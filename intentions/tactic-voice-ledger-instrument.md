@@ -179,8 +179,8 @@ protection yet).
 ## Verification
 
 ```verify
-npx vitest run --project intentionsutil --root . || exit 1
-npx tsx packages/intentionsutil/scripts/voice-review.ts
+npx vitest run --project packages/intentionsutil --root . || exit 1
+node --import tsx/esm packages/intentionsutil/scripts/voice-review.ts
 ```
 
 Prose: the script's reported qualifying set matches the 11 ids listed in

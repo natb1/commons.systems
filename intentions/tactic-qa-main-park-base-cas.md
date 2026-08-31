@@ -283,7 +283,7 @@ cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispat
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/hooks/test-approve-workflow-commands.sh
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && packages/intentionsutil/scripts/test-park-node.sh
 cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && .claude/skills/dispatch-propagate/scripts/run-lint.sh
-cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && npx tsx packages/intentionsutil/scripts/validate-graph.ts
+cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts
 ```
 
 `test-park-node.sh` must stay green unchanged — it is the regression net for `park-node`'s `--base` contract (its cases 12–15 cover a matching pin landing normally, a stale pin refusing with exit 3 and zero side effects, the manifest form, and the usage-error forms). If it goes red, the change touched `park-node` and it should not have.

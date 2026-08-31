@@ -199,8 +199,8 @@ functions, so whichever lands second rebases over the other.
 ## Verification
 
 ```verify
-npx vitest run --project intentionsutil --root . || exit 1
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+npx vitest run --project packages/intentionsutil --root . || exit 1
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts
 ```
 
 Prose: run the grounding gap report and confirm the nine bare-`false` records

@@ -78,9 +78,10 @@ attributes: {}
 
 ## Context
 
-`strategy-graph-native-dispatch` carries 326 tactic children under a single
-defect-ratio `success_signal` (measured 2026-08-30 on `origin/main` `546042d4`;
-see clarification 2 for the method). One ratio averaged over that much unlike
+`strategy-graph-native-dispatch` carries 328 tactic children under a single
+defect-ratio `success_signal` (re-measured 2026-08-31 on `origin/main`
+`2d5faa71`; clarification 2 records the method and the earlier 316/326
+readings). One ratio averaged over that much unlike
 work says less than it appears to. The author ruled the fix on 2026-08-29 and
 `tactic-review-dispatch-charter-split` records it. That node closed with no diff
 and no PR — the sitting was its deliverable — so the execution has no carrier and
@@ -129,7 +130,7 @@ it does not re-author the mechanism records.
 
 ## Unit 2 — Exclusive re-serve of the children onto the three charters
 
-**Recommended model: opus.** The classification of 326 nodes is judgment work,
+**Recommended model: opus.** The classification of 328 nodes is judgment work,
 and a misfiled child silently corrupts a charter's band.
 
 Every tactic serving `strategy-graph-native-dispatch` moves to exactly one
@@ -179,7 +180,7 @@ retired sensor must be de-registered, not merely orphaned.
 
 ## Dependencies
 
-- **Position 12 must complete first.** Re-serving 326 children invalidates every
+- **Position 12 must complete first.** Re-serving 328 children invalidates every
   `--base` CAS manifest in flight; this is the spec node's D1 ruling and the
   reason Position 13 sits last.
 - No `blocked_by` edge is set, because the blocker is a batch position rather

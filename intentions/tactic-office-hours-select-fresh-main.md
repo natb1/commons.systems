@@ -437,14 +437,15 @@ npx vitest run --project packages/intentionsutil --root "$(git rev-parse --show-
 ```
 
 ```verify
-git fetch origin main --quiet; npx tsx packages/intentionsutil/scripts/office-hours-select.ts --list
+git fetch origin main --quiet || exit 1
+node --import tsx/esm packages/intentionsutil/scripts/office-hours-select.ts --list
 ```
 Exits 0; every line is `<rank>\t<node-id>\t<since>`. Cross-check the invariant
 by hand for one listed id: `git show origin/main:intentions/<id>.md | head -40`
 shows a non-null `office_hours:` in the frontmatter.
 
 ```verify
-npx tsx packages/intentionsutil/scripts/office-hours-select.ts absent-node-id-xyz
+node --import tsx/esm packages/intentionsutil/scripts/office-hours-select.ts absent-node-id-xyz
 ```
 Prints exactly `empty not-parked absent-node-id-xyz`.
 

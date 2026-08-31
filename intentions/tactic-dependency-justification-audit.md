@@ -158,7 +158,7 @@ precedents).
 ## Verification
 
 ```verify
-npx tsx packages/intentionsutil/scripts/dependency-audit.ts
+node --import tsx/esm packages/intentionsutil/scripts/dependency-audit.ts
 ```
 
 The audit prints the `dependency-audit: N runtime deps, M unjustified, K
@@ -166,7 +166,7 @@ dead-upstream` summary; confirm Critters and epubjs appear in the dead-upstream
 list.
 
 ```verify
-npx tsx packages/intentionsutil/scripts/read-sensors.ts
+node --import tsx/esm packages/intentionsutil/scripts/read-sensors.ts
 ```
 
 Confirm the driver resolves the new sensor for `strategy-owned-web-platform`

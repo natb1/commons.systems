@@ -343,10 +343,10 @@ bash -n packages/intentionsutil/scripts/office-hours-graph
 
 ```verify
 bash .claude/skills/dispatch-propagate/scripts/test-lib-reservation-ledger.sh > "${TMPDIR:-/tmp}/test-lib-reservation-ledger.sh.log" 2>&1; rc=$?
-tail -20 "${TMPDIR:-/tmp}/test-lib-reservation-ledger.sh.log"
+tail -20 "${TMPDIR:-/tmp}/test-lib-reservation-ledger.sh.log" || exit 1
 [ "$rc" -eq 0 ] || exit 1
 bash .claude/skills/dispatch-propagate/scripts/test-dispatch-sweep.sh > "${TMPDIR:-/tmp}/test-dispatch-sweep.sh.log" 2>&1; rc=$?
-tail -20 "${TMPDIR:-/tmp}/test-dispatch-sweep.sh.log"
+tail -20 "${TMPDIR:-/tmp}/test-dispatch-sweep.sh.log" || exit 1
 [ "$rc" -eq 0 ] || exit 1
 ```
 

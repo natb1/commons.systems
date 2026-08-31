@@ -690,7 +690,7 @@ pass before merge, and it is the check that would otherwise break the graph fast
 path on the fleet's next graph push.
 
 ```verify
-cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 ### Manual checks
@@ -699,7 +699,7 @@ cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispat
 graph and read the head of the candidate list:
 
 ```verify
-cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && npx tsx packages/intentionsutil/scripts/select-targets.ts
+cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && node --import tsx/esm packages/intentionsutil/scripts/select-targets.ts
 ```
 
 Inspect the JSON (pipe through `jq` directly — never `echo` a captured JSON
@@ -729,7 +729,7 @@ unit tests. Record it as observed-in-production on the next red-main episode.
 marked nodes and that unmarked lines are unchanged from before:
 
 ```verify
-cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && npx tsx packages/intentionsutil/scripts/frontier-view.ts
+cd /home/n8/natb1/commons.systems/.claude/worktrees/strategy-graph-native-dispatch && node --import tsx/esm packages/intentionsutil/scripts/frontier-view.ts
 ```
 
 **Judgment call at review time.** Design decision (b) — inherited authored claims

@@ -104,7 +104,7 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
+phase: done
 execution: null
 validates: []
 blocked_by: []
@@ -163,6 +163,45 @@ attributes:
       measured: 2026-08-14
 ---
 # Finding: neither phase declared a `node-terminal` marker, and roughly half the run's wall clock elapsed after the phase work was already public
+
+## Completion record — shipped 2026-08-31
+
+Unit 1, the one owed investigation, landed as a pure graph write —
+`676f9d9a`, an ancestor of `origin/main` — and not as a PR, because the
+deliverable was the determination itself and it lives in this node body under
+`## Determination — 2026-08-14 align-tactics write path` above.
+
+`execution` stays `null` for that reason. `execution.branch` is a required
+string in the schema, so recording a completion object here would mean
+inventing a branch name for a landing that had none; the precedent is
+`4d66566f`, which on 2026-08-30 discharged this window's ci-pending hold
+carrier to `phase: done` with `execution: null` on the same grounds.
+
+What the unit established, against its three-part scope:
+
+1. **The write path** — the round landed through the mandated
+   `land-align-round --terminal`, on both attempts, with a byte-identical
+   command line. It was never an off-path write.
+2. **The completion instant** — adopted as `2026-08-14T16:28:32Z`, the instant
+   `origin/main` first carried `bfba6276`, per this checkout's `origin/main`
+   reflog and corroborated within five seconds by the landing session's own
+   push output. Neither the committer date (a rebase artifact) nor the author
+   date is usable as a publication instant.
+3. **This entry's own figures** — three post-completion metrics corrected, and
+   the 15:42:53Z sighting shown to be a false positive: it is a
+   `dispatch-ladder-await` progress-observation line, not a push.
+
+The evidence census's "transcript is ALREADY GONE" finding was itself wrong —
+the transcript survives under the main checkout's project slug rather than the
+worktree's, which is the reusable lesson: check both slugs before believing a
+transcript is gone.
+
+One sub-question is recorded as **undetermined** — whether `mark-node-terminal`
+wrote the marker or hit its `CLAUDE_JOB_DIR` guard — because nothing that
+survives ever read the marker file, and the job dir is gone. The unit's own
+contract admits undetermined as an acceptable outcome, so this is the unit
+finishing, not the unit stopping short.
+
 
 Observed across the whole `tactic-attention-per-tier-boost-migration` ladder run,
 2026-08-14T15:11:58Z–17:52:42Z.

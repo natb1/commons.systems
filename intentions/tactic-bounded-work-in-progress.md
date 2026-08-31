@@ -665,7 +665,7 @@ forces the unrestricted branch, and no flag must reproduce today's behavior.
 
 ```verify
 set -euo pipefail
-OUT=$(npx tsx packages/intentionsutil/scripts/select-targets.ts --wip-limit 0)
+OUT=$(node --import tsx/esm packages/intentionsutil/scripts/select-targets.ts --wip-limit 0)
 jq -e '.wip.limit == 0 and (.wip.in_flight | type) == "number"' <<<"$OUT" >/dev/null
 jq -e '.wip.restricted == true or .wip.failed_open == true' <<<"$OUT" >/dev/null
 # When restricted, no "start new work" candidate below tier 2 survives:
@@ -676,17 +676,17 @@ jq -e 'if .wip.restricted then
 # Never empty on account of the bound.
 jq -e '(.candidates | length) > 0' <<<"$OUT" >/dev/null
 
-UNB=$(npx tsx packages/intentionsutil/scripts/select-targets.ts --wip-limit 1000000)
+UNB=$(node --import tsx/esm packages/intentionsutil/scripts/select-targets.ts --wip-limit 1000000)
 jq -e '.wip.restricted == false and .wip.failed_open == false and .wip.bypassed == 0' <<<"$UNB" >/dev/null
 
-DEF=$(npx tsx packages/intentionsutil/scripts/select-targets.ts)
+DEF=$(node --import tsx/esm packages/intentionsutil/scripts/select-targets.ts)
 jq -e '.wip.limit == null and .wip.restricted == false' <<<"$DEF" >/dev/null
 # Unbounded output must be identical to the pre-change candidate list.
 diff <(jq -S '.candidates' <<<"$DEF") <(jq -S '.candidates' <<<"$UNB") >/dev/null
 
 # Bad limits are rejected loudly, never silently coerced.
 for bad in -1 1.5 1e6 abc; do
-  if npx tsx packages/intentionsutil/scripts/select-targets.ts --wip-limit "$bad" >/dev/null 2>&1; then
+  if node --import tsx/esm packages/intentionsutil/scripts/select-targets.ts --wip-limit "$bad" >/dev/null 2>&1; then
     echo "select-targets accepted a bad --wip-limit: $bad" >&2; exit 1
   fi
 done

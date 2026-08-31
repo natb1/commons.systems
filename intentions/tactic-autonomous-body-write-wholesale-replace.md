@@ -712,7 +712,7 @@ bash .claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 Manual and judgment checks, in order:

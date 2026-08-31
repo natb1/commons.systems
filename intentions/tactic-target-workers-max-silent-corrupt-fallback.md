@@ -345,9 +345,9 @@ End-to-end behavioral check, self-contained and repo-runnable (reproduces the de
 set -u
 S=.claude/skills/dispatch-propagate/scripts
 D=$(mktemp -d)
-mkdir -p "$D/scripts" "$D/config"
-cp "$S/dispatch-target-workers" "$S/dispatch-config-load" "$S/lib.sh" "$D/scripts/"
-chmod +x "$D/scripts/dispatch-target-workers" "$D/scripts/dispatch-config-load"
+mkdir -p "$D/scripts" "$D/config" || exit 1
+cp "$S/dispatch-target-workers" "$S/dispatch-config-load" "$S/lib.sh" "$D/scripts/" || exit 1
+chmod +x "$D/scripts/dispatch-target-workers" "$D/scripts/dispatch-config-load" || exit 1
 export DISPATCH_CONFIG_DIR="$D/config"
 export DISPATCH_TARGET_WORKERS_RATE_LIMITS_PATH="$D/absent.json"
 absent=$("$D/scripts/dispatch-target-workers" --max)
@@ -363,7 +363,7 @@ bad=$("$D/scripts/dispatch-target-workers" --max 2>/dev/null) || rc=$?
 rc=0
 cnt=$("$D/scripts/dispatch-target-workers" 2>/dev/null) || rc=$?
 [ "$rc" -ne 0 ] || { echo "FAIL: count mode must exit non-zero on corrupt config, printed '$cnt'"; exit 1; }
-rm -rf "$D"
+rm -rf "$D" || exit 1
 echo "OK"
 ```
 

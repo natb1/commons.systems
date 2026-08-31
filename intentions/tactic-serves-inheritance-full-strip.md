@@ -118,7 +118,7 @@ census/owed-prune scope, not this strip).
 ## Verification
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 Manual: re-run the digest's DUP-SERVES table after the strip — it must be

@@ -852,7 +852,7 @@ positional argument — omitting it exits non-zero with a usage error, and a
 cwd-relative invocation from the wrong directory can pass vacuously:
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 Manual and judgment checks:

@@ -31,7 +31,18 @@ rationale: "Filed 2026-08-18 as a residual of PR #3095 (graph write-path
   keeps -- and this node's Scope silently picked the first. So the specification
   is NOT simply present with the code one check short of meeting it: the two
   artifacts that record an intent record opposite intents, and no clarification
-  anywhere in the graph rules between them. The node is parked for that ruling."
+  anywhere in the graph rules between them. The node is parked for that ruling.
+  AMENDED 2026-08-31: the premise in the sentence above is REFUTED.
+  graph-commit's --base is a per-id opt-in, not a whole-batch mode.
+  check_base_freshness returns early on an empty manifest and otherwise
+  iterates only the manifest's own keys, so a positional id absent from the
+  manifest is simply not CAS-checked; and the ordinary-id guard asks only
+  that intentions/<id>.md exist on disk, never on origin/main. The header
+  documents --prune as mixable with ordinary positional ids. One invocation
+  can therefore carry creates, edits and prunes together. Only the stated
+  REASON was wrong: the decision it explains -- filing PR1's residuals as
+  their own nodes rather than folding them into that batch -- stands on its
+  own merits and is not disturbed by this correction."
 reading: null
 serves:
   - strategy-graph-integrity

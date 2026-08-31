@@ -37,11 +37,22 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: p6-done-node-retention-scan-cost
+  pr: 3158
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-31T02:58:16Z
+    mergeCommitSha: ca3330c3e4970dc9c36a3b4f791e71de0d5cb643
+    graphCommitSha: null
+  lane_pass: null
 validates: []
-blocked_by:
-  - tactic-review-stall-listnodes-duplicate-scan
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -49,6 +60,35 @@ attributes: {}
 ---
 
 # Make a retained done node cost ~0 per scan: finish wiring the every-tick full-store enumerations onto the content-addressed store cache
+
+## Completion record — shipped 2026-08-31
+
+Units 1 and 2 landed as PR #3158, merge `ca3330c3`, an ancestor of
+`origin/main`.
+
+- **Unit 1** — the tolerant cached read. `listNodesCached` in `store-cache.ts`,
+  sharing `listNodesStrictCached`'s key through the newly-exported
+  `cacheEntryPath`, wired into `graph-census-debt.ts` and
+  `list-scope-stale-tactics.ts` (both call `listNodes`, not `listNodesStrict`,
+  and must keep degrading rather than failing shut). The sharing is one-way by
+  construction: the tolerant reader reads entries and never writes one, because
+  a tolerant enumeration legitimately omits a corrupt node and publishing that
+  shorter array under the shared key would hand the selection path a set with a
+  blocker missing.
+- **Unit 2** — the tree-sha-keyed selector snapshot. The entry is keyed on the
+  `origin/main:intentions` tree sha rather than a directory fingerprint, since
+  the selector's store is a fresh `git archive` into a new `mktemp -d` every
+  tick. `select-targets.ts` gained `--nodes-json` / `--emit-nodes` with an
+  empty-array refusal, and `graph-select-target` gained the snapshot cache that
+  skips archive+tar on a hit. Seven cases in `test-graph-select-target.sh`
+  pin it, one of them shadowing `git` with a stub that fails loudly on
+  `archive` to prove a warm entry really skips it.
+
+The `blocked_by` edge to `tactic-review-stall-listnodes-duplicate-scan` is
+dropped in the same write. That blocker's primitive landed as PR #3152 and its
+wiring as PR #3157, and it reaches `phase: done` in this same batch, so the
+edge no longer names anything outstanding.
+
 
 ## Context
 
