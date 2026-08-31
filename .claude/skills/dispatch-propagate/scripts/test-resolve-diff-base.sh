@@ -37,6 +37,11 @@ TMP_ROOT=$(mktemp -d)
 #                  already merged into origin/main as a merge commit's SECOND
 #                  parent, with HEAD parked on the branch tip. HEAD is contained
 #                  in origin/main but sits OFF its first-parent chain.
+#     "demoted-main-tip"
+#                — the SAME off-chain shape reached the other way: a commit
+#                  pushed to `main` that a later landing merge demoted into its
+#                  SECOND parent. Indistinguishable from the above, which is
+#                  exactly why the off-chain arm resolves rather than refuses.
 #     (default)  — a feature branch one commit ahead of origin/main
 # Sets: REPO
 # ---------------------------------------------------------------------------
@@ -106,6 +111,32 @@ make_repo() {
       git -C "$REPO" merge -q --no-ff merged-feature -m "merge the feature branch"
       git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
       git -C "$REPO" checkout -q "$MERGED_TIP_SHA"
+      ;;
+    demoted-main-tip)
+      # The OTHER way to land off origin/main's first-parent chain, and the one
+      # that makes refusing this shape unshippable: a merge-then-push landing
+      # DEMOTES the previous `main` tip into the merge's SECOND parent.
+      #
+      # X is pushed to main and a workflow run starts for it. Before that run's
+      # `actions/checkout` fetches, a landing merges its own line Y and pushes M
+      # with M^1 = Y and M^2 = X. The run's HEAD is now X: contained in
+      # origin/main, off its first-parent chain, and structurally identical to
+      # an already-merged feature branch — the benign push race this mode exists
+      # to absorb, wearing the shape an earlier revision of the arm refused.
+      #
+      # Measured on the real repo 2026-08-31: 25 of 25 merge commits on
+      # origin/main's own first-parent chain have an off-chain second parent.
+      printf 'pushed to main\n' > "$REPO/demoted.txt"
+      git -C "$REPO" add demoted.txt
+      git -C "$REPO" commit -q -m "the push this run is for"
+      DEMOTED_SHA=$(git -C "$REPO" rev-parse HEAD)
+      git -C "$REPO" checkout -q -b lander "$BASELINE_SHA"
+      printf 'the landing\n' > "$REPO/lander.txt"
+      git -C "$REPO" add lander.txt
+      git -C "$REPO" commit -q -m "the landing's own line"
+      git -C "$REPO" merge -q --no-ff "$DEMOTED_SHA" -m "landing merge: demotes the main tip to P2"
+      git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+      git -C "$REPO" checkout -q "$DEMOTED_SHA"
       ;;
     *)
       git -C "$REPO" update-ref refs/remotes/origin/main "$BASELINE_SHA"
@@ -272,45 +303,63 @@ run_sut --repo-root "$REPO"
 assert_eq "behind-nonroot/default: exit 5" "yes" "$(rc_of "$RC" 5)"
 
 # ---------------------------------------------------------------------------
-# Test 4b: the OTHER strict-ancestor shape — an ALREADY-MERGED FEATURE BRANCH.
+# Test 4b: HEAD contained in origin/main but OFF its first-parent chain —
+# resolved from the FORK POINT, with a warning. Never refused.
 #
 # HEAD is contained in origin/main, so the no-delta arm fires exactly as it does
-# for the push race above. But HEAD came in as the merge commit's SECOND parent,
-# so it sits OFF origin/main's first-parent chain, and HEAD^1..HEAD is the
-# branch's LAST COMMIT rather than the branch. first-parent mode used to narrow
-# to it anyway and exit 0 with nothing but a stderr WARNING — a required check
-# examining one commit of a two-commit branch and reporting PASS, which is the
-# very vacuous-pass class this helper exists to close. A warning is not a gate.
+# for the push race above, but HEAD came in as a merge commit's SECOND parent.
+# HEAD^1..HEAD is then only the LAST COMMIT of the line HEAD ends, so the base
+# is the fork point — the newest commit on origin/main's first-parent chain that
+# is an ancestor of HEAD — which covers the whole line.
 #
-# The DEFAULT `fail` mode is deliberately untouched here: it already exits 5 for
-# both halves of the strict-ancestor shape, and the arm below asserts it still
-# does.
+# WHY THIS MUST NOT REFUSE, which is the regression this test now pins: TWO
+# unrelated situations produce this identical shape, and nothing here can tell
+# them apart.
+#   (a) an already-merged feature branch                 — `merged-feature`
+#   (b) a `main` tip demoted into a landing merge's P2   — `demoted-main-tip`
+# (b) is the benign push race the whole mode exists to absorb. Measured on the
+# real repo 2026-08-31: 25 of 25 merge commits on origin/main's first-parent
+# chain have an off-chain second parent, and `unit-tests.yml` does not ignore
+# `main`, so refusing here reddens a required context on `main` deterministically
+# for any workflow re-run on one of them. An earlier revision of this arm did
+# exit 5, and that is what these two arms exist to keep from coming back.
+#
+# The DEFAULT `fail` mode is deliberately untouched: it still exits 5 for both
+# halves of the strict-ancestor shape, and the arms below assert it still does.
 # ---------------------------------------------------------------------------
-echo "Test 4b: an already-merged feature branch is refused, not narrowed to HEAD^1"
+echo "Test 4b: off the first-parent chain resolves the fork point and warns, never refuses"
 make_repo merged-feature
 
-# The reproduction, measured on the fixture rather than asserted from the
-# helper: the range first-parent mode WOULD have handed the caller sees only the
-# branch's last commit, while the branch introduced two files.
+# Why the fork point and not HEAD^1, measured on the fixture rather than asserted
+# from the helper: HEAD^1..HEAD sees one of the branch's two files.
 NARROWED=$(git -C "$REPO" diff --name-only "$MERGED_TIP_SHA^1..$MERGED_TIP_SHA")
 assert_eq "merged-feature: HEAD^1..HEAD sees only the branch's LAST commit" \
   "branch-second.txt" "$NARROWED"
-FULL_BRANCH=$(git -C "$REPO" diff --name-only "$BASELINE_SHA..$MERGED_TIP_SHA")
-assert_eq "merged-feature: the branch itself introduced BOTH files" \
-  "branch-first.txt
-branch-second.txt" "$FULL_BRANCH"
 
 run_sut --repo-root "$REPO" --at-remote-tip first-parent
-assert_eq "merged-feature/first-parent: exit 5" "yes" "$(rc_of "$RC" 5)"
-assert_eq "merged-feature/first-parent: stdout is empty" "" "$OUT"
-assert_contains "merged-feature/first-parent: names the condition" \
+assert_eq "merged-feature/first-parent: exit 0 (resolves, never refuses)" "0" "$RC"
+assert_eq "merged-feature/first-parent: base is the fork point" "$BASELINE_SHA" "$OUT"
+assert_contains "merged-feature/first-parent: provenance names source=fork-point" \
+  "source=fork-point" "$ERR"
+# The payoff: the range the caller diffs covers the WHOLE branch, not its last
+# commit — strictly wider than the HEAD^1 range measured above.
+MF_DELTA=$(git -C "$REPO" diff --name-only "$OUT"..HEAD)
+assert_eq "merged-feature/first-parent: the resolved range names BOTH branch files" \
+  "branch-first.txt
+branch-second.txt" "$MF_DELTA"
+# Loud, not silent: the reader must be able to see this is not the full range.
+assert_contains "merged-feature/first-parent: warns" "WARNING" "$ERR"
+assert_contains "merged-feature/first-parent: warning names the condition" \
   "OFF its first-parent chain" "$ERR"
-assert_contains "merged-feature/first-parent: names the shape" \
-  "already-merged feature branch" "$ERR"
-assert_contains "merged-feature/first-parent: names the remedy" "--head" "$ERR"
-# It must REFUSE, not narrow: no base on stdout means no source= line either.
-assert_not_contains "merged-feature/first-parent: no base was resolved" \
-  "source=first-parent" "$ERR"
+assert_contains "merged-feature/first-parent: warning says it is not the full range" \
+  "not the full range since" "$ERR"
+assert_contains "merged-feature/first-parent: warning still tells a developer to fetch/rebase" \
+  "fetch and rebase" "$ERR"
+# The old text named a remedy ("run the check against the merge commit that
+# carried this branch in") that is WRONG for the demoted-main-tip half. The two
+# shapes are indistinguishable here, so the message must name NEITHER remedy.
+assert_not_contains "merged-feature/first-parent: names no shape-specific remedy" \
+  "carried this branch in" "$ERR"
 
 # ... and the default mode is unchanged: the same exit 5 it always gave.
 run_sut --repo-root "$REPO"
@@ -318,15 +367,33 @@ assert_eq "merged-feature/default: exit 5 (unchanged)" "yes" "$(rc_of "$RC" 5)"
 assert_contains "merged-feature/default: still the STRICT ANCESTOR message" \
   "STRICT ANCESTOR" "$ERR"
 
-# The positive control that keeps the refusal narrow: the ON-chain half of the
-# same strict-ancestor shape — the push race on `main` — must still resolve.
-# Without this, "refuse every strict ancestor" would pass the case above while
-# reddening every required context on `main`.
+# (b) the SAME off-chain shape, reached by a landing merge demoting the `main`
+# tip. This is the arm that makes refusing unshippable: it is the benign push
+# race, and it must resolve.
+make_repo demoted-main-tip
+run_sut --repo-root "$REPO" --at-remote-tip first-parent
+assert_eq "demoted-main-tip/first-parent: exit 0 (the push race must not redden main)" \
+  "0" "$RC"
+assert_eq "demoted-main-tip/first-parent: base is the fork point" "$BASELINE_SHA" "$OUT"
+assert_contains "demoted-main-tip/first-parent: provenance names source=fork-point" \
+  "source=fork-point" "$ERR"
+# For a one-commit line the fork point IS HEAD^1, so the range is exactly what
+# that push introduced — and never the landing's own file.
+DMT_DELTA=$(git -C "$REPO" diff --name-only "$OUT"..HEAD)
+assert_eq "demoted-main-tip/first-parent: the range is exactly what that push introduced" \
+  "demoted.txt" "$DMT_DELTA"
+assert_eq "demoted-main-tip: the fork point coincides with HEAD^1 for a one-commit line" \
+  "$(git -C "$REPO" rev-parse 'HEAD^1')" "$OUT"
+
+# The positive control that keeps this narrow: the ON-chain half of the same
+# strict-ancestor shape must still resolve from HEAD^1, not from the fork point.
 make_repo behind-nonroot
 run_sut --repo-root "$REPO" --at-remote-tip first-parent
 assert_eq "control: on-chain strict ancestor still exits 0" "0" "$RC"
 assert_contains "control: on-chain strict ancestor still resolves first-parent" \
   "source=first-parent" "$ERR"
+assert_not_contains "control: on-chain does NOT take the fork-point arm" \
+  "source=fork-point" "$ERR"
 
 # ---------------------------------------------------------------------------
 # Test 5: exit 4 — the remote ref does not resolve.
