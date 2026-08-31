@@ -993,6 +993,16 @@ printf '%s\n' "$*" >> "$_root/park-node-calls.log"
 exit 0
 GSCIPARK
   chmod +x "$GSCI_ROOT/packages/intentionsutil/scripts/park-node"
+  # hold-node stub: _hold_node_ci_pending (and _hold_node_fix_cap) run it from
+  # NATIVE_ROOT. Logs its argv so the CI-pending cap case can assert the hold
+  # actually landed and carried --kind ci-pending-stalled.
+  cat > "$GSCI_ROOT/packages/intentionsutil/scripts/hold-node" <<'GSCIHOLD'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+printf '%s\n' "$*" >> "$_root/hold-node-calls.log"
+exit 0
+GSCIHOLD
+  chmod +x "$GSCI_ROOT/packages/intentionsutil/scripts/hold-node"
   # Fake npx: serves BOTH tsx entry points the selector shells out to —
   # select-targets.ts (the candidate list, from a per-case file) and
   # apply-fix-state.ts (the interrupt write, whose invocation is logged; the
@@ -1679,5 +1689,238 @@ assert_eq "graph-select-target cache: the message names the selector" "yes" \
   "$(case "$(cat "$GSCC_ROOT/sel-err.log")" in *"SELECTOR failure"*) printf 'yes' ;; *) printf 'no' ;; esac)"
 
 rm -rf "$GSCC_ROOT" "$GSCC_BARE" "$GSCC_CACHE"
+
+# ============================================================================
+# Test: graph-select-target — the CI-pending liveness bound
+# (tactic-autonomous-ci-pending-liveness-bound, sub-unit 2)
+# ============================================================================
+# The `qa|review` arm's `ci-pending` outcome used to be an unbounded skip. It is
+# now counted in a sidecar file keyed on the PR's head SHA, and the
+# DISPATCH_CI_PENDING_STRIKE_CAP-th consecutive observation of the SAME SHA
+# lands a `--kind ci-pending-stalled` hold instead.
+#
+# These reuse gsc_interrupt_setup verbatim (its gh stub serves the raw REST PR
+# whose head.sha is `deadbee`, and its packages/intentionsutil/scripts/ now
+# carries a hold-node stub) and only replace dispatch-ci-ready with a
+# fixed-exit stub, so the case controls the one input the ladder keys on
+# without depending on that script's own gate logic.
+
+# gscip_setup <ci-ready-exit> — the interrupt fixture with a MERGEABLE, green
+# PR (so _gate_maybe_interrupt declines and the qa arm's merged check passes)
+# and dispatch-ci-ready pinned to a fixed exit code.
+#
+# The stub prints the SAME stdout word the real script prints on that exit:
+# `ready` on 0, `waiting` on 1. That is not cosmetic — the exit code alone is
+# ambiguous. dispatch-ci-ready runs `set -euo pipefail`, so it ALSO exits 1 when
+# dispatch_ci_verdict_rest's check-runs/check-suites fetch or its jq projection
+# fails, dying before it prints anything; the selector reads the stdout word to
+# tell a real `pending` from that death. A silent exit-1 stub would therefore
+# model the FAILURE case while the case names claim to model pending — see
+# gscip_setup_silent, which models the failure case deliberately.
+gscip_setup() {
+  gsc_interrupt_setup
+  gsci_candidate qa
+  gsci_pr true
+  gsci_checks '{"check_runs":[{"status":"completed","conclusion":"success"}]}'
+  printf '%s\n' "#!/usr/bin/env bash" > "$GSCI_SCRIPTS/dispatch-ci-ready"
+  case "$1" in
+    0) printf '%s\n' "echo ready" >> "$GSCI_SCRIPTS/dispatch-ci-ready" ;;
+    1) printf '%s\n' "echo waiting" >> "$GSCI_SCRIPTS/dispatch-ci-ready" ;;
+  esac
+  printf '%s\n' "exit $1" >> "$GSCI_SCRIPTS/dispatch-ci-ready"
+  chmod +x "$GSCI_SCRIPTS/dispatch-ci-ready"
+  GSCIP_SIDECAR="$GSCI_ROOT/.claude/worktrees/tactic-fixture.ci-pending-strikes"
+}
+
+# gscip_setup_silent <ci-ready-exit> — the same fixture, but with a
+# dispatch-ci-ready that prints NOTHING before exiting. This is the shape a
+# `set -e` death produces: the fetch/projection failure aborts the script inside
+# the `VERDICT=$(dispatch_ci_verdict_rest ...)` substitution, upstream of the
+# `echo waiting`.
+gscip_setup_silent() {
+  gscip_setup 0
+  printf '%s\n' "#!/usr/bin/env bash" > "$GSCI_SCRIPTS/dispatch-ci-ready"
+  printf '%s\n' "exit $1" >> "$GSCI_SCRIPTS/dispatch-ci-ready"
+  chmod +x "$GSCI_SCRIPTS/dispatch-ci-ready"
+}
+
+# gscip_seed <sha> <count> — pre-seed the sidecar.
+gscip_seed() {
+  mkdir -p "$GSCI_ROOT/.claude/worktrees"
+  printf '%s %s\n' "$1" "$2" > "$GSCIP_SIDECAR"
+}
+
+# gscip_sidecar — the sidecar's content, or the literal `gone` when absent.
+# The presence/absence idiom is test-dispatch-graph-execute.sh's.
+gscip_sidecar() {
+  [ -e "$GSCIP_SIDECAR" ] && cat "$GSCIP_SIDECAR" || echo gone
+}
+
+gscip_holds() {
+  [ -f "$GSCI_ROOT/hold-node-calls.log" ] && cat "$GSCI_ROOT/hold-node-calls.log" || echo none
+}
+
+# --- Case 1: below the cap, the first pending observation opens the ladder ---
+echo "Test: graph-select-target — a first ci-pending observation writes the sidecar and holds nothing"
+gscip_setup 1
+gscip1_out=$(gsci_run)
+assert_eq "graph-select-target ci-pending: a pending candidate is not selected" \
+  "empty" "$gscip1_out"
+assert_eq "graph-select-target ci-pending: the sidecar opens at the PR head SHA, count 1" \
+  "deadbee 1" "$(gscip_sidecar)"
+assert_eq "graph-select-target ci-pending: no hold lands below the cap" \
+  "none" "$(gscip_holds)"
+assert_eq "graph-select-target ci-pending: the skip reason carries the strike count" \
+  "1" "$(grep -q 'ci-pending (strike 1/8)' "$GSCI_ROOT/seldir/graph-selection.jsonl" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 2: the same head SHA accumulates ----------------------------------
+echo "Test: graph-select-target — a repeat observation on the SAME head SHA increments the ladder"
+gscip_setup 1
+gscip_seed deadbee 3
+gsci_run >/dev/null
+assert_eq "graph-select-target ci-pending: the same SHA increments rather than resetting" \
+  "deadbee 4" "$(gscip_sidecar)"
+assert_eq "graph-select-target ci-pending: still no hold at strike 4" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- Case 3: a different head SHA resets ------------------------------------
+# This is what makes the bound mean "this ONE CI run never concluded" rather
+# than "this node has been slow over its lifetime": a fresh push legitimately
+# restarts CI, so the count starts over.
+echo "Test: graph-select-target — a changed head SHA resets the ladder to 1"
+gscip_setup 1
+gscip_seed cafef00 7
+gsci_run >/dev/null
+assert_eq "graph-select-target ci-pending: a differing recorded SHA resets the count to 1" \
+  "deadbee 1" "$(gscip_sidecar)"
+assert_eq "graph-select-target ci-pending: a reset lands no hold even from a near-cap count" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- Case 4: at the cap, the hold lands and the ladder is cleared ------------
+echo "Test: graph-select-target — the cap-th consecutive pending observation lands a ci-pending-stalled hold"
+gscip_setup 1
+gscip_seed deadbee 7
+gscip4_out=$(gsci_run)
+assert_eq "graph-select-target ci-pending: a held candidate is still not selected" \
+  "empty" "$gscip4_out"
+assert_eq "graph-select-target ci-pending: hold-node is invoked with the new kind and the node id" \
+  "1" "$(case "$(gscip_holds)" in *"tactic-fixture --kind ci-pending-stalled"*) printf 1 ;; *) printf 0 ;; esac)"
+assert_eq "graph-select-target ci-pending: the sidecar is cleared once the hold lands" \
+  "gone" "$(gscip_sidecar)"
+assert_eq "graph-select-target ci-pending: the skip reason reports the cap hold" \
+  "1" "$(grep -q 'ci-pending-cap-held' "$GSCI_ROOT/seldir/graph-selection.jsonl" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Case 4b: the hold's landing refreshes the caller's lock heartbeat -------
+# hold-node lands its own graph-commit, which waits up to LOCK_WAIT_SECONDS
+# (1050s) for the GLOBAL landing lock — far past the MAX_HOLD_SECONDS (300s)
+# after which dispatch-acquire-lock reclaims a holder. Without a refresh
+# afterwards a completed hold can age the tick's OWN dispatch lock out, letting
+# a second tick reclaim it and select the same candidate set: the
+# duplicate-worker / double-booked-worktree failure the CONFLICT_COMMIT_BUDGET
+# header describes. Every other landing on this write path is bracketed this way
+# (_graph_commit_conflict), so this pins the ci-pending arm to the same rule.
+#
+# The stub replaces the real dispatch-acquire-lock only for this case, and keeps
+# its stdout protocol (`--wait` answers `acquired`) so the standalone lane still
+# behaves; what it adds is an argv log.
+echo "Test: graph-select-target — a landed ci-pending hold refreshes the lock heartbeat"
+gscip_setup 1
+cat > "$GSCI_SCRIPTS/dispatch-acquire-lock" <<'GSCILOCK'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/../../../.." && pwd)"
+printf '%s\n' "$*" >> "$_root/acquire-lock-calls.log"
+[[ "${1:-}" == --wait ]] && echo acquired
+exit 0
+GSCILOCK
+chmod +x "$GSCI_SCRIPTS/dispatch-acquire-lock"
+gscip_seed deadbee 7
+gsci_run >/dev/null
+assert_eq "graph-select-target ci-pending: the hold really landed in this case too" \
+  "1" "$(case "$(gscip_holds)" in *"--kind ci-pending-stalled"*) printf 1 ;; *) printf 0 ;; esac)"
+assert_eq "graph-select-target ci-pending: a --heartbeat follows the landed hold" \
+  "1" "$(grep -c -- '^--heartbeat$' "$GSCI_ROOT/acquire-lock-calls.log")"
+gsc_interrupt_teardown
+
+# --- Case 5: the explicit --node lane never counts ---------------------------
+# A human re-running `dispatch <node-id>` must not burn the autonomous budget.
+# The sidecar content is asserted LITERALLY, not merely "no hold landed": a
+# missing NODE_TARGET skip whose counter also never ran would satisfy the
+# weaker assertion while still being the bug.
+echo "Test: graph-select-target — an explicit --node run neither counts nor holds"
+gscip_setup 1
+gscip_seed deadbee 7
+gsci_run --node tactic-fixture >/dev/null
+assert_eq "graph-select-target ci-pending: --node leaves the sidecar untouched" \
+  "deadbee 7" "$(gscip_sidecar)"
+assert_eq "graph-select-target ci-pending: --node lands no hold even at the cap boundary" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- Case 6: a concluded verdict clears the ladder --------------------------
+# So the count always means CONSECUTIVE pending observations, mirroring
+# dispatch-graph-execute's clear-on-success.
+echo "Test: graph-select-target — a ready candidate is selected and clears its ladder"
+gscip_setup 0
+gscip_seed deadbee 4
+gscip6_out=$(gsci_run)
+assert_eq "graph-select-target ci-pending: a ci-ready candidate is emitted at its phase" \
+  "node tactic-fixture tactic qa" "$gscip6_out"
+assert_eq "graph-select-target ci-pending: a concluded verdict clears the sidecar" \
+  "gone" "$(gscip_sidecar)"
+assert_eq "graph-select-target ci-pending: a concluded verdict lands no hold" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- Case 7: an UNREADABLE verdict is not a pending observation --------------
+# The fail-open this closes. `dispatch-ci-ready` runs `set -euo pipefail`, and
+# `VERDICT=$(dispatch_ci_verdict_rest "$sha")` exits 1 when the check-runs
+# fetch, a check-suites fetch or a jq projection fails (lib.sh's
+# dispatch_ci_verdict_rest returns 1 on each) — the same exit 1 a genuine
+# `pending` uses. Reading the code alone, a node whose `pulls/{n}` read SUCCEEDS
+# (so the empty-head_sha exemption below does not catch it) but whose check-runs
+# read FAILS accrues a strike every tick and is parked to `office_hours` after
+# eight, under a reason that misstates the cause.
+#
+# Seeded at 7, one below the cap, so a single un-guarded bump would land the
+# hold: the assertion discriminates the guard directly rather than inferring it.
+# The sidecar is asserted LITERALLY so BOTH wrong directions are caught — a
+# failed fetch is not evidence either way, so it must neither count NOR clear,
+# exactly as reconcile-graph-review-stall already treats an empty RAW_VERDICT on
+# the SHARED sidecar.
+echo "Test: graph-select-target — an unreadable CI verdict neither counts a strike nor holds"
+gscip_setup_silent 1
+gscip_seed deadbee 7
+gscip7_out=$(gsci_run)
+assert_eq "graph-select-target ci-pending: an unreadable verdict selects nothing" \
+  "empty" "$gscip7_out"
+assert_eq "graph-select-target ci-pending: an unreadable verdict leaves the sidecar untouched" \
+  "deadbee 7" "$(gscip_sidecar)"
+assert_eq "graph-select-target ci-pending: an unreadable verdict lands no hold at the cap boundary" \
+  "none" "$(gscip_holds)"
+assert_eq "graph-select-target ci-pending: the skip reason names the unreadable verdict, not pending" \
+  "1" "$(grep -q 'ci-verdict-unreadable' "$GSCI_ROOT/seldir/graph-selection.jsonl" && echo 1 || echo 0)"
+assert_eq "graph-select-target ci-pending: an unreadable verdict is NOT logged as a strike" \
+  "0" "$(grep -c 'ci-pending (strike' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+gsc_interrupt_teardown
+
+# --- Case 8: an unreadable verdict does not CLEAR a live ladder either -------
+# The mirror-image failure. Treating the failure as `ready` (rc 0) would clear
+# the sidecar and reset a node that really has been stalled for seven ticks,
+# so one flaky fetch would restart the bound from zero forever. Asserted with a
+# below-cap seed so the surviving count is visible rather than consumed by a
+# hold.
+echo "Test: graph-select-target — an unreadable CI verdict does not clear a live ladder"
+gscip_setup_silent 1
+gscip_seed deadbee 3
+gsci_run >/dev/null
+assert_eq "graph-select-target ci-pending: a live ladder survives an unreadable verdict intact" \
+  "deadbee 3" "$(gscip_sidecar)"
+assert_eq "graph-select-target ci-pending: no hold lands off an unreadable verdict" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
 
 report_results

@@ -32,7 +32,7 @@
 #
 # Usage:
 #   hold-node <source-node-id>
-#             --kind <provision-conflict|fix-attempt-cap|worktree-residue>
+#             --kind <provision-conflict|fix-attempt-cap|worktree-residue|ci-pending-stalled>
 #             --reason-file <f> --recommendation-file <f>
 #             [--body-file <f>] [--reset-fix-attempt] [--reset-fix-cycle]
 #
@@ -67,7 +67,7 @@ DUMP_NODE_TS="$SCRIPT_DIR/dump-node.ts"
 APPLY_FIX_TS="$SCRIPT_DIR/apply-fix-state.ts"
 GRAPH_COMMIT="$SCRIPT_DIR/graph-commit"
 
-USAGE="usage: hold-node <source-node-id> --kind <provision-conflict|fix-attempt-cap|worktree-residue> --reason-file <f> --recommendation-file <f> [--body-file <f>] [--reset-fix-attempt] [--reset-fix-cycle]"
+USAGE="usage: hold-node <source-node-id> --kind <provision-conflict|fix-attempt-cap|worktree-residue|ci-pending-stalled> --reason-file <f> --recommendation-file <f> [--body-file <f>] [--reset-fix-attempt] [--reset-fix-cycle]"
 
 SOURCE_ID=""
 KIND=""
