@@ -278,13 +278,29 @@ Every `AskUserQuestion` round in this step — the step-2.1 intent confirmation,
 the step-2.9 design-canvas question, and any other — carries three things (the
 standing feedback loop of both types, not a type-a convenience):
 
-1. a **recommendation** — your best answer, listed first;
+1. a **recommendation** — your best answer, listed first — carrying **in the
+   same option** the authority under which it is accepted: **ratified**,
+   **delegated**, or **deferred** (the authority-in-option rule,
+   `strategy-discovered-requirements` 2026-08-31 clarification, superseding
+   the earlier separate accept-as-deferral option);
 2. an honest **boldness assessment** on that recommendation — how much of it
    rests on the graph and this session's context versus Claude-internal
    knowledge the author has not verified;
-3. an explicit **accept-as-deferral** option alongside plain acceptance, so the
-   author can hold the recommendation on trust rather than endorse it (see
-   "Deferral mechanics" below).
+3. **other options presenting alternatives with their trade-offs** — never
+   authority re-spellings of option 1. The author accepts a disposition at a
+   *different* authority via the free-text "Other" reply, which every
+   question already carries.
+
+Propose the authority by these ratified rules (same clarification): **ratify**
+for authority and vocabulary boundaries, charters and principles that bind
+future judgment, amendments touching ratified content, and transcriptions of
+the author's stated position; **delegate** for implementation detail under a
+ratified principle — mechanically validatable, cheaply reversible, reviewable
+through the normal queues; **defer** for Claude-authored substance the author
+has not examined and cannot cheaply examine in-interview, and for the first
+concrete instance of a newly delegated pattern; escalate one level toward
+ratify when being wrong is expensive, irreversible, or capture-shaped. An
+accepted deferral still follows "Deferral mechanics" below.
 
 **Deliver a question's motivating context — including each recommendation's
 boldness — where the author will actually read it:** inside the
