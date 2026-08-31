@@ -102,6 +102,12 @@ fi
 #       Prose, not executed. The MERGE_BASE it documents is already an explicit
 #       merge-base.
 #
+#   .claude/skills/review-fix/references/code-review-invocation.md
+#       A dated measurement record, not an instruction (see its own header). The
+#       single match is inside a fenced block quoting /code-review's stdout
+#       VERBATIM; rewriting it would falsify a measurement, and a same-line
+#       marker would corrupt the quote. Nothing here is executed.
+#
 #   .github/scripts/check-graph-fast-path.sh
 #       The match is inside a comment explaining why that script deliberately
 #       does NOT use a three-dot range.
@@ -113,6 +119,7 @@ ALLOWLIST=(
   "packages/intentionsutil/scripts/graph-commit"
   ".claude/skills/dispatch-propagate/scripts/audit-copy-changes.sh"
   ".claude/skills/review-fix/SKILL.md"
+  ".claude/skills/review-fix/references/code-review-invocation.md"
   ".github/scripts/check-graph-fast-path.sh"
   ".claude/skills/dispatch-propagate/scripts/test-diff-base-doctrine.sh"
 )
@@ -120,23 +127,29 @@ ALLOWLIST=(
 # ---------------------------------------------------------------------------
 # KNOWN_UNMIGRATED — NOT an allowlist. These carry the defect.
 #
-# Five skill documents instruct an agent to run a three-dot range for
-# changed-file detection. They are genuine instances, out of scope for the
-# change that introduced this ratchet (which converted the nine executable call
-# sites), and listed here so the ratchet can go green on that work without
-# blessing them.
+# THE LIST IS EMPTY, AND IS KEPT EMPTY. It held five skill documents that
+# instructed an agent to run a three-dot range for changed-file detection; four
+# were migrated to resolve-diff-base.sh, and the fifth moved to ALLOWLIST above
+# because it is a dated measurement record rather than an instruction.
 #
-# The distinction is load-bearing, not bookkeeping: an entry here is a to-do,
-# and the check below asserts each one STILL matches. Fix one and the ratchet
-# fails until its entry is deleted, so this list can only shrink. An ALLOWLIST
-# entry carries no such obligation — those are correct as they stand.
+# The array and this block survive the drain deliberately: the idiom is the
+# mechanism the next migration needs, and an empty list is a claim worth
+# asserting rather than a dead declaration.
+#
+# The distinction from ALLOWLIST is load-bearing, not bookkeeping: an entry here
+# is a to-do, and the check below asserts each one STILL matches. Fix one and
+# the ratchet fails until its entry is deleted, so this list can only shrink. An
+# ALLOWLIST entry carries no such obligation — those are correct as they stand.
+#
+# WHY AN ENTRY IS TEMPORARY BY CONSTRUCTION. is_skipped() folds ALLOWLIST and
+# KNOWN_UNMIGRATED into the SAME whole-file exclusion, so while an entry exists
+# that file is outside scan() entirely — and a BRAND-NEW three-dot baseline
+# added to it passes both sweeps silently, hidden behind an assertion that the
+# file is already defective. That is why the list is held at zero rather than
+# maintained: the only entry that cannot hide a new defect is one that does not
+# exist.
 # ---------------------------------------------------------------------------
 KNOWN_UNMIGRATED=(
-  ".claude/skills/qa-fix/SKILL.md"
-  ".claude/skills/qa-fix/references/auto-fix-lane.md"
-  ".claude/skills/qa-fix/references/idempotency-preamble.md"
-  ".claude/skills/review-fix/references/code-review-invocation.md"
-  ".claude/skills/review-fix/references/terminal-actions.md"
 )
 
 is_skipped() {
@@ -486,6 +499,14 @@ fi
 rm -f "$BIG_FILE"
 
 echo "=== Known-unmigrated entries still carry the defect ==="
+# The list is empty today, and a bare `for` over an empty array would print the
+# banner and nothing else — a section that says nothing reads the same whether
+# it ran or was deleted. Emit one pass so the tally stays meaningful and so a
+# future re-addition is visible as a change in the CI log. A NON-empty list is
+# NOT a failure: the mechanism has to stay usable for the next migration.
+if [ "${#KNOWN_UNMIGRATED[@]}" -eq 0 ]; then
+  pass "KNOWN_UNMIGRATED is empty — no file is excluded from scan() on to-do grounds"
+fi
 for entry in "${KNOWN_UNMIGRATED[@]}"; do
   if [ ! -f "$REPO_ROOT/$entry" ]; then
     fail "known-unmigrated path is gone (remove the entry): $entry"

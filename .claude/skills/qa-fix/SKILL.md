@@ -244,13 +244,50 @@ each fork site.
    increment `SKILL_SUBAGENTS` by 1 on the fork path only. If the fork then reports a
    merge conflict, escalate and stop.
 
-1. **Detect whether the implementation has a browser component.** From
-   `git diff --name-only origin/main...HEAD`, a browser component exists if any
-   changed path is a `vite.config.*`, a frontend template (`index.html`, `src/` of a
-   frontend app), or under a known frontend package (`budget`, `fellspiral`,
-   `landing`, `print`). This supplies the **app dir** for the QA server (Step 3b) and
-   tells the triage subagent whether a browser is available (per-item run is decided
-   in Step 3).
+1. **Detect whether the implementation has a browser component.** Resolve the
+   baseline, then diff against it with TWO dots (the helper has already resolved
+   the base). Keep it ONE fence — shell state does not persist between Bash
+   calls, so a second fence would not see `DIFF_BASE`:
+
+   ```bash
+   set -e
+   DIFF_BASE=$(.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh --at-remote-tip first-parent)
+   git diff --name-only "$DIFF_BASE"..HEAD
+   ```
+
+   `set -e` plus a **plain assignment** is the idiom of the reference migrated
+   call site, `.claude/skills/dispatch-propagate/scripts/run-lint.sh` (its
+   `DIFF_BASE=$("$SCRIPTS/resolve-diff-base.sh" …)` line and the comment above
+   it: *"A plain assignment, not `if ! X=$(…)`, so the helper's non-zero exit
+   propagates under `set -e` rather than being swallowed"*).
+
+   Do **not** re-spell this as `DIFF_BASE=$(…) && git diff …`. That form
+   swallows the failure: every non-zero helper exit (3/4/5/6/7/8/9)
+   short-circuits the chain, no paths are printed, and an empty changed-path
+   list is indistinguishable from "nothing changed" — so `browser` and
+   `firestore_caveat` both derive **false**, Step 3b starts no QA server, and
+   the pass goes green having inspected nothing. That is the vacuous pass
+   `resolve-diff-base.sh` exists to remove.
+
+   **A non-zero exit here is a blocker, never an empty diff.** The helper names
+   its reason on stderr (`resolve-diff-base: ERROR: …`). Do not continue to
+   Step 2 on a failed resolution — record it as a user-input blocker and
+   escalate per the **Escalation** section.
+
+   (`run-lint.sh` additionally wraps its diff in
+   `if ! CHANGED=$(…); then echo … >&2; exit 1; fi`. That half is deliberately
+   **not** copied, because here it would add nothing: `run-lint.sh` captures
+   the diff into a variable and keeps going, so it needs an explicit check,
+   while this fence lets `git diff` write straight to stdout under `set -e` —
+   a failure aborts the fence loudly on its own. Do not read this as a ban on
+   control flow in a fence: the Idempotency preamble above is a `case`/`if`
+   fence with five `echo … >&2` redirects, and it runs first in every session.)
+
+   A browser component exists if any changed path is a `vite.config.*`, a frontend
+   template (`index.html`, `src/` of a frontend app), or under a known frontend
+   package (`budget`, `fellspiral`, `landing`, `print`). This supplies the **app
+   dir** for the QA server (Step 3b) and tells the triage subagent whether a browser
+   is available (per-item run is decided in Step 3).
 
    From the same diff: if any changed path is `firestore.rules` or a Firestore query
    module, `Read .claude/docs/firestore.md` for the rules-deploy caveat — on a

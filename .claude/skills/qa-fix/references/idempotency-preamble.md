@@ -69,9 +69,9 @@ read the prior comment, and continue from there.
 
 qa-fix adopts `--pr` and `--phase-log` in the preamble's `dispatch-context-pack`
 call, but does **not** add `--diff`. The only diff use in this skill is Step 1's
-local `git diff --name-only origin/main...HEAD` for browser-component detection — a
-free, local, name-only call that must run against a tree with `origin/main` already
-merged in. That precondition is met differently per lane: on the **legacy issue
+local `resolve-diff-base.sh` call and the name-only `git diff "$DIFF_BASE"..HEAD`
+it feeds, for browser-component detection — a free, local, name-only pair that must
+run against a tree with `origin/main` already merged in. That precondition is met differently per lane: on the **legacy issue
 lane** it holds because Step 0.5's in-session `origin/main` merge runs first; on the
 **node lane** it holds because the graph launcher (`provision-node-worktree`) merges
 `origin/main` into the worktree *before* this session starts (see the **Merge (Step
