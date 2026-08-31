@@ -53,6 +53,7 @@ export {
   hasNeedsMainResidue,
   stampRound,
   inboundBlockers,
+  inboundSuperseders,
   strategiesToStamp,
   parseScopeStamp,
   isScopeStale,

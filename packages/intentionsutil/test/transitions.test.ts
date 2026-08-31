@@ -17,6 +17,7 @@ import {
   hasNeedsMainResidue,
   stampRound,
   inboundBlockers,
+  inboundSuperseders,
   strategiesToStamp,
   parseScopeStamp,
   isScopeStale,
@@ -353,6 +354,27 @@ describe("inboundBlockers", () => {
     ];
     expect(inboundBlockers("tactic-p", nodes)).toEqual(["tactic-a", "tactic-b"]);
     expect(inboundBlockers("tactic-none", nodes)).toEqual([]);
+  });
+});
+
+describe("inboundSuperseders", () => {
+  it("finds every node listing the pruned id in superseded_by", () => {
+    const nodes = [
+      anode({ id: "tactic-p", kind: "tactic", phase: "done" }),
+      anode({ id: "tactic-a", kind: "tactic", status: "superseded", superseded_by: ["tactic-p"] }),
+      anode({
+        id: "tactic-b",
+        kind: "tactic",
+        status: "superseded",
+        superseded_by: ["tactic-p", "tactic-x"],
+      }),
+      anode({ id: "tactic-c", kind: "tactic", status: "superseded", superseded_by: ["tactic-x"] }),
+      // Inbound on the OTHER pruned-edge field: rule 13's scan must not answer
+      // rule 24's question, so this node belongs to neither result.
+      anode({ id: "tactic-d", kind: "tactic", phase: "implement", blocked_by: ["tactic-p"] }),
+    ];
+    expect(inboundSuperseders("tactic-p", nodes)).toEqual(["tactic-a", "tactic-b"]);
+    expect(inboundSuperseders("tactic-none", nodes)).toEqual([]);
   });
 });
 

@@ -433,6 +433,24 @@ export function inboundBlockers(prunedId: string, nodes: readonly IntentionNode[
 }
 
 /**
+ * The ids of nodes that list `prunedId` in their `superseded_by` — the rule-24
+ * counterpart of `inboundBlockers` above. `validateGraph` Rule 24 rejects any
+ * surviving `superseded_by` that no longer resolves, the same way Rule 13 treats
+ * `blocked_by`, so a prune MUST strip `prunedId` from these inbound edges in the
+ * SAME commit. Without this scan rule 24's ledger entry rested on "nodes are
+ * never pruned", which the function directly above already falsifies for rule 13.
+ *
+ * Removal is safe and semantics-preserving here too, though a different reader
+ * is why: retirement is carried by `status` — `isSuperseded` tests
+ * `status === SUPERSEDED_STATUS` and never looks at the edge — so a node stays
+ * retired once the edge is dropped. The edge is provenance, naming WHERE the
+ * intent moved, and a pruned target is no longer there to name.
+ */
+export function inboundSuperseders(prunedId: string, nodes: readonly IntentionNode[]): string[] {
+  return nodes.filter((n) => n.superseded_by.includes(prunedId)).map((n) => n.id);
+}
+
+/**
  * Whether a `strategy` node is a serving strategy of `tactic` and `tactic` is
  * its LAST non-draft child — i.e. no OTHER non-draft tactic still serves that
  * strategy once `tactic` prunes. Draft tactics are `/align-tactics` input, not

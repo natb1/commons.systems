@@ -286,9 +286,16 @@ export interface IntentionNode {
   superseded_by: string[];
   // The event that expires this node's supersession edge — normally the
   // in-flight PR's own merge or closure. Required (rule 26) when the node is
-  // superseded WHILE in flight (`execution` non-null): a similarity judgment
-  // never halts live work, and that interim-live-risk exception is only
-  // permitted when an expiry is named. `null` otherwise.
+  // superseded WHILE in flight — `execution` non-null AND `phase` not `done`:
+  // a similarity judgment never halts live work, and that interim-live-risk
+  // exception is only permitted when an expiry is named. `null` otherwise.
+  //
+  // INVENTED, NOT RATIFIED. The doctrine ruled the interim-live-risk exception
+  // but never named a field to carry it. This field and rule 26 are the
+  // implementer's design for that ruling, owed to the author for ratification;
+  // do not read the paragraph above as established schema. Nothing in the repo
+  // writes a non-empty value today, so no stored data depends on the spelling
+  // and it can be renamed or replaced without a migration.
   supersession_expiry: string | null;
   office_hours: OfficeHours | null; // first-class parking record; goal-layer kinds only
   pace_exempt: boolean; // authored pace-gate bypass; goal-layer kinds only
@@ -1529,13 +1536,15 @@ function checkTierMarkShape(node: IntentionNode, problems: string[]): void {
  * spelling is the field itself. Every violating key on a node is reported, not
  * just the first, so one run tells the author the whole edit to make.
  *
- * NOTE — RULE NUMBER COLLISION. `intentions/tactic-supersession-edge-and-terminal.md`
- * also claims rules **23 and 24**, for the supersession edge and its cycle check.
- * Neither is landed as of 2026-08-29, and neither is this one at the time of
- * writing. Rule numbers are cross-referenced from node bodies and are NEVER
- * reused (see the burned rule 20 in the ledger above `validateGraph`), so
- * whichever of the two lands second must renumber its rules — and update the
- * claiming node body — rather than sharing a number.
+ * NOTE — RULE NUMBER COLLISION, RESOLVED 2026-08-31.
+ * `intentions/tactic-supersession-edge-and-terminal.md` also claimed rules
+ * **23 and 24**, for the supersession edge and its cycle check. Rule numbers are
+ * cross-referenced from node bodies and are NEVER reused (see the burned rule 20
+ * in the ledger above `validateGraph`), so whichever of the two landed second had
+ * to renumber. This shadow-ban landed first and keeps 23; supersession landed
+ * second and is numbered 24, 25 and 26. That node's body still says "23 and 24"
+ * and is stale on this point — it is the plan units 2-5 execute from, so read the
+ * numbers from the ledger above `validateGraph`, not from the node.
  */
 function checkAttributesShadowing(node: IntentionNode, problems: string[]): void {
   for (const key of FIRST_CLASS_FIELD_NAMES) {
@@ -1811,6 +1820,31 @@ function checkEdgeCycles(
  *
  * Inert on a node that is not superseded, and on a superseded node that is not
  * in flight — there is no interim live risk to except.
+ *
+ * KNOWN HAZARD — a node superseded BEFORE dispatch. Such a node has
+ * `execution === null`, so this rule is inert on it, and nothing yet keeps it
+ * out of dispatch: the selector keys on `phase`, and `isSuperseded` has no
+ * reader in selection. The ladder therefore stamps `execution` on an
+ * already-superseded node, and from that moment the node violates this rule.
+ * `graph-commit` does not run `validateGraph`, so the invalid state lands on
+ * main and every later whole-store `validate-graph` run is red until a human
+ * hand-adds an expiry.
+ *
+ * The rule stays FATAL anyway, for two measured reasons. (a) The hazard is
+ * latent, not live: measured 2026-08-31 across `.claude`, `packages`, `.github`
+ * and `intentions` on both `origin/main` and this branch, nothing writes
+ * `status: "superseded"` or a non-empty `superseded_by` — every occurrence is a
+ * type declaration, a test fixture, or prose about a superseded review run or
+ * PR — so the state is unreachable until a writer exists. (b) There is nowhere
+ * softer to put it: `validateGraph` has no warning tier, every rule pushing into
+ * one `problems` array that throws unconditionally, and the only non-fatal path
+ * in the repo is the script-level `--strict-sensors` branch in
+ * `scripts/validate-graph.ts`, which wraps a separate pass and no numbered rule.
+ *
+ * What closes this is the reader half — `isSuperseded` consulted in selection,
+ * deferred with the rest of the readers by
+ * `intentions/tactic-supersession-edge-and-terminal.md`. That wiring must land
+ * before or with the first writer of these fields.
  */
 function checkSupersessionExpiry(node: IntentionNode, problems: string[]): void {
   if (node.superseded_by.length === 0) return;
@@ -1943,11 +1977,16 @@ function checkSupersessionExpiry(node: IntentionNode, problems: string[]): void 
  *      re-parenting; same-kind is modelled on rule 6's parent-kind rule and
  *      costs nothing, since `checkRequiredEdgeKinds` already takes the expected
  *      kind as an argument and `node.kind` is passed straight in. A dangling
- *      supersession target is a hard fail: nodes are never pruned, so a target
- *      that does not resolve was never written, not retired. Unlike rules 10
- *      and 13-14 this rule is NOT kind-confined — `superseded_by` is legal on
- *      every kind, because a superseded strategy is exactly the case a
- *      tactic-only phase terminal could not express.
+ *      supersession target is a hard fail, and what keeps it from firing is the
+ *      PRUNER, not this rule: completion pruning does remove nodes, so a prune
+ *      must strip the pruned id from every inbound `superseded_by` in the same
+ *      commit — exactly the repair rule 13 already requires for `blocked_by`.
+ *      The reverse-edge scans that make it possible are `inboundSuperseders` and
+ *      `inboundBlockers` (`transitions.ts`). An earlier draft of this entry
+ *      instead claimed nodes are never pruned; `inboundBlockers` falsifies that.
+ *      Unlike rules 10 and 13-14 this rule is NOT kind-confined —
+ *      `superseded_by` is legal on every kind, because a superseded strategy is
+ *      exactly the case a tactic-only phase terminal could not express.
  *  25. `superseded_by` contains no cycles — a node cannot transitively supersede
  *      itself, and self-supersession (a node naming its own id) is the length-1
  *      case. Shares one three-colour DFS with rule 15 via `checkEdgeCycles`
