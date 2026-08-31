@@ -1843,20 +1843,53 @@ out="$(
 calls10f="$(cat "$FIX10F/gh-calls.log" 2>/dev/null || true)"
 ncalls10f="$(grep -c . <<<"$calls10f" || true)"
 
+# VERDICT WITNESS. The four call-log assertions below prove the two check-runs
+# fetches HAPPENED. None of them proves what those fetches RETURNED — and the
+# guard this case exists to pin does not distinguish the two answers that
+# matter. reconcile-graph-review-stall swallows a failed fetch
+# (RAW_VERDICT=$(dispatch_ci_verdict_rest ... 2>/dev/null) || RAW_VERDICT="")
+# and normalizes the empty result to `unknown`, which takes the SAME
+# `!= failing` branch as `passing`. So a fixture whose check-runs call ERRORS
+# still produces rc 0, exactly four logged REST calls, no predicate spawn and
+# no writes — every assertion here would hold, and the case would report that
+# "the guard held over a GREEN candidate" from a run where CI was never
+# successfully read at all.
+#
+# So read the verdict independently and pin the value. Two constraints on the
+# call, both load-bearing:
+#   * It MUST run AFTER calls10f/ncalls10f are captured. The call goes through
+#     the same gh stub and appends a fifth line to gh-calls.log (measured),
+#     which would break the exact-count-of-4 assertion below.
+#   * It runs in a SUBSHELL mirroring the `out=$(...)` one above, so sourcing
+#     lib.sh — which exports FIREBASE_PROJECT_ID and defines the whole dispatch
+#     function set — cannot pollute the harness's own shell. The subshell
+#     reproduces the reconciler's environment exactly: cd into the clone, the
+#     gh stub first on PATH, GC_FIXTURE_DIR at this case's fixtures, so the
+#     call hits the FIXTURE and never the network.
+# A failed source or a failed fetch leaves verdict10f empty, which fails the
+# conjunct — there is no path on which an error reads as a pass.
+verdict10f="$(
+  cd "$C10F" || exit 99
+  export PATH="$BIN10F:$PATH" GC_FIXTURE_DIR="$FIX10F"
+  source .claude/skills/dispatch-propagate/scripts/lib.sh || exit 98
+  dispatch_ci_verdict_rest deadbeef201
+)"
+
 if [[ $rc -eq 0 ]] \
    && [[ "${ncalls10f// /}" -eq 4 ]] \
    && grep -q '/pulls/201$' <<<"$calls10f" \
    && grep -q '/pulls/202$' <<<"$calls10f" \
    && grep -q 'deadbeef201/check-runs$' <<<"$calls10f" \
    && grep -q 'deadbeef202/check-runs$' <<<"$calls10f" \
+   && [[ "$verdict10f" == "passing" ]] \
    && [[ "$([ -f "$WORK/t10f-node-calls.log" ] && echo 1 || echo 0)" -eq 0 ]] \
    && ! grep -q 'recovered' <<<"$out" \
    && ! grep -qE '^\s*since:' "$C10F/intentions/t-rs1.md" \
    && ! grep -qE '^\s*since:' "$C10F/intentions/t-rs2.md" \
    && [[ ! -e "$WORK/t10f-argv.txt" ]]; then
-  ok "reconcile-graph-review-stall: the cost guard holds — both seeded candidates are really polled (exactly 4 REST calls: pulls+check-runs for each), yet a green + MERGEABLE candidate spawns no reviewStallRoute subprocess, and nothing is written or landed"
+  ok "reconcile-graph-review-stall: the cost guard holds — both seeded candidates are really polled (exactly 4 REST calls: pulls+check-runs for each) and the CI fetch really returns passing, yet a green + MERGEABLE candidate spawns no reviewStallRoute subprocess, and nothing is written or landed"
 else
-  no "reconcile-graph-review-stall cost guard (rc=$rc, gh calls=$ncalls10f)"
+  no "reconcile-graph-review-stall cost guard (rc=$rc, gh calls=$ncalls10f, ci verdict=$verdict10f)"
   printf '%s\n' "$out"
   printf 'gh calls:\n%s\n' "$calls10f"
 fi
