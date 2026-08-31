@@ -177,6 +177,11 @@ fi
 # checkout), so it never dirties a tree; it is refreshed by every transition
 # write and removed with the worktree.
 STAMP_PATH="$PROJECT_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
+# This site deliberately stays on `npx tsx` rather than the `node --import
+# tsx/esm` spelling used everywhere else: test-provision-node-worktree.sh
+# intercepts the gate with a `$BIN_DIR/npx` shim keyed on that exact argv
+# shape, so re-spelling it here silently disarms the test's only hook into
+# the selection gate. Convert the shim and this line together, not apart.
 GATE_FP=$(cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/check-node-selection.ts \
   "$NODE_ID" "$SELECTED_PHASE" --dir "$PROJECT_ROOT/intentions" --stamp "$STAMP_PATH")
 GATE_RC=$?
