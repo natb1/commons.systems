@@ -127,6 +127,18 @@ fi
 # used, and test-stamp-dispatch-session.sh asserts byte-identical output against
 # the real sed over a table of inputs (underscore, space, @, ., /, a multi-byte
 # UTF-8 character, and the empty string).
+#
+# RESULT IS RETURNED IN THE GLOBAL `ENCODED_CWD`, NOT ON STDOUT — and that is
+# the whole point, not a stylistic choice. Bash forks a subshell for EVERY
+# command substitution, with no optimization for a function body, so a
+# `$(encode_cwd "$cand")` call site forks once per candidate no matter how the
+# function is spelled internally: dropping `sed` saved one `exec` per call, not
+# the fork. Reading the global is what actually removes it. A caller must
+# therefore invoke `encode_cwd "$x"` as a plain command and read $ENCODED_CWD.
+# The function must never `printf` its result either: this hook's stdout is
+# consumed by Claude Code, so once the value stops travelling through `$(...)`
+# there is no subshell left to contain it.
+ENCODED_CWD=""
 encode_cwd() {
   local s="$1" out="" i ch
   for (( i = 0; i < ${#s}; i++ )); do
@@ -136,7 +148,7 @@ encode_cwd() {
       *)           out+="-"   ;;
     esac
   done
-  printf '%s' "$out"
+  ENCODED_CWD="$out"
 }
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-}"
@@ -149,13 +161,15 @@ resolve_from_encoded() {
   local encoded="$1" cand
   [[ -n "$encoded" ]] || return 1
   [[ -n "$PROJECT_DIR" && -d "$PROJECT_DIR" ]] || return 1
-  if [[ "$(encode_cwd "$PROJECT_DIR")" == "$encoded" ]]; then
+  encode_cwd "$PROJECT_DIR"
+  if [[ "$ENCODED_CWD" == "$encoded" ]]; then
     SESSION_DIR="$PROJECT_DIR"
     return 0
   fi
   for cand in "$PROJECT_DIR"/.claude/worktrees/*; do
     [[ -d "$cand" ]] || continue
-    if [[ "$(encode_cwd "$cand")" == "$encoded" ]]; then
+    encode_cwd "$cand"
+    if [[ "$ENCODED_CWD" == "$encoded" ]]; then
       SESSION_DIR="$cand"
       return 0
     fi

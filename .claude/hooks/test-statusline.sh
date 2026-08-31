@@ -224,6 +224,50 @@ json_with_null_ctx() {
     }'
 }
 
+# current_usage is a non-null OBJECT, but its token keys have been renamed or
+# dropped — the schema-drift class the context_window_size guard was written
+# for, applied to the NUMERATOR instead of the denominator. `usage != "null"`
+# passes (the object is there) and ctx_size is a valid positive integer, so the
+# token branch is entered with nothing to sum.
+json_with_renamed_usage_keys() {
+  local model="$1" cwd="$2"
+  jq -nc \
+    --arg m "$model" \
+    --arg d "$cwd" \
+    '{
+      model: {display_name: $m},
+      workspace: {current_dir: $d},
+      context_window: {
+        current_usage: {
+          prompt_tokens: 10000,
+          completion_tokens: 5000
+        },
+        context_window_size: 200000
+      }
+    }'
+}
+
+# A token field typed as a STRING rather than a number — the same drift class,
+# and the variant that is loudest: jq's `"12" + null` is the string `"12"`, so
+# the unguarded numerator reached bash as a quoted token and made
+# `$((current * 100 / ctx_size))` an arithmetic syntax error.
+json_with_string_typed_tokens() {
+  local model="$1" cwd="$2"
+  jq -nc \
+    --arg m "$model" \
+    --arg d "$cwd" \
+    '{
+      model: {display_name: $m},
+      workspace: {current_dir: $d},
+      context_window: {
+        current_usage: {
+          input_tokens: "12"
+        },
+        context_window_size: 200000
+      }
+    }'
+}
+
 # =============================================================================
 # Case 1: branch `main` — no dispatch segment (model+cwd+tokens still render)
 # =============================================================================
@@ -333,6 +377,37 @@ run_hook "$(json_with_null_ctx "claude-sonnet-4" "/home/user/project")"
 assert_nonempty     "case10: null ctx_size still renders (does not crash silent)" "$HOOK_OUT"
 assert_contains     "case10: null ctx_size falls back to model-only" "claude-sonnet-4" "$HOOK_OUT"
 assert_not_contains "case10: null ctx_size omits a bogus tokens line" "tokens" "$HOOK_OUT"
+
+# =============================================================================
+# Case 11: current_usage present, token keys renamed/absent — the NUMERATOR's
+# half of the same schema-drift guard. jq sums `null + null + null` to `null`,
+# bash reads the bare word `null` as an unset name worth 0, and the status line
+# renders a confident `0k/200k tokens (0%)` for a session that may be at the
+# context ceiling. A fabricated zero presented as a measurement is worse than
+# no number, so the correct rendering is the model-only fallback — the same one
+# a genuinely absent current_usage takes.
+# =============================================================================
+setup_case
+export STUB_BRANCH="main"
+run_hook "$(json_with_renamed_usage_keys "claude-sonnet-4" "/home/user/project")"
+assert_nonempty     "case11: drifted token keys still render" "$HOOK_OUT"
+assert_contains     "case11: drifted token keys fall back to model-only" "claude-sonnet-4" "$HOOK_OUT"
+assert_not_contains "case11: drifted token keys omit a bogus tokens line" "tokens" "$HOOK_OUT"
+assert_not_contains "case11: no fabricated zero-token reading" "0k/200k" "$HOOK_OUT"
+
+# =============================================================================
+# Case 12: a string-typed token field. jq's `"12" + null` is the string `"12"`,
+# so the unguarded numerator reached bash quoted and `$((current * 100 /
+# ctx_size))` died with `arithmetic syntax error: operand expected` — fatal
+# even without `set -e`, so NOTHING rendered, not even the model segment. Same
+# fail-open violation as case 9/10, entered through the numerator.
+# =============================================================================
+setup_case
+export STUB_BRANCH="main"
+run_hook "$(json_with_string_typed_tokens "claude-sonnet-4" "/home/user/project")"
+assert_nonempty     "case12: string-typed tokens still render (no arithmetic death)" "$HOOK_OUT"
+assert_contains     "case12: string-typed tokens fall back to model-only" "claude-sonnet-4" "$HOOK_OUT"
+assert_not_contains "case12: string-typed tokens omit a bogus tokens line" "tokens" "$HOOK_OUT"
 
 # --- Summary ------------------------------------------------------------------
 

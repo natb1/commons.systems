@@ -20,6 +20,24 @@ model=$(echo "$input" | jq -r '.model.display_name')
 cwd_raw=$(echo "$input" | jq -r '.workspace.current_dir')
 usage=$(echo "$input" | jq '.context_window.current_usage')
 ctx_size=$(echo "$input" | jq -r '.context_window.context_window_size')
+# The NUMERATOR gets the same treatment as the denominator below, because it is
+# exposed to the same schema drift. `.input_tokens + .cache_… + .cache_…` over a
+# current_usage whose token keys have been renamed or dropped is `null + null +
+# null` = `null`; bash reads the bare word `null` as an unset name worth 0 and
+# the status line renders a confident `0k/200k tokens (0%)` for a session that
+# may be at the context ceiling — a fabricated measurement, which is worse than
+# no number. A string-typed field is the loud variant: jq's `"12" + null` is the
+# string `"12"`, and `$(( "12" * 100 / ctx_size ))` is an arithmetic syntax
+# error, fatal for the same reason spelled out below.
+#
+# `map(select(type == "number"))` sums only the members that really are numbers,
+# which PRESERVES today's partial-presence behaviour (jq's `5 + null` is `5`),
+# and `// "null"` turns the all-absent case into the same literal "null" the
+# ctx_size guard already recognises — so it takes the model-only branch rather
+# than reporting a zero it did not measure. Hoisted above the `if` so the guard
+# can test it. Here-string, not `echo`, per .claude/rules/shell-json.md.
+current=$(jq -r '[.input_tokens, .cache_creation_input_tokens, .cache_read_input_tokens]
+                 | map(select(type == "number")) | add // "null"' <<<"$usage")
 # ctx_size must be a positive integer to divide by. jq -r turns a JSON `null`
 # or a missing key into the literal string "null", and a malformed/zero
 # context_window_size is not impossible either — either way `$(( ... /
@@ -30,8 +48,7 @@ ctx_size=$(echo "$input" | jq -r '.context_window.context_window_size')
 # the status line to nothing, which the fail-open posture documented at the
 # top of this file forbids. Falls back to the plain model-only branch, same
 # as the no-usage case, rather than crash.
-if [[ "$usage" != "null" && "$ctx_size" =~ ^[0-9]+$ && "$ctx_size" -gt 0 ]]; then
-  current=$(echo "$usage" | jq '.input_tokens + .cache_creation_input_tokens + .cache_read_input_tokens')
+if [[ "$usage" != "null" && "$current" =~ ^[0-9]+$ && "$ctx_size" =~ ^[0-9]+$ && "$ctx_size" -gt 0 ]]; then
   pct=$((current * 100 / ctx_size))
   printf "\033[36m%s\033[0m | \033[35m%dk/%dk tokens (%d%%)\033[0m" \
     "$model" "$((current/1000))" "$((ctx_size/1000))" "$pct"

@@ -191,6 +191,21 @@ function requireNumber(obj, path, field) {
   return v;
 }
 
+// Project an OPTIONAL field from `src` onto `dst`, only when it is really
+// there. Absent stays ABSENT: writing a default (0, or false) in its place
+// would make a row from before the field existed indistinguishable from one
+// that measured the default, which is the same silent lie the discriminator
+// fields are being persisted to prevent. Present-but-wrong-typed is still a
+// hard error — a malformed payload is a broken producer, not an old one.
+function projectOptional(src, dst, path, field, isValid, expected) {
+  const v = src?.[field];
+  if (v === undefined || v === null) return;
+  if (!isValid(v)) {
+    fail(`payload field ${path}.${field} must be ${expected} when present`);
+  }
+  dst[field] = v;
+}
+
 // Project a by_phase / by_model bucket into the persisted shape. Both carry the
 // four token counts plus turns + price_proxy_usd.
 function projectBucket(bucket, path) {
@@ -284,6 +299,36 @@ function loadPayload(raw) {
     sidecar_eligible: requireNumber(win, "window", "sidecar_eligible"),
     sidecar_present: requireNumber(win, "window", "sidecar_present"),
   };
+
+  // OPTIONAL — the discriminators that make `sidecar_eligible` READABLE ACROSS
+  // ITS OWN REDEFINITION. The denominator changed meaning from "every worker
+  // session" to "every STAMPABLE worker session"; the key did not. Without
+  // these fields a reader plotting stored sidecar_present / sidecar_eligible
+  // over time sees a step up at the cutover and reads it as stamping coverage
+  // improving, when the numerator never moved — the denominator just got
+  // smaller. The BEHAVIOR CONTRACT that explains the redefinition lives in the
+  // report artifact, which the persisted series does not carry, so the series
+  // has to carry its own discriminator.
+  //
+  // Their PRESENCE is the discriminator, which is exactly why absent must stay
+  // absent (see projectOptional): a row with sidecar_ineligible_* is a
+  // post-cutover row whose denominator is the stampable population; a row
+  // without them predates the change and carries the old, larger one. Backfill
+  // a 0 and that distinction is destroyed — the row would then claim it
+  // measured an empty ineligible population rather than not having measured it.
+  projectOptional(win, window, "window", "sidecar_ineligible_unstampable_branch",
+    isFiniteNumber, "a finite number");
+  projectOptional(win, window, "window", "sidecar_ineligible_branch_unknown",
+    isFiniteNumber, "a finite number");
+  // project_dirs_scanned: how many project dirs the run swept. The scope
+  // widening that motivated the redefinition is visible here and nowhere else.
+  projectOptional(win, window, "window", "project_dirs_scanned",
+    isFiniteNumber, "a finite number");
+  // sidecar_coverage_measurable: false under --node scope, where present and
+  // eligible are equal by construction. A stored row that is false must not be
+  // plotted as coverage at all.
+  projectOptional(win, window, "window", "sidecar_coverage_measurable",
+    (v) => typeof v === "boolean", "a boolean");
 
   const totals = {
     input: requireNumber(tot, "totals", "input"),

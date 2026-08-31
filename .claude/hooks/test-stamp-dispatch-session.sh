@@ -394,19 +394,92 @@ rm -rf "$ROOT"
 
 # --- 8. encode_cwd: no fork per candidate, byte-identical to the sed it replaced
 
-# resolve_from_encoded calls encode_cwd once per candidate worktree, so the sed
-# spelling forked a process per worktree on every turn yield. The hook's OWN
-# function is extracted here (renamed so it does not shadow this file's
-# sed-based helper) and checked on both counts: that it forks nothing, and that
-# it still agrees byte-for-byte with the real `sed 's/[^A-Za-z0-9]/-/g'`.
+# resolve_from_encoded calls encode_cwd once per candidate worktree, so on every
+# Stop yield the cost of this helper is multiplied by the number of worktrees on
+# disk. Dropping `sed` from the body removed one `exec` per call but NOT the
+# fork: bash forks a subshell for every command substitution, with no
+# optimization for a function body, so a `$(encode_cwd "$cand")` call site forks
+# once per candidate however the function is spelled internally. The fork is
+# removed only by returning through the global $ENCODED_CWD and reading it.
+#
+# The superseded version of this case could not detect any of that. It greped
+# the extracted function body for `sed` and then called the function through
+# `$(...)` itself — demonstrating the very fork it certified as absent. The
+# assertions below are built so each one goes RED when its property is
+# violated:
+#
+#   (a) call sites  — no `$(encode_cwd` anywhere in the hook's CODE. Comment
+#       lines are stripped first: the hook's own header quotes the forbidden
+#       spelling to explain why it is forbidden, and a grep that cannot tell
+#       prose from code would fail on the documentation.
+#   (b) function body — no command substitution, backtick or pipeline inside
+#       encode_cwd, so it forks nothing internally either. (A `case` pattern
+#       alternation would trip the pipeline check; spell one as a character
+#       class, which is what the encoder uses anyway.)
+#   (c) DYNAMIC — the decisive one. A counting shim wraps the encoder, and
+#       resolve_from_encoded is driven over a real fixture. A counter increment
+#       survives only if the call site ran the function in the CURRENT shell; a
+#       `$(...)` call site runs it in a forked subshell where the increment is
+#       discarded with the subshell. So the observed count is 0 exactly when the
+#       fork is back, and the exact expected count also pins that the encoder is
+#       called once per candidate and short-circuits on a hit.
+#   (d) equivalence — still byte-identical to the real `sed`, now read out of
+#       $ENCODED_CWD rather than captured from stdout.
 
-HOOK_ENCODE_SRC=$(awk '/^encode_cwd\(\)/,/^[}]$/' "$HOOK" | sed '1s/^encode_cwd/hook_encode_cwd/')
+HOOK_ENCODE_SRC=$(awk '/^encode_cwd\(\)/,/^[}]$/' "$HOOK" | sed 's/encode_cwd/hook_encode_cwd/g')
+HOOK_RESOLVE_SRC=$(awk '/^resolve_from_encoded\(\)/,/^[}]$/' "$HOOK" | sed 's/encode_cwd/hook_encode_cwd/g')
 assert_contains "encode_cwd: the hook's own function was extracted" \
   "hook_encode_cwd() {" "$HOOK_ENCODE_SRC"
-assert_eq       "encode_cwd: implemented without forking a process per call" "no fork" \
-  "$(case "$HOOK_ENCODE_SRC" in *sed*) echo "forks sed" ;; *) echo "no fork" ;; esac)"
-eval "$HOOK_ENCODE_SRC"
+assert_contains "encode_cwd: the hook's own resolve_from_encoded was extracted" \
+  "resolve_from_encoded() {" "$HOOK_RESOLVE_SRC"
 
+# (a) call sites do not fork. Comment lines stripped — see note above.
+assert_eq "encode_cwd: no call site spells \$(encode_cwd …)" "0" \
+  "$(grep -v '^[[:space:]]*#' "$HOOK" | grep -c '[$](encode_cwd' || true)"
+
+# (b) the body itself forks nothing.
+assert_eq "encode_cwd: body has no command substitution, backtick or pipeline" "clean" \
+  "$(case "$HOOK_ENCODE_SRC" in *'$('*) echo "command substitution" ;; *'`'*) echo "backtick" ;; *'|'*) echo "pipeline" ;; *) echo "clean" ;; esac)"
+
+eval "$HOOK_ENCODE_SRC"
+eval "$HOOK_RESOLVE_SRC"
+
+# The encoder must return through the global, never on stdout: this hook's
+# stdout is consumed by Claude Code, and with the `$(...)` containment gone
+# there is no subshell left to swallow a printf.
+assert_eq "encode_cwd: writes nothing to stdout" "" "$(hook_encode_cwd "/a/b" ; printf '%s' "")"
+
+# (c) the dynamic fork detector. Wrap the real encoder in a counting shim.
+eval "$(declare -f hook_encode_cwd | sed '1s/^hook_encode_cwd/real_hook_encode_cwd/')"
+ENCODE_CALLS=0
+hook_encode_cwd() { ENCODE_CALLS=$((ENCODE_CALLS + 1)); real_hook_encode_cwd "$@"; }
+
+FORK_ROOT=$(mktemp -d)
+mkdir -p "$FORK_ROOT/.claude/worktrees/wt-a" \
+         "$FORK_ROOT/.claude/worktrees/wt-b" \
+         "$FORK_ROOT/.claude/worktrees/wt-c"
+PROJECT_DIR="$FORK_ROOT"
+
+# Miss: every candidate is encoded — project root plus all three worktrees.
+SESSION_DIR=""
+ENCODE_CALLS=0
+resolve_from_encoded "no-such-encoded-directory-name" || true
+assert_eq "encode_cwd: runs in the caller's shell, not a forked subshell (miss)" "4" \
+  "$ENCODE_CALLS"
+assert_eq "encode_cwd: a miss resolves nothing" "" "$SESSION_DIR"
+
+# Hit on the SECOND worktree: project root, wt-a, wt-b — then it short-circuits.
+SESSION_DIR=""
+ENCODE_CALLS=0
+resolve_from_encoded "$(encode_cwd "$FORK_ROOT/.claude/worktrees/wt-b")" || true
+assert_eq "encode_cwd: runs in the caller's shell, not a forked subshell (hit)" "3" \
+  "$ENCODE_CALLS"
+assert_eq "encode_cwd: the hit resolves the right worktree" \
+  "$FORK_ROOT/.claude/worktrees/wt-b" "$SESSION_DIR"
+
+rm -rf "$FORK_ROOT"
+
+# (d) still byte-identical to the sed it replaced, read out of the global.
 ENCODE_CASES=(
   "/home/n8/repo/.claude/worktrees/tactic-hook-fixture"
   "under_score"
@@ -420,9 +493,11 @@ ENCODE_CASES=(
   ""
 )
 for RAW in "${ENCODE_CASES[@]}"; do
+  ENCODED_CWD="<unset>"
+  real_hook_encode_cwd "$RAW"
   assert_eq "encode_cwd matches sed for '$RAW'" \
     "$(printf '%s' "$RAW" | sed 's/[^A-Za-z0-9]/-/g')" \
-    "$(hook_encode_cwd "$RAW")"
+    "$ENCODED_CWD"
 done
 
 # --- Summary ----------------------------------------------------------------
