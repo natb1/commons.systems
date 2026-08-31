@@ -64,8 +64,20 @@ attention:
     are compressed by hand onto a 0.01-per-level ladder that preserves the
     original ordering WITHIN the band. Original magnitude preserved at
     attributes.pre_namespacing_boost for restoration.
-phase: null
-execution: null
+phase: done
+execution:
+  branch: a-p7-ci-pending-liveness-bound
+  pr: 3169
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-31T09:04:41Z
+    mergeCommitSha: c7a96c24be0bea39ec3b62a041c2aa0486b1a4bc
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null

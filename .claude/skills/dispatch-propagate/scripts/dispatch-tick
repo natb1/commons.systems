@@ -185,12 +185,86 @@ source "$SCRIPT_DIR/lib.sh"
 # Install the trap BEFORE the workspace creation and the sentinel write below, so
 # it clears a partial workspace or partial sentinel if either setup fails and we
 # abort. A single EXIT trap covers every `exit` below this point — intended.
+#
+# A SIGNAL MUST STOP THE TICK, NOT JUST TIDY UP AFTER IT. A single combined
+# `trap fn EXIT INT TERM` whose handler only cleans up and RETURNS hands control
+# straight back to the interrupted tick, which then carries on running with the
+# headless-liveness sentinel ALREADY DELETED — so a concurrent tick resolves
+# this still-live holder as dead and reclaims the selection lock mid-selection,
+# which is the exact duplicate-spawn defect #1068 closes. So INT and TERM get
+# their own registrations, and the handler TERMINATES the tick.
+#
+# IT TERMINATES BY RE-RAISING THE SIGNAL, NOT BY `exit 143`. systemd counts
+# death by SIGHUP/SIGINT/SIGTERM/SIGPIPE as a clean stop but a 143/130 EXIT
+# STATUS as a failure, and both units that run this script carry
+# `OnFailure=dispatch-tick-recover.service`: the heartbeat service (lib.sh's
+# `desired_service`) and the transient unit dispatch-spawn-tick launches. So
+# exiting 143 would make an ordinary `systemctl --user stop
+# dispatch-heartbeat.service` mid-tick arm a backstop reseed that relaunches the
+# chain minutes later, and repeats escalate to a `dispatch:chain-stalled` issue.
+# Clearing the handler's own registration and `kill`ing ourselves restores the
+# default disposition, so the tick dies of the signal it was sent. A waiting
+# shell still sees 143/130 — `wait` reports 128+signo for signal death — so
+# callers and tests are unaffected. (dispatch-ladder-run does NOT do this: it
+# has no OnFailure, by deliberate design — see dispatch-ladder-spawn:42-49.)
+#
+# DYING OF THE SIGNAL IS NOT BY ITSELF ENOUGH ON THE HEARTBEAT UNIT. That
+# clean-stop rule is spelled with a carve-out — systemd.service(5), under
+# `SuccessExitStatus=`: "in addition to the normal successful exit status 0 and,
+# EXCEPT FOR Type=oneshot, the signals SIGHUP, SIGINT, SIGTERM, and SIGPIPE".
+# dispatch-heartbeat.service IS Type=oneshot, so for that unit alone a re-raised
+# SIGTERM would still end it `Failed with result 'signal'` and fire the
+# OnFailure= anyway. lib.sh's `desired_service` therefore also carries
+# `SuccessExitStatus=SIGTERM SIGINT`, and the two halves only work together:
+# without the re-raise the exit STATUS fails the unit, without that line the
+# SIGNAL fails it. The transient unit sets no Type=, so it is Type=simple and
+# gets the carve-out already.
+#
+# `trap - EXIT` FIRST, because a signal handler that calls `exit` DOES run the
+# EXIT trap afterwards — `exit` only fails to re-enter the trap it is already
+# inside, which on the signal path is the INT/TERM trap and not this one.
+# Without it the whole body would run a second time on every signal. Clearing
+# it makes cleanup run exactly once on every path.
+#
+# `$?` is captured by hand on the FIRST line, before any command in the body can
+# overwrite it, so the plain EXIT path still reports the tick's real status. It
+# cannot be read from `$?` on the signal path: at handler entry on a signal `$?`
+# is the last COMPLETED command's status, NOT 128+signo — which is why the two
+# statuses are passed as literal arguments too. The trailing `exit "$rc"` is
+# then unreachable on the signal path (the re-raise kills us first) and is kept
+# only as the backstop for a `kill` that somehow does not land. Same shape as
+# `vi_exit_trap` in test-dispatch-verify-instrument-invocation.sh, plus the
+# re-raise.
 SENTINEL=""
+# The paused-branch node-lane drain below is the ONE place this script holds the
+# selection lock in its own process; every other hold belongs to
+# dispatch-select-tick, which acquires and releases it inside its own. Set to 1
+# by that drain's acquire and back to 0 by its unconditional release, so a
+# signal landing between the two does not strand the lock. It matters most for
+# an INHERITED real session id (a hand-run tick, Ctrl-C during graph-auto-merge):
+# there is no sentinel on that path, so resolve_holder_state asks the daemon,
+# finds the session LIVE, and nothing reclaims the lock until it ages past
+# MAX_HOLD_SECONDS (dispatch-acquire-lock, default 300s). The headless case
+# self-heals through the removed sentinel and so hides this entirely.
+TICK_LOCK_HELD=0
 _dispatch_tick_cleanup() {
+  local rc=${1:-$?} sig="${2:-}"
+  trap - EXIT
+  if (( TICK_LOCK_HELD )); then
+    "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
+    TICK_LOCK_HELD=0
+  fi
   [[ -n "${SENTINEL:-}" ]] && rm -f "$SENTINEL"
   [[ -n "${DISPATCH_TICK_WORKSPACE:-}" ]] && rm -rf "$DISPATCH_TICK_WORKSPACE"
+  if [[ -n "$sig" ]]; then
+    trap - "$sig"
+    kill -"$sig" "$$"
+  fi
+  exit "$rc"
 }
-trap '_dispatch_tick_cleanup' EXIT INT TERM
+trap '_dispatch_tick_cleanup' EXIT
+trap '_dispatch_tick_cleanup 130 INT' INT
+trap '_dispatch_tick_cleanup 143 TERM' TERM
 
 # Tick-scoped workspace holding the agents snapshot (#1452). Created
 # unconditionally (both the autonomous and --manual paths run the
@@ -638,10 +712,30 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
     if [[ -z "$DRAIN_TIMEOUT_BIN" ]]; then
       echo "dispatch-tick: WARNING: \`timeout\` not found; refusing to run an unbounded merge/reconcile drain on a Type=oneshot heartbeat; SKIPPING the paused-branch node-lane drain this tick" >&2
     else
+      # Declare the hold to the cleanup handler BEFORE the acquire, not after
+      # it. `--wait` polls for up to DISPATCH_LOCK_WAIT_TIMEOUT (default 300s)
+      # in a CHILD process, and dispatch-heartbeat.service sets
+      # KillMode=process — so a `systemctl --user stop` mid-wait signals only
+      # this shell. bash defers the pending trap until the command substitution
+      # finishes, by which time the child has ALREADY taken the lock and
+      # written our session id into it; a flag raised only afterwards is still
+      # 0 when the handler runs, so the handler skips the release and the lock
+      # is stranded for MAX_HOLD_SECONDS — exactly the defect TICK_LOCK_HELD
+      # exists to prevent. Raising it first is safe because `--release` is a
+      # strict self-release (dispatch-acquire-lock's `release)` arm): a silent
+      # `noop`, exit 0, whenever the recorded holder is not our session id.
+      TICK_LOCK_HELD=1
       DRAIN_LOCK=$("$SCRIPT_DIR/dispatch-acquire-lock" --wait) || DRAIN_LOCK=""
       if [[ "$DRAIN_LOCK" != acquired ]]; then
+        # Not ours after all — drop the claim, so no later exit path issues a
+        # pointless `--release` for a lock we never held.
+        TICK_LOCK_HELD=0
         echo "dispatch-tick: paused-branch node-lane drain SKIPPED; dispatch-acquire-lock reported '${DRAIN_LOCK:-error}' (another tick holds the selection lock); the next tick retries" >&2
       else
+        # Everything between here and the unconditional release below runs with
+        # the lock held, and a SIGINT/SIGTERM landing anywhere in that window
+        # must release it on the way out rather than strand it (see
+        # TICK_LOCK_HELD's comment at the trap).
         # No main-health read here: graph-auto-merge performs that admission
         # gate ITSELF (tactic-graph-auto-merge-main-health-gate), calling
         # `dispatch-graph-main-red-sync --read-only` internally and merging
@@ -687,6 +781,7 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
         # Release unconditionally — including after a timeout — so a wedged
         # drain never leaves the selection lock held for the rest of the pause.
         "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
+        TICK_LOCK_HELD=0
       fi
     fi
   fi
