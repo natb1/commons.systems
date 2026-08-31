@@ -281,7 +281,7 @@ seed_node() { # <id> — 12 numbered lines so distant edits rebase cleanly, wrap
 }
 for id in t-stale t-concurrent t-pr t-pr-bad-arg t-resolve-ratify t-resolve-reject t-resolve-unparked t-pinned \
           t-clear-happy t-clear-noop t-clear-rollback t-clear-pinned t-clear-cwd t-resolve-cwd t-restore-stale \
-          t-park-rollback t-park-unknown t-park-false-fail; do
+          t-park-rollback t-park-unknown t-park-false-fail t-clear-symlink; do
   seed_node "$id"
 done
 # t-demote: a schema-VALID node (only id/kind/statement/owner/status are
@@ -1518,6 +1518,79 @@ else
   printf 'missing: %s\n' "$out_missing"
   printf 'nostore: %s\n' "$out_nostore"
   printf 'nottop: %s\n' "$out_nottop"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 26: a checkout reached through a SYMLINK is a legitimate -C.
+# ---------------------------------------------------------------------------
+# The toplevel gate case 25 pins used to decide by STRING-COMPARING two
+# normalizations of the same directory: `cd "$REPO_ARG" && pwd`, which is
+# LOGICAL and keeps the symlink in the path, against `rev-parse
+# --show-toplevel`, which is SYMLINK-RESOLVED. Through a symlinked checkout
+# those two can never match, so a caller standing in the one and only tree it
+# meant was rejected outright with "is not the git toplevel" -- a gate built to
+# catch a NESTED -C firing on a perfectly legitimate state instead.
+# `rev-parse --show-prefix` answers the question the gate is actually asking
+# (empty IFF this directory IS the toplevel) and has no second normalization to
+# disagree with.
+#
+# Both arms are load-bearing. (a) is the false rejection. (b) is the gate
+# keeping its teeth through the very same symlink -- without it the repair
+# could have traded a false reject for a false accept, which is the strictly
+# worse failure (case 25's comment explains what a nested -C does).
+SYM_REAL="$WORK/sym-real"; make_clone "$SYM_REAL" writer-sym
+SYM_LINK="$WORK/sym-alias"
+ln -s "$SYM_REAL" "$SYM_LINK"
+
+run_cp_at() { # <-C value> [clear-park args...] — cwd is always the REAL path,
+              # so the -C spelling is the only variable between the two arms.
+  local at="$1"; shift
+  (
+    cd "$SYM_REAL" || exit 99
+    export PATH="$WORK/bin:$PATH"
+    export GC_FIXTURE_DIR="$FIXTURE_DIR"
+    export GRAPH_COMMIT_CHECK_POLL_SECONDS=0
+    export GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=5
+    export GRAPH_COMMIT_MAX_ATTEMPTS=5
+    bash packages/intentionsutil/scripts/clear-park -C "$at" "$@"
+  )
+}
+
+# (a) the legitimate invocation: -C names the checkout through its symlink.
+run_pn "$SYM_REAL" t-clear-symlink 'unit-test symlinked -C setup' >/dev/null 2>&1
+sync_clone "$SYM_REAL"
+parked_sym="$(origin_show t-clear-symlink)"
+before_sha_sym="$(origin_sha)"
+out_sym="$(run_cp_at "$SYM_LINK" t-clear-symlink 'through a symlinked checkout' 2>&1)"; rc_sym=$?
+content_sym="$(origin_show t-clear-symlink)"
+after_sha_sym="$(origin_sha)"
+porcelain_sym="$(git -C "$SYM_REAL" status --porcelain -- intentions/)"
+
+# (b) a NESTED store below the same symlink is still not the toplevel.
+SYM_NESTED="$SYM_REAL/nested-store"; mkdir -p "$SYM_NESTED/intentions"
+printf -- '---\nid: t-clear-symlink\n---\nnested sentinel, must not be rewritten\n' \
+  > "$SYM_NESTED/intentions/t-clear-symlink.md"
+sym_nested_before="$(git hash-object "$SYM_NESTED/intentions/t-clear-symlink.md")"
+out_symnest="$(run_cp_at "$SYM_LINK/nested-store" t-clear-symlink 'nested below the alias' 2>&1)"; rc_symnest=$?
+sym_nested_after="$(git hash-object "$SYM_NESTED/intentions/t-clear-symlink.md")"
+
+# The setup must genuinely have parked the node, or "office_hours: null" after
+# the clear is satisfied by the seed fixture's own starting value and the arm
+# proves nothing.
+if ! grep -q 'office_hours: null' <<<"$parked_sym" \
+   && [[ $rc_sym -eq 0 ]] \
+   && grep -q 'office_hours: null' <<<"$content_sym" \
+   && [[ "$after_sha_sym" != "$before_sha_sym" ]] \
+   && [[ -z "$porcelain_sym" ]] \
+   && [[ $rc_symnest -eq 2 ]] \
+   && grep -q 'is not the git toplevel' <<<"$out_symnest" \
+   && [[ "$sym_nested_after" == "$sym_nested_before" ]]; then
+  ok "clear-park -C through a symlinked checkout lands the clear (was a false 'not the git toplevel' reject), while a nested store below the same symlink is still refused"
+else
+  no "clear-park symlinked -C (rc_sym=$rc_sym rc_symnest=$rc_symnest porcelain='$porcelain_sym' before=$before_sha_sym after=$after_sha_sym nested_before=$sym_nested_before nested_after=$sym_nested_after)"
+  printf 'parked: %s\n' "$parked_sym"
+  printf 'sym: %s\n' "$out_sym"; printf '%s\n' "$content_sym"
+  printf 'nested: %s\n' "$out_symnest"
 fi
 
 echo

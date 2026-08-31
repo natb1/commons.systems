@@ -605,16 +605,24 @@ out2="$(run_mint "$L" "$GCLOG_L2" land "$SRC_L" --pr "$SRC_PR" \
          --items "$WORK/items-machine-plus-new.json" --now "$NOW" 2>&1)"; rc2=$?
 blob_l2="$(git -C "$L" hash-object -- "intentions/$MACH_L.md" 2>/dev/null)"
 status_l="$(git -C "$L" status --porcelain -- intentions/)"
+# The reported item list is read out of the diagnostic LINE and compared whole,
+# rather than grepped for as bare tokens across the whole captured output.
+# `out2` also carries git's `From <tmpdir>/origin` line and `mktemp -d` names
+# are random, so a token as short as `V1` can match the PATH: run 33362528446
+# drew `/tmp/tmp.rV1YYeIBAE` and the `! grep -q 'V1'` guard fired on the tmpdir
+# name, reddening `hook-tests` on a refusal that was entirely correct (rc1=0
+# rc2=1, blobs equal, tree clean). Comparing the list itself is immune to any
+# incidental output and is also STRICTER than the two greps it replaces: those
+# passed on any superset that happened to name V3, this pins the set exactly.
+missing_l2="$(sed -n 's/.*does NOT record verification item(s): //p' <<<"$out2")"
 if [[ $rc1 -eq 0 && $rc2 -ne 0 ]] \
-   && grep -q 'does NOT record verification item' <<<"$out2" \
-   && grep -q 'V3' <<<"$out2" \
-   && ! grep -q 'V1' <<<"$out2" \
+   && [[ "$missing_l2" == "V3" ]] \
    && [[ ! -e "$GCLOG_L2" ]] \
    && [[ -n "$blob_l1" && "$blob_l1" == "$blob_l2" ]] \
    && [[ -z "$status_l" ]]; then
   ok "a NEW item for an EXISTING lane is refused loudly, naming only the missing item; the landed node is not rewritten and the tree stays clean"
 else
-  no "new-item-on-existing-lane refusal (rc1=$rc1 rc2=$rc2 blob1=$blob_l1 blob2=$blob_l2 status='$status_l')"
+  no "new-item-on-existing-lane refusal (rc1=$rc1 rc2=$rc2 missing='$missing_l2' blob1=$blob_l1 blob2=$blob_l2 status='$status_l')"
   printf '%s\n' "$out2"; [[ -e "$GCLOG_L2" ]] && cat "$GCLOG_L2"
 fi
 

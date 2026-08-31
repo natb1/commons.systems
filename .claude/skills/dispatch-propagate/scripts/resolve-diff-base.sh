@@ -59,25 +59,83 @@
 #                   For checks that are meaningless without a branch delta; the
 #                   two codes are kept distinct because the causes and remedies
 #                   differ.
-#     first-parent  use HEAD^1 as the base — "what this commit introduced" — in
-#                   BOTH shapes. Correct for CI checks that must also run on
-#                   `main`. The strict-ancestor shape is not an error for such a
-#                   caller: it is what a second push to `main` produces while an
-#                   earlier run is still in flight, and HEAD^1 answers the
-#                   question just as well after the tip has moved on. Failing it
-#                   would turn a benign push race into a red required context on
-#                   `main`, blocking merges repo-wide.
+#     first-parent  never fatal for a no-delta HEAD: it always resolves a base
+#                   and says on stderr which one it used. Correct for CI checks
+#                   that must also run on `main`. Two sub-shapes, split on
+#                   whether HEAD sits on <remote-ref>'s own FIRST-PARENT CHAIN:
+#
+#                     ON the chain (and at the tip) → HEAD^1,
+#                     `source=first-parent`. "What this commit introduced." This
+#                     is the push race on `main`: a second push landing while an
+#                     earlier run is still in flight makes that run's HEAD a
+#                     strict ancestor of origin/main, and HEAD^1 answers the
+#                     question just as well after the tip has moved on.
+#
+#                     OFF the chain → the FORK POINT, `source=fork-point`: the
+#                     newest chain commit that is an ancestor of HEAD, i.e.
+#                     where HEAD's line left the chain. HEAD got here as a merge
+#                     commit's SECOND parent, and HEAD^1..HEAD can be far
+#                     narrower than the line HEAD ends — on an already-merged
+#                     five-commit branch it is the last commit only. The fork
+#                     point covers the whole line.
+#
+#                     It does NOT, however, coincide with HEAD^1 merely because
+#                     that line is one commit long — an earlier revision of this
+#                     header claimed it did, and that was WRONG. The fork point
+#                     is measured against <remote-ref>'s CURRENT first-parent
+#                     chain, and a landing merge REROUTES that chain through the
+#                     LANDER's branch. Commits HEAD's line genuinely forked from
+#                     are demoted off the chain along with the tip they sat on,
+#                     so the walk cannot see them and stops at an OLDER chain
+#                     commit. Whenever the lander forked EARLIER than HEAD^1 the
+#                     base is older than HEAD^1, however short HEAD's line is.
+#                     Measured on fixture `lander-forks-earlier` in
+#                     test-resolve-diff-base.sh — main A0→A→X, a lander branched
+#                     at A0 merges X and pushes, HEAD=X, X's line ONE commit
+#                     long: base=A0, not X^1=A, and A0..X names a.txt AND x.txt
+#                     where X^1..X names only x.txt.
+#
+#                     What IS guaranteed is the DIRECTION of the error, and it
+#                     is the safe one. An off-chain HEAD is by definition not on
+#                     the chain, so the fork point is a STRICT ancestor of HEAD
+#                     and hence — for a single-parent HEAD — an ancestor of
+#                     HEAD^1: <fork>..HEAD always CONTAINS HEAD^1..HEAD. The
+#                     range can be too WIDE, never vacuous, which is the same
+#                     trade the FETCHING note below already accepts for a stale
+#                     <remote-ref>. The cost is real and worth naming: a caller
+#                     that SCORES over the whole range — check-test-integrity.sh
+#                     counts added-minus-removed and carries no suppression
+#                     marker — can be pushed red by commits HEAD never touched.
+#
+#                     Narrowing to HEAD^1 is NOT the repair. It reinstates
+#                     exactly the vacuity this arm exists to prevent (the
+#                     already-merged five-commit branch above, where HEAD^1..HEAD
+#                     is one file of two), and the two shapes are provably
+#                     indistinguishable from the current chain — see the arm
+#                     below, where that discriminator is measured dead. A wide
+#                     range that WARNS beats a narrow one that silently passes,
+#                     so the stderr warning is the mitigation here: not a
+#                     refusal, and not a narrower base.
+#
+#                   This mode does NOT refuse the off-chain shape. It used to,
+#                   for one revision, and that was measurably wrong: a
+#                   merge-then-push landing demotes the previous `main` tip into
+#                   the merge's second parent, so a former main tip is off-chain
+#                   too and is not distinguishable from an already-merged
+#                   feature branch. See the arm below for the measurement and
+#                   for why the diagnostic, not a refusal, is this mode's value.
+#
 #                     Every first-parent call site today is ALSO a
 #                   developer-invoked script (run-lint.sh, run-unit-tests.sh,
-#                   lint-prose-rules.sh, lint-ds-drift.sh, detect-changes.sh).
-#                   The strict-ancestor shape there usually just means a stale
-#                   local checkout, and used to be exit 5 — the developer's only
-#                   signal their tree was behind. Silently narrowing to HEAD^1
-#                   would destroy that signal, so this mode prints a same-shape
-#                   warning to stderr (not fatal) whenever HEAD != --remote-ref,
-#                   naming the narrowed range and telling the reader to fetch and
-#                   rebase if this is a local checkout. It is silent only in the
-#                   one case that needs to be: HEAD exactly at the remote tip.
+#                   lint-prose-rules.sh, lint-ds-drift.sh, detect-changes.sh),
+#                   where a no-delta HEAD usually just means a stale local
+#                   checkout — and `fail` mode's exit 5 was the developer's only
+#                   signal their tree was behind. Silently narrowing would
+#                   destroy that signal, so BOTH sub-shapes print a warning to
+#                   stderr (not fatal) whenever HEAD != --remote-ref, naming the
+#                   resolved range and telling the reader to fetch and rebase if
+#                   this is a local checkout. It is silent only in the one case
+#                   that needs to be: HEAD exactly at the remote tip.
 #
 # STDOUT CONTRACT
 #
@@ -106,15 +164,21 @@
 #   5  HEAD is a STRICT ancestor of --remote-ref (already merged, or the
 #      checkout is behind) and --at-remote-tip is `fail` (the default) — no
 #      defensible base exists for a caller that needs a branch delta.
-#      Unreachable under --at-remote-tip first-parent, which resolves this
-#      shape to HEAD^1 instead — but still prints a non-fatal stderr warning
-#      naming the narrowed range, since this is the one signal a developer on a
-#      stale local checkout gets that their tree is behind.
+#      Unreachable under --at-remote-tip first-parent, which resolves both
+#      sub-shapes of this state (HEAD^1 on-chain, the fork point off-chain) —
+#      but still prints a non-fatal stderr warning naming the resolved range,
+#      since this is the one signal a developer on a stale local checkout gets
+#      that their tree is behind.
 #   6  no merge base between --remote-ref and --head (unrelated histories, or a
 #      shallow clone whose grafted history does not reach the fork point)
 #   7  --head does not resolve to a commit
 #   8  HEAD == --remote-ref and --at-remote-tip is `fail` (the default)
 #   9  --at-remote-tip first-parent was requested but HEAD is a root commit
+#  10  --at-remote-tip first-parent was requested and --remote-ref's
+#      first-parent chain could not be walked, came back empty against a HEAD
+#      that is a strict ancestor of it, or yielded no fork point (corrupt or
+#      unreadable history). The two sub-shapes resolve from different bases, so
+#      without that walk there is no base to pick.
 #
 # NOT IN SCOPE (deliberately)
 #
@@ -334,14 +398,13 @@ SOURCE="merge-base"
 
 # BASE == HEAD covers BOTH no-delta shapes: HEAD is exactly the remote tip, or
 # HEAD is a STRICT ANCESTOR of it. `fail` mode distinguishes them, because the
-# two states have different causes and different remedies. `first-parent` mode
-# does not need to: the question it asks — "what did this commit introduce" —
-# is answered by HEAD^1 and is well-defined no matter where the remote tip has
-# since moved. Making the strict-ancestor case fatal for first-parent callers
-# would turn a benign push race on `main` (a second push landing while the
-# first run is still in flight, so the run's own HEAD becomes an ancestor of
-# origin/main) into a red required check on `main`, which blocks merges
-# repo-wide.
+# two states have different causes and different remedies, and refuses both.
+# `first-parent` mode refuses neither. It splits the strict-ancestor shape again
+# — on whether HEAD lies on --remote-ref's first-parent chain — only to pick the
+# right base for each: HEAD^1 on-chain (the benign push race on `main`, where
+# HEAD^1 is exactly what that commit introduced), the fork point off-chain
+# (where HEAD's line is longer than one commit and HEAD^1 would understate it).
+# Both warn. See the arm below.
 if [ "$BASE" = "$HEAD_SHA" ]; then
   if [ "$AT_REMOTE_TIP" = "fail" ]; then
     if [ "$HEAD_SHA" != "$REMOTE_SHA" ]; then
@@ -361,28 +424,136 @@ if [ "$BASE" = "$HEAD_SHA" ]; then
           "If this caller is meant to run on $REMOTE_REF too (a post-merge push)," \
           "pass --at-remote-tip first-parent to diff what the push introduced."
   fi
+  # first-parent mode absorbs BOTH shapes `fail` mode treats as exit 5, but it
+  # resolves them from different bases and says which it used. The split is
+  # whether HEAD sits ON --remote-ref's own FIRST-PARENT CHAIN.
+  #
+  #   ON the chain — the benign push race this mode exists for: the commit
+  #   under test was pushed to `main`, a second push landed on top, and this
+  #   run's HEAD is now a strict ancestor of origin/main. HEAD^1..HEAD is
+  #   exactly "what this commit introduced".
+  #
+  #   OFF the chain — HEAD is reachable from --remote-ref but was carried in as
+  #   a merge commit's SECOND parent. HEAD^1..HEAD can then be far narrower than
+  #   the line HEAD ends: on an already-merged five-commit feature branch it is
+  #   the branch's LAST COMMIT only. So this arm resolves the FORK POINT
+  #   instead — the newest commit on --remote-ref's first-parent chain that is
+  #   an ancestor of HEAD, i.e. where HEAD's line left the chain — which covers
+  #   the whole line rather than its last commit.
+  #
+  # WHY THIS DOES NOT REFUSE, though a too-narrow base is exactly the vacuity
+  # this helper exists to stop. An earlier revision of this arm exited 5
+  # off-chain. That was WRONG, and measurably so: a merge-then-push landing
+  # demotes the PREVIOUS main tip into the merge's second parent, so a former
+  # main tip is off-chain too — structurally identical to an already-merged
+  # feature branch, and not distinguishable from one. Measured 2026-08-31 on
+  # this repo: of the 25 merge commits on origin/main's own first-parent chain,
+  # 25 of 25 second parents are off-chain, and a workflow re-run on any of them
+  # would have failed deterministically. `unit-tests.yml` does not ignore
+  # `main`, so a `graph-commit` landing that pushes M with P2=X while an
+  # earlier run for X is still fetching turns a required context on `main` red
+  # for precisely the push race this mode was written to absorb. A helper that
+  # cannot tell the two shapes apart must not be the thing that reddens a
+  # required check.
+  #
+  # The obvious structural discriminator was measured DEAD, so do not go
+  # looking for it again: `4f868409^1` is a former main tip and is off-chain
+  # too. The exact answer for a push event is GitHub's `github.event.before`,
+  # which the header's NOT IN SCOPE section deliberately leaves out.
+  #
+  # What survives is the DIAGNOSTIC, which is where this arm's value actually
+  # was: the stderr warning names the resolved range and its provenance
+  # (`source=fork-point`), so a reader who was expecting the full range since
+  # --remote-ref can see they are not getting it. That is what a warning is
+  # for; a refusal here buys nothing it does not also break.
+  #
+  # HOISTED ABOVE THE SPLIT, because BOTH arms need HEAD's first parent and a
+  # root HEAD has none. On-chain it is the base itself. Off-chain the fork-point
+  # walk presupposes a line that LEFT the chain, which a parentless commit does
+  # not have: its `^@` expands to nothing, the walk runs to --remote-ref's own
+  # root, and that root has no first parent either — so the arm died exit 10,
+  # whose text blames corrupt or unreadable history. That was a lie about a
+  # perfectly readable repository. A second root merged into --remote-ref is an
+  # off-chain root HEAD and reaches here, so the shape is real, not theoretical.
+  # Exit 9 is what the header documents for a root HEAD, unqualified, and the
+  # cause is the same in both arms — so the check belongs to neither.
   if ! PARENT=$(git -C "$ROOT" rev-parse --verify --quiet "${HEAD_SHA}^1^{commit}"); then
     die 9 "ERROR: --at-remote-tip first-parent was requested but HEAD ($HEAD_SHA)" \
           "is a root commit with no first parent, so 'what this push introduced'" \
           "is undefined."
   fi
-  # first-parent mode deliberately absorbs a state `fail` mode treats as
-  # exit 5: HEAD is a STRICT ancestor of --remote-ref, not just equal to it.
-  # In CI that is the benign push race the mode exists for (a second push
-  # landing on `main` while an earlier run is still in flight), and HEAD^1
-  # answers "what did this commit introduce" correctly either way. But every
-  # first-parent call site is ALSO a developer-invoked script, and on a
-  # developer's checkout the old exit 5 was the only signal that their tree
-  # was behind — silently narrowing to one commit here would destroy that
-  # signal without telling anyone. So warn (non-fatal) whenever HEAD is
-  # strictly behind the remote ref; stay silent when HEAD is exactly at the
-  # tip, which is the ordinary, expected post-merge push.
-  if [ "$HEAD_SHA" != "$REMOTE_SHA" ]; then
-    printf '%s: WARNING: HEAD (%s) is behind %s (%s).\n%s: Diffing only HEAD^1..HEAD — what this commit introduced — not the full range since %s.\n%s: If this is a local checkout, it is stale: fetch and rebase. This check is examining far less than the reader expects.\n' \
-      "$SELF" "$HEAD_SHA" "$REMOTE_REF" "$REMOTE_SHA" "$SELF" "$REMOTE_REF" "$SELF" >&2
+  ON_FIRST_PARENT=no
+  if [ "$HEAD_SHA" = "$REMOTE_SHA" ]; then
+    ON_FIRST_PARENT=yes
+  else
+    # Bounded walk: `--not <head>^@` prunes at HEAD's PARENTS, so this visits
+    # only --remote-ref's first-parent chain down to HEAD's own generation
+    # rather than the whole history. HEAD itself is not excluded, so it is
+    # printed exactly when it lies on that chain. A root HEAD would make `^@`
+    # expand to nothing and run the walk unbounded to the root, but it cannot
+    # reach here: the hoisted check above exits 9 first.
+    #
+    # No `| grep -q`: this script runs under `set -o pipefail`, and grep's
+    # early exit would SIGPIPE rev-list and turn a MATCH into a non-zero
+    # pipeline. The case-glob does the same containment test with no pipe.
+    if ! git_capture -C "$ROOT" rev-list --first-parent "$REMOTE_SHA" --not "${HEAD_SHA}^@"; then
+      die 10 "ERROR: could not walk $REMOTE_REF's first-parent chain in $ROOT." \
+             "git said: $GIT_ERR" \
+             "That walk is what tells the push race on $REMOTE_REF apart from a" \
+             "line carried in as a merge commit's second parent, and the two" \
+             "resolve from different bases."
+    fi
+    CHAIN="$GIT_OUT"
+    case $'\n'"$CHAIN"$'\n' in
+      *$'\n'"$HEAD_SHA"$'\n'*) ON_FIRST_PARENT=yes ;;
+    esac
   fi
-  BASE="$PARENT"
-  SOURCE="first-parent"
+
+  if [ "$ON_FIRST_PARENT" = "no" ]; then
+    # The FORK POINT, from the walk already done. $CHAIN is --remote-ref's
+    # first-parent chain down to HEAD's generation; its OLDEST line is the last
+    # chain commit not reachable from HEAD, so that commit's own first parent is
+    # the NEWEST chain commit that IS reachable from HEAD — the point where
+    # HEAD's line left the chain. No second walk, and no `| tail -1` pipe: this
+    # script runs under `set -o pipefail`.
+    CHAIN_TAIL="${CHAIN##*$'\n'}"
+    if [ -z "$CHAIN_TAIL" ]; then
+      die 10 "ERROR: $REMOTE_REF's first-parent chain came back empty in $ROOT," \
+             "though HEAD ($HEAD_SHA) is a strict ancestor of it ($REMOTE_SHA)." \
+             "Those cannot both be true; the repository state is not one this" \
+             "helper can resolve a base from."
+    fi
+    if ! FORK=$(git -C "$ROOT" rev-parse --verify --quiet "${CHAIN_TAIL}^1^{commit}"); then
+      die 10 "ERROR: could not resolve the fork point of HEAD ($HEAD_SHA) from" \
+             "$REMOTE_REF's first-parent chain in $ROOT: $CHAIN_TAIL has no first" \
+             "parent, so there is no chain commit that HEAD's line branched from."
+    fi
+    # Loud, because the range is NOT the full range since --remote-ref and a
+    # reader who assumes otherwise is wrong. Deliberately does NOT name a
+    # remedy: the two shapes that land here are indistinguishable (see above)
+    # and the remedies differ, so naming either one is wrong half the time.
+    printf '%s: WARNING: HEAD (%s) is contained in %s (%s) but sits OFF its first-parent chain.\n%s: Diffing %s..HEAD — the line HEAD ends, from where it left %s — not the full range since %s.\n%s: Both a former %s tip demoted into a merge second parent and an already-merged feature branch look like this, and they are not distinguishable here. If this is a local checkout, it is stale: fetch and rebase.\n' \
+      "$SELF" "$HEAD_SHA" "$REMOTE_REF" "$REMOTE_SHA" \
+      "$SELF" "${FORK:0:12}" "$REMOTE_REF" "$REMOTE_REF" \
+      "$SELF" "$REMOTE_REF" >&2
+    BASE="$FORK"
+    SOURCE="fork-point"
+  else
+    # $PARENT is already resolved by the hoisted root-commit check above.
+    # Every first-parent call site is ALSO a developer-invoked script, and on a
+    # developer's checkout the on-chain strict-ancestor shape is just a stale
+    # local tree, where `fail` mode's exit 5 was the only signal that their tree
+    # was behind — silently narrowing to one commit here would destroy that
+    # signal without telling anyone. So warn (non-fatal) whenever HEAD is
+    # strictly behind the remote ref; stay silent when HEAD is exactly at the
+    # tip, which is the ordinary, expected post-merge push.
+    if [ "$HEAD_SHA" != "$REMOTE_SHA" ]; then
+      printf '%s: WARNING: HEAD (%s) is behind %s (%s).\n%s: Diffing only HEAD^1..HEAD — what this commit introduced — not the full range since %s.\n%s: If this is a local checkout, it is stale: fetch and rebase. This check is examining far less than the reader expects.\n' \
+        "$SELF" "$HEAD_SHA" "$REMOTE_REF" "$REMOTE_SHA" "$SELF" "$REMOTE_REF" "$SELF" >&2
+    fi
+    BASE="$PARENT"
+    SOURCE="first-parent"
+  fi
 fi
 
 printf '%s: base=%s source=%s repo=%s head=%s@%s remote=%s@%s\n' \

@@ -32,6 +32,30 @@ TMP_ROOT=$(mktemp -d)
 #     "behind-nonroot"
 #                — the strict-ancestor shape with a first parent available
 #                  (the push race on `main`)
+#     "merged-feature"
+#                — the OTHER strict-ancestor shape: a TWO-commit feature branch
+#                  already merged into origin/main as a merge commit's SECOND
+#                  parent, with HEAD parked on the branch tip. HEAD is contained
+#                  in origin/main but sits OFF its first-parent chain.
+#     "demoted-main-tip"
+#                — the SAME off-chain shape reached the other way: a commit
+#                  pushed to `main` that a later landing merge demoted into its
+#                  SECOND parent. Indistinguishable from the above, which is
+#                  exactly why the off-chain arm resolves rather than refuses.
+#     "lander-forks-earlier"
+#                — the same demotion, but with the LANDER forking EARLIER than
+#                  the demoted tip's own parent. `demoted-main-tip` branches its
+#                  lander from the baseline, which is ALSO that tip's parent, so
+#                  "the fork point equals HEAD^1" holds there by CONSTRUCTION
+#                  and any drift between the two is invisible. Here a commit
+#                  sits between, and the base resolves OLDER than HEAD^1 even
+#                  though HEAD's line is one commit long.
+#     "off-chain-root"
+#                — a SECOND ROOT commit merged into origin/main. HEAD is parked
+#                  on it: contained in origin/main, OFF its first-parent chain,
+#                  AND parentless. The only shape that is both off-chain and a
+#                  root, so the only one that reaches the fork-point walk with
+#                  no first parent to resolve.
 #     (default)  — a feature branch one commit ahead of origin/main
 # Sets: REPO
 # ---------------------------------------------------------------------------
@@ -78,6 +102,105 @@ make_repo() {
       git -C "$REPO" commit -q -m "the second push, landed while this run was in flight"
       git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
       git -C "$REPO" checkout -q "$MINE_SHA"
+      ;;
+    merged-feature)
+      # A TWO-commit feature branch merged into main with --no-ff, so the merge
+      # commit's FIRST parent is the pre-merge main tip and its SECOND parent is
+      # the branch. HEAD is parked on the branch tip: contained in origin/main
+      # (so merge-base == HEAD, and the no-delta arm fires) but OFF origin/main's
+      # first-parent chain.
+      #
+      # Two commits, not one, is load-bearing: it is what makes HEAD^1..HEAD
+      # DEMONSTRABLY smaller than the branch. With one commit the narrowed range
+      # would happen to equal the branch and the vacuity would be invisible.
+      git -C "$REPO" checkout -q -b merged-feature
+      printf 'first\n' > "$REPO/branch-first.txt"
+      git -C "$REPO" add branch-first.txt
+      git -C "$REPO" commit -q -m "branch commit 1 of 2"
+      printf 'second\n' > "$REPO/branch-second.txt"
+      git -C "$REPO" add branch-second.txt
+      git -C "$REPO" commit -q -m "branch commit 2 of 2"
+      MERGED_TIP_SHA=$(git -C "$REPO" rev-parse HEAD)
+      git -C "$REPO" checkout -q main
+      git -C "$REPO" merge -q --no-ff merged-feature -m "merge the feature branch"
+      git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+      git -C "$REPO" checkout -q "$MERGED_TIP_SHA"
+      ;;
+    demoted-main-tip)
+      # The OTHER way to land off origin/main's first-parent chain, and the one
+      # that makes refusing this shape unshippable: a merge-then-push landing
+      # DEMOTES the previous `main` tip into the merge's SECOND parent.
+      #
+      # X is pushed to main and a workflow run starts for it. Before that run's
+      # `actions/checkout` fetches, a landing merges its own line Y and pushes M
+      # with M^1 = Y and M^2 = X. The run's HEAD is now X: contained in
+      # origin/main, off its first-parent chain, and structurally identical to
+      # an already-merged feature branch — the benign push race this mode exists
+      # to absorb, wearing the shape an earlier revision of the arm refused.
+      #
+      # Measured on the real repo 2026-08-31: 25 of 25 merge commits on
+      # origin/main's own first-parent chain have an off-chain second parent.
+      printf 'pushed to main\n' > "$REPO/demoted.txt"
+      git -C "$REPO" add demoted.txt
+      git -C "$REPO" commit -q -m "the push this run is for"
+      DEMOTED_SHA=$(git -C "$REPO" rev-parse HEAD)
+      git -C "$REPO" checkout -q -b lander "$BASELINE_SHA"
+      printf 'the landing\n' > "$REPO/lander.txt"
+      git -C "$REPO" add lander.txt
+      git -C "$REPO" commit -q -m "the landing's own line"
+      git -C "$REPO" merge -q --no-ff "$DEMOTED_SHA" -m "landing merge: demotes the main tip to P2"
+      git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+      git -C "$REPO" checkout -q "$DEMOTED_SHA"
+      ;;
+    lander-forks-earlier)
+      # The off-chain shape once more, arranged so the fork point is genuinely
+      # OBSERVABLE — which `demoted-main-tip` above cannot do.
+      #
+      # There the lander branches from the baseline, and the baseline is also
+      # X^1, so the fork point and HEAD^1 are the same commit no matter what the
+      # walk does. Here A sits BETWEEN them: main is A0 -> A -> X with
+      # origin/main at X, and the lander branched back at A0, BEFORE A landed.
+      # Its landing merge reroutes origin/main's first-parent chain through the
+      # lander's own line, demoting BOTH X and A off that chain. The walk can no
+      # longer see A, so it stops at A0 — and the base is older than X^1 even
+      # though X's line is ONE commit long.
+      printf 'a\n' > "$REPO/a.txt"
+      git -C "$REPO" add a.txt
+      git -C "$REPO" commit -q -m "A: an earlier main tip, demoted by the landing too"
+      EARLIER_MAIN_SHA=$(git -C "$REPO" rev-parse HEAD)
+      printf 'x\n' > "$REPO/x.txt"
+      git -C "$REPO" add x.txt
+      git -C "$REPO" commit -q -m "X: the push this run is for (X^1 is A, NOT the baseline)"
+      FORKED_TIP_SHA=$(git -C "$REPO" rev-parse HEAD)
+      git -C "$REPO" update-ref refs/remotes/origin/main "$FORKED_TIP_SHA"
+      git -C "$REPO" checkout -q -b lander "$BASELINE_SHA"
+      printf 'the landing\n' > "$REPO/lander.txt"
+      git -C "$REPO" add lander.txt
+      git -C "$REPO" commit -q -m "the landing's own line, forked before A landed"
+      git -C "$REPO" merge -q --no-ff "$FORKED_TIP_SHA" \
+        -m "landing merge: reroutes the chain through the lander"
+      git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+      git -C "$REPO" checkout -q "$FORKED_TIP_SHA"
+      ;;
+    off-chain-root)
+      # A SECOND ROOT merged into main. R2 has no parents at all, so it is both
+      # OFF origin/main's first-parent chain and parentless — the one shape that
+      # reaches the fork-point walk with no HEAD^1 to fall back on.
+      #
+      # Not a hypothetical: merging an independently-started repository in (a
+      # vendored tree, a docs site, a subtree import) lands exactly this, and a
+      # workflow re-run on that root commit then runs the helper against it.
+      git -C "$REPO" checkout -q --orphan second-root
+      git -C "$REPO" rm -q -rf . >/dev/null 2>&1 || true
+      printf 'second root\n' > "$REPO/SECOND_ROOT"
+      git -C "$REPO" add SECOND_ROOT
+      git -C "$REPO" commit -q -m "a second, unrelated root"
+      OFF_CHAIN_ROOT_SHA=$(git -C "$REPO" rev-parse HEAD)
+      git -C "$REPO" checkout -q main
+      git -C "$REPO" merge -q --no-ff --allow-unrelated-histories \
+        "$OFF_CHAIN_ROOT_SHA" -m "merge the second root into main"
+      git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+      git -C "$REPO" checkout -q "$OFF_CHAIN_ROOT_SHA"
       ;;
     *)
       git -C "$REPO" update-ref refs/remotes/origin/main "$BASELINE_SHA"
@@ -244,6 +367,159 @@ run_sut --repo-root "$REPO"
 assert_eq "behind-nonroot/default: exit 5" "yes" "$(rc_of "$RC" 5)"
 
 # ---------------------------------------------------------------------------
+# Test 4b: HEAD contained in origin/main but OFF its first-parent chain —
+# resolved from the FORK POINT, with a warning. Never refused.
+#
+# HEAD is contained in origin/main, so the no-delta arm fires exactly as it does
+# for the push race above, but HEAD came in as a merge commit's SECOND parent.
+# HEAD^1..HEAD is then only the LAST COMMIT of the line HEAD ends, so the base
+# is the fork point — the newest commit on origin/main's first-parent chain that
+# is an ancestor of HEAD — which covers the whole line.
+#
+# WHY THIS MUST NOT REFUSE, which is the regression this test now pins: TWO
+# unrelated situations produce this identical shape, and nothing here can tell
+# them apart.
+#   (a) an already-merged feature branch                 — `merged-feature`
+#   (b) a `main` tip demoted into a landing merge's P2   — `demoted-main-tip`
+# (b) is the benign push race the whole mode exists to absorb. Measured on the
+# real repo 2026-08-31: 25 of 25 merge commits on origin/main's first-parent
+# chain have an off-chain second parent, and `unit-tests.yml` does not ignore
+# `main`, so refusing here reddens a required context on `main` deterministically
+# for any workflow re-run on one of them. An earlier revision of this arm did
+# exit 5, and that is what these two arms exist to keep from coming back.
+#
+# The DEFAULT `fail` mode is deliberately untouched: it still exits 5 for both
+# halves of the strict-ancestor shape, and the arms below assert it still does.
+# ---------------------------------------------------------------------------
+echo "Test 4b: off the first-parent chain resolves the fork point and warns, never refuses"
+make_repo merged-feature
+
+# Why the fork point and not HEAD^1, measured on the fixture rather than asserted
+# from the helper: HEAD^1..HEAD sees one of the branch's two files.
+NARROWED=$(git -C "$REPO" diff --name-only "$MERGED_TIP_SHA^1..$MERGED_TIP_SHA")
+assert_eq "merged-feature: HEAD^1..HEAD sees only the branch's LAST commit" \
+  "branch-second.txt" "$NARROWED"
+
+run_sut --repo-root "$REPO" --at-remote-tip first-parent
+assert_eq "merged-feature/first-parent: exit 0 (resolves, never refuses)" "0" "$RC"
+assert_eq "merged-feature/first-parent: base is the fork point" "$BASELINE_SHA" "$OUT"
+assert_contains "merged-feature/first-parent: provenance names source=fork-point" \
+  "source=fork-point" "$ERR"
+# The payoff: the range the caller diffs covers the WHOLE branch, not its last
+# commit — strictly wider than the HEAD^1 range measured above.
+MF_DELTA=$(git -C "$REPO" diff --name-only "$OUT"..HEAD)
+assert_eq "merged-feature/first-parent: the resolved range names BOTH branch files" \
+  "branch-first.txt
+branch-second.txt" "$MF_DELTA"
+# Loud, not silent: the reader must be able to see this is not the full range.
+assert_contains "merged-feature/first-parent: warns" "WARNING" "$ERR"
+assert_contains "merged-feature/first-parent: warning names the condition" \
+  "OFF its first-parent chain" "$ERR"
+assert_contains "merged-feature/first-parent: warning says it is not the full range" \
+  "not the full range since" "$ERR"
+assert_contains "merged-feature/first-parent: warning still tells a developer to fetch/rebase" \
+  "fetch and rebase" "$ERR"
+# The old text named a remedy ("run the check against the merge commit that
+# carried this branch in") that is WRONG for the demoted-main-tip half. The two
+# shapes are indistinguishable here, so the message must name NEITHER remedy.
+assert_not_contains "merged-feature/first-parent: names no shape-specific remedy" \
+  "carried this branch in" "$ERR"
+
+# ... and the default mode is unchanged: the same exit 5 it always gave.
+run_sut --repo-root "$REPO"
+assert_eq "merged-feature/default: exit 5 (unchanged)" "yes" "$(rc_of "$RC" 5)"
+assert_contains "merged-feature/default: still the STRICT ANCESTOR message" \
+  "STRICT ANCESTOR" "$ERR"
+
+# (b) the SAME off-chain shape, reached by a landing merge demoting the `main`
+# tip. This is the arm that makes refusing unshippable: it is the benign push
+# race, and it must resolve.
+make_repo demoted-main-tip
+run_sut --repo-root "$REPO" --at-remote-tip first-parent
+assert_eq "demoted-main-tip/first-parent: exit 0 (the push race must not redden main)" \
+  "0" "$RC"
+assert_eq "demoted-main-tip/first-parent: base is the fork point" "$BASELINE_SHA" "$OUT"
+assert_contains "demoted-main-tip/first-parent: provenance names source=fork-point" \
+  "source=fork-point" "$ERR"
+# For a one-commit line the fork point IS HEAD^1, so the range is exactly what
+# that push introduced — and never the landing's own file.
+DMT_DELTA=$(git -C "$REPO" diff --name-only "$OUT"..HEAD)
+assert_eq "demoted-main-tip/first-parent: the range is exactly what that push introduced" \
+  "demoted.txt" "$DMT_DELTA"
+# True HERE only by CONSTRUCTION: this fixture's lander branches from the
+# baseline, which is also HEAD^1, so the two cannot differ whatever the walk
+# does. It pins this fixture's own shape, NOT a general property of the fork
+# point — the header once generalised it and was wrong. Test 4c builds the
+# fixture where they genuinely differ.
+assert_eq "demoted-main-tip: with the lander forked AT HEAD^1, the base IS HEAD^1 (true by construction; see 4c)" \
+  "$(git -C "$REPO" rev-parse 'HEAD^1')" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 4c: (c) the SAME off-chain shape with the LANDER forking EARLIER than the
+# demoted tip's parent — the arm that can actually SEE where the fork point
+# lands, and the reason (b) alone is not enough.
+#
+# resolve-diff-base.sh's header used to claim the fork point "coincides with
+# HEAD^1 exactly when that line is one commit long". It does not. The fork point
+# is measured against origin/main's CURRENT first-parent chain, and the landing
+# merge reroutes that chain through the lander — demoting A off it along with X.
+# The walk stops at A0, so the base is OLDER than X^1 even though X's line is
+# one commit long. These arms pin the CORRECTED claim, and would have gone red
+# against the old one.
+# ---------------------------------------------------------------------------
+echo "Test 4c: the fork point can be OLDER than HEAD^1 even for a one-commit line"
+make_repo lander-forks-earlier
+run_sut --repo-root "$REPO" --at-remote-tip first-parent
+assert_eq "lander-forks-earlier/first-parent: exit 0 (still resolves, never refuses)" \
+  "0" "$RC"
+assert_contains "lander-forks-earlier/first-parent: provenance names source=fork-point" \
+  "source=fork-point" "$ERR"
+# The fixture's precondition, asserted rather than assumed: X's line is ONE
+# commit and X^1 is A, NOT the baseline. This is exactly what demoted-main-tip
+# cannot arrange, and without it the assertion below is vacuous again.
+assert_eq "lander-forks-earlier: HEAD^1 is A, not the baseline (unlike demoted-main-tip)" \
+  "$EARLIER_MAIN_SHA" "$(git -C "$REPO" rev-parse 'HEAD^1')"
+# The correction itself: the base is the baseline A0, NOT HEAD^1.
+assert_eq "lander-forks-earlier: base is A0, the rerouted chain's fork point" \
+  "$BASELINE_SHA" "$OUT"
+# Full 40-hex SHAs of equal length, so "does not contain" IS "is not equal to";
+# this reuses the existing helper rather than adding an assert_not_eq for one site.
+assert_not_contains "lander-forks-earlier: the base does NOT coincide with HEAD^1, though the line is ONE commit long" \
+  "$EARLIER_MAIN_SHA" "$OUT"
+# ... and the consequence a caller actually feels: the resolved range is BROADER
+# than what this push introduced, naming a file HEAD never touched. That is the
+# input check-test-integrity.sh scores added-minus-removed over.
+LFE_NARROW=$(git -C "$REPO" diff --name-only 'HEAD^1..HEAD')
+LFE_WIDE=$(git -C "$REPO" diff --name-only "$OUT"..HEAD)
+assert_eq "lander-forks-earlier: HEAD^1..HEAD is just this push's own file" \
+  "x.txt" "$LFE_NARROW"
+assert_eq "lander-forks-earlier: the resolved range ALSO names a.txt, which HEAD never touched" \
+  "a.txt
+x.txt" "$LFE_WIDE"
+# The direction of the error is what matters, and it is the safe one: too WIDE,
+# never vacuous. A narrower base would pass vacuously, which is the defect this
+# helper exists to stop — so the range must stay a superset, and be WARNED about.
+assert_contains "lander-forks-earlier: the too-wide range is warned about, not silent" \
+  "not the full range since" "$ERR"
+# The base sits on the chain BELOW where the lander forked, so the lander's own
+# line stays out of the range. Too wide is tolerated; unbounded is not.
+assert_not_contains "lander-forks-earlier: the landing's own file is NOT in the range" \
+  "lander.txt" "$LFE_WIDE"
+# The default mode is untouched here too: still the same exit 5.
+run_sut --repo-root "$REPO"
+assert_eq "lander-forks-earlier/default: exit 5 (unchanged)" "yes" "$(rc_of "$RC" 5)"
+
+# The positive control that keeps this narrow: the ON-chain half of the same
+# strict-ancestor shape must still resolve from HEAD^1, not from the fork point.
+make_repo behind-nonroot
+run_sut --repo-root "$REPO" --at-remote-tip first-parent
+assert_eq "control: on-chain strict ancestor still exits 0" "0" "$RC"
+assert_contains "control: on-chain strict ancestor still resolves first-parent" \
+  "source=first-parent" "$ERR"
+assert_not_contains "control: on-chain does NOT take the fork-point arm" \
+  "source=fork-point" "$ERR"
+
+# ---------------------------------------------------------------------------
 # Test 5: exit 4 — the remote ref does not resolve.
 # ---------------------------------------------------------------------------
 echo "Test 5: unresolvable remote ref"
@@ -299,6 +575,49 @@ git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse H
 run_sut --repo-root "$REPO" --at-remote-tip first-parent
 assert_eq "root commit: exit 9" "yes" "$(rc_of "$RC" 9)"
 assert_contains "root commit: names the condition" "root commit" "$ERR"
+
+# ---------------------------------------------------------------------------
+# Test 8b: exit 9 for an OFF-CHAIN root HEAD — a second root merged into
+# origin/main.
+#
+# Test 8 above only covers the ON-chain root (HEAD == origin/main), and the
+# `behind` fixture in Test 4 only the on-chain strict-ancestor root. Both reach
+# the root-commit guard through the first-parent arm. This shape does not: HEAD
+# is contained in origin/main but sits OFF its first-parent chain, so it fell
+# through into the FORK-POINT walk — which then found origin/main's own root at
+# the chain tail, could not resolve its first parent either, and died exit 10
+# blaming "corrupt or unreadable history" about a repository that is neither.
+#
+# The header documents exit 9 for a root HEAD UNQUALIFIED, so exit 10 here was
+# the script contradicting its own contract. The guard is now hoisted ABOVE the
+# on-chain/off-chain split, where it belongs: both arms need HEAD's first
+# parent, and a root HEAD has none regardless of which arm it would take.
+# ---------------------------------------------------------------------------
+echo "Test 8b: first-parent on an OFF-CHAIN root commit"
+make_repo off-chain-root
+# Pin the fixture's own shape first, so a later change that stops producing an
+# off-chain root cannot make the assertions below pass vacuously.
+assert_eq "off-chain root: HEAD is parentless" \
+  "" "$(git -C "$REPO" rev-parse --verify --quiet 'HEAD^1' || true)"
+assert_eq "off-chain root: HEAD is contained in origin/main" \
+  "$(git -C "$REPO" rev-parse HEAD)" \
+  "$(git -C "$REPO" merge-base refs/remotes/origin/main HEAD)"
+assert_not_contains "off-chain root: HEAD is NOT on origin/main's first-parent chain" \
+  "$(git -C "$REPO" rev-parse HEAD)" \
+  "$(git -C "$REPO" rev-list --first-parent refs/remotes/origin/main)"
+
+run_sut --repo-root "$REPO" --at-remote-tip first-parent
+assert_eq "off-chain root: exit 9, not the fork-point arm's exit 10" "yes" "$(rc_of "$RC" 9)"
+assert_contains "off-chain root: names the condition" "root commit" "$ERR"
+assert_eq "off-chain root: stdout is empty" "" "$OUT"
+# The specific misdiagnosis this replaces: the fork-point arm's message blamed
+# the repository's history, which sent a reader looking for corruption.
+assert_not_contains "off-chain root: does not blame the fork point" \
+  "fork point" "$ERR"
+
+# ... and the default mode is untouched: the strict-ancestor refusal, as before.
+run_sut --repo-root "$REPO"
+assert_eq "off-chain root/default: exit 5 (unchanged)" "yes" "$(rc_of "$RC" 5)"
 
 # ---------------------------------------------------------------------------
 # Test 9: exit 3 — repo-root resolution failures.
