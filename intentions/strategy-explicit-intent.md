@@ -815,6 +815,105 @@ clarifications:
       categories live on dispositions, with node-level status: delegated and
       owner: ai retained only as brownfield carriers whose migration is
       delegated to Claude. (decision: author-ratified, 2026-08-31)"
+  - question: What governs greenfield and brownfield graph state (doctrine-alignment
+      round, 2026-08-31)?
+    answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) The author's
+      directive doctrine, ratified: the graph maintains an always VALID, always
+      ITERABLE, always ALIGNED greenfield state, and a critical brownfield
+      migration path maintained even while implementation lags. Brownfield
+      pathing balances critical pathing with execution efficiency - the test:
+      does punting a cheap item create unreasonable debt even off the critical
+      path? The plans/ documents are a stop-gap mirror of the brownfield
+      critical path until the graph-native dispatch ladder is operational.
+      Two-priority ordering for the current period: (1) graph-integrity work -
+      internal integrity/consistency tooling AND greenfield-state
+      discovery/encoding with its critical brownfield migration path; then (2)
+      batch execution toward dispatch-ladder takeover with rsi and no
+      regressions in integrity, quality, or token efficiency. Out-of-priority
+      plan scope may be removed only where a clear, valid brownfield migration
+      path for it exists. (decision: author-ratified, 2026-08-31)"
+  - question: What does 'greenfield' mean, and from which perspectives must AI
+      evaluate it (2026-08-31)?
+    answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) FULL-FRONTIER
+      DEFINITION, ratified: every reference to 'greenfield' - especially while
+      exercising /align - evaluates the FULL solution frontier, not 'ideal
+      design given implicit constraints'; the frontier includes review of
+      ratified dispositions where alternative framing would yield a more ideal
+      design. 'Ratified' does not mean unchangeable; it means changing it
+      requires an author interview - and /align IS that interview, per the
+      overrule algebra (2026-08-31 clarification on this node). DUAL-PERSPECTIVE
+      RULE, ratified: greenfield evaluation by AI always includes evaluation
+      from the perspective of AI best judgment AND evaluation with reference to
+      tradition, and every tradition reference surfaced is recorded with the
+      resolution it informed. (decision: author-ratified, 2026-08-31)"
+  - question: What vocabulary distinguishes 'doctrine' from 'disposition', and what
+      is the atomic unit of intent (2026-08-31)?
+    answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) Vocabulary,
+      ratified: 'doctrine' names a RATIFIED disposition and nothing else -
+      unratified content is a disposition, never doctrine. The atomic unit of
+      intent is the disposition: a decided thing bearing an authority stamp.
+      Intent-side frontmatter fields (statement, rationale, success_signal,
+      attributes.conditions, clarifications) are role-typed CARRIERS of
+      dispositions, and a role distinction earns its keep only where a consumer
+      reads it mechanically (sensors read success_signal and conditions;
+      listings read statement). Carrier consolidation is under delegated
+      evaluation (tactic-intent-orchestration-layer-schema), proposals arriving
+      deferred; the author flags clarifications as prime for consolidation and
+      directs evaluation of whether the greenfield design includes rationale at
+      all or whether a serves edge already carries that role. (decision:
+      author-ratified, 2026-08-31)"
+  - question: What is the intent/orchestration layer boundary, and what does
+      consolidation change about append-only records (2026-08-31)?
+    answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) LAYER BOUNDARY,
+      ratified: intent fields and orchestration fields (phase, execution,
+      office_hours and kin) are distinct layers with distinct write authority -
+      orchestration writers never rewrite intent fields, and intent writers
+      never rewrite orchestration fields. Tradition reference:
+      infrastructure-as-code spec/status separation (Kubernetes), where the
+      boundary exists so controllers and humans cannot corrupt each other's
+      writes; the measured body-clobber defect family is the local symptom the
+      boundary removes. The field-by-field classification and tooling
+      enforcement are delegated (tactic-intent-orchestration-layer-schema), the
+      classification bound by the carrier-parsimony evaluation recorded in the
+      sibling vocabulary clarification. CONSOLIDATION, ratified: a sanctioned
+      consolidation (restatement) operation exists - for ratified content it
+      happens only in interview; for delegated or deferred content it follows
+      the overrule algebra, an AI consolidation being itself a deferred
+      disposition entering the author queue. Git is the permanent deep history,
+      so the append-only rule is restated: appends are the cheap default edit
+      mode between consolidations; rewrites happen only through the
+      consolidation operation; disposition stamps still append in-file.
+      Tradition references: common-law restatements (authoritative consolidation
+      of accreted precedent, citing what it consolidates); Plato, Phaedrus
+      274-277 (the record stays alive through re-derivation, not accretion).
+      Tooling and trigger heuristics delegated (tactic-consolidation-operation).
+      (decision: author-ratified, 2026-08-31)"
+  - question: How is graph context materialized into AI judgment (2026-08-31)?
+    answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) Ratified
+      principle: the context AI judges from is materialized from the graph into
+      the harness's native context channels, tiered for token efficiency. A
+      minimal ratified BINDING FLOOR always loads in full (content that is
+      mechanically load-bearing regardless of task relevance); everything else
+      is ordered by the rank triage charter (strategy-graph-drives-dispatch,
+      2026-08-31) and compacted to a target context size, harness-memory style -
+      if it fits, it fits; as the corpus grows, low-ordered items compact toward
+      index lines first. The worktree-local projection (CLAUDE.local.md for the
+      claimed node) follows the same tier structure; the existing
+      ancestry-context.md strategy is re-evaluated for function and token
+      efficiency, not adopted wholesale. The author receives a session-time
+      signal of the compaction level, which doubles as a capture-monitoring
+      hook: heavy compaction is a visible judgment-quality warning. Governance
+      content that binds sessions from outside the graph (.claude/rules/,
+      harness memory) comes under this materialization so the graph's audit
+      apparatus covers what the AI actually reads (measured 2026-08-31:
+      measurement-and-provenance.md binds every session with zero graph
+      anchoring). The floor PRINCIPLE is ratified; the floor's membership
+      classification is deferred to author review when drafted (enrolled
+      sitting: tactic-review-binding-floor-classification); materialization
+      design, generation tooling, and the rules migration are delegated
+      (tactic-context-materialization). (decision: author-ratified, 2026-08-31)
+      (floor classification: decision: deferred, delegation-anthropic-claude,
+      2026-08-31)"
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

@@ -608,6 +608,34 @@ clarifications:
       mixing a 91-node data migration and the level-value judgment into a
       pure-algebra change, and the alternative of narrowing the algebra node to
       today's flat scalar was rejected as the dead-scaffolding case above."
+  - question: What is rank (the triage charter), and can virtues be ranked against
+      one another (2026-08-31)?
+    answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) Ratified
+      charter: rank is ATTENTION-ALLOCATION UNDER SCARCITY - one importance
+      backbone derived on read from graph position (tier, band, boost, lineage),
+      composed per-surface with surface-specific factors that never enter the
+      backbone. The four attention surfaces: dispatch composes readiness and
+      cost; alarms compose blast radius; author review composes expected review
+      impact (importance times expected change - a settled important node has
+      near-zero review value); context injection composes task relevance. Rank
+      is thereby also an ALIGNMENT surface: what the model never sees cannot
+      align it. OVERLOAD is defined as a per-surface factor leaking into the
+      backbone (e.g. boosting a node to force a review would corrupt dispatch
+      order too); that leak is forbidden. VIRTUES ARE INCOMMENSURABLE ROOTS and
+      are never ranked against one another - differentiation begins at the
+      strategy layer (author-set bands), and a node serving two virtues inherits
+      attention from both without comparing them. Tradition references: medical
+      triage (ranks urgency of attention under scarcity, emphatically never
+      worth of persons - the inversion that makes triage ethically survivable);
+      Aristotle, Nicomachean Ethics (the virtues unified in phronesis -
+      deliberation ranks the actions available now, never the virtues they
+      serve); Berlin, value pluralism (plural terminal values admit no common
+      measure, so a total order over virtues would be a false report).
+      Per-surface composition design delegated
+      (tactic-rank-surface-composition); the current two-priority ordering
+      enters the backbone as authored boosts on the strategy-graph-integrity
+      lineage (tactic-priority-lineage-boosts). (decision: author-ratified,
+      2026-08-31)"
 tooling_goals:
   - kind: actuator
     statement: resolveAttention (outer tier from bug_fix/security/tier marks with
@@ -627,6 +655,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds:

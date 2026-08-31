@@ -6743,6 +6743,44 @@ clarifications:
       a phase: null node whose work already shipped, which clear-park makes
       router-eligible rather than terminal — the correct act is the completion
       record (phase: done), never the clear."
+  - question: How does the target-state disposition read under the
+      intent/orchestration layer boundary (2026-08-31)?
+    answer: "(Amended 2026-08-31 /align doctrine-alignment round; appends to, never
+      rewrites, the ratified target-state clarification.) Ratified restatement:
+      the INTENT LAYER always reflects target state; orchestration fields
+      (phase, execution, office_hours and kin) are observed state and exempt by
+      construction - the layer boundary is recorded on strategy-explicit-intent
+      (2026-08-31). Full-frontier review upheld the one-layer target-state
+      design rather than an explicit second current-state layer: the
+      infrastructure-as-code tradition (declarative desired state plus
+      reconciliation) independently converges on it, and a second layer would
+      duplicate what sensors and orchestration fields already carry. (decision:
+      author-ratified, 2026-08-31)"
+  - question: How are brownfield migration paths maintained (projection principle,
+      2026-08-31)?
+    answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) Ratified:
+      brownfield migration paths are DERIVED PROJECTIONS between measured
+      current state and recorded target state - never stored step lists, which
+      stale the moment either end moves (the author's named pain: migration
+      tactics growing stale and causing regressions when finally drained). Where
+      the target is machine-checkable, the migration frontier is fully derived:
+      target rules run in observe mode, the frontier they report IS the
+      remaining migration recomputed on every read, drain means the frontier
+      empties, and the ratchet then flips observe to enforce - the four-step
+      migration contract mechanized (record target schema; open read-tolerance
+      window; drain the derived frontier; ratchet). Where the target is prose,
+      carrier tactics remain but must carry execution-time re-derivation (the
+      drift re-evaluation gate pattern ratified 2026-08-31 on
+      tactic-keystone-decomposition-reorg). DEPRECATION is a migration whose
+      target is absence: the retirement disposition is the target state; the
+      frontier reports every remaining live reference as the migration surface;
+      the ratchet is deletion plus a lint refusing new references. Tradition
+      references: Terraform plan / the IaC reconciliation loop (the bridge
+      between current and desired state is derived at execution time, never
+      stored). Frontier tooling delegated
+      (tactic-migration-frontier-projection). The plans/ stop-gap mirror
+      (strategy-explicit-intent, 2026-08-31) is a projection the graph should be
+      deriving. (decision: author-ratified, 2026-08-31)"
 tooling_goals:
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic
@@ -6790,6 +6828,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds:

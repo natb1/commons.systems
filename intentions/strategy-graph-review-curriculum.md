@@ -459,6 +459,34 @@ clarifications:
       nothing the program produced is lost. Mount records carry no author
       dispositions and are not /exetasis subjects (accuracy is objective, other
       processes repair it); kinds inherit rank via their keystone position."
+  - question: Is the author review queue bounded, and how many author queues are
+      there (2026-08-31)?
+    answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) Ratified: the
+      author review queue is UNBOUNDED BY DESIGN - in the author's words, 'I am
+      mortal and will never review all the traditions I would like, or achieve
+      perfect autonomy'; the graph is ideal when author queue PRIORITY is
+      optimized, not bound. There is exactly ONE author review queue and it is
+      the office-hours queue: parked nodes, born-parked review items, reading
+      chunks, and disposition reviews are entries in the same queue under one
+      priority function - importance times expected review impact, per the rank
+      triage charter (strategy-graph-drives-dispatch, 2026-08-31). /exetasis,
+      when built, is a lane and priority function of that queue, never a second
+      queue. The AI batch-review queue (tactic-rsi-graph-review) remains
+      distinct because its scarce resource differs - tokens, not author
+      attention; a delegated disposition posts to both, double-entry style (the
+      2026-08-31 both-queues ruling upheld). A review-debt sensor structurally
+      RE-PRIORITIZES the queue, and the response to sampled findings is
+      ESCALATION - a defect found escalates scrutiny of its source (same author,
+      lane, period) - never gating or contraction of delegated autonomy.
+      Tradition references: audit sampling and escalation (nothing reviews
+      everything; stratified sampling with failures escalating scrutiny);
+      double-entry bookkeeping (every AI override posts to two ledgers);
+      queueing theory, consulted and DIVERGED from - its
+      stability-requires-bounding conclusion was rejected because priority
+      optimization, not boundedness, is the ideal for a mortal reviewer. Debt
+      sensor and sampling/escalation mechanics delegated
+      (tactic-review-debt-reprioritization). (decision: author-ratified,
+      2026-08-31)"
 tooling_goals:
   - kind: sensor
     statement: review debt, read off the virtual review node — the count of
@@ -509,6 +537,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds:

@@ -343,6 +343,26 @@ clarifications:
       reviewer launched with an explicit opus model parameter and no
       drafting-session context, working only from on-disk artifacts — and it
       expires when tactic-align-review-skill merges.
+  - question: How do interviews present recommendations and disposition authority
+      (2026-08-31)?
+    answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) Ratified:
+      interviews always present a recommendation and, in the same option, the
+      authority under which it is accepted - ratified, delegated, or deferred.
+      Other options present alternatives with their trade-offs. The author may
+      accept a disposition at a different authority via the free-text option.
+      This supersedes the prior pattern of a recommendation with a separate
+      accept-as-deferral option. Authority-proposal rules, ratified: propose
+      RATIFY for authority and vocabulary boundaries, charters and principles
+      that bind future judgment, amendments touching ratified content, and
+      transcriptions of the author's stated position; propose DELEGATE for
+      implementation detail under a ratified principle - mechanically
+      validatable, cheaply reversible, reviewable through the normal queues;
+      propose DEFER for Claude-authored substance the author has not examined
+      and cannot cheaply examine in-interview, and for the first concrete
+      instance of a newly delegated pattern; escalate one level toward ratify
+      when being wrong is expensive, irreversible, or capture-shaped. The align
+      skill's question-mechanics section carries this operationally (bootstrap
+      edit, 2026-08-31). (decision: author-ratified, 2026-08-31)"
 tooling_goals:
   - kind: actuator
     statement: "/align — the single interactive entry point to the persistent layer:
@@ -422,6 +442,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -501,16 +523,16 @@ attributes:
       tactic lands, the interim discharge is an inline-pack bootstrap subagent
       run before graph-commit. ACCEPTED COST, taken knowingly: this is an opt-in
       floor, not a mechanical one — a caller that omits the flag is ungated by
-      omission. The mitigation is a lint asserting that /align's call site always
-      passes --review; only that addresses omission. A second mitigation was
-      recorded 2026-08-14 — that /align's call site is the only site that MAY
-      pass --review — and is WITHDRAWN 2026-08-15 as a non-sequitur: restricting
-      who may pass the flag constrains opt-IN, and the disclosed hole is
-      omission. It remains a true scope narrowing; it is simply not a mitigation
-      of this cost. (Ratified in the
-      /dispatch-ladder session 2026-08-14 against tactic-align-review-skill,
-      which recorded that the serving strategy still owed the mechanism; this
-      entry discharges that debt.)"
+      omission. The mitigation is a lint asserting that /align's call site
+      always passes --review; only that addresses omission. A second mitigation
+      was recorded 2026-08-14 — that /align's call site is the only site that
+      MAY pass --review — and is WITHDRAWN 2026-08-15 as a non-sequitur:
+      restricting who may pass the flag constrains opt-IN, and the disclosed
+      hole is omission. It remains a true scope narrowing; it is simply not a
+      mitigation of this cost. (Ratified in the /dispatch-ladder session
+      2026-08-14 against tactic-align-review-skill, which recorded that the
+      serving strategy still owed the mechanism; this entry discharges that
+      debt.)"
     - "a recording round is answerable for the internal consistency of its own
       output — no edge a round authors may contradict a scope the same round
       authors, checked before the round lands; this binds consistency ONLY and

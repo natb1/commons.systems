@@ -28,7 +28,6 @@ rationale: "The 2026-07-09 full-graph review found the self-description contract
   serves is empty by the sub-strategy inheritance rule (kind-strategy): this
   node adds no virtue claim beyond its parent strategy-explicit-intent."
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
@@ -129,6 +128,19 @@ clarifications:
       strategy_fingerprint stamps use real fields. All immaterial to the
       decomposition shape; recorded without interrupting the round. Recorded
       2026-07-11 /align-tactics round."
+  - question: Is the kind-body schema authority machine-readable (schema-as-data,
+      2026-08-31)?
+    answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) Ratified:
+      kind-node bodies carry a structured, machine-readable schema block from
+      which validateGraph derives its checks; the prose remains the rationale
+      authority while the block becomes the check authority. This refines, not
+      contradicts, the ratified 'kind body is the single schema authority': the
+      block is part of the body - what changes is that the authoritative part
+      becomes machine-consumable, closing the prose/code drift seam by
+      construction instead of by review vigilance. Block format, derivation
+      mechanics, and migration are delegated (tactic-kind-schema-blocks),
+      migrating under the projection principle (strategy-graph-native-dispatch,
+      2026-08-31). (decision: author-ratified, 2026-08-31)"
 tooling_goals:
   - kind: actuator
     statement: kind-declaration-driven validation — validateGraph reads status
@@ -149,11 +161,14 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - kind nodes stay the sole schema authority — no second document claims
