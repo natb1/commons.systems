@@ -569,27 +569,38 @@ done <<<"$CANDIDATES"
 # WHAT A REFUSED --base COSTS THE REST OF THE BATCH. Threading --base here makes
 # check_base_freshness()'s fail-closed park reachable for this sweep for the
 # first time: before this change the sweep passed no pins, so the guard
-# short-circuited on an empty manifest and could never park. The cost is not
-# confined to the diverged node. park_and_exit() partitions into bystander
-# PRUNES (re-applied and landed) and park_ids, where park_ids is ALL_IDS minus
-# those prunes (graph-commit:3436-3459). This sweep passes no prune ids, so
-# bystander_prunes is always empty and EVERY id in the invocation parks -- and
-# the conflicted_ids() fallback sets park_ids=("${ALL_IDS[@]}") outright.
+# short-circuited on an empty manifest and could never park.
 #
-# So one node's unresolvable execution.fix divergence parks this tick's other
-# CLEAN recovered nodes into office_hours. That is not self-healing: the
-# enumeration above skips any node with `office_hours != null`, and the selector
-# excludes on REVIEWED_MARKER, so the collateral nodes leave this sweep's
-# candidate set entirely. A later tick does NOT pick them back up; they need an
-# office-hours park clear.
+# The cost is now confined to the node that actually diverged. park_and_exit()
+# partitions ALL_IDS per id (graph-commit:3499-3537): an id in the conflicted
+# set parks, and every other id takes the BYSTANDER path -- re-applied after the
+# park's reset and landed with the park commit -- when it is either a --prune id
+# or an ordinary edit id whose --base pin still matches the tip the park
+# re-fetched (base_pin_still_fresh(), graph-commit:2975). This sweep pins EVERY
+# id it commits, so one node's unresolvable execution.fix divergence parks that
+# node and lands the rest. graph-commit signals that outcome with rc 1, so the
+# failure branch below reports it WITHOUT claiming "nothing landed" — on this
+# path something did. Keep the two in step: a claim made here that the branch
+# below contradicts is worse than either alone, because the log line is the one
+# a reader actually sees.
 #
-# Kept fail-closed deliberately -- refusing beats landing over a stale base --
-# but it is a real behaviour change, not a no-op, and it is written down here
-# because nothing else in the file says it. The two ways out both cost more than
-# this unit owns: pinning and landing per node breaks the "AT MOST ONE
-# graph-commit per tick" lock budget stated in the header above, and teaching
-# park_and_exit() to partition on which --base key actually refused is a
-# graph-commit change.
+# THAT DEPENDS ON THE PIN, so do not drop it. An id committed with no --base
+# entry has no evidence behind it -- "unchanged since this writer read it" is
+# unanswerable -- and park_and_exit() fails closed on it, which is the old
+# whole-batch park all over again. The `continue` above that SKIPS a candidate
+# which cannot be pinned is what keeps that from happening here: an unpinnable
+# id never reaches the invocation at all.
+#
+# Why it mattered: the collateral never self-healed. The enumeration above skips
+# any node with `office_hours != null`, and the selector excludes on
+# REVIEWED_MARKER, so a wrongly-parked node left this sweep's candidate set
+# entirely. A later tick did NOT pick it back up; it needed an office-hours park
+# clear by hand.
+#
+# The diverged node itself is still fail-closed, deliberately -- refusing beats
+# landing over a stale base. The other way out, pinning and landing per node,
+# would still break the "AT MOST ONE graph-commit per tick" lock budget stated
+# in the header above, so it stays rejected.
 #
 # The idempotency note further up is a DIFFERENT path and remains true: it
 # justifies the per-candidate SKIP taken when an id fails node_id_is_safe or
@@ -625,10 +636,46 @@ if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]; then
   for id in "${RECOVERED_IDS[@]}"; do GC_ARGS+=("$id"); done
 
   if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
-    echo "reconcile-graph-review-stall: graph-commit failed for ${RECOVERED_IDS[*]} (write rolled back, nothing landed)" >&2
-    # The EXIT trap restores every staged write, so intentions/ is left clean
-    # for the next graph writer. The next tick re-detects these nodes — the
-    # enumeration still matches.
+    # NOT "nothing landed". graph-commit's own caller contract says in so many
+    # words that rc 1 does not mean that (graph-commit:269), and the --base note
+    # above describes exactly the path where it does not: park_and_exit() lands
+    # an office_hours park for the diverged node AND re-applies every bystander
+    # id's fix-interrupt edit onto the park commit, pushes, and exits non-zero.
+    # On that path a park landed and other ids' edits landed with it, so the old
+    # wording was false on the one path this sweep newly reaches.
+    #
+    # It cannot be replaced by the opposite assertion either: the other rc-1
+    # shapes (rc 11's committed-but-unpushed write, an argument-validation
+    # refusal raised before any git write, and a park whose OWN push failed —
+    # `could not land the parking write ... office_hours set locally but not
+    # pushed to main`, graph-commit:3734, still rc 1, park commit left an
+    # unpushed local orphan) really did land nothing. This line
+    # has no way to tell them apart, so it asserts NEITHER outcome and names
+    # the two places that do know — graph-commit's own stderr just above, and
+    # the graph_rollback_node_writes classification line the EXIT trap prints
+    # just below.
+    echo "reconcile-graph-review-stall: graph-commit did not report success for ${RECOVERED_IDS[*]} — what landed is NOT uniformly 'nothing': if it printed a 'verdict: parked' line an office_hours park DID land for the diverged node, with the other ids' fix-interrupt edits riding along as bystanders; if it instead reported 'could not land the parking write', the park path was taken but its push failed, leaving the park commit an unpushed local orphan and no change at all on main; read graph-commit's stderr above and the rollback line below for which happened" >&2
+    # The EXIT trap restores every staged write that did NOT land, leaving
+    # intentions/ clean for the next graph writer. A landed park MOVED HEAD, and
+    # graph_rollback_node_writes classifies that case and deliberately KEEPS it
+    # rather than re-erasing the park (lib-graph-rollback.sh's header).
+    #
+    # Re-detection is therefore NOT uniform either. An id whose edit was rolled
+    # back is re-enumerated next tick — it still matches. An id that PARKED is
+    # not: the enumeration above skips any node with `office_hours != null`, so
+    # for that node the park is terminal for this sweep and waits on an
+    # office-hours clear, exactly as the --base note above says.
+    #
+    # RECOVERED_MSGS stays suppressed here, deliberately. The stdout protocol is
+    # one `recovered <id> -> fix` line per node actually acted on, consumed
+    # verbatim by dispatch-select-tick behind a `review-stall: ` prefix. On the
+    # park path the set is SPLIT — the bystanders got their fix interrupt, the
+    # diverged one got a park instead — and nothing here can partition it
+    # without parsing graph-commit's prose park clause. Emitting the whole set
+    # would tell the tick a fix interrupt is active on a node now sitting in
+    # office_hours, which is a worse lie than silence; emitting none loses only
+    # a record that graph-commit's own stderr already carries. So silence stays,
+    # and the line above is what points a reader at the truth.
     exit 0
   fi
   # Landed — disarm the rollback so the clean exit keeps the committed state.

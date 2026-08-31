@@ -376,6 +376,21 @@
 #      SNAP_DIR is destroyed; an over-cap snapshot is carried as a strict
 #      prefix with a note stating exactly how many bytes were dropped.
 #
+# Cases 86-88 pin park_and_exit()'s partition to WHICH --base pin refused,
+# rather than to "is it a --prune id". Before them, park_ids was ALL_IDS minus
+# the bystander prunes, so an invocation passing no --prune parked its whole
+# batch on one node's unresolvable divergence, and the collateral never
+# self-healed (every enumerating caller skips office_hours != null):
+#  86. THE DEFECT, on an invocation with NO --prune at all: three pinned ids,
+#      one concurrent same-field edit. Only the diverged id parks; the two ids
+#      whose pins still match origin/main land their edits with the park commit
+#      and carry no office_hours
+#  87. THE NEGATIVE: an id the caller never pinned still parks. Freshness is
+#      the --base CAS's answer and nothing else, which is what keeps every park
+#      by an unpinned caller (cases 4, 20, 50, 72) behaving as before
+#  88. COMPOSITION: a fresh-pin edit and an unrelated --prune ride the same
+#      park commit, each in its own subject clause (park / land / prune)
+#
 # No network and no real gh needed; requires bash + git + jq + setsid, plus
 # node and this repo's node_modules (tsx + yaml) for case 84's real-helper run.
 
@@ -470,7 +485,7 @@ for id in t-happy t-merge t-conflict t-ckfail t-ghfail t-pending t-desync v1..v2
           t-plumb-cli t-plumb-dirty t-plumb-race t-plumb-race-conflict \
           t-plumb-noop t-plumb-base \
           t-noop-guard t-noop-unit t-merge-npx-guard \
-          t-behind-noop t-behind-advance; do
+          t-behind-noop t-behind-advance t-mixed-prune; do
   seed_node "$id"
 done
 
@@ -516,6 +531,14 @@ seed_field_node t-multi-snap-b "sentinel: base"
 seed_field_node t-merge-unrunnable-base "sentinel: base"
 seed_field_node t-merge-unrunnable-farahead "sentinel: base"
 seed_field_node t-merge-real-divergence "sentinel: base"
+# Cases 86-88: the park partition keyed on which --base pin actually refused.
+seed_field_node t-fresh-diverged "sentinel: base"
+seed_field_node t-fresh-bystander-a "fieldA: base"
+seed_field_node t-fresh-bystander-b "fieldA: base"
+seed_field_node t-unpinned-diverged "sentinel: base"
+seed_field_node t-unpinned-sibling "fieldA: base"
+seed_field_node t-mixed-diverged "sentinel: base"
+seed_field_node t-mixed-edit "fieldA: base"
 
 setup_or_die git -C "$SEED" add -A
 setup_or_die git -C "$SEED" commit -qm seed
@@ -4180,6 +4203,147 @@ else
 fi
 set_mode green
 sync_clone "$B"
+
+# --- Case 86: a FRESH --base pin makes an id a bystander, not collateral -------
+# The defect this trio exists for. Cases 44/46 only ever proved that a --prune
+# id escapes the park; an ordinary edit id could not, because park_and_exit()
+# drew its bystander set from PRUNE_IDS alone and took park_ids = ALL_IDS minus
+# those prunes. An invocation passing NO --prune therefore parked its ENTIRE
+# batch on one node's unresolvable divergence — and the collateral does not
+# self-heal, since every enumerating caller (reconcile-graph-review-stall, the
+# selector) skips nodes with office_hours != null. THIS CASE PASSES NO --prune
+# AT ALL, which is exactly the shape that used to park everything.
+#
+# Three pinned ids, one concurrent same-field edit on the first. The other two
+# pins still match origin/main, which is positive proof no concurrent writer
+# touched them, so their edits must LAND with the park commit while only the
+# diverged id parks.
+set_mode green
+W86="$WORK/w86"
+make_clone "$W86" writer-86
+diverged86="$(git -C "$W86" hash-object intentions/t-fresh-diverged.md)"
+fresh86a="$(git -C "$W86" hash-object intentions/t-fresh-bystander-a.md)"
+fresh86b="$(git -C "$W86" hash-object intentions/t-fresh-bystander-b.md)"
+edit_field "$W86" t-fresh-diverged sentinel writer86-value
+edit_field "$W86" t-fresh-bystander-a fieldA writer86-a
+edit_field "$W86" t-fresh-bystander-b fieldA writer86-b
+
+OTHER86="$WORK/other86"
+make_clone "$OTHER86" other86
+edit_field "$OTHER86" t-fresh-diverged sentinel concurrent86-value
+git -C "$OTHER86" commit -qam 'concurrent same-field edit'
+git -C "$OTHER86" push -q origin main
+
+out="$(run_gc "$W86" -m 'test: fresh-pin bystander edits' \
+        --base "t-fresh-diverged=$diverged86" \
+        --base "t-fresh-bystander-a=$fresh86a" \
+        --base "t-fresh-bystander-b=$fresh86b" \
+        t-fresh-diverged t-fresh-bystander-a t-fresh-bystander-b 2>&1)"; rc=$?
+parked86="$(origin_show t-fresh-diverged 2>/dev/null)"
+by86a="$(origin_show t-fresh-bystander-a 2>/dev/null)"
+by86b="$(origin_show t-fresh-bystander-b 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+subject="$(git -C "$ORIGIN" log -1 --format=%s main)"
+park_clause="${subject%%; land*}"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$parked86" \
+   && grep -q 'sentinel: concurrent86-value' <<<"$parked86" \
+   && grep -q '^fieldA: writer86-a' <<<"$by86a" \
+   && ! grep -q 'office_hours' <<<"$by86a" \
+   && grep -q '^fieldA: writer86-b' <<<"$by86b" \
+   && ! grep -q 'office_hours' <<<"$by86b" \
+   && grep -q 're-applying and landing bystander edit(s)' <<<"$out" \
+   && grep -q 't-fresh-diverged' <<<"$park_clause" \
+   && ! grep -q 't-fresh-bystander-a' <<<"$park_clause" \
+   && ! grep -q 't-fresh-bystander-b' <<<"$park_clause" \
+   && grep -q '; land t-fresh-bystander-a t-fresh-bystander-b' <<<"$subject"; then
+  ok "fresh --base pin: only the diverged id parks; the unconflicted pinned edits land with the park commit, with NO --prune id in the invocation"
+else
+  no "fresh-pin bystander edits (rc=$rc)"; printf '%s\n' "$out"; printf 'parked: %s\n' "$parked86"; printf 'a: %s\n' "$by86a"; printf 'b: %s\n' "$by86b"; printf 'subject: %s\n' "$subject"
+fi
+
+# --- Case 87: an UNPINNED sibling still parks ---------------------------------
+# The negative that keeps the carve-out honest. Freshness is decided by the
+# --base compare-and-swap and nothing else, so an id the caller never pinned has
+# no evidence behind it — "unchanged since this writer read it" is unanswerable
+# — and must keep the pre-existing fail-closed fate. This is what makes every
+# park by a caller that passes no --base at all (cases 4, 20, 50, 72) behave
+# exactly as it did before the partition changed.
+set_mode green
+W87="$WORK/w87"
+make_clone "$W87" writer-87
+diverged87="$(git -C "$W87" hash-object intentions/t-unpinned-diverged.md)"
+edit_field "$W87" t-unpinned-diverged sentinel writer87-value
+edit_field "$W87" t-unpinned-sibling fieldA writer87-sibling
+
+OTHER87="$WORK/other87"
+make_clone "$OTHER87" other87
+edit_field "$OTHER87" t-unpinned-diverged sentinel concurrent87-value
+git -C "$OTHER87" commit -qam 'concurrent same-field edit'
+git -C "$OTHER87" push -q origin main
+
+out="$(run_gc "$W87" -m 'test: unpinned sibling still parks' \
+        --base "t-unpinned-diverged=$diverged87" \
+        t-unpinned-diverged t-unpinned-sibling 2>&1)"; rc=$?
+parked87="$(origin_show t-unpinned-diverged 2>/dev/null)"
+sib87="$(origin_show t-unpinned-sibling 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+subject="$(git -C "$ORIGIN" log -1 --format=%s main)"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'office_hours' <<<"$parked87" \
+   && grep -q 'office_hours' <<<"$sib87" \
+   && grep -q '^fieldA: base' <<<"$sib87" \
+   && ! grep -q '^fieldA: writer87-sibling' <<<"$sib87" \
+   && grep -q 't-unpinned-sibling' <<<"$subject" \
+   && ! grep -q '; land ' <<<"$subject" \
+   && ! grep -q 're-applying and landing bystander edit(s)' <<<"$out"; then
+  ok "unpinned sibling: an id with no --base pin still parks — freshness is the CAS's answer, never an assumption"
+else
+  no "unpinned sibling still parks (rc=$rc)"; printf '%s\n' "$out"; printf 'parked: %s\n' "$parked87"; printf 'sibling: %s\n' "$sib87"; printf 'subject: %s\n' "$subject"
+fi
+
+# --- Case 88: park / land / prune, all three clauses in one invocation ---------
+# The two bystander kinds compose, and the commit subject keeps all three sets
+# in separate, fixed-order clauses so no reader can mistake a landed id for a
+# parked one.
+set_mode green
+W88="$WORK/w88"
+make_clone "$W88" writer-88
+diverged88="$(git -C "$W88" hash-object intentions/t-mixed-diverged.md)"
+fresh88="$(git -C "$W88" hash-object intentions/t-mixed-edit.md)"
+edit_field "$W88" t-mixed-diverged sentinel writer88-value
+edit_field "$W88" t-mixed-edit fieldA writer88-edit
+rm -f "$W88/intentions/t-mixed-prune.md"
+
+OTHER88="$WORK/other88"
+make_clone "$OTHER88" other88
+edit_field "$OTHER88" t-mixed-diverged sentinel concurrent88-value
+git -C "$OTHER88" commit -qam 'concurrent same-field edit'
+git -C "$OTHER88" push -q origin main
+
+out="$(run_gc "$W88" -m 'test: mixed bystanders' \
+        --base "t-mixed-diverged=$diverged88" \
+        --base "t-mixed-edit=$fresh88" \
+        t-mixed-diverged t-mixed-edit --prune t-mixed-prune 2>&1)"; rc=$?
+parked88="$(origin_show t-mixed-diverged 2>/dev/null)"
+by88="$(origin_show t-mixed-edit 2>/dev/null)"
+snap="$(sed -n 's/.*preserved at \(.*\) for the manual merge.*/\1/p' <<<"$out")"
+[[ -n "$snap" ]] && SNAP_DIRS_TO_CLEAN+=("$snap")
+subject="$(git -C "$ORIGIN" log -1 --format=%s main)"
+if [[ $rc -eq 1 ]] \
+   && grep -q 'mechanical-unresolved' <<<"$parked88" \
+   && grep -q 'sentinel: concurrent88-value' <<<"$parked88" \
+   && grep -q '^fieldA: writer88-edit' <<<"$by88" \
+   && ! grep -q 'office_hours' <<<"$by88" \
+   && ! git -C "$ORIGIN" cat-file -e main:intentions/t-mixed-prune.md 2>/dev/null \
+   && grep -q '^graph: park t-mixed-diverged (concurrent-edit conflict); land t-mixed-edit; prune t-mixed-prune$' <<<"$subject" \
+   && grep -q 'landed bystander prune deletion(s) for t-mixed-prune; landed bystander edit(s) for t-mixed-edit' <<<"$out"; then
+  ok "mixed bystanders: a fresh-pin edit and an unrelated prune both ride the park commit, each named in its own subject clause"
+else
+  no "mixed bystanders (rc=$rc)"; printf '%s\n' "$out"; printf 'parked: %s\n' "$parked88"; printf 'edit: %s\n' "$by88"; printf 'subject: %s\n' "$subject"
+fi
 
 # --- No scratch branches left behind anywhere ------------------------------------
 if [[ -z "$(scratch_refs)" ]]; then
