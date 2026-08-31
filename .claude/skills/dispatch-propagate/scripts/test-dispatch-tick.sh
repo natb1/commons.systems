@@ -1455,4 +1455,280 @@ tick_teardown
 
 # <<< END MOVED <<<
 
+# --- A signal STOPS the tick (it does not merely tidy up) ---------------------
+# dispatch-tick's cleanup handler removes the headless-liveness sentinel (#1068)
+# and the per-tick snapshot workspace (#1452). Under a single combined
+# `trap _dispatch_tick_cleanup EXIT INT TERM` the handler runs on SIGINT/SIGTERM
+# and then RETURNS — bash hands control straight back to the interrupted tick,
+# which carries on running with its sentinel already deleted. A concurrent tick
+# then resolves this still-live holder as dead and reclaims the selection lock
+# mid-selection: the exact duplicate-spawn defect #1068 closes.
+#
+# The discriminator is deliberately NOT a string match on `trap -p TERM` — that
+# would assert the spelling, not the behavior. Instead the select-tick fake
+# delivers the signal to the tick itself and then returns a perfectly normal
+# `empty` decision. bash runs the pending trap when that command substitution
+# returns, so a handler that terminates never reaches Step 2 at all, while a
+# handler that returns routes `empty` into dispatch-tick-recover and exits 0.
+# Three assertions per signal, each independently load-bearing:
+#   status   — 143 / 130 EXACTLY, never merely non-zero. Measured under the
+#              combined `trap fn EXIT INT TERM`: both signals exit 0, because at
+#              handler entry $? is the last COMPLETED command's status (the
+#              command substitution, 0) and NOT 128+signo.
+#   stopped  — dispatch-tick-recover never ran, i.e. the routing table below the
+#              signal was never reached. This is the half that catches a handler
+#              that got the status right by some other means but still fell
+#              through.
+#   cleaned  — no sentinel is left behind, i.e. the handler still does its
+#              ORIGINAL job. Without it, `trap 'exit 143' TERM` would pass.
+# INT and TERM get one case each on purpose: with only one of them, the other
+# registration could be mis-numbered or deleted and this suite would stay green.
+
+# tick_signal_fake <SIG> — the select-tick fake for the cases below. It waits
+# (bounded) for the harness to record the tick's PID, signals it, then answers
+# `empty` and exits 0 like any other clean selection.
+tick_signal_fake() {
+  local sig="$1"
+  rm -f "$TMPDIR_TEST/tick.pid"
+  cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
+#!/usr/bin/env bash
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$TMPDIR_TEST/tick.pid" ]] && break
+  sleep 0.1
+done
+kill -$sig "\$(cat "$TMPDIR_TEST/tick.pid")"
+printf 'empty\n'
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-select-tick"
+}
+
+# tick_run_signalled — run the tick in the background so its PID can be handed
+# to the fake above, then report its exit status in TICK_SIG_RC. `env -u` forces
+# the headless path (the suite itself usually runs inside a Claude session,
+# which exports a real CLAUDE_CODE_SESSION_ID) so a sentinel is genuinely
+# written and the `cleaned` assertion has something to observe.
+#
+# `set -m` around the launch is REQUIRED, not decoration. With job control off
+# (the default for a script), a command started with `&` inherits SIGINT and
+# SIGQUIT as SIG_IGN — and a signal ignored on entry to a shell cannot be
+# trapped or reset. Measured without it: the TERM case passes but the INT case
+# exits 0 with dispatch-tick-recover having run, i.e. the trap never fired at
+# all and the case proves nothing about the INT registration. Job control gives
+# the child its own process group with default signal dispositions.
+TICK_SIG_RC=0
+tick_run_signalled() {
+  local pid
+  set -m
+  env -u CLAUDE_CODE_SESSION_ID -u INVOCATION_ID \
+    "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 &
+  pid=$!
+  set +m
+  printf '%s\n' "$pid" > "$TMPDIR_TEST/tick.pid"
+  TICK_SIG_RC=0
+  wait "$pid" || TICK_SIG_RC=$?
+}
+
+# tick_live_sentinels — how many headless sentinels are left beside the pinned
+# lock file. The cleanup handler must leave none.
+tick_live_sentinels() {
+  local n
+  n=$(find "$TMPDIR_TEST" -maxdepth 1 -name 'dispatch-tick-*.live' | grep -c .) || n=0
+  echo "$n"
+}
+
+echo "Test: a SIGTERM mid-tick stops the tick with status 143, after cleaning up"
+tick_setup
+tick_signal_fake TERM
+tick_run_signalled
+assert_eq "sigterm: the tick exits 143, not 0" "143" "$TICK_SIG_RC"
+assert_eq "sigterm: the tick STOPPED — it never routed the decision into dispatch-tick-recover" \
+  "0" "$([ -e "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+assert_eq "sigterm: the headless sentinel was still removed" "0" "$(tick_live_sentinels)"
+tick_teardown
+
+echo "Test: a SIGINT mid-tick stops the tick with status 130, after cleaning up"
+tick_setup
+tick_signal_fake INT
+tick_run_signalled
+assert_eq "sigint: the tick exits 130, not 0" "130" "$TICK_SIG_RC"
+assert_eq "sigint: the tick STOPPED — it never routed the decision into dispatch-tick-recover" \
+  "0" "$([ -e "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+assert_eq "sigint: the headless sentinel was still removed" "0" "$(tick_live_sentinels)"
+tick_teardown
+
+# --- ...and it stops by DYING OF the signal, not by `exit 143` ---------------
+# The two cases above cannot see this and neither can any bash: `wait` reports
+# 143 both for `exit 143` and for death by SIGTERM (measured, both forms).
+# systemd does distinguish them — death by SIGHUP/SIGINT/SIGTERM/SIGPIPE is a
+# clean stop while a 143/130 exit STATUS is a failure — and BOTH units that run
+# dispatch-tick carry `OnFailure=dispatch-tick-recover.service`: the heartbeat
+# service (lib.sh's `desired_service`) and the transient unit
+# dispatch-spawn-tick launches. So a tick that exits 143 turns an ordinary
+# `systemctl --user stop dispatch-heartbeat.service` into a failed unit, which
+# arms a backstop reseed that relaunches the chain minutes later, and repeats
+# escalate to a `dispatch:chain-stalled` issue. Only WIFSIGNALED can tell the
+# two apart, so these two cases run the tick under a five-line python3
+# supervisor. python3 is already an unconditional CI dependency —
+# lint-vendored-skills.sh calls it, and run-lint.sh runs that on every PR.
+#
+# THESE TWO CASES ARE NECESSARY BUT NOT SUFFICIENT, and deliberately so: they
+# assert WIFSIGNALED, which is true whether or not the unit that receives that
+# death treats it as clean. dispatch-heartbeat.service is Type=oneshot, and
+# systemd.service(5) excepts Type=oneshot from the four-signal clean-stop rule,
+# so the unit-level half of this contract is `SuccessExitStatus=SIGTERM SIGINT`
+# in lib.sh's `desired_service`. That half is asserted where the unit text is
+# generated — test-lib-systemd-units.sh, "SuccessExitStatus=SIGTERM SIGINT" —
+# because it is a property of the unit file, not of this script's exit.
+
+# tick_sig_kind <SIG> — run the tick under that supervisor and report how it
+# died in TICK_SIG_KIND: `signaled:<signo>` or `exited:<status>`. The supervisor
+# also removes the need for `set -m` here, because the tick is python's child
+# rather than a background job of this shell and so never inherits SIGINT as
+# SIG_IGN.
+TICK_SIG_KIND=""
+tick_sig_kind() {
+  cat > "$TMPDIR_TEST/supervise.py" <<'PY'
+import subprocess, sys
+
+pidfile = sys.argv[1]
+child = subprocess.Popen(sys.argv[2:], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+with open(pidfile, "w") as fh:
+    fh.write("%d\n" % child.pid)
+rc = child.wait()
+if rc < 0:
+    print("signaled:%d" % -rc)
+else:
+    print("exited:%d" % rc)
+PY
+  TICK_SIG_KIND=$(python3 "$TMPDIR_TEST/supervise.py" "$TMPDIR_TEST/tick.pid" \
+    env -u CLAUDE_CODE_SESSION_ID -u INVOCATION_ID "$TMPDIR_TEST/dispatch-tick")
+}
+
+echo "Test: a SIGTERM mid-tick kills the tick BY the signal, so systemd sees a clean stop"
+tick_setup
+tick_signal_fake TERM
+tick_sig_kind
+assert_eq "sigterm-kind: died of SIGTERM, not \`exit 143\` (which would fire OnFailure)" \
+  "signaled:15" "$TICK_SIG_KIND"
+tick_teardown
+
+echo "Test: a SIGINT mid-tick kills the tick BY the signal too"
+tick_setup
+tick_signal_fake INT
+tick_sig_kind
+assert_eq "sigint-kind: died of SIGINT, not \`exit 130\`" "signaled:2" "$TICK_SIG_KIND"
+tick_teardown
+
+# --- a signal during the paused drain must RELEASE the selection lock --------
+# The paused-branch node-lane drain is the one place dispatch-tick holds the
+# selection lock in its own process: it acquires with `dispatch-acquire-lock
+# --wait`, runs graph-auto-merge and reconcile-graph-merged, then releases
+# unconditionally. A signal landing between those two points now aborts the run
+# before the release, so without the handler releasing it the lock is stranded.
+#
+# The session id here is a REAL inherited one, deliberately. On the headless
+# path resolve_holder_state resolves liveness through the PID sentinel, which
+# the handler removes, so the stranded lock self-heals on the next tick's read
+# and the defect is invisible. With a real id — a hand-run `dispatch-tick`, or
+# Ctrl-C during graph-auto-merge — the daemon reports the session LIVE and
+# nothing reclaims the lock until it ages past MAX_HOLD_SECONDS (default 300s).
+#
+# The signal comes from inside the graph-auto-merge fake, which the drain calls
+# in exactly that window, and the fake still returns 0 with no merge, so nothing
+# about the sequence itself stops the drain.
+
+# tick_run_signalled_real <session-id> — as tick_run_signalled, but with a real
+# inherited session id instead of the synthesized headless one. `set -m` is
+# required for the same reason it is there.
+tick_run_signalled_real() {
+  local pid
+  rm -f "$TMPDIR_TEST/tick.pid"
+  set -m
+  CLAUDE_CODE_SESSION_ID="$1" "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 &
+  pid=$!
+  set +m
+  printf '%s\n' "$pid" > "$TMPDIR_TEST/tick.pid"
+  TICK_SIG_RC=0
+  wait "$pid" || TICK_SIG_RC=$?
+}
+
+echo "Test: a SIGTERM during the paused drain releases the selection lock it was holding"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+cat > "$TMPDIR_TEST/graph-auto-merge" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/graph-auto-merge.log"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$TMPDIR_TEST/tick.pid" ]] && break
+  sleep 0.1
+done
+kill -TERM "\$(cat "$TMPDIR_TEST/tick.pid")"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/graph-auto-merge"
+tick_run_signalled_real "sess-drain-lock"
+assert_eq "drain-lock: the tick exits 143" "143" "$TICK_SIG_RC"
+assert_eq "drain-lock: the drain really was mid-flight (graph-auto-merge ran)" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+# The whole finding: acquire, then release — and NOT acquire alone. The
+# exact-sequence form (rather than a count) also pins that no --heartbeat
+# slipped in, i.e. the run stopped where the signal landed rather than
+# continuing into reconcile-graph-merged.
+assert_eq "drain-lock: the selection lock was acquired and then RELEASED on the way out" \
+  "$(printf -- '--wait\n--release')" "$(cat "$TMPDIR_TEST/logs/acquire-lock.log")"
+assert_eq "drain-lock: the drain STOPPED — reconcile-graph-merged never ran" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+tick_teardown
+
+# --- a signal DURING the acquire must release the lock the child then took ----
+# The window the case above does not reach. `dispatch-acquire-lock --wait` polls
+# for up to DISPATCH_LOCK_WAIT_TIMEOUT (default 300s) in a CHILD process, and
+# dispatch-heartbeat.service sets KillMode=process — so a `systemctl --user
+# stop` mid-wait signals only the tick's own shell and the child polls on. bash
+# defers the pending trap until the command substitution returns, by which time
+# the child has ALREADY written our session id into the lock file. A
+# TICK_LOCK_HELD raised only after the acquire is therefore still 0 when the
+# handler runs: it skips the release and the lock is stranded for
+# MAX_HOLD_SECONDS — the exact defect the flag was added to prevent.
+#
+# The fake reproduces that ordering exactly: it signals the tick and THEN
+# answers `acquired`, so the lock is genuinely ours by the time the deferred
+# trap fires. A real inherited session id, for the same reason as the case
+# above — the headless path self-heals through the sentinel and hides this.
+#
+# The exact-sequence assertion is what fails before the fix: `--wait` alone,
+# with no `--release` behind it.
+
+echo "Test: a SIGTERM while the drain's lock acquire is in flight still releases the lock"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+cat > "$TMPDIR_TEST/dispatch-acquire-lock" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/acquire-lock.log"
+if [[ "\$*" == *--release* ]]; then
+  echo released
+  exit 0
+fi
+# The acquire is "in flight": signal the tick, then hand back the lock. bash
+# cannot run the pending trap until this substitution returns, so the handler
+# observes a lock that IS ours.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$TMPDIR_TEST/tick.pid" ]] && break
+  sleep 0.1
+done
+kill -TERM "\$(cat "$TMPDIR_TEST/tick.pid")"
+echo acquired
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-acquire-lock"
+tick_run_signalled_real "sess-acquire-window"
+assert_eq "acquire-window: the tick exits 143" "143" "$TICK_SIG_RC"
+assert_eq "acquire-window: the signal landed INSIDE the acquire — the drain never started" \
+  "0" "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "acquire-window: the lock the child took was RELEASED on the way out" \
+  "$(printf -- '--wait\n--release')" "$(cat "$TMPDIR_TEST/logs/acquire-lock.log")"
+tick_teardown
+
 report_results

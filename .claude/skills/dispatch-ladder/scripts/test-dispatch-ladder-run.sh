@@ -1630,4 +1630,353 @@ else
 fi
 make_seq_fake "$LADDER/dispatch-ladder-advance" advance
 
+# --- A signal STOPS the run (it does not merely release the lock) ------------
+# The driver's own cleanup comment names the scenario: "a SIGTERM from
+# `systemctl stop` lands mid-pass otherwise and leaves the lock held". A single
+# combined `trap _ladder_cleanup EXIT INT TERM` DEFEATS that rather than serving
+# it — bash runs the handler, the handler releases the lock and RETURNS, and
+# control goes straight back to the interrupted pass, which carries on merging
+# and absorbing THE SAME NODE with the selection lock no longer held. A
+# concurrent dispatch tick is free to claim it at the same moment. That is a
+# routing race, not a tidy-up nit, which is why the assertions below check where
+# the run got to and not only what status it returned.
+#
+# The signal is delivered from inside the graph-auto-merge fake, which the
+# driver calls in the middle of reconcile_pass with LOCK_HELD=1 — the exact
+# window the comment above is about. bash runs the pending trap when that
+# command substitution returns, so the fake also answers normally (exit 0, no
+# merge): nothing about the sequence itself stops the pass. Three assertions per
+# signal:
+#   status   — 143 / 130 EXACTLY, never merely non-zero. Measured under the
+#              combined `trap fn EXIT INT TERM`: both signals produce exit 10
+#              (the ci-wait budget draining normally), because at handler entry
+#              $? is the last COMPLETED command's status and NOT 128+signo.
+#   stopped  — reconcile-graph-merged was never called. This is the race itself:
+#              under the combined trap the pass walks straight on into the
+#              absorb step having already released the lock.
+#   released — the lock was still released exactly once, i.e. the handler still
+#              does its ORIGINAL job. Without it, `trap 'exit 143' TERM` passes.
+# INT and TERM get one case each on purpose: with only one of them, the other
+# registration could be mis-numbered or deleted and this suite would stay green.
+
+# ladder_signal_merge_fake <SIG> — the graph-auto-merge fake for the two cases
+# below. Waits (bounded) for the harness to record the driver's PID, signals it,
+# then answers `no merge` and exits 0 like any other quiet pass.
+ladder_signal_merge_fake() {
+  local sig="$1"
+  rm -f "$SEQ_DIR/driver.pid"
+  cat >"$DISPATCH/graph-auto-merge" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$SEQ_DIR/merge.count")
+echo \$((n + 1)) >"$SEQ_DIR/merge.count"
+printf '%s\n' "\$*" >>"$SEQ_DIR/merge.argv"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$SEQ_DIR/driver.pid" ]] && break
+  sleep 0.1
+done
+kill -$sig "\$(cat "$SEQ_DIR/driver.pid")"
+exit 0
+STUB
+  chmod +x "$DISPATCH/graph-auto-merge"
+}
+
+# run_ladder_signalled — run the driver in the background so its PID can be
+# handed to the fake above, then report its exit status in RC.
+#
+# `set -m` around the launch is REQUIRED, not decoration. With job control off
+# (the default for a script), a command started with `&` inherits SIGINT and
+# SIGQUIT as SIG_IGN — and a signal ignored on entry to a shell cannot be
+# trapped or reset. Measured without it in the sibling test-dispatch-tick.sh
+# case: the TERM half passes while the INT half runs to a normal completion,
+# i.e. the trap never fires at all and the case proves nothing about the INT
+# registration. Job control gives the child its own process group with default
+# signal dispositions.
+run_ladder_signalled() { # [extra driver args...]
+  local pid
+  RC=0
+  set -m
+  "$RUN" "$NODE" --poll-s 1 --timeout-s 3 --ci-wait-s 1 "$@" >/dev/null 2>&1 &
+  pid=$!
+  set +m
+  printf '%s\n' "$pid" >"$SEQ_DIR/driver.pid"
+  wait "$pid" || RC=$?
+}
+
+echo "Test: a SIGTERM mid-pass stops the run with status 143, after releasing the lock"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+ladder_signal_merge_fake TERM
+run_ladder_signalled
+assert_eq "sigterm: the run exits 143, not the budget's own 10" "143" "$RC"
+assert_eq "sigterm: the pass STOPPED — it never walked on into the absorb step" \
+  "0" "$(calls reconcile)"
+assert_eq "sigterm: the selection lock was still released" "1" "$(lock_modes --release)"
+make_seq_fake "$DISPATCH/graph-auto-merge" merge
+
+echo "Test: a SIGINT mid-pass stops the run with status 130, after releasing the lock"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+ladder_signal_merge_fake INT
+run_ladder_signalled
+assert_eq "sigint: the run exits 130, not the budget's own 10" "130" "$RC"
+assert_eq "sigint: the pass STOPPED — it never walked on into the absorb step" \
+  "0" "$(calls reconcile)"
+assert_eq "sigint: the selection lock was still released" "1" "$(lock_modes --release)"
+make_seq_fake "$DISPATCH/graph-auto-merge" merge
+
+# --- ...and a signal exit still owes a TERMINAL STATE -------------------------
+# The three assertions per signal above pin that the run STOPS. They cannot see
+# what it leaves behind, and stopping cleanly is only half the contract.
+#
+# halt() is the one terminal path the ladder's own logic takes, and everything
+# terminal hangs off it: classify_terminus, write_state, spawn_phase_eval. A
+# signal exit reaches none of that. Left alone it stops with state.json still
+# reading `{"status":"running","step":"merge","terminus":null}` — the file it
+# wrote on entering the merge step — and TWO things then go wrong:
+#
+#   * `dispatch-ladder-status` sees status `running` with an inactive unit and
+#     answers `orphaned`, whose documented meaning (the `orphaned` row of
+#     dispatch-ladder-status's <status> list, :50) is "the driver died WITHOUT
+#     writing a terminal state". After an ordinary
+#     `systemctl --user stop dispatch-ladder-<node>` that is simply false, so
+#     the reader's vocabulary starts lying about its most routine case.
+#   * the per-phase RSI evaluation halt() would have spawned is never spawned
+#     and never recorded, so the phase produces NO ledger entry at all — the
+#     exact gap the driver header's A HALT OWES THE EVALUATION TOO closes.
+#
+# The repair is local writes ONLY (signal_terminal_write), which is why the
+# terminus stays null here rather than being classified: classify_terminus makes
+# bounded network reads and spawn_phase_eval is a daemon round trip, and the
+# clock on this path is TimeoutStopSec, after which systemd sends SIGKILL and
+# nothing lands at all. So the assertions below pin BOTH halves — the state that
+# is written, and the debt that is recorded rather than paid.
+#
+# The step is asserted as `merge` on purpose: it is set at
+# dispatch-ladder-run's `STEP=merge; write_state` immediately before
+# graph-auto-merge, which is where this fake delivers the signal. A terminal
+# write that reset or blanked it would lose the one field that says WHERE the
+# run was standing when it was stopped.
+echo "Test: a SIGTERM mid-merge writes a terminal 'signalled' state, not one that reads as orphaned"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+ladder_signal_merge_fake TERM
+run_ladder_signalled
+assert_eq "sigterm-state: the run exits 143" "143" "$RC"
+assert_eq "sigterm-state: state.json status is 'signalled', NOT 'running' (which reads as orphaned)" \
+  "signalled" "$(jq -r .status "$STATE_DIR/state.json")"
+assert_eq "sigterm-state: state.json exit_code is 143" \
+  "143" "$(jq -r .exit_code "$STATE_DIR/state.json")"
+assert_eq "sigterm-state: state.json disposition is 'signalled'" \
+  "signalled" "$(jq -r .disposition "$STATE_DIR/state.json")"
+assert_eq "sigterm-state: the step the run was standing on is preserved" \
+  "merge" "$(jq -r .step "$STATE_DIR/state.json")"
+assert_eq "sigterm-state: terminus stays null — classifying it is the network read this path skips" \
+  "null" "$(jq -r '.terminus // "null"' "$STATE_DIR/state.json")"
+assert_eq "sigterm-state: the detail names the signal" "1" \
+  "$(jq -r .detail "$STATE_DIR/state.json" | grep -c 'SIGTERM')"
+assert_eq "sigterm-state: exactly one halt event with disposition 'signalled'" \
+  "1" "$(events_have halt signalled)"
+make_seq_fake "$DISPATCH/graph-auto-merge" merge
+
+echo "Test: a SIGINT mid-merge writes the same terminal state with its own status"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+ladder_signal_merge_fake INT
+run_ladder_signalled
+assert_eq "sigint-state: the run exits 130" "130" "$RC"
+assert_eq "sigint-state: state.json status is 'signalled'" \
+  "signalled" "$(jq -r .status "$STATE_DIR/state.json")"
+assert_eq "sigint-state: state.json exit_code is 130, not 143" \
+  "130" "$(jq -r .exit_code "$STATE_DIR/state.json")"
+assert_eq "sigint-state: the detail names SIGINT, not SIGTERM" "1" \
+  "$(jq -r .detail "$STATE_DIR/state.json" | grep -c 'SIGINT')"
+make_seq_fake "$DISPATCH/graph-auto-merge" merge
+
+# --- the owed evaluation is RECORDED, not silently dropped -------------------
+# The two cases above run the idle path, where no phase ever launches, so no
+# evaluation is owed and none can be missing. This case is the one that can see
+# the second half of the gap: advance LAUNCHES a phase, and the signal lands
+# inside the await that follows it — before the phase boundary where
+# spawn_phase_eval would otherwise have run.
+#
+# The debt is not paid here (the spawn is the daemon round trip this path
+# cannot afford) but it must not vanish either, so it is written to
+# events.jsonl as `eval ... skipped` — reusing the disposition
+# spawn_phase_eval's own "no executable dispatch-spawn-job" arm already uses for
+# "this phase is unevaluated", so the events vocabulary stays closed. The event
+# names the exact `/rsi` call that pays it, which is what makes the record
+# actionable rather than merely honest.
+#
+# Guarded exactly as spawn_phase_eval is: asserting the spawn did NOT happen
+# pins that this path stays local, and asserting the record DID pins that
+# skipping it is not the same as forgetting it.
+ladder_signal_await_fake() {
+  local sig="$1"
+  rm -f "$SEQ_DIR/driver.pid"
+  cat >"$LADDER/dispatch-ladder-await" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$SEQ_DIR/await.count")
+echo \$((n + 1)) >"$SEQ_DIR/await.count"
+printf '%s\n' "\$*" >>"$SEQ_DIR/await.argv"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$SEQ_DIR/driver.pid" ]] && break
+  sleep 0.1
+done
+kill -$sig "\$(cat "$SEQ_DIR/driver.pid")"
+echo 'advanced tactic-fixture-node implement -> origin/main'
+exit 0
+STUB
+  chmod +x "$LADDER/dispatch-ladder-await"
+}
+
+echo "Test: a SIGTERM after a phase launched RECORDS the owed evaluation instead of dropping it"
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement'
+ladder_signal_await_fake TERM
+run_ladder_signalled
+assert_eq "sigterm-owed: the run exits 143" "143" "$RC"
+assert_eq "sigterm-owed: state.json status is 'signalled'" \
+  "signalled" "$(jq -r .status "$STATE_DIR/state.json")"
+assert_eq "sigterm-owed: the phase the run was in is preserved" \
+  "implement" "$(jq -r .phase "$STATE_DIR/state.json")"
+assert_eq "sigterm-owed: the evaluation was NOT spawned — this path makes no daemon round trip" \
+  "0" "$(calls spawnjob)"
+assert_eq "sigterm-owed: exactly one 'eval ... skipped' event records the debt" \
+  "1" "$(events_have eval skipped)"
+assert_eq "sigterm-owed: that event names the /rsi call that pays the debt" "1" \
+  "$(jq -r 'select(.event == "eval" and .disposition == "skipped") | .detail' \
+       "$STATE_DIR/events.jsonl" | grep -c "/rsi $NODE implement --since")"
+make_seq_fake "$LADDER/dispatch-ladder-await" await
+
+# --- a signal that lands INSIDE halt() must not overwrite what halt() decided --
+# Every signal case above stops a run that was still walking the ladder, so the
+# terminal write has nothing to overwrite. This one reaches the window where it
+# does: halt() writes state.json and logs its halt event and only THEN calls
+# spawn_phase_eval, a dispatch-spawn-job round trip through the claude daemon.
+# bash defers a pending trap until the running command returns, so a stop
+# delivered during that spawn fires the handler while halt() is still mid-body,
+# with a terminal record already on disk.
+#
+# What the unguarded terminal write does to that record is not a cosmetic
+# overwrite. It replaces `halted`/`stalled`/12 with `signalled`/`signalled`/143
+# — losing the disposition the ladder actually reached — while leaving TERMINUS
+# at the `violation` classify_terminus paid two network reads for. The result is
+# a `signalled` status carrying a classified terminus, the ONE combination the
+# status vocabulary promises cannot occur (dispatch-ladder-status's `signalled`
+# row: "<terminus> is null rather than classified"). A reader that trusts the
+# vocabulary reads a deliberate operator stop where the truth is a violation.
+#
+# The fixture drives exactly that ordering: advance launches a phase (so halt()
+# has an evaluation to spawn and therefore a window to be interrupted in), await
+# answers 12 so the run halts `stalled`, and the spawn fake signals the driver
+# before answering. The default `landed 4` sequence makes classify_terminus walk
+# its three probes to `violation`, so the terminus is non-empty when the handler
+# runs — without that the bug leaves no trace to assert on.
+#
+# The assertions read the record, not the exit status: the process still dies of
+# the signal (143), because it genuinely was signalled. What must survive is
+# what the ladder decided before the signal arrived.
+ladder_signal_spawnjob_fake() { # <SIG>
+  local sig="$1"
+  rm -f "$SEQ_DIR/driver.pid"
+  cat >"$DISPATCH/dispatch-spawn-job" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$SEQ_DIR/spawnjob.count")
+echo \$((n + 1)) >"$SEQ_DIR/spawnjob.count"
+printf '%s\n' "\$*" >>"$SEQ_DIR/spawnjob.argv"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$SEQ_DIR/driver.pid" ]] && break
+  sleep 0.1
+done
+kill -$sig "\$(cat "$SEQ_DIR/driver.pid")"
+echo spawned
+exit 0
+STUB
+  chmod +x "$DISPATCH/dispatch-spawn-job"
+}
+
+echo "Test: a SIGTERM inside halt()'s evaluation spawn leaves halt()'s own terminal record intact"
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement'
+set_seq await   '12|stalled tactic-fixture-node implement'
+ladder_signal_spawnjob_fake TERM
+run_ladder_signalled
+assert_eq "halt-race: the process still dies of the signal" "143" "$RC"
+assert_eq "halt-race: the signal landed inside halt()'s spawn" "1" "$(calls spawnjob)"
+assert_eq "halt-race: state.json still reports the halt, not the signal" \
+  "halted" "$(jq -r .status "$STATE_DIR/state.json")"
+assert_eq "halt-race: the disposition the ladder reached survives" \
+  "stalled" "$(jq -r .disposition "$STATE_DIR/state.json")"
+assert_eq "halt-race: so does the exit code halt() recorded" \
+  "12" "$(jq -r .exit_code "$STATE_DIR/state.json")"
+assert_eq "halt-race: and the terminus classify_terminus paid for" \
+  "violation" "$(jq -r '.terminus // "null"' "$STATE_DIR/state.json")"
+assert_eq "halt-race: no second halt event was appended under the signal" \
+  "0" "$(events_have halt signalled)"
+assert_eq "halt-race: halt()'s own halt event is the only one" \
+  "1" "$(events_have halt stalled)"
+# The pairing the vocabulary forbids, asserted directly rather than inferred
+# from the four fields above: no state.json a reader ever sees may carry status
+# `signalled` alongside a non-null terminus.
+assert_eq "halt-race: no record pairs a 'signalled' status with a classified terminus" \
+  "false" "$(jq -r '.status == "signalled" and .terminus != null' "$STATE_DIR/state.json")"
+make_seq_fake "$DISPATCH/dispatch-spawn-job" spawnjob
+make_seq_fake "$LADDER/dispatch-ladder-await" await
+
+# --- a signal DURING the acquire must release the lock the child then took ----
+# The window the two cases above do not reach. `dispatch-acquire-lock --wait`
+# polls for up to DISPATCH_LOCK_WAIT_TIMEOUT (default 300s) in a CHILD process,
+# and dispatch-ladder-spawn passes --property=KillMode=process — so a
+# `systemctl --user stop dispatch-ladder-<node>` mid-wait signals only the
+# driver and the child polls on. bash defers the pending trap until the command
+# substitution returns, by which time the child has ALREADY taken the lock and
+# recorded our session id. With LOCK_HELD raised only after the acquire the
+# handler sees 0 and skips the release; and because the handler now exits
+# rather than returning into the pass, reconcile_pass's own release_lock never
+# runs either. The lock is stranded until it ages past MAX_HOLD_SECONDS —
+# blocking every dispatch tick meanwhile.
+#
+# Before this PR the same window existed but was harmless: the handler returned
+# and the pass reached its own release_lock. The new `exit` removes exactly
+# that recovery, so the window has to be closed at the flag instead.
+#
+# The stub reproduces the ordering: it signals the driver and THEN answers
+# `acquired`, so the lock is genuinely the driver's by the time the deferred
+# trap fires. The release assertion is what fails without the fix.
+
+echo "Test: a SIGTERM while the selection-lock acquire is in flight still releases the lock"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+rm -f "$SEQ_DIR/driver.pid"
+cat >"$DISPATCH/dispatch-acquire-lock" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$SEQ_DIR/lock.argv"
+printf '%s\n' "\${CLAUDE_CODE_SESSION_ID:-<unset>}" >>"$SEQ_DIR/lock.sid"
+case "\${1:-}" in
+  --heartbeat|--release) exit 0 ;;
+esac
+# The acquire is "in flight": signal the driver, then hand back the lock. bash
+# cannot run the pending trap until this substitution returns, so the handler
+# observes a lock that IS ours.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$SEQ_DIR/driver.pid" ]] && break
+  sleep 0.1
+done
+kill -TERM "\$(cat "$SEQ_DIR/driver.pid")"
+n=\$(cat "$SEQ_DIR/lock.count")
+echo \$((n + 1)) >"$SEQ_DIR/lock.count"
+line=\$(sed -n "\$((n + 1))p" "$SEQ_DIR/lock.script")
+[[ -n "\$line" ]] || line=\$(tail -n1 "$SEQ_DIR/lock.script")
+out="\${line#*|}"
+[[ -n "\$out" ]] && printf '%s\n' "\$out"
+exit "\${line%%|*}"
+STUB
+chmod +x "$DISPATCH/dispatch-acquire-lock"
+run_ladder_signalled
+assert_eq "acquire-window: the run exits 143, not the budget's own 10" "143" "$RC"
+assert_eq "acquire-window: the signal landed INSIDE the acquire — the merge step never ran" \
+  "0" "$(calls merge)"
+assert_eq "acquire-window: the lock the child took was RELEASED on the way out" \
+  "1" "$(lock_modes --release)"
+
 report_results
