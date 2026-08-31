@@ -77,8 +77,45 @@
 #                     commit's SECOND parent, and HEAD^1..HEAD can be far
 #                     narrower than the line HEAD ends — on an already-merged
 #                     five-commit branch it is the last commit only. The fork
-#                     point covers the whole line. It coincides with HEAD^1
-#                     exactly when that line is one commit long.
+#                     point covers the whole line.
+#
+#                     It does NOT, however, coincide with HEAD^1 merely because
+#                     that line is one commit long — an earlier revision of this
+#                     header claimed it did, and that was WRONG. The fork point
+#                     is measured against <remote-ref>'s CURRENT first-parent
+#                     chain, and a landing merge REROUTES that chain through the
+#                     LANDER's branch. Commits HEAD's line genuinely forked from
+#                     are demoted off the chain along with the tip they sat on,
+#                     so the walk cannot see them and stops at an OLDER chain
+#                     commit. Whenever the lander forked EARLIER than HEAD^1 the
+#                     base is older than HEAD^1, however short HEAD's line is.
+#                     Measured on fixture `lander-forks-earlier` in
+#                     test-resolve-diff-base.sh — main A0→A→X, a lander branched
+#                     at A0 merges X and pushes, HEAD=X, X's line ONE commit
+#                     long: base=A0, not X^1=A, and A0..X names a.txt AND x.txt
+#                     where X^1..X names only x.txt.
+#
+#                     What IS guaranteed is the DIRECTION of the error, and it
+#                     is the safe one. An off-chain HEAD is by definition not on
+#                     the chain, so the fork point is a STRICT ancestor of HEAD
+#                     and hence — for a single-parent HEAD — an ancestor of
+#                     HEAD^1: <fork>..HEAD always CONTAINS HEAD^1..HEAD. The
+#                     range can be too WIDE, never vacuous, which is the same
+#                     trade the FETCHING note below already accepts for a stale
+#                     <remote-ref>. The cost is real and worth naming: a caller
+#                     that SCORES over the whole range — check-test-integrity.sh
+#                     counts added-minus-removed and carries no suppression
+#                     marker — can be pushed red by commits HEAD never touched.
+#
+#                     Narrowing to HEAD^1 is NOT the repair. It reinstates
+#                     exactly the vacuity this arm exists to prevent (the
+#                     already-merged five-commit branch above, where HEAD^1..HEAD
+#                     is one file of two), and the two shapes are provably
+#                     indistinguishable from the current chain — see the arm
+#                     below, where that discriminator is measured dead. A wide
+#                     range that WARNS beats a narrow one that silently passes,
+#                     so the stderr warning is the mitigation here: not a
+#                     refusal, and not a narrower base.
 #
 #                   This mode does NOT refuse the off-chain shape. It used to,
 #                   for one revision, and that was measurably wrong: a

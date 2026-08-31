@@ -42,6 +42,14 @@ TMP_ROOT=$(mktemp -d)
 #                  pushed to `main` that a later landing merge demoted into its
 #                  SECOND parent. Indistinguishable from the above, which is
 #                  exactly why the off-chain arm resolves rather than refuses.
+#     "lander-forks-earlier"
+#                — the same demotion, but with the LANDER forking EARLIER than
+#                  the demoted tip's own parent. `demoted-main-tip` branches its
+#                  lander from the baseline, which is ALSO that tip's parent, so
+#                  "the fork point equals HEAD^1" holds there by CONSTRUCTION
+#                  and any drift between the two is invisible. Here a commit
+#                  sits between, and the base resolves OLDER than HEAD^1 even
+#                  though HEAD's line is one commit long.
 #     (default)  — a feature branch one commit ahead of origin/main
 # Sets: REPO
 # ---------------------------------------------------------------------------
@@ -137,6 +145,36 @@ make_repo() {
       git -C "$REPO" merge -q --no-ff "$DEMOTED_SHA" -m "landing merge: demotes the main tip to P2"
       git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
       git -C "$REPO" checkout -q "$DEMOTED_SHA"
+      ;;
+    lander-forks-earlier)
+      # The off-chain shape once more, arranged so the fork point is genuinely
+      # OBSERVABLE — which `demoted-main-tip` above cannot do.
+      #
+      # There the lander branches from the baseline, and the baseline is also
+      # X^1, so the fork point and HEAD^1 are the same commit no matter what the
+      # walk does. Here A sits BETWEEN them: main is A0 -> A -> X with
+      # origin/main at X, and the lander branched back at A0, BEFORE A landed.
+      # Its landing merge reroutes origin/main's first-parent chain through the
+      # lander's own line, demoting BOTH X and A off that chain. The walk can no
+      # longer see A, so it stops at A0 — and the base is older than X^1 even
+      # though X's line is ONE commit long.
+      printf 'a\n' > "$REPO/a.txt"
+      git -C "$REPO" add a.txt
+      git -C "$REPO" commit -q -m "A: an earlier main tip, demoted by the landing too"
+      EARLIER_MAIN_SHA=$(git -C "$REPO" rev-parse HEAD)
+      printf 'x\n' > "$REPO/x.txt"
+      git -C "$REPO" add x.txt
+      git -C "$REPO" commit -q -m "X: the push this run is for (X^1 is A, NOT the baseline)"
+      FORKED_TIP_SHA=$(git -C "$REPO" rev-parse HEAD)
+      git -C "$REPO" update-ref refs/remotes/origin/main "$FORKED_TIP_SHA"
+      git -C "$REPO" checkout -q -b lander "$BASELINE_SHA"
+      printf 'the landing\n' > "$REPO/lander.txt"
+      git -C "$REPO" add lander.txt
+      git -C "$REPO" commit -q -m "the landing's own line, forked before A landed"
+      git -C "$REPO" merge -q --no-ff "$FORKED_TIP_SHA" \
+        -m "landing merge: reroutes the chain through the lander"
+      git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+      git -C "$REPO" checkout -q "$FORKED_TIP_SHA"
       ;;
     *)
       git -C "$REPO" update-ref refs/remotes/origin/main "$BASELINE_SHA"
@@ -382,8 +420,68 @@ assert_contains "demoted-main-tip/first-parent: provenance names source=fork-poi
 DMT_DELTA=$(git -C "$REPO" diff --name-only "$OUT"..HEAD)
 assert_eq "demoted-main-tip/first-parent: the range is exactly what that push introduced" \
   "demoted.txt" "$DMT_DELTA"
-assert_eq "demoted-main-tip: the fork point coincides with HEAD^1 for a one-commit line" \
+# True HERE only by CONSTRUCTION: this fixture's lander branches from the
+# baseline, which is also HEAD^1, so the two cannot differ whatever the walk
+# does. It pins this fixture's own shape, NOT a general property of the fork
+# point — the header once generalised it and was wrong. Test 4c builds the
+# fixture where they genuinely differ.
+assert_eq "demoted-main-tip: with the lander forked AT HEAD^1, the base IS HEAD^1 (true by construction; see 4c)" \
   "$(git -C "$REPO" rev-parse 'HEAD^1')" "$OUT"
+
+# ---------------------------------------------------------------------------
+# Test 4c: (c) the SAME off-chain shape with the LANDER forking EARLIER than the
+# demoted tip's parent — the arm that can actually SEE where the fork point
+# lands, and the reason (b) alone is not enough.
+#
+# resolve-diff-base.sh's header used to claim the fork point "coincides with
+# HEAD^1 exactly when that line is one commit long". It does not. The fork point
+# is measured against origin/main's CURRENT first-parent chain, and the landing
+# merge reroutes that chain through the lander — demoting A off it along with X.
+# The walk stops at A0, so the base is OLDER than X^1 even though X's line is
+# one commit long. These arms pin the CORRECTED claim, and would have gone red
+# against the old one.
+# ---------------------------------------------------------------------------
+echo "Test 4c: the fork point can be OLDER than HEAD^1 even for a one-commit line"
+make_repo lander-forks-earlier
+run_sut --repo-root "$REPO" --at-remote-tip first-parent
+assert_eq "lander-forks-earlier/first-parent: exit 0 (still resolves, never refuses)" \
+  "0" "$RC"
+assert_contains "lander-forks-earlier/first-parent: provenance names source=fork-point" \
+  "source=fork-point" "$ERR"
+# The fixture's precondition, asserted rather than assumed: X's line is ONE
+# commit and X^1 is A, NOT the baseline. This is exactly what demoted-main-tip
+# cannot arrange, and without it the assertion below is vacuous again.
+assert_eq "lander-forks-earlier: HEAD^1 is A, not the baseline (unlike demoted-main-tip)" \
+  "$EARLIER_MAIN_SHA" "$(git -C "$REPO" rev-parse 'HEAD^1')"
+# The correction itself: the base is the baseline A0, NOT HEAD^1.
+assert_eq "lander-forks-earlier: base is A0, the rerouted chain's fork point" \
+  "$BASELINE_SHA" "$OUT"
+# Full 40-hex SHAs of equal length, so "does not contain" IS "is not equal to";
+# this reuses the existing helper rather than adding an assert_not_eq for one site.
+assert_not_contains "lander-forks-earlier: the base does NOT coincide with HEAD^1, though the line is ONE commit long" \
+  "$EARLIER_MAIN_SHA" "$OUT"
+# ... and the consequence a caller actually feels: the resolved range is BROADER
+# than what this push introduced, naming a file HEAD never touched. That is the
+# input check-test-integrity.sh scores added-minus-removed over.
+LFE_NARROW=$(git -C "$REPO" diff --name-only 'HEAD^1..HEAD')
+LFE_WIDE=$(git -C "$REPO" diff --name-only "$OUT"..HEAD)
+assert_eq "lander-forks-earlier: HEAD^1..HEAD is just this push's own file" \
+  "x.txt" "$LFE_NARROW"
+assert_eq "lander-forks-earlier: the resolved range ALSO names a.txt, which HEAD never touched" \
+  "a.txt
+x.txt" "$LFE_WIDE"
+# The direction of the error is what matters, and it is the safe one: too WIDE,
+# never vacuous. A narrower base would pass vacuously, which is the defect this
+# helper exists to stop — so the range must stay a superset, and be WARNED about.
+assert_contains "lander-forks-earlier: the too-wide range is warned about, not silent" \
+  "not the full range since" "$ERR"
+# The base sits on the chain BELOW where the lander forked, so the lander's own
+# line stays out of the range. Too wide is tolerated; unbounded is not.
+assert_not_contains "lander-forks-earlier: the landing's own file is NOT in the range" \
+  "lander.txt" "$LFE_WIDE"
+# The default mode is untouched here too: still the same exit 5.
+run_sut --repo-root "$REPO"
+assert_eq "lander-forks-earlier/default: exit 5 (unchanged)" "yes" "$(rc_of "$RC" 5)"
 
 # The positive control that keeps this narrow: the ON-chain half of the same
 # strict-ancestor shape must still resolve from HEAD^1, not from the fork point.

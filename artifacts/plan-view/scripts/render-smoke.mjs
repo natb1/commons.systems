@@ -89,6 +89,11 @@ function writeEmptyStoreCopy(builtFile, intoDir) {
   return out;
 }
 
+// Allocated BEFORE the browser launches, deliberately: a throw between the
+// launch and the try/finally below would leave the chromium process running and
+// node unable to exit, so nothing that can fail is allowed to sit in that gap.
+const scratch = mkdtempSync(join(tmpdir(), "plan-view-smoke-"));
+
 const executablePath = process.env.DS_CHROMIUM_PATH;
 const browser = await chromium.launch(
   executablePath === undefined || executablePath === "" ? {} : { executablePath },
@@ -213,7 +218,6 @@ async function smoke(pageFile, snapshot) {
   }
 }
 
-const scratch = mkdtempSync(join(tmpdir(), "plan-view-smoke-"));
 try {
   await smoke(file, "built");
   await smoke(writeEmptyStoreCopy(file, scratch), "empty-store");

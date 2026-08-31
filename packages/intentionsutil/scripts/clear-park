@@ -220,7 +220,15 @@ if ! GIT_TOPLEVEL="$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>/dev/null)"
   echo "clear-park: -C '$REPO_ARG' is not inside a git repository -- the store must be committable" >&2
   exit 2
 fi
-GIT_PREFIX="$(git -C "$REPO_ROOT" rev-parse --show-prefix)"
+# Checked, not captured-and-hoped: this script runs WITHOUT `set -e`, so an
+# unchecked `GIT_PREFIX="$(...)"` that fails leaves GIT_PREFIX EMPTY, which this
+# gate reads as "-C IS the toplevel" and waves a nested -C straight through --
+# the exact false accept the gate exists to prevent, and the strictly worse
+# failure of the two.
+if ! GIT_PREFIX="$(git -C "$REPO_ROOT" rev-parse --show-prefix 2>/dev/null)"; then
+  echo "clear-park: -C '$REPO_ARG' -- 'git rev-parse --show-prefix' failed there, so whether it is the git toplevel cannot be decided; refusing rather than guessing" >&2
+  exit 2
+fi
 if [[ -n "$GIT_PREFIX" ]]; then
   echo "clear-park: -C '$REPO_ARG' is not the git toplevel (that is '$GIT_TOPLEVEL') -- pass the checkout root, or this script and graph-commit resolve the same intentions/<id>.md to two different files" >&2
   exit 2
