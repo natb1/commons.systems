@@ -298,7 +298,8 @@ trap 'dc_real_exit_trap 143' TERM
 DC_REAL_TMP=$(mktemp -d)
 
 # ---------------------------------------------------------------------------
-# REGRESSION: the EXIT trap above must CHAIN, not replace.
+# REGRESSION: the EXIT trap above must CHAIN, must preserve $?, and the signal
+# handlers must be their OWN registrations.
 #
 # `trap` installs a handler, it does not append one. A bare
 # `trap dc_real_cleanup EXIT` here overwrote `_dispatch_test_exit_trap`
@@ -314,10 +315,16 @@ DC_REAL_TMP=$(mktemp -d)
 # (via `declare -f`), so the test tracks the code rather than a copy of it.
 #   clean run -> exit 0, nothing left in its own private $TMPDIR
 #   forged host-systemd leak -> exit NON-ZERO, still nothing left behind
-# The second case is the one the bare trap broke.
+#   failing assertion + report_results -> exit NON-ZERO (the $?-preservation
+#                                         half; the buggy idiom returns 0 here)
+#   TERM mid-run -> exit 143 (the split-handler half; one shared
+#                             `trap fn EXIT INT TERM` returns 0 here)
+# The second case is the one the bare trap broke. The last is what the separate
+# INT/TERM registrations above exist for: without it, reverting them to the
+# combined `trap dc_real_exit_trap EXIT INT TERM` leaves this suite green.
 # ---------------------------------------------------------------------------
 echo "Regression: the EXIT trap chains onto the fixture's leak guards"
-dc_trap_harness() {  # <path> <"clean"|"leak">
+dc_trap_harness() {  # <path> <"clean"|"leak"|"fail"|"signal">
   {
     printf '%s\n' '#!/usr/bin/env bash'
     printf '%s\n' 'set -euo pipefail'
@@ -334,12 +341,24 @@ dc_trap_harness() {  # <path> <"clean"|"leak">
       # dispatch_host_systemd_guard_check trips on.
       printf '%s\n' 'printf "start some.service\n" >> "$DISPATCH_GUARD_SYSTEMCTL_LOG"'
     fi
-    printf '%s\n' 'exit 0'
+    if [ "$2" = "fail" ]; then
+      printf '%s\n' 'assert_eq "deliberate failure" "expected" "actual"'
+      printf '%s\n' 'report_results'
+    elif [ "$2" = "signal" ]; then
+      # Kill the harness with TERM mid-run. bash runs the trap between
+      # commands, so the `exit 0` below is never reached WHEN THE HANDLER
+      # IS CORRECT -- and is exactly what a buggy handler falls through
+      # to, which is what makes this case discriminating.
+      printf '%s\n' 'kill -TERM $$'
+      printf '%s\n' 'exit 0'
+    else
+      printf '%s\n' 'exit 0'
+    fi
   } > "$1"
 }
 
 DC_TRAP_DIR=$(mktemp -d "$DC_REAL_TMP/traptest.XXXXXX")
-for dc_trap_case in clean leak; do
+for dc_trap_case in clean leak fail signal; do
   dc_trap_harness "$DC_TRAP_DIR/$dc_trap_case.sh" "$dc_trap_case"
   DC_TRAP_TMPDIR=$(mktemp -d "$DC_TRAP_DIR/tmp-$dc_trap_case.XXXXXX")
   set +e
@@ -351,9 +370,17 @@ for dc_trap_case in clean leak; do
     "0" "$DC_TRAP_LEFT"
   if [ "$dc_trap_case" = "clean" ]; then
     assert_eq "trap chain (clean): a clean run still exits 0" "0" "$DC_TRAP_RC"
+  elif [ "$dc_trap_case" = "signal" ]; then
+    # The whole point of the separate INT/TERM registrations: with one shared
+    # `trap dc_real_exit_trap EXIT INT TERM` this is 0, because at handler
+    # entry $? is the last COMPLETED command's status and NOT 128+signo.
+    # Asserted as 143 exactly, not merely non-zero -- "non-zero" would also
+    # accept the harness dying for an unrelated reason.
+    assert_eq "trap chain (signal): a TERM-killed suite exits 143, not 0" \
+      "143" "$DC_TRAP_RC"
   else
     [ "$DC_TRAP_RC" -ne 0 ] && _v=nonzero || _v=zero
-    assert_eq "trap chain (leak): the fixture's leak guard still forces failure" \
+    assert_eq "trap chain ($dc_trap_case): status reaches the fixture trap" \
       "nonzero" "$_v"
   fi
 done

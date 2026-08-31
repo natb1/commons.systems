@@ -1963,7 +1963,6 @@ ca_setup
 write_fake_claude '[{"id":"c0ffee11","sessionId":"deadbeef-session-uuid","name":"attach-me"}]' 0
 if out=$(claude_job_id_for_name_all "attach-me"); then rc=0; else rc=$?; fi
 assert_eq "job-id-all: id-not-sessionId exits 0" "0" "$rc"
-assert_eq "job-id-all: stdout is the .id field" "c0ffee11" "$out"
 # Three-way, not two-way: an `else leaked=id` arm maps EVERY wrong answer
 # -- including an empty string -- onto the passing value, so it could only
 # ever catch one specific wrong output.
