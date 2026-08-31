@@ -104,6 +104,12 @@ source "$SCRIPT_DIR/lib.sh"
 # graph_rollback_node_writes — the shared roll-a-failed-node-write-back-to-HEAD
 # primitive, extracted from THIS script so its siblings stop re-deriving it.
 source "$SCRIPT_DIR/lib-graph-rollback.sh"
+# The durable writer identity graph-commit stamps onto every commit it makes for
+# this sweep, and the string graph_rollback_node_writes below compares each
+# unpushed commit's `Graph-Writer:` trailer against — so a CONCURRENT writer's
+# commit is recognised as not-ours and kept. It MUST stay identical to the
+# <label> argument passed at the call site (see lib-graph-rollback.sh's header).
+export GRAPH_WRITER=reconcile-graph-merged
 # node_id_is_safe / require_safe_node_id / pin_base_blob — the shared
 # diagnosis-time compare-and-swap pin, likewise extracted from THIS script.
 source "$SCRIPT_DIR/lib-graph-base-pin.sh"
@@ -289,14 +295,37 @@ HEAD_AT_ARM=""
 # (require_safe_node_id): a planned edit id it cannot pin is a real error, not a
 # skip, because a skipped pin is an UNPROTECTED write.
 
+# WRITTEN_IDS — the ids this sweep has actually mutated on disk, and the ONE
+# source restore_node_files() arms the rollback from. It is deliberately not
+# `${!BASE_BLOB[@]}`, which is the Step 2 PIN set: the two are equal only while
+# the two reconcile-graph.ts runs agree, and this script already hard-errors on
+# their disagreement in the opposite direction (the missing-pin check at the
+# --base loop below). Reading the pins here made the disarm-free empty-plan exit
+# unsound: the emptiness test reads the APPLY run's `.edit[]`, while the
+# rollback's no-ids guard was reading Step 2's keys, so a plan that drifted to
+# EMPTY between the two runs left a non-empty id set on a zero-write path — and
+# the sweep announced "rolled the node write(s) back to HEAD" for a sweep that
+# wrote nothing, the exact false claim the no-ids guard exists to eliminate.
+#
+# The two assignments below are the whole contract, and both are exact:
+#   - Before the apply run, the pin set is the only bound available, and it is
+#     the correct conservative one — a mid-run failure may have written any
+#     prefix of it.
+#   - After the apply run returns, `.edit[]` IS the written set. Every
+#     writeNode() in reconcile-graph.ts is immediately followed by an
+#     editSet.add() of the same id (reconcile-graph.ts:269-270, 301-302,
+#     324-325) and `--no-apply` skips only the writeNode half, so `.edit[]`
+#     enumerates exactly the files the apply run touched — no more (a pinned id
+#     the apply dropped was never written) and no less (an id the apply added
+#     without a pin is written, and gets rolled back rather than stranded).
+declare -a WRITTEN_IDS=()
 # The rollback itself lives in lib-graph-rollback.sh — see that file's header
 # for WHY it restores to HEAD rather than to a captured blob, and how it tells
 # an ordinary rollback from graph-commit having moved HEAD (a landed park vs. an
-# un-landed, stranded commit). This wrapper only supplies the ids: every id this
-# sweep pinned in Step 2 is exactly an id its apply run mutated.
+# un-landed, stranded commit). This wrapper only supplies the ids.
 restore_node_files() {
   graph_rollback_node_writes "$REPO_ROOT" "$HEAD_AT_ARM" reconcile-graph-merged \
-    "${!BASE_BLOB[@]}"
+    "${WRITTEN_IDS[@]}"
 }
 # Single EXIT trap (bash traps REPLACE on a signal, not stack): always drop the
 # temp file, and roll the write back when a post-pin step armed the flag.
@@ -333,6 +362,11 @@ done < <(jq -r '.edit[]?' <<<"$PLAN_ONLY")
 # never claim the write was rolled back.
 HEAD_AT_ARM="$(git -C "$REPO_ROOT" rev-parse HEAD)" || {
   echo "reconcile-graph-merged: cannot read HEAD before the apply run (no rollback reference point)" >&2; exit 1; }
+# The conservative bound, for a failure INSIDE the apply run: it may have
+# written any prefix of the planned set before dying, and the pins are the only
+# enumeration of that set available before its stdout is read. Narrowed to the
+# exact written set the moment the plan is parsed, below.
+WRITTEN_IDS=("${!BASE_BLOB[@]}")
 RESTORE_ON_FAILURE=1
 PLAN="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/reconcile-graph.ts" --pr-states "$STATES_FILE") )" || {
   echo "reconcile-graph-merged: reconcile-graph.ts failed" >&2; exit 1; }
@@ -350,37 +384,46 @@ done < <(jq -c '.deferred[]?' <<<"$PLAN")
 
 # --- Land the plan as one graph-commit ---------------------------------------
 mapfile -t EDIT < <(jq -r '.edit[]?' <<<"$PLAN")
+# The apply run returned, so its `.edit[]` is now the EXACT written set (see
+# WRITTEN_IDS' declaration). Narrowing here is what makes the empty-plan exit
+# below sound: with no edits, the rollback is armed with no ids and its no-ids
+# guard genuinely fires, rather than firing only when the pins happen to agree.
+WRITTEN_IDS=("${EDIT[@]}")
 if [[ "${#EDIT[@]}" -eq 0 ]]; then
-  # DISARM BEFORE EXITING. An empty apply plan means the apply run mutated
-  # nothing, so there is nothing to roll back — but the EXIT trap does not know
-  # that, and would call restore_node_files() anyway. Two harms follow, and the
-  # second is not confined to this sweep:
+  # NO HAND-DISARM HERE, and that is a deliberate retirement rather than an
+  # omission. An empty apply plan means the apply run mutated nothing, so the
+  # EXIT trap's restore_node_files() is a zero-write call — and a
+  # `RESTORE_ON_FAILURE=0` used to sit here to keep it from running at all,
+  # because the shared rollback did two harmful things on that path:
   #
-  #   1. It logs "rolled the node write(s) back to HEAD" for a sweep that wrote
-  #      nothing, which is simply false in the journal.
-  #   2. graph_rollback_node_writes() compares HEAD against HEAD_AT_ARM to tell
-  #      an ordinary rollback from graph-commit having moved HEAD. If a
-  #      CONCURRENT graph writer landed a commit while we were planning, that
-  #      comparison sees a moved HEAD, enters _graph_discard_stranded_commits,
-  #      and `git reset --mixed`es away a commit this sweep never made.
+  #   1. it logged "rolled the node write(s) back to HEAD" for a sweep that
+  #      wrote nothing, which is simply false in the journal;
+  #   2. it compared HEAD against HEAD_AT_ARM, read a CONCURRENT graph writer's
+  #      commit landed during our planning window as OUR stranded write, and
+  #      `git reset --mixed`ed away a commit this sweep never made.
+  #
+  # Both are now fixed where they were caused, in lib-graph-rollback.sh: (1) by
+  # the no-ids guard at the top of graph_rollback_node_writes, which returns
+  # silently rather than claiming a rollback it did not perform, and (2) by the
+  # `Graph-Writer:` attribution, which classifies a peer writer's commit as not
+  # ours and keeps it. A caller-side flag could only ever have covered harm (2)
+  # on the paths that remembered to set it — never the ARMED path, and never
+  # graph-select-target, which has no such flag at all.
   #
   # An empty plan is ROUTINE, not exceptional: unprovenMainQa enumerates a
   # merged record-time mint on every sweep and isMergeAbsorbable then refuses
-  # it, so this path is reached often. A rare-path bug would be survivable; a
-  # routine-path one is not.
+  # it, so this path is reached often. That is why it is pinned by a test
+  # (test-graph-write-rollback.sh case 9b) rather than left to reasoning.
   #
-  # Safe because an empty `.edit[]` means the apply run wrote nothing: every
-  # writeNode() in reconcile-graph.ts is paired with an editSet.add(), so
-  # `.edit[]` empty <=> no node file was written. There is nothing to restore.
-  #
-  # NOT "safe because BASE_BLOB is empty". That was the original rationale here
-  # and it is the wrong reason: the destructive
-  # `_graph_discard_stranded_commits` leg runs BEFORE the per-id loop and
-  # restores the STRANDED COMMITS' paths, not the caller's pinned ids. An empty
-  # BASE_BLOB therefore does not make the trap harmless, and stating it that
-  # way reads as if this disarm were cosmetic. It is not — the destructive leg
-  # is exactly what the disarm exists to keep out of a zero-write path.
-  RESTORE_ON_FAILURE=0
+  # The no-ids guard really does fire here, and it does so UNCONDITIONALLY
+  # rather than as a consequence of the two runs agreeing. Every writeNode() in
+  # reconcile-graph.ts is paired with an editSet.add(), so an empty `.edit[]`
+  # means no node file was written — and WRITTEN_IDS was narrowed to `.edit[]`
+  # immediately above, so the rollback is armed with an EMPTY id set on exactly
+  # the paths that wrote nothing. Arming it from the Step 2 pins instead made
+  # this reasoning conditional on plan stability between the --no-apply and
+  # apply runs, which is precisely the drift the --base loop below hard-errors
+  # on in the other direction.
   [[ "$HARD_ERROR" -ne 0 ]] && exit 1
   exit 0
 fi

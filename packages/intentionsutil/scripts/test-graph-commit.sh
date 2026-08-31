@@ -3344,6 +3344,48 @@ else
 fi
 sync_clone "$A"
 
+# --- Case 67b: the PLUMBING writer stamps the caller's Graph-Writer trailer ---
+# Case 7b in test-graph-write-rollback.sh closes this loop for the WORKTREE
+# writer only. The trailer is the input lib-graph-rollback.sh's ownership
+# classifier reads, so a plumbing landing that stamped nothing would be read as
+# `foreign` by its own writer's rollback and fail closed — and
+# dispatch-eval-finding is a live GRAPH_COMMIT_WRITER=plumbing caller, so the
+# path is not hypothetical. Read with git's own `%(trailers:key=…)` parser, the
+# same one _graph_commit_writer uses.
+edit_line "$A" t-plumb-cli 3 plumbing-trailer
+export GRAPH_COMMIT_WRITER=plumbing GRAPH_WRITER=test-plumbing-caller
+out="$(run_gc "$A" -m 'test: writer plumbing trailer' t-plumb-cli 2>&1)"; rc=$?
+unset GRAPH_COMMIT_WRITER GRAPH_WRITER
+trailer67b="$(git -C "$ORIGIN" log -1 --format='%(trailers:key=Graph-Writer,valueonly)' main | head -n1 | tr -d '[:space:]')"
+subject67b="$(git -C "$ORIGIN" log -1 --format=%s main)"
+if [[ $rc -eq 0 ]] && origin_show t-plumb-cli | grep -q 'line3: plumbing-trailer' \
+   && [[ "$trailer67b" == "test-plumbing-caller" ]] \
+   && [[ "$subject67b" == 'test: writer plumbing trailer' ]]; then
+  ok "GRAPH_COMMIT_WRITER=plumbing stamps the caller's Graph-Writer trailer, and the SUBJECT is unchanged by it"
+else
+  no "plumbing writer trailer (rc=$rc trailer='$trailer67b' subject='$subject67b')"; printf '%s\n' "$out"
+fi
+sync_clone "$A"
+
+# --- Case 67c: a malformed GRAPH_WRITER is refused before anything is written -
+# A trailer that spans lines is not a trailer: git's parser would not read the
+# label back, so the commit's attribution would be silently unreadable to the
+# rollback classifier — the fail-closed case that strands a writer's own work.
+# graph-commit refuses at startup instead, and nothing reaches origin/main.
+before67c="$(origin_sha)"
+edit_line "$A" t-plumb-cli 1 malformed-writer-label
+export GRAPH_WRITER='two
+lines'
+out="$(run_gc "$A" -m 'test: malformed writer label' t-plumb-cli 2>&1)"; rc=$?
+unset GRAPH_WRITER
+if [[ $rc -eq 2 ]] && grep -q 'is not a usable writer label' <<<"$out" \
+   && [[ "$(origin_sha)" == "$before67c" ]]; then
+  ok "a malformed GRAPH_WRITER is refused with exit 2 and nothing reaches origin/main"
+else
+  no "malformed GRAPH_WRITER refusal (rc=$rc origin moved: $before67c -> $(origin_sha))"; printf '%s\n' "$out"
+fi
+sync_clone "$A"
+
 # --- Case 68: the builder builds against the BASE it is handed ----------------
 # Not against HEAD, not against the index. An older base is handed in while the
 # checkout's HEAD carries a newer commit; the built commit must carry the OLD
