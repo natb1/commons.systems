@@ -20,8 +20,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: agent-ab40834f327b7f8e3
+  pr: 3163
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-31T04:55:15Z
+    mergeCommitSha: a2caf0abbc6953948044818c92121751233d1504
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -31,6 +43,35 @@ attributes: {}
 ---
 
 # Eliminate the duplicate gh_pr_view_rest PR-JSON fetch reconcile-graph-review-stall makes on every tick for PRs reconcile-graph-merged already fetched moments earlier, by giving gh_pr_view_rest an opt-in file-backed memo (DISPATCH_PR_JSON_CACHE) that dispatch-select-tick arms narrowly across only its two back-to-back reconciler invocations — never exported tick-wide, so graph-auto-merge and graph-select-target's load-bearing mergedAt freshness reads stay live
+
+## Completion record — shipped 2026-08-31
+
+All three units landed as PR #3163, merge `a2caf0ab`, an ancestor of
+`origin/main`.
+
+- **Unit 1** — `gh_pr_view_rest` in `lib.sh` gained an opt-in file-backed memo
+  behind `DISPATCH_PR_JSON_CACHE`: when the variable names a non-empty
+  directory, a hit `cat`s the stored body from a sanitised-path key.
+- **Unit 2** — `dispatch-select-tick` arms the memo across the reconciler pair
+  only, as a per-invocation environment prefix on `reconcile-graph-merged` and
+  `reconcile-graph-review-stall`.
+- **Unit 3** — `dispatch-ladder-run` carries the containment backstop,
+  `unset`ting the variable beside `DISPATCH_CI_VERDICT_CACHE` at each
+  reconciler call.
+
+**The arming scope is the whole safety argument, and it shipped as the node
+required.** The memo carries no state filter and no TTL, so a tick-wide
+`export` would have served a cached pre-merge body to `graph-select-target`'s
+`mergedAt` freshness read — reintroducing the stale-review-target bug that read
+exists to prevent — and to `graph-auto-merge`, which mutates PR state and runs
+before both reconcilers. Re-measured at close: `origin/main` carries **no**
+`export DISPATCH_PR_JSON_CACHE` anywhere. The variable reaches only the two
+processes named above, which is the posture the node's own statement demanded
+and the one the original "Recommended fix" got wrong.
+
+The budget this protects is the fleet's shared GitHub REST quota, not model
+tokens.
+
 
 ## Context
 

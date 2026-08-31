@@ -19,8 +19,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: a-p4-review-stall-per-candidate-cost
+  pr: 3162
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-31T04:53:09Z
+    mergeCommitSha: 05ff7e4bb3aad03be7be643b384a5080d18ad378
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -30,6 +42,40 @@ attributes: {}
 ---
 
 # Stop spawning a `node --import tsx/esm` subprocess per candidate per tick to evaluate the pure `reviewStallRoute` predicate
+
+## Completion record — shipped 2026-08-31
+
+Units 1 and 2 landed as PR #3162, merge `05ff7e4b`, an ancestor of
+`origin/main`, in one commit shared with the sibling node
+`tactic-review-stall-ci-verdict-cache-miss`.
+
+**Unit 1** — the superset cost guard. `reconcile-graph-review-stall` now runs
+`[[ "$VERDICT" != "failing" && "$MERGEABLE" != "CONFLICTING" ]]` before the
+`reviewStallRoute` subprocess spawn, so the overwhelmingly common green +
+MERGEABLE candidate no longer pays a process to evaluate a pure two-string
+boolean of values the shell already held. Recorded measurement, three runs
+each: the one-liner cost 131 / 100 / 100 ms against a bare
+`node --import tsx/esm -e 'void 0'` at 93 / 92 / 91 ms.
+
+It is sound because `interruptRoute` decides CONFLICTING before it consults CI
+and its doc comment states the superset invariant explicitly, sanctioning a
+shell pre-filter by name; `transitions.test.ts` pins it exhaustively, so no new
+TypeScript test was added and none should be. The guard is the shipped sibling
+of `graph-select-target`'s `_gate_maybe_interrupt`, adapted in exactly two
+ways: `return 1` became `continue`, and the condition was rebound to this
+script's own `$VERDICT` / `$MERGEABLE`, since the sibling's variables do not
+exist here and under `set -u` the first expansion would abort the sweep.
+
+The `CONFLICTING` clause is retained deliberately even though unreachable on
+this path today — the sibling's short-circuit is local and reversible, while
+the superset is the documented, test-pinned property. Narrowing to
+`ci == failing` alone would fail silently: the sweep would simply stop seeing
+conflicts.
+
+**Unit 2** — cases 10f and 10g in `test-graph-write-rollback.sh`: the guard
+holds (green + MERGEABLE spawns nothing, writes nothing), and the composition
+with the sibling short-circuit.
+
 
 ## Context
 

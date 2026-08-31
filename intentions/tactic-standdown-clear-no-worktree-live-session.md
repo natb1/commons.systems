@@ -47,8 +47,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-standdown-clear-no-worktree-live-session-u1
+  pr: 3155
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-31T04:48:59Z
+    mergeCommitSha: 6c89ccb89d23ffacfcd7b3beda849870586b36a8
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -58,6 +70,39 @@ attributes: {}
 ---
 
 # The stand-down sweep's `cleared-no-worktree` branch erases a stand-down while a live session still holds the node name, silently re-creating the deadlock the stand-down protocol exists to remove
+
+## Completion record — shipped 2026-08-31
+
+Unit 1 — the node's only unit — landed as PR #3155, merge `6c89ccb8`, an
+ancestor of `origin/main`.
+
+Three sites in `lib-standdown-recheck.sh` changed together:
+
+1. The unlettered no-worktree branch became a `no_wt` flag instead of a marker
+   release. Rule (d) has already `continue`d on `n_live == 0`, so `n_live >= 1`
+   is an invariant at that branch — the state rules (h)/(i) exist to park.
+2. The (h)/(i) site gained a third reason variant,
+   `standdown-winner-dead-node-held-no-worktree`, as its **first** arm, so the
+   sync predicates are never called on a missing directory. That arm is
+   load-bearing rather than cosmetic: `worktree_in_sync` and
+   `worktree_merged_in_sync` both open with `git -C "$path" status --porcelain`
+   and return false on a missing path, so a bare fall-through would have parked
+   every no-worktree node as `standdown-winner-dead-work-unpushed` — asserting
+   stranded commits in a directory that is not on disk. The new variant makes
+   no unpushed-work claim.
+3. The rule-ladder header comment, this file's authoritative contract, was
+   updated in the same commit.
+
+`standdown_clear` is now reached from exactly one place, rule (d). The blast
+radius was confirmed kind-agnostic — `dispatch-graph-execute` spawns both
+`kind == strategy` and the `align-tactics` rung with `--cwd "$PROJECT_ROOT"`
+and no worktree — and the shipped predicate reads no `kind:` field at all.
+
+Coverage went from 95 to 109 assertions with none skipped or weakened. Test 15
+was inverted in place: its fixture was already the defect scenario, and it now
+asserts a park with the no-worktree tag, a kept marker, and no push-from-there
+instruction in the recommendation.
+
 
 ## Context
 
