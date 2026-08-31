@@ -139,9 +139,15 @@ jobs:
   # 54-minute write outage). Running it here fails the branch that made the
   # change instead.
   #
-  # Deliberately NOT a required context: graph/** pushes do not run this workflow
-  # at all, so a fifth required context would deadlock the graph fast path — the
-  # very failure mode this job exists to prevent.
+  # Deliberately NOT a required context. graph/** pushes do not run this workflow
+  # at all, so historically a fifth required context would have deadlocked the
+  # graph fast path — the very failure mode this job exists to prevent.
+  # graph-fast-path.yml now stamps a `graph-validate` context of its own, so the
+  # deadlock is no longer the blocker; what still blocks promotion is that the
+  # fast-path stamp reports `guard`'s FLAGLESS run, while this job's verdict on
+  # `main` includes `--strict-sensors` (line 205). Promoting the name would make
+  # the weaker branch-ref verdict satisfy a gate readers take to mean the
+  # stronger one. See the graph-validate comment in graph-fast-path.yml.
   graph-validate:
     runs-on: ubuntu-latest
     permissions:

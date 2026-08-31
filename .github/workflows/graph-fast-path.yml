@@ -58,3 +58,186 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo "graph fast path — intentions/-only push; required context stamped (real check runs in PR CI for code changes)"
+
+  # ---------------------------------------------------------------------------
+  # Contexts below are NOT required today. They exist so that a graph/** landing
+  # reports them at all — which is the precondition for ever promoting them.
+  #
+  # WHY A CONTEXT MUST BE PRODUCED HERE OR NOWHERE. `graph-commit` lands an
+  # intentions/-only node edit WITHOUT opening a PR: it pushes a scratch SHA to
+  # `graph/<id>-$$`, polls for check runs on that SHA, then fast-forwards `main`
+  # to the SAME SHA. The only workflow a `graph/**` push triggers is this one —
+  # `unit-tests.yml` excludes `graph/**` from its push trigger, and
+  # `pr-checks.yml` is `pull_request`-only. So a context that does not report
+  # here never gets a check run before the push lands, and the only ref where it
+  # would run is `main` — which is exactly the push it would be gating. Making
+  # such a context required is a deadlock, not a safety net: it can never be
+  # satisfied, and every graph write in the repo stops. That is why the three
+  # contexts currently required by ruleset 12884700 (`acceptance`, `lint`,
+  # `unit-tests`) can be required at all: this workflow stamps those names.
+  # (`unit-tests.yml`'s `graph-validate` job carried a comment refusing
+  # promotion for want of exactly this; the `graph-validate` job below now
+  # supplies it, so that comment names a DIFFERENT remaining blocker — the
+  # flagless-vs-`--strict-sensors` gap spelled out at that job below.)
+  #
+  # WHY STUBS ARE CORRECT HERE AND NOT LAZINESS. Every job in this workflow
+  # declares `needs: guard`, and `guard` runs
+  # `.github/scripts/check-graph-fast-path.sh`, which REJECTS any `graph/**`
+  # push touching a path outside `intentions/` (and rejects merge commits, and
+  # examines every pushed commit in the push-event payload, not just HEAD). So
+  # by the time a job below runs, it is already proven that no source file
+  # changed. `hook-tests`, `typecheck` and `test-integrity` read only source,
+  # config and test files — none of which can differ from what `main` already
+  # carries and already ran these checks against. Re-running them would spend
+  # CI minutes recomputing a known answer; omitting them leaves the context
+  # absent and permanently unpromotable. The stub is the honest third option.
+  #
+  # WHAT THAT PROVES IS "UNCHANGED", NOT "PASSING", and the gap is a second
+  # promotion blocker. The guard establishes that the pushed tree's
+  # non-`intentions/` half is byte-identical to the `main` this commit rebased
+  # onto; it says nothing about whether these checks were GREEN on that `main`.
+  # During a red-main episode (`repo-health --main-broken-sha` latched) a graph
+  # landing rebases onto the red tree, `guard` passes because the push is
+  # `intentions/`-only, and the `typecheck` stub stamps `success` on a SHA that
+  # does not typecheck — then fast-forwards it onto `main`. Promoted, that is a
+  # context reporting green on every graph landing regardless of the tree's real
+  # verdict: the same "gate that does not gate" the next paragraph raises for
+  # `skipped`, except always-on rather than only on guard rejection.
+  #
+  # THE PREMISE HAS TWO KNOWN BOUNDS, and it is not "every commit" without
+  # qualification. GitHub caps a push event's `commits` array at 20 entries, and
+  # `github.event.commits.*.id` is exactly what the guard iterates — so a
+  # `graph/**` push carrying more than 20 commits leaves commits 21+
+  # unexamined, and these stubs would stamp green for a push that did change
+  # source. `graph-commit` pushes a single rebased node commit, so the bound is
+  # not reached in practice, but nothing in the guard enforces that. The second
+  # bound is the opposite end of the same array: on an EMPTY `commits` payload
+  # the guard's benign-already-landed branch
+  # (`check-graph-fast-path.sh:41-70`) exits 0 having examined no path at all,
+  # on the strength of `merge-base --is-ancestor <head> origin/main` alone. That
+  # one is benign for these stubs specifically — a SHA already reachable from
+  # `main` cannot admit new content by being fast-forwarded onto it — but it is
+  # a second exit-0 route that does not prove "intentions/-only", so a reader
+  # closing only the 20-commit bound has not closed the premise. Read the proof
+  # above as "proven for the commits GitHub reported", and close BOTH bounds in
+  # `check-graph-fast-path.sh` before promoting any context below.
+  #
+  # FAIL-CLOSED IS TRUE OF `graph-commit`'S POLL, NOT AUTOMATICALLY OF THE
+  # RULESET. When `guard` rejects a push these jobs are skipped, and
+  # `graph-commit` requires each of its four names to resolve to conclusion
+  # `success` (`await_checks`), so a skip is a refusal there. GitHub's required
+  # status checks are a different consumer: a job skipped because its `needs`
+  # failed publishes a check run with conclusion `skipped`, which required
+  # status checks have historically treated as satisfied. So promoting a context
+  # below on the strength of the word "fail-closed" would be promoting a gate
+  # that does not gate. Measure a guard-REJECTED push, not only a passing one,
+  # before promoting.
+  #
+  # A consequence to keep in view: a `guard` failure now knocks out eight
+  # dependent contexts rather than four (the 2026-08-14 shape — see
+  # `validate-graph.ts:217` and `read-sensors.ts:1457`, which is why the
+  # registered-sensor rule — `findUnboundRegisteredSensorNames`, the non-fatal
+  # sibling of `src/sensors.ts`'s `validateRegisteredSensorNames`, which
+  # `validate-graph.ts` does NOT call — only warns at this call site).
+  # `graph-commit`'s poll is unaffected in its VERDICT — it filters check runs
+  # to the exact names `["acceptance","preview-and-smoke","lint","unit-tests"]`
+  # and requires four greens, so extra rows are ignored by construction
+  # (`packages/intentionsutil/scripts/graph-commit:1979`). Its TIMING is not
+  # unaffected: all eight jobs become runnable at once when `guard` finishes and
+  # compete for the same concurrent-job budget, while `await_checks` gives the
+  # four required names a fixed 180s (`GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS`,
+  # `graph-commit:362`) before returning rc 1 and burning a push attempt. Under
+  # fleet load the four stubs below can queue ahead of the four required ones.
+  # If graph landings start timing out with everything still `pending`, raise
+  # `GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS` or drop these jobs — do not read it as
+  # a content failure. Serializing the stubs behind the required four with
+  # `needs:` is NOT the answer: it would guarantee they conclude only AFTER the
+  # fast-forward, which is precisely the thing promotion requires them not to
+  # do (see PROMOTION below).
+  #
+  # PROMOTION IS A SEPARATE STEP, AND IT IS A TWO-SIDED ONE. Nothing here edits
+  # ruleset 12884700. Merging this only makes the contexts appear; promoting one
+  # requires first MEASURING that it actually lands on the scratch SHA before
+  # the fast-forward, on a real graph-commit landing.
+  #
+  # It also requires editing `graph-commit`'s poll IN THE SAME CHANGE. That jq
+  # program hardcodes `["acceptance","preview-and-smoke","lint","unit-tests"]`
+  # and gates on `ngreen -eq 4` (`graph-commit:1979,2028`), so a context added
+  # to the ruleset but not to that list is never waited on: `await_checks`
+  # returns 0 as soon as ITS four are green and `push <sha>:main` fires with the
+  # newly-required fifth context still `pending`. Branch protection rejects that
+  # push — deterministically, on every landing, for every writer in the repo,
+  # until the list is extended. Promoting a name in the ruleset alone is a graph
+  # write outage, not a half-finished improvement.
+
+  hook-tests:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "graph fast path — guard proved this push is intentions/-only, so no hook script or hook test changed; context stamped (real check runs in PR CI for code changes)"
+
+  typecheck:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "graph fast path — guard proved this push is intentions/-only, so no TypeScript source changed; context stamped (real check runs in PR CI for code changes)"
+
+  test-integrity:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "graph fast path — guard proved this push is intentions/-only, so no test file changed; context stamped (real check runs in PR CI for code changes)"
+
+  # graph-validate is NOT a coverage stub like the three above, and the
+  # distinction matters. The real validation — `validate-graph.ts` over the
+  # pushed content — ALREADY RAN, in `guard`, on this exact tree; it merely
+  # reported under the name `guard`. This job re-reports that same verdict under
+  # the name the rest of CI uses for it. `needs: guard` is what carries the
+  # meaning: this context can only conclude success when the real validation
+  # passed, so the name is backed by a genuine run and not by an assumption.
+  #
+  # THE VERDICT IS THE BRANCH-REF ONE, NOT THE MAIN-REF ONE. `guard` runs
+  # `validate-graph.ts intentions` with NO flag; unit-tests.yml's `graph-validate`
+  # runs it with `--strict-sensors` when and only when the ref is `main`
+  # (`.github/workflows/unit-tests.yml:205`), because the fatal registered-sensor
+  # check is deliberately post-merge-only (`validate-graph.ts:217`,
+  # `read-sensors.ts:1457` — the 2026-08-14 outage). So this stub matches what
+  # `graph-validate` means on a feature branch and is strictly WEAKER than what
+  # it means on `main` — and a graph landing fast-forwards `main` to this very
+  # SHA, so the two meanings meet on one commit. Concretely: a node edit that
+  # leaves a registered sensor name unbound gets `graph-validate=success` here,
+  # lands, and then turns `main` red under the same context name minutes later.
+  # Promoting `graph-validate` in ruleset 12884700 would therefore admit the push
+  # on a green that never ran the strict check the name denotes on `main`. If the
+  # strict verdict is what promotion is meant to buy, `guard` has to pass
+  # `--strict-sensors` first — which is the 2026-08-14 decision being reopened,
+  # not a detail of this job.
+  #
+  # Chosen over renaming `guard`'s context to `graph-validate` deliberately.
+  # `guard` does two things, only one of which is graph validation: it also runs
+  # check-graph-fast-path.sh, the intentions/-only path gate. Renaming would
+  # report a path-gate rejection under a name claiming the graph failed to
+  # validate. The name is also referenced by prose across the repo — see
+  # `packages/intentionsutil/scripts/validate-graph.ts:217`,
+  # `read-sensors.ts:1457`,
+  # `.claude/skills/dispatch-propagate/scripts/detect-changes.sh:83`,
+  # `.github/workflows/unit-tests.yml:133`,
+  # `packages/intentionsutil/test/reader-required-dir.test.ts:94`,
+  # `packages/intentionsutil/SEPARABILITY.md:156` — all of which a rename would
+  # strand. (That last one is NOT independent evidence: SEPARABILITY.md cited
+  # this workflow by PATH only, and the job-name citation at :156 was authored
+  # by the same change that added this comment, describing this very job. Count
+  # the five above it, not six; re-measure
+  # `grep -in guard packages/intentionsutil/SEPARABILITY.md` before assuming
+  # otherwise.) No machine reference to the name exists (`graph-commit`'s poll
+  # excludes `guard` by name filter), so the rename would have been safe
+  # mechanically and wrong descriptively.
+  graph-validate:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "graph fast path — the real validate-graph.ts run for this content is the guard job, which this job needs; context stamped to surface that verdict (flagless, i.e. NOT --strict-sensors) under the graph-validate name"

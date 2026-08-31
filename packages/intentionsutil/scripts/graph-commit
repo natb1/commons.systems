@@ -9,13 +9,14 @@
 # never authors node content itself (except the office_hours parking fallback
 # below, which goes through store.ts's writeNode, not raw text): it stages
 # exactly `intentions/<id>.md` for each id, commits, stamps the commit's SHA
-# with the four required checks via a throwaway `graph/**` scratch branch, and
+# with the four checks this loop waits on via a throwaway `graph/**` scratch
+# branch (three of them required by main's ruleset — see below), and
 # fast-forwards that SHA onto `main` directly (no PR) with a bounded
 # rebase-retry loop.
 #
 # Why the stamp step is required: `main`'s branch-protection ruleset requires
-# four status checks (`acceptance`, `preview-and-smoke`, `lint`, `unit-tests`)
-# to already be green ON THE EXACT SHA before it will accept a push of that SHA
+# three status checks (`acceptance`, `lint`, `unit-tests`; this loop also waits
+# on `preview-and-smoke`) already green ON THE EXACT SHA before it accepts it
 # — checks attach to the SHA, not the branch. A brand-new local commit has zero
 # check runs, so `git push origin HEAD:main` on it is deterministically
 # rejected. The repo's `graph/**` CI fast path
@@ -1889,7 +1890,9 @@ check_suite_concluded() { # <suite-id>
 # --- Fast-path check stamping ----------------------------------------------
 # Poll the branch-protection ruleset's four required contexts on <sha> until all
 # report a successful conclusion, keyed on the check-run NAME (mirrors the four
-# jobs in .github/workflows/graph-fast-path.yml). Gating is per DISTINCT
+# STAMPING jobs in .github/workflows/graph-fast-path.yml; that workflow also
+# carries non-required stubs — hook-tests, typecheck, test-integrity,
+# graph-validate — which this filter ignores by name). Gating is per DISTINCT
 # required context, not per check-run row: a SHA re-stamped by several pushes
 # accumulates one row per workflow run per name, so a row count of the green
 # rows can exceed four and an `== 4` row gate can never fire, leaving an

@@ -152,6 +152,21 @@ assert_eq "sweep.live_worker_redundant_events" "2" \
 assert_eq "sweep.dead_session_stranded_distinct_worktrees" "4" \
   "$(jq '.sweep.dead_session_stranded_distinct_worktrees' <<<"$OUT")"
 
+# RATE, reason-generic table: the retained scalars above are DERIVED from it, so
+# the two must agree on the same fixture.
+assert_eq "sweep.reclaim_events_total" "6" \
+  "$(jq '.sweep.reclaim_events_total' <<<"$OUT")"
+assert_eq 'reclaim_events_by_reason["dead-session-stranded"]' "4" \
+  "$(jq '.sweep.reclaim_events_by_reason["dead-session-stranded"]' <<<"$OUT")"
+assert_eq 'reclaim_events_by_reason["live-worker-redundant"]' "2" \
+  "$(jq '.sweep.reclaim_events_by_reason["live-worker-redundant"]' <<<"$OUT")"
+assert_eq "sweep.reclaim_events_reason_unparsed" "0" \
+  "$(jq '.sweep.reclaim_events_reason_unparsed' <<<"$OUT")"
+# A reason absent from the window is absent from the object, not zero-valued —
+# the key set is data, not schema. Reading it as 0 is what a consumer must do.
+assert_eq 'reclaim_events_by_reason["spawn-handoff-expired"] // 0 (absent)' "0" \
+  "$(jq '.sweep.reclaim_events_by_reason["spawn-handoff-expired"] // 0' <<<"$OUT")"
+
 # CAUSE buckets: exactly one event in each.
 assert_eq 'cause_buckets["came-and-went"]' "1" \
   "$(jq '.cause_buckets["came-and-went"]' <<<"$OUT")"
@@ -383,6 +398,282 @@ assert_eq "inconsistent exit code" "0" "$INCONS_RC"
 
 export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
 unset DISPATCH_RECLAIM_JOURNALCTL_CMD
+
+# --- case E: reasons carrying a trailing in-paren clause --------------------
+# The regression lock for the reason-generic bucketing. spawn-handoff-expired and
+# <origin>-ttl-expired append ` after <N>s with no live worker` INSIDE the same
+# parentheses, so the old `\(<reason>\)` anchors matched neither and both were
+# counted nowhere. The fixture also carries the two ledger lines that look like
+# reclaims but are not — `keeping malformed reservation` and the `(stranded
+# reclaim of ...)` follow-up note — which the total must exclude.
+#
+# A SEPARATE sweep log: the shared $SWEEP_LOG feeds every assertion above.
+CASE_E_LOG="$ROOT/sweep-clauses.txt"
+{
+  printf '%s host dispatch-tick[201]: lib-reservation-ledger: reclaimed reservation 2007-ggg (spawn-handoff-expired after 300s with no live worker)\n' "$T"
+  printf '%s host dispatch-tick[202]: lib-reservation-ledger: reclaimed reservation 2008-hhh (spawn-handoff-expired after 300s with no live worker)\n' "$T"
+  printf '%s host dispatch-tick[203]: lib-reservation-ledger: reclaimed reservation 2009-iii (standalone-ttl-expired after 600s with no live worker)\n' "$T"
+  printf '%s host dispatch-tick[204]: lib-reservation-ledger: reclaimed reservation 2010-jjj (explicit-ttl-expired after 600s with no live worker)\n' "$T"
+  printf '%s host dispatch-tick[205]: lib-reservation-ledger: reclaimed reservation 2011-kkk (office-hours-ttl-expired after 600s with no live worker)\n' "$T"
+  printf '%s host dispatch-tick[206]: lib-reservation-ledger: reclaimed reservation 2012-lll (dead-session-stranded)\n' "$T"
+  printf '%s host dispatch-tick[207]: lib-reservation-ledger: keeping malformed reservation 2013-mmm (no session= line)\n' "$T"
+  printf '%s host dispatch-tick[208]: lib-reservation-ledger:   (stranded reclaim of 2012-lll — if retained, inspect tmp/dispatch-launch-2012-lll.log for the launcher last output)\n' "$T"
+} > "$CASE_E_LOG"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$CASE_E_LOG"
+
+CLAUSE_RC=0
+CLAUSE_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json) || CLAUSE_RC=$?
+
+echo ""
+echo "--- assertions (reasons with a trailing in-paren clause) ---"
+
+# 6, not 8: the two non-reclaim ledger lines are pinned out of the population.
+assert_eq "clause sweep.reclaim_events_total (non-reclaim lines excluded)" "6" \
+  "$(jq '.sweep.reclaim_events_total' <<<"$CLAUSE_OUT")"
+assert_eq 'clause reclaim_events_by_reason["spawn-handoff-expired"]' "2" \
+  "$(jq '.sweep.reclaim_events_by_reason["spawn-handoff-expired"]' <<<"$CLAUSE_OUT")"
+assert_eq 'clause reclaim_events_by_reason["standalone-ttl-expired"]' "1" \
+  "$(jq '.sweep.reclaim_events_by_reason["standalone-ttl-expired"]' <<<"$CLAUSE_OUT")"
+assert_eq 'clause reclaim_events_by_reason["explicit-ttl-expired"]' "1" \
+  "$(jq '.sweep.reclaim_events_by_reason["explicit-ttl-expired"]' <<<"$CLAUSE_OUT")"
+assert_eq 'clause reclaim_events_by_reason["office-hours-ttl-expired"]' "1" \
+  "$(jq '.sweep.reclaim_events_by_reason["office-hours-ttl-expired"]' <<<"$CLAUSE_OUT")"
+assert_eq 'clause reclaim_events_by_reason["dead-session-stranded"]' "1" \
+  "$(jq '.sweep.reclaim_events_by_reason["dead-session-stranded"]' <<<"$CLAUSE_OUT")"
+# The retained named counters still derive correctly from the table.
+assert_eq "clause sweep.dead_session_stranded_events (derived)" "1" \
+  "$(jq '.sweep.dead_session_stranded_events' <<<"$CLAUSE_OUT")"
+assert_eq "clause sweep.live_worker_redundant_events (derived)" "0" \
+  "$(jq '.sweep.live_worker_redundant_events' <<<"$CLAUSE_OUT")"
+assert_eq "clause sweep.reclaim_events_reason_unparsed" "0" \
+  "$(jq '.sweep.reclaim_events_reason_unparsed' <<<"$CLAUSE_OUT")"
+assert_eq "clause sweep.dead_session_stranded_distinct_worktrees" "1" \
+  "$(jq '.sweep.dead_session_stranded_distinct_worktrees' <<<"$CLAUSE_OUT")"
+
+# OUT-OF-SCOPE GUARD: the new reasons must stay a scalar RATE count and must not
+# leak into the CAUSE analysis. Only 2012-lll (dead-session-stranded, and with no
+# project dir under the projects root) reaches the buckets.
+assert_eq 'clause cause_buckets["genuine-strand"]' "1" \
+  "$(jq '.cause_buckets["genuine-strand"]' <<<"$CLAUSE_OUT")"
+assert_eq "clause cause_buckets sum (only the dead-session event apportioned)" "1" \
+  "$(jq '[.cause_buckets[]] | add' <<<"$CLAUSE_OUT")"
+
+assert_eq "clause sweep.status" '"ok"' \
+  "$(jq '.sweep.status' <<<"$CLAUSE_OUT")"
+assert_eq "clause sweep.crosscheck" '"skipped"' \
+  "$(jq '.sweep.crosscheck' <<<"$CLAUSE_OUT")"
+assert_eq "clause exit code" "0" "$CLAUSE_RC"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
+
+# --- case G: a NON-NUMERIC worktree basename --------------------------------
+# The regression lock for the CAUSE-half basename capture. The parse used to
+# require a numeric prefix (`\([0-9][0-9]*-[^ ]*\)`), which no real fleet
+# worktree has: live basenames are `agent-a67cb7cd9bfa78d2b`, `align-rank-model`,
+# `g2-fence-sweep`, `tactic-...`. Every genuine reclaim therefore fell out at the
+# `[[ -n "$wt" ]] || continue` below the capture, with no counter incremented --
+# the exact silent-drop class `reclaim_events_reason_unparsed` was added to
+# close, one parse further on. RATE stayed non-zero while CAUSE read 0, and the
+# header's promise that CAUSE "apportions the dead-session-stranded events"
+# quietly did not hold.
+#
+# Every other fixture in this file uses numeric names, so nothing caught it.
+CASE_G_LOG="$ROOT/sweep-nonnumeric.txt"
+{
+  printf '%s host dispatch-tick[301]: lib-reservation-ledger: reclaimed reservation agent-deadbeef (dead-session-stranded)\n' "$T"
+  printf '%s host dispatch-tick[302]: lib-reservation-ledger: reclaimed reservation g2-fence-sweep (dead-session-stranded)\n' "$T"
+  printf '%s host dispatch-tick[303]: lib-reservation-ledger: reclaimed reservation 3001-nnn (dead-session-stranded)\n' "$T"
+} > "$CASE_G_LOG"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$CASE_G_LOG"
+
+NONNUM_RC=0
+NONNUM_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json) || NONNUM_RC=$?
+
+echo ""
+echo "--- assertions (non-numeric worktree basenames) ---"
+
+assert_eq "nonnumeric sweep.reclaim_events_total" "3" \
+  "$(jq '.sweep.reclaim_events_total' <<<"$NONNUM_OUT")"
+assert_eq 'nonnumeric reclaim_events_by_reason["dead-session-stranded"]' "3" \
+  "$(jq '.sweep.reclaim_events_by_reason["dead-session-stranded"]' <<<"$NONNUM_OUT")"
+# CORRECTION: dead_session_stranded_events is NOT basename-fed. It is derived
+# from the reason table (dispatch-reclaim-audit:360), exactly like the RATE
+# count above, so it reads 3 even with the buggy numeric-prefix sed restored.
+# The assertion is a genuine check of the JSON contract but is NOT a lock on the
+# basename parse, and the comment that previously claimed it was is wrong.
+assert_eq "nonnumeric sweep.dead_session_stranded_events (reason-table-fed)" "3" \
+  "$(jq '.sweep.dead_session_stranded_events' <<<"$NONNUM_OUT")"
+# THESE two are the real basename-fed locks. distinct_worktrees is cut from
+# DEAD_EVENTS_FILE, and basename_unparsed is the RATE-minus-CAUSE difference;
+# both move the moment the capture regresses.
+assert_eq "nonnumeric sweep.dead_session_stranded_distinct_worktrees (basename-fed)" "3" \
+  "$(jq '.sweep.dead_session_stranded_distinct_worktrees' <<<"$NONNUM_OUT")"
+assert_eq "nonnumeric sweep.dead_session_stranded_basename_unparsed (basename-fed)" "0" \
+  "$(jq '.sweep.dead_session_stranded_basename_unparsed' <<<"$NONNUM_OUT")"
+assert_eq "nonnumeric cause_buckets sum (every event apportioned)" "3" \
+  "$(jq '[.cause_buckets[]] | add' <<<"$NONNUM_OUT")"
+assert_eq "nonnumeric sweep.reclaim_events_reason_unparsed" "0" \
+  "$(jq '.sweep.reclaim_events_reason_unparsed' <<<"$NONNUM_OUT")"
+assert_eq "nonnumeric exit code" "0" "$NONNUM_RC"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
+
+# --- case I: reason tokens whose spelling has drifted -----------------------
+# The reason class had no delimiter after it, so it stopped at the first
+# out-of-class character and bucketed the PREFIX as though it were the whole
+# reason. MEASURED before the fix: `(weird_reason)` -> `weird`,
+# `(deadSessionStranded)` -> `dead`, `(spawn handoff expired)` -> `spawn`, and
+# reclaim_events_reason_unparsed 0 throughout -- the fail-open closer never
+# fired, because the parse "succeeded" with an invented key.
+#
+# All four LIVE shapes appear below and must still parse; four drifted
+# spellings appear beside them and must ALL land in unparsed. The ninth line
+# additionally drives the RATE/CAUSE shortfall, so the conclusion block's
+# INCOMPLETE caveat is exercised too -- it parses for the reason table
+# (`dead-session-stranded` followed by ` after `) but not for the basename
+# capture, which requires a literal `(dead-session-stranded)`.
+CASE_I_LOG="$ROOT/sweep-drift.txt"
+{
+  printf '%s host dispatch-tick[501]: lib-reservation-ledger: reclaimed reservation agent-i1 (dead-session-stranded)\n' "$T"
+  printf '%s host dispatch-tick[502]: lib-reservation-ledger: reclaimed reservation agent-i2 (live-worker-redundant)\n' "$T"
+  printf '%s host dispatch-tick[503]: lib-reservation-ledger: reclaimed reservation agent-i3 (spawn-handoff-expired after 300s with no live worker)\n' "$T"
+  printf '%s host dispatch-tick[504]: lib-reservation-ledger: reclaimed reservation agent-i4 (standalone-ttl-expired after 600s with no live worker)\n' "$T"
+  printf '%s host dispatch-tick[505]: lib-reservation-ledger: reclaimed reservation agent-i5 (weird_reason)\n' "$T"
+  printf '%s host dispatch-tick[506]: lib-reservation-ledger: reclaimed reservation agent-i6 (deadSessionStranded)\n' "$T"
+  printf '%s host dispatch-tick[507]: lib-reservation-ledger: reclaimed reservation agent-i7 (spawn handoff expired)\n' "$T"
+  printf '%s host dispatch-tick[508]: lib-reservation-ledger: reclaimed reservation agent-i8 (dead-session-stranded, forced)\n' "$T"
+  printf '%s host dispatch-tick[509]: lib-reservation-ledger: reclaimed reservation agent-i9 (dead-session-stranded after 30s with no live worker)\n' "$T"
+} > "$CASE_I_LOG"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$CASE_I_LOG"
+# Capture the status instead of letting `set -e` abort the suite on it. Case I
+# is the ONE fixture that deliberately drives
+# dead_session_stranded_basename_unparsed > 0, and that counter is REPORT-ONLY
+# by design: it never touches EXIT_CODE. Uncaptured, a regression that made the
+# condition exit 3 would kill the run before report_results, surfacing as a bare
+# non-zero exit with no FAIL: line and no counts -- which reads as harness
+# breakage rather than as the contract change it actually is. Asserting the 0
+# locks the report-only posture, exactly as case F already does for the sibling
+# reason-unparsed counter.
+DRIFT_RC=0
+DRIFT_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json) || DRIFT_RC=$?
+DRIFT_TEXT_RC=0
+DRIFT_TEXT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650) || DRIFT_TEXT_RC=$?
+
+echo ""
+echo "--- assertions (a drifted reason is UNPARSED, never a fabricated bucket) ---"
+
+assert_eq "drift: the basename-unparsed counter is report-only (--json exits 0)" "0" \
+  "$DRIFT_RC"
+assert_eq "drift: the basename-unparsed counter is report-only (text exits 0)" "0" \
+  "$DRIFT_TEXT_RC"
+
+assert_eq "drift: every line is still counted for the rate" "9" \
+  "$(jq '.sweep.reclaim_events_total' <<<"$DRIFT_OUT")"
+assert_eq "drift: the four drifted spellings are reported unparsed" "4" \
+  "$(jq '.sweep.reclaim_events_reason_unparsed' <<<"$DRIFT_OUT")"
+assert_eq "drift: the five live lines all reached a bucket" "5" \
+  "$(jq '[.sweep.reclaim_events_by_reason[]] | add' <<<"$DRIFT_OUT")"
+assert_eq "drift: a bare-paren token parses" "2" \
+  "$(jq '.sweep.reclaim_events_by_reason["dead-session-stranded"]' <<<"$DRIFT_OUT")"
+assert_eq "drift: an ' after <N>s' token parses" "1" \
+  "$(jq '.sweep.reclaim_events_by_reason["spawn-handoff-expired"]' <<<"$DRIFT_OUT")"
+assert_eq "drift: an <origin>-ttl-expired token parses" "1" \
+  "$(jq '.sweep.reclaim_events_by_reason["standalone-ttl-expired"]' <<<"$DRIFT_OUT")"
+
+# The three keys the truncation used to invent. `has` is the assertion that
+# matters: a fabricated bucket is worse than a missing one, because it reads as
+# a successful parse.
+assert_eq "drift: no bucket invented from 'weird_reason'" "false" \
+  "$(jq '.sweep.reclaim_events_by_reason | has("weird")' <<<"$DRIFT_OUT")"
+assert_eq "drift: no bucket invented from 'deadSessionStranded'" "false" \
+  "$(jq '.sweep.reclaim_events_by_reason | has("dead")' <<<"$DRIFT_OUT")"
+assert_eq "drift: no bucket invented from 'spawn handoff expired'" "false" \
+  "$(jq '.sweep.reclaim_events_by_reason | has("spawn")' <<<"$DRIFT_OUT")"
+
+# The RATE/CAUSE shortfall the ninth line drives, and the conclusion block's
+# caveat about it -- which used to print only in the RATE section, ~40 lines
+# above the number it qualifies.
+assert_eq "drift: the RATE/CAUSE shortfall is counted" "1" \
+  "$(jq '.sweep.dead_session_stranded_basename_unparsed' <<<"$DRIFT_OUT")"
+assert_eq "drift: the conclusion block flags the incomplete population" "yes" \
+  "$(case "$DRIFT_TEXT" in *'INCOMPLETE: 1 dead-session-stranded event(s) are NOT in the split above'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# The OTHER headline. Both self-contained sections print the same shortfall-bearing
+# number, so both must carry the caveat; asserting only the split let the strands
+# headline ship a bare floor billed as the real abnormal-death signal.
+assert_eq "drift: the un-transcripted strands headline flags it too" "yes" \
+  "$(case "$DRIFT_TEXT" in *'INCOMPLETE: 1 dead-session-stranded event(s) reached no bucket'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
+
+# --- case H: a NUL byte in the captured sweep text --------------------------
+# GNU grep treats a file containing a NUL as binary: it writes "binary file
+# matches" to stderr, emits nothing on stdout, and exits 0. Without `-a` on the
+# capturing greps that silently zeroed every count while still grading the
+# sweep ok and exiting 0 -- MEASURED: the same 3-reclaim log with one
+# NUL-bearing line appended went from reclaim_events_total 3 to 0. A journal is
+# exactly where a stray NUL turns up, and the fail-open closer this audit adds
+# cannot see it, because grep's exit status is 0 and not >1.
+CASE_H_LOG="$ROOT/sweep-nul.txt"
+{
+  printf '%s host dispatch-tick[401]: lib-reservation-ledger: reclaimed reservation agent-nul-a (dead-session-stranded)\n' "$T"
+  printf '%s host dispatch-tick[402]: lib-reservation-ledger: reclaimed reservation agent-nul-b (dead-session-stranded)\n' "$T"
+  printf '%s host dispatch-tick[403]: lib-reservation-ledger: reclaimed reservation agent-nul-c (dead-session-stranded)\n' "$T"
+  printf 'a\000b a line carrying a NUL byte\n'
+} > "$CASE_H_LOG"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$CASE_H_LOG"
+
+NUL_RC=0
+NUL_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json) || NUL_RC=$?
+
+echo ""
+echo "--- assertions (one NUL byte must not zero every count) ---"
+
+assert_eq "nul sweep.reclaim_events_total" "3" \
+  "$(jq '.sweep.reclaim_events_total' <<<"$NUL_OUT")"
+assert_eq "nul sweep.dead_session_stranded_events" "3" \
+  "$(jq '.sweep.dead_session_stranded_events' <<<"$NUL_OUT")"
+assert_eq "nul sweep.dead_session_stranded_distinct_worktrees" "3" \
+  "$(jq '.sweep.dead_session_stranded_distinct_worktrees' <<<"$NUL_OUT")"
+assert_eq "nul sweep.dead_session_stranded_basename_unparsed" "0" \
+  "$(jq '.sweep.dead_session_stranded_basename_unparsed' <<<"$NUL_OUT")"
+assert_eq "nul exit code" "0" "$NUL_RC"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
+
+# --- case F: a reason token the parse does not recognize --------------------
+# The fail-open closer. A reclaim line whose reason will not parse is counted in
+# the total and reported in its own figure — never silently dropped into no
+# bucket, which is exactly the blindness this change removes. It is a maintenance
+# signal, not evidence of an undercount (the total is still right), so it is
+# report-only and must NOT grade the run untrusted.
+CASE_F_LOG="$ROOT/sweep-unparsed.txt"
+printf '%s host dispatch-tick[209]: lib-reservation-ledger: reclaimed reservation 2014-nnn (Weird_Reason)\n' \
+  "$T" > "$CASE_F_LOG"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$CASE_F_LOG"
+
+UNPARSED_RC=0
+UNPARSED_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json) || UNPARSED_RC=$?
+
+echo ""
+echo "--- assertions (unrecognized reason token → reported, not dropped) ---"
+
+assert_eq "unparsed sweep.reclaim_events_reason_unparsed" "1" \
+  "$(jq '.sweep.reclaim_events_reason_unparsed' <<<"$UNPARSED_OUT")"
+assert_eq "unparsed sweep.reclaim_events_total (still counted)" "1" \
+  "$(jq '.sweep.reclaim_events_total' <<<"$UNPARSED_OUT")"
+assert_eq "unparsed sweep.reclaim_events_by_reason (empty table)" "{}" \
+  "$(jq -c '.sweep.reclaim_events_by_reason' <<<"$UNPARSED_OUT")"
+assert_eq "unparsed sweep.status" '"ok"' \
+  "$(jq '.sweep.status' <<<"$UNPARSED_OUT")"
+# The point of the case: reported, not graded untrusted.
+assert_eq "unparsed exit code (report-only, not exit 3)" "0" "$UNPARSED_RC"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
 
 report_results
 exit $FAIL
