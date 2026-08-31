@@ -281,7 +281,6 @@ The failure message must say: *add the file to `KNOWN_UNISOLATED` only if it pro
 Reproduce the defect first (must fail before Unit 1, pass after):
 
 ```verify
-cd /home/n8/natb1/commons.systems && \
 FAKE_HOME=$(mktemp -d) && \
 env -u DISPATCH_DECISION_LOG_DIR -u DISPATCH_DECISION_LOG_FILE -u DECISION_LOG_FILE \
     HOME="$FAKE_HOME" \
@@ -297,13 +296,13 @@ echo "PASS: no production decision-log write"; rm -rf "$FAKE_HOME"
 The new regression suite on its own:
 
 ```verify
-cd /home/n8/natb1/commons.systems && .claude/skills/dispatch-propagate/scripts/test-decision-log-isolation.sh
+.claude/skills/dispatch-propagate/scripts/test-decision-log-isolation.sh
 ```
 
 The two suites named in this node, plus the four that already isolate (Unit 2 touches two of them) — all must stay green:
 
 ```verify
-cd /home/n8/natb1/commons.systems && for t in \
+for t in \
   test-dispatch-standdown.sh test-dispatch-stop-hook.sh \
   test-dispatch-select-tick.sh test-dispatch-tick.sh \
   test-lib-frozen-session-park.sh test-lib-standdown-recheck.sh \
@@ -315,13 +314,13 @@ cd /home/n8/natb1/commons.systems && for t in \
 The full dispatch shell suite — this is the real blast-radius check, since Unit 1 changes both shared harnesses and every one of ~130 suites now runs one extra guard assertion:
 
 ```verify
-cd /home/n8/natb1/commons.systems && .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh --pr-scripts
+.claude/skills/dispatch-propagate/scripts/run-unit-tests.sh --pr-scripts
 ```
 
 Lint (both harnesses and the new lib are committed shell):
 
 ```verify
-cd /home/n8/natb1/commons.systems && .claude/skills/dispatch-propagate/scripts/run-lint.sh
+.claude/skills/dispatch-propagate/scripts/run-lint.sh
 ```
 
 **Manual / judgment checks.**

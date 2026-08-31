@@ -70,11 +70,12 @@ still owns the merge predicate.
 
 **Scope: this pass's own fix commits are already in it.** Step 3's
 `/commit-merge-push` committed the Lane-A and Lane-B fix edits before this step,
-and `run-lint.sh` derives its targets from `git diff --name-only
-origin/main...HEAD` — so those commits are inside the diff it checks. Do not
-narrow it to a hand-built file list: its unconditional checks (verify-fence
-paths, the type-safety escape-hatch check) resolve their own baselines and are
-exactly the ones a hand-narrowed invocation would drop.
+and `run-lint.sh` derives its targets from a baseline it resolves through
+`resolve-diff-base.sh` and then diffs with two dots — so those commits are inside
+the diff it checks. Do not narrow it to a hand-built file list: its
+unconditional checks (verify-fence paths, the type-safety escape-hatch check)
+resolve their own baselines and are exactly the ones a hand-narrowed invocation
+would drop.
 
 **On red.** Fix the violation the bundle named, commit and push the fix with one
 `/commit-merge-push`, and re-run the bundle. Bound this at **two** fix attempts.

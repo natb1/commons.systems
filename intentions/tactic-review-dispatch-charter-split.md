@@ -2,8 +2,8 @@
 id: tactic-review-dispatch-charter-split
 kind: tactic
 statement: "Review sitting: split strategy-graph-native-dispatch by charter —
-  its 316 tactic children share one defect-ratio signal, so the ratio means less
-  than it appears to"
+  its 328 tactic children (measured at origin/main 174a19e8, 2026-08-31) share
+  one defect-ratio signal, so the ratio means less than it appears to"
 owner: human
 status: raw
 parent: null
