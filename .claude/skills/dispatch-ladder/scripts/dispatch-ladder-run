@@ -267,6 +267,15 @@
 # variable before each reconciler call. See
 # intentions/tactic-review-stall-ci-verdict-cache-miss.md:40.
 #
+# THE GRAPH NODE CACHE IS DELIBERATELY LEFT ALONE — not an oversight.
+# DISPATCH_GRAPH_NODE_CACHE (packages/intentionsutil/src/store-cache.ts) keys
+# every entry on a hash of the store's own bytes, so a node this driver writes
+# between polls moves the key and the next read misses; an inherited directory
+# therefore cannot pin the poll loop to stale node state the way the TTL-less
+# verdict memo can. This script neither exports nor unsets it, and with nothing
+# in the environment the reconcilers self-enumerate — the ladder's existing
+# behavior, unchanged.
+#
 # EXIT CODES — deliberately the primitives' codes, so a journald reader sees
 # one vocabulary across the whole ladder:
 #

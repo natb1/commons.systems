@@ -148,8 +148,14 @@ NOW=${GRAPH_RECONCILE_NOW:-$(date -u +%s)}
 # never edited, and never pinned — so it cannot mis-key anything. Validating a
 # filtered-out sibling would abort a single-node absorb over a corruption with
 # no bearing on it.
+#
+# `DISPATCH_GRAPH_NODE_CACHE` (packages/intentionsutil/src/store-cache.ts) names
+# a storage LOCATION for a read-only, content-addressed memo of this same strict
+# enumeration — never a node subset, so it cannot change the candidate set — and
+# `--node` still arrives via process.argv, so unset or empty simply
+# self-enumerates, which is the `/dispatch-ladder` single-node path.
 OPEN_TACTICS="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
-  const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
+  const { listNodesStrictCached } = await import("./packages/intentionsutil/src/store-cache.js");
   // Merge-absorbable phases. `main-qa` is deliberately ABSENT: it is an open
   // phase, but a node sitting at it has no merge of its own left to absorb.
   // Mirrors `isMergeAbsorbable` in reconcile-graph.ts.
@@ -173,7 +179,7 @@ OPEN_TACTICS="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
   const unprovenMainQa = (n) =>
     n.phase === "main-qa" &&
     !(n.execution && n.execution.completion && n.execution.completion.mergedAt);
-  for (const n of listNodesStrict("./intentions")) {
+  for (const n of listNodesStrictCached("./intentions", process.env.DISPATCH_GRAPH_NODE_CACHE || "")) {
     if (only && n.id !== only) continue;
     if (n.kind !== "tactic") continue;
     if (n.phase === null) continue;
