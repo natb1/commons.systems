@@ -62,6 +62,7 @@ export {
   listNodesStrict,
   listNodesResilient,
 } from "./store.js";
+export { storeFingerprint, listNodesStrictCached } from "./store-cache.js";
 export { listScopeStaleTactics } from "./scope-sweep.js";
 export { projectGoals, activeFrontier, realizationForOwner, renderFrontier } from "./goals.js";
 export type { Goal, Realization } from "./goals.js";
