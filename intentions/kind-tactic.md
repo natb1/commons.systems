@@ -124,6 +124,8 @@ attributes:
     delegated: Claude-authored on trust; the decisions remain the author's
     codified: the plan is written and the tactic is ready to dispatch — the author
       has settled its execution plan
+    superseded: the intent moved to another node — abandoned, not completed;
+      superseded_by names the successor
 ---
 # Tactic — a completable unit of execution
 
@@ -157,6 +159,16 @@ workflow.
 orthogonal `execution.fix` record, set and cleared off the live CI verdict
 independent of whatever phase the tactic is in — so a tactic under CI repair
 does not lose its place in the lifecycle.
+
+`superseded` is deliberately NOT a phase either. `done` is the COMPLETION
+terminal; abandonment is the second terminal and is carried on `status`, with
+`superseded_by` naming the successor. A superseded tactic keeps whatever phase
+it reached, so a reader asking "is this node still live work" must consult
+`status` too, while a reader that specifically means "reached the completed
+terminal" keeps the literal `phase === "done"` test. The full rationale — and
+why a `superseded` phase would deadlock the ladder and could not mark a
+superseded strategy at all — lives on kind-kind under Supersession, which is the
+authority for cross-kind fields; it is not restated here.
 
 ## `execution`
 

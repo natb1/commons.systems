@@ -23,6 +23,8 @@ function node(overrides: Partial<IntentionNode> = {}): IntentionNode {
     execution: null,
     validates: [],
     blocked_by: [],
+    superseded_by: [],
+    supersession_expiry: null,
     office_hours: null,
     pace_exempt: false,
     rounds: null,

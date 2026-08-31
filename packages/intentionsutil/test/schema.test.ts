@@ -6,6 +6,10 @@ import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
 import {
   FIRST_CLASS_FIELD_NAMES,
+  STATUSES,
+  SUPERSEDED_STATUS,
+  isRetired,
+  isSuperseded,
   validateGraph,
   validateGraphProseRefs,
   validateNode,
@@ -47,6 +51,8 @@ describe("validateNode", () => {
       execution: null,
       validates: [],
       blocked_by: [],
+      superseded_by: [],
+      supersession_expiry: null,
       office_hours: null,
       pace_exempt: false,
       rounds: null,
@@ -919,6 +925,56 @@ describe("validateNode", () => {
     ).toThrow();
   });
 
+  it("rejects a superseded_by that is not a string array", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-badsup",
+        kind: "tactic",
+        statement: "Bad superseded_by.",
+        owner: "ai",
+        status: "raw",
+        superseded_by: "tactic-new",
+      }),
+    ).toThrow();
+    expect(() =>
+      validateNode({
+        id: "n1-badsup2",
+        kind: "tactic",
+        statement: "Bad superseded_by entries.",
+        owner: "ai",
+        status: "raw",
+        superseded_by: [1, 2],
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a supersession_expiry that is not a string", () => {
+    expect(() =>
+      validateNode({
+        id: "n1-badexp",
+        kind: "tactic",
+        statement: "Bad supersession_expiry.",
+        owner: "ai",
+        status: "raw",
+        supersession_expiry: 42,
+      }),
+    ).toThrow();
+  });
+
+  it("round-trips a populated superseded_by and supersession_expiry", () => {
+    const result = validateNode({
+      id: "n1-sup",
+      kind: "tactic",
+      statement: "A superseded tactic.",
+      owner: "ai",
+      status: "raw",
+      superseded_by: ["tactic-new", "tactic-newer"],
+      supersession_expiry: "merge or closure of PR #42",
+    });
+    expect(result.superseded_by).toEqual(["tactic-new", "tactic-newer"]);
+    expect(result.supersession_expiry).toBe("merge or closure of PR #42");
+  });
+
   it("accepts a valid minimal node and applies defaults", () => {
     const result = validateNode({
       id: "n2",
@@ -946,6 +1002,8 @@ describe("validateNode", () => {
       execution: null,
       validates: [],
       blocked_by: [],
+      superseded_by: [],
+      supersession_expiry: null,
       office_hours: null,
       pace_exempt: false,
       rounds: null,
@@ -1275,6 +1333,8 @@ describe("validateGraph", () => {
       execution: partial.execution ?? null,
       validates: partial.validates ?? [],
       blocked_by: partial.blocked_by ?? [],
+      superseded_by: partial.superseded_by ?? [],
+      supersession_expiry: partial.supersession_expiry ?? null,
       office_hours: partial.office_hours ?? null,
       pace_exempt: partial.pace_exempt ?? false,
       rounds: partial.rounds ?? null,
@@ -2478,6 +2538,266 @@ describe("validateGraph", () => {
       ),
     ).not.toThrow();
   });
+
+  // --- Supersession: rules 24 (same-kind target), 25 (no cycles), 26 (expiry) ---
+
+  /**
+   * The kind nodes every supersession fixture needs, with a vocabulary that
+   * declares `superseded` so rule 16 is satisfied and the rule under test is
+   * the one that fires.
+   */
+  function supersessionKinds(): IntentionNode[] {
+    const vocab = {
+      status_vocabulary: {
+        raw: "Not yet started.",
+        codified: "Complete.",
+        superseded: "Abandoned; superseded_by names the successor.",
+      },
+    };
+    return [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified", attributes: vocab }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified", attributes: vocab }),
+      gnode({ id: "kind-virtue", kind: "kind", status: "codified", attributes: vocab }),
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: { goal_layer: true, ...vocab },
+      }),
+    ];
+  }
+
+  it("rule 24: accepts a superseded_by naming a same-kind node", () => {
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({ id: "tactic-old", kind: "tactic", superseded_by: ["tactic-new"] }),
+      gnode({ id: "tactic-new", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rule 24: rejects a superseded_by that does not resolve", () => {
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({ id: "tactic-old", kind: "tactic", superseded_by: ["tactic-ghost"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-old.*superseded_by "tactic-ghost" does not resolve to a node/,
+    );
+  });
+
+  it("rule 24: rejects a superseded_by whose target is a different kind", () => {
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({ id: "virtue-root", kind: "virtue", status: "codified" }),
+      gnode({ id: "strategy-successor", kind: "strategy", serves: ["virtue-root"] }),
+      gnode({ id: "tactic-old", kind: "tactic", superseded_by: ["strategy-successor"] }),
+    ];
+    // A tactic superseded by a strategy is not a supersession, it is a
+    // re-parenting — the same-kind rule modelled on rule 6's parent-kind check.
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-old.*superseded_by "strategy-successor" must resolve to a kind "tactic" node, got kind "strategy"/,
+    );
+  });
+
+  it("rule 24 is NOT kind-confined: a superseded strategy passes rule 10", () => {
+    // The half of the requirement a tactic-only `phase` terminal could not
+    // express. `phase`/`blocked_by`/`validates` are tactic-only; `superseded_by`
+    // deliberately is not.
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({ id: "virtue-root", kind: "virtue", status: "codified" }),
+      gnode({
+        id: "strategy-old",
+        kind: "strategy",
+        serves: ["virtue-root"],
+        status: "superseded",
+        superseded_by: ["strategy-new"],
+      }),
+      gnode({ id: "strategy-new", kind: "strategy", serves: ["virtue-root"] }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rule 25: rejects self-supersession (the length-1 cycle)", () => {
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({ id: "tactic-self", kind: "tactic", superseded_by: ["tactic-self"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-self: superseded_by forms a cycle — a node cannot transitively supersede itself/,
+    );
+  });
+
+  it("rule 25: rejects a two-node superseded_by cycle", () => {
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({ id: "tactic-a", kind: "tactic", superseded_by: ["tactic-b"] }),
+      gnode({ id: "tactic-b", kind: "tactic", superseded_by: ["tactic-a"] }),
+    ];
+    const run = (): void => validateGraph(nodes);
+    expect(run).toThrow(/tactic-a: superseded_by forms a cycle/);
+    expect(run).toThrow(/tactic-b: superseded_by forms a cycle/);
+  });
+
+  it("rule 25: accepts a three-node non-cyclic supersession chain", () => {
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({ id: "tactic-a", kind: "tactic", superseded_by: ["tactic-b"] }),
+      gnode({ id: "tactic-b", kind: "tactic", superseded_by: ["tactic-c"] }),
+      gnode({ id: "tactic-c", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rule 25 does not confuse the two cycle edges: a blocked_by cycle still names blocked_by", () => {
+    // The shared `checkEdgeCycles` is called once per edge field; each call must
+    // keep its own message. A regression that traversed the wrong field here
+    // would be invisible without this case.
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({ id: "tactic-a", kind: "tactic", blocked_by: ["tactic-b"] }),
+      gnode({ id: "tactic-b", kind: "tactic", blocked_by: ["tactic-a"] }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-a: blocked_by forms a cycle — a tactic cannot be transitively blocked by itself/,
+    );
+    expect(() => validateGraph(nodes)).not.toThrow(/superseded_by forms a cycle/);
+  });
+
+  it("rule 26: rejects a node superseded while in flight with no expiry named", () => {
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({
+        id: "tactic-live",
+        kind: "tactic",
+        phase: "implement",
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+        superseded_by: ["tactic-new"],
+      }),
+      gnode({ id: "tactic-new", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /tactic-live: superseded while in flight .* supersession_expiry is not named/,
+    );
+  });
+
+  it("rule 26: accepts an in-flight supersession that names its expiry event", () => {
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({
+        id: "tactic-live",
+        kind: "tactic",
+        phase: "implement",
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+        superseded_by: ["tactic-new"],
+        supersession_expiry: "merge or closure of PR #1",
+      }),
+      gnode({ id: "tactic-new", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rule 26: rejects a whitespace-only expiry — naming nothing is not naming", () => {
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({
+        id: "tactic-live",
+        kind: "tactic",
+        phase: "implement",
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+        superseded_by: ["tactic-new"],
+        supersession_expiry: "   ",
+      }),
+      gnode({ id: "tactic-new", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(/tactic-live: superseded while in flight/);
+  });
+
+  it("rule 26 is inert on a superseded node that is NOT in flight", () => {
+    // No interim live risk to except, so no expiry is owed.
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({
+        id: "tactic-old",
+        kind: "tactic",
+        status: "superseded",
+        phase: "implement",
+        execution: null,
+        superseded_by: ["tactic-new"],
+      }),
+      gnode({ id: "tactic-new", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rule 26 is inert on an in-flight node that is not superseded", () => {
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({
+        id: "tactic-live",
+        kind: "tactic",
+        phase: "implement",
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+      }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("rule 16 governs the superseded terminal: it passes only where the kind declares it", () => {
+    const declaring = [
+      ...supersessionKinds(),
+      gnode({ id: "tactic-old", kind: "tactic", status: "superseded" }),
+    ];
+    expect(() => validateGraph(declaring)).not.toThrow();
+
+    // The same node against a kind fixture whose vocabulary omits `superseded`.
+    const silent = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({ id: "tactic-old", kind: "tactic", status: "superseded" }),
+    ];
+    expect(() => validateGraph(silent)).toThrow(/tactic-old.*superseded.*status_vocabulary/);
+  });
+});
+
+describe("supersession predicates", () => {
+  function pnode(partial: Partial<IntentionNode>): IntentionNode {
+    return validateNode({
+      id: "tactic-p",
+      kind: "tactic",
+      statement: "A tactic.",
+      owner: "ai",
+      status: "raw",
+      ...partial,
+    });
+  }
+
+  it("isSuperseded is true only at the superseded status", () => {
+    expect(isSuperseded(pnode({ status: SUPERSEDED_STATUS }))).toBe(true);
+    expect(isSuperseded(pnode({ status: "raw" }))).toBe(false);
+    expect(isSuperseded(pnode({ status: "codified", phase: "done" }))).toBe(false);
+  });
+
+  it("isRetired covers BOTH terminals and nothing else", () => {
+    expect(isRetired(pnode({ status: "raw", phase: "done" }))).toBe(true);
+    expect(isRetired(pnode({ status: SUPERSEDED_STATUS, phase: "implement" }))).toBe(true);
+    expect(isRetired(pnode({ status: "raw", phase: "implement" }))).toBe(false);
+    expect(isRetired(pnode({ status: "raw", phase: null }))).toBe(false);
+  });
+
+  it("SUPERSEDED_STATUS is deliberately absent from the legacy STATUSES array", () => {
+    // Nothing validates against STATUSES; the terminal lives in each kind
+    // node's status_vocabulary. Adding it here would imply a central status
+    // enum the graph does not have.
+    expect(STATUSES).toEqual(["raw", "refining", "delegated", "codified"]);
+    expect(STATUSES).not.toContain(SUPERSEDED_STATUS);
+  });
+
+  it("the new fields are first-class, so rule 23 bans them from attributes", () => {
+    expect(FIRST_CLASS_FIELD_NAMES).toContain("superseded_by");
+    expect(FIRST_CLASS_FIELD_NAMES).toContain("supersession_expiry");
+  });
 });
 
 describe("validateGraphProseRefs", () => {
@@ -2502,6 +2822,8 @@ describe("validateGraphProseRefs", () => {
       execution: partial.execution ?? null,
       validates: partial.validates ?? [],
       blocked_by: partial.blocked_by ?? [],
+      superseded_by: partial.superseded_by ?? [],
+      supersession_expiry: partial.supersession_expiry ?? null,
       office_hours: partial.office_hours ?? null,
       pace_exempt: partial.pace_exempt ?? false,
       rounds: partial.rounds ?? null,

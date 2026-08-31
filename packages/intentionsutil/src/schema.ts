@@ -24,7 +24,43 @@ export const OWNERS: readonly Owner[] = ["human", "ai", "procedure"];
  */
 export type Status = string;
 
+// `superseded` is DELIBERATELY absent from this array. Nothing validates
+// against `STATUSES` — its only consumers are two re-exports (`src/index.ts`,
+// `src/graph.ts`) and an `Array.isArray` shape assertion in `test/graph.test.ts`
+// — and adding a value here would imply a central status enum the graph
+// deliberately does not have. The `superseded` terminal lives where every other
+// status value lives: each kind node's `attributes.status_vocabulary`, enforced
+// by rule 16.
 export const STATUSES: readonly string[] = ["raw", "refining", "delegated", "codified"];
+
+/**
+ * The abandonment terminal. A node at this status was not completed — its
+ * intent moved elsewhere, and `superseded_by` names where.
+ *
+ * Carried on `status`, never on `phase`. A `superseded` PHASE would deadlock
+ * the ladder: `blockersComplete` treats a blocker as complete only when it is
+ * absent or at `phase: "done"`, so a non-pruning superseded phase would block
+ * every dependent forever. A status also reaches kinds a phase cannot —
+ * `phase` is tactic-only (rule 10), while supersession is legal on any kind.
+ */
+export const SUPERSEDED_STATUS = "superseded";
+
+/** The node was abandoned in favour of whatever `superseded_by` names. */
+export function isSuperseded(node: IntentionNode): boolean {
+  return node.status === SUPERSEDED_STATUS;
+}
+
+/**
+ * The node is finished with, by EITHER terminal — completed (`phase: "done"`)
+ * or abandoned (`status: "superseded"`).
+ *
+ * Sites that specifically mean *reached the completed terminal* must keep the
+ * literal `phase === "done"` test; this predicate is for the distinct question
+ * "is this node still live work".
+ */
+export function isRetired(node: IntentionNode): boolean {
+  return node.phase === "done" || isSuperseded(node);
+}
 
 /**
  * The tier axis: the outer, lexicographically-dominant ranking key. Tier 1 is
@@ -243,6 +279,17 @@ export interface IntentionNode {
   execution: Execution | null; // live in-flight record; tactics only
   validates: string[]; // strategy ids this tactic validates (factual edge); tactics only
   blocked_by: string[]; // tactic ids blocking this one; tactics only
+  // Ids of the nodes that supersede this one. Stored on the SUPERSEDED node;
+  // the reverse direction is derived by scan, never by a maintained index.
+  // Legal on EVERY kind (unlike phase/execution/validates/blocked_by above) —
+  // rule 24's same-kind target rule is what makes it meaningful everywhere.
+  superseded_by: string[];
+  // The event that expires this node's supersession edge — normally the
+  // in-flight PR's own merge or closure. Required (rule 26) when the node is
+  // superseded WHILE in flight (`execution` non-null): a similarity judgment
+  // never halts live work, and that interim-live-risk exception is only
+  // permitted when an expiry is named. `null` otherwise.
+  supersession_expiry: string | null;
   office_hours: OfficeHours | null; // first-class parking record; goal-layer kinds only
   pace_exempt: boolean; // authored pace-gate bypass; goal-layer kinds only
   rounds: Rounds | null; // /align-tactics round accounting; strategies only
@@ -283,6 +330,8 @@ const FIRST_CLASS_FIELD_PROBE: Record<keyof IntentionNode, true> = {
   execution: true,
   validates: true,
   blocked_by: true,
+  superseded_by: true,
+  supersession_expiry: true,
   office_hours: true,
   pace_exempt: true,
   rounds: true,
@@ -320,6 +369,8 @@ export interface IntentionNodeInput {
   execution?: Execution | null;
   validates?: string[];
   blocked_by?: string[];
+  superseded_by?: string[];
+  supersession_expiry?: string | null;
   office_hours?: OfficeHours | null;
   pace_exempt?: boolean;
   rounds?: Rounds | null;
@@ -1150,6 +1201,12 @@ export function validateNode(value: unknown): IntentionNode {
       value.validates == null ? [] : validateIdArray(value.validates, "validates"),
     blocked_by:
       value.blocked_by == null ? [] : validateIdArray(value.blocked_by, "blocked_by"),
+    superseded_by:
+      value.superseded_by == null ? [] : validateIdArray(value.superseded_by, "superseded_by"),
+    supersession_expiry:
+      value.supersession_expiry == null
+        ? null
+        : requireString(value.supersession_expiry, "supersession_expiry"),
     office_hours:
       value.office_hours == null ? null : validateOfficeHours(value.office_hours, "office_hours"),
     pace_exempt:
@@ -1292,6 +1349,12 @@ function checkGoalLayerOnlyFields(
 /**
  * Rules 9, 10 & 12: kind-typed field placement — recovers/rounds are
  * strategy-only, and phase/execution/blocked_by/validates are tactic-only.
+ *
+ * `superseded_by` and `supersession_expiry` are DELIBERATELY not confined here,
+ * and that omission must not be "fixed". Rule 24 requires a supersession target
+ * to share the superseded node's kind, which already makes the edge meaningful
+ * on every kind; and supersession has to reach strategies, which is the half of
+ * the requirement a tactic-only `phase` terminal structurally could not cover.
  */
 export function checkKindTypedFields(node: IntentionNode, problems: string[]): void {
   if (node.recovers.length > 0 && node.kind !== "strategy") {
@@ -1671,14 +1734,22 @@ function checkWaitNodeShape(node: IntentionNode, problems: string[]): void {
 }
 
 /**
- * Rule 15: reject cycles in the blocked_by graph. A DFS over resolved edges
- * flags every node that participates in a cycle (a tactic transitively blocked
- * by itself). Dangling edges are reported by rule 13, not traversed.
+ * Rules 15 & 25: reject cycles in a directed edge field. A three-colour DFS over
+ * resolved edges flags every node that participates in a cycle. Dangling edges
+ * are reported by the edge's own existence rule (13 for `blocked_by`, 24 for
+ * `superseded_by`), not traversed.
+ *
+ * ONE implementation, called once per cyclic edge field. A second near-identical
+ * copy would be exactly the duplicated-write-surface defect the graph strategy's
+ * one-shared-write-surface ruling condemns. A self-edge (a node naming itself)
+ * is a length-1 cycle this DFS already catches, so it needs no separate check.
  */
-function checkBlockedByCycles(
+function checkEdgeCycles(
   nodes: IntentionNode[],
   byId: Map<string, IntentionNode>,
   problems: string[],
+  edgeOf: (node: IntentionNode) => string[],
+  message: (id: string) => string,
 ): void {
   const CYCLE_WHITE = 0;
   const CYCLE_GRAY = 1;
@@ -1691,8 +1762,8 @@ function checkBlockedByCycles(
     path.push(id);
     const node = byId.get(id);
     if (node !== undefined) {
-      for (const target of node.blocked_by) {
-        if (!byId.has(target)) continue; // dangling — rule 13 owns it
+      for (const target of edgeOf(node)) {
+        if (!byId.has(target)) continue; // dangling — the existence rule owns it
         if (color.get(target) === CYCLE_GRAY) {
           // Back edge: everything from `target` to here is on the cycle.
           for (const member of path.slice(path.indexOf(target))) {
@@ -1710,8 +1781,33 @@ function checkBlockedByCycles(
     if (color.get(node.id) === CYCLE_WHITE) visit(node.id);
   }
   for (const id of inCycle) {
+    problems.push(message(id));
+  }
+}
+
+/**
+ * Rule 26: a node superseded WHILE IN FLIGHT must name its supersession's
+ * expiry event.
+ *
+ * The ruled exception is that an in-flight node (`execution` non-null) still
+ * takes the supersession edge and still gets NO park, so a similarity judgment
+ * never halts live work. That interim-live-risk exception is only permitted
+ * when an expiry is named — normally the in-flight PR's own merge or closure.
+ * Without this rule `supersession_expiry` would be another field nothing reads.
+ *
+ * The expiry is per-NODE, not per-edge: the risk being bounded is that THIS
+ * node is in flight, which is a property of its own `execution` and not of
+ * which node supersedes it. A per-edge expiry would repeat one value.
+ *
+ * Inert on a node that is not superseded, and on a superseded node that is not
+ * in flight — there is no interim live risk to except.
+ */
+function checkSupersessionExpiry(node: IntentionNode, problems: string[]): void {
+  if (node.superseded_by.length === 0) return;
+  if (node.execution === null) return;
+  if (node.supersession_expiry === null || node.supersession_expiry.trim() === "") {
     problems.push(
-      `${id}: blocked_by forms a cycle — a tactic cannot be transitively blocked by itself`,
+      `${node.id}: superseded while in flight (execution is non-null) but supersession_expiry is not named — the interim-live-risk exception requires an expiry event, normally the in-flight PR's own merge or closure`,
     );
   }
 }
@@ -1825,10 +1921,34 @@ function checkBlockedByCycles(
  *      field under `attributes`. Every violating key on a node is reported.
  *      `attributes` stays free-form for every key that is not a field name.
  *
- *      RULE NUMBER COLLISION: `intentions/tactic-supersession-edge-and-terminal.md`
- *      also claims 23 and 24 (supersession edge + its cycle check), unlanded as
- *      of 2026-08-29. Numbers are cross-referenced from node bodies and never
- *      reused — see burned rule 20 above — so whichever lands second renumbers.
+ *      RULE NUMBER COLLISION, RESOLVED 2026-08-31.
+ *      `intentions/tactic-supersession-edge-and-terminal.md` also claimed 23
+ *      and 24. The shadow-ban landed first and keeps 23; supersession landed
+ *      second and renumbered to 24, 25 and 26 below, per the standing "whichever
+ *      lands second renumbers" rule (see burned rule 20 above). That node's body
+ *      still says "23 and 24" and is stale on this point.
+ *  24. `superseded_by` targets exist and share the superseded node's kind. A
+ *      tactic superseded by a strategy is not a supersession, it is a
+ *      re-parenting; same-kind is modelled on rule 6's parent-kind rule and
+ *      costs nothing, since `checkRequiredEdgeKinds` already takes the expected
+ *      kind as an argument and `node.kind` is passed straight in. A dangling
+ *      supersession target is a hard fail: nodes are never pruned, so a target
+ *      that does not resolve was never written, not retired. Unlike rules 10
+ *      and 13-14 this rule is NOT kind-confined — `superseded_by` is legal on
+ *      every kind, because a superseded strategy is exactly the case a
+ *      tactic-only phase terminal could not express.
+ *  25. `superseded_by` contains no cycles — a node cannot transitively supersede
+ *      itself, and self-supersession (a node naming its own id) is the length-1
+ *      case. Shares one three-colour DFS with rule 15 via `checkEdgeCycles`
+ *      rather than copying it. Like rule 15 this is a whole-graph pass, wired
+ *      outside the per-node loop.
+ *  26. A node superseded WHILE IN FLIGHT names its expiry event. When
+ *      `superseded_by` is non-empty AND `execution` is non-null, a non-empty
+ *      `supersession_expiry` is required. The ruling is that supersession never
+ *      parks live work — an in-flight node takes the edge and keeps running —
+ *      and that interim-live-risk exception is only permitted when an expiry is
+ *      named, normally the in-flight PR's own merge or closure. Inert when the
+ *      node is not superseded, and when a superseded node is not in flight.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -1883,9 +2003,30 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkWaitNodeShape(node, problems);
     // Rule 23: no attributes key shadows a first-class field name.
     checkAttributesShadowing(node, problems);
+    // Rule 24: superseded_by targets exist and share this node's kind. NOT
+    // kind-confined — `node.kind` is the expected kind, so the rule is
+    // meaningful on every kind.
+    checkRequiredEdgeKinds(node, node.superseded_by, "superseded_by", node.kind, byId, problems);
+    // Rule 26: a node superseded while in flight names its expiry event.
+    checkSupersessionExpiry(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
-  checkBlockedByCycles(nodes, byId, problems);
+  checkEdgeCycles(
+    nodes,
+    byId,
+    problems,
+    (n) => n.blocked_by,
+    (id) =>
+      `${id}: blocked_by forms a cycle — a tactic cannot be transitively blocked by itself`,
+  );
+  // Rule 25: reject cycles in the superseded_by graph.
+  checkEdgeCycles(
+    nodes,
+    byId,
+    problems,
+    (n) => n.superseded_by,
+    (id) => `${id}: superseded_by forms a cycle — a node cannot transitively supersede itself`,
+  );
   if (problems.length > 0) {
     throw new IntentionSchemaError(`Graph integrity violations:\n${problems.join("\n")}`);
   }

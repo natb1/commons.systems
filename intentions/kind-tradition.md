@@ -138,5 +138,7 @@ attributes:
       adopted/diverged/chosen_over content against the cited texts — attests
       reference-accuracy of the record, never doctrine status (mounts are never
       doctrine; amended 2026-08-30)
+    superseded: the intent moved to another node — abandoned, not completed;
+      superseded_by names the successor
 ---
 # Tradition — an examined intellectual attachment; where philosophical alignment and divergence stay auditable

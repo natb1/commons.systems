@@ -28,6 +28,8 @@ function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
     execution: partial.execution ?? null,
     validates: partial.validates ?? [],
     blocked_by: partial.blocked_by ?? [],
+    superseded_by: partial.superseded_by ?? [],
+    supersession_expiry: partial.supersession_expiry ?? null,
     office_hours: partial.office_hours ?? null,
     pace_exempt: partial.pace_exempt ?? false,
     rounds: partial.rounds ?? null,

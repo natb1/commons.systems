@@ -109,6 +109,8 @@ attributes:
     raw: not yet dialectically examined
     refining: under active dialectic
     codified: the author has personally settled this strategy against present conditions
+    superseded: the intent moved to another node — abandoned, not completed;
+      superseded_by names the successor
 ---
 # Strategy — the highest goals a virtue generates against present conditions
 
@@ -155,3 +157,11 @@ planned but not delivered — a signal only the split makes visible.
 `last_aligned` is shape-validated as a `YYYY-MM-DD` date string when non-null;
 `last_completed` is validated as a plain nullable string, so it can hold a
 fuller timestamp.
+
+## Supersession
+
+A strategy is retired by `status: superseded` with `superseded_by` naming the
+successor, never by any phase — `phase` is tactic-only (rule 10), and a strategy
+being retirable at all is the half of the requirement that decided the terminal
+onto `status`. The field is cross-kind, so its normative detail lives on
+kind-kind under Supersession and is not restated here.

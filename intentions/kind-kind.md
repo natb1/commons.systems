@@ -334,6 +334,8 @@ attributes:
   entry_point: this node is the entry point of the graph
   status_vocabulary:
     codified: the author has personally settled this kind's semantics
+    superseded: the intent moved to another node — abandoned, not completed;
+      superseded_by names the successor
 ---
 # A kind defines the semantics of a class of nodes
 
@@ -441,6 +443,8 @@ non-null, the shape is validated strictly.
 | `attention`      | `Attention \| null`       | `null`  | A user-authored attention injection. Goal-layer kinds only. |
 | `office_hours`   | `OfficeHours \| null`     | `null`  | First-class parking record — why the node needs the author and since when. Goal-layer kinds only; the router skips parked subtrees. |
 | `pace_exempt`    | `boolean`                 | `false` | Authored pace-gate bypass: admits one gate-exempt worker past a paced-to-zero budget. Never changes ordering. Goal-layer kinds only. |
+| `superseded_by`  | `string[]`                | `[]`    | Ids of the nodes that supersede this one — stored on the SUPERSEDED node, reverse derived by scan. Legal on EVERY kind; see Supersession below. |
+| `supersession_expiry` | `string \| null`     | `null`  | The event that expires this node's supersession — normally the in-flight PR's own merge or closure. Required by rule 26 when the node is superseded while in flight. |
 | `attributes`     | `Record<string, unknown>` | `{}`    | Kind-specific fields. Validated only as a plain object; the meaning of its entries is defined by the node's kind node. |
 
 "Goal-layer kinds" are those whose kind node sets `attributes.goal_layer: true`
@@ -635,6 +639,52 @@ has settled the strategy against present conditions. The historical central list
 was `raw | refining | delegated | codified`; kinds that still want those values
 declare them.
 
+## Supersession
+
+A node is **superseded** when its intent moved to another node — abandoned, not
+completed. Every kind vocabulary declares `superseded`, and `superseded_by`
+names the successor.
+
+**The terminal is carried on `status`, never on `phase`.** Three reasons, all
+of which a future implementer should read before proposing a `superseded` phase:
+
+1. `phase: done` is the COMPLETION terminal, and closing abandoned work that way
+   launders it as finished. The harm is the word `done`, not a deletion — nodes
+   are never pruned, so a superseded node stays present and every inbound prose
+   citation keeps resolving.
+2. A `superseded` PHASE would deadlock the ladder. A blocker counts as complete
+   only when it is absent or at `phase: done`, so a non-pruning superseded phase
+   would block every dependent forever and drain them as excused-blocked,
+   silently.
+3. A phase cannot mark a superseded STRATEGY. Rule 10 confines `phase` to
+   `kind: tactic`, and the originating requirement is that the graph must not
+   implement one strategy-or-tactic and later attempt the one it supersedes. A
+   status covers the whole requirement, because status vocabulary is already
+   per-kind data and already validated by rule 16. Adding the terminal therefore
+   needs no new validation code and no type widening — only vocabulary entries
+   on the six kind nodes.
+
+**The edge direction is fixed.** `superseded_by` is stored on the SUPERSEDED
+node and names the nodes that supersede it. The reverse direction is derived by
+scanning, exactly the way inbound `blocked_by` edges are found today. There is
+no maintained reverse index and none is to be built.
+
+**A superseded node keeps whatever `phase` it reached.** Nothing pins it, because
+partial supersession — what `superseded_by` means when the successor obsoletes
+only part of the node — is unruled, and pinning the phase would pre-empt that
+question. Readers that mean "is this node still live work" must consult `status`
+as well as `phase`; readers that specifically mean "reached the completed
+terminal" keep the literal `phase === "done"` test.
+
+**In-flight supersession does not park.** A node with a non-null `execution`
+still takes the supersession edge and still gets no park — a similarity judgment
+must never halt live work. The price of that exception is `supersession_expiry`:
+rule 26 requires the edge to name the event that ends the interim live risk,
+normally the in-flight PR's own merge or closure. The expiry is per-node rather
+than per-edge, because what is being bounded is that THIS node is in flight.
+
+Rules 24, 25 and 26 enforce all of the above; see Graph-level validation.
+
 ## Required vs. optional
 
 The required core — `id`, `kind`, `statement`, `owner`, `status` — is always
@@ -651,8 +701,9 @@ these rather than rejecting them as invalid.
 The defaults applied on read are: `parent: null`, `serves: []`, `recovers: []`,
 `rationale: null`, `reading: null`, `gap: null`, `clarifications: []`,
 `tooling_goals: []`, `success_signal: null`, `attention: null`, `phase: null`,
-`execution: null`, `validates: []`, `blocked_by: []`, `office_hours: null`,
-`pace_exempt: false`, `rounds: null`, `attributes: {}`.
+`execution: null`, `validates: []`, `blocked_by: []`, `superseded_by: []`,
+`supersession_expiry: null`, `office_hours: null`, `pace_exempt: false`,
+`rounds: null`, `attributes: {}`.
 
 ## Graph-level validation
 
@@ -724,6 +775,32 @@ problem set rather than the first entry. It enforces:
     only and never reads a value — a measurement is queryable input to a ranking
     act, never an ordering authority of its own. `kind-tactic` carries the
     field's normative detail.
+24. Every `superseded_by` entry resolves to an existing node of the SAME `kind`
+    as the superseded node. Same-kind is modelled on rule 6: a tactic superseded
+    by a strategy is not a supersession, it is a re-parenting. Unlike rules 10
+    and 13–14 this rule is NOT kind-confined — `superseded_by` is legal on every
+    kind, which is the half of the requirement a tactic-only `phase` terminal
+    could not express. It owns its own dangling case: nodes are never pruned, so
+    a target that does not resolve was never written, not retired.
+25. `superseded_by` edges contain no cycle — a node cannot transitively
+    supersede itself, and a node naming its own id is the length-1 case. Shares
+    one DFS implementation with rule 15. Dangling edges are reported by rule 24,
+    not traversed.
+26. A node superseded WHILE IN FLIGHT names its expiry event: when
+    `superseded_by` is non-empty and `execution` is non-null, `supersession_expiry`
+    must be a non-empty string. Supersession never parks live work — an in-flight
+    node takes the edge and keeps running — and that interim-live-risk exception
+    is only permitted when an expiry is named, normally the in-flight PR's own
+    merge or closure. The expiry is per-NODE, not per-edge: what is bounded is
+    that THIS node is in flight, a property of its own `execution`. Inert when
+    the node is not superseded, and when a superseded node is not in flight.
+
+Rule numbering has two gaps this list does not close, both pre-existing:
+rule 20 above describes the per-tier boost namespace check, which code RETIRED
+(numbers are cross-referenced from node bodies and never reused, so 20 stays
+burned rather than being reassigned); and rules 22 (WAIT-node shape) and 23
+(no `attributes` key shadows a first-class field name) are enforced in
+`schema.ts` but not yet transcribed here.
 
 Rules 6–9 judge only edges whose target already resolves — rules 2–4 report the
 dangling case — so a single broken edge is not double-reported. Rules 13–14 own

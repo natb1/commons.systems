@@ -38,11 +38,30 @@ export function realizationForOwner(owner: Owner): Realization {
  *
  * A node is a leaf when no other node names it as a parent; childless nodes —
  * including childless virtue roots — are leaves. The predicate is
- * `status !== "codified" && <node is a leaf>`. Rationale: every tactic leaf is
- * currently `status: "raw"`, so gating on a `delegated`/`codified` status would
- * yield an empty frontier. Leaf-ness alone would wrongly include the childless
- * `codified` virtue roots (and the kind, strategy, and delegation nodes, all
- * hand-maintained at `codified`); the `!== "codified"` clause drops those.
+ * `status !== "codified" && phase !== "done" && <node is a leaf>`.
+ *
+ * The `!== "codified"` clause drops the childless nodes that are hand-maintained
+ * at `codified` (virtue roots, and the kind, strategy and delegation nodes),
+ * which leaf-ness alone would wrongly admit.
+ *
+ * The `phase !== "done"` clause drops finished tactic leaves. `status` is
+ * write-once authoring provenance that the dispatch ladder never advances, so
+ * without this clause a finished leaf whose author never codified it stays in
+ * the frontier permanently, reported as work still needing attention. Measured
+ * 2026-08-31 on the 783-node store: the frontier held 381 nodes of which 65 were
+ * `phase: "done"` — 62 at `status: "raw"` and 3 at `status: "delegated"`, every
+ * one a leaf — so the clause takes it to 316. Write the clause on `phase`; never
+ * spell it `status !== "raw"`, because those 3 `delegated` nodes are the
+ * standing proof that `status` is the wrong axis for this question. The nodes
+ * are correct and the READER is what changes here (`kind-tactic`'s "Is
+ * `status: raw` together with `phase: done` a node defect to sweep?"
+ * clarification, landed 2026-08-30): no node's `status` is migrated.
+ *
+ * An earlier revision of this comment rationalized the predicate as "every
+ * tactic leaf is currently `status: raw`, so gating on a `delegated`/`codified`
+ * status would yield an empty frontier". That premise no longer describes a
+ * graph holding ~200 done tactics, which is what the `phase` clause corrects.
+ *
  * `serves` edges do not affect leaf-ness — only `parent` does. Input order is
  * preserved (filter only).
  *
@@ -54,7 +73,9 @@ export function activeFrontier(nodes: IntentionNode[]): IntentionNode[] {
   const parentIds = new Set(
     nodes.map((n) => n.parent).filter((p): p is string => p !== null),
   );
-  return nodes.filter((node) => node.status !== "codified" && !parentIds.has(node.id));
+  return nodes.filter(
+    (node) => node.status !== "codified" && node.phase !== "done" && !parentIds.has(node.id),
+  );
 }
 
 /**
