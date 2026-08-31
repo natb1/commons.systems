@@ -218,6 +218,13 @@ _graph_restore_ids_to_head() {
 # half of the claim is printed.
 _GRAPH_RESTORE_RC=0
 _GRAPH_RESTORE_CLAIM=""
+# Set by _graph_discard_stranded_commits when its rewind TORE — reset --mixed
+# succeeded, so HEAD moved and the commits are gone, but a per-path restore
+# then failed and those paths still hold discarded content. The discard's own
+# non-zero rc cannot carry this: a refusal returns the same 1, and after a
+# refusal NOTHING was touched. The two need opposite claims about the shared
+# checkout, so the distinction has to leave the function as its own flag.
+_GRAPH_DISCARD_TORN=0
 _graph_restore_and_claim() {
   local repo_root="$1" label="$2"
   shift 2
@@ -391,7 +398,20 @@ graph_rollback_node_writes() {
       _graph_discard_stranded_commits "$repo_root" "$head_at_arm" "$label" "${mine[@]}" || discard_rc=$?
       if [[ "$discard_rc" -ne 0 ]]; then
         _graph_restore_and_claim "$repo_root" "$label" "${ids[@]}"
-        echo "$label: $_GRAPH_RESTORE_CLAIM" >&2
+        # A TORN rewind and a REFUSED one both arrive here with rc 1, but the
+        # success claim is only true of the refusal. After a tear the message
+        # one line above has just said the touched intentions/ path(s) still
+        # hold discarded content — those are paths this writer's ids do not
+        # cover, so restoring the ids cannot make the checkout clean, and
+        # printing "not left dirty for every other graph writer" would deny in
+        # one sentence what the previous sentence asserted. The operator who
+        # believes it stops looking, and the next graph-commit from that
+        # checkout trips assert_clean_outside_ids for everyone.
+        if [[ "$_GRAPH_DISCARD_TORN" -eq 1 && "$_GRAPH_RESTORE_RC" -eq 0 ]]; then
+          echo "$label: This writer's own node file(s) WERE restored to HEAD, but the torn rewind above left OTHER intentions/ path(s) holding discarded content, so the shared checkout IS STILL DIRTY and the next graph-commit from it will trip assert_clean_outside_ids for every other graph writer — restore the path(s) named above by hand FIRST." >&2
+        else
+          echo "$label: $_GRAPH_RESTORE_CLAIM" >&2
+        fi
       fi
       return $discard_rc
     fi
@@ -452,6 +472,7 @@ _graph_discard_stranded_commits() {
   local repo_root="$1" head_at_arm="$2" label="$3"
   shift 3
   local -a stranded=("$@")
+  _GRAPH_DISCARD_TORN=0
   local unsafe=0 sha parents files path p seen
   local -a touched=()
   git -C "$repo_root" merge-base --is-ancestor "$head_at_arm" HEAD || unsafe=1
@@ -486,6 +507,7 @@ _graph_discard_stranded_commits() {
   # commits are already gone, and acting on that instruction would drop
   # whatever now sits on HEAD instead.
   if [[ "$restore_rc" -eq 2 ]]; then
+    _GRAPH_DISCARD_TORN=1
     echo "$label: graph-commit left un-landed commit(s) (${stranded[0]}) and the rollback is HALF-DONE. HEAD was ALREADY moved back to ${head_at_arm:0:8} and those commit(s) are ALREADY GONE, but restoring the ${#touched[@]} intentions/ path(s) they touched FAILED, so those paths still hold the discarded content. Do NOT drop the commit(s) by hand — that would discard whatever is on HEAD now. Restore those paths to ${head_at_arm:0:8} by hand instead, before any other graph-commit runs from this checkout" >&2
     return 1
   fi

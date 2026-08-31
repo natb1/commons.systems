@@ -2265,6 +2265,13 @@ fi
 # The two cases need opposite remedies, so they need distinct rcs (1 vs 2) and
 # distinct messages.
 #
+# The same split governs the CLAIM sentence the caller appends. A refusal
+# touched nothing, so restoring this writer's own ids really does leave the
+# checkout clean; a tear left intentions/ path(s) OUTSIDE those ids holding
+# discarded content, so the identical sentence would be false — and false in
+# the direction that makes an operator stop looking, one line after being told
+# those paths still hold the discarded content.
+#
 # Forcing the tear: the stub's commit CREATES intentions/t-created.md, a path
 # head_at_arm does not have, so the restore loop takes the `rm -f` branch for
 # it. Replacing that working-tree slot with a directory makes `rm -f` fail.
@@ -2324,7 +2331,9 @@ if [[ $rc -ne 0 ]] \
    && grep -q 'ALREADY GONE' <<<"$out" \
    && grep -q 'Do NOT drop the commit(s) by hand' <<<"$out" \
    && ! grep -q 'the write was NOT rolled back' <<<"$out" \
-   && ! grep -q 'discarded by moving HEAD back to' <<<"$out"; then
+   && ! grep -q 'discarded by moving HEAD back to' <<<"$out" \
+   && grep -q 'IS STILL DIRTY' <<<"$out" \
+   && ! grep -q 'is not left dirty for every other graph writer' <<<"$out"; then
   ok "graph write rollback torn-rewind report: when reset --mixed SUCCEEDED and a per-path restore then failed, the operator is told the commits are ALREADY GONE and not to drop them by hand — the opposite remedy from the pre-reset gate refusal"
 else
   no "graph write rollback must not report a TORN rewind as a REFUSED one — 'drop them by hand' after HEAD already moved discards the operator's good state (rc=$rc, head moved back: $([[ "$head9m_after" == "$head9m_before" ]] && echo yes || echo no))"
