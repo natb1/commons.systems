@@ -649,13 +649,21 @@ names the successor.
 of which a future implementer should read before proposing a `superseded` phase:
 
 1. `phase: done` is the COMPLETION terminal, and closing abandoned work that way
-   launders it as finished. The harm is the word `done`, not a deletion — nodes
-   are never pruned, so a superseded node stays present and every inbound prose
-   citation keeps resolving.
-2. A `superseded` PHASE would deadlock the ladder. A blocker counts as complete
-   only when it is absent or at `phase: done`, so a non-pruning superseded phase
-   would block every dependent forever and drain them as excused-blocked,
-   silently.
+   launders it as finished. The harm is the word `done`, not a deletion —
+   marking a node superseded deletes nothing, so the node stays present and
+   every inbound prose citation keeps resolving. (Pruning is a separate,
+   deliberate act; see rule 24 for the edge repair a prune owes.)
+2. A `superseded` PHASE would not survive rule 10 or the ladder's phase
+   vocabulary, and it would still deadlock dependents. NOTE — carrying the
+   terminal on `status` does NOT by itself avoid that deadlock, and an earlier
+   revision of this bullet wrongly claimed it did: `blockersComplete`
+   (`packages/intentionsutil/src/router.ts`) counts a blocker complete only when
+   it is absent or at `phase: done`, and a superseded node keeps whatever phase
+   it reached (below), so a superseded blocker blocks every dependent forever
+   and `classifyTerminus` (`terminus.ts`) drains them as `excused-blocked`. The
+   fix is the reader half, not the axis: whatever consults `isSuperseded` in
+   selection must also treat a superseded blocker as no longer blocking. Until
+   that lands, do not supersede a node any live node names in `blocked_by`.
 3. A phase cannot mark a superseded STRATEGY. Rule 10 confines `phase` to
    `kind: tactic`, and the originating requirement is that the graph must not
    implement one strategy-or-tactic and later attempt the one it supersedes. A
@@ -688,11 +696,13 @@ Rules 24, 25 and 26 enforce all of the above; see Graph-level validation.
 **No reader consults the terminal yet.** Landed 2026-08-31: the schema half is
 enforced (rules 24-26, the per-kind vocabulary, and the shared `isSuperseded` /
 `isRetired` predicates), but every liveness reader still judges on `phase`
-alone — the selector, the ladder-terminus census, and the goals/census/attention
-passes. So a node marked superseded today keeps being selected for dispatch, and
-a merged one classifies as a terminus `violation` rather than a terminal. Units 2
-and 3 of `tactic-supersession-edge-and-terminal` wire them; until those land,
-marking a node superseded records the intent but stops nothing.
+alone — the selector, `blockersComplete`/`classifyTerminus`, and the
+goals/census/attention passes. So a node marked superseded today keeps being
+selected for dispatch, a merged one classifies as a terminus `violation` rather
+than a terminal, and — the one case that is worse than a no-op — a superseded
+node still blocks every node naming it in `blocked_by`, forever. Units 2 and 3
+of `tactic-supersession-edge-and-terminal` wire them; until those land, marking
+a node superseded records the intent but stops nothing.
 
 ## Required vs. optional
 
@@ -789,8 +799,15 @@ problem set rather than the first entry. It enforces:
     by a strategy is not a supersession, it is a re-parenting. Unlike rules 10
     and 13–14 this rule is NOT kind-confined — `superseded_by` is legal on every
     kind, which is the half of the requirement a tactic-only `phase` terminal
-    could not express. It owns its own dangling case: nodes are never pruned, so
-    a target that does not resolve was never written, not retired.
+    could not express. A dangling supersession target is a hard fail, and what
+    keeps it from firing is the PRUNER, not this rule: completion pruning
+    (`graph-commit --prune`) really does delete node files, so a prune must
+    strip the pruned id from every inbound `superseded_by` in the SAME commit —
+    exactly the repair rule 13 already requires for `blocked_by`. The
+    reverse-edge scans that make that possible are `inboundSuperseders` and
+    `inboundBlockers` (`packages/intentionsutil/src/transitions.ts`); neither
+    has a caller in the prune path today, so the repair is the pruning agent's
+    obligation.
 25. `superseded_by` edges contain no cycle — a node cannot transitively
     supersede itself, and a node naming its own id is the length-1 case. Shares
     one DFS implementation with rule 15. Dangling edges are reported by rule 24,
