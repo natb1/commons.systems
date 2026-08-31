@@ -276,10 +276,12 @@ each fork site.
 
    (`run-lint.sh` additionally wraps its diff in
    `if ! CHANGED=$(…); then echo … >&2; exit 1; fi`. That half is deliberately
-   **not** copied: this skill runs worktree-isolated, where the Bash tool
-   refuses control flow and `>&2` redirects as *"too complex to verify that it
-   stays inside the worktree"*, so the guard would make the fence unrunnable.
-   Under `set -e` a failing `git diff` already aborts the fence loudly.)
+   **not** copied, because here it would add nothing: `run-lint.sh` captures
+   the diff into a variable and keeps going, so it needs an explicit check,
+   while this fence lets `git diff` write straight to stdout under `set -e` —
+   a failure aborts the fence loudly on its own. Do not read this as a ban on
+   control flow in a fence: the Idempotency preamble above is a `case`/`if`
+   fence with five `echo … >&2` redirects, and it runs first in every session.)
 
    A browser component exists if any changed path is a `vite.config.*`, a frontend
    template (`index.html`, `src/` of a frontend app), or under a known frontend
