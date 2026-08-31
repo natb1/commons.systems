@@ -27,11 +27,38 @@
 #     either as transient `dispatch-reseed-*.service` units or as children of the
 #     durable heartbeat under `user@1000.service` — none of which have
 #     _SYSTEMD_UNIT=dispatch-tick, so a -u match silently drops them all. The
-#     exact lines are:
-#       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (dead-session-stranded)
+#     exact lines are (the four reclaim rules of reservation_sweep, named as its
+#     own header block names them at lib-reservation-ledger.sh:172-231):
 #       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (live-worker-redundant)
+#         rule (a), lib-reservation-ledger.sh:662 — a live worker already owns
+#         the worktree; the marker is redundant. Age-independent.
+#       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (spawn-handoff-expired after <N>s with no live worker)
+#         rule (a-handoff), lib-reservation-ledger.sh:692 — a claim handed off to
+#         a spawned worker that never registered before the handoff TTL elapsed.
+#       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (<origin>-ttl-expired after <N>s with no live worker)
+#         rule (c-ttl), lib-reservation-ledger.sh:710 — a consumer-less claim
+#         (<origin> is `standalone`, `explicit` or `office-hours` today) that
+#         aged past the standalone TTL without a worker of its name appearing.
+#       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (dead-session-stranded)
+#         rule (c), lib-reservation-ledger.sh:715 — the reserving session is dead
+#         and the claim never converted.
 #     where <wt> is the worktree basename and the leading field is the event's
 #     ISO timestamp. Transcripts are NOT the rate source.
+#
+#     The RATE table is DERIVED from the reason token parsed out of each line,
+#     not enumerated from a hardcoded list of reasons, so a reason the ledger
+#     adds later appears in the report without a code change here. A reclaim line
+#     whose reason token will not parse is counted in the total and reported as
+#     `reclaim_events_reason_unparsed` — never silently dropped. Two ledger lines
+#     that look similar are NOT reclaims and are excluded by the
+#     `reclaimed reservation ` anchor: `keeping malformed reservation <wt> (no
+#     session= line)` (rule (b), :670) and the `(stranded reclaim of <wt> — ...)`
+#     follow-up note (:716).
+#
+#     CAUSE stays `dead-session-stranded`-only. A handoff expiry or a TTL expiry
+#     has no transcript to compare against — by construction the worker never
+#     registered — so those reasons are a scalar count in the RATE and never join
+#     the interval analysis below.
 #   CAUSE (why, apportionment): for each reclaim EVENT (wt, T), compare T against
 #     the assistant-work intervals of wt's Claude session transcripts and bucket
 #     by their temporal relationship (see CLASSIFICATION below).
@@ -129,7 +156,8 @@
 #
 # EXIT CODES
 #   0  ok
-#   2  usage error (bad/unknown arg, non-integer --days, no GNU date)
+#   2  usage or environment error (bad/unknown arg, non-integer --days, no GNU
+#      date, the captured sweep text could not be read back)
 #   3  sweep counts are not trustworthy (SWEEP_STATUS != ok or
 #      SWEEP_CROSSCHECK == mismatch) — the report was still emitted in full
 #      `inconsistent` and `unavailable` do NOT set 3: like a `--grep`-less
@@ -284,11 +312,67 @@ if [[ "$SWEEP_STATUS" != ok || "$SWEEP_CROSSCHECK" == mismatch ]]; then
   EXIT_CODE=3
 fi
 
-# Event counts for the RATE (count every matching line).
-DEAD_EVENTS=$(grep -cE 'lib-reservation-ledger: reclaimed reservation .+ \(dead-session-stranded\)' "$SWEEP_RAW" || true)
-REDUNDANT_EVENTS=$(grep -cE 'lib-reservation-ledger: reclaimed reservation .+ \(live-worker-redundant\)' "$SWEEP_RAW" || true)
-DEAD_EVENTS=${DEAD_EVENTS:-0}
-REDUNDANT_EVENTS=${REDUNDANT_EVENTS:-0}
+# Event counts for the RATE (count every matching line), bucketed by the reason
+# token parsed out of the line rather than by a hardcoded list of reasons — so a
+# reason the ledger adds later is counted here without a code change, and none of
+# the four it emits today is silently uncounted.
+#
+# ALL_RECLAIM_RE (above) is the all-reasons denominator. It anchors on
+# `reclaimed reservation `, which already excludes the two non-reclaim ledger
+# lines (`keeping malformed reservation`, and the `(stranded reclaim of ...)`
+# follow-up note) — do not broaden it.
+RECLAIM_RAW="$TMP/reclaim.txt"
+RECLAIM_GREP_RC=0
+grep -E "$ALL_RECLAIM_RE" "$SWEEP_RAW" >"$RECLAIM_RAW" || RECLAIM_GREP_RC=$?
+# grep exits 1 for "no matches" and >=2 for a real error. A window with no
+# reclaims is a legitimate zero; an unreadable capture is not, and must not be
+# swallowed into an empty result (.claude/rules/code-style.md).
+if (( RECLAIM_GREP_RC > 1 )); then
+  echo "error: could not read the captured sweep text '$SWEEP_RAW' (grep exit $RECLAIM_GREP_RC)" >&2
+  exit 2
+fi
+
+# The reason table. Counted in one pass over the captured reclaim lines, so
+# RECLAIM_TOTAL equals the sum of REASON_EVENTS plus REASON_UNPARSED by
+# construction rather than by a second count that could drift.
+declare -A REASON_EVENTS=()
+RECLAIM_TOTAL=0
+REASON_UNPARSED=0
+while IFS= read -r line; do
+  RECLAIM_TOTAL=$(( RECLAIM_TOTAL + 1 ))
+  # Capture the reason TOKEN only. spawn-handoff-expired and <origin>-ttl-expired
+  # carry a trailing ` after <N>s with no live worker` clause inside the same
+  # parentheses, so a closing-paren anchor would match neither — let `.*` absorb
+  # the tail instead.
+  reason=$(printf '%s\n' "$line" \
+    | sed -n 's/.*reclaimed reservation [^ ]* (\([a-z][a-z0-9-]*\).*/\1/p')
+  if [[ -z "$reason" ]]; then
+    # The fail-open closer: a reclaim line whose reason will not parse is
+    # reported, never dropped. Report-only — it does not touch EXIT_CODE, since
+    # RECLAIM_TOTAL is still correct when the ledger's message shape changes.
+    REASON_UNPARSED=$(( REASON_UNPARSED + 1 ))
+    continue
+  fi
+  REASON_EVENTS[$reason]=$(( ${REASON_EVENTS[$reason]:-0} + 1 ))
+done <"$RECLAIM_RAW"
+
+# Retained named counters, now DERIVED from the table (JSON contract unchanged).
+DEAD_EVENTS=${REASON_EVENTS[dead-session-stranded]:-0}
+REDUNDANT_EVENTS=${REASON_EVENTS[live-worker-redundant]:-0}
+
+# The by-reason JSON object, built via a "<reason>\t<count>" temp file so the
+# values are never interpolated into the jq program text. An empty file yields {}.
+REASON_EVENTS_TSV="$TMP/reason_events.tsv"
+: >"$REASON_EVENTS_TSV"
+# Guarded: `"${!REASON_EVENTS[@]}"` on an empty array trips `set -u` on older bash.
+if (( ${#REASON_EVENTS[@]} > 0 )); then
+  for reason in "${!REASON_EVENTS[@]}"; do
+    printf '%s\t%d\n' "$reason" "${REASON_EVENTS[$reason]}" >>"$REASON_EVENTS_TSV"
+  done
+fi
+REASON_EVENTS_JSON=$(jq -R -s \
+  'split("\n") | map(select(length>0) | split("\t") | {key: .[0], value: (.[1]|tonumber)}) | from_entries' \
+  <"$REASON_EVENTS_TSV")
 
 # Dead-session-stranded reclaim EVENTS as "<ts>\t<wt>" pairs (one per line; keep
 # duplicates — a worktree may be reclaimed multiple times). The leading field is
@@ -471,6 +555,9 @@ if (( JSON_OUT )); then
     --argjson crosscheck_filtered_lines "$CROSSCHECK_FILTERED_LINES" \
     --argjson dead_events "$DEAD_EVENTS" --argjson redundant_events "$REDUNDANT_EVENTS" \
     --argjson dead_distinct "$DEAD_DISTINCT" \
+    --argjson reclaim_total "$RECLAIM_TOTAL" \
+    --argjson reclaim_events_by_reason "$REASON_EVENTS_JSON" \
+    --argjson reclaim_unparsed "$REASON_UNPARSED" \
     --argjson transcripts_scanned "$TRANSCRIPTS_SCANNED" \
     --argjson transcripts_failed "$TRANSCRIPTS_FAILED" \
     --argjson came_and_went "${BUCKET[came-and-went]}" \
@@ -496,7 +583,17 @@ if (( JSON_OUT )); then
         crosscheck_filtered_lines: $crosscheck_filtered_lines,
         dead_session_stranded_events: $dead_events,
         live_worker_redundant_events: $redundant_events,
-        dead_session_stranded_distinct_worktrees: $dead_distinct
+        dead_session_stranded_distinct_worktrees: $dead_distinct,
+        # Every line matching the all-reasons reclaim pattern.
+        reclaim_events_total: $reclaim_total,
+        # Keys are the reason tokens actually present in the window — data, not
+        # schema. A reason absent from the window is absent from this object;
+        # that is unambiguous because reclaim_events_total and the two retained
+        # scalars above are always present.
+        reclaim_events_by_reason: $reclaim_events_by_reason,
+        # Reclaim lines whose reason token would not parse: counted in the total,
+        # bucketed nowhere, reported here rather than dropped.
+        reclaim_events_reason_unparsed: $reclaim_unparsed
       },
       transcripts: {scanned: $transcripts_scanned, failed: $transcripts_failed},
       un_transcripted_stranded_reclaims: $genuine_strand,
@@ -546,11 +643,27 @@ fi
 if [[ "$SWEEP_CROSSCHECK" == unavailable ]]; then
   echo "NOTE: sweep filter cross-check could not run — an undercounting identifier filter would NOT have been detected here."
 fi
-printf '  dead-session-stranded reclaims (events) ..... %d\n' "$DEAD_EVENTS"
-printf '  live-worker-redundant reclaims (events) ..... %d\n' "$REDUNDANT_EVENTS"
+printf '  reclaim events (all reasons) ................ %d\n' "$RECLAIM_TOTAL"
+if (( ${#REASON_EVENTS[@]} > 0 )); then
+  {
+    for reason in "${!REASON_EVENTS[@]}"; do
+      printf '%d\t%s\n' "${REASON_EVENTS[$reason]}" "$reason"
+    done
+  } | sort -rn -k1,1 | while IFS=$'\t' read -r cnt name; do
+    print_rank "$name" "$cnt"
+  done
+else
+  echo "  (no reclaim events in window)"
+fi
+if (( REASON_UNPARSED > 0 )); then
+  printf 'NOTE: %d reclaim line(s) had an unrecognized reason token — counted in the total, bucketed nowhere. The ledger message shape has changed; update the reason parse.\n' \
+    "$REASON_UNPARSED"
+fi
 printf '  dead-session-stranded distinct worktrees .... %d\n' "$DEAD_DISTINCT"
 echo "  (RATE and CAUSE are both counted in reclaim EVENTS; a worktree may be"
-echo "   reclaimed more than once, so events > distinct worktrees.)"
+echo "   reclaimed more than once, so events > distinct worktrees. CAUSE below"
+echo "   apportions the dead-session-stranded events only — the other reasons"
+echo "   have no worker transcript to compare against.)"
 echo
 
 echo "--- UN-TRANSCRIPTED STRANDS (blind-spot closer) ---"
