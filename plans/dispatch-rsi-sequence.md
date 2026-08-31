@@ -1008,7 +1008,9 @@ execution."* It closed 2026-08-29 by author disposition (`phase: done`,
 >    ~316 children invalidates every `--base` CAS manifest in flight.
 
 Deferred past position 12 for the same reason Bundle 8 is: an exclusive re-serve
-of 316 children invalidates every `--base` CAS manifest still in flight.
+of 328 children (measured at commit `7ee14b13`, superseding both the original
+316 and an intermediate 326) invalidates every `--base` CAS manifest still in
+flight.
 
 **The shape, as ruled.** Three charters, cut along the strategy body's existing
 sections: *recording surface* (Serialization & Commit, Other Settled Mechanism);
@@ -1128,7 +1130,7 @@ cannot:
 5. **Bundle 8 after all node bookkeeping** (position 12). Bulk content rewrites
    invalidate every CAS manifest.
 6. **The charter split after Bundle 8** (position 13). Same CAS reason, larger
-   blast radius — 316 children re-served.
+   blast radius — 328 children re-served (measured; supersedes 316 and 326).
 7. **PR5's internal unit order** (position 4). Six unit-families edit one
    ~340-line script, `reconcile-graph-review-stall`, plus one shared test file.
    Four orderings inside that PR are load-bearing and went unrecorded until
@@ -1174,21 +1176,21 @@ cannot:
      whichever path still reaches that spawn"), but neither re-scopes the case.
      Re-scope it as part of U12 rather than discovering it in CI.
    - **U13–U15 before U18.** U18 appends a new `hold-node` landing block after the
-     sweep's `graph-commit` landing block (`:321-338`) — the same block U14 rewrites
+     sweep's `graph-commit` landing block (`:374-391`) — the same block U14 rewrites
      to thread the `--base` pin through. Reversed, U18's new block is written against
      a landing shape U14 then replaces underneath it.
 
      **"After the landing block" is not sufficient on its own: U18 must also amend
-     the early exit above it.** `reconcile-graph-review-stall:311` is
+     the early exit above it.** `reconcile-graph-review-stall:364` is
      `[[ "${#RECOVERED_IDS[@]}" -eq 0 ]] && exit 0`, and a CI-pending candidate never
      enters `RECOVERED_IDS` — below the strike cap it `continue`s, at cap it is
      recorded in `CI_STALL_IDS` and `continue`s. So on the sweep runs U18 exists to
-     serve, `RECOVERED_IDS` is empty and the script exits at `:311` before any block
-     placed after `:321`. That is the same dead-code trap as the ⛔ box in the node's
-     own Unit 3 step 2, one exit earlier: widen `:311` to
+     serve, `RECOVERED_IDS` is empty and the script exits at `:364` before any block
+     placed after `:374`. That is the same dead-code trap as the ⛔ box in the node's
+     own Unit 3 step 2, one exit earlier: widen `:364` to
      `[[ "${#RECOVERED_IDS[@]}" -eq 0 && "${#CI_STALL_IDS[@]}" -eq 0 ]] && exit 0`
      (or land the hold before it). The node's re-landing brief does not mention
-     `:311` — its steps 3 and 4 still describe a conflict-hold block at `:307-331`
+     `:364` — its steps 3 and 4 still describe a conflict-hold block at `:307-331`
      that no longer exists.
    - **U2 rebases over the merged PR5a.** PR5a shipped as **#3140** and
      `tactic-mainqa-record-time-routing` is `phase: done` on `origin/main`. Its
