@@ -5,7 +5,7 @@ statement: Give aggregate-usage.sh --session/--node scoping so one instrument
   and one lens catalog serve both the per-run session evaluation and the
   periodic fleet audit, with fleet-denominator lenses tagged fleet-only
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Drafted 2026-08-12 /align round. The parsimony finding:
   /dispatch-token-audit and the session evaluation were never two analyses —
@@ -21,104 +21,23 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
-execution: null
+phase: done
+execution:
+  branch: strategy-recursive-self-improvement
+  pr: 3074
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-13T03:26:48Z
+    mergeCommitSha: c3c229f0de63db09df7dc01ce02177f3d1b56c95
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: >-
-    PARK 1 of 2 — MAJOR SCOPE DEVIATION. The whole stated scope of this node is
-    already merged on origin/main, so there is no plan left to author against
-    the drafted body. Verified independently in-checkout by the 2026-08-19
-    /align-tactics round (three agents, own line anchors): aggregate-usage.sh
-    carries --session/--node with mutual exclusion, the unbounded-mtime-window
-    rule and the no-Firestore-persist rule
-    (.claude/skills/rsi-audit/scripts/aggregate-usage.sh:22-47, 105-129,
-    185-265, 1424-1470); .claude/skills/rsi-audit/SKILL.md:15 already frames the
-    skill as the fleet-scoped invocation and its step 4 (lines 108-148) tags all
-    twelve lenses [fleet-only]/[any-scope]; and the per-phase evaluator this
-    node third bullet names exists as the /rsi skill, invoking
-    aggregate-usage.sh --node (.claude/skills/rsi/SKILL.md:90-109, 129). Shipped
-    by commit f9af1a69 (2026-08-12 — the SAME DAY the /align round drafted this
-    node, which is why the draft was never reconciled against its own
-    implementation), then relocated by commit c3c229f0 / PR #3074, which
-    collapsed the skill family into /rsi and /rsi-audit and thereby makes every
-    .claude/skills/dispatch-token-audit/... anchor in this node body point at a
-    directory that no longer exists. Finalizing this node to phase:implement as
-    drafted would dispatch a worker to implement already-merged work against
-    dead paths.
-
-
-    PARK 2 of 2 — REQUIREMENT AMBIGUITY, on the one candidate residual. Lens 1
-    (tool_errors) is tagged [fleet-only] wholesale at
-    .claude/skills/rsi-audit/SKILL.md:113, yet /rsi reads that same field at
-    --node scope (.claude/skills/rsi/SKILL.md:138, 180) with no skip caveat, and
-    aggregate-usage.sh builds it by reducing over the scope-filtered rows
-    (:984-1003) — so a scoped run tool_errors is that node own errors rather
-    than a pooled statistic. This node own body already draws exactly that split
-    (cross-session tool_errors signatures fleet-only vs tool_errors per-run
-    meaningful at both scopes), but the shipped SKILL.md never encodes it.
-    Ruling needed: (a) split the tag — per-run tool_errors counts any-scope,
-    cross-session recurrence/sessions_affected fleet-only — or (b) keep the
-    monolithic fleet-only tag and instead remove the unqualified tool_errors
-    read from /rsi Step 5 lens 1. And if (a), whether that re-tag is THIS node
-    residual scope or a new carrier: the live sibling draft
-    tactic-rsi-round-trips-lens-carrier is scoped exclusively to lens 10
-    (phase_standup/scriptable_round_trips) and does not cover lens 1, so
-    planning either arm autonomously would either invent scope the author never
-    recorded or create overlap with that sibling.
-
-
-    RECORD-COMPLETENESS DEFECTS OF THE 2026-08-12 /align ROUND, named here
-    rather than written onto the strategy (a per-node /align-tactics session
-    never edits the serving strategy). (i) strategy-token-economy clarifications
-    41, 42 and 43 all anchor on .claude/skills/dispatch-token-audit/..., a path
-    PR #3074 removed; they read today as .claude/skills/rsi-audit/..., and the
-    per-phase evaluator (tactic-ladder-per-phase-evaluation) clarification 41
-    names is now the /rsi skill. (ii) That round work landed in code ahead of
-    its graph bookkeeping across the whole sibling set: aggregate-usage.sh
-    self-attributes its shipped lenses to sibling node ids (cache_efficiency
-    lens (tactic-audit-cache-efficiency-lens) at :1161; permission_friction lens
-    (tactic-audit-permission-friction) at :1215) and rsi-audit/SKILL.md:208-214
-    carries the attended-only /fewer-permission-prompts remediation, yet
-    intentions/tactic-audit-cache-efficiency-lens.md and
-    intentions/tactic-audit-permission-friction.md both still read status:raw,
-    phase:null. (iii) tactic-ladder-per-phase-evaluation is blocked_by this
-    node, and that blocker is satisfied in code while this node stays draft.
-  since: 2026-08-19
-  recommendation: >-
-    Run an author /align pass on strategy-token-economy that does three things.
-
-
-    (1) RESOLVE OR PRUNE THIS NODE AS DELIVERED. That is the default reading —
-    all three of its stated bullets are merged on main. Only if the tool_errors
-    split below is wanted should this node instead be re-scoped to that single
-    residual, and its body re-anchored from .claude/skills/dispatch-token-audit/
-    onto .claude/skills/rsi-audit/.
-
-
-    (2) RULE ON THE LENS-1 TAG QUESTION and record the answer as a
-    clarification: either split the tool_errors tag (per-run counts any-scope,
-    cross-session recurrence/sessions_affected fleet-only) or drop the
-    unqualified tool_errors read from /rsi Step 5 lens 1. Decide at the same
-    time whether that work lands on this node or on a new carrier alongside
-    tactic-rsi-round-trips-lens-carrier, which owns the same re-tagging concern
-    class for lens 10.
-
-
-    (3) SWEEP THE SIBLING BOOKKEEPING the 2026-08-12 round left behind:
-    tactic-audit-cache-efficiency-lens and tactic-audit-permission-friction are
-    both shipped in code but still read status:raw/phase:null;
-    tactic-ladder-per-phase-evaluation is blocked_by this node on a blocker
-    already satisfied in code; and strategy-token-economy clarifications 41-43
-    still anchor on the removed dispatch-token-audit path.
-
-
-    DO NOT re-run /align-tactics on this node before that pass. The 2026-08-19
-    round already established there is nothing autonomous left to plan here, so
-    a repeat run would park again on these same two questions and burn the
-    allowance for no closure.
-  session_type: other
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
@@ -139,10 +58,10 @@ and its drift, not the measurement.
 
 ## What changes
 
-- `.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh` — add
+- `.claude/skills/rsi-audit/scripts/aggregate-usage.sh` — add
   `--session <id>` / `--node <id>` scoping alongside the existing `--days <N>`.
   Same script, same JSON schema, same lens catalog at both scopes.
-- `.claude/skills/dispatch-token-audit/SKILL.md` — reframe as the **fleet-scoped
+- `.claude/skills/rsi-audit/SKILL.md` — reframe as the **fleet-scoped
   invocation** of that instrument, and tag each lens by the scope at which it is
   meaningful.
 - The per-phase evaluator (`tactic-ladder-per-phase-evaluation`) invokes the
@@ -175,3 +94,82 @@ from ~5 sessions; and `strategy-token-economy`'s own `success_signal` is
 structure, **not a measured diff** against a ~1000-line jq program. If scoping
 turns out to require restructuring the aggregation, re-scope this unit rather
 than forcing it.
+
+## Ruling, 2026-08-30 — this node is a COMPLETION RECORD
+
+**Instrument.** Ruling 4's BOUND clause
+(`plans/dispatch-rsi-author-rulings.md`, quoting
+`strategy-graph-native-dispatch`): *"a DEAD PREMISE is not a DEAD SCOPE … Where
+clear-park is the wrong instrument — a `phase: null` node whose work already
+shipped, which clear-park makes router-eligible rather than terminal — the
+correct act is the completion record (`phase: done`), never the clear."* Here
+the park's premise is alive and the **scope** is dead, so this node closes as a
+completion record under the Ruling 1 convention: stamp `execution.completion`
+against the carrier PR, `status: raw → codified`, `phase: null → done`, do not
+prune.
+
+**Applied here.** All three bullets of "What changes" are merged.
+`--session <id>` / `--node <id>` scoping ships at
+`.claude/skills/rsi-audit/scripts/aggregate-usage.sh:22,34,42`, with mutual
+exclusion at `:222` and `:232`, the unbounded-mtime-window rule at `:261`, the
+no-Firestore-persist rule for a scoped run at `:1534-1539`, and the
+`scope: {type, id}` object documented at `:1463` and emitted at `:1488` and
+`:1499`. `.claude/skills/rsi-audit/SKILL.md:15` frames the skill as the
+fleet-scoped invocation of that one instrument, and its step 4 (`:108`, tag
+definitions at `:110-111`) tags all twelve lenses `[fleet-only]` / `[any-scope]`
+at `:113-138`. The per-phase evaluator the third bullet names exists as the
+`/rsi` skill, which invokes `aggregate-usage.sh --node` at
+`.claude/skills/rsi/SKILL.md:108-109` and rules an empty selection a missing
+measurement at `:129`. Landed by `f9af1a69` (2026-08-12, the same day the
+`/align` round drafted this node — which is why the draft was never reconciled
+against its own implementation) and relocated by `c3c229f0` / PR #3074, which
+collapsed the skill family into `/rsi` and `/rsi-audit`. Sibling carriers:
+`tactic-rsi-audit-skill-rename` and `tactic-rsi-audit-ledger-findings`, both
+`phase: done` against the same PR.
+
+### The lens-1 question is answered by a live sibling, not by a new carrier
+
+PARK 2 of the 2026-08-19 park asked whether `tool_errors` should be re-tagged
+(per-run counts any-scope, cross-session recurrence fleet-only), or whether the
+unqualified `/rsi` read should be dropped instead — and, if the former, whether
+that lands here or on a new carrier alongside
+`tactic-rsi-round-trips-lens-carrier`.
+
+**It lands on neither this node nor a new one.** It is already carried by
+`tactic-rsi-lens-catalog-decomposition` (`status: codified`, `phase: implement`,
+`office_hours: null`, `blocked_by: []`), which names the identical contradiction
+in its own body and rules the answer: `tool_errors` is re-tagged
+`[node, fleet]`, under a `scope` list drawn from `{node, fleet}` that replaces
+the binary `any-scope`/`fleet-only` vocabulary outright. Its catalog row
+`rsi-lens-tool-errors` carries `node, fleet` and covers `/rsi` lens 1 and audit
+lens 1 together, so the re-housing regenerates the `/rsi` read from the ruled
+tag rather than leaving it to be deleted by hand — which closes both arms of
+PARK 2's either/or in one place. Minting a second carrier for lens 1 would
+create a duplicate-target pair with that node.
+
+### Not discharged by this record — owed to an `/align` pass on `strategy-token-economy`
+
+Transcribed here because clearing the park destroys it, and the router will
+never surface a `phase: done` node again.
+
+**`strategy-token-economy` still anchors on the removed
+`.claude/skills/dispatch-token-audit/` path.** Seven live mentions remain on
+that node, including a hard file anchor
+(`.claude/skills/dispatch-token-audit/scripts/aggregate-usage.sh:319`) and the
+2026-08-12 parsimony clarification this node was drafted from. They read today
+as `.claude/skills/rsi-audit/...`, and the per-phase evaluator that
+clarification names is now the `/rsi` skill. A per-node round may not edit a
+serving strategy, so this stays owed.
+
+### Discharged by this record
+
+- The sibling-bookkeeping half of the 2026-08-19 park's item (ii):
+  `tactic-audit-cache-efficiency-lens` is `status: codified`, `phase: implement`
+  and `tactic-audit-permission-friction` is `status: codified`, `phase: done`
+  on `origin/main`. Both were `status: raw`, `phase: null` when the park was
+  written; neither is now.
+- Item (iii): `tactic-ladder-per-phase-evaluation` is `blocked_by` this node on
+  a blocker already satisfied in code. That edge now resolves against a
+  `phase: done` blocker. It stays blocked by its other edge,
+  `tactic-rsi-session-sweep-trigger` (`phase: null`), so nothing becomes
+  router-eligible as a side effect of this write.
