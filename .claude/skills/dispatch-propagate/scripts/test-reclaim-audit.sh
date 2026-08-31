@@ -498,18 +498,61 @@ assert_eq "nonnumeric sweep.reclaim_events_total" "3" \
   "$(jq '.sweep.reclaim_events_total' <<<"$NONNUM_OUT")"
 assert_eq 'nonnumeric reclaim_events_by_reason["dead-session-stranded"]' "3" \
   "$(jq '.sweep.reclaim_events_by_reason["dead-session-stranded"]' <<<"$NONNUM_OUT")"
-# The bug lived HERE: the RATE count above came from the reason table and was
-# always right, while the two counters below are fed by the basename capture and
-# read 1 instead of 3 -- only the numeric fixture survived the parse.
-assert_eq "nonnumeric sweep.dead_session_stranded_events (basename-fed)" "3" \
+# CORRECTION: dead_session_stranded_events is NOT basename-fed. It is derived
+# from the reason table (dispatch-reclaim-audit:360), exactly like the RATE
+# count above, so it reads 3 even with the buggy numeric-prefix sed restored.
+# The assertion is a genuine check of the JSON contract but is NOT a lock on the
+# basename parse, and the comment that previously claimed it was is wrong.
+assert_eq "nonnumeric sweep.dead_session_stranded_events (reason-table-fed)" "3" \
   "$(jq '.sweep.dead_session_stranded_events' <<<"$NONNUM_OUT")"
-assert_eq "nonnumeric sweep.dead_session_stranded_distinct_worktrees" "3" \
+# THESE two are the real basename-fed locks. distinct_worktrees is cut from
+# DEAD_EVENTS_FILE, and basename_unparsed is the RATE-minus-CAUSE difference;
+# both move the moment the capture regresses.
+assert_eq "nonnumeric sweep.dead_session_stranded_distinct_worktrees (basename-fed)" "3" \
   "$(jq '.sweep.dead_session_stranded_distinct_worktrees' <<<"$NONNUM_OUT")"
+assert_eq "nonnumeric sweep.dead_session_stranded_basename_unparsed (basename-fed)" "0" \
+  "$(jq '.sweep.dead_session_stranded_basename_unparsed' <<<"$NONNUM_OUT")"
 assert_eq "nonnumeric cause_buckets sum (every event apportioned)" "3" \
   "$(jq '[.cause_buckets[]] | add' <<<"$NONNUM_OUT")"
 assert_eq "nonnumeric sweep.reclaim_events_reason_unparsed" "0" \
   "$(jq '.sweep.reclaim_events_reason_unparsed' <<<"$NONNUM_OUT")"
 assert_eq "nonnumeric exit code" "0" "$NONNUM_RC"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
+
+# --- case H: a NUL byte in the captured sweep text --------------------------
+# GNU grep treats a file containing a NUL as binary: it writes "binary file
+# matches" to stderr, emits nothing on stdout, and exits 0. Without `-a` on the
+# capturing greps that silently zeroed every count while still grading the
+# sweep ok and exiting 0 -- MEASURED: the same 3-reclaim log with one
+# NUL-bearing line appended went from reclaim_events_total 3 to 0. A journal is
+# exactly where a stray NUL turns up, and the fail-open closer this audit adds
+# cannot see it, because grep's exit status is 0 and not >1.
+CASE_H_LOG="$ROOT/sweep-nul.txt"
+{
+  printf '%s host dispatch-tick[401]: lib-reservation-ledger: reclaimed reservation agent-nul-a (dead-session-stranded)\n' "$T"
+  printf '%s host dispatch-tick[402]: lib-reservation-ledger: reclaimed reservation agent-nul-b (dead-session-stranded)\n' "$T"
+  printf '%s host dispatch-tick[403]: lib-reservation-ledger: reclaimed reservation agent-nul-c (dead-session-stranded)\n' "$T"
+  printf 'a\000b a line carrying a NUL byte\n'
+} > "$CASE_H_LOG"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$CASE_H_LOG"
+
+NUL_RC=0
+NUL_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json) || NUL_RC=$?
+
+echo ""
+echo "--- assertions (one NUL byte must not zero every count) ---"
+
+assert_eq "nul sweep.reclaim_events_total" "3" \
+  "$(jq '.sweep.reclaim_events_total' <<<"$NUL_OUT")"
+assert_eq "nul sweep.dead_session_stranded_events" "3" \
+  "$(jq '.sweep.dead_session_stranded_events' <<<"$NUL_OUT")"
+assert_eq "nul sweep.dead_session_stranded_distinct_worktrees" "3" \
+  "$(jq '.sweep.dead_session_stranded_distinct_worktrees' <<<"$NUL_OUT")"
+assert_eq "nul sweep.dead_session_stranded_basename_unparsed" "0" \
+  "$(jq '.sweep.dead_session_stranded_basename_unparsed' <<<"$NUL_OUT")"
+assert_eq "nul exit code" "0" "$NUL_RC"
 
 export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
 
