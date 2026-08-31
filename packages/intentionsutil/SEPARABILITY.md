@@ -134,9 +134,11 @@ branch-protection ruleset requiring exactly the four checks
   that producer slug, and the `gh` CLI + GitHub REST API, are hardcoded. A
   consumer repo whose fast path is stamped by some other App must change the
   slug too, not just the names.
-- `.github/workflows/graph-fast-path.yml:3-4,54-80` — the `on: push: branches:
+- `.github/workflows/graph-fast-path.yml:3-5,34-60` — the `on: push: branches:
   ['graph/**']` workflow that stamps those four contexts for an
-  intentions/-only SHA. A consumer repo has neither this workflow nor the
+  intentions/-only SHA. (Jobs below line 60 in that file are non-required
+  coverage stubs, not part of this coupling.) A consumer repo has neither this
+  workflow nor the
   ruleset; without it, `graph-commit`'s scratch-branch stamp step never goes
   green and the push loop times out.
 - Further host couplings: the office_hours parking fallback shells out to

@@ -1889,7 +1889,9 @@ check_suite_concluded() { # <suite-id>
 # --- Fast-path check stamping ----------------------------------------------
 # Poll the branch-protection ruleset's four required contexts on <sha> until all
 # report a successful conclusion, keyed on the check-run NAME (mirrors the four
-# jobs in .github/workflows/graph-fast-path.yml). Gating is per DISTINCT
+# STAMPING jobs in .github/workflows/graph-fast-path.yml; that workflow also
+# carries non-required stubs — hook-tests, typecheck, test-integrity,
+# graph-validate — which this filter ignores by name). Gating is per DISTINCT
 # required context, not per check-run row: a SHA re-stamped by several pushes
 # accumulates one row per workflow run per name, so a row count of the green
 # rows can exceed four and an `== 4` row gate can never fire, leaving an
