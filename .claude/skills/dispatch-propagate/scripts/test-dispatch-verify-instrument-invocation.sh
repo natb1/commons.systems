@@ -331,7 +331,8 @@ assert_eq "case 9: stale-mtime transcript is not parsed" "1" "$RC"
 assert_eq "case 9: no invocations from a pruned file" "0" "$(jq -r '.invocations' <<<"$OUT")"
 
 # ---------------------------------------------------------------------------
-# REGRESSION: the EXIT trap above must CHAIN, and must preserve $?.
+# REGRESSION: the EXIT trap above must CHAIN, must preserve $?, and the signal
+# handlers must be their OWN registrations.
 #
 # Asserted end-to-end in a CHILD process, not by inspecting the trap string: the
 # child sources the real fixture and installs THIS FILE'S ACTUAL function bodies
@@ -341,9 +342,19 @@ assert_eq "case 9: no invocations from a pruned file" "0" "$(jq -r '.invocations
 #   forged host-systemd leak -> exit NON-ZERO, still nothing left behind
 #   failing assertion + report_results -> exit NON-ZERO (the status-preservation
 #                                         half; the buggy idiom returns 0 here)
+#   TERM mid-run -> exit 143 (the split-handler half; one shared
+#                             `trap fn EXIT INT TERM` returns 0 here)
+#   INT mid-run  -> exit 130 (the same half, for the INT registration)
+# The two signal cases are ONE PER REGISTRATION on purpose: with only one of
+# them, the other of `trap 'vi_exit_trap 143' TERM` /
+# `trap 'vi_exit_trap 130' INT` could be mis-numbered or deleted and this suite
+# would stay green. Measured under the combined
+# `trap vi_exit_trap EXIT INT TERM`: TERM exits 0 instead of 143, INT exits 0
+# instead of 130. This block is the twin of the one in
+# `test-detect-changes.sh`; keep the two in step.
 # ---------------------------------------------------------------------------
 echo "Regression: the EXIT trap chains onto the fixture's leak guards"
-vi_trap_harness() {  # <path> <"clean"|"leak"|"fail"|"signal">
+vi_trap_harness() {  # <path> <"clean"|"leak"|"fail"|"sigterm"|"sigint">
   {
     printf '%s\n' '#!/usr/bin/env bash'
     printf '%s\n' 'set -euo pipefail'
@@ -363,12 +374,22 @@ vi_trap_harness() {  # <path> <"clean"|"leak"|"fail"|"signal">
     if [ "$2" = "fail" ]; then
       printf '%s\n' 'assert_eq "deliberate failure" "expected" "actual"'
       printf '%s\n' 'report_results'
-    elif [ "$2" = "signal" ]; then
-      # Kill the harness with TERM mid-run. bash runs the trap between
-      # commands, so the `exit 0` below is never reached WHEN THE HANDLER
-      # IS CORRECT -- and is exactly what a buggy handler falls through
-      # to, which is what makes this case discriminating.
-      printf '%s\n' 'kill -TERM $$'
+    elif [ "$2" = "sigterm" ] || [ "$2" = "sigint" ]; then
+      # Kill the harness with TERM (sigterm) or INT (sigint) mid-run. bash runs
+      # the trap between commands, and the chained handler ends inside the
+      # fixture's `_dispatch_test_exit_trap`, whose last statement is
+      # `exit "$rc"` (dispatch-test-fixture.sh:1466). So the `exit 0` below is
+      # not reached by the correct handler OR by the buggy one -- measured, all
+      # four combinations of {split, combined} x {INT, TERM}: never reached.
+      # The fallthrough is therefore NOT what discriminates. The STATUS is: the
+      # split registrations exit 143 / 130, one shared
+      # `trap fn EXIT INT TERM` exits 0. The `exit 0` is only a backstop for a
+      # harness left with no handler installed at all.
+      if [ "$2" = "sigterm" ]; then
+        printf '%s\n' 'kill -TERM $$'
+      else
+        printf '%s\n' 'kill -INT $$'
+      fi
       printf '%s\n' 'exit 0'
     else
       printf '%s\n' 'exit 0'
@@ -377,7 +398,7 @@ vi_trap_harness() {  # <path> <"clean"|"leak"|"fail"|"signal">
 }
 
 VI_TRAP_DIR=$(mktemp -d "$VERIFY_ROOT/traptest.XXXXXX")
-for vi_trap_case in clean leak fail signal; do
+for vi_trap_case in clean leak fail sigterm sigint; do
   vi_trap_harness "$VI_TRAP_DIR/$vi_trap_case.sh" "$vi_trap_case"
   VI_TRAP_TMPDIR=$(mktemp -d "$VI_TRAP_DIR/tmp-$vi_trap_case.XXXXXX")
   set +e
@@ -389,10 +410,20 @@ for vi_trap_case in clean leak fail signal; do
     "0" "$VI_TRAP_LEFT"
   if [ "$vi_trap_case" = "clean" ]; then
     assert_eq "trap chain (clean): a clean run still exits 0" "0" "$VI_TRAP_RC"
-  elif [ "$vi_trap_case" = "signal" ]; then
-    # The whole point: with one shared EXIT/INT/TERM handler this is 0.
-    assert_eq "trap chain (signal): a TERM-killed suite exits 143, not 0" \
+  elif [ "$vi_trap_case" = "sigterm" ]; then
+    # The whole point: with one shared EXIT/INT/TERM handler this is 0, because
+    # at handler entry $? is the last COMPLETED command's status and NOT
+    # 128+signo. 143 exactly, not merely non-zero -- "non-zero" is what the
+    # `fail` case above already asserts, so it would prove nothing about TERM.
+    assert_eq "trap chain (sigterm): a TERM-killed suite exits 143, not 0" \
       "143" "$VI_TRAP_RC"
+  elif [ "$vi_trap_case" = "sigint" ]; then
+    # The INT registration needs its OWN case or it is never exercised: with
+    # the TERM case alone, mis-numbering or deleting
+    # `trap 'vi_exit_trap 130' INT` leaves this suite green. 130 exactly, for
+    # the same reason 143 is exact above.
+    assert_eq "trap chain (sigint): an INT-killed suite exits 130, not 0" \
+      "130" "$VI_TRAP_RC"
   else
     [ "$VI_TRAP_RC" -ne 0 ] && _v=nonzero || _v=zero
     assert_eq "trap chain ($vi_trap_case): status reaches the fixture trap" \

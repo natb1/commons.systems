@@ -319,12 +319,17 @@ DC_REAL_TMP=$(mktemp -d)
 #                                         half; the buggy idiom returns 0 here)
 #   TERM mid-run -> exit 143 (the split-handler half; one shared
 #                             `trap fn EXIT INT TERM` returns 0 here)
-# The second case is the one the bare trap broke. The last is what the separate
-# INT/TERM registrations above exist for: without it, reverting them to the
-# combined `trap dc_real_exit_trap EXIT INT TERM` leaves this suite green.
+#   INT mid-run  -> exit 130 (the same half, for the INT registration)
+# The second case is the one the bare trap broke. The last two are what the
+# separate INT and TERM registrations above exist for, and they are ONE CASE
+# PER REGISTRATION on purpose: a suite that killed only with TERM would leave
+# `trap 'dc_real_exit_trap 130' INT` free to be mis-numbered or deleted and
+# still run green. Measured under the combined
+# `trap dc_real_exit_trap EXIT INT TERM`: TERM exits 0 instead of 143, INT
+# exits 0 instead of 130.
 # ---------------------------------------------------------------------------
 echo "Regression: the EXIT trap chains onto the fixture's leak guards"
-dc_trap_harness() {  # <path> <"clean"|"leak"|"fail"|"signal">
+dc_trap_harness() {  # <path> <"clean"|"leak"|"fail"|"sigterm"|"sigint">
   {
     printf '%s\n' '#!/usr/bin/env bash'
     printf '%s\n' 'set -euo pipefail'
@@ -344,12 +349,22 @@ dc_trap_harness() {  # <path> <"clean"|"leak"|"fail"|"signal">
     if [ "$2" = "fail" ]; then
       printf '%s\n' 'assert_eq "deliberate failure" "expected" "actual"'
       printf '%s\n' 'report_results'
-    elif [ "$2" = "signal" ]; then
-      # Kill the harness with TERM mid-run. bash runs the trap between
-      # commands, so the `exit 0` below is never reached WHEN THE HANDLER
-      # IS CORRECT -- and is exactly what a buggy handler falls through
-      # to, which is what makes this case discriminating.
-      printf '%s\n' 'kill -TERM $$'
+    elif [ "$2" = "sigterm" ] || [ "$2" = "sigint" ]; then
+      # Kill the harness with TERM (sigterm) or INT (sigint) mid-run. bash runs
+      # the trap between commands, and the chained handler ends inside the
+      # fixture's `_dispatch_test_exit_trap`, whose last statement is
+      # `exit "$rc"` (dispatch-test-fixture.sh:1466). So the `exit 0` below is
+      # not reached by the correct handler OR by the buggy one -- measured, all
+      # four combinations of {split, combined} x {INT, TERM}: never reached.
+      # The fallthrough is therefore NOT what discriminates. The STATUS is: the
+      # split registrations exit 143 / 130, one shared
+      # `trap fn EXIT INT TERM` exits 0. The `exit 0` is only a backstop for a
+      # harness left with no handler installed at all.
+      if [ "$2" = "sigterm" ]; then
+        printf '%s\n' 'kill -TERM $$'
+      else
+        printf '%s\n' 'kill -INT $$'
+      fi
       printf '%s\n' 'exit 0'
     else
       printf '%s\n' 'exit 0'
@@ -358,7 +373,7 @@ dc_trap_harness() {  # <path> <"clean"|"leak"|"fail"|"signal">
 }
 
 DC_TRAP_DIR=$(mktemp -d "$DC_REAL_TMP/traptest.XXXXXX")
-for dc_trap_case in clean leak fail signal; do
+for dc_trap_case in clean leak fail sigterm sigint; do
   dc_trap_harness "$DC_TRAP_DIR/$dc_trap_case.sh" "$dc_trap_case"
   DC_TRAP_TMPDIR=$(mktemp -d "$DC_TRAP_DIR/tmp-$dc_trap_case.XXXXXX")
   set +e
@@ -370,14 +385,23 @@ for dc_trap_case in clean leak fail signal; do
     "0" "$DC_TRAP_LEFT"
   if [ "$dc_trap_case" = "clean" ]; then
     assert_eq "trap chain (clean): a clean run still exits 0" "0" "$DC_TRAP_RC"
-  elif [ "$dc_trap_case" = "signal" ]; then
+  elif [ "$dc_trap_case" = "sigterm" ]; then
     # The whole point of the separate INT/TERM registrations: with one shared
     # `trap dc_real_exit_trap EXIT INT TERM` this is 0, because at handler
     # entry $? is the last COMPLETED command's status and NOT 128+signo.
     # Asserted as 143 exactly, not merely non-zero -- "non-zero" would also
-    # accept the harness dying for an unrelated reason.
-    assert_eq "trap chain (signal): a TERM-killed suite exits 143, not 0" \
+    # accept the harness dying for an unrelated reason, and it is already what
+    # the `fail` case above asserts, so it would prove nothing about TERM.
+    assert_eq "trap chain (sigterm): a TERM-killed suite exits 143, not 0" \
       "143" "$DC_TRAP_RC"
+  elif [ "$dc_trap_case" = "sigint" ]; then
+    # The INT registration needs its OWN case or it is never exercised: with
+    # the TERM case alone, mis-numbering or deleting
+    # `trap 'dc_real_exit_trap 130' INT` leaves this suite green. 130 exactly,
+    # for the same reason 143 is exact above; measured under the combined
+    # handler this is 0.
+    assert_eq "trap chain (sigint): an INT-killed suite exits 130, not 0" \
+      "130" "$DC_TRAP_RC"
   else
     [ "$DC_TRAP_RC" -ne 0 ] && _v=nonzero || _v=zero
     assert_eq "trap chain ($dc_trap_case): status reaches the fixture trap" \
