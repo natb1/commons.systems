@@ -43,8 +43,9 @@
 # compare-and-swap: each edited id's pre-mutation on-disk blob is pinned and
 # passed as `graph-commit --base <id>=<blob>`, so an edit that lands on
 # origin/main between this sweep's read and its commit is three-way merged
-# rather than silently overwritten. See Step 2 for why the pin is the DISK blob
-# and why `hash-object -w` is mandatory, and
+# rather than silently overwritten. See lib-graph-base-pin.sh (the shared pin
+# primitive, extracted from this script) for why the pin is the DISK blob and why
+# `hash-object -w` is mandatory, and
 # .claude/skills/ref-diagnosis-time-cas/SKILL.md for the doctrine.
 #
 # Manual completion backfill (office-hours workflow, no script): when a tactic's
@@ -103,6 +104,9 @@ source "$SCRIPT_DIR/lib.sh"
 # graph_rollback_node_writes — the shared roll-a-failed-node-write-back-to-HEAD
 # primitive, extracted from THIS script so its siblings stop re-deriving it.
 source "$SCRIPT_DIR/lib-graph-rollback.sh"
+# node_id_is_safe / require_safe_node_id / pin_base_blob — the shared
+# diagnosis-time compare-and-swap pin, likewise extracted from THIS script.
+source "$SCRIPT_DIR/lib-graph-base-pin.sh"
 
 # ---- Argument parsing -------------------------------------------------------
 NODE_FILTER=""
@@ -135,7 +139,7 @@ NOW=${GRAPH_RECONCILE_NOW:-$(date -u +%s)}
 # The id shape is validated HERE, at the point unvalidated frontmatter strings
 # first enter the sweep, because the tab/newline-delimited `read` loops below
 # cannot see the difference between a multi-line id and two records. See
-# validate_node_id() for why an id carrying `=`, whitespace, or a control
+# lib-graph-base-pin.sh for why an id carrying `=`, whitespace, or a control
 # character is unsafe downstream (it silently re-keys graph-commit's
 # `--base <id>=<sha>` pin). Refuse the sweep rather than reconcile the node with
 # a broken or mis-keyed compare-and-swap base.
@@ -279,28 +283,11 @@ RESTORE_ON_FAILURE=0
 # trusted to restore to. Captured in Step 3; read by restore_node_files().
 HEAD_AT_ARM=""
 
-# A node id must be safe both as a single path component and as the KEY of
-# graph-commit's `--base <id>=<blobsha>` pair. add_blob_pair() splits the pair at
-# the FIRST `=` (packages/intentionsutil/scripts/graph-commit:369-378), so an id
-# containing `=` is silently re-keyed: `tactic-a=b` records the pin under the
-# truncated id `tactic-a` with the garbage sha `b=<real-sha>`. If a genuine
-# `tactic-a` is in the same batch its correct pin is overwritten, and
-# check_base_freshness then three-way merges against the wrong (or unresolvable)
-# base — defeating the very lost-update protection the pin exists to provide.
-# Whitespace and control characters are equally unsafe: the pin loop reads the
-# planned edit ids line by line, so a multi-line id would hash the wrong path and
-# leave the true id unpinned.
-#
-# Node ids are unvalidated frontmatter strings, so gate them here. Hard-error
-# (.claude/rules/code-style.md: clear errors over fallbacks) rather than skipping
-# the pin — a skipped pin is an UNPROTECTED write, exactly the failure this
-# compare-and-swap closes.
-validate_node_id() {
-  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
-    echo "reconcile-graph-merged: unsafe node id $(printf '%q' "$1") — ids must match ^[A-Za-z0-9][A-Za-z0-9._-]*\$ (no '=', whitespace, or control characters) to be a valid --base pair key" >&2
-    exit 1
-  }
-}
+# The id-shape gate lives in lib-graph-base-pin.sh — see that file's header for
+# WHY an id carrying `=`, whitespace, or a control character is unsafe as a
+# `--base <id>=<sha>` pair key. This sweep uses the hard-error form
+# (require_safe_node_id): a planned edit id it cannot pin is a real error, not a
+# skip, because a skipped pin is an UNPROTECTED write.
 
 # The rollback itself lives in lib-graph-rollback.sh — see that file's header
 # for WHY it restores to HEAD rather than to a captured blob, and how it tells
@@ -322,25 +309,18 @@ PLAN_ONLY="$( (cd "$REPO_ROOT" && node --import tsx/esm "$UTIL_SCRIPTS/reconcile
 
 # Step 2: pin every planned edit id's diagnosis-time base blob — the blob of the
 # ON-DISK file, which is exactly the content reconcile-graph.ts's readNode reads
-# in Step 3. NOT origin/main's blob: graph-commit defines base as "the blob the
-# writer read", and when this checkout sits behind origin/main the two differ.
-# Pinning origin/main would make scalarMerge compute a spurious "ours" delta on
-# fields this sweep never touched and could revert landed content — the exact
-# failure class the pin exists to close. In the normal synced case the two are
-# byte-identical and the distinction is a no-op.
+# in Step 3. pin_base_blob (lib-graph-base-pin.sh) holds the two properties an
+# implementer must not lose: `-w` is mandatory, and the blob pinned is the DISK
+# blob and never origin/main's. See that file's header for both.
 #
-# `-w` is MANDATORY, not an optimization: check_base_freshness resolves the base
-# with `git cat-file -p <sha>` and die()s with "base blob … is unreadable in the
-# local object database" when it misses. A disk blob differing from every
-# committed blob is absent from the object database unless -w writes it there,
-# so omitting -w would convert a benign stale base into a hard die. Keep the
-# hard-error posture (.claude/rules/code-style.md: clear errors over fallbacks)
-# — a hash-object failure on a planned edit id is a real error, not a skip.
+# pin_base_blob RETURNS non-zero rather than exiting, so each caller picks its
+# posture. This sweep keeps the hard error (.claude/rules/code-style.md: clear
+# errors over fallbacks) — a hash-object failure on a planned edit id is a real
+# error, not a skip. The diagnostic is already printed; supply only the exit.
 while IFS= read -r sid; do
   [[ -n "$sid" ]] || continue
-  validate_node_id "$sid"
-  blob=$(git -C "$REPO_ROOT" hash-object -w -- "intentions/$sid.md") || {
-    echo "reconcile-graph-merged: cannot pin base blob for $sid (no CAS base, no rollback path)" >&2; exit 1; }
+  require_safe_node_id reconcile-graph-merged "$sid"
+  blob=$(pin_base_blob "$REPO_ROOT" reconcile-graph-merged "$sid") || exit 1
   BASE_BLOB[$sid]="$blob"
 done < <(jq -r '.edit[]?' <<<"$PLAN_ONLY")
 
@@ -416,9 +396,9 @@ GC_ARGS=(-C "$REPO_ROOT" -m "graph: reconcile terminal tactics (record completio
 #
 # Re-gate the id shape here too, at the exact point the `<id>=<sha>` pair is
 # built: graph-commit splits the pair at the FIRST `=`, so an id carrying one
-# would be silently re-keyed onto a different node (see validate_node_id()).
+# would be silently re-keyed onto a different node (see lib-graph-base-pin.sh).
 for id in "${EDIT[@]}"; do
-  validate_node_id "$id"
+  require_safe_node_id reconcile-graph-merged "$id"
   [[ -n "${BASE_BLOB[$id]:-}" ]] || {
     echo "reconcile-graph-merged: no pinned base blob for planned edit id $id (plan drifted between the --no-apply and apply runs)" >&2
     exit 1; }

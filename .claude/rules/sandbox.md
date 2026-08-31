@@ -221,9 +221,29 @@ are auto-approved; write/execute commands are not — `cd /path && command` stil
 misses rules like `Bash(npx vitest:*)`. Use a directory flag instead:
 `npm run build --prefix print`.
 
-For app vitest suites, root at the worktree/repo root and select the app with
-`--project`: `npx vitest run --project <app> --root <repo_root>`, or from a
-worktree root `npx vitest run --project print --root .`. Rooting at the app dir
+For vitest suites, root at the worktree/repo root and select the workspace with
+`--project`: `npx vitest run --project <workspace-dir> --root <repo_root>`, or
+from a worktree root `npx vitest run --project print --root .`. The flag is not
+apps-only — it takes any workspace directory `vitest.config.ts` builds a project
+for, `packages/*` included (e.g. `npx vitest run --project
+packages/intentionsutil --root .`).
+
+**Nothing downstream is apps-only either** — do not reach for
+`run-unit-tests.sh` as the place the narrowing lives, because it is not there.
+Measured 2026-08-31: `resolve_dirty_apps` (`lib.sh:2480`) longest-prefix-matches
+a changed file against *any* workspace in the root `package.json` and sets
+`dirty_apps["$ws"]=1`, `packages/*` included; `APP_DIRS` is exactly those
+matches (`run-unit-tests.sh:113`, `APP_DIRS=("${!DIRTY_APPS[@]}")`); and every
+entry is fed straight into `PROJECT_ARGS` (`:145-149`). Feeding it
+`packages/intentionsutil/src/transitions.ts` yields `packages/intentionsutil`,
+`office-hours` and `artifacts/plan-view`. So a packages-only PR really does run
+`npx vitest run --project packages/intentionsutil` in CI, and the sole exclusion
+anywhere on this path is `packages/rules-test`.
+
+The name `APP_DIRS` is the whole trap: it holds workspaces, not apps, so reading
+the variable name as a contract reproduces exactly the mistake this section
+exists to correct — treating a caller's argument loop as a narrowing that was
+never there. Rooting at the app dir
 (`--root print`) scopes vite's `server.fs.allow` to `print/`, so root-hoisted
 `?url` asset imports (`pdfjs-dist`'s worker, hoisted to the root `node_modules`
 by npm workspaces) are denied and correct changes false-fail. The repo-root form
