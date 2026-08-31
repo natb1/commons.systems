@@ -14,7 +14,7 @@ docs PR.
 | pos | plan est | measured | status (2026-08-31) |
 |-----|----------|----------|---------------------|
 | 1-4 | - | done | landed |
-| 5 | 2 | 6-7 | **stopped mid-position** (2026-08-31, user-directed): #3178 merged 14:56Z; #3181 (Units 2+3) round 2 settled, auto-merge armed 17:26Z; #3180 (rsi-audit usage aggregation + session-stamp hooks) round 2 settled, fixes in flight, merge on green. Units 4-8 and the graph bookkeeping landing not started — tasks #127, #128 |
+| 5 | 2 | 6-7 | **stopped mid-position** (2026-08-31, user-directed): #3178 merged 14:56Z; #3181 (Units 2+3) merged 17:35Z; #3180 (rsi-audit usage aggregation + session-stamp hooks) merged 20:11Z. **Nothing is left running** — the drain is complete, which is the state the STOP ruling below requires. Units 4-8 and the graph bookkeeping landing not started — tasks #127, #128 |
 | 6 | per plan | unmeasured | not started |
 | 7 | 1 (~20 units) | 6 PRs / 63 units | parks staged: 3 clear-park + 1 leave-held |
 | 8 | 3 | 4-5 | not started |
@@ -130,14 +130,23 @@ their own source inline — do not read them as user rules.
   rewrite, and the retired-stub prose. `rsi/SKILL.md` and `rsi-audit/SKILL.md`
   (not `dispatch-ladder/SKILL.md`, which only passes the bound) each carry a
   hard "mint nothing" branch for Unit 4 to convert, and name Unit 4 in the
-  prose, so they are greppable. Task #128.
+  prose, so they are greppable — but **grep case-insensitively**:
+  `rsi-audit/SKILL.md:191` writes it lowercase and `rsi/SKILL.md:314`
+  capitalizes it (`**Mint nothing, and write nothing.**`), so `grep 'mint
+  nothing'` finds only one of the two and reads as though `rsi/SKILL.md` were
+  already converted. Task #128.
 - Task #127 — three design calls deferred out of #3180 round 2 want a follow-up
-  node. **All three `path:line` anchors below resolve on #3180's branch
-  (`agent-a1cabfeca49083030`), not on `origin/main`** — #3180 is unmerged, and
-  on main `stamp-dispatch-session.sh` is 55 lines and `aggregate-usage.sh` has
-  no `review_runs` at all, so an anchor that finds nothing means "read the
-  branch", never "already fixed". The three: the `$PWD` sidecar misattribution
-  (`.claude/hooks/stamp-dispatch-session.sh:203`); the Stop fast-path cost
+  node. #3180 **merged** 2026-08-31 20:11Z (squashed onto main as `35fc5573`),
+  so all three `path:line` anchors below now resolve on `origin/main`. Measured
+  there after the merge: `stamp-dispatch-session.sh` is 233 lines and
+  `aggregate-usage.sh` carries 12 `review_runs` occurrences. Before that merge
+  main had a 55-line hook and no `review_runs` at all — so an anchor that finds
+  nothing means the checkout predates `35fc5573`, never "already fixed". The
+  three: the `$PWD` sidecar misattribution
+  (`.claude/hooks/stamp-dispatch-session.sh:217`, the `SESSION_DIR="$PWD"`
+  last-resort branch — re-measured on `origin/main` at `35fc5573`; the
+  previously recorded `:203` lands in the ancestor-walk loop, not on the
+  `$PWD` fallback); the Stop fast-path cost
   (`:105`, raised independently by *both* round-2 runs); and the `review_runs`
   replay double-count (`.claude/skills/rsi-audit/scripts/aggregate-usage.sh:859`
   — measured runs 5 / sessions 2, one review counted twice, which inflates the
