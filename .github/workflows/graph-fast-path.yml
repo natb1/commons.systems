@@ -90,6 +90,18 @@ jobs:
   # CI minutes recomputing a known answer; omitting them leaves the context
   # absent and permanently unpromotable. The stub is the honest third option.
   #
+  # WHAT THAT PROVES IS "UNCHANGED", NOT "PASSING", and the gap is a second
+  # promotion blocker. The guard establishes that the pushed tree's
+  # non-`intentions/` half is byte-identical to the `main` this commit rebased
+  # onto; it says nothing about whether these checks were GREEN on that `main`.
+  # During a red-main episode (`repo-health --main-broken-sha` latched) a graph
+  # landing rebases onto the red tree, `guard` passes because the push is
+  # `intentions/`-only, and the `typecheck` stub stamps `success` on a SHA that
+  # does not typecheck — then fast-forwards it onto `main`. Promoted, that is a
+  # context reporting green on every graph landing regardless of the tree's real
+  # verdict: the same "gate that does not gate" the next paragraph raises for
+  # `skipped`, except always-on rather than only on guard rejection.
+  #
   # THE PREMISE HAS ONE KNOWN BOUND, and it is not "every commit" without
   # qualification. GitHub caps a push event's `commits` array at 20 entries, and
   # `github.event.commits.*.id` is exactly what the guard iterates — so a
@@ -188,11 +200,14 @@ jobs:
   # `read-sensors.ts:1457`,
   # `.claude/skills/dispatch-propagate/scripts/detect-changes.sh:83`,
   # `.github/workflows/unit-tests.yml:133`,
-  # `packages/intentionsutil/test/reader-required-dir.test.ts:94`,
-  # `packages/intentionsutil/SEPARABILITY.md:137` — all of which a rename would
-  # strand. No machine reference to the name exists (`graph-commit`'s poll
-  # excludes `guard` by name filter), so the rename would have been safe
-  # mechanically and wrong descriptively.
+  # `packages/intentionsutil/test/reader-required-dir.test.ts:94` — all of which
+  # a rename would strand. `packages/intentionsutil/SEPARABILITY.md` is NOT on
+  # that list, despite documenting this workflow: measured 2026-08-30,
+  # `grep -ic guard packages/intentionsutil/SEPARABILITY.md` is 0 — it cites
+  # this file by PATH, never by job name, so a rename leaves it correct. No
+  # machine reference to the name exists either (`graph-commit`'s poll excludes
+  # `guard` by name filter), so the rename would have been safe mechanically and
+  # wrong descriptively.
   graph-validate:
     needs: guard
     runs-on: ubuntu-latest

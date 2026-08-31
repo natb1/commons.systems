@@ -14,8 +14,8 @@
 # rebase-retry loop.
 #
 # Why the stamp step is required: `main`'s branch-protection ruleset requires
-# four status checks (`acceptance`, `preview-and-smoke`, `lint`, `unit-tests`)
-# to already be green ON THE EXACT SHA before it will accept a push of that SHA
+# three status checks (`acceptance`, `lint`, `unit-tests`; this loop also waits
+# on `preview-and-smoke`) already green ON THE EXACT SHA before it accepts it
 # — checks attach to the SHA, not the branch. A brand-new local commit has zero
 # check runs, so `git push origin HEAD:main` on it is deterministically
 # rejected. The repo's `graph/**` CI fast path

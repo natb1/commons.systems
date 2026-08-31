@@ -117,15 +117,29 @@ documented vendoring path) is real work.
 **What breaks:** `graph-commit` — the "single write primitive that lands node
 edits on main" — cannot run against a repo that lacks (a) GitHub hosting with an
 authenticated `gh` CLI, (b) the `graph/**` CI fast-path workflow, and (c) a
-branch-protection ruleset requiring exactly the four checks
-`acceptance`, `preview-and-smoke`, `lint`, `unit-tests`.
+branch-protection ruleset whose required-check names `graph-commit` hardcodes.
+Measured 2026-08-30, the two sets are not identical and an adopter must satisfy
+the union: ruleset 12884700 requires THREE contexts (`acceptance`, `lint`,
+`unit-tests`), while `graph-commit`'s poll waits on FOUR, adding
+`preview-and-smoke`.
+
+```
+gh api repos/natb1/commons.systems/rulesets/12884700 \
+  --jq '.rules[]|select(.type=="required_status_checks")|.parameters.required_status_checks[].context'
+acceptance
+lint
+unit-tests
+```
 
 **Evidence:**
 
 - `scripts/graph-commit:16-27` — the header states main's branch-protection
-  ruleset requires those four named status checks green on the exact SHA before
-  a push is accepted, and that the `graph/**` fast path is what stamps them.
-- `scripts/graph-commit:343-346` — polls
+  ruleset requires named status checks green on the exact SHA before a push is
+  accepted, and that the `graph/**` fast path is what stamps them. (That header
+  attributes all four polled names to the ruleset; per the measurement above it
+  requires three of them. The fourth, `preview-and-smoke`, is a self-imposed
+  wait, not a host requirement.)
+- `scripts/graph-commit:1977-1987` — polls
   `gh api "repos/{owner}/{repo}/commits/$sha/check-runs"` and selects check runs
   named literally `acceptance` / `preview-and-smoke` / `lint` / `unit-tests`,
   and only those rows written by the GitHub Actions App
@@ -136,9 +150,12 @@ branch-protection ruleset requiring exactly the four checks
   slug too, not just the names.
 - `.github/workflows/graph-fast-path.yml:3-5,34-60` — the `on: push: branches:
   ['graph/**']` workflow that stamps those four contexts for an
-  intentions/-only SHA. (Jobs below line 60 in that file are non-required
-  coverage stubs, not part of this coupling.) A consumer repo has neither this
-  workflow nor the
+  intentions/-only SHA. (The jobs below line 60 in that file are not part of
+  this coupling: `hook-tests`, `typecheck` and `test-integrity` are non-required
+  coverage stubs, and `graph-validate` — explicitly not a stub — re-reports the
+  `guard` job's own flagless `validate-graph.ts` verdict under a second name.
+  None is required by the ruleset.) A consumer repo has neither this workflow
+  nor the
   ruleset; without it, `graph-commit`'s scratch-branch stamp step never goes
   green and the push loop times out.
 - Further host couplings: the office_hours parking fallback shells out to
