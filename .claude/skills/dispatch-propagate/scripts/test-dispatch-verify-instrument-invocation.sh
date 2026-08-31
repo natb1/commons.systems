@@ -37,14 +37,22 @@ vi_cleanup() { [ -n "${VERIFY_ROOT:-}" ] && rm -rf "$VERIFY_ROOT"; return 0; }
 # `rm`'s 0 and turn a failing suite green. `set +e` guards the `(exit "$rc")`
 # that restores the status, which errexit would otherwise treat as a failing
 # non-final command and act on.
+# Signals get their OWN handlers, and the status is passed in explicitly.
+# `trap fn EXIT INT TERM` installs one handler for all three, and at handler
+# entry $? is the last COMPLETED command's status -- NOT 128+signo. So a suite
+# killed by TERM (a cancelled Actions job, a step timeout) or INT (Ctrl-C) ran
+# only part of its assertions and still exits 0: green. CI runs this suite
+# unguarded, so that is a vacuous pass of exactly the shape this PR closes.
 vi_exit_trap() {
-  local rc=$?
+  local rc=${1:-$?}
   vi_cleanup
   set +e
   (exit "$rc")
   _dispatch_test_exit_trap
 }
-trap vi_exit_trap EXIT INT TERM
+trap vi_exit_trap EXIT
+trap 'vi_exit_trap 130' INT
+trap 'vi_exit_trap 143' TERM
 # Temp projects root. mktemp -d honors $TMPDIR when set and is what every
 # sibling suite in this directory uses, so it never lands in a bare /tmp the
 # sandbox denies (.claude/rules/sandbox.md).
@@ -335,7 +343,7 @@ assert_eq "case 9: no invocations from a pruned file" "0" "$(jq -r '.invocations
 #                                         half; the buggy idiom returns 0 here)
 # ---------------------------------------------------------------------------
 echo "Regression: the EXIT trap chains onto the fixture's leak guards"
-vi_trap_harness() {  # <path> <"clean"|"leak"|"fail">
+vi_trap_harness() {  # <path> <"clean"|"leak"|"fail"|"signal">
   {
     printf '%s\n' '#!/usr/bin/env bash'
     printf '%s\n' 'set -euo pipefail'
@@ -343,7 +351,9 @@ vi_trap_harness() {  # <path> <"clean"|"leak"|"fail">
     printf '%s\n' 'VERIFY_ROOT=""'
     declare -f vi_cleanup
     declare -f vi_exit_trap
-    printf '%s\n' 'trap vi_exit_trap EXIT INT TERM'
+    printf '%s\n' 'trap vi_exit_trap EXIT'
+    printf '%s\n' "trap 'vi_exit_trap 130' INT"
+    printf '%s\n' "trap 'vi_exit_trap 143' TERM"
     printf '%s\n' 'VERIFY_ROOT=$(mktemp -d)'
     if [ "$2" = "leak" ]; then
       # A recorded call to the real `systemctl` is exactly what
@@ -353,6 +363,13 @@ vi_trap_harness() {  # <path> <"clean"|"leak"|"fail">
     if [ "$2" = "fail" ]; then
       printf '%s\n' 'assert_eq "deliberate failure" "expected" "actual"'
       printf '%s\n' 'report_results'
+    elif [ "$2" = "signal" ]; then
+      # Kill the harness with TERM mid-run. bash runs the trap between
+      # commands, so the `exit 0` below is never reached WHEN THE HANDLER
+      # IS CORRECT -- and is exactly what a buggy handler falls through
+      # to, which is what makes this case discriminating.
+      printf '%s\n' 'kill -TERM $$'
+      printf '%s\n' 'exit 0'
     else
       printf '%s\n' 'exit 0'
     fi
@@ -360,7 +377,7 @@ vi_trap_harness() {  # <path> <"clean"|"leak"|"fail">
 }
 
 VI_TRAP_DIR=$(mktemp -d "$VERIFY_ROOT/traptest.XXXXXX")
-for vi_trap_case in clean leak fail; do
+for vi_trap_case in clean leak fail signal; do
   vi_trap_harness "$VI_TRAP_DIR/$vi_trap_case.sh" "$vi_trap_case"
   VI_TRAP_TMPDIR=$(mktemp -d "$VI_TRAP_DIR/tmp-$vi_trap_case.XXXXXX")
   set +e
@@ -372,6 +389,10 @@ for vi_trap_case in clean leak fail; do
     "0" "$VI_TRAP_LEFT"
   if [ "$vi_trap_case" = "clean" ]; then
     assert_eq "trap chain (clean): a clean run still exits 0" "0" "$VI_TRAP_RC"
+  elif [ "$vi_trap_case" = "signal" ]; then
+    # The whole point: with one shared EXIT/INT/TERM handler this is 0.
+    assert_eq "trap chain (signal): a TERM-killed suite exits 143, not 0" \
+      "143" "$VI_TRAP_RC"
   else
     [ "$VI_TRAP_RC" -ne 0 ] && _v=nonzero || _v=zero
     assert_eq "trap chain ($vi_trap_case): status reaches the fixture trap" \

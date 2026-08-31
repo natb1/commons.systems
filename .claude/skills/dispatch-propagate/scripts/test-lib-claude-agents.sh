@@ -1964,8 +1964,15 @@ write_fake_claude '[{"id":"c0ffee11","sessionId":"deadbeef-session-uuid","name":
 if out=$(claude_job_id_for_name_all "attach-me"); then rc=0; else rc=$?; fi
 assert_eq "job-id-all: id-not-sessionId exits 0" "0" "$rc"
 assert_eq "job-id-all: stdout is the .id field" "c0ffee11" "$out"
-if [ "$out" = "deadbeef-session-uuid" ]; then leaked=sessionId; else leaked=id; fi
-assert_eq "job-id-all: stdout is NOT the .sessionId field" "id" "$leaked"
+# Three-way, not two-way: an `else leaked=id` arm maps EVERY wrong answer
+# -- including an empty string -- onto the passing value, so it could only
+# ever catch one specific wrong output.
+case "$out" in
+  c0ffee11) emitted=id ;;
+  deadbeef-session-uuid) emitted=sessionId ;;
+  *) emitted="neither:$out" ;;
+esac
+assert_eq "job-id-all: stdout is the .id field and not .sessionId" "id" "$emitted"
 ca_teardown
 
 # --- Test 78: claude_job_id_for_name_all — no name match is a DEFINITE no -----
@@ -1995,7 +2002,13 @@ ca_teardown
 
 echo "Test: claude_job_id_for_name_all reports a non-zero claude exit as unknown"
 ca_setup
-write_fake_claude '' 1
+# The payload is VALID and name-matching on purpose. An empty one would
+# also trip the blank-output guard (lib-claude-agents.sh:776-778), so both
+# guards would fire and deleting the exit-status guard at :773-775 would
+# leave this case green. With a payload that would otherwise MATCH, the
+# exit status is the only thing that can produce rc 1. Test 82 covers the
+# zero-exit/blank-output branch.
+write_fake_claude '[{"id":"aaaa1111","sessionId":"sess-a","name":"wanted-job"}]' 1
 if out=$(claude_job_id_for_name_all "wanted-job"); then rc=0; else rc=$?; fi
 assert_eq "job-id-all: non-zero claude exit is unknown (rc 1)" "1" "$rc"
 assert_eq "job-id-all: non-zero claude exit prints nothing" "" "$out"

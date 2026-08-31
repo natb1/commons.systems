@@ -279,14 +279,22 @@ dc_real_cleanup() { [ -n "${DC_REAL_TMP:-}" ] && rm -rf "$DC_REAL_TMP"; return 0
 # `rm`'s 0 and turn a failing suite green. `set +e` guards the `(exit "$rc")`
 # that restores the status, which errexit would otherwise treat as a failing
 # non-final command and act on.
+# Signals get their OWN handlers, and the status is passed in explicitly.
+# `trap fn EXIT INT TERM` installs one handler for all three, and at handler
+# entry $? is the last COMPLETED command's status -- NOT 128+signo. So a suite
+# killed by TERM (a cancelled Actions job, a step timeout) or INT (Ctrl-C) ran
+# only part of its assertions and still exits 0: green. CI runs this suite
+# unguarded, so that is a vacuous pass of exactly the shape this PR closes.
 dc_real_exit_trap() {
-  local rc=$?
+  local rc=${1:-$?}
   dc_real_cleanup
   set +e
   (exit "$rc")
   _dispatch_test_exit_trap
 }
-trap dc_real_exit_trap EXIT INT TERM
+trap dc_real_exit_trap EXIT
+trap 'dc_real_exit_trap 130' INT
+trap 'dc_real_exit_trap 143' TERM
 DC_REAL_TMP=$(mktemp -d)
 
 # ---------------------------------------------------------------------------
@@ -317,7 +325,9 @@ dc_trap_harness() {  # <path> <"clean"|"leak">
     printf '%s\n' 'DC_REAL_TMP=""'
     declare -f dc_real_cleanup
     declare -f dc_real_exit_trap
-    printf '%s\n' 'trap dc_real_exit_trap EXIT INT TERM'
+    printf '%s\n' 'trap dc_real_exit_trap EXIT'
+    printf '%s\n' "trap 'dc_real_exit_trap 130' INT"
+    printf '%s\n' "trap 'dc_real_exit_trap 143' TERM"
     printf '%s\n' 'DC_REAL_TMP=$(mktemp -d)'
     if [ "$2" = "leak" ]; then
       # A recorded call to the real `systemctl` is exactly what
