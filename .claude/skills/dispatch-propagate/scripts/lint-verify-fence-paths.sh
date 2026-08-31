@@ -117,12 +117,16 @@
 #
 # --repo-root defaults to the repo containing the CWD (not the one containing
 # this script). When the script is invoked from a checkout other than the one
-# it lives in, --repo-root is REQUIRED — see the resolution block below.
+# it lives in, --repo-root is REQUIRED — see the resolution block below. An
+# EXPLICIT --repo-root must name the git TOPLEVEL of that checkout; a
+# subdirectory is refused with exit 2 rather than normalized, because this
+# script spells its target three ways that only agree at the toplevel.
 #
 # Exit codes:
 #   0  no violations (or every violation is grandfathered by the baseline)
 #   1  at least one new violation
-#   2  bad usage / unreadable input
+#   2  bad usage / unreadable input, or a --repo-root that is not the git
+#      toplevel
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -180,6 +184,63 @@ if [[ -z "$REPO_ROOT" ]]; then
     echo "  pass --repo-root to name the tree to scan" >&2
     exit 2
   fi
+else
+  # An EXPLICIT --repo-root must name the git TOPLEVEL, and a subdirectory is
+  # REFUSED rather than normalized.
+  #
+  # (i) Why a subdirectory is silently catastrophic here. Nothing below
+  #     re-derives the root: INTENTIONS_DIR becomes "$REPO_ROOT/intentions",
+  #     which under a subdirectory does not exist, and because the path was
+  #     default-resolved rather than explicitly named the block below takes the
+  #     bare `exit 0` — a REQUIRED gate reporting PASS having scanned zero
+  #     nodes. Supply --intentions-dir so nodes ARE scanned and the second
+  #     spelling misfires instead: the existence test
+  #     `[[ -e "$REPO_ROOT/$stripped" ]]` resolves fence paths against the
+  #     subdirectory, so a path that still exists reads as an orphan (and one
+  #     that is genuinely orphaned can read as present). Measured pre-fix on
+  #     this repo: `--repo-root <root>/.claude` exits 0 with empty stdout AND
+  #     empty stderr, indistinguishable from a clean run.
+  #
+  # (ii) Why this REFUSES where the explicit-`--repo-root` branch of
+  #      check-type-safety-escapes.sh silently normalizes to the toplevel. That
+  #      gate spells its target ONE way (a pathspec prefix), so normalizing is
+  #      lossless. This one spells it THREE ways that disagree in three
+  #      different directions under a subdirectory root: "$REPO_ROOT/intentions"
+  #      (arg-relative), `git -C "$REPO_ROOT" ... ls-tree` (prefix-relative),
+  #      and "$REPO_ROOT/$stripped" (arg-relative). That is the same
+  #      one-argument-two-spellings hazard clear-park's `-C` contract refuses,
+  #      and the failure mode is failing OPEN on a required gate — the caller
+  #      never learns their invocation was wrong. Both live callers already pass
+  #      the exact toplevel, so refusing costs nothing.
+  #
+  # (iii) Why the test is `rev-parse --show-prefix` and NOT a string compare
+  #       against `rev-parse --show-toplevel`. --show-prefix is empty IFF the
+  #       directory IS the toplevel, and it needs no normalization step: it is
+  #       symlink-proof, trailing-slash-proof and `.`-proof. A compare would
+  #       need to normalize the caller's path, and the only portable way to do
+  #       that (`cd ... && pwd`) is LOGICAL while --show-toplevel is
+  #       SYMLINK-RESOLVED — see the SCRIPT_GIT_ROOT divergence guard's comment
+  #       in .github/scripts/check-type-safety-escapes.sh for why comparing
+  #       those two normalizations makes a checkout reached through a symlink
+  #       read as two different trees and abort on the tree it is standing in.
+  #       That matters for this script's own test suite, whose FIXTURE_REPO
+  #       comes from `mktemp -d` and carries whatever spelling $TMPDIR has.
+  RAW_REPO_ROOT="$REPO_ROOT"
+  if [[ ! -d "$RAW_REPO_ROOT" ]]; then
+    echo "lint-verify-fence-paths.sh: --repo-root '$RAW_REPO_ROOT' is not a directory" >&2
+    exit 2
+  fi
+  if ! GIT_TOPLEVEL="$(git -C "$RAW_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null)"; then
+    echo "lint-verify-fence-paths.sh: --repo-root '$RAW_REPO_ROOT' is not inside a git work tree" >&2
+    exit 2
+  fi
+  PREFIX="$(git -C "$RAW_REPO_ROOT" rev-parse --show-prefix)"
+  if [[ -n "$PREFIX" ]]; then
+    echo "lint-verify-fence-paths.sh: --repo-root '$RAW_REPO_ROOT' is not the git toplevel (that is '$GIT_TOPLEVEL');" >&2
+    echo "  pass the checkout root, or this gate resolves intentions/ and the fence paths it checks against two different trees" >&2
+    exit 2
+  fi
+  REPO_ROOT="$GIT_TOPLEVEL"
 fi
 INTENTIONS_DIR_EXPLICIT=false
 if [[ -n "$INTENTIONS_DIR" ]]; then

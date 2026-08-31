@@ -44,7 +44,8 @@
 #   containing the CWD — NOT the one containing this script — and when it is
 #   omitted the CWD's root is compared against this script's own root and a
 #   divergence is a hard error naming the flag. That is the shape the nearest
-#   neighbour in this directory already uses (lint-verify-fence-paths.sh:168-181):
+#   neighbour in this directory already uses (lint-verify-fence-paths.sh's
+#   resolution block for an absent --repo-root):
 #   it costs no churn at call sites whose cwd is already right, and it still
 #   refuses to guess when the two trees disagree. Running one checkout's copy of
 #   a script against a DIFFERENT checkout is a routine dispatch pattern, but it
@@ -297,7 +298,8 @@ else
   ROOT="$GIT_OUT"
   # With no --repo-root, a CWD in a different checkout from this script's own
   # means either guess is silently wrong. Refuse, and name the flag that fixes
-  # it — the same contract lint-verify-fence-paths.sh:174-181 applies.
+  # it — the same contract lint-verify-fence-paths.sh's SCRIPT_REPO_ROOT
+  # divergence guard applies.
   SELF_ROOT="$(git -C "$SELF_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
   if [ -n "$SELF_ROOT" ] && [ "$SELF_ROOT" != "$ROOT" ]; then
     die 3 "ERROR: this script lives in $SELF_ROOT but the CWD resolves to $ROOT." \

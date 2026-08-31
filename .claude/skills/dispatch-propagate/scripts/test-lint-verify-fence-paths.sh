@@ -80,6 +80,67 @@ run_lint_warn() {
                    --baseline "$baseline" 2>&1); then RC=0; else RC=$?; fi
 }
 
+# --- 0. an explicit --repo-root must be the git TOPLEVEL ---------------------
+# The vacuous-pass class: the script resolves INTENTIONS_DIR as
+# "$REPO_ROOT/intentions" and tests fence paths as "$REPO_ROOT/$stripped", so a
+# --repo-root naming a SUBDIRECTORY misses both and the default-resolved branch
+# takes the bare `exit 0`. Measured against the unpatched script, the first case
+# below exited 0 with EMPTY stdout AND EMPTY stderr — a REQUIRED gate reporting
+# PASS having scanned nothing — so these cases discriminate on the exit code AND
+# on the message, never on the exit code alone.
+#
+# `run_lint`/`run_lint_warn` are deliberately NOT used: both hardcode
+# --repo-root "$FIXTURE_REPO", which is the thing under test here.
+#
+# The expected toplevel is read back from git rather than compared against
+# $FIXTURE_REPO. mktemp -d returns whatever spelling $TMPDIR carries, while
+# rev-parse --show-toplevel is symlink-RESOLVED; asserting on $FIXTURE_REPO
+# would turn these cases red on any host whose $TMPDIR traverses a symlink.
+FIXTURE_TOPLEVEL="$(git -C "$FIXTURE_REPO" rev-parse --show-toplevel)"
+
+echo "Test: a subdirectory --repo-root is refused, not silently passed"
+reset_nodes
+write_node live-orphan implement '## Verification
+```verify
+bash .claude/dead-script.sh
+```'
+if ARGOUT=$("$LINT" --repo-root "$FIXTURE_REPO/.claude" \
+                    --baseline "$EMPTY_BASELINE" --no-status-warn 2>&1); then ARGRC=0; else ARGRC=$?; fi
+assert_eq "subdirectory --repo-root exits 2" "2" "$ARGRC"
+assert_contains_local "the subdirectory refusal names the flag" \
+  "--repo-root" "$ARGOUT"
+assert_contains_local "the subdirectory refusal names the git toplevel to pass instead" \
+  "(that is '$FIXTURE_TOPLEVEL')" "$ARGOUT"
+
+echo "Test: a --repo-root outside any git work tree is refused"
+NOGIT_DIR="$(mktemp -d)"
+if ARGOUT=$("$LINT" --repo-root "$NOGIT_DIR" \
+                    --baseline "$EMPTY_BASELINE" --no-status-warn 2>&1); then ARGRC=0; else ARGRC=$?; fi
+assert_eq "non-git --repo-root exits 2" "2" "$ARGRC"
+assert_contains_local "the non-git refusal names the path that was passed" \
+  "$NOGIT_DIR" "$ARGOUT"
+rmdir "$NOGIT_DIR"
+
+echo "Test: a --repo-root that is not a directory is refused"
+if ARGOUT=$("$LINT" --repo-root "$FIXTURE_REPO/.claude/live-script.sh" \
+                    --baseline "$EMPTY_BASELINE" --no-status-warn 2>&1); then ARGRC=0; else ARGRC=$?; fi
+assert_eq "non-directory --repo-root exits 2" "2" "$ARGRC"
+assert_contains_local "the non-directory refusal says so" \
+  "is not a directory" "$ARGOUT"
+
+# The positive control: the exact toplevel still works. Without it a fix that
+# refused EVERY --repo-root would pass all three cases above.
+echo "Test: the exact git toplevel is still accepted"
+reset_nodes
+write_node live-existing implement '## Verification
+```verify
+bash .claude/live-script.sh
+```'
+if ARGOUT=$("$LINT" --repo-root "$FIXTURE_TOPLEVEL" \
+                    --baseline "$EMPTY_BASELINE" --no-status-warn 2>&1); then ARGRC=0; else ARGRC=$?; fi
+assert_eq "toplevel --repo-root still exits 0" "0" "$ARGRC"
+assert_eq "toplevel --repo-root still prints nothing" "" "$ARGOUT"
+
 # --- 1. live node, fence names an EXISTING path -> pass ---------------------
 echo "Test: live node with an existing fence path passes"
 reset_nodes
