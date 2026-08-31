@@ -6,7 +6,7 @@ statement: Migrate the graph to the symmetric substantiation edges —
   rationale prose, validate-graph mirror enforcement, and the stamp vocabulary
   sweep (old state names → ratified/deferred/delegated)
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Retained from the 2026-08-30 resolution round, which ratified the
   symmetric locus doctrine (strategy-explicit-intent's superseded locus
@@ -71,79 +71,191 @@ clarifications:
       Mount-record shape and lint mechanics are delegated to Claude under the
       2026-08-30 resolution round, so this is Claude's to settle by greenfield
       merit in the plan, not an author gate."
+  - question: What rule disposes each legacy (node, tradition) pair, and who
+      exercises it (finalize interview, 2026-08-31)?
+    answer: "(Recorded 2026-08-31 finalize interview.) The per-pair disposition rule
+      is ratified: for each of the 24 legacy (node, tradition) pairs across the
+      10 attributes.traditions bearers, an adopted entry on the tradition record
+      naming the node becomes substantiated_by; a diverged/chosen_over entry
+      contradicting the node's content becomes contradicted_by, with Claude
+      back-filling the missing locus into the tradition entry where the entry
+      names none (an inference, deferred-stamped); where neither kind of entry
+      exists the pair is dropped and the drop recorded as a dated clarification
+      on the bearer. Contradictions become edges, never clarifications -
+      clarifications record only drops. Claude exercises the disposition for all
+      pairs, virtue-layer included, under the standing greenfield-merit
+      delegation; every virtue-layer edge write and locus back-fill carries a
+      deferred stamp so it enters the /exetasis review queue. (decision:
+      author-ratified, 2026-08-31)"
+  - question: How does the mirror check land - rule number, id convention, baseline
+      (finalize interview, 2026-08-31)?
+    answer: "(Recorded 2026-08-31 finalize interview; delegated by the author as a
+      testing detail.) Take the next free validateGraph rule number at land
+      time, never pinned in the plan. Re-measured 2026-08-31:
+      tactic-supersession-edge-and-terminal landed rules 24/25/26 on main
+      (commit f0603ff7), superseding this node's earlier '23 and 24 claimed,
+      unlanded' baseline, so the expected claim is 27 - re-checked against the
+      schema.ts collision note at implementation time. The mirror check keys
+      tradition-record entries to node ids by an id-substring convention over
+      adopted/diverged/chosen_over entry text, and a grandfather baseline
+      freezes the asymmetries present at the migration commit (the
+      prose-ref-baseline.json / plan-body-baseline.json rollout precedent), so
+      only new edges are enforced. (decision: delegated,
+      delegation-anthropic-claude, 2026-08-31)"
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Requirement ambiguity in scope item (1), for author ratification: this
-    tactic's body calls itself \"the mechanical carry\" of the author-ratified
-    symmetric-edge doctrine, but the rename it prescribes is not mechanical
-    against the graph as it stands. Measured on origin/main, 10 nodes carry
-    legacy attributes.traditions as a bare tradition-id list meaning
-    \"traditions engaged here\", and at least one pointer inverts under the
-    doctrine: virtue-philosophical-mobility.md:118-123 lists tradition-stoicism,
-    whose record is origin: declined with no adopted entry naming that virtue
-    and a diverged entry contradicting it by name (\"detachment as telos —
-    mobility is recoverability, not retention\"). Renaming that pointer to
-    substantiated_by would assert on a virtue node the opposite of what the
-    mount record says — a doctrine-bearing edge written at the capture model's
-    steepest position price. Proposed clarification for ratification: the
-    migration disposes each (node, tradition) pair against the mount record —
-    substantiated_by where an adopted entry names the locus, contradicted_by
-    where a diverged/chosen_over entry does, dropped where neither does —
-    instead of renaming the field wholesale; and the author confirms whether
-    Claude may exercise that per-pair disposition under the standing
-    greenfield-merit delegation with a deferred stamp, or whether the
-    virtue-layer pairs are author-owned. Scope items (2), (3) and (4) are
-    unaffected and plannable once this is settled. Two secondary notes recorded
-    on this node's clarifications rather than acted on: the mirror check is not
-    enforceable against today's free-form tradition-record entries without an id
-    convention or a grandfather baseline (delegated, Claude's to settle in the
-    plan), and the mirror rule needs a fresh validateGraph rule number since 23
-    is taken on main and the unlanded tactic-supersession-edge-and-terminal
-    claims 23 and 24. Separately, a record-completeness note for the serving
-    strategy that this per-node session cannot write: strategy-explicit-intent's
-    condition 4 still names /align-audit as the home of the standing-conditions
-    sweep, a home the 2026-08-30 resolution round ordered deprecated and removed
-    (tactic-align-audit-retirement, still status: raw, skill file still live and
-    unmarked at .claude/skills/align-audit/SKILL.md). That staleness does not
-    gate this node's plan; it wants a strategy-target round or an /exetasis
-    sitting. Recommend: rule on the per-pair disposition — ratify the proposed
-    rule (substantiated_by where an adopted entry names the locus,
-    contradicted_by where a diverged/chosen_over entry does, dropped where
-    neither does), or claim the virtue-layer pairs as author-owned — then re-run
-    /align-tactics tactic-substantiation-edge-migration."
-  since: 2026-08-30
-  recommendation: null
-  session_type: other
+superseded_by: []
+supersession_expiry: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Migrate the graph to the symmetric substantiation edges — attributes.traditions → substantiated_by, contradicted_by edges added from rationale prose, validate-graph mirror enforcement, and the stamp vocabulary sweep (old state names → ratified/deferred/delegated)
+# Migrate the graph to the symmetric substantiation edges — attributes.traditions → substantiated_by, contradicted_by edges added from rationale prose, validate-graph mirror enforcement, and the stamp vocabulary sweep
 
-## Parked 2026-08-30 — the rename premise is disputed, not the doctrine
+## Context
 
-The symmetric-edge doctrine itself is author-ratified and unchallenged. What the
-drift review measured (and this session independently re-verified) is that scope
-item (1) — "rename attributes.traditions → substantiated_by on every bearer" —
-is not the mechanical carry the rationale calls it. The legacy field records
-traditions ENGAGED at a node, not traditions substantiating it. Counter-case,
-verified at origin/main f8a337cf: virtue-philosophical-mobility lists
-tradition-stoicism, whose record is origin: declined, has no adopted entry
-naming that virtue, and carries a diverged entry contradicting it by name
-("detachment as telos — mobility is recoverability, not retention"). A wholesale
-rename would write substantiated_by asserting the opposite of the mount record,
-on a virtue node — the capture model's steepest position.
+The symmetric locus doctrine is author-ratified (strategy-explicit-intent's
+superseded locus clarification): substantiation and contradiction are two typed
+edges on the substantiated node (`attributes.substantiated_by` /
+`attributes.contradicted_by`), each mirrored by a locus-naming entry on the
+tradition record (adopted ⇔ substantiated_by; diverged/chosen_over ⇔
+contradicted_by), prose optional narrative. The 2026-08-30 park was resolved by
+the 2026-08-31 finalize interview: the rename is NOT mechanical — the legacy
+`attributes.traditions` field records traditions ENGAGED, not substantiating
+(counter-case: virtue-philosophical-mobility × tradition-stoicism, whose record
+is `origin: declined` with a diverged entry contradicting the virtue) — and the
+author ratified the per-pair disposition rule recorded in this node's
+2026-08-31 clarifications, with Claude exercising it for all pairs. The landed
+edge precedent is `intentions/virtue-right-livelihood.md:54-60`
+(`substantiated_by` + `contradicted_by`), mirrored at
+`intentions/tradition-franciscan.md:37-46` and
+`intentions/tradition-stoicism.md:73-78`. Contradictions become edges, never
+clarifications; clarifications record only dropped pairs.
 
-The office_hours reason carries the proposed per-pair disposition rule for
-ratification; the two clarifications on this node carry the measured migration
-baseline and the mirror-check enforceability observation (id-extraction
-convention + grandfather baseline + fresh validateGraph rule number — 23 is
-taken on main and the unlanded tactic-supersession-edge-and-terminal claims 23
-and 24). Scope items (2), (3), (4) are unaffected and plannable once the rule
-is ruled.
+## Unit 1 — per-pair migration of the 10 legacy bearers
+
+**Recommended model:** opus
+
+Scope:
+
+- Dispose all 24 legacy (node, tradition) pairs per the ratified rule
+  (2026-08-31 clarification on this node). The bearers, measured 2026-08-31:
+  `intentions/strategy-join-existing-practice.md:75` (aristotle, kant);
+  `intentions/strategy-external-calibration.md:98` (plato);
+  `intentions/strategy-open-source-as-gift.md:110` (aristotle);
+  `intentions/strategy-tabletop-storytelling.md:59` (aristotle);
+  `intentions/strategy-philosophical-grounding.md:370` (aristotle, plato, kant,
+  augustine); `intentions/virtue-temperance.md:70` (aristotle, plato);
+  `intentions/virtue-respect-for-persons.md:87` (kant, aristotle);
+  `intentions/virtue-progressive-detachment.md:72` (aristotle, stoicism);
+  `intentions/virtue-philosophical-mobility.md:118` (aristotle, plato, kant,
+  stoicism, augustine); `intentions/virtue-alignment-of-attachments.md:79`
+  (kant, aristotle). Re-measure the set at execution time before editing.
+- Known contradiction pairs, both becoming `contradicted_by:
+  [tradition-stoicism]`: virtue-philosophical-mobility × stoicism (the diverged
+  entry "detachment as telos" at `intentions/tradition-stoicism.md:71-72` names
+  no locus — back-fill the locus into that entry, deferred-stamped) and
+  virtue-progressive-detachment × stoicism (the record's `review_trigger` at
+  `intentions/tradition-stoicism.md:84-86` treats that virtue as a divergence
+  tripwire, and no adopted entry names it — verify against the record at
+  execution and dispose per rule).
+- Check every remaining pair against its tradition record's
+  adopted/diverged/chosen_over entries; write `substantiated_by`,
+  `contradicted_by`, or drop the pair per rule; record every drop as a dated
+  clarification on the bearer. Virtue-layer edge writes and locus back-fills
+  carry `(decision: deferred, delegation-anthropic-claude, YYYY-MM-DD)` stamps.
+- Update the spec text still describing the legacy field:
+  `intentions/kind-strategy.md:101`, `intentions/kind-virtue.md:160`, and the
+  legacy phrasing at `intentions/kind-tradition.md:34-36`.
+- Update the grounding sensor: `packages/intentionsutil/src/grounding.ts:48-51`
+  (`hasTraditionsMark`) keys the grounded/unmarked split on
+  `attributes.traditions`; make `substantiated_by` or `contradicted_by` count
+  as the grounding mark (keeping `attributes.traditions` accepted until the
+  last bearer migrates), and update the fixtures at
+  `packages/intentionsutil/test/grounding.test.ts:63-89`. Without this the
+  rename silently converts all 10 bearers to "unmarked" in
+  strategy-complete-grounding's gap report.
+- Out of scope: the mirror rule (Unit 2), the stamp sweep (Unit 3), and any
+  tradition-record restructuring beyond the locus back-fills this unit's edges
+  mirror.
+
+## Unit 2 — the validate-graph mirror rule
+
+**Recommended model:** opus
+
+Dependencies: Unit 1 (the edges must exist before the mirror is enforced).
+
+- New `validateGraph` rule at the next free number — measured 2026-08-31 rules
+  24/25/26 are landed (the supersession family, commit f0603ff7), so 27 is the
+  expected claim; re-check the collision note in
+  `packages/intentionsutil/src/schema.ts` at implementation time and extend it
+  to record this claim. Burned numbers are never reused.
+- Shape: a `substantiated_by`/`contradicted_by` edge without a matching
+  tradition-record entry naming the node (id-substring convention over
+  adopted/diverged/chosen_over entry text), or a locus-naming entry without its
+  edge, is a violation — except pairs recorded in a grandfather baseline
+  captured at the migration commit (a `substantiation-baseline.json`, following
+  the `prose-ref-baseline.json` rollout at
+  `packages/intentionsutil/scripts/validate-graph.ts` and the
+  `plan-body-baseline.json` pattern in
+  `packages/intentionsutil/src/planlint.ts`).
+- Follow the rule 19/21/22 shape: inert when the keys are absent, shape-checked
+  when present. Unit tests in `packages/intentionsutil/test/`.
+
+## Unit 3 — stamp vocabulary sweep
+
+**Recommended model:** sonnet
+
+No dependency on Units 1–2.
+
+- Sweep the interim stamp vocabulary — `delegated-pending-review → deferred`,
+  `delegated-review-declined → delegated` — across the bearer files measured in
+  this node's 2026-08-30 baseline clarification (9 files then; re-measure at
+  execution, the set moves). tactic-node-review-skill's Unit 2 parser reads
+  both spellings tolerantly, so this sweep gates nothing; sweep prose only and
+  never weaken that tolerance.
+- Leave deliberate historical citations of the old spelling in place (grammar
+  templates and meta-quotes that cite the interim form as history) — judgment
+  per site, each rewrite preserving the sentence's meaning.
+
+## Reuse
+
+- `packages/intentionsutil/src/schema.ts` — rule wiring and the collision
+  note; rules 19/21/22 as the inert-when-absent shape template.
+- `packages/intentionsutil/scripts/validate-graph.ts` and
+  `packages/intentionsutil/src/planlint.ts` — grandfather-baseline rollout
+  precedent.
+- `packages/intentionsutil/src/grounding.ts` +
+  `packages/intentionsutil/test/grounding.test.ts` — the sensor to re-key.
+- `intentions/virtue-right-livelihood.md:54-60` — the landed edge precedent to
+  copy, mirrored at `intentions/tradition-franciscan.md:37-46` and
+  `intentions/tradition-stoicism.md:73-78`.
+- `packages/intentionsutil/scripts/write-node.ts` + `graph-commit` — the only
+  write path; never hand-author frontmatter.
+
+## Verification
+
+```verify
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
+```
+
+```verify
+npm test --prefix packages/intentionsutil
+```
+
+```verify
+grep -n contradicted_by intentions/virtue-philosophical-mobility.md
+```
+
+Manual checks: after Unit 1, every one of the 24 pairs has exactly one
+disposition (edge or recorded drop) and no `attributes.traditions` key remains
+on any bearer; after Unit 2, the baseline file exists and validate-graph is
+green with the new rule wired; after Unit 3, a repo grep for
+`delegated-pending-review` and `delegated-review-declined` returns only
+deliberate historical citations.
