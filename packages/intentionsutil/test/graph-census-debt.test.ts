@@ -200,9 +200,9 @@ describe("computeDebt", () => {
   });
 
   // tactic-eval-finding-ledger — the prune exemption. donePresent is the batch a
-  // census DELETES with `graph-commit --prune`, and a retired ledger entry must
-  // survive with its summary metrics intact so a later recurrence resumes the
-  // count instead of restarting at 1.
+  // census DELETES with `graph-commit --prune`, and a node holding measurements
+  // must survive with its summary metrics intact so a later recurrence resumes
+  // the count instead of restarting at 1.
   it("exempts a retired finding record from the owed-prune batch", () => {
     const nodes = [strategy(), retiredFindingRecord("tactic-eval-finding-stop-hook-hold-loop")];
     const debt = computeDebt(nodes, new Set());
@@ -213,7 +213,13 @@ describe("computeDebt", () => {
   // The exemption is NAMESPACE-FREE. It keyed on attributes.ledger_entry until
   // PR4 Unit 1, a marker only dispatch-eval-finding wrote into
   // `tactic-eval-finding-*`; keying on measured_impact covers every producer.
-  // An id outside that prefix is the case the old predicate could not reach.
+  //
+  // This case does NOT distinguish the two predicates — neither reads `node.id`,
+  // so with the marker dropped from the fixture the old one fails the case above
+  // identically. The id namespace lives in dispatch-eval-finding's `list_entries()`
+  // prefix search, never in the census predicate. Paired with the in-namespace id
+  // above, this pins that the prefix cannot migrate INTO the exemption when
+  // Unit 3 widens that search.
   it("exempts a done node holding measurements from OUTSIDE the eval-finding namespace", () => {
     const nodes = [strategy(), retiredFindingRecord("tactic-graph-commit-landing-lock")];
     const debt = computeDebt(nodes, new Set());
@@ -221,7 +227,7 @@ describe("computeDebt", () => {
     expect(debt.total).toBe(0);
   });
 
-  it("still counts ordinary done nodes alongside an exempt ledger entry", () => {
+  it("still counts ordinary done nodes alongside an exempt finding record", () => {
     const nodes = [
       strategy(),
       doneTactic("tactic-a"),
@@ -298,7 +304,7 @@ describe("computeDebt", () => {
     ]);
   });
 
-  it("keeps a retired ledger entry out of the batch a birthed census would drain", () => {
+  it("keeps a retired finding record out of the batch a birthed census would drain", () => {
     const nodes = [
       strategy(),
       doneTactic("tactic-a"),
