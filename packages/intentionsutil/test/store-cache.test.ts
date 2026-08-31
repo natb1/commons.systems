@@ -368,7 +368,7 @@ describe("storeFingerprint on a filesystem that reports no d_type", () => {
    * reduce to a hash of the sorted file NAMES there and serve every in-place
    * node edit from a stale entry. This stands in for that filesystem.
    */
-  it("still covers file content when every dirent reads as UNKNOWN", async () => {
+  it("still covers file content when every dirent reports UNKNOWN", async () => {
     const dir = tempDir("intentions-");
     seedStore(dir);
 
