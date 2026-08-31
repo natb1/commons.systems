@@ -150,10 +150,15 @@ FAKE
   CLAUDE_AGENTS_CMD="$SD_FAKE"
 }
 
-# sd_write_node <id> <unparked|parked|bodymention> — write one node markdown file
-# into the scratch repo's intentions/ dir.
+# sd_write_node <id> <unparked|parked|bodymention> [node-kind] — write one node
+# markdown file into the scratch repo's intentions/ dir. `node-kind` is the
+# graph `kind:` field and defaults to `tactic`; pass `strategy` for the lane
+# that never pre-provisions a worktree. validateNode (schema.ts) treats `kind`
+# as any non-empty string and makes `success_signal` optional, so a strategy
+# fixture still passes the strict verify-landed read the fake park-node
+# triggers.
 sd_write_node() {
-  local id="$1" kind="$2"
+  local id="$1" kind="$2" node_kind="${3:-tactic}"
   local f="$SD_REPO/intentions/$id.md"
   # `statement`/`owner`/`status` are the IntentionSchema's required core
   # (schema.ts validateNode) — present on every fixture below so a
@@ -165,7 +170,7 @@ sd_write_node() {
       cat > "$f" <<NODE
 ---
 id: $id
-kind: tactic
+kind: $node_kind
 statement: fixture node for lib-standdown-recheck tests
 owner: ai
 status: working
@@ -185,7 +190,7 @@ NODE
       cat > "$f" <<NODE
 ---
 id: $id
-kind: tactic
+kind: $node_kind
 statement: fixture node for lib-standdown-recheck tests
 owner: ai
 status: working
@@ -202,7 +207,7 @@ NODE
       cat > "$f" <<NODE
 ---
 id: $id
-kind: tactic
+kind: $node_kind
 statement: fixture node for lib-standdown-recheck tests
 owner: ai
 status: working
@@ -381,8 +386,10 @@ standdown_write "tactic-dead-insync" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
 sd_run
 assert_eq "dead-insync: sweep returns 0" "0" "$SD_RC"
 assert_eq "dead-insync: park-node invoked exactly once" "1" "$(sd_park_calls)"
+# The reason string is `<tag>: <prose>`, so anchor on the colon: a bare
+# `standdown-winner-dead-node-held*` prefix also matches the no-worktree tag.
 case "$(sd_park_reason)" in
-  standdown-winner-dead-node-held*) sd_reason_tag="yes" ;;
+  standdown-winner-dead-node-held:*) sd_reason_tag="yes" ;;
   *) sd_reason_tag="no" ;;
 esac
 assert_eq "dead-insync: reason carries the node-held tag" "yes" "$sd_reason_tag"
@@ -709,9 +716,13 @@ assert_eq "unsafe-id: stderr reports the unsafe id" "yes" "$(sd_contains 'unsafe
 assert_eq "unsafe-id: the marker is kept" "declared" "$(sd_marker_field tactic-Bad_Id origin)"
 sd_teardown
 
-# --- Test 15: a node with no worktree drops its marker -----------------------
+# --- Test 15: a node with no worktree is PARKED, never cleared ---------------
 
-echo "Test: a marker whose node has no worktree is cleared"
+# Rule (d) has already returned on n_live == 0, so a marker that reaches the
+# no-worktree check is still held by a live session. Clearing it there erased
+# the only durable record of the stand-down; it now selects the
+# no-unpushed-work reason variant of the (h)/(i) park instead.
+echo "Test: a marker whose node has no worktree parks node-held-no-worktree"
 sd_setup
 sd_write_node "tactic-no-worktree" unparked
 sd_commit_nodes
@@ -720,10 +731,72 @@ sd_install_claude 0
 standdown_write "tactic-no-worktree" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
 sd_run
 assert_eq "no-worktree: sweep returns 0" "0" "$SD_RC"
-assert_eq "no-worktree: park-node not invoked" "0" "$(sd_park_calls)"
-assert_eq "no-worktree: the marker file is removed" "no" \
+assert_eq "no-worktree: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "no-worktree: the marker file is kept" "yes" \
   "$(standdown_exists tactic-no-worktree && printf 'yes' || printf 'no')"
-assert_eq "no-worktree: stderr reports the clear" "yes" "$(sd_contains 'cleared-no-worktree tactic-no-worktree')"
+case "$(sd_park_reason)" in
+  standdown-winner-dead-node-held-no-worktree:*) sd_reason_tag="yes" ;;
+  *) sd_reason_tag="no" ;;
+esac
+assert_eq "no-worktree: reason carries the no-worktree tag" "yes" "$sd_reason_tag"
+assert_eq "no-worktree: the reason makes no unpushed-work claim" "no" \
+  "$(case "$(sd_park_reason)" in *UNPUSHED*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "no-worktree: the recommendation omits the push-from-there instruction" "no" \
+  "$(case "$(sd_park_recommendation)" in *'push them from there FIRST'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# No clear of ANY kind is reported. Asserted on the `cleared-` disposition
+# prefix rather than on the retired tag's literal spelling, which the plan's
+# contract fence requires to be absent from this file; the summary line spells
+# its counter `cleared=`, so it is not matched here.
+assert_eq "no-worktree: stderr reports no clear disposition" "no" "$(sd_contains 'cleared-')"
+assert_eq "no-worktree: the sweep summary counts zero clears" "yes" "$(sd_contains 'cleared=0')"
+assert_eq "no-worktree: one decision record, disposition=parked" "parked" "$(sd_log_dispositions)"
+sd_teardown
+
+# --- Test 15b: the clear path was NARROWED, not removed ----------------------
+
+# Same missing-worktree fixture, but with zero live sessions under the node
+# name: rule (d) still owns the one legitimate release. The session under a
+# DIFFERENT name is required — a fully empty registry is UNKNOWN to the
+# uncorroborated-empty guard and would park nothing.
+echo "Test: no worktree AND nobody left still clears via rule (d)"
+sd_setup
+sd_write_node "tactic-no-worktree-nobody-left" unparked
+sd_commit_nodes
+sd_add_session "0cc3-3333" "tactic-some-other-node"
+sd_install_claude 0
+standdown_write "tactic-no-worktree-nobody-left" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "no-worktree-nobody-left: sweep returns 0" "0" "$SD_RC"
+assert_eq "no-worktree-nobody-left: park-node not invoked" "0" "$(sd_park_calls)"
+assert_eq "no-worktree-nobody-left: the marker file is removed" "no" \
+  "$(standdown_exists tactic-no-worktree-nobody-left && printf 'yes' || printf 'no')"
+assert_eq "no-worktree-nobody-left: stderr reports the clear" "yes" \
+  "$(sd_contains 'cleared-no-live-session tactic-no-worktree-nobody-left')"
+sd_teardown
+
+# --- Test 15c: the motivating strategy-lane scenario, end to end -------------
+
+# The strategy lane spawns with --cwd "$PROJECT_ROOT" and never pre-provisions
+# a worktree, so this is the worst case the fix exists for. The branch reads no
+# `kind:` field at all — the same park must fire kind-agnostically.
+echo "Test: a strategy node with no worktree parks node-held-no-worktree"
+sd_setup
+sd_write_node "strategy-no-worktree" unparked strategy
+sd_commit_nodes
+sd_add_session "0bb2-2222" "strategy-no-worktree"
+sd_install_claude 0
+standdown_write "strategy-no-worktree" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "strategy-no-worktree: sweep returns 0" "0" "$SD_RC"
+assert_eq "strategy-no-worktree: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "strategy-no-worktree: the marker file is kept" "yes" \
+  "$(standdown_exists strategy-no-worktree && printf 'yes' || printf 'no')"
+case "$(sd_park_reason)" in
+  standdown-winner-dead-node-held-no-worktree:*) sd_reason_tag="yes" ;;
+  *) sd_reason_tag="no" ;;
+esac
+assert_eq "strategy-no-worktree: reason carries the no-worktree tag" "yes" "$sd_reason_tag"
+assert_eq "strategy-no-worktree: one decision record, disposition=parked" "parked" "$(sd_log_dispositions)"
 sd_teardown
 
 # --- Test 16: a name with no node file on origin/main is kept, not parked ----

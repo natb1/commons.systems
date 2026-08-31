@@ -130,17 +130,25 @@
 #     f. node id absent from origin/main's `intentions/` → `not-a-node`, keep;
 #        or the node is already parked → `already-parked`, keep. Next.
 #        (Lazy `git fetch`, at most once per invocation, precedes this read.)
-#     -  worktree directory missing → clear the marker, `cleared-no-worktree`,
-#        next. A variant of "no unpushed work is possible", checked explicitly
-#        here because rules (h)/(i) assume the worktree exists.
-#     g. the park cap for this pass is spent → `deferred`, keep, next.
+#     -  worktree directory missing → NO clear. It selects the no-worktree
+#        reason variant of the park below and SKIPS both sync predicates, which
+#        fail on a missing directory and would be misread as "unpushed". Rule
+#        (d) has already returned on `n_live == 0`, so a marker reaching this
+#        point is held by at least one live session — a missing worktree means
+#        no unpushed work is possible, never that the node is free. Two lanes
+#        never pre-provision one (`kind == strategy`, and the `align-tactics`
+#        rung), so this is a normal state for a stranded node.
+#     g. the park cap for this pass is spent → `deferred`, keep, next. A
+#        no-worktree park consumes cap budget like any other.
 #     h. the worktree is NOT in sync — BOTH `worktree_in_sync` and
 #        `worktree_merged_in_sync` are false → PARK,
 #        `standdown-winner-dead-work-unpushed`. The second predicate is what
 #        keeps a post-squash-merge local merge commit from being misread as
 #        stranded work.
-#     i. otherwise (in sync, node still held) → PARK,
-#        `standdown-winner-dead-node-held`.
+#     i. otherwise (node still held) → PARK. Two reason tags:
+#        `standdown-winner-dead-node-held-no-worktree` when the worktree is
+#        missing (checked FIRST, makes no unpushed-work claim), otherwise
+#        `standdown-winner-dead-node-held` (in sync).
 #
 #   Fail-safe posture: if EITHER underlying liveness call is UNKNOWN, every
 #   marker is treated as `observing` for the pass and nothing is parked or
@@ -662,18 +670,21 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
       fi
 
       # Worktree path, DERIVED (never read from the daemon), mirroring
-      # dispatch-graph-execute's CONFLICT_WT composition. A missing directory
-      # means no unpushed work is possible and nothing is held in a checkout —
-      # drop the marker. Checked here, ahead of rules (h)/(i), because both
-      # assume the worktree exists.
+      # dispatch-graph-execute's CONFLICT_WT composition. A MISSING directory
+      # means no unpushed work is possible — it does NOT mean the node is free:
+      # rule (d) has already returned for n_live == 0, so at this point at
+      # least one live session still holds the node name. Two lanes never
+      # pre-provision a worktree at all (dispatch-graph-execute: kind ==
+      # strategy, and the align-tactics rung of the tactic lane both spawn with
+      # --cwd "$PROJECT_ROOT"), so "no worktree" is a NORMAL state for a
+      # genuinely stranded node. It therefore selects the no-unpushed-work
+      # REASON VARIANT below and skips the sync predicates (both fail on a
+      # missing dir and would be misread as "unpushed"). It never clears:
+      # clearing here would erase the only durable record of a stand-down whose
+      # holder is still live.
       local wt="$repo_root/.claude/worktrees/$node"
-      if [[ ! -d "$wt" ]]; then
-        standdown_clear "$node"
-        cleared=$(( cleared + 1 ))
-        printf 'lib-standdown-recheck: cleared-no-worktree %s (no worktree at %s)\n' "$node" "$wt" >&2
-        _standdown_log_decision "$node" "$m_origin" "$m_winner" "$survivors" "" "cleared-no-worktree"
-        continue
-      fi
+      local no_wt=0
+      [[ -d "$wt" ]] || no_wt=1
 
       # (g) Cap. Excess candidates are deferred to the next pass rather than
       # serializing N graph-commit landing-lock pushes inside this one.
@@ -687,8 +698,17 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
       # stranded": worktree_merged_in_sync is what keeps a post-squash-merge
       # local merge commit (which `rev-list --not --remotes` over-counts as
       # unpushed) from being misread as stranded work.
-      local unpushed_flag reason_tag reason recommendation unpushed_head=""
-      if ! worktree_in_sync "$wt" && ! worktree_merged_in_sync "$wt"; then
+      local unpushed_flag reason_tag reason recommendation unpushed_head="" rec_wt_clause
+      if (( no_wt )); then
+        # FIRST arm, so the sync predicates are never called on a missing
+        # directory: both return 1 when `git -C` fails, which rule (h) would
+        # read as stranded unpushed work in a worktree that does not exist.
+        unpushed_flag="false"
+        reason_tag="standdown-winner-dead-node-held-no-worktree"
+        printf -v reason \
+          'standdown-winner-dead-node-held-no-worktree: a session stood down for this node in favour of winner session %s, which is no longer registered with the Claude daemon. No worktree exists at %s — this node lane spawns without one (strategy nodes and the align-tactics rung claim their own), so NO work can be unpushed — but the node is still held by session(s) %s waiting on a session that no longer exists, so nothing will advance it without intervention.' \
+          "${m_winner:-(unattributed — observed duplicate, no winner declared)}" "$wt" "${survivors:-none}"
+      elif ! worktree_in_sync "$wt" && ! worktree_merged_in_sync "$wt"; then
         unpushed_flag="true"
         reason_tag="standdown-winner-dead-work-unpushed"
         # Never fatal: any git failure yields an empty head summary.
@@ -704,7 +724,14 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
           'standdown-winner-dead-node-held: a session stood down for this node in favour of winner session %s, which is no longer registered with the Claude daemon. No work is unpushed — the worktree at %s is clean and fully pushed — but the node is still held by session(s) %s waiting on a session that no longer exists, so nothing will advance it without intervention.' \
           "${m_winner:-(unattributed — observed duplicate, no winner declared)}" "$wt" "${survivors:-none}"
       fi
-      recommendation="Find the holding job with 'claude agents --all' and attach it ('claude attach <job-id>') to see where it stopped. If the worktree at $wt has unpushed commits, verify them and push them from there FIRST. To release the holding session use 'claude stop <job-id>' — NEVER 'claude rm', which deletes the session AND its worktree, destroying any unpushed work still in the shared worktree. Once the work is safe and the session is stopped, run 'clear-park -C <repo-root> $node' to return the node to the lane. Accepted residual: while a live session still holds the node-id session name, office-hours reports this node as 'all-held' rather than launching a review session for it — that is expected, not a bug."
+      # One shared template; only the worktree sentence varies, so the long
+      # prose below is never duplicated per reason variant.
+      if (( no_wt )); then
+        rec_wt_clause="No worktree exists at $wt, so no unpushed work is at risk — do NOT create one."
+      else
+        rec_wt_clause="If the worktree at $wt has unpushed commits, verify them and push them from there FIRST."
+      fi
+      recommendation="Find the holding job with 'claude agents --all' and attach it ('claude attach <job-id>') to see where it stopped. $rec_wt_clause To release the holding session use 'claude stop <job-id>' — NEVER 'claude rm', which deletes the session AND its worktree, destroying any unpushed work still in the shared worktree. Once the work is safe and the session is stopped, run 'clear-park -C <repo-root> $node' to return the node to the lane. Accepted residual: while a live session still holds the node-id session name, office-hours reports this node as 'all-held' rather than launching a review session for it — that is expected, not a bug."
 
       local rc=0
       "$park_node" "$node" "$reason" "$recommendation" >/dev/null || rc=$?
