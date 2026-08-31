@@ -60,11 +60,16 @@ function openCensusTactic(id: string): IntentionNode {
 }
 
 /**
- * A RETIRED evaluation finding ledger entry: `phase: "done"` with its summary
- * metrics intact. This is the shape the owed-prune census must never batch for
- * deletion — see `intentions/tactic-eval-finding-ledger.md`.
+ * A RETIRED finding record: `phase: "done"` with its summary metrics intact.
+ * This is the shape the owed-prune census must never batch for deletion — see
+ * `intentions/tactic-eval-finding-ledger.md`.
+ *
+ * It carries NO `ledger_entry` marker. The exemption keys on
+ * `measured_impact` alone, so the fixture must not smuggle in the retired
+ * class marker — a fixture that still set it would pass against either
+ * predicate and prove nothing about the change.
  */
-function retiredLedgerEntry(id: string): IntentionNode {
+function retiredFindingRecord(id: string): IntentionNode {
   return validateNode({
     id,
     kind: "tactic",
@@ -74,7 +79,6 @@ function retiredLedgerEntry(id: string): IntentionNode {
     serves: [STRATEGY],
     phase: "done",
     attributes: {
-      ledger_entry: true,
       first_seen: "2026-08-01",
       measured_impact: [
         {
@@ -199,8 +203,19 @@ describe("computeDebt", () => {
   // census DELETES with `graph-commit --prune`, and a retired ledger entry must
   // survive with its summary metrics intact so a later recurrence resumes the
   // count instead of restarting at 1.
-  it("exempts a retired ledger entry from the owed-prune batch", () => {
-    const nodes = [strategy(), retiredLedgerEntry("tactic-eval-finding-stop-hook-hold-loop")];
+  it("exempts a retired finding record from the owed-prune batch", () => {
+    const nodes = [strategy(), retiredFindingRecord("tactic-eval-finding-stop-hook-hold-loop")];
+    const debt = computeDebt(nodes, new Set());
+    expect(debt.donePresent).toEqual([]);
+    expect(debt.total).toBe(0);
+  });
+
+  // The exemption is NAMESPACE-FREE. It keyed on attributes.ledger_entry until
+  // PR4 Unit 1, a marker only dispatch-eval-finding wrote into
+  // `tactic-eval-finding-*`; keying on measured_impact covers every producer.
+  // An id outside that prefix is the case the old predicate could not reach.
+  it("exempts a done node holding measurements from OUTSIDE the eval-finding namespace", () => {
+    const nodes = [strategy(), retiredFindingRecord("tactic-graph-commit-landing-lock")];
     const debt = computeDebt(nodes, new Set());
     expect(debt.donePresent).toEqual([]);
     expect(debt.total).toBe(0);
@@ -210,28 +225,51 @@ describe("computeDebt", () => {
     const nodes = [
       strategy(),
       doneTactic("tactic-a"),
-      retiredLedgerEntry("tactic-eval-finding-stop-hook-hold-loop"),
+      retiredFindingRecord("tactic-eval-finding-stop-hook-hold-loop"),
     ];
     const debt = computeDebt(nodes, new Set());
     expect(debt.donePresent).toEqual(["tactic-a"]);
     expect(debt.total).toBe(1);
   });
 
-  it("does not exempt a done node whose ledger_entry is not literally true", () => {
+  it("does not exempt a done node with no measured_impact at all", () => {
     const nodes = [
       strategy(),
       validateNode({
-        id: "tactic-not-a-ledger-entry",
+        id: "tactic-holds-no-measurements",
         kind: "tactic",
         statement: "t",
         owner: "ai",
         status: "codified",
         serves: [STRATEGY],
         phase: "done",
-        attributes: { ledger_entry: "true" },
+        attributes: { first_seen: "2026-08-01" },
       }),
     ];
-    expect(computeDebt(nodes, new Set()).donePresent).toEqual(["tactic-not-a-ledger-entry"]);
+    expect(computeDebt(nodes, new Set()).donePresent).toEqual(["tactic-holds-no-measurements"]);
+  });
+
+  // An EMPTY array is the boundary the predicate has to get right: it is
+  // present and it is an Array, so a bare `Array.isArray` or truthiness test
+  // would exempt a node that holds nothing. There are no metrics to lose, so
+  // there is nothing to exempt.
+  it("does not exempt a done node whose measured_impact is an empty array", () => {
+    const nodes = [
+      strategy(),
+      validateNode({
+        id: "tactic-holds-an-empty-measurement-array",
+        kind: "tactic",
+        statement: "t",
+        owner: "ai",
+        status: "codified",
+        serves: [STRATEGY],
+        phase: "done",
+        attributes: { measured_impact: [] },
+      }),
+    ];
+    expect(computeDebt(nodes, new Set()).donePresent).toEqual([
+      "tactic-holds-an-empty-measurement-array",
+    ]);
   });
 
   it("keeps a retired ledger entry out of the batch a birthed census would drain", () => {
@@ -240,7 +278,7 @@ describe("computeDebt", () => {
       doneTactic("tactic-a"),
       doneTactic("tactic-b"),
       doneTactic("tactic-c"),
-      retiredLedgerEntry("tactic-eval-finding-stop-hook-hold-loop"),
+      retiredFindingRecord("tactic-eval-finding-stop-hook-hold-loop"),
     ];
     const d = decideCensus(nodes, new Set(), 3, NOW);
     expect(d.shouldBirth).toBe(true);
