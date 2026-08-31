@@ -1377,4 +1377,209 @@ assert_eq "graph-select-target conflict: the deferred candidate is logged as bud
   "1" "$(grep -q "conflict-commit-budget-spent" "$GSCI_ROOT/seldir/graph-selection.jsonl" && echo 1 || echo 0)"
 gsc_interrupt_teardown
 
+# ============================================================================
+# Test: graph-select-target — the tree-sha-keyed origin/main snapshot cache
+# (tactic-done-node-retention-scan-cost Unit 2)
+# ============================================================================
+# Unlike the fixtures above, these cases run the REAL select-targets.ts: the
+# whole point is the new --nodes-json / --emit-nodes handling, and a stubbed
+# selector would prove nothing about it. The fake `npx` therefore forwards to
+# the real script instead of printing canned candidates, and the fixture repo
+# carries a real two-node intentions store at origin/main.
+GSCC_ROOT=$(mktemp -d)
+GSCC_BARE=$(mktemp -d)
+GSCC_CACHE=$(mktemp -d)
+GSCC_SCRIPTS="$GSCC_ROOT/.claude/skills/dispatch-propagate/scripts"
+mkdir -p "$GSCC_SCRIPTS" "$GSCC_ROOT/bin" "$GSCC_ROOT/seldir"
+cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh "$GSCC_SCRIPTS/"
+
+# The checkout under test, where the real select-targets.ts and node_modules
+# live. SCRIPT_DIR is scripts -> dispatch-propagate -> skills -> .claude -> root.
+GSCC_REPO="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+GSCC_REAL_GIT="$(command -v git)"
+
+# Forward `npx tsx <relative-script> ARGS…` to the real select-targets.ts. The
+# `cd` is required: `node --import tsx/esm` resolves the tsx loader from cwd,
+# and the caller's cwd is the FIXTURE root, which has no node_modules. The
+# node --import spelling rather than `npx tsx` per .claude/rules/sandbox.md.
+cat > "$GSCC_ROOT/bin/npx" <<GSCCNPX
+#!/usr/bin/env bash
+shift 2
+cd "$GSCC_REPO" || exit 2
+exec node --import tsx/esm packages/intentionsutil/scripts/select-targets.ts "\$@"
+GSCCNPX
+chmod +x "$GSCC_ROOT/bin/npx"
+
+# Daemon stubs, same shape as the fixtures above: no live sessions, and the
+# empty-read corroboration probe reports the daemon visible so `[]` is trusted.
+cat > "$GSCC_ROOT/bin/claude" <<'GSCCCLAUDE'
+#!/usr/bin/env bash
+printf '%s' '[]'
+GSCCCLAUDE
+chmod +x "$GSCC_ROOT/bin/claude"
+cat > "$GSCC_ROOT/bin/pgrep-daemon-visible" <<'GSCCPGREP'
+#!/usr/bin/env bash
+exit 0
+GSCCPGREP
+chmod +x "$GSCC_ROOT/bin/pgrep-daemon-visible"
+
+# A real store: one strategy and one tactic at phase implement. An implement
+# candidate's sensor_gate returns 0 without touching gh, so no network stub is
+# needed and the emitted line is deterministic.
+mkdir -p "$GSCC_ROOT/intentions"
+cat > "$GSCC_ROOT/intentions/strategy-fixture.md" <<'GSCCSTRAT'
+---
+id: strategy-fixture
+kind: strategy
+statement: A fixture strategy for the selector snapshot-cache tests
+owner: ai
+status: codified
+parent: null
+phase: null
+---
+
+# Fixture strategy
+GSCCSTRAT
+cat > "$GSCC_ROOT/intentions/tactic-fixture-cache.md" <<'GSCCTAC'
+---
+id: tactic-fixture-cache
+kind: tactic
+statement: A fixture tactic the selector emits at phase implement
+owner: ai
+status: codified
+parent: null
+serves:
+  - strategy-fixture
+phase: implement
+---
+
+# Fixture tactic
+GSCCTAC
+
+git init -q -b main "$GSCC_ROOT"
+git -C "$GSCC_ROOT" config user.email t@t
+git -C "$GSCC_ROOT" config user.name t
+git -C "$GSCC_ROOT" add intentions
+git -C "$GSCC_ROOT" commit -q -m seed
+git init -q --bare -b main "$GSCC_BARE"
+git -C "$GSCC_ROOT" remote add origin "$GSCC_BARE"
+git -C "$GSCC_ROOT" push -q origin main
+git -C "$GSCC_ROOT" fetch -q origin
+
+# gscc_run [<cache-dir>] — one selection. An empty/absent argument is the
+# cache-disabled path (the script reads ${DISPATCH_GRAPH_NODE_CACHE:-}, so an
+# empty value and an unset one are the same branch).
+gscc_run() {
+  PATH="$GSCC_ROOT/bin:$SAVED_PATH" \
+    CLAUDE_AGENTS_CMD="$GSCC_ROOT/bin/claude" \
+    CLAUDE_AGENTS_PGREP_CMD="$GSCC_ROOT/bin/pgrep-daemon-visible" \
+    DISPATCH_RESERVATION_DIR="$GSCC_ROOT/reservations" \
+    DISPATCH_SELECTION_LOG_DIR="$GSCC_ROOT/seldir" \
+    DISPATCH_GRAPH_NODE_CACHE="${1:-}" \
+    "$GSCC_SCRIPTS/graph-select-target" --top 1 2>/dev/null
+}
+
+# The number of nodes-tree-*.json entries in the cache directory.
+gscc_entries() {
+  find "$GSCC_CACHE" -maxdepth 1 -name 'nodes-tree-*.json' | wc -l | tr -d ' '
+}
+
+GSCC_EXPECTED="node tactic-fixture-cache tactic implement"
+
+# --- Case 1: the var unset is byte-identical to today's path, and writes none -
+echo "Test: graph-select-target — an unset DISPATCH_GRAPH_NODE_CACHE selects on today's path and caches nothing"
+gscc_cold_uncached=$(gscc_run)
+assert_eq "graph-select-target cache: uncached run selects the fixture tactic" \
+  "$GSCC_EXPECTED" "$gscc_cold_uncached"
+assert_eq "graph-select-target cache: uncached run writes no entry" "0" "$(gscc_entries)"
+
+# --- Case 2: cold writes exactly one entry; warm returns the same selection ---
+echo "Test: graph-select-target — a cold cached run writes one tree-sha entry and a warm run matches it"
+gscc_cold=$(gscc_run "$GSCC_CACHE")
+assert_eq "graph-select-target cache: cold cached run matches the uncached selection" \
+  "$gscc_cold_uncached" "$gscc_cold"
+assert_eq "graph-select-target cache: cold run writes exactly one entry" "1" "$(gscc_entries)"
+gscc_warm=$(gscc_run "$GSCC_CACHE")
+assert_eq "graph-select-target cache: warm run matches the cold selection" "$gscc_cold" "$gscc_warm"
+assert_eq "graph-select-target cache: warm run adds no second entry" "1" "$(gscc_entries)"
+# The entry is keyed on the tree object the archive would have produced.
+gscc_tree=$(git -C "$GSCC_ROOT" rev-parse origin/main:intentions)
+assert_eq "graph-select-target cache: the entry is named for the origin/main:intentions tree sha" \
+  "1" "$([ -f "$GSCC_CACHE/nodes-tree-$gscc_tree.json" ] && echo 1 || echo 0)"
+
+# --- Case 3: the hit really skips `git archive` -------------------------------
+# This is the proof the 75 ms is SAVED rather than merely duplicated. A `git`
+# shim on PATH fails loudly on `archive` and forwards everything else (including
+# the rev-parse the key needs) to the real binary. With the entry warm the
+# selection must still succeed; with it cold the same shim must break the run,
+# which is what rules out a vacuous pass where the archive was never reached
+# for some unrelated reason.
+echo "Test: graph-select-target — a warm entry skips git archive entirely"
+cat > "$GSCC_ROOT/bin/git" <<GSCCGIT
+#!/usr/bin/env bash
+for _a in "\$@"; do
+  if [ "\$_a" = "archive" ]; then
+    echo "stub git: archive must not run on a cache hit" >&2
+    exit 97
+  fi
+done
+exec "$GSCC_REAL_GIT" "\$@"
+GSCCGIT
+chmod +x "$GSCC_ROOT/bin/git"
+# `|| true` so a REGRESSION here reports as a FAIL rather than aborting the
+# suite under `set -e`: if the hit path stops being taken, this run exits 2.
+gscc_noarchive=$(gscc_run "$GSCC_CACHE") || true
+assert_eq "graph-select-target cache: a warm run selects with git archive forbidden" \
+  "$GSCC_EXPECTED" "$gscc_noarchive"
+# Negative control for the shim itself: remove the entry and the same run must
+# now fail, proving the shim is actually in the path the cold run takes.
+rm -f "$GSCC_CACHE"/nodes-tree-*.json
+# The run exits 2 here (the snapshot pipeline fails), which is the point — so
+# capture rather than let `set -e` take the suite down with it.
+gscc_noarchive_cold=$(gscc_run "$GSCC_CACHE") || gscc_noarchive_rc=$?
+assert_eq "graph-select-target cache: with no entry the archive-forbidding shim breaks the run" \
+  "2" "${gscc_noarchive_rc:-0}"
+assert_eq "graph-select-target cache: the broken cold run emits no selection" \
+  "" "$gscc_noarchive_cold"
+rm -f "$GSCC_ROOT/bin/git"
+# Re-warm for the cases below.
+gscc_run "$GSCC_CACHE" >/dev/null
+
+# --- Case 4: a new origin/main tree is a new key ------------------------------
+echo "Test: graph-select-target — advancing origin/main writes a second entry and selects the new tree"
+printf '\nAn added body paragraph.\n' >> "$GSCC_ROOT/intentions/tactic-fixture-cache.md"
+git -C "$GSCC_ROOT" add intentions
+git -C "$GSCC_ROOT" commit -q -m advance
+git -C "$GSCC_ROOT" push -q origin main
+git -C "$GSCC_ROOT" fetch -q origin
+gscc_advanced=$(gscc_run "$GSCC_CACHE")
+assert_eq "graph-select-target cache: the advanced tree still selects the fixture tactic" \
+  "$GSCC_EXPECTED" "$gscc_advanced"
+assert_eq "graph-select-target cache: the advanced tree writes a second entry" "2" "$(gscc_entries)"
+GSCC_TREE2=$(git -C "$GSCC_ROOT" rev-parse origin/main:intentions)
+assert_eq "graph-select-target cache: the second entry is named for the new tree sha" \
+  "1" "$([ -f "$GSCC_CACHE/nodes-tree-$GSCC_TREE2.json" ] && echo 1 || echo 0)"
+
+# --- Cases 5-7: an unusable entry degrades to a fresh strict enumeration ------
+# `[]` is the one that matters most: it is valid JSON and a valid array, so an
+# entry truncated to nothing would otherwise read as "no candidates today" and
+# stop the fleet silently. select-targets.ts refuses it; the wrapper deletes the
+# entry and re-snapshots ONCE.
+gscc_expect_degrades() { # <label> <payload>
+  printf '%s' "$2" > "$GSCC_CACHE/nodes-tree-$GSCC_TREE2.json"
+  local out
+  out=$(gscc_run "$GSCC_CACHE")
+  assert_eq "graph-select-target cache: $1 degrades to a fresh enumeration" "$GSCC_EXPECTED" "$out"
+  assert_eq "graph-select-target cache: $1 leaves a rewritten, usable entry" \
+    "$GSCC_EXPECTED" "$(gscc_run "$GSCC_CACHE")"
+}
+echo "Test: graph-select-target — a truncated cache entry degrades to the archive path"
+gscc_expect_degrades "a truncated entry" '[{"id":"tac'
+echo "Test: graph-select-target — a valid-JSON invalid-node entry degrades to the archive path"
+gscc_expect_degrades "an invalid-node entry" '[{"id":5}]'
+echo "Test: graph-select-target — an empty-array entry is refused, not read as 'no candidates'"
+gscc_expect_degrades "an empty-array entry" '[]'
+
+rm -rf "$GSCC_ROOT" "$GSCC_BARE" "$GSCC_CACHE"
+
 report_results

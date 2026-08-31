@@ -11,8 +11,13 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IntentionSchemaError } from "../src/errors.js";
 import { validateNode } from "../src/schema.js";
-import { listNodesStrictCached, storeFingerprint } from "../src/store-cache.js";
-import { listNodesStrict, writeNode } from "../src/store.js";
+import {
+  cacheEntryPath,
+  listNodesCached,
+  listNodesStrictCached,
+  storeFingerprint,
+} from "../src/store-cache.js";
+import { listNodes, listNodesStrict, writeNode } from "../src/store.js";
 
 function tempDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -290,6 +295,162 @@ describe("listNodesStrictCached with the cache pointed at the store", () => {
     expect(listNodesStrictCached(dir, dir)).toEqual(listNodesStrict(dir));
     // An entry written here would change the very fingerprint it was filed
     // under, so every later call would miss and drop another one.
+    expect(readdirSync(dir).sort()).toEqual(before);
+  });
+});
+
+// --- listNodesCached, the tolerant counterpart -------------------------------
+// The property under test throughout is the ONE-WAY sharing: it may READ an
+// entry the strict writer published, and must never WRITE one of its own,
+// because a tolerant enumeration legitimately omits a corrupt node and a strict
+// gate caller reads an absent `blocked_by` id as COMPLETE.
+
+describe("listNodesCached without a cache directory", () => {
+  it("returns exactly what listNodes returns and writes nothing", () => {
+    const dir = tempDir("intentions-");
+    seedStore(dir);
+    const before = readdirSync(dir).sort();
+
+    expect(listNodesCached(dir, "")).toEqual(listNodes(dir));
+    expect(readdirSync(dir).sort()).toEqual(before);
+  });
+});
+
+describe("listNodesCached shares the strict reader's key", () => {
+  it("addresses the very file listNodesStrictCached wrote", () => {
+    const dir = tempDir("intentions-");
+    const cacheDir = tempDir("intentions-cache-");
+    seedStore(dir);
+
+    listNodesStrictCached(dir, cacheDir);
+
+    // Not a re-spelling of the formula — the same exported helper both readers
+    // call. A second spelling would be a silent cache split.
+    expect(cacheEntryPath(dir, cacheDir, storeFingerprint(dir))).toBe(onlyEntry(cacheDir));
+  });
+
+  it("serves a hit from that entry rather than re-parsing the store", () => {
+    const dir = tempDir("intentions-");
+    const cacheDir = tempDir("intentions-cache-");
+    seedStore(dir);
+
+    listNodesStrictCached(dir, cacheDir);
+    writeSentinel(onlyEntry(cacheDir));
+
+    // The sentinel is not on disk in the store, so returning it can only mean
+    // the entry was read. This is the hit proof: with the cache disabled the
+    // call returns good-a/good-b and this expectation goes red.
+    expect(listNodesCached(dir, cacheDir).map((n) => n.id)).toEqual(["cache-sentinel"]);
+  });
+});
+
+describe("listNodesCached never writes an entry", () => {
+  it("leaves an empty cache directory empty on a miss", () => {
+    const dir = tempDir("intentions-");
+    const cacheDir = tempDir("intentions-cache-");
+    seedStore(dir);
+
+    expect(listNodesCached(dir, cacheDir)).toEqual(listNodes(dir));
+    // Publishing here is the fail-open hazard the module refuses: the entry
+    // would be shared with listNodesStrictCached, whose callers gate on it.
+    expect(readdirSync(cacheDir)).toEqual([]);
+  });
+
+  it("writes nothing even when the store is corrupt", () => {
+    const dir = tempDir("intentions-");
+    const cacheDir = tempDir("intentions-cache-");
+    seedStore(dir);
+    seedTruncatedNode(dir, "truncated");
+
+    // Tolerance survives caching: the damaged file is dropped, the rest returned.
+    const nodes = listNodesCached(dir, cacheDir);
+    expect(nodes.map((n) => n.id)).toEqual(["good-a", "good-b"]);
+    expect(nodes).toEqual(listNodes(dir));
+
+    // The contrast that makes the asymmetry concrete — the strict reader
+    // refuses the same store outright, which is why no entry can exist for it.
+    expect(() => listNodesStrictCached(dir, cacheDir)).toThrow(IntentionSchemaError);
+    expect(readdirSync(cacheDir)).toEqual([]);
+  });
+});
+
+describe("listNodesCached invalidation", () => {
+  it("returns the new disk state after a node file changes", () => {
+    const dir = tempDir("intentions-");
+    const cacheDir = tempDir("intentions-cache-");
+    seedStore(dir);
+
+    listNodesStrictCached(dir, cacheDir);
+    writeSentinel(onlyEntry(cacheDir));
+
+    seedStore(dir, ["good-c"]);
+
+    // The fingerprint moved, so the sentinel's entry is no longer addressed.
+    expect(listNodesCached(dir, cacheDir)).toEqual(listNodes(dir));
+    expect(listNodesCached(dir, cacheDir).map((n) => n.id)).toEqual([
+      "good-a",
+      "good-b",
+      "good-c",
+    ]);
+    // Still no entry of its own for the new state.
+    expect(cacheEntries(cacheDir)).toHaveLength(1);
+  });
+});
+
+describe("listNodesCached degradation", () => {
+  /** A damaged entry costs one tolerant parse and nothing else. */
+  function expectDegradesFrom(payload: string): void {
+    const dir = tempDir("intentions-");
+    const cacheDir = tempDir("intentions-cache-");
+    seedStore(dir);
+
+    listNodesStrictCached(dir, cacheDir);
+    const file = onlyEntry(cacheDir);
+    writeFileSync(file, payload);
+
+    expect(listNodesCached(dir, cacheDir)).toEqual(listNodes(dir));
+    // Unlike the strict reader, this one does not repair the entry it rejected.
+    expect(readFileSync(file, "utf8")).toBe(payload);
+  }
+
+  it("degrades to a tolerant enumeration when the entry is not JSON", () => {
+    expectDegradesFrom("{not json");
+  });
+
+  it("degrades to a tolerant enumeration when the entry fails validateNode", () => {
+    expectDegradesFrom(JSON.stringify([{ id: 5 }]));
+  });
+
+  it("degrades to a tolerant enumeration when the entry is not an array", () => {
+    expectDegradesFrom(JSON.stringify({ nodes: [] }));
+  });
+
+  it("returns the right nodes when the cache directory does not exist", () => {
+    const dir = tempDir("intentions-");
+    const cacheDir = join(tempDir("intentions-cache-"), "never-created");
+    seedStore(dir);
+
+    expect(listNodesCached(dir, cacheDir)).toEqual(listNodes(dir));
+  });
+
+  it("does not read as an empty store when the store directory is missing", () => {
+    const cacheDir = tempDir("intentions-cache-");
+    const missing = join(tempDir("intentions-"), "never-created");
+
+    // No fingerprint can be taken, so the call falls through to `listNodes`,
+    // whose own readdirSync surfaces the failure one layer down.
+    expect(() => listNodesCached(missing, cacheDir)).toThrow();
+    expect(readdirSync(cacheDir)).toEqual([]);
+  });
+});
+
+describe("listNodesCached with the cache pointed at the store", () => {
+  it("degrades to an uncached tolerant enumeration", () => {
+    const dir = tempDir("intentions-");
+    seedStore(dir);
+    const before = readdirSync(dir).sort();
+
+    expect(listNodesCached(dir, dir)).toEqual(listNodes(dir));
     expect(readdirSync(dir).sort()).toEqual(before);
   });
 });

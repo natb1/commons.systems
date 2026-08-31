@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { validateNode, type IntentionNode } from "./schema.js";
-import { listNodesStrict } from "./store.js";
+import { listNodes, listNodesStrict } from "./store.js";
 
 /**
  * Content-addressed materialization of `listNodesStrict`, so several processes
@@ -57,6 +57,38 @@ import { listNodesStrict } from "./store.js";
  * `listNodes`, never to an empty set. An entry always holds the complete store,
  * never a filtered subset, because both `graph-auto-merge` and the review-stall
  * sweep build a `byId` map and an id absent from it reads as `COMPLETE`.
+ *
+ * ONE-WAY SHARING BETWEEN THE TOLERANT AND STRICT READS. `listNodesCached` is
+ * the tolerant counterpart, for the consumers that call `listNodes` rather than
+ * `listNodesStrict` — the per-tick census (`graph-census-debt.ts`) and the
+ * pre-selection scope sweep (`list-scope-stale-tactics.ts`), which report on the
+ * store and must keep degrading rather than fail closed on one damaged file.
+ * The two reads share ONE key (`cacheEntryPath`), and the sharing is
+ * deliberately asymmetric: the tolerant path READS entries and never WRITES
+ * one.
+ *
+ * The asymmetry is a fail-closed argument, and it only works in this direction.
+ * An entry on disk is written exclusively by `listNodesStrictCached`, which
+ * throws rather than publish anything when the store does not enumerate
+ * strictly — so an entry that exists is always the COMPLETE store, and complete
+ * is a superset of what a tolerant reader would have produced. Accepting it
+ * costs a tolerant consumer nothing: it would have returned every one of those
+ * nodes anyway.
+ *
+ * The converse is a live hazard. A tolerant enumeration legitimately OMITS a
+ * corrupt node, so publishing its shorter array under the shared key would let a
+ * later strict caller — the router's selection path — be handed a set with a
+ * node silently missing. A `blocked_by` id ABSENT from the store SATISFIES
+ * `blockersComplete` (`router.ts`), so one dropped blocker file unblocks its
+ * dependent and dispatches it. The tolerant reader's whole contract (tolerate a
+ * damaged file) is exactly what a gate caller must not inherit, and a shared
+ * cache is precisely the seam that would let it. Hence: read, never write.
+ *
+ * The obvious "fix" — give tolerant writes their own key namespace — is refused.
+ * It buys a second key space for a hit rate of approximately zero: census and
+ * scope-sweep each run ONCE per tick, so a tolerant-namespace entry would be
+ * written by the only call that could ever have used it. The cost of a miss here
+ * is one `listNodes` — today's behavior exactly.
  *
  * The caller owns the cache directory's lifecycle: this module never creates it
  * and never prunes it, mirroring `dispatch_ci_verdict_rest`.
@@ -220,6 +252,25 @@ function writeCacheEntry(
 }
 
 /**
+ * The one place the cache key is spelled.
+ *
+ * Exported so every reader of this cache — `listNodesStrictCached`,
+ * `listNodesCached`, and the tests that assert the two address the same file —
+ * derives the path from this function rather than re-deriving the formula. A
+ * second spelling would be a silent cache SPLIT: both halves would work, each
+ * would miss what the other wrote, and the only symptom would be the cost this
+ * module exists to remove.
+ *
+ * The key pairs the RESOLVED store directory with the store fingerprint, so two
+ * stores with coincidentally identical contents never share an entry, and a
+ * change to either half moves the file.
+ */
+export function cacheEntryPath(dir: string, cacheDir: string, fingerprint: string): string {
+  const dirKey = createHash("sha256").update(resolve(dir)).digest("hex").slice(0, 12);
+  return join(cacheDir, `nodes-${dirKey}-${fingerprint.slice(0, 32)}.json`);
+}
+
+/**
  * `listNodesStrict`, memoized on the store's content when `cacheDir` names a
  * directory the caller has created.
  *
@@ -251,8 +302,7 @@ export function listNodesStrictCached(dir: string, cacheDir: string): IntentionN
   const fingerprint = fingerprintOrNull(dir);
   if (fingerprint === null) return listNodesStrict(dir);
 
-  const dirKey = createHash("sha256").update(resolve(dir)).digest("hex").slice(0, 12);
-  const file = join(cacheDir, `nodes-${dirKey}-${fingerprint.slice(0, 32)}.json`);
+  const file = cacheEntryPath(dir, cacheDir, fingerprint);
 
   const cached = readCacheEntry(file);
   if (cached !== null) return cached;
@@ -264,4 +314,53 @@ export function listNodesStrictCached(dir: string, cacheDir: string): IntentionN
   writeCacheEntry(file, dir, fingerprint, nodes);
 
   return nodes;
+}
+
+/**
+ * `listNodes` — the TOLERANT enumeration — served from an entry
+ * `listNodesStrictCached` already wrote, when one exists for this exact store
+ * state.
+ *
+ * With an empty `cacheDir` this IS `listNodes`: byte-for-byte today's behavior,
+ * no file read, no file written. That is the state outside a dispatch tick, so
+ * `/dispatch-ladder` and every manual invocation are unchanged.
+ *
+ * READS ENTRIES, WRITES NONE. The module header argues this at length; the
+ * short form is that an entry is always the COMPLETE store (only the strict
+ * writer publishes, and it throws instead of publishing an incomplete one), so a
+ * tolerant consumer may safely accept one — while a tolerant enumeration may
+ * legitimately omit a corrupt node, and publishing that under the shared key
+ * would hand a later strict gate caller a set with a blocker missing — and a
+ * missing `blocked_by` target SATISFIES `blockersComplete` (`router.ts`). The
+ * sharing is one-way for that reason and no other.
+ *
+ * TOLERANCE IS NOT WEAKENED BY A HIT, and this is the property to re-check if
+ * this function is ever changed. On a MISS the answer comes from `listNodes`,
+ * which drops the damaged file exactly as it does today. On a HIT the answer is
+ * a strict enumeration of the SAME store bytes — and the two readers differ only
+ * on a store that has a damaged file, which cannot have an entry at this
+ * fingerprint at all, because the strict writer threw before publishing one. So
+ * a hit can only occur where tolerant and strict already agree.
+ *
+ * Every failure is one answer — `listNodes(dir)`. A missing entry, an
+ * unreadable one, malformed JSON, a non-array payload, an element
+ * `validateNode` rejects, or a store whose fingerprint cannot be taken: each
+ * costs one tolerant parse and nothing else. This layer may never fail a sweep
+ * the uncached path would have completed.
+ *
+ * A `cacheDir` that IS the store degrades the same way, for the same reason as
+ * in `listNodesStrictCached`: an entry filed there would change the very key it
+ * was filed under. Nothing is written here in any case, so this guard only
+ * spares a read that could never hit.
+ */
+export function listNodesCached(dir: string, cacheDir: string): IntentionNode[] {
+  if (!cacheDir || resolve(cacheDir) === resolve(dir)) return listNodes(dir);
+
+  const fingerprint = fingerprintOrNull(dir);
+  if (fingerprint === null) return listNodes(dir);
+
+  const cached = readCacheEntry(cacheEntryPath(dir, cacheDir, fingerprint));
+  if (cached !== null) return cached;
+
+  return listNodes(dir);
 }

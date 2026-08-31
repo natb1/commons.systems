@@ -42,11 +42,31 @@
 //   { total, donePresent, orphans, mergedUnabsorbed, openCensus, shouldBirth,
 //     node?, node_body? }
 // `node` and `node_body` are present only when shouldBirth is true.
+//
+// Enumeration is TOLERANT and stays tolerant. This tool reports on the store's
+// health, so one damaged node file must cost that node from the report, never
+// the whole report — `listNodes`, not `listNodesStrict`.
+//
+// It runs once per dispatch tick over the entire store, which on a 717-node
+// store is ~0.3 s of `yaml.parse` for a node set the tick's earlier
+// reconcile-band sweeps have usually already parsed. So `main()` reads that
+// parse back through `listNodesCached` (../src/store-cache.ts) when
+// DISPATCH_GRAPH_NODE_CACHE names the tick-scoped cache directory. That path
+// READS entries and never writes one: a tolerant enumeration legitimately omits
+// a corrupt node, and publishing that shorter set under the shared content key
+// would later hand a STRICT gate caller a store with a `blocked_by` target
+// missing — and a missing target SATISFIES `blockersComplete` (../src/router.ts). The
+// asymmetry argument is in store-cache.ts's header; the consequence here is that
+// this tool's answer is identical cached or not, and an unset or empty var is
+// byte-for-byte today's `listNodes` call.
+//
+// Nothing else changes: computeDebt, the isLedgerEntry exemption, decideCensus,
+// the threshold/latch logic and the JSON output shape are untouched.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listNodes } from "../src/store.js";
+import { listNodesCached } from "../src/store-cache.js";
 import { isWaitNode } from "../src/waits.js";
 import { isLedgerEntry } from "../src/schema.js";
 import type { IntentionNode, IntentionNodeInput } from "../src/schema.js";
@@ -340,7 +360,7 @@ export function decideCensus(
 
 function main(): void {
   const { intentionsDir, prStatesFile, threshold, now } = parseArgs(process.argv.slice(2));
-  const nodes = listNodes(intentionsDir);
+  const nodes = listNodesCached(intentionsDir, process.env.DISPATCH_GRAPH_NODE_CACHE || "");
   const mergedIds = readMergedIds(prStatesFile);
   const decision = decideCensus(nodes, mergedIds, threshold, now);
   process.stdout.write(JSON.stringify(decision) + "\n");
