@@ -150,10 +150,15 @@ FAKE
   CLAUDE_AGENTS_CMD="$SD_FAKE"
 }
 
-# sd_write_node <id> <unparked|parked|bodymention> — write one node markdown file
-# into the scratch repo's intentions/ dir.
+# sd_write_node <id> <unparked|parked|bodymention> [node-kind] — write one node
+# markdown file into the scratch repo's intentions/ dir. `node-kind` is the
+# graph `kind:` field and defaults to `tactic`; pass `strategy` for the lane
+# that never pre-provisions a worktree. validateNode (schema.ts) treats `kind`
+# as any non-empty string and makes `success_signal` optional, so a strategy
+# fixture still passes the strict verify-landed read the fake park-node
+# triggers.
 sd_write_node() {
-  local id="$1" kind="$2"
+  local id="$1" kind="$2" node_kind="${3:-tactic}"
   local f="$SD_REPO/intentions/$id.md"
   # `statement`/`owner`/`status` are the IntentionSchema's required core
   # (schema.ts validateNode) — present on every fixture below so a
@@ -165,7 +170,7 @@ sd_write_node() {
       cat > "$f" <<NODE
 ---
 id: $id
-kind: tactic
+kind: $node_kind
 statement: fixture node for lib-standdown-recheck tests
 owner: ai
 status: working
@@ -185,7 +190,7 @@ NODE
       cat > "$f" <<NODE
 ---
 id: $id
-kind: tactic
+kind: $node_kind
 statement: fixture node for lib-standdown-recheck tests
 owner: ai
 status: working
@@ -202,7 +207,7 @@ NODE
       cat > "$f" <<NODE
 ---
 id: $id
-kind: tactic
+kind: $node_kind
 statement: fixture node for lib-standdown-recheck tests
 owner: ai
 status: working
@@ -247,6 +252,77 @@ sd_write_worktree() {
     git -C "$wt" add -A
     git -C "$wt" commit -q -m "the unpushed fix"
   fi
+}
+
+# sd_write_orphan_branch <node> — leave refs/heads/<node> one commit ahead of
+# origin/main with NO worktree at all. This is exactly what `git worktree
+# remove` leaves behind — and what the `rm -rf` + `git worktree prune` recovery
+# a torn sandboxed removal requires leaves behind too: the checkout is gone, the
+# branch and its commits are not. Built with plumbing (hash-object / mktree /
+# commit-tree / update-ref) so the fixture never creates a checkout, which is
+# the whole point of the state under test.
+sd_write_orphan_branch() {
+  local node="$1" base blob tree commit
+  base=$(git -C "$SD_REPO" rev-parse refs/remotes/origin/main)
+  blob=$(printf 'work that outlived its checkout\n' | git -C "$SD_REPO" hash-object -w --stdin)
+  tree=$(printf '100644 blob %s\tstranded.txt\n' "$blob" | git -C "$SD_REPO" mktree)
+  commit=$(git -C "$SD_REPO" commit-tree "$tree" -p "$base" -m "work that outlived its checkout")
+  git -C "$SD_REPO" update-ref "refs/heads/$node" "$commit"
+}
+
+# sd_write_ghost_branch <node> — leave refs/heads/<node> holding a well-formed
+# sha that is NOT a reachable object, so the ref exists but cannot be walked.
+# This is the third state of the no-worktree arm: `rev-parse --verify --quiet`
+# accepts it (MEASURED on this host: exit 0), while `rev-list --count` fails,
+# so the ahead-count is unavailable and the arm must report UNKNOWN rather than
+# an all-clear. Written as a loose ref because `update-ref` refuses a missing
+# object — which is precisely the state being fabricated.
+sd_write_ghost_branch() {
+  local node="$1" gitdir
+  gitdir=$(git -C "$SD_REPO" rev-parse --absolute-git-dir)
+  mkdir -p "$gitdir/refs/heads"
+  printf '%s\n' 0000000000000000000000000000000000000001 > "$gitdir/refs/heads/$node"
+}
+
+# sd_write_squashed_branch <node> — refs/heads/<node> is one commit AHEAD of
+# origin/main while its TREE is byte-identical to origin/main's. That is the
+# signature a squash merge leaves on the feature branch, and post-merge with the
+# worktree reaped is the NORMAL end state in this fleet — not an edge case.
+# MEASURED on git 2.55.0: `origin/main..<branch>` counts 1 while
+# `git diff --quiet origin/main <branch>` exits 0.
+sd_write_squashed_branch() {
+  local node="$1" base tree commit
+  base=$(git -C "$SD_REPO" rev-parse refs/remotes/origin/main)
+  tree=$(git -C "$SD_REPO" rev-parse "$base^{tree}")
+  commit=$(git -C "$SD_REPO" commit-tree "$tree" -p "$base" -m "squash-merged upstream; tree already on main")
+  git -C "$SD_REPO" update-ref "refs/heads/$node" "$commit"
+}
+
+# sd_write_pushed_branch <node> — refs/heads/<node> carries work that is ALSO
+# reachable from refs/remotes/origin/<node>. Nothing is at risk: the commits are
+# on a remote. `origin/main..<branch>` still counts them, because that predicate
+# answers "is it unmerged", not "is it unpushed". MEASURED: `origin/main..` 1,
+# `--not --remotes` 0.
+sd_write_pushed_branch() {
+  local node="$1" base blob tree commit
+  base=$(git -C "$SD_REPO" rev-parse refs/remotes/origin/main)
+  blob=$(printf 'work already pushed to its own remote branch\n' | git -C "$SD_REPO" hash-object -w --stdin)
+  tree=$(printf '100644 blob %s\tpushed.txt\n' "$blob" | git -C "$SD_REPO" mktree)
+  commit=$(git -C "$SD_REPO" commit-tree "$tree" -p "$base" -m "work pushed to origin/<node>")
+  git -C "$SD_REPO" update-ref "refs/heads/$node" "$commit"
+  git -C "$SD_REPO" update-ref "refs/remotes/origin/$node" "$commit"
+}
+
+# sd_write_broken_branch <node> — a loose ref whose CONTENT is not a sha at all,
+# i.e. a torn ref write. Distinct from sd_write_ghost_branch: MEASURED on this
+# host, a garbage or empty loose ref exits 1 with `warning: ignoring broken ref`
+# on stderr, while an ABSENT ref exits 1 with empty stderr. Same rc, so stderr is
+# the only discriminator — and the commits are still in the reflog.
+sd_write_broken_branch() {
+  local node="$1" gitdir
+  gitdir=$(git -C "$SD_REPO" rev-parse --absolute-git-dir)
+  mkdir -p "$gitdir/refs/heads"
+  printf 'not-a-sha\n' > "$gitdir/refs/heads/$node"
 }
 
 # sd_write_transcript <sid> <mtime-epoch>
@@ -295,6 +371,15 @@ sd_marker_field() {
 sd_log_dispositions() {
   [[ -f "$DECISION_LOG_FILE" ]] || return 0
   jq -r 'select(.site == "standdown-recheck-sweep") | .disposition' "$DECISION_LOG_FILE"
+}
+
+# The RAW `unpushed` field, `jq -c` and NOT `-r`, so the tri-state's three
+# encodings stay distinguishable: true/false (measured), "unknown" (asked,
+# unanswerable) and null (never asked). `-r` would print `unknown` and `null`
+# as bare words and lose exactly the distinction under test.
+sd_log_unpushed() {
+  [[ -f "$DECISION_LOG_FILE" ]] || return 0
+  jq -c 'select(.site == "standdown-recheck-sweep") | .unpushed' "$DECISION_LOG_FILE"
 }
 
 # --- Test 1: THE INVARIANT — a declared marker never times out ---------------
@@ -381,8 +466,10 @@ standdown_write "tactic-dead-insync" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
 sd_run
 assert_eq "dead-insync: sweep returns 0" "0" "$SD_RC"
 assert_eq "dead-insync: park-node invoked exactly once" "1" "$(sd_park_calls)"
+# The reason string is `<tag>: <prose>`, so anchor on the colon: a bare
+# `standdown-winner-dead-node-held*` prefix also matches the no-worktree tag.
 case "$(sd_park_reason)" in
-  standdown-winner-dead-node-held*) sd_reason_tag="yes" ;;
+  standdown-winner-dead-node-held:*) sd_reason_tag="yes" ;;
   *) sd_reason_tag="no" ;;
 esac
 assert_eq "dead-insync: reason carries the node-held tag" "yes" "$sd_reason_tag"
@@ -709,9 +796,13 @@ assert_eq "unsafe-id: stderr reports the unsafe id" "yes" "$(sd_contains 'unsafe
 assert_eq "unsafe-id: the marker is kept" "declared" "$(sd_marker_field tactic-Bad_Id origin)"
 sd_teardown
 
-# --- Test 15: a node with no worktree drops its marker -----------------------
+# --- Test 15: a node with no worktree is PARKED, never cleared ---------------
 
-echo "Test: a marker whose node has no worktree is cleared"
+# Rule (d) has already returned on n_live == 0, so a marker that reaches the
+# no-worktree check is still held by a live session. Clearing it there erased
+# the only durable record of the stand-down; it now selects the
+# no-unpushed-work reason variant of the (h)/(i) park instead.
+echo "Test: a marker whose node has no worktree parks node-held-no-worktree"
 sd_setup
 sd_write_node "tactic-no-worktree" unparked
 sd_commit_nodes
@@ -720,10 +811,277 @@ sd_install_claude 0
 standdown_write "tactic-no-worktree" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
 sd_run
 assert_eq "no-worktree: sweep returns 0" "0" "$SD_RC"
-assert_eq "no-worktree: park-node not invoked" "0" "$(sd_park_calls)"
-assert_eq "no-worktree: the marker file is removed" "no" \
+assert_eq "no-worktree: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "no-worktree: the marker file is kept" "yes" \
   "$(standdown_exists tactic-no-worktree && printf 'yes' || printf 'no')"
-assert_eq "no-worktree: stderr reports the clear" "yes" "$(sd_contains 'cleared-no-worktree tactic-no-worktree')"
+case "$(sd_park_reason)" in
+  standdown-winner-dead-node-held-no-worktree:*) sd_reason_tag="yes" ;;
+  *) sd_reason_tag="no" ;;
+esac
+assert_eq "no-worktree: reason carries the no-worktree tag" "yes" "$sd_reason_tag"
+assert_eq "no-worktree: the reason makes no unpushed-work claim" "no" \
+  "$(case "$(sd_park_reason)" in *UNPUSHED*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "no-worktree: the recommendation omits the push-from-there instruction" "no" \
+  "$(case "$(sd_park_recommendation)" in *'push them from there FIRST'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# No clear of ANY kind is reported. Asserted on the `cleared-` disposition
+# prefix rather than on the retired tag's literal spelling, which the plan's
+# contract fence requires to be absent from this file; the summary line spells
+# its counter `cleared=`, so it is not matched here.
+assert_eq "no-worktree: stderr reports no clear disposition" "no" "$(sd_contains 'cleared-')"
+assert_eq "no-worktree: the sweep summary counts zero clears" "yes" "$(sd_contains 'cleared=0')"
+assert_eq "no-worktree: one decision record, disposition=parked" "parked" "$(sd_log_dispositions)"
+sd_teardown
+
+# --- Test 15c: no worktree, but the BRANCH survived --------------------------
+
+# The regression lock for the no-worktree arm's safety claim. That arm used to
+# assert "NO work can be unpushed", and recommend "do NOT create one", from
+# `[[ -d "$wt" ]]` failing and nothing else. A missing checkout does not prove a
+# missing branch: `git worktree remove` leaves refs/heads/<node> carrying its
+# commits, and provision-node-worktree re-attaches that same branch rather than
+# recutting it. The park record is the durable artifact an operator acts on, so
+# the old text actively told them not to look at the one place the work was.
+#
+# Every other fixture in this file either has a worktree, or has no branch
+# either — the case that decides the two apart was the one nobody wrote.
+echo "Test: no worktree but a surviving branch reports the work at risk"
+sd_setup
+sd_write_node "tactic-orphan-branch" unparked
+sd_commit_nodes
+sd_write_orphan_branch "tactic-orphan-branch"
+sd_add_session "0bb2-2222" "tactic-orphan-branch"
+sd_install_claude 0
+standdown_write "tactic-orphan-branch" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "orphan-branch: sweep returns 0" "0" "$SD_RC"
+assert_eq "orphan-branch: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "orphan-branch: the reason reports the surviving branch and its count" "yes" \
+  "$(case "$(sd_park_reason)" in *'survived the missing checkout and still carries 1 commit(s)'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "orphan-branch: the reason does NOT claim nothing survives" "no" \
+  "$(case "$(sd_park_reason)" in *'no unpushed work survives'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "orphan-branch: the recommendation drops 'do NOT create one'" "no" \
+  "$(case "$(sd_park_recommendation)" in *'do NOT create one'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "orphan-branch: the recommendation names the recut command" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'worktree add'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# The torn-removal case this arm exists for leaves the registration under
+# .git/worktrees/ behind, and `worktree add` refuses while it is there — so a
+# recut instruction without the prune is one an operator cannot follow.
+assert_eq "orphan-branch: the recut command prunes the stale registration first" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'worktree prune &&'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "orphan-branch: the decision record encodes unpushed as true" "true" "$(sd_log_unpushed)"
+assert_eq "orphan-branch: one decision record, disposition=parked" "parked" "$(sd_log_dispositions)"
+sd_teardown
+
+# --- Test 15d: no worktree AND no branch stays determinate -------------------
+
+# The other half of the pair, so the fix above cannot be "call everything
+# unknown". With neither checkout nor branch there really is nothing to strand,
+# and the arm must still say so plainly rather than hedging.
+echo "Test: no worktree and no branch reports no surviving work, not unknown"
+sd_setup
+sd_write_node "tactic-no-branch-either" unparked
+sd_commit_nodes
+sd_add_session "0bb2-2222" "tactic-no-branch-either"
+sd_install_claude 0
+standdown_write "tactic-no-branch-either" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "no-branch-either: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "no-branch-either: the reason says no branch exists either" "yes" \
+  "$(case "$(sd_park_reason)" in *'No branch refs/heads/tactic-no-branch-either exists either'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "no-branch-either: the verdict is not hedged as UNKNOWN" "no" \
+  "$(case "$(sd_park_reason)" in *UNKNOWN*) printf 'yes' ;; *) printf 'no' ;; esac)"
+sd_teardown
+
+# --- Test 15b: the clear path was NARROWED, not removed ----------------------
+
+# Same missing-worktree fixture, but with zero live sessions under the node
+# name: rule (d) still owns the one legitimate release. The session under a
+# DIFFERENT name is required — a fully empty registry is UNKNOWN to the
+# uncorroborated-empty guard and would park nothing.
+echo "Test: no worktree AND nobody left still clears via rule (d)"
+sd_setup
+sd_write_node "tactic-no-worktree-nobody-left" unparked
+sd_commit_nodes
+sd_add_session "0cc3-3333" "tactic-some-other-node"
+sd_install_claude 0
+standdown_write "tactic-no-worktree-nobody-left" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "no-worktree-nobody-left: sweep returns 0" "0" "$SD_RC"
+assert_eq "no-worktree-nobody-left: park-node not invoked" "0" "$(sd_park_calls)"
+assert_eq "no-worktree-nobody-left: the marker file is removed" "no" \
+  "$(standdown_exists tactic-no-worktree-nobody-left && printf 'yes' || printf 'no')"
+assert_eq "no-worktree-nobody-left: stderr reports the clear" "yes" \
+  "$(sd_contains 'cleared-no-live-session tactic-no-worktree-nobody-left')"
+sd_teardown
+
+# --- Test 15e: the motivating strategy-lane scenario, end to end -------------
+
+# The strategy lane spawns with --cwd "$PROJECT_ROOT" and never pre-provisions
+# a worktree, so this is the worst case the fix exists for. The branch reads no
+# `kind:` field at all — the same park must fire kind-agnostically.
+echo "Test: a strategy node with no worktree parks node-held-no-worktree"
+sd_setup
+sd_write_node "strategy-no-worktree" unparked strategy
+sd_commit_nodes
+sd_add_session "0bb2-2222" "strategy-no-worktree"
+sd_install_claude 0
+standdown_write "strategy-no-worktree" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "strategy-no-worktree: sweep returns 0" "0" "$SD_RC"
+assert_eq "strategy-no-worktree: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "strategy-no-worktree: the marker file is kept" "yes" \
+  "$(standdown_exists strategy-no-worktree && printf 'yes' || printf 'no')"
+case "$(sd_park_reason)" in
+  standdown-winner-dead-node-held-no-worktree:*) sd_reason_tag="yes" ;;
+  *) sd_reason_tag="no" ;;
+esac
+assert_eq "strategy-no-worktree: reason carries the no-worktree tag" "yes" "$sd_reason_tag"
+assert_eq "strategy-no-worktree: one decision record, disposition=parked" "parked" "$(sd_log_dispositions)"
+sd_teardown
+
+# --- Test 15f: the branch-absent arm scopes its claim to the node id ---------
+
+# Round 2's finding on the round-1 fix. The arm probes refs/heads/<node> and
+# nothing else, then reported an UNSCOPED all-clear and told the operator "do
+# NOT create one". Native EnterWorktree lets a session claim its checkout under
+# any name, and on this host every worktree in fact uses one (agent-<hash> or a
+# slug), so the branch carrying the work is routinely NOT the one probed. The
+# verdict stays false -- that is what was measured -- but the prose must report
+# what was measured and name the gap rather than paper over it.
+echo "Test: the no-branch arm scopes its all-clear to the node id"
+sd_setup
+sd_write_node "tactic-scoped-allclear" unparked
+sd_commit_nodes
+sd_add_session "0bb2-2222" "tactic-scoped-allclear"
+sd_install_claude 0
+standdown_write "tactic-scoped-allclear" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "scoped-allclear: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "scoped-allclear: the reason scopes the all-clear to the node id" "yes" \
+  "$(case "$(sd_park_reason)" in *'under the node id'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "scoped-allclear: the reason names the other-name gap" "yes" \
+  "$(case "$(sd_park_reason)" in *'claimed its checkout under a different name'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# The recommendation used to assert a merge measurement in the very arm where
+# no branch existed to measure -- reporting a measurement never taken.
+assert_eq "scoped-allclear: the recommendation claims no merge measurement" "no" \
+  "$(case "$(sd_park_recommendation)" in *'fully merged into origin/main'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "scoped-allclear: the recommendation names the other-name branch hunt" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'branch --no-merged origin/main'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "scoped-allclear: the decision record encodes unpushed as false" "false" "$(sd_log_unpushed)"
+sd_teardown
+
+# --- Test 15h: an unmeasurable branch is UNKNOWN, and says so in the log -----
+
+# The third state. refs/heads/<node> exists and `rev-parse --verify` accepts it
+# (MEASURED: a ref holding a well-formed sha that is not a reachable object
+# exits 0), but `rev-list --count` cannot walk it, so no ahead-count is
+# available. Reporting that as "false" would tell an operator nothing is at risk
+# on the strength of a measurement that never succeeded.
+#
+# It also pins the decision-log encoding: `unknown` used to serialize to null,
+# byte-identical to a disposition where the question never arose -- collapsing
+# "we asked and could not answer" into "we never asked", in the durable record.
+echo "Test: an unmeasurable branch reports UNKNOWN, distinct from null in the log"
+sd_setup
+sd_write_node "tactic-unmeasurable-branch" unparked
+sd_commit_nodes
+sd_write_ghost_branch "tactic-unmeasurable-branch"
+sd_add_session "0bb2-2222" "tactic-unmeasurable-branch"
+sd_install_claude 0
+standdown_write "tactic-unmeasurable-branch" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "unmeasurable: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "unmeasurable: the reason reports UNKNOWN" "yes" \
+  "$(case "$(sd_park_reason)" in *UNKNOWN*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "unmeasurable: the reason does NOT claim nothing survives" "no" \
+  "$(case "$(sd_park_reason)" in *'no unpushed work survives'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "unmeasurable: the recommendation refuses the all-clear" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'do NOT assume nothing is at risk'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "unmeasurable: the log distinguishes unknown from null" '"unknown"' "$(sd_log_unpushed)"
+sd_teardown
+
+# --- Test 15i: a squash-merged branch is NOT stranded work -------------------
+
+# Round 3's first finding. The arm measured `rev-list --count origin/main..`,
+# which counts 1 for a squash-merged branch even though its tree already landed.
+# Post-merge-with-worktree-reaped is the NORMAL end state here, so the common
+# case produced a park saying "That work is at risk", recording unpushed=true,
+# and telling the operator to recut the checkout and "push it FIRST" —
+# resurrecting an already-landed branch. Rule (h) five lines below avoids exactly
+# this with worktree_merged_in_sync's tree-identity fallback
+# (lib-worktree-in-sync.sh:103, added for #1845); this arm had no equivalent.
+echo "Test: a squash-merged branch with no worktree is not reported as work at risk"
+sd_setup
+sd_write_node "tactic-squashed-branch" unparked
+sd_commit_nodes
+sd_write_squashed_branch "tactic-squashed-branch"
+sd_add_session "0bb2-2222" "tactic-squashed-branch"
+sd_install_claude 0
+standdown_write "tactic-squashed-branch" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "squashed-branch: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "squashed-branch: the reason does NOT claim the work is at risk" "no" \
+  "$(case "$(sd_park_reason)" in *'That work is at risk'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "squashed-branch: the reason names the tree-identity verdict" "yes" \
+  "$(case "$(sd_park_reason)" in *'tree is IDENTICAL to origin/main'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# The operative half: a recut instruction here sends the operator to push
+# commits that are already on main.
+assert_eq "squashed-branch: the recommendation does NOT tell the operator to recut" "no" \
+  "$(case "$(sd_park_recommendation)" in *'worktree add'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "squashed-branch: the recommendation does NOT tell the operator to push" "no" \
+  "$(case "$(sd_park_recommendation)" in *'push it FIRST'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "squashed-branch: the decision record encodes unpushed as false" "false" "$(sd_log_unpushed)"
+sd_teardown
+
+# --- Test 15j: a branch already on its own remote is not unpushed ------------
+
+# Round 3's third finding. `origin/main..` answers "is it unmerged", not "is it
+# unpushed". worktree_in_sync (lib-worktree-in-sync.sh:62) calls this exact state
+# in sync via `rev-list --count HEAD --not --remotes`, so the two arms produced
+# contradictory park records depending only on whether the checkout survived.
+echo "Test: a branch already pushed to its own remote ref is not unpushed"
+sd_setup
+sd_write_node "tactic-pushed-branch" unparked
+sd_commit_nodes
+sd_write_pushed_branch "tactic-pushed-branch"
+sd_add_session "0bb2-2222" "tactic-pushed-branch"
+sd_install_claude 0
+standdown_write "tactic-pushed-branch" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "pushed-branch: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "pushed-branch: the reason does NOT claim the work is at risk" "no" \
+  "$(case "$(sd_park_reason)" in *'That work is at risk'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "pushed-branch: the reason names the remote-reachability verdict" "yes" \
+  "$(case "$(sd_park_reason)" in *'fully reachable from a remote ref'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "pushed-branch: the decision record encodes unpushed as false" "false" "$(sd_log_unpushed)"
+sd_teardown
+
+# --- Test 15k: a BROKEN ref is UNKNOWN, not "no branch exists" ---------------
+
+# Round 3's second finding. `2>&1` discarded the only discriminator between an
+# absent ref and a torn one — both exit 1. A torn ref write (which this repo
+# already expects from torn sandboxed worktree removals) therefore produced
+# unpushed=false and "there is nothing to recut ... do NOT create one", while the
+# commits were still recoverable from .git/logs/refs/heads/<node>.
+echo "Test: a broken ref reports UNKNOWN and points at the reflog, not an all-clear"
+sd_setup
+sd_write_node "tactic-broken-ref" unparked
+sd_commit_nodes
+sd_write_broken_branch "tactic-broken-ref"
+sd_add_session "0bb2-2222" "tactic-broken-ref"
+sd_install_claude 0
+standdown_write "tactic-broken-ref" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "broken-ref: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "broken-ref: the reason reports UNKNOWN" "yes" \
+  "$(case "$(sd_park_reason)" in *UNKNOWN*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "broken-ref: the reason does NOT claim no branch exists" "no" \
+  "$(case "$(sd_park_reason)" in *'No branch refs/heads/tactic-broken-ref exists'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "broken-ref: the recommendation refuses the all-clear" "no" \
+  "$(case "$(sd_park_recommendation)" in *'do NOT create one'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "broken-ref: the recommendation points at the reflog" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'logs/refs/heads/tactic-broken-ref'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "broken-ref: the log distinguishes unknown from null" '"unknown"' "$(sd_log_unpushed)"
 sd_teardown
 
 # --- Test 16: a name with no node file on origin/main is kept, not parked ----
@@ -782,5 +1140,288 @@ assert_eq "uncorroborated-empty: the marker is kept" "declared" \
 assert_eq "uncorroborated-empty: stderr reports the unknown liveness" "yes" \
   "$(sd_contains 'observing tactic-uncorroborated-empty (liveness unknown this pass')"
 sd_teardown
+
+
+# --- Test 15l: a TORN worktree is not a live checkout ------------------------
+
+# Round 5's second finding. `no_wt` came from `[[ -d "$wt" ]]` alone, so a path
+# that exists but is not a readable checkout -- the state a torn sandboxed
+# `git worktree remove` leaves, and the very state this arm exists to survive --
+# skipped the no-worktree arm and fell into rule (h). There both sync predicates
+# fail their `git -C` and return 1, so the park announced "the winner left work
+# UNPUSHED in $wt" with head `<unavailable>` and told the operator to push from
+# a checkout git cannot open.
+echo "Test: a torn worktree is measured as absent, not as stranded work"
+sd_setup
+sd_write_node "tactic-torn-wt" unparked
+sd_commit_nodes
+# A directory, with content, and NO git checkout of its own. Deliberately not
+# `git init`ed: the point is a path git cannot resolve as its own toplevel.
+mkdir -p "$SD_REPO/.claude/worktrees/tactic-torn-wt"
+printf 'left behind by a torn removal\n' > "$SD_REPO/.claude/worktrees/tactic-torn-wt/f.txt"
+sd_add_session "0bb2-2222" "tactic-torn-wt"
+sd_install_claude 0
+standdown_write "tactic-torn-wt" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "torn-wt: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "torn-wt: the reason does NOT claim work is unpushed in the torn path" "no" \
+  "$(case "$(sd_park_reason)" in *'left work UNPUSHED in'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "torn-wt: the reason names the tear" "yes" \
+  "$(case "$(sd_park_reason)" in *'git cannot read it as a checkout'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "torn-wt: the recommendation says to clear the torn path first" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'worktree prune'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# Round 7's first finding, on the same fixture. Measuring the tear as ABSENT is
+# only half the answer: a tear destroys the .git link while LEAVING THE FILES on
+# disk, so the branch measurement that follows (here: no branch exists at all)
+# reports `false` over work that is still sitting in $wt. No probe above can see
+# it -- it was never committed, so refs/heads/<node> says nothing about it, and
+# the directory is unreadable as a checkout. `false` there is an all-clear
+# issued over the exact files this arm exists to protect.
+assert_eq "torn-wt: the verdict degrades to unknown, not a false all-clear" '"unknown"' \
+  "$(sd_log_unpushed)"
+assert_eq "torn-wt: the reason says uncommitted work in the torn path is UNKNOWN" "yes" \
+  "$(case "$(sd_park_reason)" in *'still holds UNCOMMITTED work is UNKNOWN'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# ORDER, not mere presence. The recommendation used to OPEN with `rm -rf`, the
+# one command that destroys what the paragraph above says is unknown and at
+# risk. An operator reading top-down would run it first. Assert that salvage is
+# ordered ahead of the destructive step, which a presence-only check cannot see.
+assert_eq "torn-wt: the recommendation salvages BEFORE it destroys" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'SALVAGE FIRST'*'rm -rf'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# Test 15n asserts the tag follows the verdict for `true`; UNKNOWN is the third
+# verdict and had no tag of its own, so it fell through to the tag the header
+# ladder documents as "nothing at risk". The chosen tag shares the
+# `standdown-winner-dead-work-` prefix so ONE triage grep finds both.
+assert_eq "torn-wt: filed under the unknown tag, not the nothing-at-risk tag" "yes" \
+  "$(case "$(sd_park_reason)" in standdown-winner-dead-work-unknown*) printf 'yes' ;; *) printf 'no' ;; esac)"
+sd_teardown
+
+# --- Test 15m: uncommitted work in the SHARED checkout is not an all-clear ----
+
+# Round 5's first finding. The arm measures refs/heads/<node> and nothing else,
+# but the two lanes it was written for -- kind == strategy, and the
+# align-tactics rung -- run against the SHARED checkout and never create that
+# ref. Their at-risk work is uncommitted there, so the arm answered "nothing to
+# recut ... do NOT create one" for exactly its motivating case. The dirt is not
+# attributed to the node (any session may have left it); the verdict degrades to
+# UNKNOWN and names the thing to look at.
+echo "Test: uncommitted work in the shared checkout degrades the verdict to UNKNOWN"
+sd_setup
+sd_write_node "tactic-shared-dirt" unparked
+sd_commit_nodes
+# No worktree and no branch: every branch predicate in the arm answers "nothing
+# at risk". The only at-risk work is this, in the shared checkout.
+printf '\n' >> "$SD_REPO/intentions/tactic-shared-dirt.md"
+sd_add_session "0bb2-2222" "tactic-shared-dirt"
+sd_install_claude 0
+standdown_write "tactic-shared-dirt" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "shared-dirt: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "shared-dirt: the log reports unknown, not false" '"unknown"' "$(sd_log_unpushed)"
+assert_eq "shared-dirt: the reason names the shared checkout" "yes" \
+  "$(case "$(sd_park_reason)" in *'uncommitted tracked file(s)'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "shared-dirt: the recommendation says to inspect it before releasing" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'status --porcelain'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+sd_teardown
+
+# --- Test 15p: an UNTRACKED node body in the shared checkout is not an all-clear
+
+# Round 7's second finding, and the sibling of Test 15m. That probe asked
+# `status --porcelain --untracked-files=no`, but the dominant shape of
+# shared-checkout work is a NEW FILE: a strategy or align-tactics session writes
+# intentions/<id>.md and dies before committing it. `-uno` cannot see an
+# untracked file at all, so the probe read CLEAN and the arm issued `false` over
+# precisely the case Test 15m exists for. The untracked probe is scoped to
+# intentions/ -- the worktrees root lives inside the working tree and is not
+# gitignored in this fixture, so an unscoped probe would report every torn
+# checkout's leftovers as shared-checkout work.
+echo "Test: an untracked node body in the shared checkout degrades the verdict to UNKNOWN"
+sd_setup
+sd_write_node "tactic-shared-untracked" unparked
+sd_commit_nodes
+# Untracked, NOT modified: this is invisible to `status --untracked-files=no`,
+# which is the whole point of the fixture. No worktree and no branch either, so
+# every other predicate in the arm answers "nothing at risk" and this file is
+# the only thing that can move the verdict.
+printf 'a node body written by a session that died before committing it\n' \
+  > "$SD_REPO/intentions/tactic-orphan-body.md"
+sd_add_session "0bb2-2222" "tactic-shared-untracked"
+sd_install_claude 0
+standdown_write "tactic-shared-untracked" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "shared-untracked: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "shared-untracked: the log reports unknown, not false" '"unknown"' "$(sd_log_unpushed)"
+# BOTH counts, so the assertion cannot pass on a probe that merely reported
+# something: the tracked half must read 0 (proving -uno saw nothing) while the
+# untracked half reads 1 (proving the new probe is what moved the verdict).
+assert_eq "shared-untracked: the reason reports the tracked probe as clean" "yes" \
+  "$(case "$(sd_park_reason)" in *'holds 0 uncommitted tracked file(s)'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "shared-untracked: the reason counts the untracked node body" "yes" \
+  "$(case "$(sd_park_reason)" in *'1 untracked file(s) under intentions/'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "shared-untracked: the recommendation names the ls-files probe" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'ls-files --others --exclude-standard -- intentions'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+sd_teardown
+
+# --- Test 15n: the reason tag follows the VERDICT, not the arm ----------------
+
+# Round 5's fourth finding. `reason_tag` was set unconditionally to the
+# no-worktree tag, including on the branch that had just measured
+# unpushed=true. A park carrying stranded work was therefore filed under the tag
+# the header ladder documents as "nothing at risk", so a triage grep for
+# standdown-winner-dead-work-unpushed missed it entirely.
+echo "Test: a no-worktree park carrying stranded work is filed under the unpushed tag"
+sd_setup
+sd_write_node "tactic-tag-follows-verdict" unparked
+sd_commit_nodes
+sd_write_orphan_branch "tactic-tag-follows-verdict"
+sd_add_session "0bb2-2222" "tactic-tag-follows-verdict"
+sd_install_claude 0
+standdown_write "tactic-tag-follows-verdict" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "tag-follows-verdict: the log reports unpushed work" 'true' "$(sd_log_unpushed)"
+case "$(sd_park_reason)" in
+  standdown-winner-dead-work-unpushed*) sd_reason_tag="yes" ;;
+  *) sd_reason_tag="no" ;;
+esac
+assert_eq "tag-follows-verdict: reason carries the work-unpushed tag" "yes" "$sd_reason_tag"
+case "$(sd_park_reason)" in
+  standdown-winner-dead-node-held-no-worktree*) sd_reason_tag="yes" ;;
+  *) sd_reason_tag="no" ;;
+esac
+assert_eq "tag-follows-verdict: reason does NOT carry the nothing-at-risk tag" "no" "$sd_reason_tag"
+sd_teardown
+
+# --- Test 15q: an UNREADABLE probe is INDETERMINATE, not a tear ---------------
+
+# Round 8's first finding. The readability probe collapsed two outcomes:
+# `wt_top=$(git -C "$wt" rev-parse --show-toplevel) || wt_top=""` made rc 0 with
+# a foreign toplevel (DEFINITE -- not a worktree) and rc NON-ZERO
+# (INDETERMINATE -- a real tear, OR a transient git failure against a healthy
+# LIVE checkout) both set torn_wt=1. A blip -- the `bwrap: Can't get type of
+# source .../config.worktree` class this repo already tracks, or index.lock
+# contention -- therefore filed a park asserting a torn removal as FACT while
+# telling the operator to `rm -rf` a directory that may hold a live session's
+# uncommitted work. Test 15l's fixture takes the rc-0 path, so it cannot see
+# this branch at all.
+#
+# The failure is EMULATED by a git shim, because a transient git failure cannot
+# be provoked on demand. The shim fails ONLY `rev-parse --show-toplevel` against
+# this node's worktree and execs the real git for everything else, so the
+# directory under test is a genuinely healthy in-sync checkout that the probe
+# merely could not read -- which is the whole point.
+echo "Test: an unreadable worktree probe reports UNKNOWN and issues no rm -rf"
+sd_setup
+sd_write_node "tactic-probe-blip" unparked
+sd_commit_nodes
+# A REAL, healthy, fully-pushed checkout. Nothing here is torn.
+sd_write_worktree "tactic-probe-blip" insync
+sd_add_session "0bb2-2222" "tactic-probe-blip"
+sd_install_claude 0
+standdown_write "tactic-probe-blip" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_blip_git=$(command -v git)
+sd_blip_wt="$SD_REPO/.claude/worktrees/tactic-probe-blip"
+mkdir -p "$SD_DIR/blipshim"
+cat > "$SD_DIR/blipshim/git" <<BLIPSHIM
+#!/usr/bin/env bash
+_dashc=""
+_topl=0
+_prev=""
+for _a in "\$@"; do
+  if [ "\$_prev" = "-C" ]; then _dashc="\$_a"; fi
+  if [ "\$_a" = "--show-toplevel" ]; then _topl=1; fi
+  _prev="\$_a"
+done
+if [ "\$_topl" = 1 ] && [ "\$_dashc" = "$sd_blip_wt" ]; then
+  echo "bwrap: Can't get type of source $sd_blip_wt/.git/config.worktree" >&2
+  exit 128
+fi
+exec "$sd_blip_git" "\$@"
+BLIPSHIM
+chmod +x "$SD_DIR/blipshim/git"
+sd_blip_path="$PATH"
+PATH="$SD_DIR/blipshim:$PATH"
+sd_run
+PATH="$sd_blip_path"
+assert_eq "probe-blip: park-node invoked exactly once" "1" "$(sd_park_calls)"
+# Unmeasurable is never reported as SAFE.
+assert_eq "probe-blip: the log reports unknown, not false" '"unknown"' \
+  "$(sd_log_unpushed)"
+# ...and never reported as a FACT either. The torn arm's prose asserts what the
+# directory IS; this arm may only report what the probe DID.
+assert_eq "probe-blip: the reason does NOT assert a torn removal" "no" \
+  "$(case "$(sd_park_reason)" in *'git cannot read it as a checkout'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "probe-blip: the reason names the failed probe and its rc" "yes" \
+  "$(case "$(sd_park_reason)" in *'the checkout probe FAILED (git rev-parse --show-toplevel exited 128)'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# THE assertion that matters. An indeterminate verdict must not hand the
+# operator the one command that destroys a live checkout.
+assert_eq "probe-blip: the recommendation issues NO rm -rf directive" "no" \
+  "$(case "$(sd_park_recommendation)" in *'rm -rf'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "probe-blip: the recommendation says not to delete it" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'Do NOT delete it'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# It must not fall into rule (h) either: both sync predicates would fail their
+# own `git -C` and read as stranded work in a checkout nothing could open --
+# the defect Test 15l closed for the rc-0 shape.
+assert_eq "probe-blip: the reason does NOT claim work is unpushed in the path" "no" \
+  "$(case "$(sd_park_reason)" in *'left work UNPUSHED in'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# The tag follows the verdict (Test 15n's rule), so UNKNOWN files under the
+# shared `standdown-winner-dead-work-` prefix, not the nothing-at-risk tag.
+assert_eq "probe-blip: filed under the unknown tag" "yes" \
+  "$(case "$(sd_park_reason)" in standdown-winner-dead-work-unknown*) printf 'yes' ;; *) printf 'no' ;; esac)"
+sd_teardown
+
+# --- Test 15o: the broken-ref discriminator survives a translated locale ------
+
+# Round 5's third finding. The absent-vs-broken discriminator is a substring
+# match on git's own warning text, and git LOCALIZES warnings. Under a
+# translated locale the match fails, the broken ref reclassifies as ABSENT, and
+# the arm issues the false all-clear it exists to prevent.
+#
+# The translation is EMULATED by a shim rather than depending on a translated
+# locale being installed on the host -- there is none here, so a test that just
+# set LC_ALL would pass whether or not the pin exists. The shim answers only for
+# this node's ref and execs the real git for everything else; it reports the
+# English warning when it is called under LC_ALL=C and a French one otherwise.
+# So the assertion below fails if and only if the lib stops pinning the locale.
+echo "Test: a broken ref is still discriminated when the ambient locale is translated"
+sd_setup
+sd_write_node "tactic-locale-broken" unparked
+sd_commit_nodes
+sd_write_broken_branch "tactic-locale-broken"
+sd_add_session "0bb2-2222" "tactic-locale-broken"
+sd_install_claude 0
+standdown_write "tactic-locale-broken" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_real_git=$(command -v git)
+mkdir -p "$SD_DIR/gitshim"
+cat > "$SD_DIR/gitshim/git" <<GITSHIM
+#!/usr/bin/env bash
+for _a in "\$@"; do
+  if [ "\$_a" = "refs/heads/tactic-locale-broken" ]; then
+    if [ "\${LC_ALL:-}" = "C" ]; then
+      echo "warning: ignoring broken ref refs/heads/tactic-locale-broken" >&2
+    else
+      echo "avertissement : reference cassee ignoree refs/heads/tactic-locale-broken" >&2
+    fi
+    exit 1
+  fi
+done
+exec "$sd_real_git" "\$@"
+GITSHIM
+chmod +x "$SD_DIR/gitshim/git"
+sd_saved_path="$PATH"
+PATH="$SD_DIR/gitshim:$PATH"
+# Any value that is not exactly `C` does the job -- the shim keys on that,
+# not on the locale being a real translated one. en_US.utf8 is installed on
+# this host, so bash does not warn the way an absent fr_FR.UTF-8 would.
+export LC_ALL=en_US.utf8
+sd_run
+unset LC_ALL
+PATH="$sd_saved_path"
+assert_eq "locale-broken: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "locale-broken: the log reports unknown, not false" '"unknown"' "$(sd_log_unpushed)"
+assert_eq "locale-broken: the reason does NOT claim no branch exists" "no" \
+  "$(case "$(sd_park_reason)" in *'No branch refs/heads/tactic-locale-broken exists'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "locale-broken: the recommendation still points at the reflog" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'logs/refs/heads/tactic-locale-broken'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+sd_teardown
+
 
 report_results
