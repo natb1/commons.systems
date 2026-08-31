@@ -107,6 +107,11 @@ fi
 # `phase: done`; a present, not-done blocker blocks. Expressed here as a join of
 # each node's blocked_by ids against the same fixture array — without it the
 # gate would be invisible to this fixture, since the real predicate never runs.
+# Record the enumeration environment. graph-auto-merge is bash and shells out
+# to `node` for the enumeration, and in this harness that `node` is THIS stub
+# -- so this file is the only place a test at this layer can observe what
+# actually reached the enumeration process.
+printf '%s\n' "${DISPATCH_GRAPH_NODE_CACHE:-<unset>}" >> "$STUB/../nodecache-env.log"
 only="${!#}"
 jq -r --arg only "$only" '
   (map({key: .id, value: .}) | from_entries) as $byId
@@ -375,7 +380,7 @@ if grep -q 'pulls/111/merge' "$GAM_ROOT/stub/merge-calls.log" 2>/dev/null; then 
 assert_eq "graph-auto-merge (h): eligible sibling is NOT merged" "untouched" "$gam_h_sib"
 # Control: unflagged, the SAME fixture merges both — proving (h) isolated the
 # sibling by the filter, not by some unrelated ineligibility.
-rm -f "$GAM_ROOT/stub/merge-calls.log"
+rm -f "$GAM_ROOT/stub/merge-calls.log" "$GAM_ROOT/nodecache-env.log"
 gam_hc_out=$(run_gam 2>/dev/null)
 assert_eq "graph-auto-merge (h): control — unflagged sweep merges both" \
   "merged #110 (tactic-h1)
@@ -386,12 +391,27 @@ merged #111 (tactic-h2)" "$gam_hc_out"
 # stdout must be byte-identical to the unflagged control above. A regression
 # that let the variable narrow the sweep — the failure mode `--node`'s
 # process.argv contract exists to prevent — shows up here as a shorter list.
+#
+# SCOPE, stated plainly. This harness replaces `node` with a jq stub, so
+# listNodesStrictCached NEVER EXECUTES here and no assertion at this layer can
+# say anything about caching BEHAVIOUR — that belongs to intentionsutil's own
+# unit tests. Comparing two stub runs would therefore have compared two runs of
+# a program that ignores the variable entirely: a pass carrying no information.
+# What this layer CAN observe, and now does, is the bash→node plumbing: that the
+# variable reaches the enumeration process at all, and that its presence does
+# not narrow the candidate set. The env log below is what makes the first half
+# non-vacuous; without it the identical-output assertion is true by construction.
 rm -f "$GAM_ROOT/stub/merge-calls.log"
 GAM_NODE_CACHE_DIR="$GAM_ROOT/nodecache"; mkdir -p "$GAM_NODE_CACHE_DIR"
+assert_eq "graph-auto-merge (h): control run reached the enumeration with the var UNSET" \
+  "<unset>" "$(head -n1 "$GAM_ROOT/nodecache-env.log" 2>/dev/null)"
+rm -f "$GAM_ROOT/nodecache-env.log"
 gam_hn_out=$(DISPATCH_GRAPH_NODE_CACHE="$GAM_NODE_CACHE_DIR" run_gam 2>/dev/null)
 unset DISPATCH_GRAPH_NODE_CACHE
 assert_eq "graph-auto-merge (h): DISPATCH_GRAPH_NODE_CACHE set → identical candidate set and stdout" \
   "$gam_hc_out" "$gam_hn_out"
+assert_eq "graph-auto-merge (h): the variable actually reached the enumeration process" \
+  "$GAM_NODE_CACHE_DIR" "$(head -n1 "$GAM_ROOT/nodecache-env.log" 2>/dev/null)"
 
 # ---- (i) --node with an unknown id merges nothing (empty candidate set) -----
 gam_reset

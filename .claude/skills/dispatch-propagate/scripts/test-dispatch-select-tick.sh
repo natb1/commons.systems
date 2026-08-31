@@ -499,6 +499,17 @@ sel_tick_teardown
 # alongside it still fire — a clobbered trap would show up here as a surviving
 # ci-verdict dir or a missing decision-log record, not as a failure in the tick
 # under test.
+# A path that could not be RECORDED is not evidence of removal. `[ -d "" ]` and
+# `[ -d "<unset>" ]` are both false, so the naive `[ -d "$p" ] && echo 1 || echo 0`
+# reported the strongest possible verdict — "removed" — precisely when the
+# measurement had failed and there was nothing to report at all. Both removal
+# assertions below depend on a path parsed out of a log line that may not exist.
+sel_tick_dir_state() {
+  case "${1:-}" in
+    ""|"<unset>") printf 'unrecorded' ;;
+    *) if [ -d "$1" ]; then printf '1'; else printf '0'; fi ;;
+  esac
+}
 echo "Test: select-tick arms a tick-scoped DISPATCH_GRAPH_NODE_CACHE and removes it on exit"
 sel_tick_setup
 out=$(run_sel_tick) || true
@@ -512,10 +523,10 @@ assert_eq "nodecache: exported to the band with a non-empty value" "1" \
   "$([ -n "$gnc_path" ] && [ "$gnc_path" != "<unset>" ] && echo 1 || echo 0)"
 assert_eq "nodecache: the exported path was a real directory during the tick" "dir" "$gnc_state"
 assert_eq "nodecache: removed by the EXIT trap" "0" \
-  "$([ -d "$gnc_path" ] && echo 1 || echo 0)"
+  "$(sel_tick_dir_state "$gnc_path")"
 assert_eq "nodecache: sibling ci-verdict cache still armed during the tick" "dir" "$civ_state"
 assert_eq "nodecache: sibling ci-verdict cache still removed by the same trap" "0" \
-  "$([ -d "$civ_path" ] && echo 1 || echo 0)"
+  "$(sel_tick_dir_state "$civ_path")"
 assert_eq "nodecache: decision-log emit still chained into the same trap" "empty" \
   "$(tail -n1 "$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl" | jq -r '.disposition')"
 sel_tick_teardown
