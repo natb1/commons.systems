@@ -54,8 +54,9 @@ attributes: {}
 
 ### Why this exists
 
-`reconcile-graph.ts`'s done-transition (Pass 3, header comment beginning at
-`packages/intentionsutil/scripts/reconcile-graph.ts:205`) deliberately **leaves the node present** —
+`reconcile-graph.ts`'s done-transition (Pass 3, the header comment opened by
+`// Pass 3: done transitions` in `packages/intentionsutil/scripts/reconcile-graph.ts`
+— `:266`, re-measured 2026-08-30) deliberately **leaves the node present** —
 "LEAVE the node present. No prune, no inbound-`blocked_by` repair … Edge repair and deletion are
 only needed at actual deletion time, which is now a separate future census concern." That change
 (PR #2965, `tactic-execution-pr-merge-verification`) removed the `rmSync` loop and the `prune`
@@ -101,9 +102,11 @@ store growth (store adds ran 45–116 new node files per week over 2026-W27…W3
 "bound retention cost" cannot mean "delete retained nodes". It has to mean **make a retained node's
 marginal per-scan cost near zero**.
 
-**The permanently-unprunable cohort is real but small.** `graph-census-debt.ts:143` exempts ledger
-entries from the prune batch (`if (n.phase === "done" && !isLedgerEntry(n)) donePresent.push(n.id)`;
-`isLedgerEntry` at `packages/intentionsutil/src/schema.ts:529`) because a retired
+**The permanently-unprunable cohort is real but small.** `graph-census-debt.ts`'s
+`computeDebt` exempts ledger entries from the prune batch at its `donePresent.push`
+guard (`if (n.phase === "done" && !isLedgerEntry(n)) donePresent.push(n.id)` — `:179-180`,
+re-measured 2026-08-30; `isLedgerEntry` in `packages/intentionsutil/src/schema.ts`,
+located by name — `:580`, re-measured 2026-08-30) because a retired
 `tactic-eval-finding-*` keeps its summary metrics so `dispatch-eval-finding` can *resume* an
 occurrence count rather than restart it at 1. Measured: 39 ledger nodes (21 already done),
 avg 12.8 KB each, **8.5 % of total parse cost**, all 39 created in a 3-day burst (2026-08-12…14).
@@ -152,7 +155,10 @@ Expected effect per tick: census (~0.5 s) and scope-sweep (~0.5 s) become ~0.02 
 the entry the reconcile band just wrote; the selector's first call drops archive+tar+parse
 (~0.6 s) to a JSON read whenever `origin/main:intentions` is unchanged since an earlier
 materialization in the same tick, and its second call (the `--pace-exempt-only` probe at
-`dispatch-select-tick:817` plus the `--node`/`--top` call at :1115/:1121) is a guaranteed hit.
+`dispatch-select-tick`'s `graph-select-target --pace-exempt-only` call, plus its
+`graph-select-target --node` and `graph-select-target --top` calls — locate each
+by that literal; `:917`, `:1215` and `:1221` re-measured 2026-08-30) is a
+guaranteed hit.
 After this lands, a retained done node costs ~0.04 ms of JSON deserialization per scan instead of
 ~0.32 ms of YAML parse — retention is bounded by construction, with no pruning required and no
 node ever dropped from any enumerated set.
@@ -200,7 +206,8 @@ what actually landed rather than against this paragraph, and say so in the PR.
 While verifying the residual, this round found a defect in the **unmerged** PR #3037:
 `partitionDonePresent` (`origin/tactic-census-scripted-tick:packages/intentionsutil/scripts/census-decide.ts`)
 filters `nodes.filter((n) => n.phase === "done")` with **no `isLedgerEntry` exemption**, unlike
-`graph-census-debt.ts:143`. Measured against today's store, **4 done `tactic-eval-finding-*` nodes
+`graph-census-debt.ts`'s `donePresent.push` guard (`:179-180`, re-measured
+2026-08-30). Measured against today's store, **4 done `tactic-eval-finding-*` nodes
 satisfy `verifyCompletion` and would be pruned outright**, sending the recurrence metrics
 `dispatch-eval-finding` resumes on a repeat finding to git history where no ranking read finds them —
 the exact loss the `isLedgerEntry` exemption comment says it exists to prevent. This belongs to
@@ -253,10 +260,12 @@ for a hit rate of approximately zero (census and scope-sweep each run once per t
 
 Wire two call sites, one line each, plus a paragraph on each script's existing header comment:
 
-- `packages/intentionsutil/scripts/graph-census-debt.ts:305` (`const nodes = listNodes(intentionsDir);`
-  inside `main()`) — read `process.env.DISPATCH_GRAPH_NODE_CACHE || ""` at the CLI layer and call
+- `packages/intentionsutil/scripts/graph-census-debt.ts` — the
+  `const nodes = listNodes(intentionsDir);` line inside `main()` (`:343`,
+  re-measured 2026-08-30) — read `process.env.DISPATCH_GRAPH_NODE_CACHE || ""` at the CLI layer and call
   `listNodesCached(intentionsDir, cacheDir)`. `computeDebt`, `decideCensus`, the `isLedgerEntry`
-  exemption at :143, the threshold/latch logic and the JSON output shape are untouched.
+  exemption at its `donePresent.push` guard (`:179-180`, re-measured 2026-08-30),
+  the threshold/latch logic and the JSON output shape are untouched.
 - `packages/intentionsutil/scripts/list-scope-stale-tactics.ts:78` (`const nodes = listNodes(dir);`) —
   same substitution, same env read. The `--dir` / `--stamp-dir` / `--live` argument handling and the
   emitted list are untouched.
@@ -395,14 +404,18 @@ candidate set.
 - `packages/intentionsutil/src/schema.ts` — `validateNode(value: unknown): IntentionNode`, the
   no-cast way to re-type a parsed cache element (measured 8 ms for all 717 nodes, so validating on
   every cache hit is affordable and is the right default).
-- `packages/intentionsutil/src/schema.ts:529` — `isLedgerEntry(node)`, the canonical
+- `packages/intentionsutil/src/schema.ts` — `isLedgerEntry(node)`, located by name
+  (`:580`, re-measured 2026-08-30), the canonical
   done-but-present exemption predicate. Not called by this plan, but the reason the ledger cohort is
   permanently retained; never re-spell `attributes.ledger_entry === true`.
 - `packages/intentionsutil/src/router.ts` — `blockersComplete(tactic, byId)` and its
   strict-enumeration precondition comment: an id absent from the map reads as COMPLETE. This is the
   hazard Unit 1's never-write rule exists to prevent.
-- `packages/intentionsutil/scripts/graph-census-debt.ts` — `computeDebt` (`:122`), the `donePresent`
-  push (`:143`), `decideCensus`, and the `listNodes` call at `:305`. Only the last one changes.
+- `packages/intentionsutil/scripts/graph-census-debt.ts` — `computeDebt`, the
+  `donePresent.push` guard inside it, `decideCensus`, and the
+  `const nodes = listNodes(intentionsDir);` call inside `main()`. Locate each by
+  name; re-measured 2026-08-30 they sit at `:123`, `:179-180`, `:318` and `:343`.
+  Only the last one changes.
 - `packages/intentionsutil/scripts/list-scope-stale-tactics.ts:34,78` — the tolerant import and its
   single `listNodes(dir)` call; the same decision/land split shape as `graph-census-debt.ts`.
 - `packages/intentionsutil/scripts/select-targets.ts:32,58` — the `listNodesStrict` import and the
@@ -411,10 +424,14 @@ candidate set.
 - `.claude/skills/dispatch-propagate/scripts/graph-select-target` — the `git cat-file -e` store
   guard, the `mktemp -d` / `git archive | tar -x` snapshot block, the `select-targets.ts` invocation,
   and the `DISPOSITION` / `empty` output protocol that must survive unchanged.
-- `.claude/skills/dispatch-propagate/scripts/dispatch-select-tick:296-304` — the
-  `DISPATCH_CI_VERDICT_CACHE` mktemp + export + combined `EXIT` trap; the precedent
+- `.claude/skills/dispatch-propagate/scripts/dispatch-select-tick` — the
+  `DISPATCH_CI_VERDICT_CACHE` mktemp + export + combined `EXIT` trap, located by
+  the `# Tick-scoped CI-verdict memoisation` comment that opens it (`:300-315`,
+  re-measured 2026-08-30); the precedent
   `DISPATCH_GRAPH_NODE_CACHE` follows and the reason both vars are already in the environment by the
-  time census (`:578`), scope-sweep (`:595`) and the selector (`:817`, `:1115`, `:1121`) run.
+  time its `dispatch-graph-census`, `dispatch-graph-scope-sweep` and
+  `graph-select-target` invocations run — locate each by the script name it
+  invokes (`:678`, `:695`, and `:917`/`:1215`/`:1221`, re-measured 2026-08-30).
 - `.claude/skills/dispatch-propagate/scripts/lib.sh:822-921` — `dispatch_ci_verdict_rest`'s
   caller-owns-the-directory rule and its bounded-staleness header; the "never `mkdir`, never fail a
   sweep on a write error" discipline comes from here.
@@ -423,7 +440,8 @@ candidate set.
 - `packages/intentionsutil/test/graph-census-debt.test.ts:1-60` — `strategy()` / `doneTactic()` /
   `openTactic()` pure builders, the established template for filesystem-free decision-module tests.
 - `.claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh` — the existing selector
-  suite to extend; `run-unit-tests.sh:190` auto-globs it.
+  suite to extend; `run-unit-tests.sh`'s `for test_script in "$SCRIPTS"/test-*.sh`
+  loop auto-globs it (`:202`, re-measured 2026-08-30).
 
 ## Verification
 
