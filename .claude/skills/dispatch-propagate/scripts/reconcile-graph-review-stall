@@ -94,6 +94,11 @@ source "$SCRIPT_DIR/lib.sh"
 # graph_rollback_node_writes — the shared roll-a-failed-node-write-back-to-HEAD
 # primitive this sweep shares with reconcile-graph-merged.
 source "$SCRIPT_DIR/lib-graph-rollback.sh"
+# node_id_is_safe / require_safe_node_id / pin_base_blob — the shared
+# diagnosis-time compare-and-swap pin this sweep shares with
+# reconcile-graph-merged. Rollback-on-failure and compare-and-swap-on-land are
+# separate remedies; this sweep needs both.
+source "$SCRIPT_DIR/lib-graph-base-pin.sh"
 
 # ---- Argument parsing -------------------------------------------------------
 NODE_FILTER=""
@@ -151,6 +156,10 @@ RESTORE_ON_FAILURE=0
 # HEAD as of the moment the rollback is armed — the commit the staged writes sit
 # on top of, and the only commit `git checkout --` can be trusted to restore to.
 HEAD_AT_ARM=""
+# id -> the diagnosis-time base blob pinned for that id, threaded onto the
+# landing graph-commit as `--base <id>=<blob>`. Populated per candidate in the
+# `fix` arm below, BEFORE apply-fix-state mutates the file.
+declare -A BASE_BLOB=()
 restore_staged_writes() {
   [[ "${#WRITTEN_IDS[@]}" -gt 0 ]] || return 0
   graph_rollback_node_writes "$REPO_ROOT" "$HEAD_AT_ARM" reconcile-graph-review-stall \
@@ -344,6 +353,31 @@ while IFS=$'\t' read -r id pr; do
         echo "reconcile-graph-review-stall: intentions/$id.md is not tracked at HEAD (no rollback path) — skipping $id" >&2
         continue
       }
+      # Pin the diagnosis-time base blob HERE — after the tracked-at-HEAD guard,
+      # and BEFORE apply-fix-state runs below. The ordering is the whole point:
+      # apply-fix-state reads the node and rewrites the WHOLE file from that
+      # in-memory read, so the compare-and-swap base must be the PRE-mutation
+      # blob. Pinning after the write would pin the sweep's own output, and
+      # check_base_freshness would compare the sweep's edit against itself — the
+      # change would look correct and protect nothing.
+      #
+      # Failure posture here is a per-candidate SKIP, not an abort — deliberately
+      # the opposite of reconcile-graph-merged, whose ids come from a
+      # deterministic plan it must honour whole. Reasons, in order:
+      #   - a per-candidate skip is this loop's established contract (the
+      #     tracked-at-HEAD guard immediately above does exactly this);
+      #   - nothing is staged for this id yet, so there is nothing to roll back;
+      #   - the sweep is idempotent — the next tick re-enumerates this node and
+      #     tries again;
+      #   - aborting would trip the EXIT trap and roll back EARLIER candidates'
+      #     legitimate staged writes, turning one bad id into a lost sweep;
+      #   - the skip is LOUD (stderr), not silent, and it never lands an
+      #     unprotected write — which is the invariant that actually matters.
+      node_id_is_safe "$id" || {
+        echo "reconcile-graph-review-stall: unsafe node id $(printf '%q' "$id") — ids must match ^[A-Za-z0-9][A-Za-z0-9._-]*\$ (no '=', whitespace, or control characters) to be a valid --base pair key — skipping $id" >&2
+        continue
+      }
+      BASE_BLOB[$id]=$(pin_base_blob "$REPO_ROOT" reconcile-graph-review-stall "$id") || continue
       WRITTEN_IDS+=("$id")
       RESTORE_ON_FAILURE=1
       if ! node --import tsx/esm "$UTIL_SCRIPTS/apply-fix-state.ts" "$id" --set-fix --dir "$REPO_ROOT/intentions" >/dev/null; then
@@ -364,6 +398,35 @@ done <<<"$CANDIDATES"
 [[ "${#RECOVERED_IDS[@]}" -eq 0 ]] && exit 0
 
 # --- Land every staged fix-state write as ONE graph-commit -------------------
+# The land carries a diagnosis-time compare-and-swap: each recovered id's
+# PRE-mutation on-disk blob, pinned in the `fix` arm above, is passed as
+# `graph-commit --base <id>=<blob>`. Without it check_base_freshness
+# short-circuits on its first line and this sweep lands whatever is on disk —
+# and that disk content is a whole-node rewrite from apply-fix-state's in-memory
+# read, so any field another writer landed on origin/main between this sweep's
+# enumeration and this commit is silently overwritten. That lost update is bug X,
+# measured at 8 office_hours park erasures across 5 nodes in one 24h window on
+# the sibling call site (reconcile-graph-merged) before it was pinned.
+#
+# Ruling 31, read side vs write side — do NOT "simplify" this pin away as
+# redundant with the enumeration's `office_hours != null` exclusion. Those are
+# different mechanisms answering different questions, and both hold at once:
+#   - the READ-side exclusion says a node ALREADY parked when this sweep
+#     enumerated is a human's to move, so the sweep never picks it up;
+#   - the WRITE-side pin says a park that lands AFTER enumeration — inside the
+#     window the read-side gate cannot see — must be MERGED IN rather than
+#     erased.
+# The pin makes the sweep skip nothing; it makes graph-commit merge a
+# concurrently landed field instead of clobbering it.
+#
+# graph-commit MERGES rather than refuses on drift: on a stale base it runs the
+# structural three-way merge (base = the pinned blob, ours = our on-disk edit,
+# theirs = origin/main's landed content) and parks only when a divergence is
+# genuinely unresolvable. office_hours is a SCALAR_FIELD this sweep never
+# touches, so ours == base and scalarMerge takes THEIRS — the concurrent park
+# survives — while execution.fix is unchanged on origin (theirs == base) so it
+# takes OURS. Absorbing the park beats refusing the whole sweep.
+#
 # `-C "$REPO_ROOT"` is mandatory: graph-commit resolves the repo to commit from
 # its caller's cwd, never from its own on-disk location, while the --set-fix
 # writes above targeted "$REPO_ROOT/intentions". Without -C, a caller invoked
@@ -371,9 +434,63 @@ done <<<"$CANDIDATES"
 # other tree, find nothing dirty, commit nothing, exit 0 — and this sweep would
 # print `recovered` for state left stranded uncommitted. (Same reason
 # reconcile-graph-merged passes -C.)
+#
+# WHAT A REFUSED --base COSTS THE REST OF THE BATCH. Threading --base here makes
+# check_base_freshness()'s fail-closed park reachable for this sweep for the
+# first time: before this change the sweep passed no pins, so the guard
+# short-circuited on an empty manifest and could never park. The cost is not
+# confined to the diverged node. park_and_exit() partitions into bystander
+# PRUNES (re-applied and landed) and park_ids, where park_ids is ALL_IDS minus
+# those prunes (graph-commit:3436-3459). This sweep passes no prune ids, so
+# bystander_prunes is always empty and EVERY id in the invocation parks -- and
+# the conflicted_ids() fallback sets park_ids=("${ALL_IDS[@]}") outright.
+#
+# So one node's unresolvable execution.fix divergence parks this tick's other
+# CLEAN recovered nodes into office_hours. That is not self-healing: the
+# enumeration above skips any node with `office_hours != null`, and the selector
+# excludes on REVIEWED_MARKER, so the collateral nodes leave this sweep's
+# candidate set entirely. A later tick does NOT pick them back up; they need an
+# office-hours park clear.
+#
+# Kept fail-closed deliberately -- refusing beats landing over a stale base --
+# but it is a real behaviour change, not a no-op, and it is written down here
+# because nothing else in the file says it. The two ways out both cost more than
+# this unit owns: pinning and landing per node breaks the "AT MOST ONE
+# graph-commit per tick" lock budget stated in the header above, and teaching
+# park_and_exit() to partition on which --base key actually refused is a
+# graph-commit change.
+#
+# The idempotency note further up is a DIFFERENT path and remains true: it
+# justifies the per-candidate SKIP taken when an id fails node_id_is_safe or
+# fails to pin. Nothing is staged for a skipped id, so the next tick really does
+# re-enumerate it. Do not read that sentence as covering the park above.
 if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]; then
   refresh_lock
   GC_ARGS=(-C "$REPO_ROOT" -m "graph: enter fix-interrupt on stalled reviews (${#RECOVERED_IDS[@]} node(s))")
+  # graph-commit accepts both a manifest file and repeated `--base <id>=<sha>`
+  # flags; the repeated form drops straight into this id loop. The <id>=<sha>
+  # PAIR form (never a bare sha) is required for a multi-id call and is a free
+  # correctness guard — graph-commit die()s on a malformed pair.
+  #
+  # Re-gate the id shape HERE too, at the exact point the pair is built, even
+  # though the same id passed node_id_is_safe before it was pinned: this is the
+  # line whose output graph-commit splits at the FIRST `=`, so an id carrying one
+  # would be silently re-keyed onto a different node. Defense in depth costs one
+  # regex.
+  #
+  # A missing pin is an INVARIANT BREAK, not a transient, so it hard-errors
+  # rather than skipping: every id in RECOVERED_IDS was pinned two statements
+  # before it was appended, so an absent entry means the two lists have drifted
+  # and nothing here can say what base is correct. RESTORE_ON_FAILURE is 1 at
+  # this point, so the EXIT trap rolls every staged write back and the tree is
+  # left clean for the next graph writer.
+  for id in "${RECOVERED_IDS[@]}"; do
+    require_safe_node_id reconcile-graph-review-stall "$id"
+    [[ -n "${BASE_BLOB[$id]:-}" ]] || {
+      echo "reconcile-graph-review-stall: no pinned base blob for recovered id $id (pin and recovery lists drifted)" >&2
+      exit 1; }
+    GC_ARGS+=(--base "$id=${BASE_BLOB[$id]}")
+  done
   for id in "${RECOVERED_IDS[@]}"; do GC_ARGS+=("$id"); done
 
   if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
