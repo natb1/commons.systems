@@ -56,9 +56,12 @@ clarifications:
       codified means the author verified the record REPORTS faithfully
       (adopted/diverged/chosen_over accurate against the cited texts), never
       that its content binds. The decisions a record supports carry their own
-      three-state stamps on the native nodes that made them. /exetasis reviews
-      mount records for reference-accuracy and capture pricing; their review
-      fingerprint fingerprints the record itself."
+      three-state stamps on the native nodes that made them. Mount records are
+      NOT /exetasis subjects (2026-08-30 resolution round, author-ratified,
+      superseding this clause's earlier form): they are references without
+      author dispositions — accurate or objectively invalid — and accuracy
+      defects are repaired through normal QA/office-hours processes. /exetasis
+      reviews author dispositions only."
   - question: Does kind-tradition cover non-philosophical bodies of thought?
     answer: "Yes — generalized in the 2026-07-07 /align-strategy interview
       (strategy-complete-grounding): any examined body of thought — a research
@@ -93,6 +96,16 @@ clarifications:
     answer: Reading notes — passages, verified excerpts, and chunk findings backing
       the record's adopted/diverged/chosen_over detail, per kind-kind's
       body-function rule. Recorded 2026-07-09 interview.
+  - question: How do tradition-record entries relate to the substantiation edges
+      (2026-08-30)?
+    answer: (Recorded 2026-08-30, resolution round.) (Resolution round,
+      author-ratified symmetric-locus doctrine.) A node's
+      attributes.substantiated_by edge must be mirrored by an adopted entry here
+      naming the graph locus; a node's attributes.contradicted_by edge must be
+      mirrored by a diverged or chosen_over entry. Edge carries topology, entry
+      carries the scholarship, prose is optional narrative; validate-graph
+      enforces the mirror once tactic-substantiation-edge-migration lands it.
+      attributes.traditions is the legacy spelling of substantiated_by.
 tooling_goals: []
 success_signal: null
 attention: null

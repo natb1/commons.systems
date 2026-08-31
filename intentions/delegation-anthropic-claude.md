@@ -131,7 +131,11 @@ attributes:
     disposition — three sitting-mechanics resolutions on
     tactic-node-review-skill: non-goal-layer position handling, the
     unpenalized-rank queue entry, and the root-first-prefix/30-minute discharge
-    rule (all pending-review)"
+    rule (all pending-review) Vocabulary migrated 2026-08-30 (resolution round):
+    the class's states are now deferred (author owes review) and delegated
+    (author consciously doesn't care); the resolution round dispositioned every
+    then-open member — ratified, delegated, or held deferred — as recorded in
+    strategy-explicit-intent's resolution-round ledger."
   origin: chosen
   divergence:
     level: moderate — raised 2026-08-13 from low-moderate when the delegation

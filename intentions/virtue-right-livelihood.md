@@ -51,24 +51,21 @@ office_hours: null
 pace_exempt: false
 rounds: null
 attributes:
-  traditions:
+  substantiated_by:
     - tradition-aristotle
     - tradition-buddhism
     - tradition-motivation-psychology
-  tension_with: virtue-knowledge-as-gift
+  contradicted_by:
+    - tradition-franciscan
+    - tradition-stoicism
   conditions:
-    - "the tension pair with virtue-knowledge-as-gift, and that sibling itself,
-      are held delegated-pending-review (decision: delegated-pending-review,
-      delegation-anthropic-claude, 2026-08-30) — an /exetasis sitting ratifies,
-      amends, or declines the structure; this node's own substance is
-      author-ratified"
-    - "what that sitting owes structurally (recorded 2026-08-30 post-review,
-      findings H4): legalize and define ROOT-LEVEL tension pairs in kind-virtue
-      (this pair is the first — prior tension doctrine covers siblings under one
-      parent), articulate both poles' excess-directions as the chunk-2
-      cross-guard doctrine expects, and ratify or amend the gift node's rooting
-      argument; the debt is carried on kind-virtue's matching clarification
-      (decision: delegated-pending-review, delegation-anthropic-claude,
-      2026-08-30)"
+    - "the tension_with edge to virtue-knowledge-as-gift was REMOVED at the
+      2026-08-30 resolution round (author-ratified): the two virtues are
+      compatible sibling roots — 'valuing sustenance and valuing knowledge as
+      gift are not contradictory'; the felt monetization conflict is capture
+      pressure arriving through the platform-delegation mount, priced by
+      strategy-graph-mounts' capture model. virtue-knowledge-as-gift itself
+      remains deferred ('two sibling roots, deferred with review'); the
+      kind-virtue root-tension structural debt is dissolved"
 ---
 # Right Livelihood — sustenance held as a legitimate first-class motivation: meet the need to eat through means ordered to the other virtues
