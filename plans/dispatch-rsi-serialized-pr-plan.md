@@ -2378,11 +2378,24 @@ npx vitest run --project packages/intentionsutil --root .
 *(Re-spelled 2026-08-30 — the fence used to read
 `npm test --prefix packages/intentionsutil`. **That form was not broken**, and
 this is a parity change, not a repair: the new spelling is exactly what CI's
-`run-unit-tests.sh:137` runs (`npx vitest run --project <dir> --root
-"$REPO_ROOT"`), so the fence and CI exercise the same runner.
+`run-unit-tests.sh:149` runs (`npx vitest run --project <dir> --root
+"$REPO_ROOT"`), so the fence and CI exercise the same runner. (That anchor read
+`:137` until 2026-08-31; re-measured with `grep -n 'npx vitest run' .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh`, it is `149`.)
 `vitest.config.ts:18` names each project by its workspace **directory**
 (`test: { name: dir, root: "./" + dir }`), so the **full workspace path** is the
-only accepted `--project` value.)*
+only accepted `--project` value. That holds for a package exactly as for an
+app — `--project` is not apps-only: measured 2026-08-31,
+`npx vitest list --project packages/intentionsutil --root .` exits 0 and lists
+1324 tests, every one tagged `[packages/intentionsutil]`.)*
+
+*(The `--root .` half of the spelling is load-bearing too, and its canonical
+home is `.claude/rules/sandbox.md` under "Command pattern matching" — read it
+there rather than restating it here. The short of it: root at the worktree/repo
+root and select the workspace with `--project`. Rooting at the app directory
+instead (`--root print`) scopes vite's `server.fs.allow` to `print/`, so
+root-hoisted `?url` asset imports — `pdfjs-dist`'s worker, hoisted to the
+root `node_modules` by npm workspaces — are denied and correct changes
+false-fail.)*
 
 *(Rationale corrected — an earlier revision of the note above claimed the
 bare-name short form `--project intentionsutil` "passes **vacuously** with zero
@@ -2391,7 +2404,7 @@ that fence carried no `--project` at all, and the bare name fails **loudly** —
 `Error: No projects matched the filter "intentionsutil".  (Startup Error)`,
 non-zero exit. There is no vacuous-pass hazard here. **Do not "correct" the
 other `npm test --prefix packages/intentionsutil` fences in this document on
-that premise** — six of them remain, and all six are valid.)*
+that premise** — measured 2026-08-31, `grep -cx 'npm test --prefix packages/intentionsutil' plans/dispatch-rsi-serialized-pr-plan.md` returns **8**, and all eight are valid.)*
 
 Manual: run one tick with timing before and after; confirm the `intentions/`
 scan count drops from 2 to 1 and the per-candidate `node` subprocess count

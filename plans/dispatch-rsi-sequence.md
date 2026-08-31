@@ -1369,8 +1369,19 @@ for the wrapper only when you need its own logic (`clear-park`'s park-refresh
 and rollback, `mint-mainqa-nodes`' create-and-verify), and accept its
 one-landing-per-node cost as the price of that logic.
 
-Creates cannot ride an edit batch either way: a born-fresh file has no
-`origin/main` pre-image, so it emits no `--base` token.
+Creates ride the same batch as edits. An earlier revision of this paragraph
+said they cannot; that was wrong, corrected 2026-08-31. Only the premise was
+true: a born-fresh node has no `origin/main` pre-image, so it contributes no
+`--base` token. That is harmless, because `--base` is a **per-id opt-in**
+compare-and-swap — `check_base_freshness()` iterates the manifest's own keys
+(`for id in "${!BASE[@]}"`), so a positional id absent from the manifest is
+simply not CAS-checked. Nothing in `graph-commit`'s id handling segregates
+creates from edits: its own header documents `--prune <id>` as "(repeatable,
+mixable with ordinary positional ids)", and the ordinary-id existence guard
+asks only that the file be on disk — `intentions/<id>.md does not exist —
+write the node via write-node.ts before graph-commit` — never that it exist on
+`origin/main`. So one invocation can carry creates, edits and prunes together,
+with `--base` entries for exactly the ids that have an `origin/main` pre-image.
 
 So when estimating a graph-heavy position, **budget by invocation count, not by
 node count** — and check first whether the work can collapse into one direct
