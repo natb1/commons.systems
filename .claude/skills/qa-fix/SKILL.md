@@ -244,13 +244,22 @@ each fork site.
    increment `SKILL_SUBAGENTS` by 1 on the fork path only. If the fork then reports a
    merge conflict, escalate and stop.
 
-1. **Detect whether the implementation has a browser component.** From
-   `git diff --name-only origin/main...HEAD`, a browser component exists if any
-   changed path is a `vite.config.*`, a frontend template (`index.html`, `src/` of a
-   frontend app), or under a known frontend package (`budget`, `fellspiral`,
-   `landing`, `print`). This supplies the **app dir** for the QA server (Step 3b) and
-   tells the triage subagent whether a browser is available (per-item run is decided
-   in Step 3).
+1. **Detect whether the implementation has a browser component.** Resolve the
+   baseline, then diff against it with TWO dots (the helper has already resolved
+   the base):
+
+   ```bash
+   DIFF_BASE=$(.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh --at-remote-tip first-parent)
+   ```
+   ```bash
+   git diff --name-only "$DIFF_BASE"..HEAD
+   ```
+
+   A browser component exists if any changed path is a `vite.config.*`, a frontend
+   template (`index.html`, `src/` of a frontend app), or under a known frontend
+   package (`budget`, `fellspiral`, `landing`, `print`). This supplies the **app
+   dir** for the QA server (Step 3b) and tells the triage subagent whether a browser
+   is available (per-item run is decided in Step 3).
 
    From the same diff: if any changed path is `firestore.rules` or a Firestore query
    module, `Read .claude/docs/firestore.md` for the rules-deploy caveat — on a
