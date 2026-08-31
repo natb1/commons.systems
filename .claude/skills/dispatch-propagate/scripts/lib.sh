@@ -1240,8 +1240,9 @@ gh_commit_is_ancestor_rest() {
 # gh_issue_view_rest.
 # Args: $1 = <N> (PR number, required); --repo owner/repo (optional).
 # Output: one JSON object on stdout matching the porcelain shape — an EXPLICIT
-#   named projection: {number, title, body, state, mergedAt, mergeable,
-#   mergeStateStatus, headRefName, headRefOid, labels:[{name}]}.
+#   named projection: {number, title, body, state, mergedAt, mergeCommitSha,
+#   mergeable, mergeStateStatus, isDraft, headRefName, headRefOid,
+#   labels:[{name}]}.
 # Byte-compat bridges over the raw REST shape:
 #   - state: lowercase `open`/`closed` → UPPERCASE via `ascii_upcase`. (REST has
 #     no distinct MERGED state — a merged PR is state `closed` — so a consumer
@@ -1256,6 +1257,15 @@ gh_commit_is_ancestor_rest() {
 #     the GraphQL enum string `MERGEABLE`/`CONFLICTING`/`UNKNOWN` that dispatch
 #     call sites string-compare. Mapped explicitly: true→MERGEABLE,
 #     false→CONFLICTING, null (or absent)→UNKNOWN.
+#   - isDraft: REST's `draft` boolean passed through under the porcelain
+#     camelCase key `isDraft` — the same field name and boolean vocabulary
+#     `gh pr list --json isDraft` emits, so a consumer can read draftness off
+#     either source with one spelling. The raw value is passed through
+#     UNCOERCED, so a payload with no `draft` key surfaces as `null` rather
+#     than being folded into `false`. Consumers that gate on draftness must
+#     therefore compare against `"false"`/`"true"` explicitly and treat `null`
+#     as neither — the shape dispatch-ci-ready's non-draft short-circuit
+#     already assumes.
 #   - mergeStateStatus: remapped from REST's snake_case `mergeable_state` and
 #     `ascii_upcase`d to match the porcelain GraphQL enum casing (REST is
 #     lowercase `clean`/`dirty`/`blocked`).
@@ -1364,6 +1374,7 @@ gh_pr_view_rest() {
       else "UNKNOWN" end
     ),
     mergeStateStatus: ((.mergeable_state // "") | ascii_upcase),
+    isDraft: .draft,
     headRefName: .head.ref,
     headRefOid: .head.sha,
     labels: ((.labels // []) | map({name}))

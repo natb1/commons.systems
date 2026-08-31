@@ -748,6 +748,7 @@ printf '%s\n' '{
   "state": "open",
   "mergeable": true,
   "mergeable_state": "clean",
+  "draft": true,
   "head": {"ref": "feature-branch", "sha": "abc123def456"},
   "labels": [{"name": "enhancement", "color": "84b6eb"}, {"name": "dispatch:reviewed", "color": "000000"}],
   "extra_rest_field": "drop me"
@@ -759,6 +760,10 @@ assert_eq "pr: body" "the pr body" "$(jq -r '.body' <<<"$pv")"
 assert_eq "pr: state upcased OPEN" "OPEN" "$(jq -r '.state' <<<"$pv")"
 assert_eq "pr: mergeable boolean true → enum MERGEABLE" "MERGEABLE" "$(jq -r '.mergeable' <<<"$pv")"
 assert_eq "pr: mergeStateStatus key present + upcased" "CLEAN" "$(jq -r '.mergeStateStatus' <<<"$pv")"
+# REST `draft` → porcelain `isDraft`, the field name and boolean vocabulary
+# `gh pr list --json isDraft` already emits. Its consumer is graph-select-target's
+# inlined ci-readiness decision, which short-circuits READY on a non-draft PR.
+assert_eq "pr: draft boolean → isDraft passthrough" "true" "$(jq -r '.isDraft' <<<"$pv")"
 assert_eq "pr: headRefName passthrough from head.ref" "feature-branch" "$(jq -r '.headRefName' <<<"$pv")"
 assert_eq "pr: headRefOid passthrough from head.sha" "abc123def456" "$(jq -r '.headRefOid' <<<"$pv")"
 assert_eq "pr: labels narrowed to [{name}] (2 labels)" "2" "$(jq '.labels | length' <<<"$pv")"
@@ -768,7 +773,7 @@ assert_eq "pr: raw REST extra field dropped" "" "$(jq -r '.extra_rest_field // e
 # Raw REST pull with no merged_at → mergedAt key present with value null
 # (open/closed-unmerged signal; consumers test `mergedAt != null`).
 assert_eq "pr: mergedAt null when merged_at absent" "null" "$(jq -r '.mergedAt' <<<"$pv")"
-assert_eq "pr: top-level key set" "body headRefName headRefOid labels mergeCommitSha mergeStateStatus mergeable mergedAt number state title" \
+assert_eq "pr: top-level key set" "body headRefName headRefOid isDraft labels mergeCommitSha mergeStateStatus mergeable mergedAt number state title" \
   "$(jq -r 'keys | join(" ")' <<<"$pv")"
 teardown
 
@@ -832,6 +837,9 @@ assert_eq "pr: absent mergeable_state → empty string" "" "$(jq -r '.mergeState
 assert_eq "pr: headRefName from head.ref (9003)" "computing-branch" "$(jq -r '.headRefName' <<<"$pv3")"
 # Absent labels in raw REST → empty array (// [] path), not null.
 assert_eq "pr: absent labels → empty array" "0" "$(jq '.labels | length' <<<"$pv3")"
+# Absent `draft` in raw REST → isDraft null, NOT coerced to false. A `// false`
+# here would silently tell every draftness gate "this PR is ready for review".
+assert_eq "pr: absent draft → isDraft null (never coerced to false)" "null" "$(jq -r '.isDraft' <<<"$pv3")"
 teardown
 
 echo "Test: gh_pr_view_rest -- missing number returns non-zero with diagnostic stderr"
