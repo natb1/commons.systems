@@ -38,10 +38,13 @@ their own source inline — do not read them as user rules.
 - 2026-08-31 — Review effort scales by diff class: `high` + opus for code diffs
   touching dispatch/graph write paths; one `medium` round for docs/plan/
   test-only diffs. Hard cap: 2 rounds per PR; findings after round 2 become
-  follow-up nodes, never a round 3. **This supersedes rule 4 of the index's
-  "The code-review gate" section (`plans/dispatch-rsi-sequence.md:1467`), which
-  reads `high` for docs-only diffs and no round cap on code diffs — apply this
-  bullet, not that rule.** The cap is executor-tracked: **no script enforces
+  follow-up nodes, never a round 3. **This superseded rule 4 of the index's
+  "The code-review gate" section (`plans/dispatch-rsi-sequence.md:1467`), whose
+  pre-2026-08-31 text read `high` for docs-only diffs and no round cap on code
+  diffs. That divergence is closed** — rule 4 now states this tiering and this
+  cap directly, so the two agree and neither overrides the other; the sentence
+  is kept as history, not as a live "apply this, not that" instruction. The cap
+  is executor-tracked: **no script enforces
   it** (nothing in `dispatch-code-review`, `dispatch-review-plan-gate` or
   `lib.sh` counts rounds), so count rounds yourself before launching one.
 - 2026-08-31 — Delegation by default: units are built in background
@@ -95,14 +98,13 @@ their own source inline — do not read them as user rules.
   `intentions/tactic-supersession-edge-and-terminal.md` (needs a clean
   intentions-only branch; `graph-commit` pushes HEAD).
 - Task #120: 11 excluded `npx tsx` sites — unblocked (#3171, #3174 merged).
-- Index rule 4 (`plans/dispatch-rsi-sequence.md:1467`) still carries the
-  superseded review-effort text (`high` for docs-only, no round cap); edit it at
-  the next index touch. The supersession is recorded in Rulings above either
-  way.
-- **RESOLVED 2026-08-31 (this commit)** — the carry-forward directly above is
-  discharged: index rule 4 now states the tiering and the 2-round cap directly,
-  so the index no longer contradicts this file. The Rulings bullet that declares
-  rule 4 superseded is kept as history; it is no longer a live divergence.
+- **RESOLVED 2026-08-31 (this commit)** — the standing carry-forward "index
+  rule 4 (`plans/dispatch-rsi-sequence.md:1467`) still carries the superseded
+  review-effort text (`high` for docs-only, no round cap); edit it at the next
+  index touch" is discharged: rule 4 now states the tiering and the 2-round cap
+  directly, so the index no longer contradicts this file. The Rulings bullet
+  that recorded the supersession is kept as history; it is no longer a live
+  divergence, and nothing is owed at the next index touch.
 - `dispatch-code-review` has a **two-phase contract, and phase 2 is not
   optional.** The launcher returns **rc 5 = detached-and-running**; the
   `setsid` child writes Claude's output to
@@ -125,11 +127,16 @@ their own source inline — do not read them as user rules.
   `dispatch-ladder/SKILL.md`) now pass a bound, and `rsi`/`rsi-audit` each gained
   an explicit terminal branch for an id-only match that names Unit 4 as where
   `--id` arrives. Still owed: the `--id` flag itself, the slug→id addressing
-  rewrite, and the retired-stub prose. Both call sites carry a hard "mint
-  nothing" branch for Unit 4 to convert, and name Unit 4 in the prose, so they
-  are greppable. Task #128.
+  rewrite, and the retired-stub prose. `rsi/SKILL.md` and `rsi-audit/SKILL.md`
+  (not `dispatch-ladder/SKILL.md`, which only passes the bound) each carry a
+  hard "mint nothing" branch for Unit 4 to convert, and name Unit 4 in the
+  prose, so they are greppable. Task #128.
 - Task #127 — three design calls deferred out of #3180 round 2 want a follow-up
-  node: the `$PWD` sidecar misattribution
+  node. **All three `path:line` anchors below resolve on #3180's branch
+  (`agent-a1cabfeca49083030`), not on `origin/main`** — #3180 is unmerged, and
+  on main `stamp-dispatch-session.sh` is 55 lines and `aggregate-usage.sh` has
+  no `review_runs` at all, so an anchor that finds nothing means "read the
+  branch", never "already fixed". The three: the `$PWD` sidecar misattribution
   (`.claude/hooks/stamp-dispatch-session.sh:203`); the Stop fast-path cost
   (`:105`, raised independently by *both* round-2 runs); and the `review_runs`
   replay double-count (`.claude/skills/rsi-audit/scripts/aggregate-usage.sh:859`
