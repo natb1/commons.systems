@@ -685,6 +685,15 @@ than per-edge, because what is being bounded is that THIS node is in flight.
 
 Rules 24, 25 and 26 enforce all of the above; see Graph-level validation.
 
+**No reader consults the terminal yet.** Landed 2026-08-31: the schema half is
+enforced (rules 24-26, the per-kind vocabulary, and the shared `isSuperseded` /
+`isRetired` predicates), but every liveness reader still judges on `phase`
+alone — the selector, the ladder-terminus census, and the goals/census/attention
+passes. So a node marked superseded today keeps being selected for dispatch, and
+a merged one classifies as a terminus `violation` rather than a terminal. Units 2
+and 3 of `tactic-supersession-edge-and-terminal` wire them; until those land,
+marking a node superseded records the intent but stops nothing.
+
 ## Required vs. optional
 
 The required core — `id`, `kind`, `statement`, `owner`, `status` — is always
