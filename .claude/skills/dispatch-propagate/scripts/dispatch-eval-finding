@@ -278,8 +278,8 @@
 # real git remote). Each holds a command line, split on whitespace:
 #   DISPATCH_EVAL_FINDING_GRAPH_COMMIT_CMD  default: <repo>/packages/intentionsutil/scripts/graph-commit
 #   DISPATCH_EVAL_FINDING_VERIFY_LANDED_CMD default: <repo>/packages/intentionsutil/scripts/verify-landed
-#   DISPATCH_EVAL_FINDING_WRITE_NODE_CMD    default: npx tsx <repo>/packages/intentionsutil/scripts/write-node.ts --dir <repo>/intentions
-#   DISPATCH_EVAL_FINDING_DUMP_NODE_CMD     default: npx tsx <repo>/packages/intentionsutil/scripts/dump-node.ts --dir <repo>/intentions
+#   DISPATCH_EVAL_FINDING_WRITE_NODE_CMD    default: node --import tsx/esm <repo>/packages/intentionsutil/scripts/write-node.ts --dir <repo>/intentions
+#   DISPATCH_EVAL_FINDING_DUMP_NODE_CMD     default: node --import tsx/esm <repo>/packages/intentionsutil/scripts/dump-node.ts --dir <repo>/intentions
 #   DISPATCH_EVAL_FINDING_CLASSIFY_CMD      default: the node --import tsx/esm readNode one-liner below
 #   DISPATCH_EVAL_FINDING_LIST_CMD          default: the node --import tsx/esm listNodes one-liner below
 #   DISPATCH_EVAL_FINDING_INTENTIONS_DIR    default: <repo>/intentions
@@ -402,7 +402,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # --- Environment -------------------------------------------------------------
-for bin in date flock git jq node npx; do
+for bin in date flock git jq node; do
   command -v "$bin" >/dev/null 2>&1 || { log "required command '$bin' not found on PATH"; exit 69; }
 done
 
@@ -431,12 +431,12 @@ fi
 if [[ -n "${DISPATCH_EVAL_FINDING_WRITE_NODE_CMD:-}" ]]; then
   read -r -a WRITE_NODE_CMD <<<"$DISPATCH_EVAL_FINDING_WRITE_NODE_CMD"
 else
-  WRITE_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/write-node.ts" --dir "$REPO_ROOT/intentions")
+  WRITE_NODE_CMD=(node --import tsx/esm "$REPO_ROOT/packages/intentionsutil/scripts/write-node.ts" --dir "$REPO_ROOT/intentions")
 fi
 if [[ -n "${DISPATCH_EVAL_FINDING_DUMP_NODE_CMD:-}" ]]; then
   read -r -a DUMP_NODE_CMD <<<"$DISPATCH_EVAL_FINDING_DUMP_NODE_CMD"
 else
-  DUMP_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/dump-node.ts" --dir "$REPO_ROOT/intentions")
+  DUMP_NODE_CMD=(node --import tsx/esm "$REPO_ROOT/packages/intentionsutil/scripts/dump-node.ts" --dir "$REPO_ROOT/intentions")
 fi
 if [[ -n "${DISPATCH_EVAL_FINDING_CLASSIFY_CMD:-}" ]]; then
   read -r -a CLASSIFY_CMD <<<"$DISPATCH_EVAL_FINDING_CLASSIFY_CMD"

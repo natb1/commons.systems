@@ -2,7 +2,7 @@
  * Extracts chapter body HTML from a real EPUB file and writes it to a JSON file
  * for use by the storage seed. Run once to generate the fixture:
  *
- *   npx tsx print/seeds/extract-epub-chapters.ts ~/Downloads/pg3296-images-3.epub print/seeds/confessions-chapters.json 3
+ *   node --import tsx/esm print/seeds/extract-epub-chapters.ts ~/Downloads/pg3296-images-3.epub print/seeds/confessions-chapters.json 3
  *
  * Arguments:
  *   1. Path to source EPUB file

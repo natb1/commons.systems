@@ -11,7 +11,7 @@
 // code.
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/check-node-selection.ts \
+//   node --import tsx/esm packages/intentionsutil/scripts/check-node-selection.ts \
 //     <node-id> <selected-phase> --dir <intentions-dir> [--stamp <path>] \
 //     [--snapshot-ref <ref>] [--snapshot-sha <sha>] \
 //     [--snapshot-fetched-at <iso8601>] [--allow-stale]

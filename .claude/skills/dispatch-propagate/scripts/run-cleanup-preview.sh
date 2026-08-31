@@ -28,7 +28,7 @@ delete_preview_channel "$CHANNEL_ID" "$HOSTING_SITE"
 if [ "$USES_FIRESTORE" = true ]; then
   NAMESPACE=$(get_firestore_namespace "$APP_NAME" "preview-${CHANNEL_ID}")
   echo "Deleting Firestore namespace '${NAMESPACE}'..."
-  FIRESTORE_NAMESPACE="$NAMESPACE" npx tsx packages/firestoreutil/bin/run-delete-namespace.ts
+  FIRESTORE_NAMESPACE="$NAMESPACE" node --import tsx/esm packages/firestoreutil/bin/run-delete-namespace.ts
 fi
 
 echo "Preview cleanup complete."

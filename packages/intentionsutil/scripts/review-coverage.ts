@@ -9,7 +9,7 @@
 // those host tactics land.
 //
 // Run from anywhere (the store dir is resolved relative to this file, not cwd):
-//   npx tsx packages/intentionsutil/scripts/review-coverage.ts
+//   node --import tsx/esm packages/intentionsutil/scripts/review-coverage.ts
 //
 // Determinism: `listNodes` returns nodes in id-sorted order, the render sorts
 // by id, and the output carries no wall-clock/environment data — two runs on

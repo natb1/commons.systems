@@ -13,7 +13,7 @@
 // attempted here — that stays with the session.
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/align-strategy-census.ts [intentionsDir]
+//   node --import tsx/esm packages/intentionsutil/scripts/align-strategy-census.ts [intentionsDir]
 //
 // intentionsDir defaults to `intentions` (relative to cwd), matching
 // validate-graph.ts. Errors propagate as thrown errors — no fallback, no

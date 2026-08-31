@@ -18,7 +18,7 @@
 // must get it from here (or call `deriveGap` themselves).
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> [intentionsDir]
+//   node --import tsx/esm packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> [intentionsDir]
 //
 // intentionsDir defaults to `intentions` (relative to cwd), matching
 // validate-graph.ts. Errors (missing argument, unknown id, non-strategy id)
@@ -38,7 +38,7 @@ function main(): void {
   const strategyId = process.argv[2];
   if (!strategyId) {
     throw new Error(
-      "Usage: npx tsx packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> [intentionsDir]"
+      "Usage: node --import tsx/esm packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> [intentionsDir]"
     );
   }
   const intentionsDir = process.argv[3] ?? "intentions";
