@@ -290,6 +290,15 @@ for spec in "$@"; do
     10)
       # ci-waiting: a draft PR's checks are still in progress. Leave the
       # reservation; the next tick re-selects once the CI verdict lands.
+      #
+      # NO STRIKE LADDER, and this is deliberate rather than an oversight. Exit
+      # 10 is reachable ONLY when the selector's own ci-ready gate passed
+      # moments earlier in this same tick — it is an intra-tick race, not a
+      # sustained state. The SUSTAINED form of the same condition is already
+      # counted one layer up, at graph-select-target's `ci-pending` arm, against
+      # DISPATCH_CI_PENDING_STRIKE_CAP (lib.sh). A second independent counter
+      # here would count the same stall twice and hold the node at half the
+      # intended budget.
       echo "waiting $id"
       ;;
     11)

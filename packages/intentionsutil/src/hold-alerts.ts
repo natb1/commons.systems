@@ -10,8 +10,10 @@
 //   1. `listHoldCandidates` (./hold-sweep.ts) enumerates and classifies holds.
 //      Alerting keeps only `cls === "manual"` — the holds with no
 //      machine-checkable re-check predicate (`KIND_RECHECK[kind].policy ===
-//      "manual"`, today `provision-conflict` and `fix-attempt-cap`), i.e. the
-//      ones that stay parked until a human or a dedicated session picks them up.
+//      "manual"`), i.e. the ones that stay parked until a human or a dedicated
+//      session picks them up. The set is DERIVED from KIND_RECHECK and is
+//      deliberately not enumerated here, so a new manual kind surfaces in
+//      alerting without an edit to this comment.
 //      Reusing it as-is is what binds alerting to the canonical hold id, drops
 //      holds whose source is gone, and drops holds whose `blocked_by` edge has
 //      already cleared.

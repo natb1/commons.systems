@@ -18,7 +18,7 @@
 //
 // Usage:
 //   node --import tsx/esm hold-node-decide.ts --source <id>
-//     --kind <provision-conflict|fix-attempt-cap|worktree-residue>
+//     --kind <provision-conflict|fix-attempt-cap|worktree-residue|ci-pending-stalled>
 //     --reason-file <f> --recommendation-file <f>
 //     [--body-file <f>] [--now <YYYY-MM-DD>] [--intentions <dir>]
 //
@@ -243,7 +243,7 @@ function parseArgs(argv: string[]): Args {
 
   if (sourceId === null || sourceId === "") fail("--source <node-id> is required");
   if (kind === null) {
-    fail("--kind <provision-conflict|fix-attempt-cap|worktree-residue> is required");
+    fail(`--kind <${HOLD_KINDS.join("|")}> is required`);
   }
   if (!isHoldKind(kind)) {
     fail(`--kind must be one of ${HOLD_KINDS.join("|")}, got "${kind}"`);

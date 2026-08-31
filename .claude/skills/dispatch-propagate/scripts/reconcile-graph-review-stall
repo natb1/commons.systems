@@ -20,6 +20,19 @@
 #              (tactic-graph-review-exclusion-stall-recovery) then re-surfaces
 #              as a `fix` candidate on the next selection tick.
 #
+#   ci-stall — CI never CONCLUDED at all (tactic-autonomous-ci-pending-liveness-bound).
+#              A `pending` verdict is not a regression, so `reviewStallRoute`
+#              maps it to null and this sweep used to do nothing — forever, on a
+#              node whose armed auto-merge can never fire and which no other
+#              surface observes. It is now counted per node in a SHA-keyed
+#              sidecar shared with graph-select-target, and on the
+#              DISPATCH_CI_PENDING_STRIKE_CAP-th consecutive `pending`
+#              observation of the SAME head SHA this sweep lands a `--kind
+#              ci-pending-stalled` hold. The resulting `blocked_by` edge is what
+#              makes it terminate: the enumeration below and the selector both
+#              skip a node with an open blocker, so each stalled node is held
+#              ONCE. Nothing is written to the graph below the cap.
+#
 # CONFLICTING detection is NO LONGER this sweep's job
 # (tactic-graph-router-conflict-routing): the selector now surfaces every
 # reviewed awaiting-merge node as a `pending-merge` candidate and enters the
@@ -56,6 +69,7 @@
 #
 # Stdout protocol, one line per tactic acted on; NOTHING for a skip:
 #   recovered <id> -> fix (ci=<verdict> merge=<state>)
+#   held <id> -> ci-stalled via <hold-id> (sha=<sha> strikes=<n>)
 #
 # Exit codes: 0 always (including a no-op sweep and any per-node error —
 # best-effort, matching reconcile-graph-merged's doctrine); 1 only for a hard
@@ -75,8 +89,17 @@
 # older than MAX_HOLD_SECONDS (default 300s). A graph-commit can block far
 # longer than that (it waits on the global landing lock for up to
 # LOCK_WAIT_SECONDS, default 1050s), so this sweep runs AT MOST ONE
-# graph-commit per tick: every `fix`-routed node's `--set-fix` write is
-# batched into ONE commit (exactly as reconcile-graph-merged batches its plan).
+# graph-commit PLUS AT MOST ONE `hold-node` per tick: every `fix`-routed node's
+# `--set-fix` write is batched into ONE commit (exactly as
+# reconcile-graph-merged batches its plan), and the ci-stall route lands the
+# FIRST entry of CI_STALL_IDS and no more, leaving the rest for the next sweep
+# (they still match the enumeration, and their strike counts are already at
+# cap). The hold is a second landing, so the stated budget really did go from
+# one to two — but it is bounded at two, and that bound is what the caller's
+# 300s heartbeat reasoning rests on. The hold lands AFTER the batched commit,
+# never inside the loop: hold-node runs its own graph-commit, whose
+# assert_clean_outside_ids would trip on the loop's still-uncommitted
+# `--set-fix` writes.
 # Per-tick actions are
 # additionally capped (GRAPH_REVIEW_STALL_CAP), and the lock heartbeat is
 # refreshed between candidates so the per-PR polling loop cannot age the lock
@@ -99,6 +122,10 @@ source "$SCRIPT_DIR/lib-graph-rollback.sh"
 # reconcile-graph-merged. Rollback-on-failure and compare-and-swap-on-land are
 # separate remedies; this sweep needs both.
 source "$SCRIPT_DIR/lib-graph-base-pin.sh"
+# resolve_main_worktree — so this sweep and graph-select-target key the
+# CI-pending strike sidecar on the SAME root, and therefore on the same file
+# per node. Two surfaces observing one stalled node must share one counter.
+source "$SCRIPT_DIR/lib-graph-worktree.sh"
 
 # ---- Argument parsing -------------------------------------------------------
 NODE_FILTER=""
@@ -115,6 +142,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+# Soft fallback (the shape graph-select-target's NATIVE_ROOT two-liner uses):
+# only the strike sidecar's location depends on this, and a sweep run from a
+# checkout with no `main` worktree still counts correctly against its own root.
+MAIN_ROOT=$(resolve_main_worktree "$REPO_ROOT"); MAIN_ROOT="${MAIN_ROOT:-$REPO_ROOT}"
 UTIL_SCRIPTS="$REPO_ROOT/packages/intentionsutil/scripts"
 GRAPH_COMMIT="$UTIL_SCRIPTS/graph-commit"
 
@@ -229,6 +260,12 @@ CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
 # Writes only; nothing is landed inside the loop (see the lock budget above).
 RECOVERED_IDS=()
 RECOVERED_MSGS=()
+# Nodes whose CI-pending strike ladder hit the cap this sweep, recorded in the
+# loop and landed after the batched graph-commit. Declared here, above the loop,
+# because the script runs `set -uo pipefail` and an unset array expansion aborts.
+CI_STALL_IDS=()
+declare -A CI_STALL_SHA=()
+declare -A CI_STALL_COUNT=()
 ACTED=0
 while IFS=$'\t' read -r id pr; do
   [[ -n "$id" && -n "$pr" ]] || continue
@@ -306,6 +343,87 @@ while IFS=$'\t' read -r id pr; do
     passing|failing) VERDICT="$RAW_VERDICT" ;;
     *) VERDICT="unknown" ;;   # pending or a call failure — not a regression
   esac
+
+  # --- CI-pending liveness bound (tactic-autonomous-ci-pending-liveness-bound)
+  #
+  # PLACEMENT IS LOAD-BEARING: this sits ABOVE the cost guard below, and must.
+  # A pending candidate folds to VERDICT="unknown" on a MERGEABLE PR, so the
+  # guard `continue`s first and anything placed below it would be dead code for
+  # this block's ENTIRE target population. Widening the guard is not the
+  # alternative — it is a binding superset of reviewStallRoute's non-null
+  # conditions, pinned by transitions.test.ts. Sit upstream of it instead.
+  #
+  # This is why the block reads RAW_VERDICT rather than VERDICT: `pending` is
+  # not a ROUTE, it is a liveness observation, and reviewStallRoute stays a pure
+  # closed-union function over passing|failing|unknown. Widening its signature
+  # would force every caller to handle a state that has no lane.
+  #
+  # Why this surface needs the bound at all, over and above the selector's:
+  # a tactic at phase `review` carrying the `reviewed` marker is excluded from
+  # selection entirely, so graph-select-target's own ci-pending ladder never
+  # sees it. THIS SWEEP IS ITS ONLY OBSERVER, and a `pending` verdict folds to
+  # `unknown`, which reviewStallRoute maps to null — a silent no-op. Such a node
+  # has an armed auto-merge that can never fire, forever.
+  #
+  # A non-pending candidate must FALL THROUGH, never `continue`: the guard and
+  # the routing below still have to run for it.
+  #
+  # Note one accepted gap: a candidate that goes CONFLICTING never reaches this
+  # point at all (the short-circuit above skips it before the CI fetch), so it
+  # keeps any strike file it was carrying. That is harmless — the counter is
+  # SHA-keyed and only ever bumps on `pending`, so a stale count cannot escalate
+  # on its own — and it is recorded here rather than fixed with a second clear.
+  if [[ -n "$RAW_VERDICT" ]]; then
+    if [[ "$RAW_VERDICT" == "pending" ]]; then
+      # HEAD_SHA is a bare `jq -r '.headRefOid'`, so it is the four-character
+      # string `null` when the field is missing. ci_pending_strike_bump refuses
+      # both empty and `null`; a non-zero return means "do not count", and the
+      # candidate falls through to the guard untouched.
+      # AN EXPLICIT --node RUN NEVER COUNTS, exactly as graph-select-target's
+      # NODE_TARGET guard does — and the two surfaces share ONE sidecar, so an
+      # exemption on only one of them is no exemption at all. dispatch-ladder-run
+      # calls this script with --node from inside its ci-wait poll (once per
+      # `sleep $POLL_S`, 60s by default), which would walk a healthy node to the
+      # cap in ~8 minutes of ordinary CI runtime.
+      if [[ -z "$NODE_FILTER" ]] &&
+         CI_STALL_STRIKES=$(ci_pending_strike_bump "$MAIN_ROOT" "$id" "$HEAD_SHA"); then
+        if (( CI_STALL_STRIKES < DISPATCH_CI_PENDING_STRIKE_CAP )); then
+          # A sidecar write is free, so it must NOT consume the ACTED budget —
+          # ACTED/CAP exist to bound LOCK-HOLDING work, and nothing here holds a
+          # lock. The next sweep re-enumerates this node unchanged.
+          continue
+        fi
+        # At or above the cap: RECORDED, not landed. hold-node refreshes from
+        # origin/main and lands its own graph-commit, whose
+        # assert_clean_outside_ids would trip on the --set-fix writes this loop
+        # may still have staged uncommitted. The landing happens after the
+        # batched commit has cleaned the tree; see the block near the tail.
+        # A hold IS lock-holding work, so the one that will actually be landed
+        # does spend ACTED — but ONLY that one. The tail block lands
+        # CI_STALL_IDS[0] and no more, so charging every at-cap candidate would
+        # spend the whole budget on recordings that this sweep never acts on:
+        # with the default CAP of 3, three at-cap pending nodes would `break`
+        # the loop after landing a single hold, starving the `fix` route for a
+        # genuinely red-CI node later in the enumeration.
+        if [[ "${#CI_STALL_IDS[@]}" -eq 0 ]]; then
+          CI_STALL_IDS+=("$id")
+          CI_STALL_SHA["$id"]="$HEAD_SHA"
+          CI_STALL_COUNT["$id"]="$CI_STALL_STRIKES"
+          ACTED=$(( ACTED + 1 ))
+        fi
+        continue
+      fi
+    else
+      # A CONCLUDED verdict. Clear the ladder so the count always means
+      # CONSECUTIVE pending observations, then fall through — this candidate
+      # still has to be guarded and routed exactly as before.
+      ci_pending_strike_clear "$MAIN_ROOT" "$id"
+    fi
+  fi
+  # RAW_VERDICT empty (the dispatch_ci_verdict_rest call itself failed) reaches
+  # here having neither counted nor cleared. A failed fetch is not evidence
+  # either way, and treating it as a pending observation would let a gh outage
+  # walk every reviewed node to its cap.
 
   # Cost guard, NOT the routing rule: reviewStallRoute (interruptRoute at the
   # fixed phase "review") returns null unless CI is failing or the PR is
@@ -395,7 +513,20 @@ while IFS=$'\t' read -r id pr; do
   esac
 done <<<"$CANDIDATES"
 
-[[ "${#RECOVERED_IDS[@]}" -eq 0 ]] && exit 0
+# BOTH arrays, not just RECOVERED_IDS. RECOVERED_IDS collects only `fix`-routed
+# nodes, so a tick whose sole finding is a ci-pending-stalled node leaves this
+# loop with CI_STALL_IDS non-empty and RECOVERED_IDS empty — and a
+# RECOVERED_IDS-only guard would exit here, building the array and then throwing
+# it away. That is not an edge case: the ci-stall route is the only route that
+# populates CI_STALL_IDS without also populating RECOVERED_IDS, so it is this
+# route's MAIN path, and the hold block below would be dead code on exactly the
+# sweeps it exists to serve.
+#
+# Widening here needs no other change: the batched `--set-fix` land below is
+# already guarded independently by `if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]`, so a
+# ci-stall-only tick falls straight through it and cannot produce an empty
+# graph-commit.
+[[ "${#RECOVERED_IDS[@]}" -eq 0 && "${#CI_STALL_IDS[@]}" -eq 0 ]] && exit 0
 
 # --- Land every staged fix-state write as ONE graph-commit -------------------
 # The land carries a diagnosis-time compare-and-swap: each recovered id's
@@ -505,6 +636,92 @@ if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]; then
   refresh_lock
 
   for msg in "${RECOVERED_MSGS[@]}"; do echo "$msg"; done
+fi
+
+# --- Land ONE recorded ci-stall hold -----------------------------------------
+# AFTER the batched graph-commit above, not before, and that ordering is the
+# whole reason this block is down here rather than inline in the loop. The
+# batched commit is what clears the staged `--set-fix` writes from the tree, and
+# hold-node runs its own graph-commit, which refuses to start while a tracked
+# file outside its own node set is dirty (assert_clean_outside_ids). When
+# RECOVERED_IDS is empty nothing was staged and the hold can land immediately;
+# when it is non-empty the commit had to land first. Sitting after the `fi`
+# satisfies both without a branch.
+#
+# ONE hold per run. The ci-stall route is this sweep's ONLY hold producer, so
+# there is no shared slot to negotiate — landing the first entry and leaving the
+# rest for the next sweep is enough. A skipped node still matches the
+# enumeration next tick and its strike count is already at cap.
+#
+# NATURAL TERMINATION: once the hold lands, the source gains a `blocked_by`
+# edge, and this sweep's own enumeration already skips any node with an open
+# blocker (blockersComplete) — exactly as it does for a conflict hold's
+# successor. The same edge removes the node from graph-select-target's candidate
+# set. So each stalled node is held ONCE, not once per tick.
+if [[ "${#CI_STALL_IDS[@]}" -gt 0 ]]; then
+  refresh_lock
+  ci_stall_id="${CI_STALL_IDS[0]}"
+  ci_stall_sha="${CI_STALL_SHA[$ci_stall_id]}"
+  ci_stall_n="${CI_STALL_COUNT[$ci_stall_id]}"
+  if ci_stall_tmp=$(mktemp -d); then
+    ci_stall_reason="$ci_stall_tmp/reason.txt"
+    ci_stall_rec="$ci_stall_tmp/recommendation.txt"
+    {
+      printf 'This tactic completed review and its auto-merge is armed, so the '
+      printf "selector's reviewed-marker exclusion means NO worker lane observes it — "
+      printf 'this sweep is its only observer. Its PR has reported a `pending` CI '
+      printf 'verdict on head SHA %s for %s consecutive sweeps: the checks either ' \
+        "$ci_stall_sha" "$ci_stall_n"
+      printf 'never started (an empty status-check rollup) or started and never '
+      printf 'concluded. The armed merge can therefore never fire, and no verdict can '
+      printf 'arrive on its own.\n'
+    } > "$ci_stall_reason"
+    {
+      printf "Inspect the PR's Checks tab. If no workflow run exists at all, re-trigger "
+      printf 'one — close and reopen the PR, or push an empty commit to the branch; a '
+      printf 'new head SHA also resets this strike counter. If a run is stuck or was '
+      printf 'cancelled by a queue or runner problem, re-run it.\n\n'
+      printf 'Do NOT route this through the CI-fix interrupt. That path strips the '
+      printf '`reviewed` marker and re-drafts the PR, discarding a completed review '
+      printf 'verdict — see the rationale in transitions.ts and above this script'"'"'s '
+      printf '`fix` arm. The problem here is a missing verdict, not a red one.\n\n'
+      printf 'Then resolve THIS HOLD TACTIC to `phase: done` and prune it — clearing '
+      printf '`office_hours` alone does not unblock %s.\n' "$ci_stall_id"
+    } > "$ci_stall_rec"
+    # CAPTURE stdout, redirect only stderr: the hold id is parsed off hold-node's
+    # own output line for the `held ... via <hold-id>` protocol line below.
+    # (graph-select-target's _hold_node_fix_cap discards stdout instead — it runs
+    # inside a command substitution whose value is contractual. This does not.)
+    if ci_stall_out=$( (cd "$REPO_ROOT" && "$UTIL_SCRIPTS/hold-node" "$ci_stall_id" \
+        --kind ci-pending-stalled \
+        --reason-file "$ci_stall_reason" \
+        --recommendation-file "$ci_stall_rec") 2>/dev/null ); then
+      ci_pending_strike_clear "$MAIN_ROOT" "$ci_stall_id"
+      echo "held $ci_stall_id -> ci-stalled via $(awk '{print $2}' <<<"$ci_stall_out") (sha=$ci_stall_sha strikes=$ci_stall_n)"
+    else
+      # The sidecar is deliberately NOT cleared: the next sweep re-observes the
+      # node at cap and retries the landing, the same posture the selector's
+      # producer and dispatch-graph-execute's ladder take.
+      echo "reconcile-graph-review-stall: hold-node --kind ci-pending-stalled failed for $ci_stall_id" >&2
+    fi
+    # AFTER the hold, on BOTH arms — the refresh above this block only covers
+    # the walk INTO it. hold-node lands its own graph-commit, which waits up to
+    # LOCK_WAIT_SECONDS (1050s) for the GLOBAL landing lock, far past the
+    # MAX_HOLD_SECONDS (300s) after which dispatch-acquire-lock reclaims a
+    # holder. dispatch-select-tick invokes this sweep while holding its dispatch
+    # lock and then runs hundreds more lines, so without this a contended
+    # landing leaves the tick's lock reclaimable and a second tick double-books
+    # the same candidate set. Every sibling landing brackets the same way —
+    # graph-select-target's _graph_commit_conflict, _hold_node_fix_cap and
+    # _hold_node_ci_pending, and this script's own batched graph-commit above.
+    # The FAILURE arm needs it too: a hold-node that blocked on the landing lock
+    # and then failed has aged the caller's heartbeat exactly as much as one
+    # that succeeded.
+    refresh_lock
+    rm -rf "$ci_stall_tmp"
+  else
+    echo "reconcile-graph-review-stall: mktemp failed for the $ci_stall_id ci-stall hold" >&2
+  fi
 fi
 
 exit 0

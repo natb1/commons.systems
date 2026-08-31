@@ -27,16 +27,30 @@
  *                    steady state with no autonomous repair path, so the
  *                    producer escalates on the FIRST occurrence — there is no
  *                    strike ladder in front of it. IMPLEMENTED.
+ *  - `ci-stalled`  — ci-pending-stalled: the autonomous tick observed the
+ *                    node's draft-PR CI verdict as `pending` on the SAME head
+ *                    SHA for DISPATCH_CI_PENDING_STRIKE_CAP consecutive
+ *                    observations — its checks either never started (an empty
+ *                    status-check rollup) or started and never concluded.
+ *                    Unlike worktree-residue this DOES have a plausible
+ *                    self-heal (the checks may still start), so it sits behind
+ *                    a strike ladder rather than escalating on the first
+ *                    occurrence. IMPLEMENTED.
  *  - `no-progress` — RESERVED for a different tactic's future per-node
  *                    no-progress fuse. Deliberately NOT wired to a producer
  *                    kind or a CLI case here; the name is reserved so the id
  *                    scheme (`tactic-hold-no-progress-<source>`) is documented
- *                    and cannot be claimed for something else.
+ *                    and cannot be claimed for something else. The CI-stall
+ *                    bound above minted its own `ci-stalled` slug rather than
+ *                    claiming this one: `no-progress` names a general per-node
+ *                    fuse, and spending it on one specific cause would leave
+ *                    that general fuse unnameable.
  */
 export const HOLD_KINDS = [
   "provision-conflict",
   "fix-attempt-cap",
   "worktree-residue",
+  "ci-pending-stalled",
 ] as const;
 
 export type HoldKind = (typeof HOLD_KINDS)[number];
@@ -45,6 +59,7 @@ export const KIND_SLUGS: Record<HoldKind, string> = {
   "provision-conflict": "conflict",
   "fix-attempt-cap": "fix-cap",
   "worktree-residue": "residue",
+  "ci-pending-stalled": "ci-stalled",
 };
 
 /**
@@ -128,5 +143,13 @@ export const KIND_RECHECK: Record<HoldKind, HoldRecheck> = {
     why:
       "the cap is exhausted attempts, not an observable external condition; " +
       "re-checking would mean re-running CI, which is not a predicate",
+  },
+  "ci-pending-stalled": {
+    policy: "manual",
+    why:
+      "checking whether CI concluded requires a live PR-verdict fetch, not a " +
+      "local predicate the auto-resolve sweep can run without a network call; " +
+      "and the hold fires on an exhausted strike ladder, not on a condition " +
+      "that flips back on its own",
   },
 };
