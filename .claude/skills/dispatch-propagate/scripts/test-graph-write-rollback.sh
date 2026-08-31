@@ -1811,8 +1811,17 @@ exit 0
 SH
 chmod +x "$C10F/packages/intentionsutil/scripts/graph-commit"
 REAL_NODE10F="$(command -v node)"
-cp "$BIN10E/node" "$BIN10F/node"
-chmod +x "$BIN10F/node"
+# The shim install is CHECKED. Under `set -uo pipefail` (no `set -e`) a failed
+# `cp` is silent, the shim is simply absent, `node` resolves to the real
+# interpreter, GC_NODE_CALLS is never written — and every "no spawn" assertion
+# below then passes for the wrong reason. A broken install is an environment
+# fault, so abort the harness rather than report a green case.
+cp "$BIN10E/node" "$BIN10F/node" \
+  || { echo "error: case 10f: cp of the counting node shim $BIN10E/node -> $BIN10F/node failed" >&2; exit 1; }
+chmod +x "$BIN10F/node" \
+  || { echo "error: case 10f: chmod +x failed for the counting node shim $BIN10F/node" >&2; exit 1; }
+[[ -x "$BIN10F/node" ]] \
+  || { echo "error: case 10f: the counting node shim is absent or not executable at $BIN10F/node — the case would silently exercise the real interpreter" >&2; exit 1; }
 
 out="$(
   cd "$C10F" || exit 99
@@ -1820,17 +1829,36 @@ out="$(
   export GC_REAL_NODE="$REAL_NODE10F" GC_NODE_CALLS="$WORK/t10f-node-calls.log"
   bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall 2>&1
 )"; rc=$?
+# ANTI-VACUITY WITNESS. Every other assertion in this case is an absence — no
+# shim log, no `recovered` line, no `since:` stamp, no argv file — and an
+# enumeration that produced ZERO candidates satisfies all of them. So the case
+# could not distinguish "the guard held over two real candidates" from "the
+# sweep did nothing at all". The gh stub's own call log is the existing
+# observable that separates the two (cases 10d and 10g already assert against
+# it), so no production output has to change: exactly FOUR REST calls, one
+# `pulls/<n>` and one `check-runs` per seeded candidate. Pinning the count
+# exactly, rather than `> 0`, also catches a candidate silently dropped or
+# double-polled. And requiring BOTH check-runs fetches is what distinguishes
+# this case from 10g, where the CONFLICTING short-circuit skips the fetch.
+calls10f="$(cat "$FIX10F/gh-calls.log" 2>/dev/null || true)"
+ncalls10f="$(grep -c . <<<"$calls10f" || true)"
 
 if [[ $rc -eq 0 ]] \
+   && [[ "${ncalls10f// /}" -eq 4 ]] \
+   && grep -q '/pulls/201$' <<<"$calls10f" \
+   && grep -q '/pulls/202$' <<<"$calls10f" \
+   && grep -q 'deadbeef201/check-runs$' <<<"$calls10f" \
+   && grep -q 'deadbeef202/check-runs$' <<<"$calls10f" \
    && [[ "$([ -f "$WORK/t10f-node-calls.log" ] && echo 1 || echo 0)" -eq 0 ]] \
    && ! grep -q 'recovered' <<<"$out" \
    && ! grep -qE '^\s*since:' "$C10F/intentions/t-rs1.md" \
    && ! grep -qE '^\s*since:' "$C10F/intentions/t-rs2.md" \
    && [[ ! -e "$WORK/t10f-argv.txt" ]]; then
-  ok "reconcile-graph-review-stall: the cost guard holds — a green + MERGEABLE candidate spawns no reviewStallRoute subprocess, and nothing is written or landed"
+  ok "reconcile-graph-review-stall: the cost guard holds — both seeded candidates are really polled (exactly 4 REST calls: pulls+check-runs for each), yet a green + MERGEABLE candidate spawns no reviewStallRoute subprocess, and nothing is written or landed"
 else
-  no "reconcile-graph-review-stall cost guard (rc=$rc)"
+  no "reconcile-graph-review-stall cost guard (rc=$rc, gh calls=$ncalls10f)"
   printf '%s\n' "$out"
+  printf 'gh calls:\n%s\n' "$calls10f"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1881,8 +1909,13 @@ exit 0
 SH
 chmod +x "$C10G/packages/intentionsutil/scripts/graph-commit"
 REAL_NODE10G="$(command -v node)"
-cp "$BIN10E/node" "$BIN10G/node"
-chmod +x "$BIN10G/node"
+# Checked for the same reason case 10f's install is — see the comment there.
+cp "$BIN10E/node" "$BIN10G/node" \
+  || { echo "error: case 10g: cp of the counting node shim $BIN10E/node -> $BIN10G/node failed" >&2; exit 1; }
+chmod +x "$BIN10G/node" \
+  || { echo "error: case 10g: chmod +x failed for the counting node shim $BIN10G/node" >&2; exit 1; }
+[[ -x "$BIN10G/node" ]] \
+  || { echo "error: case 10g: the counting node shim is absent or not executable at $BIN10G/node — the case would silently exercise the real interpreter" >&2; exit 1; }
 
 out="$(
   cd "$C10G" || exit 99
