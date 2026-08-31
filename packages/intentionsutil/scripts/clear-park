@@ -203,15 +203,36 @@ fi
 # still fails that closed, but late and confusingly. Reject it here as the usage
 # error it is, which is the residue clarification 242's required-`-C` contract
 # exists to close.
+#
+# The TEST is `rev-parse --show-prefix`, NOT a string compare against
+# `rev-parse --show-toplevel`. --show-prefix is empty IFF the directory IS the
+# toplevel, and it needs no normalization step: symlink-proof, trailing-slash-
+# proof and `.`-proof. The compare this replaces needed the caller's path
+# normalized, and the only portable way to do that (`cd ... && pwd`) is LOGICAL
+# while --show-toplevel is SYMLINK-RESOLVED. A checkout reached through a
+# symlink therefore read as TWO DIFFERENT TREES and was rejected outright, on
+# the one tree it was standing in — a legitimate invocation refused by a gate
+# built to catch a nested -C. Same repair, same reasoning, as
+# lint-verify-fence-paths.sh's explicit---repo-root branch, whose own note
+# points at .github/scripts/check-type-safety-escapes.sh's SCRIPT_GIT_ROOT
+# divergence guard for the underlying trap.
 if ! GIT_TOPLEVEL="$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>/dev/null)"; then
   echo "clear-park: -C '$REPO_ARG' is not inside a git repository -- the store must be committable" >&2
   exit 2
 fi
-GIT_TOPLEVEL="$(cd "$GIT_TOPLEVEL" && pwd)"
-if [[ "$GIT_TOPLEVEL" != "$REPO_ROOT" ]]; then
+GIT_PREFIX="$(git -C "$REPO_ROOT" rev-parse --show-prefix)"
+if [[ -n "$GIT_PREFIX" ]]; then
   echo "clear-park: -C '$REPO_ARG' is not the git toplevel (that is '$GIT_TOPLEVEL') -- pass the checkout root, or this script and graph-commit resolve the same intentions/<id>.md to two different files" >&2
   exit 2
 fi
+# Past the gate, adopt git's OWN spelling of the toplevel for everything
+# downstream. -C is passed straight through to graph-commit and named in this
+# script's diagnostics, so one canonical path keeps both from disagreeing about
+# which tree they are describing. It resolves to the same directory the caller
+# named -- --show-prefix being empty is exactly the proof of that -- so this
+# renames the path, never retargets it.
+REPO_ROOT="$GIT_TOPLEVEL"
+INTENTIONS_DIR="$REPO_ROOT/intentions"
 
 NODE_ID="${ARGS[0]:-}"
 # Optional 2nd arg: free-text note folded into the commit message.

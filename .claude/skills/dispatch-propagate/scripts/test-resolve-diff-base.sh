@@ -32,6 +32,11 @@ TMP_ROOT=$(mktemp -d)
 #     "behind-nonroot"
 #                — the strict-ancestor shape with a first parent available
 #                  (the push race on `main`)
+#     "merged-feature"
+#                — the OTHER strict-ancestor shape: a TWO-commit feature branch
+#                  already merged into origin/main as a merge commit's SECOND
+#                  parent, with HEAD parked on the branch tip. HEAD is contained
+#                  in origin/main but sits OFF its first-parent chain.
 #     (default)  — a feature branch one commit ahead of origin/main
 # Sets: REPO
 # ---------------------------------------------------------------------------
@@ -78,6 +83,29 @@ make_repo() {
       git -C "$REPO" commit -q -m "the second push, landed while this run was in flight"
       git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
       git -C "$REPO" checkout -q "$MINE_SHA"
+      ;;
+    merged-feature)
+      # A TWO-commit feature branch merged into main with --no-ff, so the merge
+      # commit's FIRST parent is the pre-merge main tip and its SECOND parent is
+      # the branch. HEAD is parked on the branch tip: contained in origin/main
+      # (so merge-base == HEAD, and the no-delta arm fires) but OFF origin/main's
+      # first-parent chain.
+      #
+      # Two commits, not one, is load-bearing: it is what makes HEAD^1..HEAD
+      # DEMONSTRABLY smaller than the branch. With one commit the narrowed range
+      # would happen to equal the branch and the vacuity would be invisible.
+      git -C "$REPO" checkout -q -b merged-feature
+      printf 'first\n' > "$REPO/branch-first.txt"
+      git -C "$REPO" add branch-first.txt
+      git -C "$REPO" commit -q -m "branch commit 1 of 2"
+      printf 'second\n' > "$REPO/branch-second.txt"
+      git -C "$REPO" add branch-second.txt
+      git -C "$REPO" commit -q -m "branch commit 2 of 2"
+      MERGED_TIP_SHA=$(git -C "$REPO" rev-parse HEAD)
+      git -C "$REPO" checkout -q main
+      git -C "$REPO" merge -q --no-ff merged-feature -m "merge the feature branch"
+      git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+      git -C "$REPO" checkout -q "$MERGED_TIP_SHA"
       ;;
     *)
       git -C "$REPO" update-ref refs/remotes/origin/main "$BASELINE_SHA"
@@ -242,6 +270,63 @@ assert_contains "behind/first-parent: warning tells the reader to fetch/rebase" 
 # ... and the default mode is untouched by that: still exit 5.
 run_sut --repo-root "$REPO"
 assert_eq "behind-nonroot/default: exit 5" "yes" "$(rc_of "$RC" 5)"
+
+# ---------------------------------------------------------------------------
+# Test 4b: the OTHER strict-ancestor shape — an ALREADY-MERGED FEATURE BRANCH.
+#
+# HEAD is contained in origin/main, so the no-delta arm fires exactly as it does
+# for the push race above. But HEAD came in as the merge commit's SECOND parent,
+# so it sits OFF origin/main's first-parent chain, and HEAD^1..HEAD is the
+# branch's LAST COMMIT rather than the branch. first-parent mode used to narrow
+# to it anyway and exit 0 with nothing but a stderr WARNING — a required check
+# examining one commit of a two-commit branch and reporting PASS, which is the
+# very vacuous-pass class this helper exists to close. A warning is not a gate.
+#
+# The DEFAULT `fail` mode is deliberately untouched here: it already exits 5 for
+# both halves of the strict-ancestor shape, and the arm below asserts it still
+# does.
+# ---------------------------------------------------------------------------
+echo "Test 4b: an already-merged feature branch is refused, not narrowed to HEAD^1"
+make_repo merged-feature
+
+# The reproduction, measured on the fixture rather than asserted from the
+# helper: the range first-parent mode WOULD have handed the caller sees only the
+# branch's last commit, while the branch introduced two files.
+NARROWED=$(git -C "$REPO" diff --name-only "$MERGED_TIP_SHA^1..$MERGED_TIP_SHA")
+assert_eq "merged-feature: HEAD^1..HEAD sees only the branch's LAST commit" \
+  "branch-second.txt" "$NARROWED"
+FULL_BRANCH=$(git -C "$REPO" diff --name-only "$BASELINE_SHA..$MERGED_TIP_SHA")
+assert_eq "merged-feature: the branch itself introduced BOTH files" \
+  "branch-first.txt
+branch-second.txt" "$FULL_BRANCH"
+
+run_sut --repo-root "$REPO" --at-remote-tip first-parent
+assert_eq "merged-feature/first-parent: exit 5" "yes" "$(rc_of "$RC" 5)"
+assert_eq "merged-feature/first-parent: stdout is empty" "" "$OUT"
+assert_contains "merged-feature/first-parent: names the condition" \
+  "OFF its first-parent chain" "$ERR"
+assert_contains "merged-feature/first-parent: names the shape" \
+  "already-merged feature branch" "$ERR"
+assert_contains "merged-feature/first-parent: names the remedy" "--head" "$ERR"
+# It must REFUSE, not narrow: no base on stdout means no source= line either.
+assert_not_contains "merged-feature/first-parent: no base was resolved" \
+  "source=first-parent" "$ERR"
+
+# ... and the default mode is unchanged: the same exit 5 it always gave.
+run_sut --repo-root "$REPO"
+assert_eq "merged-feature/default: exit 5 (unchanged)" "yes" "$(rc_of "$RC" 5)"
+assert_contains "merged-feature/default: still the STRICT ANCESTOR message" \
+  "STRICT ANCESTOR" "$ERR"
+
+# The positive control that keeps the refusal narrow: the ON-chain half of the
+# same strict-ancestor shape — the push race on `main` — must still resolve.
+# Without this, "refuse every strict ancestor" would pass the case above while
+# reddening every required context on `main`.
+make_repo behind-nonroot
+run_sut --repo-root "$REPO" --at-remote-tip first-parent
+assert_eq "control: on-chain strict ancestor still exits 0" "0" "$RC"
+assert_contains "control: on-chain strict ancestor still resolves first-parent" \
+  "source=first-parent" "$ERR"
 
 # ---------------------------------------------------------------------------
 # Test 5: exit 4 — the remote ref does not resolve.
