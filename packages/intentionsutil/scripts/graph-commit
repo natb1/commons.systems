@@ -499,8 +499,22 @@ CURRENT_MSG=""
 # INDISTINGUISHABLE by every property a reader has — which is exactly the hole
 # lib-graph-rollback.sh's `_graph_discard_stranded_commits` fell into: it read a
 # peer writer's freshly landed commit as this sweep's own stranded write and
-# reset it away. A per-writer label makes that structurally impossible: a
-# foreign commit fails the ownership test and is preserved.
+# reset it away. A per-writer label closes that for CROSS-SCRIPT peers: a commit
+# stamped by a DIFFERENT writer script fails the ownership test and is
+# preserved.
+#
+# THE LABEL IS PER-SCRIPT, NOT PER-INVOCATION, and the difference is a real
+# residual gap rather than a quibble. Two concurrent runs of the SAME writer —
+# the tick's `reconcile-graph-merged` and /dispatch-ladder's
+# `reconcile-graph-merged --node` — stamp the SAME string, so each still reads
+# the other's commit as its own and the old destruction is unchanged for that
+# pair. That overlap is reachable: those call sites serialize on
+# `dispatch-acquire-lock`, but that lock is stale-reclaimable once the holder's
+# heartbeat is older than DISPATCH_LOCK_MAX_HOLD_SECONDS (default 300s) and
+# neither reconciler heartbeats inside its own run, which dispatch-tick budgets
+# at up to 600s. A per-invocation identity would change this trailer's format
+# and every reader of it, so it is deliberately out of scope here — but nothing
+# in this label should be read as covering same-writer concurrency.
 #
 # A TRAILER rather than an author/committer override, deliberately. The trailer
 # is additive — it leaves `git blame`, `git shortlog` and every identity-keyed

@@ -59,14 +59,22 @@
 # write that never passed check_base_freshness.
 #
 # So classify HEAD before restoring, and never report a rollback that did not
-# happen:
+# happen. "Unpushed" below means unpushed AND ABOVE <head-at-arm> — the exact
+# set `reset --mixed <head-at-arm>` would drop. An unpushed commit BELOW
+# <head-at-arm> is out of the rewind's reach and so is none of this function's
+# business; classifying it could only manufacture a refusal that strands our own
+# escaped write (see the rev-list note in the body):
 #   - HEAD unmoved                 → checkout -- (the ordinary rollback).
 #   - HEAD moved, nothing unpushed → graph-commit landed what it moved to (its
 #                                    pushed park path); checkout -- is a no-op
 #                                    that preserves it.
 #   - HEAD moved, unpushed commits that are all graph-commit PARK commits
 #                                  → keep them (an unpushed park is a record a
-#                                    human still needs) and say so loudly.
+#                                    human still needs) and say so loudly. A
+#                                    park in that range also BLOCKS the discard
+#                                    below, for exactly the reason a foreign
+#                                    commit does: the rewind drops EVERY commit
+#                                    above <head-at-arm>, park included.
 #   - HEAD moved, unpushed NON-park commits attributed to ANOTHER writer
 #                                  → not ours to touch. Keep them and restore
 #                                    only our own node files to HEAD.
@@ -75,7 +83,9 @@
 #   - HEAD moved, unpushed NON-park commits attributed to US → that is the
 #                                    escaped write. Discard it by rewinding to
 #                                    <head-at-arm> and restoring the paths it
-#                                    touched when that is safe, else refuse
+#                                    touched when that is safe — which means
+#                                    NOTHING ELSE shares that range: no other
+#                                    writer's commit, and no park. Else refuse
 #                                    loudly.
 #
 # WHY ATTRIBUTION, AND WHY IT FAILS CLOSED.
@@ -88,6 +98,21 @@
 # packages/intentionsutil/scripts/graph-commit), and <label> here is compared
 # against it. A caller gets its own commits attributed by exporting
 # GRAPH_WRITER=<the same label> before it invokes graph-commit.
+#
+# WHAT THE LABEL DOES NOT ANSWER. It identifies the WRITER SCRIPT, not the
+# invocation, so it discriminates CROSS-SCRIPT peers and only those:
+# reconcile-graph-merged tells graph-select-target's commit from its own. TWO
+# CONCURRENT INVOCATIONS OF THE SAME SCRIPT — the tick's
+# `reconcile-graph-merged` and /dispatch-ladder's `reconcile-graph-merged
+# --node`, say — stamp the SAME label, so each still reads the other's commit as
+# `mine` and the pre-attribution destruction is unchanged for that pair. The
+# overlap is reachable, not theoretical: every call site takes the same
+# `dispatch-acquire-lock` selection lock, but that lock is stale-reclaimable
+# once the holder's heartbeat is older than DISPATCH_LOCK_MAX_HOLD_SECONDS
+# (default 300s) and neither reconciler heartbeats inside its own run, which
+# dispatch-tick budgets at up to 600s. A genuine per-INVOCATION identity would
+# change the trailer format and every reader of it, so it is deliberately not
+# attempted here — but do not read the attribution as covering that case.
 #
 # An UNATTRIBUTED commit is treated as `unknown` and REFUSED (rc 1), never
 # discarded. Every graph commit made before the trailer shipped carries none, as
@@ -155,8 +180,28 @@ graph_rollback_node_writes() {
   }
   if [[ -n "$head_at_arm" && "$head_now" != "$head_at_arm" ]]; then
     local rl_out
-    if ! rl_out="$(git -C "$repo_root" rev-list origin/main..HEAD 2>&1)"; then
-      echo "$label: HEAD moved to ${head_now:0:8} during the write and origin/main is unreadable ($rl_out) — the node write(s) were NOT rolled back; inspect by hand before any other graph-commit runs from this checkout" >&2
+    # CLASSIFY EXACTLY THE COMMITS THE REWIND COULD DROP, AND NO OTHERS.
+    # The only destructive act below is `reset --mixed <head-at-arm>`, which
+    # drops `<head-at-arm>..HEAD` and cannot reach anything at or below
+    # <head-at-arm>. `origin/main..HEAD` is a STRICTLY WIDER range than that: it
+    # also spans every unpushed commit BELOW <head-at-arm> — a pre-trailer
+    # leftover, a stale worktree's residue, a hand-made commit. Classifying
+    # those forced the unattributed/foreign refusal over a commit this function
+    # could not have destroyed even if it tried, and the refusal is not free: it
+    # leaves OUR OWN escaped write committed on HEAD for the next graph-commit
+    # to push, and our node file dirty — which bricks graph-commit's
+    # assert_clean_outside_ids for every writer in the checkout. The
+    # pre-attribution code handled that case correctly; keeping the range
+    # narrow is what keeps it correct.
+    #
+    # `HEAD --not origin/main <head-at-arm>` is the same set minus everything
+    # <head-at-arm> already reaches: precisely the rewind's blast radius.
+    # <head-at-arm> is an EXCLUDE, not a range endpoint, so a <head-at-arm> that
+    # is NOT an ancestor of HEAD still yields a well-defined set — and the
+    # `merge-base --is-ancestor` gate in _graph_discard_stranded_commits is what
+    # refuses that shape, not this rev-list.
+    if ! rl_out="$(git -C "$repo_root" rev-list HEAD --not origin/main "$head_at_arm" 2>&1)"; then
+      echo "$label: HEAD moved to ${head_now:0:8} during the write and origin/main or ${head_at_arm:0:8} is unreadable ($rl_out) — the node write(s) were NOT rolled back; inspect by hand before any other graph-commit runs from this checkout" >&2
       return 1
     fi
     local -a unpushed=() parks=() mine=() foreign=() unattributed=()
@@ -196,12 +241,27 @@ graph_rollback_node_writes() {
     fi
     if [[ "${#mine[@]}" -gt 0 ]]; then
       # The discard rewinds to <head-at-arm>, which drops EVERY commit above it
-      # — not only the ones the gate inspected. So a foreign commit anywhere in
-      # that range makes the rewind unsafe no matter how clean our own stranded
-      # commits look. Refuse rather than trade one writer's leak for another
-      # writer's loss.
+      # — not only the ones the gate inspected. So ANYTHING in that range that
+      # is not ours to destroy makes the rewind unsafe, no matter how clean our
+      # own stranded commits look. There are TWO such things, and each gets its
+      # own refusal because the operator's next move differs.
+      #
+      # (a) another writer's content commit. Refuse rather than trade one
+      #     writer's leak for another writer's loss.
       if [[ "${#foreign[@]}" -gt 0 ]]; then
         echo "$label: HEAD carries this writer's un-landed commit(s) (${mine[0]:0:8}) BELOW or beside another writer's commit(s) (${foreign[0]:0:8}, Graph-Writer: $(_graph_commit_writer "$repo_root" "${foreign[0]}")) — rewinding to ${head_at_arm:0:8} would destroy the other writer's work, so the node write(s) were NOT rolled back. Drop this writer's commit(s) by hand before any other graph-commit runs from this checkout" >&2
+        return 1
+      fi
+      # (b) a PARK commit. The park test above routes it out of `foreign` on
+      #     purpose — a park is KEPT whoever made it, including one graph-commit
+      #     made for US — but "kept" is a claim about the rewind too, and
+      #     `reset --mixed` cannot spare it: it drops every commit above
+      #     <head-at-arm> indiscriminately. Discarding here would erase the
+      #     office_hours record this file's header promises to preserve, which
+      #     is the whole reason the park arm exists. Kept commits and
+      #     discardable ones cannot share one rewind, so refuse.
+      if [[ "${#parks[@]}" -gt 0 ]]; then
+        echo "$label: HEAD carries this writer's un-landed commit(s) (${mine[0]:0:8}) BELOW or beside an unpushed graph-commit park commit (${parks[0]:0:8}) — rewinding to ${head_at_arm:0:8} would erase a park record a human still needs whoever made it, so the node write(s) were NOT rolled back and NOTHING was discarded. Drop this writer's commit(s) by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
         return 1
       fi
       # Either the stranded commit is dropped (the tree is back at
