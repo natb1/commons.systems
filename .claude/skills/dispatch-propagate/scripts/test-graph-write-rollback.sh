@@ -101,7 +101,7 @@ REAL_REPO_ROOT="$(cd "$HARNESS_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS_SRC="$REAL_REPO_ROOT/packages/intentionsutil/scripts"
 INTENTIONSUTIL_SRC="$REAL_REPO_ROOT/packages/intentionsutil/src"
 
-for f in transition-node dispatch-graph-census dispatch-graph-main-red-sync lib.sh lib-graph-rollback.sh dispatch-config-load; do
+for f in transition-node dispatch-graph-census dispatch-graph-main-red-sync lib.sh lib-graph-rollback.sh lib-graph-base-pin.sh dispatch-config-load; do
   [[ -f "$HARNESS_DIR/$f" ]] || { echo "error: $f not found at $HARNESS_DIR/$f" >&2; exit 1; }
 done
 command -v jq >/dev/null || { echo "error: jq not found" >&2; exit 1; }
@@ -156,6 +156,10 @@ build_seed_repo() {
   cp "$HARNESS_DIR/lib.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib.sh"
   # The shared rollback primitive every graph writer under test sources.
   cp "$HARNESS_DIR/lib-graph-rollback.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib-graph-rollback.sh"
+  # The shared diagnosis-time compare-and-swap pin, likewise sourced by both
+  # reconcile sweeps — without this every seeded case that runs one dies at
+  # `source`.
+  cp "$HARNESS_DIR/lib-graph-base-pin.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib-graph-base-pin.sh"
   cp "$HARNESS_DIR/dispatch-config-load" "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
   chmod +x "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
 }
@@ -2443,6 +2447,278 @@ else
   no "unarmed reconciler pair (rc=$rc13a, pulls reads=$pulls13a, expected 2)"
   printf '%s\n' "$out13a"
   printf 'argv: %s\n' "$argv13a"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 14: reconcile-graph-review-stall's pin CONSTRUCTION — one `--base` pair
+# per recovered id, each pinning the EXACT diagnosis-time blob, and the blob
+# pinned is the one on DISK rather than origin/main's.
+#
+# Asserting the exact sha is the whole point. `--base` merely being present
+# would also hold for a pin taken after the mutation, or for a pin read off
+# origin/main — both of which look correct and protect nothing.
+# ---------------------------------------------------------------------------
+T14="$WORK/t14-seed"
+build_seed_repo "$T14"
+cp "$HARNESS_DIR/reconcile-graph-review-stall" "$T14/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+chmod +x "$T14/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+review_stall_node "$T14/intentions/t-rs1.md" t-rs1 401
+review_stall_node "$T14/intentions/t-rs2.md" t-rs2 402
+new_origin t14
+init_and_push "$T14"
+
+C14="$WORK/t14-clone"
+clone_with_node_modules "$C14"
+
+# Make the clone's on-disk t-rs2 differ from origin/main's, WITHOUT touching the
+# clone: land an unrelated body edit on origin out-of-band, exactly as a
+# concurrent writer would. The clone now lags origin on that node, so the
+# disk blob and origin/main's blob are different objects and an implementation
+# that pinned `origin/main:intentions/t-rs2.md` would produce a visibly
+# different sha. (t-rs1 is left synced, so the case also covers the ordinary
+# byte-identical path.)
+D14="$WORK/t14-oob"
+git clone -q "$ORIGIN" "$D14"
+git -C "$D14" config user.email other@test
+git -C "$D14" config user.name other
+printf '\nan out-of-band edit landed on origin after the clone\n' >>"$D14/intentions/t-rs2.md"
+git -C "$D14" commit -qam 'out-of-band edit to t-rs2'
+git -C "$D14" push -q origin main
+
+# The expected pins: the blobs of the files the sweep will actually READ, taken
+# from the clone's working tree before it runs. No `-w` — this only has to
+# compute the value the sweep is expected to produce, not publish it.
+EXP14_1="$(git -C "$C14" hash-object -- intentions/t-rs1.md)"
+EXP14_2="$(git -C "$C14" hash-object -- intentions/t-rs2.md)"
+ORIGIN14_2="$(git -C "$C14" fetch -q origin && git -C "$C14" rev-parse origin/main:intentions/t-rs2.md)"
+
+BIN14="$WORK/t14-bin"; FIX14="$WORK/t14-fixtures"
+review_stall_gh_stub "$BIN14" "$FIX14"
+cat >"$C14/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t14-argv.txt"
+exit 0
+SH
+chmod +x "$C14/packages/intentionsutil/scripts/graph-commit"
+
+out14="$(
+  cd "$C14" || exit 99
+  export PATH="$BIN14:$PATH" GC_FIXTURE_DIR="$FIX14"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall 2>&1
+)"; rc14=$?
+argv14="$(cat "$WORK/t14-argv.txt" 2>/dev/null || true)"
+nbase14="$(grep -c -- '^--base$' <<<"$argv14" || true)"
+
+if [[ $rc14 -eq 0 ]] \
+   && [[ "$nbase14" == "2" ]] \
+   && grep -qx -- "t-rs1=$EXP14_1" <<<"$argv14" \
+   && grep -qx -- "t-rs2=$EXP14_2" <<<"$argv14" \
+   && [[ "$EXP14_2" != "$ORIGIN14_2" ]] \
+   && ! grep -qx -- "t-rs2=$ORIGIN14_2" <<<"$argv14"; then
+  ok "reconcile-graph-review-stall pin construction: one --base per recovered id, each pinning the exact diagnosis-time blob of the file on DISK (t-rs2's origin/main blob, which differs, is NOT what was pinned)"
+else
+  no "reconcile-graph-review-stall pin construction (rc=$rc14, --base count=$nbase14, expected 2)"
+  printf '%s\n' "$out14"
+  printf 'argv:\n%s\n' "$argv14"
+  printf 'expected t-rs1=%s t-rs2=%s (origin t-rs2=%s)\n' "$EXP14_1" "$EXP14_2" "$ORIGIN14_2"
+fi
+
+# ===========================================================================
+# Case 15: THE RACE for reconcile-graph-review-stall — an office_hours park
+# landed between the sweep's read and its commit survives the fix-interrupt
+# write. This is the case that reproduces bug X on this sweep, and the one that
+# runs the REAL graph-commit (its check_base_freshness is the machinery under
+# test; only `gh` is stubbed).
+#
+# Mechanism ported from Case 7. There is no natural injection point between the
+# pin and graph-commit's fetch — they are back-to-back in one synchronous
+# process — so graph-commit is moved aside to graph-commit.real and a thin
+# sentinel-guarded wrapper lands the concurrent park ONCE before delegating. The
+# real check_base_freshness then re-fetches, sees origin's blob no longer matches
+# the pinned base, and three-way merges: office_hours is a SCALAR_FIELD this
+# sweep never touches (ours == base) so scalarMerge takes THEIRS (the park
+# survives), while execution.fix is unchanged on origin (theirs == base) so it
+# takes OURS.
+#
+# REVERT U14's --base threading and this case goes red with office_hours: null
+# — the exact erasure this node exists to stop.
+#
+# Both halves of the assertion matter: a case that only checked the park's
+# survival would also pass if the sweep had landed nothing at all.
+# ===========================================================================
+# review_stall_race_gh_stub <bin-dir> <fixture-dir> — the stub case 15 needs,
+# because it is the only review-stall case that runs the REAL graph-commit.
+#
+# The two consumers want OPPOSITE check-runs verdicts and both are load-bearing:
+#   - the SWEEP fetches check-runs for the candidate PR's head sha and must see
+#     RED, or reviewStallRoute never returns `fix` and nothing is written;
+#   - GRAPH-COMMIT fetches check-runs for its own scratch landing commit and must
+#     see GREEN, or its required-check gate die()s and nothing is landed.
+# review_stall_gh_stub answers RED to everything, which is why cases 10a-13a
+# (all of which stub graph-commit out entirely) can share it and this case
+# cannot.
+#
+# The discriminator is `--jq`, not the sha: graph-commit always passes its
+# required-check filter as `--jq <prog>`, and the sweep's dispatch_ci_verdict_rest
+# never does (it takes --paginate and applies its own jq downstream). So a call
+# carrying --jq is graph-commit's gate and is answered from the all-green fixture
+# by running graph-commit's REAL --jq program against it, exactly as
+# reconcile_gh_stub does; a call without one is the sweep's CI verdict fetch and
+# is answered red. Keying on the sha instead would couple the fixture to
+# review_stall_gh_stub's `"deadbeef" + <pr>` head-sha convention for no gain.
+review_stall_race_gh_stub() {
+  local bindir="$1" fixdir="$2"
+  mkdir -p "$bindir" "$fixdir"
+  cat >"$fixdir/checkruns-red.json" <<'JSON'
+{"check_runs": [
+  {"name": "unit-tests", "status": "completed", "conclusion": "failure", "id": 1, "app": {"slug": "github-actions"}}
+]}
+JSON
+  cat >"$fixdir/green.json" <<'JSON'
+{"check_runs": [
+  {"name": "acceptance", "status": "completed", "conclusion": "success", "id": 1, "app": {"slug": "github-actions"}},
+  {"name": "preview-and-smoke", "status": "completed", "conclusion": "success", "id": 2, "app": {"slug": "github-actions"}},
+  {"name": "lint", "status": "completed", "conclusion": "success", "id": 3, "app": {"slug": "github-actions"}},
+  {"name": "unit-tests", "status": "completed", "conclusion": "success", "id": 4, "app": {"slug": "github-actions"}}
+]}
+JSON
+  cat >"$bindir/gh" <<'SH'
+#!/usr/bin/env bash
+path=""
+jq_program=""
+prev=""
+for a in "$@"; do
+  case "$prev" in
+    --jq) jq_program="$a" ;;
+  esac
+  case "$a" in
+    */pulls/*|*/check-runs) path="$a" ;;
+  esac
+  prev="$a"
+done
+echo "$path" >> "$GC_FIXTURE_DIR/gh-calls.log"
+case "$path" in
+  */check-runs)
+    if [[ -n "$jq_program" ]]; then
+      # graph-commit's required-check gate — its own landing commit is green.
+      jq -r "$jq_program" "$GC_FIXTURE_DIR/green.json"
+    else
+      # the sweep's CI verdict for the candidate PR — red, which is what makes
+      # the node route to `fix` in the first place.
+      cat "$GC_FIXTURE_DIR/checkruns-red.json"
+    fi ;;
+  */pulls/*)
+    num="${path##*/}"
+    jq -n --argjson n "$num" '{
+      number: $n, title: "harness pr", body: "",
+      state: "open",
+      merged_at: null,
+      merge_commit_sha: null,
+      mergeable: true, mergeable_state: "clean",
+      head: {ref: "harness-branch", sha: ("deadbeef" + ($n | tostring))},
+      labels: []
+    }' ;;
+  *)
+    echo "gh stub: unhandled invocation: $*" >&2; exit 1 ;;
+esac
+SH
+  chmod +x "$bindir/gh"
+}
+
+T15="$WORK/t15-seed"
+build_seed_repo "$T15"
+cp "$HARNESS_DIR/reconcile-graph-review-stall" "$T15/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+chmod +x "$T15/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+review_stall_node "$T15/intentions/t-rs-race.md" t-rs-race 415
+
+# The concurrent-park wrapper is installed in the SEED and pushed, so the clone
+# sits EXACTLY at origin/main. Load-bearing, not tidiness — see Case 7's note:
+# installing it in the clone instead requires committing it (graph-commit's
+# assert_clean_outside_ids refuses to start on a dirty tracked file), and that
+# commit makes the worktree "ahead of origin/main with non-intentions changes",
+# so graph-commit takes its ensure_intentions_only_base() `git reset --hard
+# FETCH_HEAD` path and DISCARDS the file check_base_freshness just merged. The
+# case would then fail for a reason unrelated to the code under test.
+mv "$T15/packages/intentionsutil/scripts/graph-commit" \
+   "$T15/packages/intentionsutil/scripts/graph-commit.real"
+cat >"$T15/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+SD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ! -f "$SD/.concurrent-landed" ]]; then
+  # Another writer (an office-hours park, a main-qa pass) lands an office_hours
+  # park on the SAME node AFTER the sweep pinned its base but before this land.
+  D="$(mktemp -d)"
+  git clone -q "$GC_ORIGIN" "$D"
+  git -C "$D" config user.email other@test
+  git -C "$D" config user.name other
+  awk '
+    /^office_hours: null$/ {
+      print "office_hours:"
+      print "  reason: concurrent park landed between the sweep read and its commit"
+      print "  since: 2026-08-05"
+      print "  recommendation: harness fixture park"
+      print "  session_type: other"
+      next
+    }
+    { print }
+  ' "$D/intentions/$GC_NODE.md" >"$D/intentions/$GC_NODE.md.new"
+  mv "$D/intentions/$GC_NODE.md.new" "$D/intentions/$GC_NODE.md"
+  git -C "$D" commit -qam 'concurrent office_hours park (bypassing the sweep)'
+  git -C "$D" push -q origin main
+  rm -rf "$D"
+  # Fast-forward THIS checkout's HEAD onto the park commit while leaving the
+  # working-tree node file (the sweep's --set-fix edit, written from a read that
+  # predates the park) untouched. `--mixed`, never `--hard`, is the crux:
+  #
+  # If HEAD stays behind, graph-commit's push is rejected, it rebases, git
+  # reports a textual conflict on the node file, and layer-2's field-level
+  # auto-merge rescues the park all by itself — the park survives with or
+  # without --base and the case proves nothing. Production erasures had no
+  # conflict to rescue: the park commit was ALREADY in the new commit's
+  # ancestry, so the sweep's whole-file rewrite from its stale in-memory read
+  # fast-forwarded cleanly and silently dropped the park. `reset --mixed` puts
+  # the checkout in exactly that state, leaving --base as the ONLY thing that
+  # can still catch the lost update.
+  git -C "$GC_CLONE" fetch -q origin main
+  git -C "$GC_CLONE" reset -q --mixed FETCH_HEAD
+  : >"$SD/.concurrent-landed"
+fi
+exec "$SD/graph-commit.real" "$@"
+SH
+chmod +x "$T15/packages/intentionsutil/scripts/graph-commit"
+chmod +x "$T15/packages/intentionsutil/scripts/graph-commit.real"
+new_origin t15
+init_and_push "$T15"
+
+C15="$WORK/t15-clone"
+clone_with_node_modules "$C15"
+BIN15="$WORK/t15-bin"; FIX15="$WORK/t15-fixtures"
+review_stall_race_gh_stub "$BIN15" "$FIX15"
+
+# No RECON_ENV here, deliberately: unlike reconcile-graph-merged this sweep has
+# no time-based candidate filter. Its only MAX_HOLD_SECONDS references are prose
+# about the dispatch lock heartbeat (refresh_lock), which gates lock reclamation
+# and never eligibility. Cases 10a-13a export none either, and they pass.
+out15="$(
+  cd "$C15" || exit 99
+  export PATH="$BIN15:$PATH" GC_FIXTURE_DIR="$FIX15"
+  export GC_ORIGIN="$ORIGIN" GC_NODE=t-rs-race GC_CLONE="$C15"
+  export GRAPH_COMMIT_CHECK_POLL_SECONDS=1 GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=20
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall 2>&1
+)"; rc15=$?
+
+landed15="$(git -C "$C15" fetch -q origin && git -C "$C15" show origin/main:intentions/t-rs-race.md)"
+if [[ $rc15 -eq 0 ]] \
+   && grep -q 'concurrent park landed between the sweep read and its commit' <<<"$landed15" \
+   && grep -qE '^\s*since: 2026-08-05' <<<"$landed15" \
+   && grep -q '^recovered t-rs-race -> fix' <<<"$out15" \
+   && [[ "$(grep -cE '^\s*since:' <<<"$landed15")" -ge 2 ]]; then
+  ok "reconcile-graph-review-stall CAS race: a concurrently landed office_hours park SURVIVES the fix-interrupt sweep while the sweep's own execution.fix write still lands"
+else
+  no "reconcile-graph-review-stall CAS race (rc=$rc15)"
+  printf '%s\n' "$out15"
+  printf 'landed:\n%s\n' "$landed15"
 fi
 
 echo
