@@ -250,11 +250,19 @@ rather than improvising the next one.
 
 The body's follow-on worry — that the silently non-breaking prune path argues
 the terminal should give `validate-graph` something to check — is answered by
-this design and recorded here so it is not re-opened: nodes are never pruned, so
-a superseded node stays present and every inbound prose citation keeps
-resolving; rule 23 (Unit 1) makes the *outbound* supersession edge a hard fail
-when it dangles; and Unit 4 adds a `[SUPERSEDED-PRESENT]` digest table so the
-population is visible rather than merely non-broken.
+this design and recorded here so it is not re-opened — with one premise since
+refuted. **Nodes ARE pruned.** `graph-commit --prune` deletes node files, so a
+prune that strips a supersession target while an inbound `superseded_by`
+survives turns every whole-store `validate-graph` run red, CI included. The
+obligation that follows falls on the pruning agent: strip the pruned id from
+every inbound `superseded_by` in the same commit. `inboundSuperseders`
+(`packages/intentionsutil/src/transitions.ts`) is the scan that finds them, and
+it has **no caller on the prune path** — so nothing enforces this yet. What
+survives of the original answer: rule 24 (Unit 1) makes the *outbound*
+supersession edge a hard fail when it dangles, and Unit 4 adds a
+`[SUPERSEDED-PRESENT]` digest table so the population is visible rather than
+merely non-broken. *(Premise corrected 2026-08-31, matching the same correction
+PR19a landed on `intentions/kind-kind.md`.)*
 
 ## Design
 
@@ -293,7 +301,7 @@ population is visible rather than merely non-broken.
   a validation later never invalidates stored data, so same-kind is the safe
   direction to be wrong in.
 - *`superseded_by` is NOT kind-confined.* Unlike `blocked_by`/`validates`
-  (rule 10), it is legal on any kind, because rule 23's same-kind target rule
+  (rule 10), it is legal on any kind, because rule 24's same-kind target rule
   already makes it meaningful everywhere. `checkKindTypedFields` gets a comment
   saying the omission is deliberate, so a future reader does not "fix" it.
 
@@ -315,6 +323,22 @@ must not be split into a follow-up PR.
 ## Units of work
 
 ### Unit 1 — The `superseded_by` edge, the `superseded` vocabulary, and the shared predicates
+
+> **LANDED 2026-08-31 as PR19a (#3175), merge `fd5ce337`. This unit is a
+> RECORD, not an instruction — do not build it again.** It shipped split out
+> ahead of the rest of this node, by executor decision, to break the PR-level
+> cycle with PR4/Position 5; units 2-5 below are still unbuilt and sit at
+> Position 6.
+>
+> **The rule numbers below are the ones that shipped, and they are NOT the ones
+> this section originally planned.** 23 was already taken by the
+> `attributes`-shadow rule, so everything shifted by one: the same-kind target
+> rule landed as **24**, the cycle rule as **25**, and a **26** was added that
+> this section never planned — `supersession_expiry`, required when a node is
+> superseded while in flight, ruled during implementation because adding the
+> field later would have been a data migration. Every citation in this node was
+> renumbered to match on 2026-08-31; a reader who finds a "rule 23" referring to
+> supersession is reading a stale copy.
 
 **Scope.**
 
@@ -346,7 +370,7 @@ must not be split into a follow-up PR.
   this array (its only consumers are `src/index.ts:1`, `src/graph.ts:14`, and
   the `Array.isArray` assertion at `test/graph.test.ts:17`), and adding it would
   imply a central status enum the graph deliberately does not have.
-- Rule 23 wiring: in `validateGraph`'s per-node loop, immediately after the
+- Rule 24 wiring: in `validateGraph`'s per-node loop, immediately after the
   rules 13-14 calls at :1679-1680, add
   `checkRequiredEdgeKinds(node, node.superseded_by, "superseded_by", node.kind, byId, problems);`.
   `checkRequiredEdgeKinds` (:1075-1095) is reused verbatim — no signature
@@ -354,7 +378,10 @@ must not be split into a follow-up PR.
   passing `node.kind` yields the same-kind rule. It also owns the dangling case,
   which is what the ruling requires (a dangling supersession target is a hard
   fail).
-- Rule 24 — the cycle check. Do **not** copy `checkBlockedByCycles` (:1503-1546).
+- Rule 25 — the cycle check. Do **not** copy `checkBlockedByCycles` (:1503-1546).
+  *(Shipped. `checkBlockedByCycles` NO LONGER EXISTS — the generalization below
+  was carried out, and the symbol is now `checkEdgeCycles`, `schema.ts:1756`.
+  Grepping for the old name finds nothing.)*
   Generalize it: extract its three-color DFS into
   `checkEdgeCycles(nodes, byId, problems, edgeName, edgeOf)` where
   `edgeOf: (n: IntentionNode) => string[]`, keep the existing message text for
@@ -365,14 +392,18 @@ must not be split into a follow-up PR.
   That structural placement matters: rule 15 is a whole-graph pass, not a
   per-node check. Self-supersession (`A` in its own `superseded_by`) is a
   length-1 cycle the DFS already catches.
-- The numbered rule-list doc comment (:1550-1641): append entries 23 and 24
-  after 22, in the existing prose style. **Rule 20 is BURNED** — the doc comment
-  says in terms "Rule numbers are cross-referenced from node bodies; 20 is
-  burned, so the next new rule takes 21", and 21 and 22 are now taken. The next
-  new rule is 23, the second is 24. Do not reuse 20.
+- The numbered rule-list doc comment (:1550-1641): append the new entries in the
+  existing prose style. **Rule 20 is BURNED** — the doc comment says in terms
+  "Rule numbers are cross-referenced from node bodies; 20 is burned, so the next
+  new rule takes 21". *(Corrected 2026-08-31: this bullet planned entries 23 and
+  24 after 22. By the time Unit 1 shipped, 23 was taken by the
+  `attributes`-shadow rule, so the entries landed as **24** (target exists and
+  shares kind), **25** (no `superseded_by` cycles) and **26** (an in-flight
+  supersession names its expiry event). 20 is still burned and was not
+  reused.)*
 - `checkKindTypedFields` (:1163-1195): add no restriction. Extend its doc
   comment with one sentence recording that `superseded_by` is deliberately not
-  kind-confined, and why (rule 23's same-kind target rule already makes it
+  kind-confined, and why (rule 24's same-kind target rule already makes it
   meaningful on every kind).
 
 Kind nodes — add a `superseded:` entry to each `attributes.status_vocabulary`
@@ -396,7 +427,13 @@ Kind-node prose:
   scan. Plus a short `superseded`-terminal paragraph modelled on the existing
   `done`-terminal prose (:240-258), stating that a superseded node keeps
   whatever `phase` it reached and that the router excludes it on `status`, not
-  on `phase`.
+  on `phase`. *(Corrected 2026-08-31: **there is no `done`-terminal prose in
+  `kind-tactic.md`**, and `:240-258` is `measured_impact` prose plus
+  `## ledger_entry` — the anchor was already wrong when this node was written,
+  not merely drifted. Unit 1 shipped the equivalent paragraph itself, at
+  `kind-tactic.md:166-174` inside `## phase`, so this obligation is largely
+  DISCHARGED; what remains is to check that paragraph says what this bullet
+  asks and extend it if not.)*
 - `intentions/kind-strategy.md`: a two-sentence pointer to that section, since
   the field is cross-kind and should not be documented twice.
 
@@ -577,7 +614,14 @@ Each site below currently treats a superseded node as live work. All use
   `packages/intentionsutil/scripts/align-tactics-census.ts` needs **no** change —
   it prints `classification` as a string (:65-71) and only special-cases
   `born-parked` — but re-read it to confirm before concluding that.
-- `packages/intentionsutil/src/goals.ts:53-57` — `activeFrontier`'s predicate is
+- `packages/intentionsutil/src/goals.ts:72-78` — **PARTLY SHIPPED, re-scope
+  before building.** As of `fd5ce337` this predicate (now at `:77`) already
+  carries `&& node.phase !== "done"`, and the doc comment — this bullet's other
+  obligation — has already been rewritten, so the falsified "every tactic leaf
+  is `status: raw`" premise is gone. What is left for this unit is ONLY the
+  `&& !isSuperseded(node)` conjunct. Do not re-derive the 380 → 315 count below
+  as if the clause were absent; it is already applied. — `activeFrontier`'s
+  predicate is
   EXCLUSION-based (`node.status !== "codified" && !parentIds.has(node.id)`), so
   a superseded leaf would still be reported as work still needing attention. Add
   `&& !isSuperseded(node)` and extend the doc comment. This is the highest-risk
@@ -627,7 +671,12 @@ Each site below currently treats a superseded node as live work. All use
   is a byte-identical reimplementation of the router's non-exported
   `isOpenTactic`. Change its signature to take the node
   (`isOpen(node: IntentionNode)`) and add `&& !isSuperseded(node)`; update the
-  single call site at :175 (`!isOpen(node.phase)` → `!isOpen(node)`).
+  call sites. *(Corrected 2026-08-31: this bullet claimed a **single** call
+  site at `:175` spelled `!isOpen(node.phase)`. That call site does not exist on
+  main. `isOpen` has exactly **two** callers, `reconcile-graph.ts:177` inside
+  `isAbsorbable` and `:205` inside `isCloseAbsorbable`, and neither is negated
+  at the call. Both must be updated, and the signature change ripples into two
+  predicates rather than one line.)*
 - `packages/intentionsutil/scripts/reconcile-graph.ts:242-250` — Pass 3's inline
   remaining-children scan re-derives "open child" by hand; add
   `&& !isSuperseded(n)` so a superseded child cannot permanently block its
@@ -758,6 +807,18 @@ it — they are historical records.
 
 ## Reuse
 
+> **Anchor provenance, 2026-08-31.** Every `path:line` in this node was
+> re-measured against `origin/main` `fd5ce337` after Unit 1 landed. Almost all
+> of them MOVED — `schema.ts` alone shifted by roughly 200-350 lines — and they
+> were deliberately **not** renumbered, because a line number re-measured now
+> decays again before Position 6 executes and a wrong number is worse than an
+> obviously-stale one. Re-grep by symbol name instead; the symbol names in this
+> node are correct except where a correction note says otherwise. The drift that
+> could cause wrong work WAS corrected inline: `checkBlockedByCycles` is now
+> `checkEdgeCycles`; `readParked` never existed; `reconcile-graph.ts`'s
+> "single call site" is two; `kind-tactic.md`'s `done`-terminal template does
+> not exist; and `goals.ts`'s `phase !== "done"` clause has already shipped.
+
 - `validateIdArray` — `packages/intentionsutil/src/schema.ts:335-340`. Generic
   id-array validator (throws `IntentionSchemaError`, maps `requireString`).
   Reused verbatim for `superseded_by`; no new validator.
@@ -765,13 +826,15 @@ it — they are historical records.
   The rules-13/14 existence+kind checker. Reused with NO signature change by
   passing `node.kind` as `expected`, which yields the same-kind rule. Call-site
   pattern at :1679-1680.
-- `checkBlockedByCycles` — `packages/intentionsutil/src/schema.ts:1503-1546`.
+- `checkEdgeCycles` — `packages/intentionsutil/src/schema.ts:1756`.
+  *(Was cited here as `checkBlockedByCycles` at `:1503-1546`; Unit 1 performed
+  the generalization described below, so that name is dead as of `fd5ce337`.)*
   The graph's ONLY cycle rule (rule 15); there is no `parent` cycle rule, and
   rule 6 is parent-*kind*, not parent-cycle. Generalized into a shared
   `checkEdgeCycles` and called twice. Wired outside the per-node loop at :1694 —
   match that placement.
 - `checkParentKind` — `packages/intentionsutil/src/schema.ts:1122-1134`. The
-  precedent for a same-kind edge rule; rule 23's model.
+  precedent for a same-kind edge rule; rule 24's model.
 - `checkStatusVocabulary` (rule 16) — `packages/intentionsutil/src/schema.ts:1197-1211`,
   wired at :1681. Already generic over any key added to a kind's vocabulary.
   Reused with zero code change: adding `superseded` to the six kind nodes is the
@@ -781,9 +844,12 @@ it — they are historical records.
   list was raw|refining|delegated|codified; kinds that still want those values
   declare them". Confirms adding to the kind nodes is correct and sufficient,
   with no central enum to touch.
-- `intentions/kind-tactic.md:104-174` (field-doc sections) and `:240-258` (the
-  `done`-terminal prose) — the doc templates for the new `## superseded_by`
-  section and the `superseded`-terminal paragraph.
+- `intentions/kind-tactic.md` field-doc sections, now `:153-216`
+  (`## phase` 153, `## execution` 176, `## validates` 193, `## blocked_by` 203)
+  — the doc template for the new `## superseded_by` section. *(The companion
+  citation `:240-258`, "the `done`-terminal prose", is dropped: no such section
+  exists. Unit 1 shipped the terminal paragraph at `kind-tactic.md:166-174`;
+  use that as the template.)*
 - `IntentionNode.blocked_by` / `.validates` — `schema.ts:244-245`, `:276-277`,
   `:1016-1019`. The exact triple of edit sites (declaration, input type,
   `validateNode` default) to mirror.
@@ -797,9 +863,13 @@ it — they are historical records.
   `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall:191-202`,
   and `.claude/skills/dispatch-propagate/scripts/graph-auto-merge:263-274`.
   Fixing it once fixes all four callers.
-- `readParked` and the "3. not parked" check —
-  `packages/intentionsutil/scripts/check-node-selection.ts` (helper around :139,
-  check around :310). The exact precedent for the new "not superseded"
+- The "not parked" check —
+  `packages/intentionsutil/scripts/check-node-selection.ts:346-349`.
+  *(Corrected 2026-08-31: this bullet named a helper `readParked` "around :139".
+  **No such symbol exists in that file, at any revision** — the parked test is
+  written inline as `node.office_hours !== null` at `:347`, and `:139` is
+  snapshot-age logic. Model the new gate on the inline test; there is no helper
+  to reuse. The numbered check list in the file header is at `:26-58`.)* The exact precedent for the new "not superseded"
   execute-side gate, including the `EXIT_STALE_SELECTION` (12) exit code and the
   `fail(code, reason, message)` shape.
 - `tableDonePresent` — `packages/intentionsutil/src/digest.ts:186-195`, wired at
@@ -889,8 +959,12 @@ Manual and judgment checks:
   ONE three-color DFS implementation (the shared `checkEdgeCycles`) called twice,
   not two near-identical functions. A copy would be the same defect class this
   strategy's one-shared-write-surface ruling condemns.
-- **Rule numbering.** Confirm the new rules are numbered 23 and 24 in both the
-  doc-comment list and the wiring comments, and that 20 remains marked RETIRED.
+- **Rule numbering.** Confirm the new rules are numbered **24, 25 and 26** in
+  both the doc-comment list and the wiring comments, and that 20 remains marked
+  RETIRED. *(Corrected 2026-08-31. This bullet read "numbered 23 and 24" and
+  would have failed against what Unit 1 actually shipped: 23 was already taken
+  by the `attributes`-shadow rule, and rule 26 — the expiry field — was added
+  during implementation and is not in the original plan at all.)*
   Rule numbers are cross-referenced from node bodies, so a reused number silently
   breaks those citations.
 - **Unit 5 pre-merge re-read.** Immediately before merge, re-read

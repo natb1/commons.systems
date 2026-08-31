@@ -27,7 +27,6 @@ phase: null
 execution: null
 validates: []
 blocked_by:
-  - tactic-supersession-edge-and-terminal
   - tactic-finding-search-all-producers
 office_hours: null
 pace_exempt: false
@@ -112,7 +111,19 @@ decomposition).
 
 ### Dependencies
 
-- `tactic-supersession-edge-and-terminal` — there is no `superseded_by` field to
-  write until that lands, and `validateNode` would drop it silently.
+- `tactic-supersession-edge-and-terminal` — **DISCHARGED 2026-08-31; the
+  `blocked_by` edge is dropped.** The `superseded_by` field and its
+  `supersession_expiry` companion shipped as that node's **Unit 1 only**, merged
+  `fd5ce337` (PR19a, #3175), so there is a field to write and `validateNode` no
+  longer drops it. What has *not* shipped is that node's Unit 2, the eligibility
+  gate, and the gap binds this node directly. Until Unit 2 lands a superseded
+  node keeps its non-`done` phase and is not pruned, so `blockersComplete`
+  (`router.ts`) counts it incomplete and blocks every dependent that names it
+  forever, which `classifyTerminus` drains as `excused-blocked` — so persisting
+  a drop can deadlock a live chain. **Interim rule, the one
+  `intentions/kind-kind.md` carries: do not persist a supersession whose target
+  any live node names in `blocked_by`.** Emit those drops to the round report
+  unpersisted, as today, rather than writing an edge that strands a dependent.
 - `tactic-finding-search-all-producers` — it authors the shared `supersedes()`
   evaluator this node calls. Added 2026-08-15 with the one-evaluator ruling.
+  **Still live, and now this node's only `blocked_by` entry.**

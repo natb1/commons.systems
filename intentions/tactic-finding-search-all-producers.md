@@ -49,8 +49,7 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by:
-  - tactic-supersession-edge-and-terminal
+blocked_by: []
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -267,6 +266,30 @@ search per creation and is what makes it affordable here.
 > *completed*. A `superseded` **status** value lands with the same tactic —
 > **status, not a new phase**; see that node for the three measured reasons the
 > phase design was withdrawn on 2026-08-15.
+>
+> **DISCHARGED 2026-08-31, and the `blocked_by` edge dropped on that basis.**
+> Every claim in the paragraph above is now false as written. `IntentionNode`
+> carries `superseded_by` and its `supersession_expiry` companion,
+> `validateNode` no longer drops them, and `superseded` is a real `status` value
+> with a vocabulary entry on all six kind nodes — shipped as
+> `tactic-supersession-edge-and-terminal`'s **Unit 1 only**, merged `fd5ce337`
+> (PR19a, #3175), together with `validateGraph` rules **24** (a supersession
+> target exists and shares the node's kind), **25** (no cycles in the
+> `superseded_by` graph) and **26** (a node superseded while in flight names its
+> expiry event). The paragraph is kept rather than rewritten: it is the record of
+> why this node was blocked, and the correction is the news.
+>
+> **What Unit 1 did NOT ship, and what check two must therefore obey.** The
+> eligibility gate is that node's Unit 2 and is unbuilt — it sits at Position 6,
+> behind this node. Until it lands, a superseded node keeps its non-`done`
+> phase and is not pruned, so `blockersComplete` (`router.ts`) counts it
+> incomplete and blocks every dependent that names it **forever**, and
+> `classifyTerminus` then drains those dependents as `excused-blocked`. So check
+> two's "RECORD and PARK" is safe only for a target that no live node names in
+> `blocked_by`. For any other target, record the judgment and do **not** write
+> the edge. This is the same interim instruction `intentions/kind-kind.md`
+> carries, landed by the same PR that refuted the claim the status axis avoided
+> this deadlock.
 
 6. **Supplement the greenfield-relevance gate — do not absorb it.** *(Rewritten
    2026-08-15. This item previously read "Absorb the greenfield-relevance gate…
