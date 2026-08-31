@@ -412,10 +412,18 @@ over the denied path, and that mount leaks into the worktree's visible
 namespace for the life of the session.
 
 It was committed once by a `git add -A` in a worktree, and removed again in
-`83d490ae`. **The fix is procedural, not a `.gitignore` entry** —
-`.claude/agents/` is a real Claude Code directory for agent definitions, and
-ignoring it repo-wide would hide legitimate files from every future session to
-suppress a phantom that does not exist on disk.
+`83d490ae`. This section used to rule that the fix is procedural and **not** a
+`.gitignore` entry, on the grounds that ignoring `.claude/agents/` repo-wide
+would hide legitimate agent definitions from every future session. **That
+ruling was reversed 2026-08-31**: `/.claude/agents` now sits in `.gitignore`'s
+sandbox bind-mount block beside `.gitmodules`, `.mcp.json` and
+`.claude/commands`, and the block's caveat carries the cost — `.claude/agents/`
+is a real Claude Code directory for project subagent definitions, so a real
+file there needs a one-time `git add -f`.
+
+The procedural rules below still stand. The ignore entry silences `git status`
+only for the paths that block lists; a phantom at any other denied path is
+still one `git add -A` away from being committed.
 
 - Never `git add -A` from a sandboxed worktree session; stage named paths.
 - Before trusting any `git status`-driven file collection, re-run it with
@@ -2378,11 +2386,24 @@ npx vitest run --project packages/intentionsutil --root .
 *(Re-spelled 2026-08-30 — the fence used to read
 `npm test --prefix packages/intentionsutil`. **That form was not broken**, and
 this is a parity change, not a repair: the new spelling is exactly what CI's
-`run-unit-tests.sh:137` runs (`npx vitest run --project <dir> --root
-"$REPO_ROOT"`), so the fence and CI exercise the same runner.
+`run-unit-tests.sh:149` runs (`npx vitest run --project <dir> --root
+"$REPO_ROOT"`), so the fence and CI exercise the same runner. (That anchor read
+`:137` until 2026-08-31; re-measured with `grep -n 'npx vitest run' .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh`, it is `149`.)
 `vitest.config.ts:18` names each project by its workspace **directory**
 (`test: { name: dir, root: "./" + dir }`), so the **full workspace path** is the
-only accepted `--project` value.)*
+only accepted `--project` value. That holds for a package exactly as for an
+app — `--project` is not apps-only: measured 2026-08-31,
+`npx vitest list --project packages/intentionsutil --root .` exits 0 and lists
+1324 tests, every one tagged `[packages/intentionsutil]`.)*
+
+*(The `--root .` half of the spelling is load-bearing too, and its canonical
+home is `.claude/rules/sandbox.md` under "Command pattern matching" — read it
+there rather than restating it here. The short of it: root at the worktree/repo
+root and select the workspace with `--project`. Rooting at the app directory
+instead (`--root print`) scopes vite's `server.fs.allow` to `print/`, so
+root-hoisted `?url` asset imports — `pdfjs-dist`'s worker, hoisted to the
+root `node_modules` by npm workspaces — are denied and correct changes
+false-fail.)*
 
 *(Rationale corrected — an earlier revision of the note above claimed the
 bare-name short form `--project intentionsutil` "passes **vacuously** with zero
@@ -2391,7 +2412,7 @@ that fence carried no `--project` at all, and the bare name fails **loudly** —
 `Error: No projects matched the filter "intentionsutil".  (Startup Error)`,
 non-zero exit. There is no vacuous-pass hazard here. **Do not "correct" the
 other `npm test --prefix packages/intentionsutil` fences in this document on
-that premise** — six of them remain, and all six are valid.)*
+that premise** — measured 2026-08-31, `grep -cx 'npm test --prefix packages/intentionsutil' plans/dispatch-rsi-serialized-pr-plan.md` returns **8**, and all eight are valid.)*
 
 Manual: run one tick with timing before and after; confirm the `intentions/`
 scan count drops from 2 to 1 and the per-candidate `node` subprocess count
@@ -5782,10 +5803,21 @@ Seven hazards on this path, each of which has bitten before:
   fast-forward the user's `main` at all. What works: run the closing batch from a
   **fresh worktree cut at `origin/main`** and verify *that* checkout is 0 ahead.
   PR1's own closing batch ran this way.
-- **A node *create* must not ride in a `--base` batch of *edits*.** The
-  compare-and-swap manifest pins pre-images per id; an id with no pre-image
-  corrupts the batch. File new nodes in a separate `graph-commit` call. This is
-  why PR1's two follow-up nodes were filed after the closing batch, not in it.
+- **A node *create* rides the same `--base` batch as edits.** This bullet said
+  the opposite until 2026-08-31; only its premise was true. `--base` is a
+  **per-id opt-in** compare-and-swap: `check_base_freshness()` returns early on
+  an empty manifest and otherwise iterates the manifest's own keys
+  (`for id in "${!BASE[@]}"`, `graph-commit:771-774`), so a positional id absent
+  from the manifest is simply not CAS-checked. The ordinary-id guard asks only
+  that `intentions/<id>.md` be on disk (`graph-commit:3793`), never that it
+  exist on `origin/main`, and the header documents `--prune <id>` as
+  "(repeatable, mixable with ordinary positional ids)". So one invocation can
+  carry creates, edits and prunes together, with `--base` entries for exactly
+  the ids that have an `origin/main` pre-image. PR1's two follow-up nodes were
+  filed after the closing batch rather than in it — that split paid an extra
+  serialized landing for a constraint that does not exist. See
+  `plans/dispatch-rsi-sequence.md`'s "budget by invocation count, not by node
+  count" note.
 - **`write-node.ts` drops unknown keys**, and re-dumping a node after editing it
   wipes the edit. Dump once, edit, write. This is the same mechanism that makes
   `execution.resolved_by` vanish without complaint.
