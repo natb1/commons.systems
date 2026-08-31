@@ -7,7 +7,7 @@ the strategy's existing child tactics.
 ## Finding a strategy's children — the census script
 
 ```bash
-npx tsx packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> [intentionsDir]
+node --import tsx/esm packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> [intentionsDir]
 ```
 
 `intentionsDir` defaults to `intentions`. (`validate-graph.ts` no longer has

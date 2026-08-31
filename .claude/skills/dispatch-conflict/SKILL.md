@@ -634,9 +634,10 @@ The subagent must end its reply with exactly one of:
 ### `resolved` — write back, clear the park, land
 
 The subagent reconciled the divergence. Apply its value(s) to the node's full
-JSON, clear the park, and land the write. Every block below runs the network /
-`gh` / `npx` (npm cache) paths, so run them with `dangerouslyDisableSandbox:
-true` — see `.claude/rules/sandbox.md`.
+JSON, clear the park, and land the write. Every block below is a local read or
+write except `graph-commit`, which rebases the working tree and pushes: run that
+one with `dangerouslyDisableSandbox: true` pre-emptively — see
+`.claude/rules/sandbox.md`. Nothing here calls `gh` or `npx`.
 
 First sync **only** this node file into the worktree from the `origin/main`
 already fetched in the read step above, then capture its full JSON. Syncing the
@@ -713,7 +714,8 @@ Act on the exit code:
 Write the mutated JSON through `write-node.ts` — the sole node-mutation gate;
 full-node JSON in, `validateNode` re-applies defaults and drops unknown keys —
 then land it with a **normal-edit** `graph-commit` call, **deliberately without
-`--base`** (`dangerouslyDisableSandbox: true` — npm cache + network):
+`--base`** (`dangerouslyDisableSandbox: true` on the `graph-commit` line — it
+rebases the working tree and pushes):
 
 ```bash
 node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --dir intentions \
@@ -852,9 +854,10 @@ path above — see "Why no `-C`".
 
 Even on this enhancement path the node **stays parked** and **no** phase-completed
 marker is written — the append only enriches the recommendation a human will
-read. Run the network / `gh` / `npx` paths here with
-`dangerouslyDisableSandbox: true` (npm cache + network), per
-`.claude/rules/sandbox.md`.
+read. The only non-local command in the block above is `graph-commit`, which
+rebases the working tree and pushes: run that one with
+`dangerouslyDisableSandbox: true` pre-emptively, per
+`.claude/rules/sandbox.md`. Nothing here calls `gh` or `npx`.
 
 Then **stop**.
 
@@ -919,7 +922,7 @@ across calls; shell variables, exported env, and functions do not (the same fact
 dozen separate Bash tool calls, so a bare `$PROJECT_ROOT`, `$WT`, `$SOURCE_ID`
 or `$NODE_MD` written into a *later* call expands to the **empty string** —
 `git -C "$WT" merge` becomes `git -C "" merge`, and
-`"$PROJECT_ROOT/.claude/…/dispatch-mark-complete"` becomes an absolute path off
+`"$PROJECT_ROOT/packages/…/mark-node-terminal"` becomes an absolute path off
 `/`. The fenced blocks throughout this lane spell the names out for readability;
 they are **not** a promise that a value set in an earlier block is still there.
 
@@ -1447,8 +1450,11 @@ interrupt path, which the second half already distinguishes.
 — so the `graph-commit` below lands it, exactly as it lands
 `apply-conflict-state`. Run it out of `$PROJECT_ROOT` (the fresh primary
 checkout), never out of `$WT`: a graph write from a stale checkout is a known
-`origin/main`-reverting hazard. It needs `dangerouslyDisableSandbox: true` (`npx`
-writes the npm cache).
+`origin/main`-reverting hazard. It writes one file under `$PROJECT_ROOT` and
+makes no network call, so run it **sandboxed**: do not set
+`dangerouslyDisableSandbox: true` pre-emptively — the rule Step 6 states, and
+the npm-cache claim this note used to carry was refuted on this host and deleted
+from `.claude/rules/sandbox.md`.
 
 **A non-zero exit from this call is a WARNING, not a hard stop.** Print it to
 stderr and carry on — to the second half if an interrupt is set, otherwise
@@ -1492,8 +1498,11 @@ Then write the verdict onto the node. `apply-conflict-state` is pure of git/gh �
 it only writes `intentions/$SOURCE_ID.md` — so the `graph-commit` below lands it
 together with the stamp. Run it out of `$PROJECT_ROOT` (the fresh primary
 checkout), never out of `$WT`: a graph write from a stale checkout is a known
-`origin/main`-reverting hazard. It needs `dangerouslyDisableSandbox: true` (`npx`
-writes the npm cache).
+`origin/main`-reverting hazard. It writes one file under `$PROJECT_ROOT` and
+makes no network call, so run it **sandboxed**: do not set
+`dangerouslyDisableSandbox: true` pre-emptively — the rule Step 6 states, and
+the npm-cache claim this note used to carry was refuted on this host and deleted
+from `.claude/rules/sandbox.md`.
 
 **mechanical** — the `reviewed` marker and the ladder phase are preserved, so
 `graph-auto-merge` lands the PR once GitHub reports MERGEABLE:
@@ -1513,9 +1522,9 @@ gh pr ready --undo "$PR_NUM"
     "$SOURCE_ID" --clear-conflict-intention --dir "$PROJECT_ROOT/intentions" )
 ```
 
-The `( cd … && npx … )` **scoped subshell** is the same shape Step 6's
-verification pipe uses and carries the same rationale: the session's own cwd is
-never mutated.
+The `( cd … && node --import tsx/esm … )` **scoped subshell** is the same shape
+Step 6's verification pipe uses and carries the same rationale: the session's
+own cwd is never mutated.
 
 #### Land both halves in one graph-commit
 

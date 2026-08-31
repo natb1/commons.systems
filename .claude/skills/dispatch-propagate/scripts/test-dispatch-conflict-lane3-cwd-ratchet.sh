@@ -217,9 +217,14 @@ MARK_COMPLETE_CALLS=$(count_matches '(^|[|(&] *)\.claude/skills/dispatch-propaga
 # carved in section 6 is dead weight and this row says so.
 assert_eq "lane3: the dispatch-mark-complete exception is non-vacuous (Lane 3 still invokes it)" \
   "yes" "$([[ "$MARK_COMPLETE_CALLS" -ge 1 ]] && echo yes || echo no)"
-# The bypass itself: no $PROJECT_ROOT-prefixed spelling may survive.
+# The bypass itself: no $PROJECT_ROOT-prefixed spelling may survive. The pattern
+# is deliberately QUOTE-AGNOSTIC. Requiring the literal `"` at both ends would
+# let an UNQUOTED $PROJECT_ROOT/.claude/.../dispatch-mark-complete regression
+# walk straight through, and section 6 cannot catch that one either: its pattern
+# anchors on a line-leading (or |(&-leading) `.claude/skills`, which a
+# $PROJECT_ROOT-prefixed path does not have.
 assert_eq "lane3: no \$PROJECT_ROOT-prefixed dispatch-mark-complete invocation remains" \
-  "0" "$(count_matches '"\$PROJECT_ROOT/\.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete"' "$LANE3_FENCED")"
+  "0" "$(count_matches '\$PROJECT_ROOT/\.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete' "$LANE3_FENCED")"
 # The compensating property must be stated in the lane's prose, not only here.
 assert_eq "lane3: prose states the phase markers are cwd-independent" \
   "yes" "$(at_least_one 'cwd-independent' "$LANE3")"
