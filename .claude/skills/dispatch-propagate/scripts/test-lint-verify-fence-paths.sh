@@ -141,6 +141,27 @@ if ARGOUT=$("$LINT" --repo-root "$FIXTURE_TOPLEVEL" \
 assert_eq "toplevel --repo-root still exits 0" "0" "$ARGRC"
 assert_eq "toplevel --repo-root still prints nothing" "" "$ARGOUT"
 
+# The half that makes that control NON-VACUOUS. Exit 0 with empty output is
+# also the REGRESSION's signature: --intentions-dir is omitted here on
+# purpose (default resolution off $REPO_ROOT is the thing under test), so a
+# REPO_ROOT left on a wrong-but-existing path leaves "$REPO_ROOT/intentions"
+# absent, the script takes its bare `exit 0`, and both assertions above
+# still pass. Re-run the same toplevel --repo-root over the fixture's
+# live-orphan node: only a run that actually READ the default-resolved
+# intentions dir can report the orphan.
+echo "Test: the exact git toplevel still reads the default-resolved intentions dir"
+reset_nodes
+write_node live-orphan implement '## Verification
+```verify
+bash .claude/dead-script.sh
+```'
+if ARGOUT=$("$LINT" --repo-root "$FIXTURE_TOPLEVEL" \
+                    --baseline "$EMPTY_BASELINE" --no-status-warn 2>&1); then ARGRC=0; else ARGRC=$?; fi
+assert_eq "toplevel --repo-root still SEES an orphan (exit 1, not a bare exit 0)" \
+  "1" "$ARGRC"
+assert_eq "toplevel --repo-root names the orphaned node id and path" \
+  "live-orphan: .claude/dead-script.sh" "$ARGOUT"
+
 # --- 1. live node, fence names an EXISTING path -> pass ---------------------
 echo "Test: live node with an existing fence path passes"
 reset_nodes
