@@ -21,10 +21,20 @@ edits a GitHub issue.
 Takes `<sha>` as its single argument — the broken `origin/main` HEAD commit.
 
 Run `gh` commands with `dangerouslyDisableSandbox: true` — see
-`.claude/rules/sandbox.md`. The graph-write step's `node --import tsx/esm`,
-`write-node.ts`, `dump-node.ts`, and `graph-commit` calls (Step 3) also need
-`dangerouslyDisableSandbox: true`: they require the npm cache, and `graph-commit`
-needs network + TLS to `gh`.
+`.claude/rules/sandbox.md`. The graph-write step's `write-node.ts` /
+`dump-node.ts` fences and its `graph-commit` call (Step 3) need it too — but
+**not** for the npm-cache reason this note used to give. That rationale was
+measured and refuted on this host and no longer appears in
+`.claude/rules/sandbox.md`, and `node --import tsx/esm` needs no override of its
+own. The still-valid reasons are two:
+
+- Every Step 3 fence reads or writes under `$CLAUDE_JOB_DIR/tmp`, a path outside
+  `.claude/settings.json`'s `sandbox.filesystem.allowWrite`; measured, a write
+  under that root returns `Read-only file system`.
+- `graph-commit` is one of `.claude/rules/sandbox.md`'s named pre-emptive
+  exceptions: its internal rebase meets the read-only `.claude/` carve-outs,
+  aborts, and **reverts the uncommitted node edit**, so the override must be set
+  on the *first* attempt — a retry has nothing left to retry on.
 
 ## 1. Enumerate failing checks
 

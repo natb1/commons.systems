@@ -210,8 +210,8 @@ assert_eq "lane3: every fenced graph-commit invocation carries -C \"\$PROJECT_RO
 # only under $CLAUDE_JOB_DIR and touches no checkout, so the compensation is that
 # there is no checkout-targeted write to get wrong. What must be guarded instead
 # is that the bypass really is closed (no $PROJECT_ROOT-prefixed spelling comes
-# back) and that the cwd-independence claim is stated where an executing agent
-# reads it — in the lane's own prose, not only here.
+# back) and that the Step 9 compensating note itself is present where an
+# executing agent reads it — in the lane's own prose, not only here.
 MARK_COMPLETE_CALLS=$(count_matches '(^|[|(&] *)\.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete( |$)' "$LANE3_FENCED")
 # Non-vacuity, mirroring 6b: if Lane 3 ever stops invoking it, the exception
 # carved in section 6 is dead weight and this row says so.
@@ -226,8 +226,21 @@ assert_eq "lane3: the dispatch-mark-complete exception is non-vacuous (Lane 3 st
 assert_eq "lane3: no \$PROJECT_ROOT-prefixed dispatch-mark-complete invocation remains" \
   "0" "$(count_matches '\$PROJECT_ROOT/\.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete' "$LANE3_FENCED")"
 # The compensating property must be stated in the lane's prose, not only here.
-assert_eq "lane3: prose states the phase markers are cwd-independent" \
-  "yes" "$(at_least_one 'cwd-independent' "$LANE3")"
+#
+# NOT keyed on the bare word 'cwd-independent'. Lane 3 has carried that word
+# since BEFORE this exception existed — the "Both write under $CLAUDE_JOB_DIR
+# and are cwd-independent" sentence is present at the base commit of the PR that
+# added this section — so a row keyed on it stays GREEN with the entire Step 9
+# compensating note deleted. Measured, not reasoned: deleting that note left
+# this suite 24/24. Key the rows on text only the note itself supplies.
+assert_eq "lane3: Step 9 prose cites the dispatch-mark-complete permissions.allow entry" \
+  "yes" "$(at_least_one 'Bash\(\.claude/skills/dispatch-propagate/scripts/dispatch-mark-complete:\*\)' "$LANE3")"
+assert_eq "lane3: Step 9 prose states dispatch-mark-complete needs no -C compensation" \
+  "yes" "$(at_least_one 'needs no `-C` compensation' "$LANE3")"
+# And the sandbox half of the same note (finding 2): cwd-independence is not
+# permission. Both job-dir marker writes need the pre-emptive override.
+assert_eq "lane3: Step 9 prose separates cwd-independence from sandbox-safety" \
+  "yes" "$(at_least_one 'Cwd-independent is not sandbox-safe' "$LANE3")"
 
 assert_eq "lane3: the \$PROJECT_ROOT bootstrap sources lib-graph-worktree.sh" \
   "yes" "$(at_least_one '^PROJECT_ROOT=\$\(source \.claude/skills/dispatch-propagate/scripts/lib-graph-worktree\.sh && resolve_main_worktree\)' "$LANE3_FENCED")"

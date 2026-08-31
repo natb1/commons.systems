@@ -78,7 +78,17 @@ node lanes — the node itself:
 
 - **Lane 2** is invoked by an **explicit node id** or from the node's own
   worktree (branch == node id) — a human, or a future router. No automatic
-  dispatch tick enters Lane 2.
+  dispatch tick enters Lane 2. **The worktree entry path is gated.** A session
+  sitting in the node's own worktree is worktree-isolated, and such a session
+  refuses any Bash command containing a command substitution — while Lane 2's
+  `resolved` and `note` blocks each open with a `SCRATCH=` assignment carrying
+  `$(id -u)`, so those fences cannot be run verbatim from there. The
+  substitution-free alternative, and the only supported one on this entry path:
+  read the uid once in its own call (`id -u`), then type the returned value into
+  the `SCRATCH` path as a **literal**, the same literal-substitution discipline
+  Lane 3 applies to `$SOURCE_ID` and `$WT`. If a fence needs any other
+  substitution, re-enter by **explicit node id** from the primary checkout
+  instead. See "Why no `-C`" under Lane 2's `resolved` path.
 - **Lane 3** is invoked those same two ways **and by the autonomous dispatch
   tick**: `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute`
   case 11 spawns `/dispatch-conflict <node-id>` with `--cwd` on the **primary
@@ -422,10 +432,24 @@ auto-relocate; follow the guard's printed `Repair:` line):
 
 ### 6. `resolved` — stage, verify, commit, push, mark
 
-Sandbox posture here is the preamble's: `git add`, `git commit` and `git push` in
-this step run **sandboxed**, and Step 6 makes no `gh` call of its own. Do **not**
-set `dangerouslyDisableSandbox: true` pre-emptively — `.claude/rules/sandbox.md`
-reserves it for a **retry** after a loud failure.
+Sandbox posture for this step's **git** commands is the preamble's: `git add`,
+`git commit` and `git push` run **sandboxed**, and Step 6 makes no `gh` call of
+its own. Do **not** set `dangerouslyDisableSandbox: true` pre-emptively for
+those — `.claude/rules/sandbox.md` reserves it for a **retry** after a loud
+failure.
+
+**The marker write that ends this step is the exception.**
+`dispatch-mark-complete` writes into `$CLAUDE_JOB_DIR` (`~/.claude/jobs/<id>`),
+which is **not** covered by `.claude/settings.json`'s
+`sandbox.filesystem.allowWrite` — measured: a write under that root returns
+`Read-only file system`. Run **that one call** with
+`dangerouslyDisableSandbox: true` pre-emptively. It is the same carve-out
+`/qa-main` already records for its `$CLAUDE_JOB_DIR/office-hours-reason` write
+(`.claude/skills/qa-main/SKILL.md` — "a path not in the sandbox
+write-allowlist"). Treating it as an ordinary retry case is not free here: by
+the time the marker runs, the resolution is committed **and pushed**, so a run
+that stops on the failed write leaves the Stop hook parking a job whose
+conflict actually resolved.
 
 Stage **only** the Step-2 conflicted files (so a file the subagent touched outside the
 conflict scope is never silently committed):
@@ -1628,6 +1652,18 @@ needs no `-C` compensation — it writes only the phase-completed marker under
 point a write at the node's stale worktree. The `mark-node-terminal` call below
 keeps its `"$PROJECT_ROOT/…"` spelling: it has no `permissions.allow` entry, so
 there is nothing for a re-spelling to buy.
+
+**Cwd-independent is not sandbox-safe.** That paragraph settles *where* the
+write lands, not *whether* it is permitted. Both marker calls in this step —
+`dispatch-mark-complete` here and `mark-node-terminal` below — write under
+`$CLAUDE_JOB_DIR` (`~/.claude/jobs/<id>`), a path **outside**
+`.claude/settings.json`'s `sandbox.filesystem.allowWrite`; measured, a write
+under that root returns `Read-only file system`. Run **both** with
+`dangerouslyDisableSandbox: true` pre-emptively, the carve-out `/qa-main`
+records for the same job-dir class. This is Lane 3 — the lane the autonomous
+tick enters — so an unwritten `node-terminal` is not a cosmetic gap: it is the
+only evidence the reap contract accepts, and without it the Stop hook holds the
+job and the node reads occupied forever, exactly as spelled out below.
 
 Then write the **node-terminal** marker. It is a *different* marker with a
 *different* consumer, and both are required:
