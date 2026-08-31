@@ -101,7 +101,7 @@ function readNodesJson(path: string): IntentionNode[] {
   } catch (err) {
     // A truncated or unreadable entry is a payload problem, not a selector one.
     throw new NodesJsonError(
-      `select-targets: --nodes-json ${path} could not be read as JSON: ${String(err)}`,
+      `select-targets: --nodes-json ${path} is not valid JSON: ${String(err)}`,
     );
   }
   if (!Array.isArray(parsed)) {
