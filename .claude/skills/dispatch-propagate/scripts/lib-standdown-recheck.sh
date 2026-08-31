@@ -147,24 +147,49 @@
 #        shared checkout (tracked AND untracked under `intentions/`) and
 #        degrades to `unknown` on any dirt or on a failed probe. A torn
 #        directory degrades to `unknown` for the same reason: the files are
-#        still on disk and nothing can measure them.
+#        still on disk and nothing can measure them. The readability probe is
+#        itself TWO-VALUED and the two are never collapsed: rc 0 with a
+#        toplevel that is not the path is a DEFINITE tear and keeps the
+#        torn-removal language; a NON-ZERO rc is INDETERMINATE — a transient
+#        git failure against a healthy LIVE checkout produces it too — so that
+#        park reports the probe failure rather than asserting a tear, degrades
+#        to `unknown`, and issues no destructive directive.
 #     g. the park cap for this pass is spent → `deferred`, keep, next. A
 #        no-worktree park consumes cap budget like any other.
 #     h. the worktree is NOT in sync — BOTH `worktree_in_sync` and
 #        `worktree_merged_in_sync` are false → PARK,
 #        `standdown-winner-dead-work-unpushed`. The second predicate is what
 #        keeps a post-squash-merge local merge commit from being misread as
-#        stranded work.
-#     i. otherwise (node still held) → PARK. Three reason tags:
-#        `standdown-winner-dead-node-held-no-worktree` when the worktree is
-#        missing (checked FIRST; its unpushed-work claim comes from measuring
-#        `refs/heads/<node>`, never from the missing directory);
-#        `standdown-winner-dead-work-unknown` when that arm could not rule out
-#        work at risk -- it shares the `standdown-winner-dead-work-` prefix
-#        with the unpushed tag so one triage grep finds both, which is the
-#        whole point of not folding it into the -no-worktree tag documented as
-#        nothing-at-risk; otherwise `standdown-winner-dead-node-held`
-#        (in sync).
+#        stranded work. That tag is NOT exclusive to this rule: rule (i)'s
+#        no-worktree arm files the same one whenever the surviving branch
+#        measures unpushed work, so a triage grep for it must not assume a
+#        readable worktree exists.
+#     i. otherwise (node still held) → PARK. The tag follows the VERDICT, not
+#        the arm, so "no worktree" does NOT imply the -no-worktree tag. The
+#        no-worktree arm (checked FIRST) measures `refs/heads/<node>`, the
+#        shared checkout, and the directory's readability, then files ONE of
+#        three tags off the resulting `unpushed_flag`:
+#          true    → `standdown-winner-dead-work-unpushed` — the SAME tag rule
+#                    (h) files. A surviving branch carrying commits on no
+#                    remote is at-risk work whether or not a checkout exists.
+#          unknown → `standdown-winner-dead-work-unknown` — the arm could not
+#                    rule out work at risk: an unmeasurable or broken branch, a
+#                    torn directory, a readability probe that failed outright,
+#                    or dirt in the shared checkout. It shares the
+#                    `standdown-winner-dead-work-` prefix with the unpushed tag
+#                    so ONE triage grep finds both, which is the whole point of
+#                    not folding it into the -no-worktree tag documented as
+#                    nothing-at-risk.
+#          false   → `standdown-winner-dead-node-held-no-worktree` — and ONLY
+#                    here. This tag means "measured, nothing at risk under the
+#                    node id", never merely "the directory was missing".
+#        With a readable worktree there are two tags and both are rule (h)'s
+#        business: `standdown-winner-dead-work-unpushed` (not in sync) and
+#        `standdown-winner-dead-node-held` (in sync).
+#        So the triage greps are: `standdown-winner-dead-work-` for everything
+#        that may carry work at risk (three of the four tags, across BOTH
+#        arms), and `-node-held-no-worktree` / `-node-held` for the two
+#        measured all-clears.
 #
 #   Fail-safe posture: if EITHER underlying liveness call is UNKNOWN, every
 #   marker is treated as `observing` for the pass and nothing is parked or
@@ -709,7 +734,7 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
       # clearing here would erase the only durable record of a stand-down whose
       # holder is still live.
       local wt="$repo_root/.claude/worktrees/$node"
-      local no_wt=0 torn_wt=0
+      local no_wt=0 torn_wt=0 unreadable_wt=0
       # `-d` alone is not "a usable checkout". A TORN removal -- the state a
       # sandboxed `git worktree remove` leaves behind, and the state this whole
       # arm exists to survive -- leaves the path PRESENT while git can no longer
@@ -726,9 +751,29 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
         # Ask instead whether this path is its own toplevel, which is true of a
         # live worktree and false of both tear shapes (a dangling .git file
         # errors; a missing one resolves to the parent repo root).
-        local wt_top=""
-        wt_top=$(git -C "$wt" rev-parse --show-toplevel 2>/dev/null) || wt_top=""
-        if [[ -z "$wt_top" ]] || ! [[ "$wt_top" -ef "$wt" ]]; then
+        #
+        # TWO OUTCOMES, never collapsed. rc 0 with a toplevel that is not $wt
+        # is DEFINITE: git read the path and it is not its own worktree, which
+        # is exactly the tear shape described above. A NON-ZERO rc is
+        # INDETERMINATE -- it covers a real tear AND a transient failure
+        # against a perfectly healthy, live, in-use checkout: the `bwrap: Can't
+        # get type of source .../config.worktree` class this repo already
+        # tracks, and `index.lock` contention. The old `|| wt_top=""` threw the
+        # rc away and made both set torn_wt=1, so a single blip filed a park
+        # that asserted a torn removal as FACT and told the operator to
+        # `rm -rf` the directory -- the one command that destroys the live
+        # session's uncommitted work this arm exists to protect. Unmeasurable
+        # reports UNKNOWN, never "safe" and never a fact; the same posture the
+        # branch measurement below already honours.
+        local wt_top="" wt_top_rc=0
+        wt_top=$(git -C "$wt" rev-parse --show-toplevel 2>/dev/null) || wt_top_rc=$?
+        if (( wt_top_rc != 0 )); then
+          no_wt=1
+          unreadable_wt=1
+        elif ! [[ "$wt_top" -ef "$wt" ]]; then
+          # rc 0 and an answer, so this is determinate. An empty answer cannot
+          # be `-ef` anything and lands here too, which is the correct arm: git
+          # succeeded, so whatever it said is a measurement.
           no_wt=1
           torn_wt=1
         fi
@@ -890,6 +935,20 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
           # recommendation with the one command that destroys the thing
           # this arm exists to protect.
           rec_wt_clause="A directory exists at $wt but git cannot read it as a checkout (a torn removal). SALVAGE FIRST: inspect $wt and copy out any uncommitted work, because the next step destroys it permanently. Only then clear it with 'rm -rf $wt && git -C $repo_root worktree prune'. $rec_wt_clause"
+        elif (( unreadable_wt )); then
+          # INDETERMINATE, and it must not borrow the torn arm's language. The
+          # probe exited non-zero, which a healthy live checkout can also
+          # produce, so this park states what FAILED instead of asserting what
+          # the directory IS -- and it issues NO destructive directive at all.
+          # An `rm -rf` here would be aimed at a path that may still hold a
+          # running session's uncommitted work, on the strength of a probe that
+          # did not run.
+          branch_clause="A directory exists at $wt but the checkout probe FAILED (git rev-parse --show-toplevel exited $wt_top_rc), so whether it is a torn removal or a healthy live checkout is UNKNOWN -- a transient git failure against a live checkout produces this rc too. $branch_clause"
+          if [[ "$unpushed_flag" == "false" ]]; then
+            unpushed_flag="unknown"
+            branch_clause="$branch_clause Whether that directory holds work is UNKNOWN for the same reason: nothing above could read it."
+          fi
+          rec_wt_clause="A directory exists at $wt but the checkout probe FAILED (git rev-parse --show-toplevel exited $wt_top_rc). Do NOT delete it: this rc does not distinguish a torn removal from a transient git failure against a live checkout still in use. Re-run 'git -C $wt rev-parse --show-toplevel' and resolve the repository error FIRST; only once the directory is confirmed unreadable AND abandoned does the torn-removal recovery apply. $rec_wt_clause"
         fi
 
         # Every measurement above asks about refs/heads/<node>. Two lanes never

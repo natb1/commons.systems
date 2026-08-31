@@ -1290,6 +1290,84 @@ esac
 assert_eq "tag-follows-verdict: reason does NOT carry the nothing-at-risk tag" "no" "$sd_reason_tag"
 sd_teardown
 
+# --- Test 15q: an UNREADABLE probe is INDETERMINATE, not a tear ---------------
+
+# Round 8's first finding. The readability probe collapsed two outcomes:
+# `wt_top=$(git -C "$wt" rev-parse --show-toplevel) || wt_top=""` made rc 0 with
+# a foreign toplevel (DEFINITE -- not a worktree) and rc NON-ZERO
+# (INDETERMINATE -- a real tear, OR a transient git failure against a healthy
+# LIVE checkout) both set torn_wt=1. A blip -- the `bwrap: Can't get type of
+# source .../config.worktree` class this repo already tracks, or index.lock
+# contention -- therefore filed a park asserting a torn removal as FACT while
+# telling the operator to `rm -rf` a directory that may hold a live session's
+# uncommitted work. Test 15l's fixture takes the rc-0 path, so it cannot see
+# this branch at all.
+#
+# The failure is EMULATED by a git shim, because a transient git failure cannot
+# be provoked on demand. The shim fails ONLY `rev-parse --show-toplevel` against
+# this node's worktree and execs the real git for everything else, so the
+# directory under test is a genuinely healthy in-sync checkout that the probe
+# merely could not read -- which is the whole point.
+echo "Test: an unreadable worktree probe reports UNKNOWN and issues no rm -rf"
+sd_setup
+sd_write_node "tactic-probe-blip" unparked
+sd_commit_nodes
+# A REAL, healthy, fully-pushed checkout. Nothing here is torn.
+sd_write_worktree "tactic-probe-blip" insync
+sd_add_session "0bb2-2222" "tactic-probe-blip"
+sd_install_claude 0
+standdown_write "tactic-probe-blip" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_blip_git=$(command -v git)
+sd_blip_wt="$SD_REPO/.claude/worktrees/tactic-probe-blip"
+mkdir -p "$SD_DIR/blipshim"
+cat > "$SD_DIR/blipshim/git" <<BLIPSHIM
+#!/usr/bin/env bash
+_dashc=""
+_topl=0
+_prev=""
+for _a in "\$@"; do
+  if [ "\$_prev" = "-C" ]; then _dashc="\$_a"; fi
+  if [ "\$_a" = "--show-toplevel" ]; then _topl=1; fi
+  _prev="\$_a"
+done
+if [ "\$_topl" = 1 ] && [ "\$_dashc" = "$sd_blip_wt" ]; then
+  echo "bwrap: Can't get type of source $sd_blip_wt/.git/config.worktree" >&2
+  exit 128
+fi
+exec "$sd_blip_git" "\$@"
+BLIPSHIM
+chmod +x "$SD_DIR/blipshim/git"
+sd_blip_path="$PATH"
+PATH="$SD_DIR/blipshim:$PATH"
+sd_run
+PATH="$sd_blip_path"
+assert_eq "probe-blip: park-node invoked exactly once" "1" "$(sd_park_calls)"
+# Unmeasurable is never reported as SAFE.
+assert_eq "probe-blip: the log reports unknown, not false" '"unknown"' \
+  "$(sd_log_unpushed)"
+# ...and never reported as a FACT either. The torn arm's prose asserts what the
+# directory IS; this arm may only report what the probe DID.
+assert_eq "probe-blip: the reason does NOT assert a torn removal" "no" \
+  "$(case "$(sd_park_reason)" in *'git cannot read it as a checkout'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "probe-blip: the reason names the failed probe and its rc" "yes" \
+  "$(case "$(sd_park_reason)" in *'the checkout probe FAILED (git rev-parse --show-toplevel exited 128)'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# THE assertion that matters. An indeterminate verdict must not hand the
+# operator the one command that destroys a live checkout.
+assert_eq "probe-blip: the recommendation issues NO rm -rf directive" "no" \
+  "$(case "$(sd_park_recommendation)" in *'rm -rf'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "probe-blip: the recommendation says not to delete it" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'Do NOT delete it'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# It must not fall into rule (h) either: both sync predicates would fail their
+# own `git -C` and read as stranded work in a checkout nothing could open --
+# the defect Test 15l closed for the rc-0 shape.
+assert_eq "probe-blip: the reason does NOT claim work is unpushed in the path" "no" \
+  "$(case "$(sd_park_reason)" in *'left work UNPUSHED in'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# The tag follows the verdict (Test 15n's rule), so UNKNOWN files under the
+# shared `standdown-winner-dead-work-` prefix, not the nothing-at-risk tag.
+assert_eq "probe-blip: filed under the unknown tag" "yes" \
+  "$(case "$(sd_park_reason)" in standdown-winner-dead-work-unknown*) printf 'yes' ;; *) printf 'no' ;; esac)"
+sd_teardown
+
 # --- Test 15o: the broken-ref discriminator survives a translated locale ------
 
 # Round 5's third finding. The absent-vs-broken discriminator is a substring
