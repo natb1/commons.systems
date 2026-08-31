@@ -914,6 +914,32 @@ clarifications:
       (tactic-context-materialization). (decision: author-ratified, 2026-08-31)
       (floor classification: decision: deferred, delegation-anthropic-claude,
       2026-08-31)"
+  - question: Which incumbent structures did the 2026-08-31 full-frontier evaluation
+      deliberately KEEP, and why?
+    answer: "(Recorded 2026-08-31 /align doctrine-alignment round - the negative
+      results, recorded so the evaluation is auditable and not silently re-run.)
+      Evaluated from scratch against the three core functions (recording author
+      intent/knowledge; maintaining alignment during long-horizon AI delegation;
+      monitoring capture) and KEPT on merit, not incumbency: (1) persistence as
+      plain markdown nodes in git, one file per node, id as filename slug - for
+      a single-author, LLM-operated, human-audited store this is near-ideal
+      (LLM-native reads, diff-native review, CAS via git, offline durability, no
+      service dependency); a database would add query power at the cost of diff
+      review and independence. (2) Serialized landing through graph-commit's
+      lock - serialized landing of INTENT is an auditability feature, not an
+      accident; batching, never parallelism, is the sanctioned efficiency lever.
+      (3) Rank derived on read, never stored - convergent with the projection
+      principle. (4) The kind system (virtue/strategy/tactic/delegation) and the
+      three-state disposition algebra - a from-scratch design converges on the
+      same shapes; tradition references: Aristotle (prohairesis non-delegable,
+      deliberation externalizable), constitutional amendment procedure (ratified
+      content revisable only through a defined convention). (5) The one-layer
+      target-state design - upheld against an explicit second current-state
+      layer; see the 2026-08-31 restatement on strategy-graph-native-dispatch
+      (IaC tradition). (6) The closed rank vocabulary (tier / lineage edge /
+      authored boost) - refused weighted-term soup independently. Each keep is a
+      disposition and remains frontier-reviewable in future interviews per the
+      full-frontier definition. (decision: author-ratified, 2026-08-31)"
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
