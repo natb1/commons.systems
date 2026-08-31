@@ -2112,7 +2112,7 @@ PR-level `sonnet` tag silently overrides the `opus` rating that 12 of Position
 | U13 | base-pin 1 | sonnet |
 | U14–U15 | base-pin 2–3 | opus |
 | U16–U17 | retention-scan 1–2 | opus |
-| U18 | the absorbed ci-pending liveness bound (3 sub-units) | opus |
+| U18 | the absorbed ci-pending liveness bound (3 sub-units) | sonnet (Unit 1 — hold-kind vocabulary); opus (Units 2–3) |
 | U19 | PR9 Unit 2 standdown | opus |
 | U20 | PR9 Unit 6 reclaim audit 1 | opus |
 | U21 | PR9 Unit 6 reclaim audit 2 | sonnet |
@@ -2148,8 +2148,16 @@ to evaluate a pure two-string predicate.
 All anchors *(from node bodies — re-locate)* in
 `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall`:
 
-- **`:146-150`** — second full `intentions/` scan per tick. Share one
-  materialized node enumeration with `reconcile-graph-merged`.
+- **`:146-150`** — second full `intentions/` scan per tick. Per
+  `tactic-review-stall-listnodes-duplicate-scan` Unit 2, this is one of **five
+  enumerations across four files** that route through the same materialized
+  node enumeration: `reconcile-graph-merged`, `reconcile-graph-review-stall`,
+  `graph-auto-merge`, and `packages/intentionsutil/scripts/reconcile-graph.ts`
+  (which runs the scan twice — once `--no-apply`, once applying). The node
+  explicitly scopes three other call sites **out**, and not as an oversight:
+  `select-targets.ts:58` belongs to U17, and
+  `dispatch-graph-census:73` / `dispatch-graph-scope-sweep:98` are reached in
+  U16, through their underlying `.ts` scripts.
 - **`:186`** — duplicate `gh_pr_view_rest` fetch. Memoize the PR JSON
   **narrowly, within the review-stall sweep only — never exported tick-wide.**
   *(Corrected 2026-08-30.* The former wording offered "memoize per-PR JSON for
@@ -2908,10 +2916,15 @@ checkout as removable.
 *Model: opus* — misclassification deletes wrong checkout
 
 **Unit 2 — standdown clear must not race a live session.**
-`.claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh:619`,
-`dispatch-graph-execute:185-200` *(from node bodies — re-locate)*. The
-cleared-no-worktree branch erases a stand-down while a live session still holds
-the node name, silently re-creating the deadlock the tactic removes.
+Two files change, per the node's own Scope ("Two files change. Nothing else."):
+`.claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh` — the
+unlettered no-worktree branch and its `standdown_clear "$node"` call, currently
+at `:663-677` *(re-locate before editing — re-check the anchor)* — and
+`test-lib-standdown-recheck.sh`. **`dispatch-graph-execute` is not edited.** It
+appears only as the shape being mirrored: the branch's worktree-path derivation
+follows `dispatch-graph-execute`'s `CONFLICT_WT` composition, nothing there
+changes. The cleared-no-worktree branch erases a stand-down while a live session
+still holds the node name, silently re-creating the deadlock the tactic removes.
 
 > **⛔ The `strategy-*` framing is superseded, and the kind gate must NOT be
 > built.** *(Corrected 2026-08-30.* This unit used to end "...the deadlock the
@@ -2966,7 +2979,7 @@ shows up nowhere.
 >    whatever it is, so a reason added later is counted without editing this
 >    script. A third literal recreates the same blindness on the next reason.
 
-*Model: sonnet* — reason-generic bucketing, not a literal list
+*Model: opus* — reason-generic bucketing, not a literal list
 
 **Unit 7 — explicit lane waits out CI.** Make the explicit-node dispatch lane
 wait out in-flight CI up to the reservation TTL instead of skipping, leaving the
