@@ -4124,6 +4124,25 @@ ensure_heartbeat_units() {
   # single token rather than split into an executable + spurious arguments.
   # WorkingDirectory= is the exception — it does NOT unescape quotes and takes
   # the bare path (the no-spaces invariant is enforced by the guard above).
+  #
+  # SuccessExitStatus=SIGTERM SIGINT IS LOAD-BEARING, AND ONLY BECAUSE THIS UNIT
+  # IS Type=oneshot. dispatch-tick's INT/TERM handler deliberately dies OF the
+  # signal rather than `exit 143` (dispatch-tick's trap block says why), because
+  # systemd.service(5) counts death by SIGHUP/SIGINT/SIGTERM/SIGPIPE as a clean
+  # stop while a 143/130 exit STATUS is a failure. But that carve-out is spelled
+  # "in addition to the normal successful exit status 0 and, EXCEPT FOR
+  # Type=oneshot, the signals SIGHUP, SIGINT, SIGTERM, and SIGPIPE" — and this
+  # unit is exactly the exception. Without this line an ordinary
+  # `systemctl --user stop dispatch-heartbeat.service` mid-tick ends the unit
+  # `Failed with result 'signal'`, which fires the OnFailure= above and arms a
+  # backstop reseed that relaunches the chain minutes later — the very outcome
+  # the re-raise exists to prevent. Naming the two signals restores the
+  # non-oneshot disposition for exactly them: SIGKILL and every other signal
+  # still fail the unit, so the recovery chain keeps covering OOM kills and
+  # stop-timeout escalation.
+  #
+  # The transient unit dispatch-spawn-tick launches needs no counterpart: it
+  # sets no Type=, so it is Type=simple and already gets the carve-out.
   local desired_service
   desired_service=$(cat <<EOF
 [Unit]
@@ -4132,6 +4151,7 @@ OnFailure=dispatch-tick-recover.service
 
 [Service]
 Type=oneshot
+SuccessExitStatus=SIGTERM SIGINT
 Environment="PATH=$safe_path"
 ExecStart="$TICK_SCRIPT"
 KillMode=process
