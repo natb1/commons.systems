@@ -1176,7 +1176,7 @@ cannot:
      whichever path still reaches that spawn"), but neither re-scopes the case.
      Re-scope it as part of U12 rather than discovering it in CI.
    - **U13–U15 before U18.** U18 appends a new `hold-node` landing block after the
-     sweep's `graph-commit` landing block (`:321-338`) — the same block U14 rewrites
+     sweep's `graph-commit` landing block (`:374-391`) — the same block U14 rewrites
      to thread the `--base` pin through. Reversed, U18's new block is written against
      a landing shape U14 then replaces underneath it.
 
@@ -1186,7 +1186,7 @@ cannot:
      enters `RECOVERED_IDS` — below the strike cap it `continue`s, at cap it is
      recorded in `CI_STALL_IDS` and `continue`s. So on the sweep runs U18 exists to
      serve, `RECOVERED_IDS` is empty and the script exits at `:364` before any block
-     placed after `:321`. That is the same dead-code trap as the ⛔ box in the node's
+     placed after `:374`. That is the same dead-code trap as the ⛔ box in the node's
      own Unit 3 step 2, one exit earlier: widen `:364` to
      `[[ "${#RECOVERED_IDS[@]}" -eq 0 && "${#CI_STALL_IDS[@]}" -eq 0 ]] && exit 0`
      (or land the hold before it). The node's re-landing brief does not mention
