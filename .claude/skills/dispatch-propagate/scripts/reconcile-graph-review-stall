@@ -24,9 +24,11 @@
 # (tactic-graph-router-conflict-routing): the selector now surfaces every
 # reviewed awaiting-merge node as a `pending-merge` candidate and enters the
 # orthogonal `execution.conflict` interrupt from its own sensor gate, every tick,
-# through the normal selection path. The `conflict` route below is therefore a
-# deliberate no-op — acting on it too would double-handle the same PR (a
-# `hold-node` here racing an `execution.conflict` interrupt there).
+# through the normal selection path. Acting on it here too would double-handle
+# the same PR (a `hold-node` here racing an `execution.conflict` interrupt
+# there). So a CONFLICTING candidate is now SKIPPED outright, before the CI
+# fetch and before the route evaluation — it is not routed and then discarded.
+# See the short-circuit in the per-candidate loop for why that is sound.
 #
 # A still-OPEN PR with no regression, or one whose mergeability is still
 # UNKNOWN (GitHub computes it asynchronously and self-heals), is a no-op —
@@ -253,6 +255,41 @@ while IFS=$'\t' read -r id pr; do
       echo "reconcile-graph-review-stall: unexpected .mergeable '$MERGEABLE' from gh_pr_view_rest #$pr for $id (projection changed?)" >&2
       continue ;;
   esac
+
+  # Cost short-circuit for a CONFLICTING candidate. `interruptRoute`
+  # (packages/intentionsutil/src/transitions.ts — the delegate behind
+  # `reviewStallRoute`) opens with `if (mergeable === "CONFLICTING") return
+  # "conflict";`, BEFORE it consults CI at all, so no CI verdict can change the
+  # outcome for this candidate and fetching one cannot inform anything. That
+  # superset property is documented in `interruptRoute`'s own doc comment and
+  # pinned by the transitions.test.ts case named for "the shell pre-filter's
+  # superset invariant" (packages/intentionsutil/test/transitions.test.ts:295),
+  # so this pre-filter is sanctioned rather than a re-derivation of the routing
+  # rule in bash.
+  #
+  # And the `conflict` route it would have produced is a retired no-op
+  # (tactic-graph-router-conflict-routing): the selector's
+  # `pending-merge`/`conflict` candidate path handles CONFLICTING on every tick
+  # through `execution.conflict`, so this sweep must NOT also land a competing
+  # `provision-conflict` hold on the same PR. Nothing is lost by never computing
+  # the route.
+  #
+  # What the skip saves is real, not marginal: `dispatch_ci_verdict_rest`'s memo
+  # is per-tick — created and exported by dispatch-select-tick's tick-scoped
+  # CI-verdict memoisation block (#1601) and removed by its combined EXIT trap,
+  # while dispatch-ladder-run unsets the variable outright before every
+  # reconciler call — so the `check-runs` fetch below is a STRUCTURAL cache miss
+  # on the paths that matter, paid in full for every CONFLICTING candidate on
+  # every sweep, unbounded by CAP (which counts only candidates ACTED on).
+  #
+  # Silent by contract: no stdout (the header's "NOTHING for a skip" protocol),
+  # no stderr (the retired arm was silent too), ACTED not incremented, and
+  # `continue` rather than `break` so a genuinely red candidate later in the
+  # enumeration is still recovered.
+  if [[ "$MERGEABLE" == "CONFLICTING" ]]; then
+    continue
+  fi
+
   HEAD_SHA=$(jq -r '.headRefOid' <<<"$PR_JSON")
 
   RAW_VERDICT=$(dispatch_ci_verdict_rest "$HEAD_SHA" 2>/dev/null) || RAW_VERDICT=""
@@ -260,6 +297,24 @@ while IFS=$'\t' read -r id pr; do
     passing|failing) VERDICT="$RAW_VERDICT" ;;
     *) VERDICT="unknown" ;;   # pending or a call failure — not a regression
   esac
+
+  # Cost guard, NOT the routing rule: reviewStallRoute (interruptRoute at the
+  # fixed phase "review") returns null unless CI is failing or the PR is
+  # CONFLICTING, so skip the node subprocess when neither holds — the
+  # overwhelmingly common case, since a reviewed node waiting on auto-merge
+  # reads green and MERGEABLE on every tick until something regresses. This
+  # condition MUST stay a superset of reviewStallRoute's non-null conditions;
+  # the transitions.test.ts case named for "the shell pre-filter's superset
+  # invariant" pins that. Deliberately NOT narrowed to `ci == failing` even
+  # though the CONFLICTING clause is unreachable on this path today (the
+  # short-circuit above skips CONFLICTING before the CI fetch): that
+  # short-circuit is local and reversible (tactic-review-stall-conflict-lane
+  # proposes un-retiring the conflict arm), while the superset is the
+  # documented, test-pinned property. Verbatim sibling of
+  # graph-select-target's _gate_maybe_interrupt guard — keep the two in step.
+  if [[ "$VERDICT" != "failing" && "$MERGEABLE" != "CONFLICTING" ]]; then
+    continue
+  fi
 
   ROUTE=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
     const { reviewStallRoute } = await import("./packages/intentionsutil/src/transitions.js");
@@ -299,14 +354,6 @@ while IFS=$'\t' read -r id pr; do
       RECOVERED_IDS+=("$id")
       RECOVERED_MSGS+=("recovered $id -> fix (ci=$VERDICT merge=$MERGEABLE)")
       ACTED=$(( ACTED + 1 ))
-      ;;
-    conflict)
-      # Retired no-op (tactic-graph-router-conflict-routing): the selector's
-      # `pending-merge`/`conflict` candidate path handles CONFLICTING on every
-      # tick through `execution.conflict`, so this sweep must NOT also land a
-      # competing `provision-conflict` hold on the same PR. Nothing staged,
-      # ACTED not incremented.
-      continue
       ;;
     *)
       continue   # null — no regression; nothing to route
