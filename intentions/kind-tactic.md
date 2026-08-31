@@ -32,7 +32,6 @@ rationale: >-
   tactic; if achieving everything currently under it leaves a standing,
   condition-monitored posture, it is a strategy.
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
@@ -69,6 +68,33 @@ clarifications:
       accordingly. Supersedes the orthogonality-of-open-children heuristic
       improvised in the same-day mitigation round, which misread blast-radius
       economics as placement semantics."
+  - question: "Is `status: raw` together with `phase: done` a node defect to sweep?"
+    answer: >-
+      (Recorded 2026-08-30.) No. `status` and `phase` are independent axes with
+      different writers, and the pair is the legitimate record of a common case.
+      `status` is authoring provenance: it is written once at mint, and the
+      dispatch ladder never advances it. `phase` is dispatch position, and is
+      router-owned. So a tactic executed without an author dialectic — a filed
+      follow-up, a ledger entry, a fleet alarm, a main-red diagnosis, a
+      `/qa-main` bug node — finishes as `status: raw` with `phase: done`, and
+      that pair is a true statement about it.
+
+
+      Measured 2026-08-30 across the 780-node store: 62 nodes carry the pair and
+      all 62 are tactics. Rewriting their `status` to `codified` would
+      manufacture false provenance — asserting an author settled an execution
+      plan where none did — and rewriting `phase` would reopen finished work.
+      Neither is correct, and the cohort would regrow regardless: the producers
+      of `status: raw` are live, and nothing in the transition machinery ever
+      writes the field. The pair must not be swept.
+
+
+      Where it reads as a defect, the fault is in the reader. `activeFrontier`
+      (`packages/intentionsutil/src/goals.ts`) filters on `status !==
+      "codified"` alone, so it retains every done leaf; the repair is a `phase`
+      clause there, not a migration here. Gate on `phase`, never on `status !==
+      "raw"` — the 3 nodes carrying `delegated` with `phase: done` are the
+      standing proof that `status` is the wrong axis for the question.
 tooling_goals: []
 success_signal: null
 attention: null
