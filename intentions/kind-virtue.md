@@ -105,7 +105,7 @@ clarifications:
       tactic-reading-chunk-5-aristotle-phronesis — NE VI's phronesis is
       Aristotle's own inter-virtue coordinator. Recorded 2026-07-13
       /reading-review chunk 2."
-  - question: Why does the status vocabulary now carry 'delegated'?
+  - question: Why does the status vocabulary carry 'deferred' and 'delegated'?
     answer: "Added 2026-08-30 (sustenance round, via the legacy-null migration's
       adjacent-doctrine path). The three-state decision model legalizes
       delegated virtue substance — priced by the capture model, no longer
@@ -113,7 +113,13 @@ clarifications:
       whose articulation the author has not settled. First bearer:
       virtue-knowledge-as-gift, minted delegated-pending-review as the tension
       sibling of the ratified virtue-right-livelihood. codified keeps its
-      meaning; delegated is the stamp-visible interim."
+      meaning; delegated is the stamp-visible interim. RENAMED 2026-08-30
+      (resolution round vocabulary ratification): the pending state is
+      'deferred'; 'delegated' now means the author consciously doesn't care.
+      First deferred bearer: virtue-knowledge-as-gift. The 'tension sibling'
+      phrasing above is historical — the tension_with edge was removed the same
+      day (no root tension; the conflict is capture through the platform
+      mount)."
   - question: What structural doctrine do root-level tension pairs still owe
       (2026-08-30 post-review)?
     answer: "The sustenance round paired two ROOTS by tension_with
@@ -125,9 +131,14 @@ clarifications:
       to the /exetasis sitting that reviews the pair: legalize and define
       root-level tension pairs in this kind's doctrine, and articulate the
       pair's excess-directions in cross-guard form (which excess of each falls
-      in the other's field). Debt recorded Claude-drafted (decision:
-      delegated-pending-review, delegation-anthropic-claude, 2026-08-30); the
-      pair itself stands delegated-pending-review per its own nodes."
+      in the other's field). Debt recorded Claude-drafted (decision: deferred,
+      delegation-anthropic-claude, 2026-08-30); the pair itself stands
+      delegated-pending-review per its own nodes. DISSOLVED 2026-08-30
+      (resolution round, author ruling): 'I do not see a tension between roots'
+      — the pair's tension_with edge is removed, no root-level pair exists, the
+      2026-07-09 trigger un-fires, and tension doctrine stays sibling-scoped.
+      Delegation-induced conflict between compatible values is CAPTURE
+      (strategy-graph-mounts), not tension."
 tooling_goals: []
 success_signal: null
 attention: null
@@ -155,10 +166,13 @@ attributes:
       virtue-respect-for-persons)"
   status_vocabulary:
     codified: the author has personally settled this virtue's articulation
-    delegated: the virtue's substance is Claude-drafted and held
-      delegated-pending-review or delegated-review-declined under the
-      three-state decision model (strategy-explicit-intent, 2026-08-30) — not
-      yet author-settled; flips to codified if an /exetasis sitting or an
-      adjacent /align round ratifies it (a sitting may also amend or decline)
+    deferred: the virtue's substance is Claude-drafted and held deferred — the
+      author explicitly owes it an /exetasis review (state renamed from
+      'delegated'/'delegated-pending-review' at the 2026-08-30 vocabulary
+      ratification); flips to codified if a sitting or an adjacent /align round
+      ratifies it (a sitting may also amend or decline into delegated)
+    delegated: the author consciously holds no view on the virtue's substance
+      ('don't care') — Claude owns it, periodically re-confirmed through the
+      /exetasis category ranking; no bearer yet
 ---
 # Virtue — a disposition held and exercised, never completed

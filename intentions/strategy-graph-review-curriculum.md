@@ -416,7 +416,7 @@ clarifications:
   - question: How does the adjacent-/align path discharge review debt, what makes
       doctrine 'adjacent', and how does stampless null content rank (2026-08-30
       post-review, H8)?
-    answer: "Three Claude-drafted rulings, each (decision: delegated-pending-review,
+    answer: "Three Claude-drafted rulings, each (decision: deferred,
       delegation-anthropic-claude, 2026-08-30), closing the incoherence the
       post-hoc review found (path (2) converted null to doctrine but never
       discharged review debt, leaving adjacent-ratified content atop the queue
@@ -431,7 +431,34 @@ clarifications:
       content scores zero on the stamp-density priority term and competes on the
       remaining terms, root-distance first — the initial whole-durable-layer
       queue is therefore ordered root-out, matching the author-ratified priority
-      direction. An /exetasis sitting ratifies, amends, or declines all three."
+      direction. An /exetasis sitting ratifies, amends, or declines all three.
+      DISPOSITIONED 2026-08-30 resolution round: (b) the adjacency criterion is
+      RATIFIED and made binding on /align (silence on an adjacent null
+      disposition is a defect of the round); (a) translates into the disposition
+      model — an adjacent /align ratification stamps the disposition, which
+      removes it from null and re-ranks it, both paths ending in the same stamp
+      record; (c) is SUPERSEDED by the ratified category ranking (deferred >
+      null > ratified > delegated)."
+  - question: How does the 2026-08-30 disposition model change this strategy, and
+      what happened to the reading program?
+    answer: "(Recorded 2026-08-30, resolution round.) (Resolution round,
+      author-ratified.) /exetasis selects a DISPOSITION, not a node: the unit of
+      review is the thing that can be ratified, deferred, or delegated, and a
+      node carries many. Ranking = f(node rank, graph position with keystone
+      dispositions prioritized, timestamp, category), category order deferred >
+      null > ratified > delegated. Sittings are single-disposition with
+      opportunistic may-batch: a sitting MAY clear sibling dispositions while
+      the node's context is hot — never must, so the ranking's attention
+      allocation is not bypassed and sittings stay bounded. /exetasis SUPERSEDES
+      all other author-owned graph review processes except telemetry monitoring
+      (WIP dashboard) — in particular this strategy's curriculum
+      reading-and-review program is DEPRECATED: tradition reading and review
+      arrive as deferred dispositions in the /exetasis queue instead, and the
+      sitting metadata model must capture the deprecated program's outputs (what
+      the author learned, reinforcement material, frontier extensions) so
+      nothing the program produced is lost. Mount records carry no author
+      dispositions and are not /exetasis subjects (accuracy is objective, other
+      processes repair it); kinds inherit rank via their keystone position."
 tooling_goals:
   - kind: sensor
     statement: review debt, read off the virtual review node — the count of

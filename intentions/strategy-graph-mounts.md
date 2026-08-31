@@ -155,6 +155,19 @@ clarifications:
       tradition-deference instruction was followed — substantiating and
       contradicting traditions recorded per strategy-explicit-intent's
       substantiation doctrine."
+  - question: What sharpened the capture definition at the 2026-08-30 resolution round?
+    answer: "(Recorded 2026-08-30, resolution round.) The author, dissolving the
+      virtue-right-livelihood / virtue-knowledge-as-gift tension edge
+      (verbatim): 'I do not see a tension between roots. valuing sustenance and
+      valuing knowledge as gift are not contradictory. The tension comes from
+      the mount of the platform delegation (\"I need to pay the platform fees
+      and so if I don't monetize affect my sustainability\"). This tension
+      caused by delegation is the definition of capture.' — i.e. capture IS
+      delegation-induced tension between values that are themselves compatible.
+      This matches the standing worked decomposition on this node (the
+      platform-fees sentence decomposing into serves motivation + graft-edge
+      constraint) and makes the capture model, not any inter-virtue edge, the
+      carrier of the felt monetization conflict."
 tooling_goals:
   - kind: actuator
     statement: mount schema — mount anchors on delegation/tradition records,
@@ -193,18 +206,14 @@ rounds:
   last_aligned: null
 attributes:
   conditions:
-    - "mounted content is the author's model of the counterparty — substance
-      defaults to author authorship with agent assistance as drafting, extending
-      strategy-explicit-intent's amended authorship condition to mounts;
-      delegating it carries a decision stamp and a position price from the MOUNT
-      position metric — pending: mounts get position from the
-      dependents-count-style metric, not the capture model, whose root-distance
-      weighting is undefined for mount substance; this pricing extension is
-      Claude-drafted (decision: delegated-pending-review,
-      delegation-anthropic-claude, 2026-08-30), where the parent virtue/strategy
-      condition's 'steepest position price' is author-ratified (amended
-      2026-08-30 with the parent condition, under the legacy-null migration
-      rule)"
+    - "mounted content is the author's model of the counterparty — authorship
+      RESPONSIBILITY stays with the author (agent assistance as drafting), but
+      mounts carry NO decision stamps and NO delegation pricing (2026-08-30
+      resolution round, author-ratified): a tradition/delegation record is a
+      reference without author dispositions — it either accurately reflects its
+      counterparty or is objectively invalid, and accuracy defects are repaired
+      through normal QA/office-hours processes, never reviewed as /exetasis
+      dispositions"
     - mounts are modeled to the depth the audit needs — the graph including
       mounts stays enumerable and maintainable at individual scale, so
       strategy-complete-ledger's completeness sweep still fits an office-hours
