@@ -2429,7 +2429,7 @@ print_orphan_recovery_line() {
 
   if [[ "$GRAPH_COMMIT_WRITER" == "plumbing" ]]; then
     [[ -n "$PUSHED_SHA" ]] || return 0
-    echo "graph-commit: orphan=$PUSHED_SHA — a commit was built but is reachable from no ref (this writer never moves HEAD) and is NOT on origin/main. Recovery: re-run this same graph-commit invocation from $REPO_ROOT; it rebuilds the commit from the on-disk node files against the fresh origin/main tip and lands it. NEVER git push this commit to main by hand — it bypasses the rebase/layer-2 merge ladder and can clobber a concurrent landing." >&2
+    echo "graph-commit: orphan=$PUSHED_SHA — a commit was built but is reachable from no ref (this writer never moves HEAD) and is NOT on origin/main. Recovery: re-run this same graph-commit invocation from $REPO_ROOT WITH GRAPH_WRITER=$GRAPH_WRITER_LABEL set — the message carries a 'Graph-Writer:' trailer, so the rebuilt commit is a function of that label as well as of base and content, and a re-run with it unset or different builds a DIFFERENT SHA that restarts CI instead of re-pushing this identical commit; it rebuilds the commit from the on-disk node files against the fresh origin/main tip and lands it. NEVER git push this commit to main by hand — it bypasses the rebase/layer-2 merge ladder and can clobber a concurrent landing." >&2
     return 0
   fi
 

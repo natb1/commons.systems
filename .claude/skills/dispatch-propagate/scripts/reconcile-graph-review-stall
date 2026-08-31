@@ -122,6 +122,15 @@ source "$SCRIPT_DIR/lib-graph-rollback.sh"
 # unpushed commit's `Graph-Writer:` trailer against — so a CONCURRENT writer's
 # commit is recognised as not-ours and kept. It MUST stay identical to the
 # <label> argument passed at the call site (see lib-graph-rollback.sh's header).
+# The header's "EXPORT IT ONLY IF THE CALLER RUNS NO OTHER GRAPH WRITER AS A
+# CHILD" rule is NOT vacuously satisfied here: this sweep DOES run hold-node,
+# which lands its own graph-commit. The export is safe only because that single
+# call site strips the label (`env -u GRAPH_WRITER`, search this file). That is
+# 600+ lines away, so a test pins it rather than a comment alone — see
+# "hold-node does NOT inherit the sweep's GRAPH_WRITER" in
+# test-reconcile-graph-review-stall.sh. Adding a SECOND child writer without the
+# same `env -u` now fails that test instead of silently reintroducing the
+# same-writer destruction the trailer exists to prevent.
 export GRAPH_WRITER=reconcile-graph-review-stall
 # node_id_is_safe / require_safe_node_id / pin_base_blob — the shared
 # diagnosis-time compare-and-swap pin this sweep shares with

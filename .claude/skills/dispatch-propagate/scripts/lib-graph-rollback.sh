@@ -293,8 +293,22 @@ graph_rollback_node_writes() {
       # and a loud message" as the price of refusing wrongly; it does not
       # contemplate that dirty tree denying service to everyone else, and
       # skipping the restore buys the refusal nothing.
-      _graph_restore_ids_to_head "$repo_root" "$label" "${ids[@]}" || true
-      echo "$label: HEAD carries ${#unattributed[@]} unpushed commit(s) with NO Graph-Writer attribution (${unattributed[0]}) — this rollback cannot tell its own un-landed write from another process's work, so NOTHING was discarded and the commit(s) are LEFT on HEAD. This writer's own node file(s) WERE restored to HEAD, so the shared checkout is not left dirty for every other graph writer. Inspect the commit(s) by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
+      # The message below makes a CLAIM about the shared checkout's cleanliness,
+      # so it may not outrun its evidence: `|| true` here would discard the one
+      # signal that says whether the claim is true, and an operator told "not
+      # left dirty" by a FAILED restore stops looking — while the next
+      # graph-commit from that checkout trips assert_clean_outside_ids for
+      # everyone. That is the same false-claim class this guard exists to
+      # remove, so the rc decides which half of the claim is printed.
+      local restore_rc=0
+      _graph_restore_ids_to_head "$repo_root" "$label" "${ids[@]}" || restore_rc=$?
+      local restore_claim
+      if (( restore_rc == 0 )); then
+        restore_claim="This writer's own node file(s) WERE restored to HEAD, so the shared checkout is not left dirty for every other graph writer."
+      else
+        restore_claim="This writer's own node file(s) could NOT be restored to HEAD (restore exited $restore_rc), so the shared checkout IS LEFT DIRTY and the next graph-commit from it will trip assert_clean_outside_ids for every other graph writer — restore them by hand FIRST."
+      fi
+      echo "$label: HEAD carries ${#unattributed[@]} unpushed commit(s) with NO Graph-Writer attribution (${unattributed[0]}) — this rollback cannot tell its own un-landed write from another process's work, so NOTHING was discarded and the commit(s) are LEFT on HEAD. $restore_claim Inspect the commit(s) by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
       return 1
     fi
     if [[ "${#mine[@]}" -gt 0 ]]; then
