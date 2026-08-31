@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { validateNode, type IntentionNode } from "./schema.js";
 import { listNodesStrict } from "./store.js";
@@ -18,6 +18,15 @@ import { listNodesStrict } from "./store.js";
  * of the store's bytes turns that hazard into an automatic miss: the entry is a
  * pure function of the store state, so it can never describe a state the store
  * has left.
+ *
+ * That is a property of the WRITE path as much as of the key. The fingerprint
+ * is necessarily taken before the parse it names, so a writer landing in that
+ * window would otherwise file post-write nodes under a pre-write key — an entry
+ * describing a state its own key does not, which a later call at the pre-write
+ * state would then serve. `writeCacheEntry` closes that window by re-taking the
+ * fingerprint after the parse and publishing only when it is unchanged
+ * (compare-and-swap on the store bytes); an interleaved write costs the entry,
+ * never its correctness.
  *
  * That is the difference from `DISPATCH_CI_VERDICT_CACHE`
  * (`.claude/skills/dispatch-propagate/scripts/lib.sh`, the
@@ -57,21 +66,33 @@ import { listNodesStrict } from "./store.js";
  * key cannot miss a change the enumeration would see; the cost is a spurious
  * miss when an unrelated companion file changes, which is the safe direction.
  *
+ * A symlink is hashed by what it RESOLVES to, for the same superset reason:
+ * `listNodesResilient` calls `readFileSync` on `<id>.md` without inspecting the
+ * entry type, so a symlinked node file IS a node to the enumeration. Hashing
+ * only the link's own directory entry would let an edit made through it land
+ * without moving the key — a stale hit, the one failure this module exists to
+ * make impossible.
+ *
  * Each field is framed with a NUL separator and file bytes carry an explicit
  * byte count, so no rename or content shuffle can produce a colliding stream.
  * Read errors PROPAGATE: an unreadable store directory must abort the caller
  * rather than fingerprint as empty, which would be a cache key that outlives
- * the failure.
+ * the failure. `listNodesStrictCached` catches that throw and re-raises it
+ * through `listNodesStrict` instead — see `fingerprintOrNull`, which is what
+ * keeps a companion file this function reads but the ENUMERATION does not from
+ * being able to abort a sweep the uncached path would have completed.
  */
 export function storeFingerprint(dir: string): string {
   const entries = readdirSync(dir, { withFileTypes: true });
   entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const hash = createHash("sha256");
   for (const entry of entries) {
-    const marker = entry.isFile() ? "f" : entry.isDirectory() ? "d" : "o";
+    const path = join(dir, entry.name);
+    const isFile = entry.isFile() || (entry.isSymbolicLink() && statSync(path).isFile());
+    const marker = isFile ? "f" : entry.isDirectory() ? "d" : "o";
     hash.update(`${entry.name}\0${marker}\0`);
-    if (entry.isFile()) {
-      const bytes = readFileSync(join(dir, entry.name));
+    if (isFile) {
+      const bytes = readFileSync(path);
       hash.update(`${bytes.length}\0`);
       hash.update(bytes);
     }
@@ -100,6 +121,71 @@ function readCacheEntry(file: string): IntentionNode[] | null {
 }
 
 /**
+ * The store fingerprint, or null when this call could not take one.
+ *
+ * A fingerprint reads strictly MORE of the directory than the enumeration does
+ * (every entry, not just `*.md`), so its read set includes files whose failure
+ * says nothing about whether the store can be enumerated: a companion file with
+ * no read permission, or — the live case, since the whole point of this module
+ * is sweeps interleaved with writers — a `writeNode` temp file
+ * (`.<id>.md.<pid>.<rand>.tmp`, `store.ts`'s `writeFileAtomic`) that readdir
+ * listed and rename retired before the read reached it. Letting either abort
+ * the caller would make the cached path FAIL where the uncached path succeeds,
+ * which no read-only optimization may do.
+ *
+ * Null therefore means "no key available", not "the store is fine": the caller
+ * falls through to `listNodesStrict`, whose own `readdirSync` re-raises a
+ * genuinely unreadable store directory. The clear-error posture is preserved,
+ * one layer down.
+ */
+function fingerprintOrNull(dir: string): string | null {
+  try {
+    return storeFingerprint(dir);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Publish `nodes` at `file`, best-effort, but only while the store still reads
+ * as `fingerprint`.
+ *
+ * The re-fingerprint is a compare-and-swap on the store bytes: `fingerprint`
+ * was taken before the parse, so a writer that landed in between would have
+ * this call publish a post-write node set under a pre-write key. Skipping the
+ * write there is what makes an entry a pure function of the state its key
+ * names. It costs one extra hash (10-18 ms) on the miss path only, against the
+ * ~500 ms parse that path just paid.
+ *
+ * A temp file renamed onto the final name keeps the entry atomic — a concurrent
+ * writer either wins or loses with identical content, never a torn file — and
+ * the temp is removed when the publish fails, so a full or read-only cache
+ * directory cannot leave litter behind. Every failure is swallowed: whether the
+ * write lands changes only the cost of the next call, never its answer.
+ */
+function writeCacheEntry(
+  file: string,
+  dir: string,
+  fingerprint: string,
+  nodes: IntentionNode[],
+): void {
+  const tmp = `${file}.tmp.${process.pid}`;
+  try {
+    if (fingerprintOrNull(dir) !== fingerprint) return;
+    writeFileSync(tmp, JSON.stringify(nodes));
+    renameSync(tmp, file);
+  } catch {
+    // The caller owns the directory; a missing or unwritable one costs a
+    // repeated parse, not a failed sweep.
+    try {
+      rmSync(tmp, { force: true });
+    } catch {
+      // best-effort cleanup of a temp file that may never have been created
+    }
+  }
+}
+
+/**
  * `listNodesStrict`, memoized on the store's content when `cacheDir` names a
  * directory the caller has created.
  *
@@ -109,18 +195,22 @@ function readCacheEntry(file: string): IntentionNode[] | null {
  * separate process with no tick around it, so it supplies no cache directory.
  *
  * The key pairs the resolved directory path with the store fingerprint, so two
- * stores with coincidentally identical contents never share an entry.
+ * stores with coincidentally identical contents never share an entry. When no
+ * key can be taken at all the call is simply uncached (`fingerprintOrNull`),
+ * never failed.
  *
- * Writing the entry is best-effort: a temp file renamed onto the final name, so
- * a concurrent writer either wins or loses with identical content, and a write
- * failure is swallowed rather than failing a sweep. Whether the write lands
- * changes only the cost of the next call, never its answer.
+ * Writing the entry is best-effort and compare-and-swapped on the store bytes;
+ * see `writeCacheEntry`. Whether the write lands changes only the cost of the
+ * next call, never its answer.
  */
 export function listNodesStrictCached(dir: string, cacheDir: string): IntentionNode[] {
   if (!cacheDir) return listNodesStrict(dir);
 
+  const fingerprint = fingerprintOrNull(dir);
+  if (fingerprint === null) return listNodesStrict(dir);
+
   const dirKey = createHash("sha256").update(resolve(dir)).digest("hex").slice(0, 12);
-  const file = join(cacheDir, `nodes-${dirKey}-${storeFingerprint(dir).slice(0, 32)}.json`);
+  const file = join(cacheDir, `nodes-${dirKey}-${fingerprint.slice(0, 32)}.json`);
 
   const cached = readCacheEntry(file);
   if (cached !== null) return cached;
@@ -129,14 +219,7 @@ export function listNodesStrictCached(dir: string, cacheDir: string): IntentionN
   // runs, so no entry is written for a store that cannot be enumerated.
   const nodes = listNodesStrict(dir);
 
-  try {
-    const tmp = `${file}.tmp.${process.pid}`;
-    writeFileSync(tmp, JSON.stringify(nodes));
-    renameSync(tmp, file);
-  } catch {
-    // The caller owns the directory; a missing or unwritable one costs a
-    // repeated parse, not a failed sweep.
-  }
+  writeCacheEntry(file, dir, fingerprint, nodes);
 
   return nodes;
 }

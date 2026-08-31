@@ -1,4 +1,11 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -67,11 +74,13 @@ function onlyEntry(cacheDir: string): string {
 describe("listNodesStrictCached without a cache directory", () => {
   it("returns exactly what listNodesStrict returns and writes nothing", () => {
     const dir = tempDir("intentions-");
-    const cacheDir = tempDir("intentions-cache-");
     seedStore(dir);
+    const before = readdirSync(dir).sort();
 
     expect(listNodesStrictCached(dir, "")).toEqual(listNodesStrict(dir));
-    expect(readdirSync(cacheDir)).toEqual([]);
+    // With no cache directory there is nowhere to write but the store itself,
+    // so an entry (or a stray temp file) would land here.
+    expect(readdirSync(dir).sort()).toEqual(before);
   });
 });
 
@@ -87,6 +96,9 @@ describe("listNodesStrictCached with a cache directory", () => {
 
     expect(listNodesStrictCached(dir, cacheDir)).toEqual(cold);
     expect(cacheEntries(cacheDir)).toHaveLength(1);
+
+    // The publish is a temp file renamed into place; nothing may survive it.
+    expect(readdirSync(cacheDir).filter((name) => name.includes(".tmp."))).toEqual([]);
   });
 
   it("serves a hit from the entry rather than re-parsing the store", () => {
@@ -174,6 +186,18 @@ describe("listNodesStrictCached degradation", () => {
 
     expect(listNodesStrictCached(dir, cacheDir)).toEqual(listNodesStrict(dir));
   });
+
+  it("returns the right nodes when the cache directory is a regular file", () => {
+    const dir = tempDir("intentions-");
+    const cacheFile = join(tempDir("intentions-cache-"), "not-a-directory");
+    writeFileSync(cacheFile, "");
+    seedStore(dir);
+
+    // Both the entry read and the publish fail with ENOTDIR here, so this
+    // exercises the temp-file cleanup path as well as the swallowed write.
+    expect(listNodesStrictCached(dir, cacheFile)).toEqual(listNodesStrict(dir));
+    expect(readFileSync(cacheFile, "utf8")).toBe("");
+  });
 });
 
 describe("listNodesStrictCached stays fail-closed", () => {
@@ -185,6 +209,17 @@ describe("listNodesStrictCached stays fail-closed", () => {
 
     expect(() => listNodesStrictCached(dir, "")).toThrow(IntentionSchemaError);
     expect(() => listNodesStrictCached(dir, cacheDir)).toThrow(IntentionSchemaError);
+    expect(readdirSync(cacheDir)).toEqual([]);
+  });
+
+  it("throws on a missing store directory even with a cache directory", () => {
+    const cacheDir = tempDir("intentions-cache-");
+    const missing = join(tempDir("intentions-"), "never-created");
+
+    // The fingerprint cannot be taken, so no key exists — the call must fall
+    // through to `listNodesStrict` and surface ITS failure, not read as an
+    // empty store.
+    expect(() => listNodesStrictCached(missing, cacheDir)).toThrow();
     expect(readdirSync(cacheDir)).toEqual([]);
   });
 
@@ -235,6 +270,22 @@ describe("storeFingerprint", () => {
     expect(storeFingerprint(dir)).not.toBe(base);
 
     writeFileSync(join(dir, "notes.txt"), "not a node file\n");
+    expect(storeFingerprint(dir)).not.toBe(base);
+  });
+
+  it("covers a symlinked node file by what it resolves to", () => {
+    const dir = tempDir("intentions-");
+    const elsewhere = tempDir("intentions-target-");
+    const target = join(elsewhere, "linked.md");
+    seedStore(dir);
+    seedStore(elsewhere, ["linked"]);
+    symlinkSync(target, join(dir, "linked.md"));
+
+    // The enumeration reads through the link, so the fingerprint must too.
+    expect(listNodesStrict(dir).map((n) => n.id)).toContain("linked");
+    const base = storeFingerprint(dir);
+
+    writeFileSync(target, `${readFileSync(target, "utf8")}\nAn added body paragraph.\n`);
     expect(storeFingerprint(dir)).not.toBe(base);
   });
 
