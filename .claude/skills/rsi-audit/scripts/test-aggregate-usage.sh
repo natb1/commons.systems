@@ -263,6 +263,7 @@ setup() {
   touch "$worker_jsonl" "$subagent_jsonl" "$router_jsonl" "$subagent_b_jsonl" "$recovery_jsonl"
 
   export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
 }
 
 teardown() {
@@ -680,6 +681,7 @@ printf '#!/usr/bin/env bash\n: > %s\ncat >/dev/null\n' "'$SENTINEL_P1'" \
 chmod +x "$FAKE_WRITER_DIR/fake-writer-p1"
 if (
   export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-p1"
   unset DISPATCH_AUDIT_AGGREGATES_ENABLED 2>/dev/null || true
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 >/dev/null
@@ -697,6 +699,7 @@ chmod +x "$FAKE_WRITER_DIR/fake-writer-p2"
 JSON_OUT_P2="$FAKE_WRITER_DIR/report-p2.json"
 (
   export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   export DISPATCH_AUDIT_AGGREGATES_ENABLED="1"
   export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-p2"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --json-out "$JSON_OUT_P2"
@@ -718,6 +721,7 @@ printf '#!/usr/bin/env bash\n: > %s\ncat > %s\n' "'$SENTINEL_P2B'" "'$CAPTURE_P2
 chmod +x "$FAKE_WRITER_DIR/fake-writer-p2b"
 OUT_P2B=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   export DISPATCH_AUDIT_AGGREGATES_ENABLED="1"
   export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-p2b"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
@@ -738,6 +742,7 @@ printf '#!/usr/bin/env bash\ncat >/dev/null\nexit 1\n' \
 chmod +x "$FAKE_WRITER_DIR/fake-writer-p3"
 if (
   export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   export DISPATCH_AUDIT_AGGREGATES_ENABLED="1"
   export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-p3"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --json-out "$JSON_OUT_P3" 2>/dev/null
@@ -755,6 +760,7 @@ printf '#!/usr/bin/env bash\ncat >/dev/null\necho LEAKED-DOCID\n' \
 chmod +x "$FAKE_WRITER_DIR/fake-writer-p4"
 OUT_P4=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   export DISPATCH_AUDIT_AGGREGATES_ENABLED="1"
   export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-p4"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
@@ -808,6 +814,7 @@ touch "$partial_jsonl"
 
 OUT_PARTIAL=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$PARTIAL_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -864,6 +871,7 @@ touch "$node_jsonl"
 
 OUT_NODE=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$NODE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -913,6 +921,7 @@ touch "$guard_jsonl"
 
 if (
   export DISPATCH_AUDIT_PROJECTS_ROOT="$GUARD_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 >/dev/null 2>&1
 ); then rc_guard=0; else rc_guard=$?; fi
 assert_eq "guard: unpriceable model + nonzero usage aborts (rc!=0)" "1" \
@@ -948,6 +957,7 @@ touch "$synth_jsonl"
 
 if (
   export DISPATCH_AUDIT_PROJECTS_ROOT="$SYNTH_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 >"$SYNTH_ROOT/out.json" 2>/dev/null
 ); then rc_synth=0; else rc_synth=$?; fi
 assert_eq "synth: zero-usage unclassifiable model does not abort (rc==0)" "0" "$rc_synth"
@@ -988,6 +998,7 @@ touch "$haiku_jsonl"
 
 OUT_HAIKU=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$HAIKU_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -1031,6 +1042,7 @@ touch "$fable_jsonl"
 
 OUT_FABLE=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$FABLE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -1081,6 +1093,7 @@ jq . "$node_stamp" >/dev/null
 
 OUT_NODE=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$NODE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -1109,6 +1122,14 @@ assert_eq "node: window.sidecar_eligible == 1" "1" \
   "$(jq '.window.sidecar_eligible' <<<"$OUT_NODE")"
 assert_eq "node: window.sidecar_present == 1" "1" \
   "$(jq '.window.sidecar_present' <<<"$OUT_NODE")"
+# This run is fleet-scope (no --node flag) despite the fixture's graph-native
+# node_id sidecar, so the new drop-accounting fields must read as untouched.
+assert_eq "node: window.sidecar_coverage_measurable == true (fleet-scope run)" "true" \
+  "$(jq '.window.sidecar_coverage_measurable' <<<"$OUT_NODE")"
+assert_eq "node: window.scope_filter_dropped_unstamped == 0 (fleet scope)" "0" \
+  "$(jq '.window.scope_filter_dropped_unstamped' <<<"$OUT_NODE")"
+assert_eq "node: window.scope_filter_dropped_other_node == 0 (fleet scope)" "0" \
+  "$(jq '.window.scope_filter_dropped_other_node' <<<"$OUT_NODE")"
 
 rm -rf "$NODE_ROOT"
 
@@ -1144,6 +1165,7 @@ touch "$opus3_jsonl"
 
 if (
   export DISPATCH_AUDIT_PROJECTS_ROOT="$OPUS3_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 >"$OPUS3_ROOT/out.json" 2>/dev/null
 ); then rc_opus3=0; else rc_opus3=$?; fi
 
@@ -1177,6 +1199,7 @@ touch "$haiku3_jsonl"
 
 OUT_HAIKU3=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$HAIKU3_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -1212,6 +1235,7 @@ touch "$enum_jsonl"
 
 if (
   export DISPATCH_AUDIT_PROJECTS_ROOT="$ENUM_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 >"$ENUM_ROOT/out.json" 2>/dev/null
 ); then rc_enum=0; else rc_enum=$?; fi
 assert_eq "enum: claude-3-5-haiku + claude-3-7-sonnet session does not abort (rc==0)" "0" "$rc_enum"
@@ -1271,6 +1295,7 @@ done
 
 OUT_COV=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$COV_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -1285,22 +1310,23 @@ assert_eq "coverage: window.sidecar_present_rate (2/3)" "$EXPECTED_COV_RATE" \
 rm -rf "$COV_ROOT"
 
 # ---------------------------------------------------------------------------
-# Alternation coverage (#2351): every phase skill in the classifier's worker
+# Alternation coverage (#2351): every launch skill in the classifier's worker
 # alternation must classify a first-message <command-name> session as "worker".
-# The #2268 cov block above exercises only 3 of the 13; a typo in any of the
-# other 10 skill names would silently misclassify those sessions as "other".
+# The #2268 cov block above exercises only 3 of them; a typo in any of the
+# other names would silently misclassify those sessions as "other".
 # ISOLATED fixture: one minimal worker session per skill, each in its own root
-# so the shared totals stay untouched. Keep this list in lockstep with the
-# alternation regex in aggregate-usage.sh's classifier (10 legacy phase skills
-# + the 4 graph-native align-family skills).
+# so the shared totals stay untouched. Keep this list in lockstep with
+# `worker_skills` in aggregate-usage.sh (10 legacy phase skills, the 4
+# graph-native align-family skills, and the 2 rsi-family skills).
 # ---------------------------------------------------------------------------
 
 echo ""
-echo "--- alternation coverage: all 14 phase skills classify as worker (#2351) ---"
+echo "--- alternation coverage: all 16 launch skills classify as worker (#2351) ---"
 
 for skill in plan-issue implement qa-fix review-fix fix-checks fix-conflicts \
              qa-main budget-parse-job resolve-epic office-hours \
-             align-strategy align-tactics align-init align; do
+             align-strategy align-tactics align-init align \
+             rsi rsi-audit; do
   ALT_ROOT=$(mktemp -d)
   trap 'rm -rf "$ALT_ROOT"; teardown' EXIT INT TERM
   alt_worktree="$ALT_ROOT/-home-x-worktrees-2351-alternation"
@@ -1315,6 +1341,7 @@ for skill in plan-issue implement qa-fix review-fix fix-checks fix-conflicts \
 
   OUT_ALT=$(
     export DISPATCH_AUDIT_PROJECTS_ROOT="$ALT_ROOT"
+    export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
     bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
   )
   assert_eq "alternation: /$skill session classifies as worker" "worker" \
@@ -1349,6 +1376,7 @@ touch "$noworker_jsonl"
 
 OUT_NOWORKER=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$NOWORKER_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -1389,6 +1417,7 @@ touch "$freeform_jsonl"
 
 OUT_FREEFORM=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$FREEFORM_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -1435,6 +1464,7 @@ touch -d "2025-06-16 12:00:00" "$day_worktree/sess-after.jsonl"
 
 OUT_DAY=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$DAY_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --day "$TARGET_DAY"
 )
 assert_eq "day: only within-day file scanned (files_scanned==1)" "1" \
@@ -1478,6 +1508,7 @@ touch "$tz_jsonl"
 
 OUT_TZ=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$TZ_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   export TZ=America/New_York
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
@@ -1530,6 +1561,7 @@ touch "$keep_jsonl" "$drop_jsonl"
 # WITHOUT the flag: both sessions land in by_topic.other / by_type.none.
 OUT_SIDE_OFF=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$SIDE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 assert_eq "sidecar OFF: both sessions counted (totals.sessions==2)" "2" \
@@ -1542,6 +1574,7 @@ assert_eq "sidecar OFF: by_type.none.input == 1000+2000" "3000" \
 # WITH the flag: sess-drop excluded; only sess-keep contributes.
 OUT_SIDE_ON=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$SIDE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --exclude-sidecar-sessions
 )
 assert_eq "sidecar ON: only sess-keep counted (totals.sessions==1)" "1" \
@@ -1600,6 +1633,7 @@ touch "$sub_worktree/sess-fi.jsonl" "$sub_worktree/sess-fi/subagents/agent-x.jso
 # WITHOUT the flag: all 4 transcripts scanned (control — subagents in scope).
 OUT_SUB_OFF=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$SUB_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 assert_eq "subagent-sidecar OFF: all 4 transcripts scanned" "4" \
@@ -1611,6 +1645,7 @@ assert_eq "subagent-sidecar OFF: by_topic.other.input == 7500" "7500" \
 # (a subagent whose parent has no sidecar must not be over-excluded).
 OUT_SUB_ON=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$SUB_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --exclude-sidecar-sessions
 )
 assert_eq "subagent-sidecar ON: only sess-plain + its subagent scanned" "2" \
@@ -1747,6 +1782,7 @@ touch "$ws_worker_jsonl" "$ws_agent_jsonl" "$ws_multi_jsonl" "$ws_helper_jsonl" 
 
 OUT_WS=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$WS_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -1870,6 +1906,7 @@ touch "$scope_sess_worktree/sess-scope-a.jsonl" "$scope_sess_worktree/sess-scope
 
 OUT_SCOPE_SESS=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$SCOPE_SESS_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --session sess-scope-a
 )
 assert_eq "session-scope: files_scanned == 1" "1" \
@@ -1918,6 +1955,7 @@ touch "$scope_node_worktree/sess-scope-x.jsonl" "$scope_node_worktree/sess-scope
 
 OUT_SCOPE_NODE=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$SCOPE_NODE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --node tactic-scope-x
 )
 assert_eq "node-scope: files_scanned == 2 (session + its subagent)" "2" \
@@ -1930,6 +1968,16 @@ assert_eq "node-scope: window.scope.type == node" "node" \
   "$(jq -r '.window.scope.type' <<<"$OUT_SCOPE_NODE")"
 assert_eq "node-scope: window.scope.id == tactic-scope-x" "tactic-scope-x" \
   "$(jq -r '.window.scope.id' <<<"$OUT_SCOPE_NODE")"
+assert_eq "node-scope: window.scope_filter_dropped_other_node == 1 (sess-scope-y)" "1" \
+  "$(jq '.window.scope_filter_dropped_other_node' <<<"$OUT_SCOPE_NODE")"
+# sess-scope-z is built by write_min_session, which stamps /file-issue — not a
+# worker_skills command, so it would classify "other" if it ever reached
+# $sessions. It never does: the gate drops it for want of a sidecar before
+# classification runs. This is exactly why the drop counters are untyped (see
+# aggregate-usage.sh BEHAVIOR CONTRACT) — it is still counted as an unstamped
+# drop regardless of what it would have classified as.
+assert_eq "node-scope: window.scope_filter_dropped_unstamped == 1 (sess-scope-z)" "1" \
+  "$(jq '.window.scope_filter_dropped_unstamped' <<<"$OUT_SCOPE_NODE")"
 
 rm -rf "$SCOPE_NODE_ROOT"
 
@@ -1948,6 +1996,7 @@ touch -d "40 days ago" "$scope_win_worktree/sess-scope-old.jsonl"
 # (C1) --session with NO --day/--days: unbounded window, the old file IS found.
 OUT_SCOPE_UNBOUNDED=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$SCOPE_WIN_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --session sess-scope-old
 )
 assert_eq "scoped unbounded: files_scanned == 1 (40-day-old file found)" "1" \
@@ -1962,6 +2011,7 @@ assert_eq "scoped unbounded: window.since is the epoch" "1970-01-01 00:00:00" \
 # window (this run should behave exactly like the fleet-wide default would).
 OUT_SCOPE_BOUNDED=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$SCOPE_WIN_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --session sess-scope-old --days 7
 )
 assert_eq "scoped + explicit --days 7: files_scanned == 0 (old file excluded)" "0" \
@@ -1999,6 +2049,7 @@ printf '#!/usr/bin/env bash\n: > %s\ncat >/dev/null\n' "'$SENTINEL_SCOPE_PERSIST
 chmod +x "$FAKE_WRITER_DIR/fake-writer-scope-persist"
 if (
   export DISPATCH_AUDIT_PROJECTS_ROOT="$SCOPE_PERSIST_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   export DISPATCH_AUDIT_AGGREGATES_ENABLED="1"
   export DISPATCH_AUDIT_AGGREGATES_WRITER="$FAKE_WRITER_DIR/fake-writer-scope-persist"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --session sess-scope-persist >/dev/null
@@ -2048,6 +2099,7 @@ touch "$hr1_jsonl" "$hr2_jsonl"
 
 OUT_HR=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$HR_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -2145,6 +2197,7 @@ touch "$ce_worktree"/sess-ce-*.jsonl "$ce_worktree"/sess-ce-*.dispatch-stamp.jso
 
 OUT_CE=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$CE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -2169,6 +2222,46 @@ assert_eq "creation_churn: examples[0].node_id == tactic-ce-fixture" '"tactic-ce
   "$(jq '.lenses.cache_efficiency.creation_churn.examples[0].node_id' <<<"$OUT_CE")"
 assert_close "creation_churn: examples[0].hit_ratio == 100/1100" \
   "$EXPECTED_B_HIT" "$(jq '.lenses.cache_efficiency.creation_churn.examples[0].hit_ratio' <<<"$OUT_CE")"
+
+# --- The SAME fixture at --node scope. -------------------------------------
+# Proves the lens CARRIER exists at the scope /rsi reads it from, not only at
+# fleet scope: no --day/--days, matching the exact invocation shape /rsi Step 2
+# uses (--node <id> only), which also exercises the scoped unbounded window.
+#
+# The fixture node ids named in these comments are deliberately UN-BACKTICKED:
+# they are strings written into this test's own dispatch-stamp files, not graph
+# nodes, and a backtick span would read to validate-graph's prose-reference
+# check as a dangling node reference.
+#
+# In-scope: sess-ce-a/b/c under node tactic-ce-fixture, input 100 each with
+# (cache_creation, cache_read) of (1000,0), (900,100), (100,800) -> window hit
+# ratio 900 / (300 + 2000 + 900). Out of scope and excluded by --node: the
+# tactic-ce-lone and tactic-ce-notime groups.
+echo ""
+echo "--- lenses.cache_efficiency at --node scope (tactic-audit-cache-efficiency-lens) ---"
+
+OUT_CE_NODE=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$CE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --node tactic-ce-fixture
+)
+
+EXPECTED_CE_NODE_WINDOW=$(jq -n '900/3200')
+
+assert_eq "node scope: lenses.cache_efficiency is present and non-null (tactic-audit-cache-efficiency-lens)" "true" \
+  "$(jq '.lenses.cache_efficiency != null' <<<"$OUT_CE_NODE")"
+assert_close "node scope: hit_ratio.window == 900/3200, the three in-scope sessions only (tactic-audit-cache-efficiency-lens)" \
+  "$EXPECTED_CE_NODE_WINDOW" "$(jq '.lenses.cache_efficiency.hit_ratio.window' <<<"$OUT_CE_NODE")"
+assert_eq "node scope: creation_churn.node_groups_considered == 1 (tactic-audit-cache-efficiency-lens)" "1" \
+  "$(jq '.lenses.cache_efficiency.creation_churn.node_groups_considered' <<<"$OUT_CE_NODE")"
+assert_eq "node scope: creation_churn.staggered_sessions == 2 (tactic-audit-cache-efficiency-lens)" "2" \
+  "$(jq '.lenses.cache_efficiency.creation_churn.staggered_sessions' <<<"$OUT_CE_NODE")"
+assert_eq "node scope: creation_churn.churned_sessions == 1 (tactic-audit-cache-efficiency-lens)" "1" \
+  "$(jq '.lenses.cache_efficiency.creation_churn.churned_sessions' <<<"$OUT_CE_NODE")"
+assert_eq "node scope: no out-of-scope node group survived the scope filter (tactic-audit-cache-efficiency-lens)" "0" \
+  "$(jq '[.sessions[] | select(.artifact.node_id != "tactic-ce-fixture")] | length' <<<"$OUT_CE_NODE")"
+assert_eq "node scope: every selected row carries its own hit_ratio (tactic-audit-cache-efficiency-lens)" "0" \
+  "$(jq '[.sessions[] | select(.hit_ratio == null)] | length' <<<"$OUT_CE_NODE")"
 
 rm -rf "$CE_ROOT"
 
@@ -2267,6 +2360,7 @@ touch "$pf_worktree"/sess-pf-*.jsonl
 
 OUT_PF=$(
   export DISPATCH_AUDIT_PROJECTS_ROOT="$PF_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
   bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
 )
 
@@ -2307,6 +2401,905 @@ assert_eq "permission_friction: sess-pf-3 (clean) events == 0" "0" \
   "$(jq '[.sessions[]|select(.id=="sess-pf-3")][0].permission_friction.events' <<<"$OUT_PF")"
 
 rm -rf "$PF_ROOT"
+
+
+# ---------------------------------------------------------------------------
+# PROJECT-DIR PREFIX DISCOVERY (Unit 1). The superseded predicate matched only
+# *worktrees* and *--bare project dirs, so every transcript written by a session
+# spawned with `--cwd $PROJECT_ROOT` — the whole /rsi and align-phase population
+# — landed in the MAIN-checkout project dir and was never scanned, at any scope,
+# in any window. Discovery is now a prefix rule: a project dir is in scope when
+# its name is exactly $PROJECT_PREFIX, or begins with "$PROJECT_PREFIX-".
+#
+# ISOLATED fixture root with four project dirs, two in scope and two out:
+#   -home-x                exact prefix                     -> IN  (main checkout)
+#   -home-x-main-checkout  prefix + "-", and neither
+#                          "worktrees" nor "--bare" in the
+#                          name                             -> IN  (this one is
+#                                                                   the unit's
+#                                                                   regression
+#                                                                   guard)
+#   -home-y-other-project  a different prefix                -> OUT
+#   -home-xzz-neighbour    prefix as a bare substring, with
+#                          no "-" separator                  -> OUT
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- project-dir prefix discovery (Unit 1) ---"
+
+PREFIX_ROOT=$(mktemp -d)
+trap 'rm -rf "$PREFIX_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+
+# $1 = project dir, $2 = session id. One classified worker turn with small
+# non-zero usage; these assertions are about presence/absence, not magnitude.
+prefix_session() {
+  mkdir -p "$1"
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/implement</command-name>"}}' \
+    >> "$1/$2.jsonl"
+  printf '%s\n' '{"type":"assistant","attributionSkill":"implement","isSidechain":false,"gitBranch":"prefix-fixture","message":{"model":"claude-opus-4-8","usage":{"input_tokens":10,"cache_creation_input_tokens":20,"cache_read_input_tokens":40,"output_tokens":5}}}' \
+    >> "$1/$2.jsonl"
+  jq . "$1/$2.jsonl" >/dev/null
+  touch "$1/$2.jsonl"
+}
+
+prefix_session "$PREFIX_ROOT/-home-x"               "sess-exact"
+prefix_session "$PREFIX_ROOT/-home-x-main-checkout" "sess-main"
+prefix_session "$PREFIX_ROOT/-home-y-other-project" "sess-other"
+prefix_session "$PREFIX_ROOT/-home-xzz-neighbour"   "sess-neighbour"
+
+OUT_PREFIX=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$PREFIX_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "prefix: main-checkout-shaped dir IS scanned (no 'worktrees', no '--bare')" "1" \
+  "$(jq '[.sessions[]|select(.id=="sess-main")]|length' <<<"$OUT_PREFIX")"
+assert_eq "prefix: dir named EXACTLY the prefix IS scanned" "1" \
+  "$(jq '[.sessions[]|select(.id=="sess-exact")]|length' <<<"$OUT_PREFIX")"
+assert_eq "prefix: a different-prefix project is NOT scanned" "0" \
+  "$(jq '[.sessions[]|select(.id=="sess-other")]|length' <<<"$OUT_PREFIX")"
+assert_eq "prefix: prefix-as-substring with no '-' separator is NOT scanned" "0" \
+  "$(jq '[.sessions[]|select(.id=="sess-neighbour")]|length' <<<"$OUT_PREFIX")"
+assert_eq "prefix: exactly 2 sessions in scope" "2" \
+  "$(jq '.sessions|length' <<<"$OUT_PREFIX")"
+assert_eq "prefix: window.files_scanned == 2" "2" \
+  "$(jq '.window.files_scanned' <<<"$OUT_PREFIX")"
+assert_eq "prefix: window.project_prefix is reported" '"-home-x"' \
+  "$(jq '.window.project_prefix' <<<"$OUT_PREFIX")"
+assert_eq "prefix: window.project_dirs_scanned == 2" "2" \
+  "$(jq '.window.project_dirs_scanned' <<<"$OUT_PREFIX")"
+
+rm -rf "$PREFIX_ROOT"
+
+# ---------------------------------------------------------------------------
+# derive_project_prefix's ENCODING must equal the hook's `encode_cwd`
+# (.claude/hooks/stamp-dispatch-session.sh): EVERY non-alphanumeric character
+# becomes `-`. The two are the read and write sides of one directory-naming
+# contract, so a narrower spelling (e.g. `tr '/.' '--'`) agrees only on paths
+# made of `/`, `.` and alphanumerics — on a repo path carrying `_`, a space or
+# `@` it emits a prefix matching NO directory, and the empty/`-` guard does not
+# catch it: the run exits 0 with project_dirs_scanned=0 and files_scanned=0.
+#
+# The function is extracted from the script text and evaluated against a stubbed
+# `git`, so the probe exercises the REAL production line rather than a copy.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- derive_project_prefix encoding == stamp-dispatch-session.sh encode_cwd ---"
+
+# hook_encode_cwd — a byte-faithful copy of encode_cwd from
+# .claude/hooks/stamp-dispatch-session.sh. The oracle the probe is compared to.
+hook_encode_cwd() {
+  printf '%s' "$1" | sed 's/[^A-Za-z0-9]/-/g'
+}
+
+# derive_prefix_probe <repo path> — run aggregate-usage.sh's own
+# derive_project_prefix with `git` stubbed to report "<repo path>/.git" as the
+# git common dir. Extraction is by an anchored sed range over the live script;
+# an empty extraction is reported as a distinct failure token rather than a
+# silent empty pass.
+derive_prefix_probe() {
+  local repo="$1" fn
+  fn=$(sed -n '/^derive_project_prefix() {$/,/^}$/p' "$SCRIPT_DIR/aggregate-usage.sh")
+  if [[ -z "$fn" ]]; then
+    printf '%s' "PROBE-EXTRACTION-FAILED"
+    return 0
+  fi
+  (
+    SCRIPT_DIR="/unused"
+    PROBE_REPO="$repo"
+    git() { printf '%s\n' "$PROBE_REPO/.git"; }
+    eval "$fn"
+    derive_project_prefix
+  )
+}
+
+# Guard the probe itself: on a plain path both spellings agree, so this case
+# cannot discriminate — it only proves the extraction + stub wiring works.
+assert_eq "prefix-encoding: probe wiring (plain path) matches encode_cwd" \
+  "$(hook_encode_cwd /home/n8/natb1/commons.systems)" \
+  "$(derive_prefix_probe /home/n8/natb1/commons.systems)"
+
+# THE DISCRIMINATING CASES. Each contains a character `tr '/.' '--'` leaves
+# untouched, so each FAILS against that spelling.
+assert_eq "prefix-encoding: underscore in repo path encodes to '-' (not '_')" \
+  "$(hook_encode_cwd /home/n8/my_repo/commons.systems)" \
+  "$(derive_prefix_probe /home/n8/my_repo/commons.systems)"
+assert_eq "prefix-encoding: space in repo path encodes to '-'" \
+  "$(hook_encode_cwd '/home/n8/my repo/commons.systems')" \
+  "$(derive_prefix_probe '/home/n8/my repo/commons.systems')"
+assert_eq "prefix-encoding: '@' in repo path encodes to '-'" \
+  "$(hook_encode_cwd /home/n8/repo@v2/commons.systems)" \
+  "$(derive_prefix_probe /home/n8/repo@v2/commons.systems)"
+
+# Literal-value assertions, so the pair does not pass vacuously if BOTH the
+# probe and the oracle were to drift together.
+assert_eq "prefix-encoding: underscore case has the exact expected literal" \
+  "-home-n8-my-repo-commons-systems" \
+  "$(derive_prefix_probe /home/n8/my_repo/commons.systems)"
+assert_eq "prefix-encoding: '@' case has the exact expected literal" \
+  "-home-n8-repo-v2-commons-systems" \
+  "$(derive_prefix_probe /home/n8/repo@v2/commons.systems)"
+
+# ---------------------------------------------------------------------------
+# RSI FAMILY WHOLE-SESSION RE-KEY (Unit 2). /rsi and /rsi-audit joined
+# `worker_skills`, so an /rsi session now types as "worker" and its turns fold
+# onto its launch skill instead of sitting in the "<none>" bucket. Modelled on
+# the measured worst case: one real /rsi session, 483 turns, 0 of them carrying
+# a per-turn `attributionSkill`.
+#
+# The fixture lives in a main-checkout-shaped dir, which is where the real ones
+# live too — the two units compose, and neither alone would surface these turns.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- rsi family: whole-session re-key (Unit 2) ---"
+
+# Three opus turns: input 1000/100/10, cache_creation 2000/200/20,
+# cache_read 4000/400/40, output 500/50/5.
+# Sums: input=1110, cache_creation=2220, cache_read=4440, output=555.
+# price_proxy_usd uses the uniform Opus-list proxy rates (15 / 18.75 / 1.5 / 75);
+# cost_usd uses the truthful opus rates (5 / 6.25 / 0.50 / 25).
+EXPECTED_RSI_PRICE=$(jq -n '(1110*15 + 2220*18.75 + 4440*1.5 + 555*75)/1e6')
+EXPECTED_RSI_COST=$(jq -n '(1110*5 + 2220*6.25 + 4440*0.50 + 555*25)/1e6')
+
+# $1 = fixture root, $2 = attributionSkill JSON fragment spliced into each
+# assistant turn ("" for absent, '"attributionSkill":"rsi",' for tagged). The
+# two variants differ ONLY in that fragment, which is what makes the invariance
+# comparison below meaningful.
+rsi_fixture() {
+  local root="$1" tag="$2" dir jsonl
+  dir="$root/-home-x-main-checkout"
+  mkdir -p "$dir"
+  jsonl="$dir/sess-rsi.jsonl"
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/rsi</command-name>"}}' \
+    >> "$jsonl"
+  printf '{"type":"assistant",%s"isSidechain":false,"gitBranch":"main","message":{"model":"claude-opus-4-8","usage":{"input_tokens":1000,"cache_creation_input_tokens":2000,"cache_read_input_tokens":4000,"output_tokens":500}}}\n' \
+    "$tag" >> "$jsonl"
+  printf '{"type":"assistant",%s"isSidechain":false,"gitBranch":"main","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":200,"cache_read_input_tokens":400,"output_tokens":50}}}\n' \
+    "$tag" >> "$jsonl"
+  printf '{"type":"assistant",%s"isSidechain":false,"gitBranch":"main","message":{"model":"claude-opus-4-8","usage":{"input_tokens":10,"cache_creation_input_tokens":20,"cache_read_input_tokens":40,"output_tokens":5}}}\n' \
+    "$tag" >> "$jsonl"
+  jq . "$jsonl" >/dev/null
+  touch "$jsonl"
+}
+
+RSI_ROOT=$(mktemp -d)
+RSI_TAGGED_ROOT=$(mktemp -d)
+trap 'rm -rf "$RSI_ROOT" "$RSI_TAGGED_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+
+# Variant A — no per-turn tags at all (the measured worst case).
+rsi_fixture "$RSI_ROOT" ""
+OUT_RSI=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$RSI_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "rsi: /rsi session classifies as worker" "worker" \
+  "$(jq -r '[.sessions[]|select(.id=="sess-rsi")][0].type' <<<"$OUT_RSI")"
+assert_eq "rsi: launch_skill == rsi" "rsi" \
+  "$(jq -r '[.sessions[]|select(.id=="sess-rsi")][0].launch_skill' <<<"$OUT_RSI")"
+assert_eq "rsi: whole_session_attributed == true (0 per-turn tags)" "true" \
+  "$(jq '[.sessions[]|select(.id=="sess-rsi")][0].whole_session_attributed' <<<"$OUT_RSI")"
+assert_eq 'rsi: by_phase["rsi"].turns == 3' "3" \
+  "$(jq '.by_phase["rsi"].turns' <<<"$OUT_RSI")"
+assert_eq 'rsi: by_phase["rsi"].cost_usd' "$EXPECTED_RSI_COST" \
+  "$(jq '.by_phase["rsi"].cost_usd' <<<"$OUT_RSI")"
+assert_close 'rsi: by_phase["rsi"].price_proxy_usd' "$EXPECTED_RSI_PRICE" \
+  "$(jq '.by_phase["rsi"].price_proxy_usd' <<<"$OUT_RSI")"
+assert_eq 'rsi: by_phase["<none>"] absorbs none of those turns' "0" \
+  "$(jq '(.by_phase["<none>"].turns // 0)' <<<"$OUT_RSI")"
+
+# --- invariance: re-keying is a pure relabel, never a second count -----------
+# Variant B is byte-identical to A except every assistant turn carries
+# "attributionSkill":"rsi". If the grand totals moved between the two, or if the
+# rsi bucket grew while "<none>" held steady, the change would be double
+# counting rather than attribution — a refutation, not a partial success.
+rsi_fixture "$RSI_TAGGED_ROOT" '"attributionSkill":"rsi",'
+OUT_RSI_TAGGED=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$RSI_TAGGED_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "rsi invariance: totals.turns identical with and without per-turn tags" \
+  "$(jq '.totals.turns' <<<"$OUT_RSI_TAGGED")" "$(jq '.totals.turns' <<<"$OUT_RSI")"
+assert_eq "rsi invariance: totals.price_proxy_usd identical with and without per-turn tags" \
+  "$(jq '.totals.price_proxy_usd' <<<"$OUT_RSI_TAGGED")" "$(jq '.totals.price_proxy_usd' <<<"$OUT_RSI")"
+assert_eq 'rsi invariance: by_phase["rsi"].turns identical' \
+  "$(jq '.by_phase["rsi"].turns' <<<"$OUT_RSI_TAGGED")" "$(jq '.by_phase["rsi"].turns' <<<"$OUT_RSI")"
+assert_eq 'rsi invariance: by_phase["rsi"].price_proxy_usd identical' \
+  "$(jq '.by_phase["rsi"].price_proxy_usd' <<<"$OUT_RSI_TAGGED")" "$(jq '.by_phase["rsi"].price_proxy_usd' <<<"$OUT_RSI")"
+assert_eq 'rsi invariance: everything that left "<none>" arrived in rsi (bucket == totals)' \
+  "$(jq '.totals.price_proxy_usd' <<<"$OUT_RSI")" "$(jq '.by_phase["rsi"].price_proxy_usd' <<<"$OUT_RSI")"
+
+rm -rf "$RSI_ROOT" "$RSI_TAGGED_ROOT"
+
+# ---------------------------------------------------------------------------
+# MULTI-PHASE GUARD (Unit 2). A session launched by /align that ALSO carries
+# per-turn "rsi" attributions exists in the wild (one real session: 248 align
+# turns + 101 rsi turns). Adding rsi to worker_skills makes "rsi" count toward
+# $tagged_phase_skills, so that session now has TWO distinct phase skills and
+# must NOT be folded whole — per-turn attribution has to survive.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- rsi family: multi-phase guard keeps per-turn attribution (Unit 2) ---"
+
+RSI_MP_ROOT=$(mktemp -d)
+trap 'rm -rf "$RSI_MP_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+rsi_mp_dir="$RSI_MP_ROOT/-home-x-main-checkout"
+mkdir -p "$rsi_mp_dir"
+rsi_mp_jsonl="$rsi_mp_dir/sess-rsi-mp.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/align</command-name>"}}' \
+  >> "$rsi_mp_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"align","isSidechain":false,"gitBranch":"main","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$rsi_mp_jsonl"
+printf '%s\n' '{"type":"assistant","attributionSkill":"rsi","isSidechain":false,"gitBranch":"main","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$rsi_mp_jsonl"
+printf '%s\n' '{"type":"assistant","isSidechain":false,"gitBranch":"main","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$rsi_mp_jsonl"
+jq . "$rsi_mp_jsonl" >/dev/null
+touch "$rsi_mp_jsonl"
+
+OUT_RSI_MP=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$RSI_MP_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "rsi multi-phase: whole_session_attributed == false" "false" \
+  "$(jq '[.sessions[]|select(.id=="sess-rsi-mp")][0].whole_session_attributed' <<<"$OUT_RSI_MP")"
+# multi_phase_worker is a stage-1 row flag; the document surfaces it as the
+# attribution_coverage counter rather than a per-session field.
+assert_eq "rsi multi-phase: attribution_coverage.multi_phase_worker_sessions == 1" "1" \
+  "$(jq '.attribution_coverage.multi_phase_worker_sessions' <<<"$OUT_RSI_MP")"
+assert_eq 'rsi multi-phase: by_phase["align"].turns == 1 (kept per-turn)' "1" \
+  "$(jq '.by_phase["align"].turns' <<<"$OUT_RSI_MP")"
+assert_eq 'rsi multi-phase: by_phase["rsi"].turns == 1 (kept per-turn)' "1" \
+  "$(jq '.by_phase["rsi"].turns' <<<"$OUT_RSI_MP")"
+assert_eq 'rsi multi-phase: by_phase["<none>"].turns == 1 (untagged turn NOT folded)' "1" \
+  "$(jq '.by_phase["<none>"].turns' <<<"$OUT_RSI_MP")"
+
+rm -rf "$RSI_MP_ROOT"
+
+# ---------------------------------------------------------------------------
+# ALTERNATION ORDERING (Unit 2). "rsi" precedes "rsi-audit" in worker_skills, so
+# the alternation offers the shorter branch first. The trailing
+# "</command-name>" literal is what forces the engine to backtrack and take
+# "rsi-audit" — the same reason "align" and "align-tactics" already coexist. If
+# that reasoning were wrong, launch_skill here would come back as "rsi".
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- rsi family: /rsi-audit wins the alternation over /rsi (Unit 2) ---"
+
+RSI_AUDIT_ROOT=$(mktemp -d)
+trap 'rm -rf "$RSI_AUDIT_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+rsi_audit_dir="$RSI_AUDIT_ROOT/-home-x-main-checkout"
+mkdir -p "$rsi_audit_dir"
+rsi_audit_jsonl="$rsi_audit_dir/sess-rsi-audit.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"<command-name>/rsi-audit</command-name>"}}' \
+  >> "$rsi_audit_jsonl"
+printf '%s\n' '{"type":"assistant","isSidechain":false,"gitBranch":"main","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$rsi_audit_jsonl"
+printf '%s\n' '{"type":"assistant","isSidechain":false,"gitBranch":"main","message":{"model":"claude-opus-4-8","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  >> "$rsi_audit_jsonl"
+jq . "$rsi_audit_jsonl" >/dev/null
+touch "$rsi_audit_jsonl"
+
+OUT_RSI_AUDIT=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$RSI_AUDIT_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "rsi-audit: launch_skill == rsi-audit (not the shorter 'rsi' branch)" "rsi-audit" \
+  "$(jq -r '[.sessions[]|select(.id=="sess-rsi-audit")][0].launch_skill' <<<"$OUT_RSI_AUDIT")"
+assert_eq 'rsi-audit: by_phase has "rsi-audit" with 2 turns and no "rsi" key' "true" \
+  "$(jq '(.by_phase["rsi-audit"].turns == 2) and (.by_phase | has("rsi") | not)' <<<"$OUT_RSI_AUDIT")"
+
+rm -rf "$RSI_AUDIT_ROOT"
+
+# ---------------------------------------------------------------------------
+# --node sidecar-coverage accounting (tactic-supersession-edge-and-terminal,
+# PR3 Unit 2): three worker sessions in one fixture tree —
+# sess-cov-node-a (sidecar node_id==fixture-cov-node, the target),
+# sess-cov-node-b (no sidecar at all), sess-cov-node-c (sidecar node_id==
+# fixture-cov-other, a DIFFERENT node). Three runs over the SAME tree exercise
+# fleet scope (regression guard: Unit 1 must change nothing there), --node
+# scope with stamping partly broken (both drop reasons distinguishable), and
+# --node scope with total stamping failure (the case this tactic exists to
+# make legible — an empty node must not read the same as a node whose
+# sessions were dropped for want of a stamp).
+#
+# Trap: write_min_session stamps /file-issue, which is NOT in worker_skills,
+# so every session below is built with an inline printf using a REAL worker
+# command instead (/qa-fix) — a sidecar_eligible assertion over a
+# write_min_session fixture would read 0 for the wrong reason (type mismatch,
+# not the bug under test).
+#
+# ISOLATED fixture: own mktemp -d root, own trap, own
+# DISPATCH_AUDIT_PROJECT_PREFIX="-home-x" (required — only project dirs named
+# "-home-x" or "-home-x-*" are scanned).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- --node sidecar-coverage accounting: drop-reason counters + measurability flag ---"
+
+COVNODE_ROOT=$(mktemp -d)
+trap 'rm -rf "$COVNODE_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+covnode_worktree="$COVNODE_ROOT/-home-x-worktrees-cov-node"
+mkdir -p "$covnode_worktree"
+
+# Three real-worker-command transcripts (first line classifies as worker via
+# the /qa-fix alternation entry). The branch is `tactic-cov-node`: these
+# sessions carry node_id sidecars, so they model GRAPH-NATIVE workers, and the
+# branch has to be one dispatch-stamp-session's worker-branch gate ACCEPTS —
+# otherwise sess-cov-node-b (deliberately unstamped) would be excluded from
+# window.sidecar_eligible as unstampable, and the 2/3 fleet-rate assertion below
+# would be testing the wrong thing.
+for s in a b c; do
+  covnode_jsonl="$covnode_worktree/sess-cov-node-$s.jsonl"
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/qa-fix</command-name>"}}' \
+    >> "$covnode_jsonl"
+  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"tactic-cov-node","message":{"model":"claude-opus-4-8","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+    >> "$covnode_jsonl"
+  jq . "$covnode_jsonl" >/dev/null
+  touch "$covnode_jsonl"
+done
+
+# sess-cov-node-a: stamped for the target node.
+printf '%s\n' '{"schema":1,"session_id":"sess-cov-node-a","repo":"natb1/commons.systems","issue":null,"pr":null,"branch":"tactic-cov-node","base_sha":"aaa111","node_id":"fixture-cov-node","stamped_at":"2026-01-01T00:00:00Z"}' \
+  > "$covnode_worktree/sess-cov-node-a.dispatch-stamp.json"
+jq . "$covnode_worktree/sess-cov-node-a.dispatch-stamp.json" >/dev/null
+
+# sess-cov-node-b: NO sidecar at all — the unstamped drop.
+
+# sess-cov-node-c: stamped, but for a DIFFERENT node — the other-node drop.
+printf '%s\n' '{"schema":1,"session_id":"sess-cov-node-c","repo":"natb1/commons.systems","issue":null,"pr":null,"branch":"tactic-cov-node","base_sha":"ccc333","node_id":"fixture-cov-other","stamped_at":"2026-01-01T00:00:00Z"}' \
+  > "$covnode_worktree/sess-cov-node-c.dispatch-stamp.json"
+jq . "$covnode_worktree/sess-cov-node-c.dispatch-stamp.json" >/dev/null
+
+# (1) fleet scope: regression guard that Unit 1 changed nothing at fleet scope.
+OUT_COVNODE_FLEET=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$COVNODE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+EXPECTED_COVNODE_RATE=$(jq -n '2/3')
+assert_eq "covnode fleet: window.sidecar_eligible == 3" "3" \
+  "$(jq '.window.sidecar_eligible' <<<"$OUT_COVNODE_FLEET")"
+assert_eq "covnode fleet: window.sidecar_present == 2" "2" \
+  "$(jq '.window.sidecar_present' <<<"$OUT_COVNODE_FLEET")"
+assert_eq "covnode fleet: window.sidecar_present_rate == 2/3" "$EXPECTED_COVNODE_RATE" \
+  "$(jq '.window.sidecar_present_rate' <<<"$OUT_COVNODE_FLEET")"
+assert_eq "covnode fleet: window.sidecar_coverage_measurable == true" "true" \
+  "$(jq '.window.sidecar_coverage_measurable' <<<"$OUT_COVNODE_FLEET")"
+assert_eq "covnode fleet: window.scope_filter_dropped_unstamped == 0" "0" \
+  "$(jq '.window.scope_filter_dropped_unstamped' <<<"$OUT_COVNODE_FLEET")"
+assert_eq "covnode fleet: window.scope_filter_dropped_other_node == 0" "0" \
+  "$(jq '.window.scope_filter_dropped_other_node' <<<"$OUT_COVNODE_FLEET")"
+
+# (2) --node fixture-cov-node, stamping partly broken: sess-cov-node-b (no
+# sidecar) and sess-cov-node-c (sidecar names a different node) are both
+# dropped before $sessions, distinguishably.
+OUT_COVNODE_PARTIAL=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$COVNODE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --node fixture-cov-node
+)
+assert_eq "covnode partial: files_scanned == 1" "1" \
+  "$(jq '.window.files_scanned' <<<"$OUT_COVNODE_PARTIAL")"
+assert_eq "covnode partial: window.sidecar_coverage_measurable == false" "false" \
+  "$(jq '.window.sidecar_coverage_measurable' <<<"$OUT_COVNODE_PARTIAL")"
+assert_eq "covnode partial: window.scope_filter_dropped_unstamped == 1 (sess-cov-node-b)" "1" \
+  "$(jq '.window.scope_filter_dropped_unstamped' <<<"$OUT_COVNODE_PARTIAL")"
+assert_eq "covnode partial: window.scope_filter_dropped_other_node == 1 (sess-cov-node-c)" "1" \
+  "$(jq '.window.scope_filter_dropped_other_node' <<<"$OUT_COVNODE_PARTIAL")"
+# sidecar_present_rate reads 1 here NOT because coverage is healthy, but
+# because --node's own gate already required a sidecar to admit
+# sess-cov-node-a into $sessions at all — present==eligible by construction.
+# This is the structural artefact sidecar_coverage_measurable exists to flag,
+# not a genuine 100% coverage reading.
+assert_eq "covnode partial: window.sidecar_present_rate == 1 (structural, see comment)" "1" \
+  "$(jq '.window.sidecar_present_rate' <<<"$OUT_COVNODE_PARTIAL")"
+
+# (3) --node fixture-cov-node with sess-cov-node-a's own sidecar ALSO deleted:
+# total stamping failure. files_scanned drops to 0 — the case this tactic
+# exists to distinguish from a genuinely empty/quiet node.
+rm -f "$covnode_worktree/sess-cov-node-a.dispatch-stamp.json"
+COVNODE_STDERR="$COVNODE_ROOT/stderr-total-failure.log"
+OUT_COVNODE_TOTAL=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$COVNODE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7 --node fixture-cov-node 2>"$COVNODE_STDERR"
+)
+assert_eq "covnode total-failure: files_scanned == 0" "0" \
+  "$(jq '.window.files_scanned' <<<"$OUT_COVNODE_TOTAL")"
+assert_eq "covnode total-failure: window.sidecar_present_rate is null" "null" \
+  "$(jq '.window.sidecar_present_rate' <<<"$OUT_COVNODE_TOTAL")"
+assert_eq "covnode total-failure: window.sidecar_coverage_measurable == false" "false" \
+  "$(jq '.window.sidecar_coverage_measurable' <<<"$OUT_COVNODE_TOTAL")"
+assert_eq "covnode total-failure: window.scope_filter_dropped_unstamped == 2 (a and b)" "2" \
+  "$(jq '.window.scope_filter_dropped_unstamped' <<<"$OUT_COVNODE_TOTAL")"
+# This is the distinguishing assertion: files_scanned==0 alone reads exactly
+# like a genuinely empty node. The stderr diagnostic + the drop counter above
+# are what tell them apart — the point of the whole tactic.
+if grep -q "fixture-cov-node" "$COVNODE_STDERR" 2>/dev/null; then
+  covnode_stderr_names_node="true"
+else
+  covnode_stderr_names_node="false"
+fi
+assert_eq "covnode total-failure: stderr diagnostic names the node id" "true" \
+  "$covnode_stderr_names_node"
+if grep -q "2 candidate transcript" "$COVNODE_STDERR" 2>/dev/null; then
+  covnode_stderr_names_count="true"
+else
+  covnode_stderr_names_count="false"
+fi
+assert_eq "covnode total-failure: stderr diagnostic names the drop count (2)" "true" \
+  "$covnode_stderr_names_count"
+
+rm -rf "$COVNODE_ROOT"
+
+# ---------------------------------------------------------------------------
+# lenses.review_effort_yield + the .sessions[].review_runs mirror
+# (tactic-audit-review-effort-yield-lens).
+#
+# Five sessions cover the split, the price-proxy attribution rule, and both
+# negative guards:
+#
+#   sess-ry-a — TWO runs at the SAME effort (medium). The single-effort case:
+#     its whole price_proxy_usd is attributable to the medium bucket.
+#   sess-ry-b — runs at TWO DIFFERENT efforts (low, high). It contributes a run
+#     to BOTH buckets but its proxy to NEITHER, and raises sessions_mixed_effort.
+#   sess-ry-c — ONE run (low). The per-run field-fidelity case, and the only
+#     all-low session, so low's price_proxy_usd_single_effort is exactly its
+#     proxy — proving sess-ry-b's proxy was not divided in.
+#   sess-ry-d — FALSE-POSITIVE guard: dispatch-code-review's real in-flight poll
+#     block. It prints effort= but spells its version key run_version= and has no
+#     touched_files_count=, so the three-key shape anchor must reject it.
+#   sess-ry-e — STRICT-VALIDATION guard: full three-key shape, non-numeric
+#     touched_files_count. The run is DROPPED, never coerced to 0 (a fabricated
+#     0-touched run would drag high's median down).
+#
+# high therefore has runs 1 / sessions 1 but price_proxy_usd_single_effort 0 and
+# sessions_single_effort 0 — the mixed session is its only contributor.
+#
+# A second, EMPTY root proves a window with no review runs reports runs == 0 and
+# by_effort {} rather than a fabricated zero bucket.
+#
+# ISOLATED fixture: own mktemp -d roots, own trap, own
+# DISPATCH_AUDIT_PROJECT_PREFIX="-home-x" (required — only project dirs named
+# "-home-x" or "-home-x-*" are scanned).
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- lenses.review_effort_yield (tactic-audit-review-effort-yield-lens) ---"
+
+RY_ROOT=$(mktemp -d)
+RY_NONE_ROOT=$(mktemp -d)
+trap 'rm -rf "$RY_ROOT" "$RY_NONE_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+ry_worktree="$RY_ROOT/-home-x-worktrees-review-yield"
+mkdir -p "$ry_worktree"
+
+ry_summary_block() {
+  # ry_summary_block <effort> <model> <wall_clock_s> <touched_files_count>
+  # A byte-faithful copy of dispatch-code-review's Step 7 field list — the block
+  # it writes to $SUMMARY_FILE and cats to stdout. Field order and spelling are
+  # the parsing contract that script's own comment declares.
+  printf 'status=ok\nexit_code=0\ncache_version=7\nout_dir=/tmp/cr/out\ntarget=PR 3001\ntarget_base_sha=1111111\ntarget_head_sha=2222222\nhead_sha=2222222\neffort=%s\nmodel=%s\ncomment=--no-comment\nwall_clock_s=%s\nfindings_path=/tmp/cr/out/output.txt\npatch_path=/tmp/cr/out/patch.diff\ntouched_files_count=%s\ntouched_file=a.ts\ntouched_file=b.ts\n' \
+    "$1" "$2" "$3" "$4"
+}
+
+ry_write_session() {
+  # ry_write_session <path> <input_tokens> <output_tokens>
+  local f="$1" rin="$2" rout="$3"
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/review-fix</command-name>"}}' \
+    >> "$f"
+  printf '%s\n' "{\"type\":\"assistant\",\"attributionSkill\":\"review-fix\",\"isSidechain\":false,\"gitBranch\":\"review-yield\",\"message\":{\"model\":\"claude-opus-4-8\",\"usage\":{\"input_tokens\":$rin,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":$rout}}}" \
+    >> "$f"
+}
+
+ry_add_tool_result() {
+  # ry_add_tool_result <path> <literal block text> — jq escapes the newlines so
+  # the block reaches .content byte-exact, the same idiom the outcome-envelope
+  # fixtures use.
+  jq -nc --arg c "$2" '{type:"user",message:{content:[{type:"tool_result",content:$c}]}}' \
+    >> "$1"
+}
+
+ry_a="$ry_worktree/sess-ry-a.jsonl"
+ry_write_session "$ry_a" 1000 100
+ry_add_tool_result "$ry_a" "$(ry_summary_block medium claude-opus-4-8 300 4)"
+ry_add_tool_result "$ry_a" "$(ry_summary_block medium claude-opus-4-8 500 10)"
+
+ry_b="$ry_worktree/sess-ry-b.jsonl"
+ry_write_session "$ry_b" 2000 200
+ry_add_tool_result "$ry_b" "$(ry_summary_block low claude-sonnet-4-6 100 1)"
+ry_add_tool_result "$ry_b" "$(ry_summary_block high claude-opus-4-8 600 9)"
+
+ry_c="$ry_worktree/sess-ry-c.jsonl"
+ry_write_session "$ry_c" 3000 300
+ry_add_tool_result "$ry_c" "$(ry_summary_block low claude-sonnet-4-6 200 5)"
+
+ry_d="$ry_worktree/sess-ry-d.jsonl"
+ry_write_session "$ry_d" 10 1
+ry_add_tool_result "$ry_d" "$(printf 'status=running\nrun_version=7\nrun_id=k\npid=99\nelapsed_s=10\ndeadline_s=100\ntarget=PR 3001\neffort=high\n')"
+
+ry_e="$ry_worktree/sess-ry-e.jsonl"
+ry_write_session "$ry_e" 10 1
+ry_add_tool_result "$ry_e" "$(ry_summary_block high claude-opus-4-8 700 n/a)"
+
+for ry_f in "$ry_worktree"/sess-ry-*.jsonl; do
+  jq . "$ry_f" >/dev/null
+done
+touch "$ry_worktree"/sess-ry-*.jsonl
+
+OUT_RY=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$RY_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# Expected magnitudes are DERIVED — the proxy rates come from price-model.json
+# (the aggregator's own single source) and the medians from jq -n, never from a
+# hardcoded decimal literal.
+RY_PRICE_MODEL=$(cat "$SCRIPT_DIR/price-model.json")
+EXPECTED_RY_A_PROXY=$(jq -n --argjson p "$RY_PRICE_MODEL" '(1000*$p.input + 100*$p.output)/1e6')
+EXPECTED_RY_C_PROXY=$(jq -n --argjson p "$RY_PRICE_MODEL" '(3000*$p.input + 300*$p.output)/1e6')
+EXPECTED_RY_MED_TOUCHED=$(jq -n '(4+10)/2')
+EXPECTED_RY_MED_WALL=$(jq -n '(300+500)/2')
+
+RY_C_RUNS='[ .sessions[] | select(.id=="sess-ry-c") ][0].review_runs'
+RY_LENS='.lenses.review_effort_yield'
+
+assert_eq "review_runs mirror: sess-ry-c carries exactly one run" "1" \
+  "$(jq "$RY_C_RUNS | length" <<<"$OUT_RY")"
+assert_eq "review_runs mirror: sess-ry-c run effort" '"low"' \
+  "$(jq "$RY_C_RUNS[0].effort" <<<"$OUT_RY")"
+assert_eq "review_runs mirror: sess-ry-c run model" '"claude-sonnet-4-6"' \
+  "$(jq "$RY_C_RUNS[0].model" <<<"$OUT_RY")"
+assert_eq "review_runs mirror: sess-ry-c run wall_clock_s" "200" \
+  "$(jq "$RY_C_RUNS[0].wall_clock_s" <<<"$OUT_RY")"
+assert_eq "review_runs mirror: sess-ry-c run touched_files_count" "5" \
+  "$(jq "$RY_C_RUNS[0].touched_files_count" <<<"$OUT_RY")"
+
+assert_eq "review_effort_yield: medium.runs == 2 (sess-ry-a's two same-effort runs)" "2" \
+  "$(jq "$RY_LENS.by_effort.medium.runs" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: medium.sessions == 1" "1" \
+  "$(jq "$RY_LENS.by_effort.medium.sessions" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: medium.touched_files_total == 4+10" "14" \
+  "$(jq "$RY_LENS.by_effort.medium.touched_files_total" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: medium.touched_files_median == median(4,10)" \
+  "$EXPECTED_RY_MED_TOUCHED" "$(jq "$RY_LENS.by_effort.medium.touched_files_median" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: medium.wall_clock_s_total == 300+500" "800" \
+  "$(jq "$RY_LENS.by_effort.medium.wall_clock_s_total" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: medium.wall_clock_s_median == median(300,500)" \
+  "$EXPECTED_RY_MED_WALL" "$(jq "$RY_LENS.by_effort.medium.wall_clock_s_median" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: medium.by_model counts the runs, not the sessions" \
+  '{"claude-opus-4-8":2}' "$(jq -c "$RY_LENS.by_effort.medium.by_model" <<<"$OUT_RY")"
+# The tolerance compare runs INSIDE jq rather than through assert_close: that
+# helper feeds the actual to `jq --argjson a`, and an absent field arrives as
+# null, where `$e - null` is a jq ERROR that would abort the whole suite under
+# `set -e` instead of reporting a failure. Comparing in jq makes an absent field
+# report false — a clean FAIL — and asserts the field is a number at all.
+assert_eq "review_effort_yield: medium.price_proxy_usd_single_effort == sess-ry-a's proxy (within 1e-9)" "true" \
+  "$(jq --argjson e "$EXPECTED_RY_A_PROXY" \
+       '.lenses.review_effort_yield.by_effort.medium.price_proxy_usd_single_effort as $a
+        | ($a | type) == "number"
+          and ((($e - $a) | if . < 0 then -. else . end) < 1e-9)' <<<"$OUT_RY")"
+assert_eq "review_effort_yield: medium.sessions_single_effort == 1" "1" \
+  "$(jq "$RY_LENS.by_effort.medium.sessions_single_effort" <<<"$OUT_RY")"
+
+assert_eq "review_effort_yield: low.runs == 2 (sess-ry-b's low run + sess-ry-c)" "2" \
+  "$(jq "$RY_LENS.by_effort.low.runs" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: low.sessions == 2 (mixed session counted here)" "2" \
+  "$(jq "$RY_LENS.by_effort.low.sessions" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: low.price_proxy_usd_single_effort == sess-ry-c's proxy ONLY, within 1e-9 (mixed sess-ry-b not divided in)" "true" \
+  "$(jq --argjson e "$EXPECTED_RY_C_PROXY" \
+       '.lenses.review_effort_yield.by_effort.low.price_proxy_usd_single_effort as $a
+        | ($a | type) == "number"
+          and ((($e - $a) | if . < 0 then -. else . end) < 1e-9)' <<<"$OUT_RY")"
+assert_eq "review_effort_yield: low.sessions_single_effort == 1" "1" \
+  "$(jq "$RY_LENS.by_effort.low.sessions_single_effort" <<<"$OUT_RY")"
+
+assert_eq "review_effort_yield: high.runs == 1 (from the mixed session)" "1" \
+  "$(jq "$RY_LENS.by_effort.high.runs" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: high.sessions == 1" "1" \
+  "$(jq "$RY_LENS.by_effort.high.sessions" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: high.price_proxy_usd_single_effort == 0 (its only session is mixed)" "0" \
+  "$(jq "$RY_LENS.by_effort.high.price_proxy_usd_single_effort" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: high.sessions_single_effort == 0" "0" \
+  "$(jq "$RY_LENS.by_effort.high.sessions_single_effort" <<<"$OUT_RY")"
+
+assert_eq "review_effort_yield: sessions_mixed_effort == 1 (sess-ry-b)" "1" \
+  "$(jq "$RY_LENS.sessions_mixed_effort" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: runs == 5 (2+2+1; the two guard sessions add none)" "5" \
+  "$(jq "$RY_LENS.runs" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: sessions_affected == 3" "3" \
+  "$(jq "$RY_LENS.sessions_affected" <<<"$OUT_RY")"
+
+assert_eq "review_effort_yield: false-positive guard — in-flight poll block (effort= only) yields NO run" "0" \
+  "$(jq '[ .sessions[] | select(.id=="sess-ry-d") ][0].review_runs | length' <<<"$OUT_RY")"
+assert_eq "review_effort_yield: strict-validation guard — non-numeric touched_files_count yields NO run" "0" \
+  "$(jq '[ .sessions[] | select(.id=="sess-ry-e") ][0].review_runs | length' <<<"$OUT_RY")"
+assert_eq "review_effort_yield: by_effort keys are exactly the three real efforts (no guard bucket)" \
+  '["high","low","medium"]' "$(jq -c "$RY_LENS.by_effort | keys" <<<"$OUT_RY")"
+
+assert_eq "review_effort_yield: findings_axis_measurable == false (hardcoded honest constant)" "false" \
+  "$(jq "$RY_LENS.findings_axis_measurable" <<<"$OUT_RY")"
+assert_eq "review_effort_yield: findings_axis_note is a non-empty string" "true" \
+  "$(jq "($RY_LENS.findings_axis_note | type) == \"string\" and ($RY_LENS.findings_axis_note | length) > 0" <<<"$OUT_RY")"
+
+# Empty window: no review runs anywhere.
+ry_none_worktree="$RY_NONE_ROOT/-home-x-worktrees-review-yield-none"
+mkdir -p "$ry_none_worktree"
+ry_none="$ry_none_worktree/sess-ry-none.jsonl"
+ry_write_session "$ry_none" 10 1
+jq . "$ry_none" >/dev/null
+touch "$ry_none"
+
+OUT_RY_NONE=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$RY_NONE_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+assert_eq "review_effort_yield: window with no review runs -> runs == 0" "0" \
+  "$(jq "$RY_LENS.runs" <<<"$OUT_RY_NONE")"
+assert_eq "review_effort_yield: window with no review runs -> sessions_affected == 0" "0" \
+  "$(jq "$RY_LENS.sessions_affected" <<<"$OUT_RY_NONE")"
+assert_eq "review_effort_yield: window with no review runs -> sessions_mixed_effort == 0" "0" \
+  "$(jq "$RY_LENS.sessions_mixed_effort" <<<"$OUT_RY_NONE")"
+assert_eq "review_effort_yield: window with no review runs -> by_effort == {} (NOT a fabricated zero bucket)" \
+  "{}" "$(jq -c "$RY_LENS.by_effort" <<<"$OUT_RY_NONE")"
+
+# ---------------------------------------------------------------------------
+# SIDECAR ELIGIBILITY = THE STAMPABLE WORKER POPULATION (round-1 review
+# finding 1). The main-checkout project dir came into scope with $PROJECT_PREFIX,
+# and it holds a large worker population spawned `--cwd $PROJECT_ROOT` — trees on
+# `main`, which dispatch-stamp-session's worker-branch gate refuses by design.
+# Counting those as coverage misses reports a collapse that is an artefact of
+# which directories are scanned, not a stamping regression.
+#
+# Four worker sessions, one per case, in an isolated root:
+#   sess-el-main         — branch `main`, NO sidecar. The gate would refuse it,
+#                          so it is INELIGIBLE (unstampable_branch) and must not
+#                          depress the rate.
+#   sess-el-tactic       — branch `tactic-el-fixture`, NO sidecar. The gate WOULD
+#                          have stamped it, so it IS eligible and DOES depress
+#                          the rate — the genuine coverage miss the metric exists
+#                          to surface.
+#   sess-el-main-stamped — branch `main`, but a sidecar is present. Eligible via
+#                          the artifact disjunct: an existing sidecar is direct
+#                          proof of stamping and supersedes the branch inference.
+#                          This is what keeps sidecar_present_rate <= 1 true by
+#                          construction.
+#   sess-el-nobranch     — NO gitBranch on any row. The gate cannot be evaluated
+#                          either way, so it lands in branch_unknown, never
+#                          silently in one of the other two.
+#
+# Expected: workers 4, eligible 2, present 1, rate 1/2, unstampable 1, unknown 1.
+#
+# ISOLATED fixture: own mktemp -d root, own trap, own
+# DISPATCH_AUDIT_PROJECT_PREFIX="-home-x".
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- sidecar eligibility: denominator is the STAMPABLE worker population ---"
+
+# assert_sidecar_partition — THE VACUITY PROOF for the whole eligibility change.
+# The three buckets must partition the worker population exactly; a bucket that
+# fills while another silently empties fails here even when every individual
+# count assertion still reads the number it was written to expect. Applied to
+# several independent fixture outputs, not just the one built for this case.
+# Defined at top level and called at top level, so its assert_eq updates the
+# shared PASS/FAIL counters (a call inside $( ) would lose them to a subshell).
+#
+# THE TYPE CHECK IS LOAD-BEARING, not belt-and-braces. jq treats null as the
+# identity for `+`, so an output missing BOTH ineligible counters computes
+# `eligible + null + null == worker count` as TRUE whenever eligible happens to
+# equal the worker count — which is exactly the pre-fix behaviour. Without the
+# `type == "number"` conjuncts this assertion passes with and against the fix
+# and proves nothing.
+assert_sidecar_partition() {
+  local label="$1" out="$2"
+  assert_eq "$label: eligible + unstampable + branch_unknown == worker sessions" "true" \
+    "$(jq '(.window.sidecar_eligible                      | type) == "number"
+           and (.window.sidecar_ineligible_unstampable_branch | type) == "number"
+           and (.window.sidecar_ineligible_branch_unknown     | type) == "number"
+           and ((.window.sidecar_eligible
+                 + .window.sidecar_ineligible_unstampable_branch
+                 + .window.sidecar_ineligible_branch_unknown)
+                == ([ .sessions[] | select(.type=="worker") ] | length))' <<<"$out")"
+}
+
+EL_ROOT=$(mktemp -d)
+trap 'rm -rf "$EL_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+el_worktree="$EL_ROOT/-home-x-worktrees-eligibility"
+mkdir -p "$el_worktree"
+
+el_write_session() {
+  # el_write_session <path> <gitBranch json fragment, or empty for no key>
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/qa-fix</command-name>"}}' \
+    >> "$1"
+  printf '%s\n' "{\"type\":\"assistant\",\"attributionSkill\":\"qa\",\"isSidechain\":false,${2}\"message\":{\"model\":\"claude-opus-4-8\",\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":1}}}" \
+    >> "$1"
+}
+
+el_write_session "$el_worktree/sess-el-main.jsonl"         '"gitBranch":"main",'
+el_write_session "$el_worktree/sess-el-tactic.jsonl"       '"gitBranch":"tactic-el-fixture",'
+el_write_session "$el_worktree/sess-el-main-stamped.jsonl" '"gitBranch":"main",'
+el_write_session "$el_worktree/sess-el-nobranch.jsonl"     ''
+
+printf '%s\n' '{"schema":1,"session_id":"sess-el-main-stamped","repo":"natb1/commons.systems","issue":null,"pr":null,"branch":"main","base_sha":"eee555","node_id":"fixture-el","stamped_at":"2026-01-01T00:00:00Z"}' \
+  > "$el_worktree/sess-el-main-stamped.dispatch-stamp.json"
+jq . "$el_worktree/sess-el-main-stamped.dispatch-stamp.json" >/dev/null
+
+for el_f in "$el_worktree"/sess-el-*.jsonl; do
+  jq . "$el_f" >/dev/null
+done
+touch "$el_worktree"/sess-el-*.jsonl
+
+OUT_EL=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$EL_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# Pin the population first, so no count below can pass because a session
+# silently failed to classify as a worker at all.
+assert_eq "eligibility: 4 worker sessions in the fixture" "4" \
+  "$(jq '[ .sessions[] | select(.type=="worker") ] | length' <<<"$OUT_EL")"
+assert_eq "eligibility: sess-el-nobranch observed NO branch" "[]" \
+  "$(jq -c '[ .sessions[] | select(.id=="sess-el-nobranch") ][0].branches' <<<"$OUT_EL")"
+assert_eq "eligibility: sess-el-main observed branch main" '["main"]' \
+  "$(jq -c '[ .sessions[] | select(.id=="sess-el-main") ][0].branches' <<<"$OUT_EL")"
+
+EXPECTED_EL_RATE=$(jq -n '1/2')
+assert_eq "eligibility: sidecar_eligible == 2 (tactic-* + the main session that IS stamped)" "2" \
+  "$(jq '.window.sidecar_eligible' <<<"$OUT_EL")"
+assert_eq "eligibility: sidecar_present == 1" "1" \
+  "$(jq '.window.sidecar_present' <<<"$OUT_EL")"
+assert_eq "eligibility: unstamped tactic-* worker DOES depress the rate (1/2, not 1)" \
+  "$EXPECTED_EL_RATE" "$(jq '.window.sidecar_present_rate' <<<"$OUT_EL")"
+assert_eq "eligibility: unstampable main-branch worker is NOT in the denominator (rate is not 1/3)" "false" \
+  "$(jq '.window.sidecar_present_rate == (1/3)' <<<"$OUT_EL")"
+assert_eq "eligibility: sidecar_ineligible_unstampable_branch == 1 (sess-el-main)" "1" \
+  "$(jq '.window.sidecar_ineligible_unstampable_branch' <<<"$OUT_EL")"
+assert_eq "eligibility: sidecar_ineligible_branch_unknown == 1 (sess-el-nobranch)" "1" \
+  "$(jq '.window.sidecar_ineligible_branch_unknown' <<<"$OUT_EL")"
+# The artifact disjunct: a main-branch session that nonetheless HAS a sidecar is
+# eligible, which is exactly what forbids present > eligible.
+assert_eq "eligibility: artifact disjunct keeps sidecar_present_rate <= 1" "true" \
+  "$(jq '.window.sidecar_present_rate <= 1' <<<"$OUT_EL")"
+assert_eq "eligibility: sidecar_present <= sidecar_eligible" "true" \
+  "$(jq '.window.sidecar_present <= .window.sidecar_eligible' <<<"$OUT_EL")"
+
+assert_sidecar_partition "eligibility" "$OUT_EL"
+assert_sidecar_partition "shared-fixture" "$OUT"
+assert_sidecar_partition "coverage-fixture" "$OUT_COV"
+assert_sidecar_partition "covnode-fleet-fixture" "$OUT_COVNODE_FLEET"
+
+rm -rf "$EL_ROOT"
+
+# ---------------------------------------------------------------------------
+# review_runs EXTRACTOR HARDENING (round-1 review finding 5). Two defects, one
+# isolated root each so the shared RY expectations above stay untouched:
+#
+#   sess-rh-a — TAIL ANCHOR. Its tool_result prints a hostile file dump BEFORE
+#     the real summary block. The dump carries its own `cache_version=`, then
+#     lines starting `effort=`, `model=`, `wall_clock_s=` and
+#     `touched_files_count=`. summary_field takes the FIRST match in its
+#     subject, so an unanchored read — or one anchored on the FIRST
+#     `cache_version=` — returns the attacker's values. Anchoring on the LAST
+#     `cache_version=` discards the dump entirely.
+#   sess-rh-b — KEY SANITIZATION. Its `effort=` value is 300 characters and
+#     contains a TAB. effort becomes a JSON object key in by_effort, so it must
+#     arrive tab-stripped and capped at 64 characters, exactly as the per-turn
+#     model/skill keys are.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- review_runs extractor hardening: tail anchor + key sanitization ---"
+
+RH_ROOT=$(mktemp -d)
+trap 'rm -rf "$RY_ROOT" "$RY_NONE_ROOT" "$RH_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+rh_worktree="$RH_ROOT/-home-x-worktrees-review-harden"
+mkdir -p "$rh_worktree"
+
+# A hostile prefix that mimics ordinary stdout printed before the summary block
+# (a file dump / grep hit). Every field it carries is a decoy, including a
+# `cache_version=` so that anchoring on the FIRST occurrence is ALSO caught.
+rh_hostile_prefix() {
+  printf 'cat ./notes.txt\ncache_version=1\neffort=attacker\nmodel=attacker-model\nwall_clock_s=999\ntouched_files_count=99\n--- end of file ---\n'
+}
+
+rh_a="$rh_worktree/sess-rh-a.jsonl"
+ry_write_session "$rh_a" 1000 100
+ry_add_tool_result "$rh_a" "$(rh_hostile_prefix)$(ry_summary_block high claude-opus-4-8 400 3)"
+
+# 300 chars: 30 'A', one TAB, 269 'B'. After gsub("\t";"_") | .[0:64] the key is
+# 30 'A' + '_' + 33 'B' — computed here, never hardcoded as a literal blob.
+RH_A30="$(printf '%030d' 0 | tr '0' 'A')"
+RH_B269="$(printf '%0269d' 0 | tr '0' 'B')"
+RH_B33="$(printf '%033d' 0 | tr '0' 'B')"
+RH_EFFORT_RAW="${RH_A30}$(printf '\t')${RH_B269}"
+RH_EFFORT_KEY="${RH_A30}_${RH_B33}"
+
+rh_b="$rh_worktree/sess-rh-b.jsonl"
+ry_write_session "$rh_b" 2000 200
+ry_add_tool_result "$rh_b" "$(ry_summary_block "$RH_EFFORT_RAW" claude-sonnet-4-6 500 7)"
+
+for rh_f in "$rh_worktree"/sess-rh-*.jsonl; do
+  jq . "$rh_f" >/dev/null
+done
+touch "$rh_worktree"/sess-rh-*.jsonl
+
+OUT_RH=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$RH_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# Vacuity guard: if the fixture stopped producing runs at all, every field
+# assertion below would compare null to null-ish and could pass for the wrong
+# reason. Pin the run counts first.
+assert_eq "review_runs harden: sess-rh-a yields exactly one run" "1" \
+  "$(jq '[ .sessions[] | select(.id=="sess-rh-a") ][0].review_runs | length' <<<"$OUT_RH")"
+assert_eq "review_runs harden: sess-rh-b yields exactly one run" "1" \
+  "$(jq '[ .sessions[] | select(.id=="sess-rh-b") ][0].review_runs | length' <<<"$OUT_RH")"
+
+RH_A_RUN='[ .sessions[] | select(.id=="sess-rh-a") ][0].review_runs[0]'
+RH_B_RUN='[ .sessions[] | select(.id=="sess-rh-b") ][0].review_runs[0]'
+
+assert_eq "review_runs tail anchor: preceding stdout cannot supply effort" '"high"' \
+  "$(jq "$RH_A_RUN.effort" <<<"$OUT_RH")"
+assert_eq "review_runs tail anchor: preceding stdout cannot supply model" '"claude-opus-4-8"' \
+  "$(jq "$RH_A_RUN.model" <<<"$OUT_RH")"
+assert_eq "review_runs tail anchor: preceding stdout cannot supply wall_clock_s" "400" \
+  "$(jq "$RH_A_RUN.wall_clock_s" <<<"$OUT_RH")"
+assert_eq "review_runs tail anchor: preceding stdout cannot supply touched_files_count" "3" \
+  "$(jq "$RH_A_RUN.touched_files_count" <<<"$OUT_RH")"
+assert_eq "review_runs tail anchor: by_effort has no 'attacker' bucket" "false" \
+  "$(jq "$RY_LENS.by_effort | has(\"attacker\")" <<<"$OUT_RH")"
+
+assert_eq "review_runs key cap: 300-char effort is capped to 64 chars" "64" \
+  "$(jq "$RH_B_RUN.effort | length" <<<"$OUT_RH")"
+assert_eq "review_runs key cap: TAB in effort is replaced by '_'" "\"$RH_EFFORT_KEY\"" \
+  "$(jq -c "$RH_B_RUN.effort" <<<"$OUT_RH")"
+assert_eq "review_runs key cap: by_effort carries the sanitized key" "true" \
+  "$(jq --arg k "$RH_EFFORT_KEY" "$RY_LENS.by_effort | has(\$k)" <<<"$OUT_RH")"
+assert_eq "review_runs key cap: no by_effort key contains a TAB" "true" \
+  "$(jq "[ $RY_LENS.by_effort | keys[] | test(\"\\t\") ] | any | not" <<<"$OUT_RH")"
+assert_eq "review_runs key cap: no by_effort key exceeds 64 chars" "true" \
+  "$(jq "[ $RY_LENS.by_effort | keys[] | length > 64 ] | any | not" <<<"$OUT_RH")"
+
+rm -rf "$RY_ROOT" "$RY_NONE_ROOT" "$RH_ROOT"
 
 report_results
 exit $FAIL

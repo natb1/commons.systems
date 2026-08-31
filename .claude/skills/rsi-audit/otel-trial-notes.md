@@ -74,7 +74,7 @@ workflow-spawned agents are exactly that blind spot.
 ### Where it goes blind — the subagent / `<none>` gap
 
 - **Subagent transcripts carry no sidecar.** They nest at
-  `<projectdir>/<sid>/subagents/agent-*.jsonl` (`aggregate-usage.sh:15-18`). The
+  `<projectdir>/<sid>/subagents/agent-*.jsonl` (`aggregate-usage.sh:33-36`). The
   sidecar is written for the **top-level** session on a branch; a subagent has no
   branch context and no sidecar of its own. So its `artifact` is `null` and it is
   **excluded from `by_node`** — confirmed by SKILL.md:89,171 ("null for sessions

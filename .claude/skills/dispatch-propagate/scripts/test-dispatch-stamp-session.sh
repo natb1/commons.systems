@@ -7,6 +7,43 @@ FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=dispatch-test-fixture.sh
 source "$FIXTURE_DIR/dispatch-test-fixture.sh"
 
+# --- subshell-safe assertion tally ------------------------------------------
+# Every case in this suite runs inside its own `( … )` subshell, so the
+# fixture's PASS/FAIL/TOTAL increments never reach THIS shell. Measured before
+# this shim: 74 assertions printed, `Results: 2/2 passed` reported (only the two
+# leak guards, which run in the parent) — a failing assertion printed `FAIL:`
+# and the suite still exited 0. That is a vacuous green, so the tally is
+# recorded in a file the subshells share and folded back in before
+# `report_results` runs. `assert_eq`'s output format is unchanged.
+STAMP_TALLY=$(mktemp)
+assert_eq() {
+  local label="$1" expected="$2" actual="$3"
+  if [[ "$expected" == "$actual" ]]; then
+    printf 'PASS\n' >> "$STAMP_TALLY"
+    echo "  PASS: $label"
+  else
+    printf 'FAIL\n' >> "$STAMP_TALLY"
+    echo "  FAIL: $label"
+    echo "    expected: '$expected'"
+    echo "    actual:   '$actual'"
+  fi
+}
+
+# stamp_fold_tally — add every subshell-recorded result to the parent's counters
+# so report_results scores (and can fail on) them.
+stamp_fold_tally() {
+  local r
+  while IFS= read -r r; do
+    TOTAL=$((TOTAL + 1))
+    if [[ "$r" == PASS ]]; then
+      PASS=$((PASS + 1))
+    else
+      FAIL=$((FAIL + 1))
+    fi
+  done < "$STAMP_TALLY"
+  rm -f "$STAMP_TALLY"
+}
+
 # >>> MOVED FROM test-dispatch-scripts.sh >>>
 # ============================================================================
 # dispatch-stamp-session — per-session GitHub-artifact sidecar writer/backfill
@@ -415,4 +452,146 @@ STAMP="$SCRIPT_DIR/dispatch-stamp-session"
 
 # <<< END MOVED <<<
 
+# ============================================================================
+# --repo-dir / --only-if-absent (tactic-dispatch-worker-sidecar-cwd)
+# ============================================================================
+# A hook process does not necessarily run in the session's own working tree: a
+# detached `claude --bg` worker born in its own worktree ran SessionStart with
+# cwd = the MAIN checkout (on `main`), so the worker-branch gate no-opped and
+# the sidecar was never written. --repo-dir takes the tree from the caller
+# instead of from ambient cwd; --only-if-absent makes the Stop backstop a true
+# create-if-missing.
+echo ""
+echo "=== dispatch-stamp-session --repo-dir / --only-if-absent ==="
+
+# 19. --repo-dir stamps the SUPPLIED tree while cwd is a different checkout on
+#     `main`. The paired no-flag assertion is load-bearing: it reproduces the
+#     defect (ambient cwd = main checkout -> gate no-ops -> no sidecar), so the
+#     positive case cannot pass for the wrong reason.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 777-worker
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  # A separate "main checkout" to run FROM — exactly the wrong tree.
+  m=$(mktemp -d)
+  git -C "$m" init -q
+  git -C "$m" remote add origin https://github.com/natb1/other/elsewhere.git
+  git -C "$m" checkout -q -b main
+  git -C "$m" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+
+  # Control: no --repo-dir, cwd = main checkout -> gate no-ops, nothing written.
+  rc=0
+  ( cd "$m" && "$STAMP" --session-id sessRD0 --transcript-path "$d/sessRD0.jsonl" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: no --repo-dir from a main checkout exits 0" "0" "$rc"
+  assert_eq "stamp: no --repo-dir from a main checkout writes NO sidecar (the defect)" "no" \
+    "$([ -f "$d/sessRD0.dispatch-stamp.json" ] && echo yes || echo no)"
+
+  # With --repo-dir the supplied tree decides every field.
+  ( cd "$m" && "$STAMP" --session-id sessRD --transcript-path "$d/sessRD.jsonl" --repo-dir "$d" )
+  sc="$d/sessRD.dispatch-stamp.json"
+  assert_eq "stamp: --repo-dir writes sidecar from a foreign cwd" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: --repo-dir .branch is the SUPPLIED tree's branch" "777-worker" "$(jq -r .branch "$sc")"
+  assert_eq "stamp: --repo-dir .issue from the supplied tree" "777" "$(jq -r .issue "$sc")"
+  assert_eq "stamp: --repo-dir .base_sha is the supplied tree's HEAD" \
+    "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  assert_eq "stamp: --repo-dir .repo from the supplied tree's origin" \
+    "natb1/commons.systems" "$(jq -r .repo "$sc")"
+  rm -rf "$d" "$m"
+)
+
+# 20. --repo-dir on a tactic-<x> node-id tree: node_id == the branch, issue null.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b tactic-repo-dir-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  m=$(mktemp -d)
+  git -C "$m" init -q
+  git -C "$m" checkout -q -b main
+  git -C "$m" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  ( cd "$m" && "$STAMP" --session-id sessRDN --transcript-path "$d/sessRDN.jsonl" --repo-dir "$d" )
+  sc="$d/sessRDN.dispatch-stamp.json"
+  assert_eq "stamp: --repo-dir node-id branch .node_id" "tactic-repo-dir-fixture" "$(jq -r .node_id "$sc")"
+  assert_eq "stamp: --repo-dir node-id branch .issue is null" "null" "$(jq -r .issue "$sc")"
+  rm -rf "$d" "$m"
+)
+
+# 21. --repo-dir pointing at a nonexistent path is a caller bug -> exit 2, and
+#     nothing is written (no silent fallback to ambient cwd).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id sessRDX --transcript-path "$d/sessRDX.jsonl" \
+      --repo-dir "$d/no-such-dir" ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --repo-dir nonexistent exits 2" "2" "$rc"
+  assert_eq "stamp: --repo-dir nonexistent writes no sidecar" "no" \
+    "$([ -f "$d/sessRDX.dispatch-stamp.json" ] && echo yes || echo no)"
+  rm -rf "$d"
+)
+
+# 22. --only-if-absent over an EXISTING sidecar leaves it byte-identical and
+#     exits 0. This is what makes the Stop backstop safe to fire on every turn
+#     yield: the birth-time base_sha and a backfilled .pr are untouched, and
+#     .stamped_at (which a normal re-stamp DOES advance) stays put too.
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 999-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  sc="$d/sessOIA.dispatch-stamp.json"
+  printf '%s\n' '{"schema":1,"session_id":"sessOIA","repo":"natb1/commons.systems","issue":999,"pr":4242,"branch":"999-fixture","base_sha":"birthsha","node_id":null,"stamped_at":"2026-01-01T00:00:00Z"}' > "$sc"
+  cp "$sc" "$d/expected.json"
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id sessOIA --transcript-path "$d/sessOIA.jsonl" \
+      --repo-dir "$d" --only-if-absent ) 2>/dev/null || rc=$?
+  assert_eq "stamp: --only-if-absent over existing sidecar exits 0" "0" "$rc"
+  assert_eq "stamp: --only-if-absent leaves the sidecar byte-identical" "same" \
+    "$(cmp -s "$sc" "$d/expected.json" && echo same || echo differs)"
+  assert_eq "stamp: --only-if-absent preserves backfilled .pr" "4242" "$(jq -r .pr "$sc")"
+  assert_eq "stamp: --only-if-absent preserves birth-time .base_sha" "birthsha" "$(jq -r .base_sha "$sc")"
+  rm -rf "$d"
+)
+
+# 23. --only-if-absent with NO existing sidecar writes one (create-if-missing,
+#     not never-write).
+(
+  d=$(mktemp -d)
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/natb1/commons.systems.git
+  git -C "$d" checkout -q -b 888-fixture
+  git -C "$d" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+  rc=0
+  ( cd "$d" && "$STAMP" --session-id sessOIB --transcript-path "$d/sessOIB.jsonl" \
+      --repo-dir "$d" --only-if-absent ) 2>/dev/null || rc=$?
+  sc="$d/sessOIB.dispatch-stamp.json"
+  assert_eq "stamp: --only-if-absent with no sidecar exits 0" "0" "$rc"
+  assert_eq "stamp: --only-if-absent with no sidecar writes one" "yes" \
+    "$([ -f "$sc" ] && echo yes || echo no)"
+  assert_eq "stamp: --only-if-absent written sidecar .issue" "888" "$(jq -r .issue "$sc")"
+  assert_eq "stamp: --only-if-absent written sidecar .base_sha equals HEAD" \
+    "$(git -C "$d" rev-parse HEAD)" "$(jq -r .base_sha "$sc")"
+  rm -rf "$d"
+)
+
+# 24. --only-if-absent combined with --backfill-pr is incoherent -> exit 2
+#     (matching the existing mode-mixing guard).
+(
+  root=$(mktemp -d)
+  rc=0
+  CLAUDE_CODE_SESSION_ID=sessX DISPATCH_STAMP_PROJECTS_ROOT="$root" \
+    "$STAMP" --backfill-pr 5 --only-if-absent 2>/dev/null || rc=$?
+  assert_eq "stamp: --only-if-absent + --backfill-pr exits 2" "2" "$rc"
+  rm -rf "$root"
+)
+
+stamp_fold_tally
 report_results

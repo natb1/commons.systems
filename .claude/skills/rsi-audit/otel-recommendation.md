@@ -43,7 +43,7 @@ Everything below traces to Unit 1; the `path:line` anchors are its own.
 
 - **The blind spot is real and acute.** Subagent transcripts carry no sidecar,
   are excluded from `by_node`, and land in `by_session_type.subagent` / `<none>`
-  (`aggregate-usage.sh:15-18`, `593-601`; SKILL.md:89,171 — Unit 1 lines 76–83).
+  (`aggregate-usage.sh:33-36`, `593-601`; SKILL.md:89,171 — Unit 1 lines 76–83).
   Workflow-spawned agents are the acute case: `/review-fix`, `/qa-fix` fan out to
   `agent()`/subagent calls where Opus is actually spent, and none of it attributes
   (`dispatch-graph-execute:110-230`, SKILL.md:130 — Unit 1 lines 84–90).

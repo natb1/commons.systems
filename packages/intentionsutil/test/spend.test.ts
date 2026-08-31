@@ -10,6 +10,11 @@ describe("workflowOfSkill / attributeSpend", () => {
     // The per-phase ladder evaluator scales with dispatch volume, so it is
     // attributed to dispatch despite being named `rsi`.
     expect(workflowOfSkill("rsi")).toBe("dispatch");
+    // The ladder driver that spawns that evaluator buckets with it.
+    expect(workflowOfSkill("dispatch-ladder")).toBe("dispatch");
+    // `other` is a rendered remainder, not a dumping ground: author tooling
+    // belongs to none of the three workflows and must stay unmapped.
+    expect(workflowOfSkill("dataviz")).toBe("other");
     expect(workflowOfSkill("some-future-skill")).toBe("other");
   });
 

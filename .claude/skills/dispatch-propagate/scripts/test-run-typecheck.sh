@@ -8,6 +8,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 source "$SCRIPT_DIR/test-helpers.sh"
 SUT="$SCRIPT_DIR/run-typecheck.sh"
+# Resolved once, on the REAL PATH, before any test overrides PATH with a
+# shim dir. make_git_diff_fail_shim's git wrapper execs this absolute path
+# so it stays a faithful passthrough for every call it does not intercept.
+REAL_GIT="$(command -v git)"
 
 TMP_ROOT=""
 cleanup() { [ -n "${TMP_ROOT:-}" ] && rm -rf "$TMP_ROOT"; }
@@ -111,6 +115,28 @@ NPX
 
   # Make ensure_deps a no-op by pre-creating node_modules.
   mkdir -p "$repo/node_modules"
+}
+
+# Extends SHIM_BIN (built by make_shims, which must run first) with a `git`
+# wrapper that simulates a real-world git failure — corrupt object, transient
+# I/O, whatever — at the exact call site run-typecheck.sh treats as fatal: the
+# ADDED_SINCE_BASE probe, `git diff --name-only --no-renames --diff-filter=A`.
+# Every other git invocation passes through to the real binary unchanged, so
+# the rest of the SUT's git usage (checkout, reset, clean, rev-parse, status,
+# fetch) behaves exactly as it does unshimmed.
+make_git_diff_fail_shim() {
+  cat > "$SHIM_BIN/git" <<'GITSHIM'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  if [ "$arg" = "--diff-filter=A" ]; then
+    echo "git-diff-fail-stub: simulated git failure (added-file probe)" >&2
+    exit 128
+  fi
+done
+exec "__REAL_GIT__" "$@"
+GITSHIM
+  sed -i "s#__REAL_GIT__#$REAL_GIT#" "$SHIM_BIN/git"
+  chmod +x "$SHIM_BIN/git"
 }
 
 # Run the SUT against $REPO with shims on PATH.
@@ -399,5 +425,29 @@ assert_eq "on-main broken parent: exit 0" "0" "$RC"
 assert_contains "on-main broken parent: marked skipping" "skipping" "$OUT"
 assert_contains "on-main broken parent: mentions pre-existing" "pre-existing" "$OUT"
 assert_eq "on-main broken parent: working tree clean" "" "$(git -C "$REPO" status --porcelain)"
+
+
+# --- Test 12: a git failure in the baseline block must be FATAL -------------
+# The ADDED_SINCE_BASE probe (`git diff --name-only --no-renames
+# --diff-filter=A`) is guarded with `if ! ADDED_SINCE_BASE=$(...)` precisely so
+# a git failure there aborts the run instead of either (a) silently landing
+# the workspace in SKIPPED_BASELINE, which exits 0, or (b) leaving
+# ADDED_SINCE_BASE unset so a branch-new file is never removed and poisons the
+# baseline probe. Simulate that failure with a git shim and assert the run is
+# fatal and never reports a pass or a benign skip.
+echo "Test 12: a git failure resolving added-since-base files aborts the run"
+make_repo ws clean clean
+make_shims "$REPO"
+make_git_diff_fail_shim
+run_sut
+[ "$RC" -ne 0 ] && _t12_rc=nonzero || _t12_rc=zero
+assert_eq "git-diff-fail: exit non-zero" "nonzero" "$_t12_rc"
+assert_contains "git-diff-fail: names the baseline probe failure" "baseline probe cannot be" "$OUT"
+_t12_pass=absent
+[[ "$OUT" == *"All typecheck targets passed"* ]] && _t12_pass=present
+assert_eq "git-diff-fail: did not report a pass" "absent" "$_t12_pass"
+_t12_skip=absent
+[[ "$OUT" == *"SKIPPED_BASELINE"* || "$OUT" == *"NOT typechecked"* || "$OUT" == *"verified nothing"* ]] && _t12_skip=present
+assert_eq "git-diff-fail: did not silently skip" "absent" "$_t12_skip"
 
 report_results

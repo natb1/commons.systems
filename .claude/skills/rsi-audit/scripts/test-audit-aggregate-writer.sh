@@ -221,6 +221,63 @@ assert_eq "stdin missing window.sidecar_present → exit non-zero" "1" "$([[ "$N
 assert_eq "stdin missing window.sidecar_present → diagnostic" "1" \
   "$([[ "$NO_PRESENT_ERR" == *'audit-aggregate-writer: payload field window.sidecar_present must be a finite number'* ]] && echo 1 || echo 0)"
 
+# --- Case 11: the sidecar_eligible REDEFINITION discriminators --------------
+#
+# aggregate-usage.sh redefined window.sidecar_eligible from "every worker
+# session" to "every STAMPABLE worker session" without renaming the key, so the
+# persisted series has two different denominators under one name. A reader
+# plotting sidecar_present / sidecar_eligible across the cutover sees a step up
+# and reads it as coverage improving, when only the denominator shrank.
+#
+# The discriminators the aggregate emits alongside it must therefore reach the
+# stored row, and their PRESENCE is what dates the row. So this is asserted from
+# both sides:
+#   - a PRE-cutover payload (the shared $PAYLOAD, which has none of them) must
+#     round-trip with them genuinely ABSENT — a fabricated 0/false would claim
+#     the old row measured an empty ineligible population;
+#   - a POST-cutover payload must round-trip with all four PRESENT and equal to
+#     what the aggregate emitted.
+
+# Pre-cutover: absent in, absent out. `has()` distinguishes absent from null,
+# which a value comparison could not.
+assert_eq "pre-cutover row omits sidecar_ineligible_unstampable_branch" "false" \
+  "$(jq -c '.doc.window | has("sidecar_ineligible_unstampable_branch")' <<<"$OUT")"
+assert_eq "pre-cutover row omits sidecar_ineligible_branch_unknown" "false" \
+  "$(jq -c '.doc.window | has("sidecar_ineligible_branch_unknown")' <<<"$OUT")"
+assert_eq "pre-cutover row omits project_dirs_scanned" "false" \
+  "$(jq -c '.doc.window | has("project_dirs_scanned")' <<<"$OUT")"
+assert_eq "pre-cutover row omits sidecar_coverage_measurable" "false" \
+  "$(jq -c '.doc.window | has("sidecar_coverage_measurable")' <<<"$OUT")"
+
+# Post-cutover: the shape aggregate-usage.sh emits today.
+POST_CUTOVER=$(jq -c '.window += {
+  "sidecar_ineligible_unstampable_branch": 285,
+  "sidecar_ineligible_branch_unknown": 4,
+  "project_dirs_scanned": 12,
+  "sidecar_coverage_measurable": true
+}' <<<"$PAYLOAD")
+POST_OUT=$(printf '%s' "$POST_CUTOVER" | node "$WRITER_MJS" --dry-run 2>/dev/null)
+assert_eq "post-cutover window projects all four discriminators" \
+  '{"days":7,"since":"2026-06-03 12:00:00","until":"2026-06-10 12:00:00","files_scanned":42,"files_failed":1,"sidecar_eligible":3,"sidecar_present":2,"sidecar_ineligible_unstampable_branch":285,"sidecar_ineligible_branch_unknown":4,"project_dirs_scanned":12,"sidecar_coverage_measurable":true}' \
+  "$(jq -c '.doc.window' <<<"$POST_OUT")"
+
+# A --node-scope row carries sidecar_coverage_measurable:false, and false must
+# survive as false rather than being dropped as falsy — a dropped false reads as
+# a pre-cutover row whose coverage numbers are plottable, which they are not.
+NODE_SCOPE=$(jq -c '.window += {"sidecar_coverage_measurable": false}' <<<"$PAYLOAD")
+NODE_OUT=$(printf '%s' "$NODE_SCOPE" | node "$WRITER_MJS" --dry-run 2>/dev/null)
+assert_eq "sidecar_coverage_measurable:false survives (not dropped as falsy)" "false" \
+  "$(jq -c '.doc.window.sidecar_coverage_measurable' <<<"$NODE_OUT")"
+assert_eq "sidecar_coverage_measurable:false is present, not absent" "true" \
+  "$(jq -c '.doc.window | has("sidecar_coverage_measurable")' <<<"$NODE_OUT")"
+
+# Present-but-wrong-typed is a broken producer, not an old one → fail closed.
+BAD_TYPE=$(jq -c '.window += {"sidecar_ineligible_branch_unknown": "seven"}' <<<"$PAYLOAD")
+BAD_TYPE_ERR=$(printf '%s' "$BAD_TYPE" | node "$WRITER_MJS" --dry-run 2>&1 >/dev/null) && BAD_TYPE_RC=0 || BAD_TYPE_RC=$?
+assert_eq "wrong-typed discriminator → exit non-zero" "1" "$([[ "$BAD_TYPE_RC" -ne 0 ]] && echo 1 || echo 0)"
+assert_eq "wrong-typed discriminator → diagnostic" "1" \
+  "$([[ "$BAD_TYPE_ERR" == *'audit-aggregate-writer: payload field window.sidecar_ineligible_branch_unknown must be a finite number when present'* ]] && echo 1 || echo 0)"
+
 # (d) --dry-run without SECRET_OVERRIDE → the dry-run-only guard.
 assert_fail "dry-run without SECRET_OVERRIDE → fail-closed" \
   "audit-aggregate-writer: --dry-run requires DISPATCH_AUDIT_AGGREGATES_SECRET_OVERRIDE" \

@@ -116,6 +116,14 @@
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch-stop.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stamp-dispatch-session.sh"
+          }
+        ]
       }
     ],
     "SessionStart": [

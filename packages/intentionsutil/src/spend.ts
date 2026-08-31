@@ -86,6 +86,17 @@ export const WORKFLOW_SKILLS: ReadonlyMap<string, readonly string[]> = new Map([
       // trigger ("rsi spend approaching dispatch") would fire permanently and
       // mean nothing.
       "rsi",
+      // The ladder driver that spawns that evaluator. Same argument, one level
+      // up: leaving the driver in `other` while its evaluator sits in
+      // `dispatch` splits one workflow across two buckets for no reason.
+      //
+      // Deliberately NOT mapped here: `dispatch-emulate` (a retired name with
+      // no carrier anywhere in the tree — a skill that cannot recur is dead
+      // configuration), and the author-tooling skills `dataviz`,
+      // `artifact-design`, `artifact-capabilities` and `update-config`, which
+      // belong to none of the three workflows and are meant to land in
+      // `other`.
+      "dispatch-ladder",
     ] as const,
   ],
   [

@@ -6,9 +6,9 @@
 # Runs the producer ONLY in --dry-run, so firebase-admin and
 # @google-cloud/secret-manager are NEVER imported and no network/credentials are
 # touched. Each case builds a FIXTURE projects tree (DISPATCH_AUDIT_PROJECTS_ROOT)
-# whose project dir name matches aggregate-usage.sh's *worktrees* / *--bare
-# filter, a pinned DISPATCH_TOPIC_USAGE_NOW, a temp state dir, and dummy member
-# emails — so the producer drives the real aggregate-usage.sh subprocess
+# whose project dir name begins with the pinned DISPATCH_AUDIT_PROJECT_PREFIX,
+# a pinned DISPATCH_TOPIC_USAGE_NOW, a temp state dir, and dummy member emails
+# — so the producer drives the real aggregate-usage.sh subprocess
 # hermetically (no session carries an issue stamp, so no `gh` call) and the suite
 # is fully deterministic.
 #
@@ -48,11 +48,18 @@ GLOBAL_ROOT=$(mktemp -d)
 GLOBAL_STATE=$(mktemp -d)
 export DISPATCH_AUDIT_PROJECTS_ROOT="$GLOBAL_ROOT"
 export DISPATCH_TOPIC_USAGE_STATE_DIR="$GLOBAL_STATE"
+# aggregate-usage.sh selects project dirs by name prefix, deriving the
+# default from this repo's main root. Pin it to the fixture prefix so the
+# harness never shells out to git, and so every "-home-x…" fixture dir below
+# is in scope. Exported once at top level: the per-case subshells override
+# only DISPATCH_AUDIT_PROJECTS_ROOT, and inherit this.
+export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
 trap 'rm -rf "$GLOBAL_ROOT" "$GLOBAL_STATE"' EXIT
 
 # ---------------------------------------------------------------------------
 # Fixture helpers.  Transcripts (and their sidecars) live under a project dir
-# whose name matches the *worktrees* filter so aggregate-usage.sh scans them.
+# whose name begins with DISPATCH_AUDIT_PROJECT_PREFIX so aggregate-usage.sh
+# scans them.
 # touch uses an explicit UTC instant (Z) so the mtime lands inside the UTC --day
 # window regardless of the harness timezone.
 # ---------------------------------------------------------------------------
