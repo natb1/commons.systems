@@ -71,7 +71,16 @@ case "$path" in
     if [[ -f "$GC_FIXTURE_DIR/checkruns-fail" ]]; then
       echo "gh stub: simulated check-runs failure" >&2; exit 1
     fi
-    cat "$GC_FIXTURE_DIR/checkruns.json" ;;
+    # Per-SHA reply when the case wrote one, else the shared default. The
+    # multi-candidate cases need DIFFERENT verdicts in one sweep (several
+    # at-cap pending nodes plus one genuinely failing one); every pre-existing
+    # case writes only checkruns.json and so is unaffected.
+    sha="${path%/check-runs}"; sha="${sha##*/}"
+    if [[ -f "$GC_FIXTURE_DIR/checkruns-$sha.json" ]]; then
+      cat "$GC_FIXTURE_DIR/checkruns-$sha.json"
+    else
+      cat "$GC_FIXTURE_DIR/checkruns.json"
+    fi ;;
   */pulls/*)
     num="${path##*/}"
     jq -n --argjson n "$num" '{
@@ -94,21 +103,28 @@ SH
 # drives dispatch_classify_rollup to the named verdict. An IN-PROGRESS run with
 # no conclusion is what `pending` means here, which is exactly the state this
 # bound exists to terminate.
-rgs_checks() {
+rgs_checks() { rgs_checks_file "$1/checkruns.json" "$2"; }
+
+# rgs_checks_sha <fixture-dir> <sha> <verdict> — the same, but scoped to ONE
+# head SHA, so one sweep can see several candidates with different verdicts.
+rgs_checks_sha() { rgs_checks_file "$1/checkruns-$2.json" "$3"; }
+
+# rgs_checks_file <path> <verdict> — the check-runs page itself.
+rgs_checks_file() {
   case "$2" in
-    pending) cat >"$1/checkruns.json" <<'JSON'
+    pending) cat >"$1" <<'JSON'
 {"check_runs": [
   {"name": "unit-tests", "status": "in_progress", "conclusion": null, "id": 1, "app": {"slug": "github-actions"}}
 ]}
 JSON
       ;;
-    passing) cat >"$1/checkruns.json" <<'JSON'
+    passing) cat >"$1" <<'JSON'
 {"check_runs": [
   {"name": "unit-tests", "status": "completed", "conclusion": "success", "id": 1, "app": {"slug": "github-actions"}}
 ]}
 JSON
       ;;
-    failing) cat >"$1/checkruns.json" <<'JSON'
+    failing) cat >"$1" <<'JSON'
 {"check_runs": [
   {"name": "unit-tests", "status": "completed", "conclusion": "failure", "id": 1, "app": {"slug": "github-actions"}}
 ]}
@@ -230,6 +246,18 @@ rgs_seal() {
 # rgs_seed_sidecar <sha> <count>
 rgs_seed_sidecar() { printf '%s %s\n' "$1" "$2" > "$RGS_SIDECAR"; }
 
+# rgs_seed_sidecar_for <id> <sha> <count> — the same for a node other than
+# t-rs1, for the multi-candidate cases.
+rgs_seed_sidecar_for() {
+  printf '%s %s\n' "$2" "$3" > "$RGS_ROOT/.claude/worktrees/$1.ci-pending-strikes"
+}
+
+# rgs_sidecar_for <id> — that node's sidecar content, or `gone` when absent.
+rgs_sidecar_for() {
+  local f="$RGS_ROOT/.claude/worktrees/$1.ci-pending-strikes"
+  [ -e "$f" ] && cat "$f" || echo gone
+}
+
 # rgs_sidecar — the sidecar's content, or the literal `gone` when absent.
 rgs_sidecar() { [ -e "$RGS_SIDECAR" ] && cat "$RGS_SIDECAR" || echo gone; }
 
@@ -338,5 +366,75 @@ assert_eq "review-stall ci-stall: the hold lands anyway (the widened early exit)
   "1" "$(grep -c '^held t-rs1 -> ci-stalled via ' <<<"$c5_out")"
 assert_eq "review-stall ci-stall: hold-node really ran on the empty-RECOVERED_IDS sweep" \
   "1" "$(case "$(rgs_holds)" in *"--kind ci-pending-stalled"*) printf 1 ;; *) printf 0 ;; esac)"
+
+# --- Case 6: an explicit --node run must NOT burn the shared strike ladder ----
+# graph-select-target exempts its own NODE_TARGET lane ("a human re-running
+# `dispatch <id>` must not burn the autonomous budget"), and BOTH surfaces write
+# the SAME sidecar file per node — so an exemption on only one of them is no
+# exemption at all.
+#
+# The cadence is what makes this bite. dispatch-ladder-run's reconcile_pass
+# calls this script with `--node <id>` once per ci-wait poll (`sleep $POLL_S`,
+# 60s by default, for up to --ci-wait-s 3600s), while the strike cap of 8 was
+# sized for the 15-minute OnCalendar tick. A healthy tactic whose CI takes an
+# ordinary 12 minutes would reach the cap in ~8 minutes and be held — and the
+# driver only greps `^recovered <id> `, so it never sees the `held` line, polls
+# out its whole budget and halts idle, leaving a node needing manual
+# office-hours resolution.
+#
+# Seeded at 7 (one below the cap of 8) so a single un-exempted bump would land
+# the hold: the assertions discriminate the exemption directly rather than
+# inferring it from a count.
+echo "Test: reconcile-graph-review-stall — an explicit --node run neither bumps the ladder nor holds"
+rgs_setup c6
+rgs_node "$RGS_ROOT/intentions/t-rs1.md" t-rs1 201
+rgs_seal
+rgs_seed_sidecar deadbee201 7
+c6_out=$(rgs_run --node t-rs1)
+assert_eq "review-stall ci-stall: an explicit --node run leaves the sidecar untouched" \
+  "deadbee201 7" "$(rgs_sidecar)"
+assert_eq "review-stall ci-stall: an explicit --node run lands no hold" "none" "$(rgs_holds)"
+assert_eq "review-stall ci-stall: an explicit --node run prints no held line" \
+  "0" "$(grep -c '^held t-rs1 -> ci-stalled via ' <<<"$c6_out")"
+# The exemption must be a bump guard, not a lane that skips the sweep: the
+# candidate still has to be enumerated, polled and routed under --node.
+assert_eq "review-stall ci-stall: the --node candidate was still polled (the sweep ran)" \
+  "1" "$(grep -c 'check-runs' "$RGS_FIX/gh-calls.log")"
+
+# --- Case 7: at-cap recordings must not spend the budget they never land -----
+# Only CI_STALL_IDS[0] is landed (the tail block: "ONE hold per run"), but every
+# at-cap candidate used to charge ACTED. ACTED/CAP exist to bound LOCK-HOLDING
+# work — the comment on the below-cap path says exactly that — and a recording
+# holds no lock.
+#
+# With CAP=2: t-rs1 and t-rs2 are both at-cap pending, t-rs3 is genuinely
+# failing and is the `fix` route this sweep exists for. Enumeration is sorted by
+# id (store.ts's readdirSync(...).sort()), so t-rs3 is reached LAST — the
+# position that starves. Before the fix both pending nodes charge ACTED, the
+# loop breaks at 2, and t-rs3 is never recovered.
+echo "Test: reconcile-graph-review-stall — at-cap recordings do not starve the fix route"
+rgs_setup c7
+rgs_node "$RGS_ROOT/intentions/t-rs1.md" t-rs1 201
+rgs_node "$RGS_ROOT/intentions/t-rs2.md" t-rs2 202
+rgs_node "$RGS_ROOT/intentions/t-rs3.md" t-rs3 203
+rgs_seal
+rgs_checks_sha "$RGS_FIX" deadbee201 pending
+rgs_checks_sha "$RGS_FIX" deadbee202 pending
+rgs_checks_sha "$RGS_FIX" deadbee203 failing
+rgs_seed_sidecar_for t-rs1 deadbee201 7
+rgs_seed_sidecar_for t-rs2 deadbee202 7
+export GRAPH_REVIEW_STALL_CAP=2
+c7_out=$(rgs_run)
+unset GRAPH_REVIEW_STALL_CAP
+assert_eq "review-stall ci-stall: the red-CI node later in the enumeration is still recovered" \
+  "1" "$(grep -c '^recovered t-rs3 -> fix' <<<"$c7_out")"
+assert_eq "review-stall ci-stall: still exactly ONE hold lands per sweep" \
+  "1" "$(grep -c '^held t-rs. -> ci-stalled via ' <<<"$c7_out")"
+assert_eq "review-stall ci-stall: the hold that landed is the first at-cap candidate" \
+  "1" "$(grep -c '^held t-rs1 -> ci-stalled via ' <<<"$c7_out")"
+# The unlanded at-cap candidate keeps its ladder for the next sweep — it was
+# never acted on, so nothing about it should have changed.
+assert_eq "review-stall ci-stall: the unlanded at-cap node keeps its ladder" \
+  "deadbee202 8" "$(rgs_sidecar_for t-rs2)"
 
 report_results

@@ -851,6 +851,9 @@ _hold_node_fix_cap() {
   ( cd "$NATIVE_ROOT" && packages/intentionsutil/scripts/hold-node "${hold_args[@]}" ) \
     >/dev/null 2>&1
   rc=$?
+  # Same heartbeat requirement as _hold_node_ci_pending below — this arm had the
+  # gap first, and the class is fixed at both sites rather than half of it.
+  _refresh_lock
   rm -rf "$tmpdir"
   return $rc
 }
@@ -895,6 +898,15 @@ _hold_node_ci_pending() {
       --reason-file "$reason_file" --recommendation-file "$rec_file" ) \
     >/dev/null 2>&1
   rc=$?
+  # hold-node lands its own graph-commit, which can block on the GLOBAL landing
+  # lock for far longer than MAX_HOLD_SECONDS (300s) — graph-commit waits up to
+  # LOCK_WAIT_SECONDS (1050s). Bump the caller's heartbeat the way
+  # _graph_commit_conflict does, so a completed hold cannot age the tick's own
+  # dispatch lock out and let a second tick reclaim it and double-book the same
+  # candidate set. NOT _conflict_budget_charge: GRAPH_CONFLICT_COMMIT_BUDGET
+  # bounds the merge-conflict lane specifically, and spending it here would let
+  # a couple of conflicts silently disable ci-pending holds altogether.
+  _refresh_lock
   rm -rf "$tmpdir"
   return $rc
 }

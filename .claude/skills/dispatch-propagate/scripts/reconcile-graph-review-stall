@@ -379,7 +379,14 @@ while IFS=$'\t' read -r id pr; do
       # string `null` when the field is missing. ci_pending_strike_bump refuses
       # both empty and `null`; a non-zero return means "do not count", and the
       # candidate falls through to the guard untouched.
-      if CI_STALL_STRIKES=$(ci_pending_strike_bump "$MAIN_ROOT" "$id" "$HEAD_SHA"); then
+      # AN EXPLICIT --node RUN NEVER COUNTS, exactly as graph-select-target's
+      # NODE_TARGET guard does — and the two surfaces share ONE sidecar, so an
+      # exemption on only one of them is no exemption at all. dispatch-ladder-run
+      # calls this script with --node from inside its ci-wait poll (once per
+      # `sleep $POLL_S`, 60s by default), which would walk a healthy node to the
+      # cap in ~8 minutes of ordinary CI runtime.
+      if [[ -z "$NODE_FILTER" ]] &&
+         CI_STALL_STRIKES=$(ci_pending_strike_bump "$MAIN_ROOT" "$id" "$HEAD_SHA"); then
         if (( CI_STALL_STRIKES < DISPATCH_CI_PENDING_STRIKE_CAP )); then
           # A sidecar write is free, so it must NOT consume the ACTED budget —
           # ACTED/CAP exist to bound LOCK-HOLDING work, and nothing here holds a
@@ -391,11 +398,19 @@ while IFS=$'\t' read -r id pr; do
         # assert_clean_outside_ids would trip on the --set-fix writes this loop
         # may still have staged uncommitted. The landing happens after the
         # batched commit has cleaned the tree; see the block near the tail.
-        # A hold IS lock-holding work, so this one does spend ACTED.
-        CI_STALL_IDS+=("$id")
-        CI_STALL_SHA["$id"]="$HEAD_SHA"
-        CI_STALL_COUNT["$id"]="$CI_STALL_STRIKES"
-        ACTED=$(( ACTED + 1 ))
+        # A hold IS lock-holding work, so the one that will actually be landed
+        # does spend ACTED — but ONLY that one. The tail block lands
+        # CI_STALL_IDS[0] and no more, so charging every at-cap candidate would
+        # spend the whole budget on recordings that this sweep never acts on:
+        # with the default CAP of 3, three at-cap pending nodes would `break`
+        # the loop after landing a single hold, starving the `fix` route for a
+        # genuinely red-CI node later in the enumeration.
+        if [[ "${#CI_STALL_IDS[@]}" -eq 0 ]]; then
+          CI_STALL_IDS+=("$id")
+          CI_STALL_SHA["$id"]="$HEAD_SHA"
+          CI_STALL_COUNT["$id"]="$CI_STALL_STRIKES"
+          ACTED=$(( ACTED + 1 ))
+        fi
         continue
       fi
     else

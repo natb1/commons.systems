@@ -1789,6 +1789,37 @@ assert_eq "graph-select-target ci-pending: the skip reason reports the cap hold"
   "1" "$(grep -q 'ci-pending-cap-held' "$GSCI_ROOT/seldir/graph-selection.jsonl" && echo 1 || echo 0)"
 gsc_interrupt_teardown
 
+# --- Case 4b: the hold's landing refreshes the caller's lock heartbeat -------
+# hold-node lands its own graph-commit, which waits up to LOCK_WAIT_SECONDS
+# (1050s) for the GLOBAL landing lock — far past the MAX_HOLD_SECONDS (300s)
+# after which dispatch-acquire-lock reclaims a holder. Without a refresh
+# afterwards a completed hold can age the tick's OWN dispatch lock out, letting
+# a second tick reclaim it and select the same candidate set: the
+# duplicate-worker / double-booked-worktree failure the CONFLICT_COMMIT_BUDGET
+# header describes. Every other landing on this write path is bracketed this way
+# (_graph_commit_conflict), so this pins the ci-pending arm to the same rule.
+#
+# The stub replaces the real dispatch-acquire-lock only for this case, and keeps
+# its stdout protocol (`--wait` answers `acquired`) so the standalone lane still
+# behaves; what it adds is an argv log.
+echo "Test: graph-select-target — a landed ci-pending hold refreshes the lock heartbeat"
+gscip_setup 1
+cat > "$GSCI_SCRIPTS/dispatch-acquire-lock" <<'GSCILOCK'
+#!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/../../../.." && pwd)"
+printf '%s\n' "$*" >> "$_root/acquire-lock-calls.log"
+[[ "${1:-}" == --wait ]] && echo acquired
+exit 0
+GSCILOCK
+chmod +x "$GSCI_SCRIPTS/dispatch-acquire-lock"
+gscip_seed deadbee 7
+gsci_run >/dev/null
+assert_eq "graph-select-target ci-pending: the hold really landed in this case too" \
+  "1" "$(case "$(gscip_holds)" in *"--kind ci-pending-stalled"*) printf 1 ;; *) printf 0 ;; esac)"
+assert_eq "graph-select-target ci-pending: a --heartbeat follows the landed hold" \
+  "1" "$(grep -c -- '^--heartbeat$' "$GSCI_ROOT/acquire-lock-calls.log")"
+gsc_interrupt_teardown
+
 # --- Case 5: the explicit --node lane never counts ---------------------------
 # A human re-running `dispatch <node-id>` must not burn the autonomous budget.
 # The sidecar content is asserted LITERALLY, not merely "no hold landed": a
