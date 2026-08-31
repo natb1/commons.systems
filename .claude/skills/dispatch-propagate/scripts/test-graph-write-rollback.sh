@@ -1819,6 +1819,164 @@ else
   printf '%s\n' "$out11b"
 fi
 
+# ===========================================================================
+# Case 12: DISPATCH_GRAPH_NODE_CACHE — the tick-scoped enumeration memo
+# (packages/intentionsutil/src/store-cache.ts) really is consulted by the
+# reconcile band, really does invalidate on a store write, really stays
+# fail-closed, and really is optional.
+#
+# The hit is proved by POISONING, not by timing: the cache is warmed by the
+# primitive itself, the entry is then rewritten to drop `t-rs2`, and the sweep
+# is run unfiltered. Disk still carries an equally eligible t-rs2 (case 10c
+# above is the control: the unflagged sweep recovers BOTH). So "only t-rs1 was
+# recovered" is only explicable by the sweep having read the cache entry. A
+# test that merely ran the sweep twice would pass with the cache ripped out.
+# ===========================================================================
+
+T12="$WORK/t12-seed"
+build_seed_repo "$T12"
+cp "$HARNESS_DIR/reconcile-graph-review-stall" "$T12/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+chmod +x "$T12/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+review_stall_node "$T12/intentions/t-rs1.md" t-rs1 201
+review_stall_node "$T12/intentions/t-rs2.md" t-rs2 202
+new_origin t12
+init_and_push "$T12"
+
+BIN12="$WORK/t12-bin"; FIX12="$WORK/t12-fixtures"
+review_stall_gh_stub "$BIN12" "$FIX12"
+
+# rs_clone <dst> — one independent clone of the case-12 origin with the
+# graph-commit landing step stubbed out (each sub-case needs its own store, and
+# sub-cases (a)/(b)/(c) mutate theirs).
+rs_clone() {
+  clone_with_node_modules "$1"
+  cat >"$1/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+  chmod +x "$1/packages/intentionsutil/scripts/graph-commit"
+}
+
+# rs_warm <clone> <cache-dir> — populate <cache-dir> with the entry the sweep
+# will look up, via the primitive itself, WITHOUT running the sweep. A warming
+# sweep would write node files and so move the very fingerprint the entry is
+# keyed on, which is exactly the invalidation sub-case (b) tests.
+rs_warm() {
+  ( cd "$1" || exit 99
+    node --import tsx/esm -e '
+      const { listNodesStrictCached } = await import("./packages/intentionsutil/src/store-cache.js");
+      listNodesStrictCached("./intentions", process.argv[1]);
+    ' "$2" )
+}
+
+# rs_sweep <clone> <cache-dir-or-empty> [args...] — the unfiltered review-stall
+# sweep, stdout+stderr merged. An empty cache-dir argument runs with the
+# variable genuinely UNSET (the /dispatch-ladder single-node path).
+rs_sweep() {
+  local clone="$1" cache="$2"; shift 2
+  ( cd "$clone" || exit 99
+    export PATH="$BIN12:$PATH" GC_FIXTURE_DIR="$FIX12"
+    if [[ -n "$cache" ]]; then
+      export DISPATCH_GRAPH_NODE_CACHE="$cache"
+    else
+      unset DISPATCH_GRAPH_NODE_CACHE
+    fi
+    bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall "$@" 2>&1 )
+}
+
+# ---------------------------------------------------------------------------
+# Case 12a: the entry is a real HIT — a poisoned cache changes the candidate set.
+# ---------------------------------------------------------------------------
+C12A="$WORK/t12a-clone"; rs_clone "$C12A"
+CACHE12A="$WORK/t12a-cache"; mkdir -p "$CACHE12A"
+rs_warm "$C12A" "$CACHE12A"
+entries12a=("$CACHE12A"/nodes-*.json)
+n12a=0; [[ -e "${entries12a[0]}" ]] && n12a=${#entries12a[@]}
+poisoned12a=0
+if [[ $n12a -eq 1 ]]; then
+  jq 'map(select(.id != "t-rs2"))' "${entries12a[0]}" >"$WORK/t12a-poison.json" \
+    && mv "$WORK/t12a-poison.json" "${entries12a[0]}" && poisoned12a=1
+fi
+out12a="$(rs_sweep "$C12A" "$CACHE12A")"; rc12a=$?
+
+if [[ $n12a -eq 1 ]] \
+   && [[ $poisoned12a -eq 1 ]] \
+   && [[ $rc12a -eq 0 ]] \
+   && grep -q '^recovered t-rs1 -> fix' <<<"$out12a" \
+   && ! grep -q 't-rs2' <<<"$out12a" \
+   && grep -qE '^\s*since:' "$C12A/intentions/t-rs1.md" \
+   && ! grep -qE '^\s*since:' "$C12A/intentions/t-rs2.md"; then
+  ok "reconcile-graph-review-stall DISPATCH_GRAPH_NODE_CACHE: the sweep SERVES the cache entry (warming wrote exactly one nodes-*.json; a poisoned entry dropping t-rs2 removed it from the candidate set even though disk still qualifies it)"
+else
+  no "reconcile-graph-review-stall cache hit (entries=$n12a poisoned=$poisoned12a rc=$rc12a)"
+  printf '%s\n' "$out12a"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 12b: a store WRITE invalidates — the key is the store's bytes, so a warm
+# entry describing the pre-write state can never be served after it.
+# ---------------------------------------------------------------------------
+C12B="$WORK/t12b-clone"; rs_clone "$C12B"
+CACHE12B="$WORK/t12b-cache"; mkdir -p "$CACHE12B"
+rs_warm "$C12B" "$CACHE12B"
+# Disqualify t-rs2 on disk AFTER warming: the warm entry still records it at
+# phase:review, so serving that entry would recover it.
+sed -i 's/^phase: review$/phase: implement/' "$C12B/intentions/t-rs2.md"
+out12b="$(rs_sweep "$C12B" "$CACHE12B")"; rc12b=$?
+entries12b=("$CACHE12B"/nodes-*.json)
+n12b=0; [[ -e "${entries12b[0]}" ]] && n12b=${#entries12b[@]}
+
+if [[ $rc12b -eq 0 ]] \
+   && [[ $n12b -eq 2 ]] \
+   && grep -q '^recovered t-rs1 -> fix' <<<"$out12b" \
+   && ! grep -q 't-rs2' <<<"$out12b" \
+   && ! grep -qE '^\s*since:' "$C12B/intentions/t-rs2.md"; then
+  ok "reconcile-graph-review-stall DISPATCH_GRAPH_NODE_CACHE: an edit to the store INVALIDATES the warm entry (t-rs2 flipped off phase:review on disk is dropped from the candidate set, and the miss filed a second entry under the new key)"
+else
+  no "reconcile-graph-review-stall cache invalidation (rc=$rc12b entries=$n12b)"
+  printf '%s\n' "$out12b"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 12c: still FAIL-CLOSED — a corrupt node file under a warm cache aborts
+# the sweep rather than being served from the last good entry.
+# ---------------------------------------------------------------------------
+C12C="$WORK/t12c-clone"; rs_clone "$C12C"
+CACHE12C="$WORK/t12c-cache"; mkdir -p "$CACHE12C"
+rs_warm "$C12C" "$CACHE12C"
+printf -- '---\n' >"$C12C/intentions/t-rs2.md"
+out12c="$(rs_sweep "$C12C" "$CACHE12C")"; rc12c=$?
+
+if [[ $rc12c -eq 1 ]] \
+   && grep -q 'node enumeration failed' <<<"$out12c" \
+   && ! grep -qE '^\s*since:' "$C12C/intentions/t-rs1.md"; then
+  ok "reconcile-graph-review-stall DISPATCH_GRAPH_NODE_CACHE: a corrupt node file still aborts the sweep (exit 1, 'node enumeration failed') under a warm cache, and nothing is written"
+else
+  no "reconcile-graph-review-stall cache fail-closed (rc=$rc12c)"
+  printf '%s\n' "$out12c"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 12d: the /dispatch-ladder path — with the variable UNSET the sweep
+# self-enumerates, behaves exactly as case 10c, and writes no cache file.
+# ---------------------------------------------------------------------------
+C12D="$WORK/t12d-clone"; rs_clone "$C12D"
+CACHE12D="$WORK/t12d-cache"; mkdir -p "$CACHE12D"
+out12d="$(rs_sweep "$C12D" "")"; rc12d=$?
+stray12d="$(find "$CACHE12D" -mindepth 1 | wc -l | tr -d ' ')"
+
+if [[ $rc12d -eq 0 ]] \
+   && grep -q '^recovered t-rs1 -> fix' <<<"$out12d" \
+   && grep -q '^recovered t-rs2 -> fix' <<<"$out12d" \
+   && grep -qE '^\s*since:' "$C12D/intentions/t-rs1.md" \
+   && grep -qE '^\s*since:' "$C12D/intentions/t-rs2.md" \
+   && [[ "$stray12d" == "0" ]]; then
+  ok "reconcile-graph-review-stall DISPATCH_GRAPH_NODE_CACHE unset: the sweep self-enumerates unchanged (both nodes recovered, exactly case 10c) and writes no cache file"
+else
+  no "reconcile-graph-review-stall uncached path (rc=$rc12d, stray files=$stray12d)"
+  printf '%s\n' "$out12d"
+fi
+
 echo
 echo "passed: $PASS  failed: $FAIL"
 [[ $FAIL -eq 0 ]] || exit 1
