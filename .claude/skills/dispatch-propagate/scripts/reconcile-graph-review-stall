@@ -447,7 +447,11 @@ done <<<"$CANDIDATES"
 # or an ordinary edit id whose --base pin still matches the tip the park
 # re-fetched (base_pin_still_fresh(), graph-commit:2975). This sweep pins EVERY
 # id it commits, so one node's unresolvable execution.fix divergence parks that
-# node and lands the rest.
+# node and lands the rest. graph-commit signals that outcome with rc 1, so the
+# failure branch below reports it WITHOUT claiming "nothing landed" — on this
+# path something did. Keep the two in step: a claim made here that the branch
+# below contradicts is worse than either alone, because the log line is the one
+# a reader actually sees.
 #
 # THAT DEPENDS ON THE PIN, so do not drop it. An id committed with no --base
 # entry has no evidence behind it -- "unchanged since this writer read it" is
@@ -501,10 +505,43 @@ if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]; then
   for id in "${RECOVERED_IDS[@]}"; do GC_ARGS+=("$id"); done
 
   if ! "$GRAPH_COMMIT" "${GC_ARGS[@]}"; then
-    echo "reconcile-graph-review-stall: graph-commit failed for ${RECOVERED_IDS[*]} (write rolled back, nothing landed)" >&2
-    # The EXIT trap restores every staged write, so intentions/ is left clean
-    # for the next graph writer. The next tick re-detects these nodes — the
-    # enumeration still matches.
+    # NOT "nothing landed". graph-commit's own caller contract says in so many
+    # words that rc 1 does not mean that (graph-commit:269), and the --base note
+    # above describes exactly the path where it does not: park_and_exit() lands
+    # an office_hours park for the diverged node AND re-applies every bystander
+    # id's fix-interrupt edit onto the park commit, pushes, and exits non-zero.
+    # On that path a park landed and other ids' edits landed with it, so the old
+    # wording was false on the one path this sweep newly reaches.
+    #
+    # It cannot be replaced by the opposite assertion either: the other rc-1
+    # shapes (rc 11's committed-but-unpushed write, an argument-validation
+    # refusal raised before any git write) really did land nothing. This line
+    # has no way to tell them apart, so it asserts NEITHER outcome and names
+    # the two places that do know — graph-commit's own stderr just above, and
+    # the graph_rollback_node_writes classification line the EXIT trap prints
+    # just below.
+    echo "reconcile-graph-review-stall: graph-commit did not report success for ${RECOVERED_IDS[*]} — what landed is NOT uniformly 'nothing': if it took its park path an office_hours park DID land for the diverged node, with the other ids' fix-interrupt edits riding along as bystanders; read graph-commit's stderr above and the rollback line below for which happened" >&2
+    # The EXIT trap restores every staged write that did NOT land, leaving
+    # intentions/ clean for the next graph writer. A landed park MOVED HEAD, and
+    # graph_rollback_node_writes classifies that case and deliberately KEEPS it
+    # rather than re-erasing the park (lib-graph-rollback.sh's header).
+    #
+    # Re-detection is therefore NOT uniform either. An id whose edit was rolled
+    # back is re-enumerated next tick — it still matches. An id that PARKED is
+    # not: the enumeration above skips any node with `office_hours != null`, so
+    # for that node the park is terminal for this sweep and waits on an
+    # office-hours clear, exactly as the --base note above says.
+    #
+    # RECOVERED_MSGS stays suppressed here, deliberately. The stdout protocol is
+    # one `recovered <id> -> fix` line per node actually acted on, consumed
+    # verbatim by dispatch-select-tick behind a `review-stall: ` prefix. On the
+    # park path the set is SPLIT — the bystanders got their fix interrupt, the
+    # diverged one got a park instead — and nothing here can partition it
+    # without parsing graph-commit's prose park clause. Emitting the whole set
+    # would tell the tick a fix interrupt is active on a node now sitting in
+    # office_hours, which is a worse lie than silence; emitting none loses only
+    # a record that graph-commit's own stderr already carries. So silence stays,
+    # and the line above is what points a reader at the truth.
     exit 0
   fi
   # Landed — disarm the rollback so the clean exit keeps the committed state.

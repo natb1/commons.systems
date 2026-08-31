@@ -1976,6 +1976,69 @@ else
   printf 'gh calls:\n%s\n' "$calls10g"
 fi
 
+# ---------------------------------------------------------------------------
+# Case 10h: the failed-land report does NOT claim "nothing landed".
+#
+# Once the sweep threads --base, graph-commit's park path became reachable from
+# here for the first time: park_and_exit() lands an office_hours park for the
+# diverged node AND re-applies every bystander id's fix-interrupt edit onto that
+# park commit, pushes it, and exits NON-ZERO. graph-commit says so in its own
+# caller contract — "rc 1 does not mean 'nothing landed'"
+# (packages/intentionsutil/scripts/graph-commit:269). The sweep's report line
+# used to answer that rc with "write rolled back, nothing landed", which is
+# false on exactly the path the --base change opened, and the log is what a
+# reader sees rather than the source comment that already described the park
+# correctly.
+#
+# The report cannot swing to the opposite assertion either — the other rc-1
+# shapes really did land nothing — so what is asserted here is the ABSENCE of
+# the false claim plus the presence of the pointer at the two things that do
+# know: graph-commit's own stderr, and the rollback classification line.
+#
+# RECOVERED_MSGS stays suppressed on this path (a `recovered <id> -> fix` line
+# for a node that in fact PARKED would be a worse lie than silence), so the
+# stdout protocol must carry NO `recovered` line here. That is asserted too,
+# because it is the half a future edit is most likely to "fix" by accident.
+#
+# Fixture is Case 10c's, with one substitution: fail_graph_commit instead of the
+# argv-recording exit-0 stub.
+# ---------------------------------------------------------------------------
+T10H="$WORK/t10h-seed"
+build_seed_repo "$T10H"
+cp "$HARNESS_DIR/reconcile-graph-review-stall" "$T10H/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+chmod +x "$T10H/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+review_stall_node "$T10H/intentions/t-rs1.md" t-rs1 201
+review_stall_node "$T10H/intentions/t-rs2.md" t-rs2 202
+new_origin t10h
+init_and_push "$T10H"
+
+C10H="$WORK/t10h-clone"
+clone_with_node_modules "$C10H"
+fail_graph_commit "$C10H"
+BIN10H="$WORK/t10h-bin"; FIX10H="$WORK/t10h-fixtures"
+review_stall_gh_stub "$BIN10H" "$FIX10H"
+
+out="$(
+  cd "$C10H" || exit 99
+  export PATH="$BIN10H:$PATH" GC_FIXTURE_DIR="$FIX10H"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall 2>&1
+)"; rc=$?
+status10h="$(git -C "$C10H" status --porcelain intentions/)"
+
+if [[ $rc -eq 0 ]] \
+   && grep -q 'graph-commit did not report success for' <<<"$out" \
+   && ! grep -q 'nothing landed' <<<"$out" \
+   && grep -q 'an office_hours park DID land for the diverged node' <<<"$out" \
+   && grep -q 'rolled the node write(s) back to HEAD' <<<"$out" \
+   && ! grep -q '^recovered ' <<<"$out" \
+   && [[ -z "$status10h" ]]; then
+  ok "reconcile-graph-review-stall failed land: the report drops the false 'nothing landed' claim, points at graph-commit's stderr and the rollback line, emits no 'recovered' stdout line, and still leaves intentions/ clean"
+else
+  no "reconcile-graph-review-stall failed-land report (rc=$rc)"
+  printf '%s\n' "$out"
+  printf 'status: %s\n' "$status10h"
+fi
+
 # ===========================================================================
 # Case 11: graph-select-target's interrupt gates roll their write back when the
 # land fails (tactic-eval-finding-reconcile-base-revert-blocks-main-graph-writes).

@@ -3609,20 +3609,35 @@ park_and_exit() {
     echo "graph-commit: their office_hours record is LOCAL ONLY, in the untracked re-materialized file(s) under $INTENTIONS_DIR (unlanded content also at $SNAP_DIR); a human must decide whether to override the deletion" >&2
   fi
 
-  # One human-readable phrase naming everything that rides along with the park
-  # commit, empty when nothing does. Built once here because the four report
-  # arms below all need it and all used to re-derive it from bystander_prunes
-  # alone. The prune clause keeps its exact pre-existing wording — it is
-  # asserted on verbatim by test-graph-commit.sh's bystander-prune cases.
-  local bystander_report=""
+  # Two human-readable phrases naming everything that rides along with the park
+  # commit, both empty when nothing does. Built once here because the four
+  # report arms below all need one of them and all used to re-derive it from
+  # bystander_prunes alone.
+  #
+  # TWO phrases, not one, because two of those arms follow a CONFIRMED park and
+  # two follow a park that did NOT reach main. `bystander_report` asserts the
+  # landing ("landed bystander …") and belongs only on the confirmed arms;
+  # `bystander_pending` names the same sets tenselessly for the failure arm,
+  # which says in its own words that they did not land. Reusing the asserting
+  # phrase there produced "(landed bystander edit(s) for X) also did not land" —
+  # self-contradictory to a human, and worse, it put the literal string a log
+  # reader greps for a LANDING onto the not-landed path.
+  #
+  # The prune clause of `bystander_report` keeps its exact pre-existing
+  # wording — test-graph-commit.sh case 88 asserts on it verbatim (cases 44/46,
+  # the older bystander-prune cases, assert on the commit SUBJECT instead).
+  local bystander_report="" bystander_pending=""
   if [[ "${#bystander_prunes[@]}" -gt 0 ]]; then
     bystander_report="landed bystander prune deletion(s) for ${bystander_prunes[*]}"
+    bystander_pending="bystander prune deletion(s) for ${bystander_prunes[*]}"
   fi
   if [[ "${#bystander_edits[@]}" -gt 0 ]]; then
     if [[ -n "$bystander_report" ]]; then
       bystander_report="$bystander_report; landed bystander edit(s) for ${bystander_edits[*]}"
+      bystander_pending="$bystander_pending; bystander edit(s) for ${bystander_edits[*]}"
     else
       bystander_report="landed bystander edit(s) for ${bystander_edits[*]}"
+      bystander_pending="bystander edit(s) for ${bystander_edits[*]}"
     fi
   fi
 
@@ -3701,8 +3716,8 @@ park_and_exit() {
     # Not confirmed on origin/main (`not-landed`, or `unknown` when the
     # post-push read itself failed — the verdict line above says which, and
     # `land`'s own view was prc=$prc).
-    if [[ -n "$bystander_report" ]]; then
-      echo "error: graph-commit: could not land the parking write for ${park_ids[*]} — office_hours set locally but not pushed to main; the bystander change(s) that would have landed with it ($bystander_report) also did not land — they are committed locally but unpushed, same as the park" >&2
+    if [[ -n "$bystander_pending" ]]; then
+      echo "error: graph-commit: could not land the parking write for ${park_ids[*]} — office_hours set locally but not pushed to main; the bystander change(s) that would have landed with it ($bystander_pending) also did not land — they are committed locally but unpushed, same as the park" >&2
     else
       echo "error: graph-commit: could not land the parking write for ${park_ids[*]} — office_hours set locally but not pushed to main" >&2
     fi
