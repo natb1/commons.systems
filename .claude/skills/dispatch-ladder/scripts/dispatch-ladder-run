@@ -158,9 +158,11 @@
 # at `running` is what makes `dispatch-ladder-status` say `orphaned` — "the
 # driver died without writing a terminal state" — about a stop that was clean
 # and deliberate. So signal_terminal_write does the local half only: status
-# `signalled`, a null terminus, and the owed evaluation recorded in
-# events.jsonl as `eval ... skipped` naming the `/rsi` call that pays it. See
-# its own comment at the trap for the full reasoning.
+# `signalled`, a null terminus, and — where one is actually owed — the unpaid
+# evaluation recorded in events.jsonl as `eval ... skipped` naming the `/rsi`
+# call that pays it. It writes NOTHING once halt() has already written a
+# terminal record, which a stop landing inside halt()'s own evaluation spawn
+# otherwise would. See its own comment at the trap for the full reasoning.
 #
 # Usage: dispatch-ladder-run <node-id>
 #          [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>] [--ci-wait-s <n>]
@@ -352,8 +354,12 @@
 #   143 signalled     SIGTERM — `systemctl --user stop dispatch-ladder-<node>`.
 #                     Both write state.json with status `signalled` and a null
 #                     terminus (THE SIGNAL PATH IS THE ONE OTHER WAY OUT,
-#                     above). Conventional 128+signo, so a shell reading `wait`
-#                     and a person reading the journal see the same number.
+#                     above) — UNLESS halt() had already written a terminal
+#                     record, in which case that record stands and only this
+#                     exit code reports the signal, so a 143 does not by itself
+#                     imply a `signalled` state.json. Conventional 128+signo, so
+#                     a shell reading `wait` and a person reading the journal
+#                     see the same number.
 #
 # THE EXIT CODE AND THE TERMINUS ARE ORTHOGONAL, deliberately. Every code above
 # says WHY THE DRIVER STOPPED. None of them says WHETHER STOPPING THERE WAS
@@ -933,9 +939,31 @@ LOCK_HELD=0
 # are deliberately left alone so the record says where the run was standing.
 signal_terminal_write() {
   local sig="$1" rc="$2"
+  # A TERMINAL RECORD ALREADY ON DISK IS NEVER CLOBBERED. halt() is not
+  # instantaneous: it writes state.json and logs its halt event and only then
+  # calls spawn_phase_eval, a dispatch-spawn-job round trip through the claude
+  # daemon that a stop can easily land inside — bash defers the pending trap
+  # only until that command substitution returns, which is still INSIDE halt().
+  # By then a terminal record exists, carrying the run's real disposition and
+  # the terminus classify_terminus paid the network reads for. Overwriting it
+  # would destroy the disposition AND leave that classified terminus attached
+  # to a `signalled` status, which is exactly the pairing the status vocabulary
+  # promises cannot occur. So a signal arriving after the ladder has already
+  # decided records nothing: the decision stands, and the signal is reported by
+  # this process's exit status alone. STATUS is the flag — `running` until one
+  # of the two terminal paths sets it — which also makes this function, the one
+  # step in the handler that is NOT idempotent, safe against a second signal.
+  if [[ "$STATUS" != running ]]; then
+    echo "dispatch-ladder-run: SIG$sig landed after the run had already reached '$STATUS' (${DISPOSITION:-no disposition}, exit ${EXIT_CODE:-?}); that record stands and this path writes nothing over it" >&2
+    return 0
+  fi
   STATUS=signalled
   DISPOSITION=signalled
   EXIT_CODE="$rc"
+  # Pinned at the one site that writes `signalled`, so "a signalled record never
+  # carries a classified terminus" is an invariant of THIS function rather than
+  # a property inherited from halt() being the only other writer of TERMINUS.
+  TERMINUS=""
   DETAIL="stopped by SIG$sig at step '$STEP'; the ladder is unfinished and nothing was rolled back"
   # write_state exits 1 on a failed render or install. That is right on the
   # normal path and wrong here: it would replace the signal's own exit status

@@ -249,13 +249,13 @@ SENTINEL=""
 TICK_LOCK_HELD=0
 _dispatch_tick_cleanup() {
   local rc=${1:-$?} sig="${2:-}"
+  trap - EXIT
   if (( TICK_LOCK_HELD )); then
     "$SCRIPT_DIR/dispatch-acquire-lock" --release >/dev/null 2>&1 || true
     TICK_LOCK_HELD=0
   fi
   [[ -n "${SENTINEL:-}" ]] && rm -f "$SENTINEL"
   [[ -n "${DISPATCH_TICK_WORKSPACE:-}" ]] && rm -rf "$DISPATCH_TICK_WORKSPACE"
-  trap - EXIT
   if [[ -n "$sig" ]]; then
     trap - "$sig"
     kill -"$sig" "$$"

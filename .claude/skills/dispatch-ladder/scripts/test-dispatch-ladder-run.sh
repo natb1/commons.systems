@@ -1735,8 +1735,9 @@ make_seq_fake "$DISPATCH/graph-auto-merge" merge
 # wrote on entering the merge step — and TWO things then go wrong:
 #
 #   * `dispatch-ladder-status` sees status `running` with an inactive unit and
-#     answers `orphaned`, whose documented meaning (dispatch-ladder-status:36)
-#     is "the driver died WITHOUT writing a terminal state". After an ordinary
+#     answers `orphaned`, whose documented meaning (the `orphaned` row of
+#     dispatch-ladder-status's <status> list, :50) is "the driver died WITHOUT
+#     writing a terminal state". After an ordinary
 #     `systemctl --user stop dispatch-ladder-<node>` that is simply false, so
 #     the reader's vocabulary starts lying about its most routine case.
 #   * the per-phase RSI evaluation halt() would have spawned is never spawned
@@ -1845,6 +1846,81 @@ assert_eq "sigterm-owed: exactly one 'eval ... skipped' event records the debt" 
 assert_eq "sigterm-owed: that event names the /rsi call that pays the debt" "1" \
   "$(jq -r 'select(.event == "eval" and .disposition == "skipped") | .detail' \
        "$STATE_DIR/events.jsonl" | grep -c "/rsi $NODE implement --since")"
+make_seq_fake "$LADDER/dispatch-ladder-await" await
+
+# --- a signal that lands INSIDE halt() must not overwrite what halt() decided --
+# Every signal case above stops a run that was still walking the ladder, so the
+# terminal write has nothing to overwrite. This one reaches the window where it
+# does: halt() writes state.json and logs its halt event and only THEN calls
+# spawn_phase_eval, a dispatch-spawn-job round trip through the claude daemon.
+# bash defers a pending trap until the running command returns, so a stop
+# delivered during that spawn fires the handler while halt() is still mid-body,
+# with a terminal record already on disk.
+#
+# What the unguarded terminal write does to that record is not a cosmetic
+# overwrite. It replaces `halted`/`stalled`/12 with `signalled`/`signalled`/143
+# — losing the disposition the ladder actually reached — while leaving TERMINUS
+# at the `violation` classify_terminus paid two network reads for. The result is
+# a `signalled` status carrying a classified terminus, the ONE combination the
+# status vocabulary promises cannot occur (dispatch-ladder-status's `signalled`
+# row: "<terminus> is null rather than classified"). A reader that trusts the
+# vocabulary reads a deliberate operator stop where the truth is a violation.
+#
+# The fixture drives exactly that ordering: advance launches a phase (so halt()
+# has an evaluation to spawn and therefore a window to be interrupted in), await
+# answers 12 so the run halts `stalled`, and the spawn fake signals the driver
+# before answering. The default `landed 4` sequence makes classify_terminus walk
+# its three probes to `violation`, so the terminus is non-empty when the handler
+# runs — without that the bug leaves no trace to assert on.
+#
+# The assertions read the record, not the exit status: the process still dies of
+# the signal (143), because it genuinely was signalled. What must survive is
+# what the ladder decided before the signal arrived.
+ladder_signal_spawnjob_fake() { # <SIG>
+  local sig="$1"
+  rm -f "$SEQ_DIR/driver.pid"
+  cat >"$DISPATCH/dispatch-spawn-job" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$SEQ_DIR/spawnjob.count")
+echo \$((n + 1)) >"$SEQ_DIR/spawnjob.count"
+printf '%s\n' "\$*" >>"$SEQ_DIR/spawnjob.argv"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$SEQ_DIR/driver.pid" ]] && break
+  sleep 0.1
+done
+kill -$sig "\$(cat "$SEQ_DIR/driver.pid")"
+echo spawned
+exit 0
+STUB
+  chmod +x "$DISPATCH/dispatch-spawn-job"
+}
+
+echo "Test: a SIGTERM inside halt()'s evaluation spawn leaves halt()'s own terminal record intact"
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement'
+set_seq await   '12|stalled tactic-fixture-node implement'
+ladder_signal_spawnjob_fake TERM
+run_ladder_signalled
+assert_eq "halt-race: the process still dies of the signal" "143" "$RC"
+assert_eq "halt-race: the signal landed inside halt()'s spawn" "1" "$(calls spawnjob)"
+assert_eq "halt-race: state.json still reports the halt, not the signal" \
+  "halted" "$(jq -r .status "$STATE_DIR/state.json")"
+assert_eq "halt-race: the disposition the ladder reached survives" \
+  "stalled" "$(jq -r .disposition "$STATE_DIR/state.json")"
+assert_eq "halt-race: so does the exit code halt() recorded" \
+  "12" "$(jq -r .exit_code "$STATE_DIR/state.json")"
+assert_eq "halt-race: and the terminus classify_terminus paid for" \
+  "violation" "$(jq -r '.terminus // "null"' "$STATE_DIR/state.json")"
+assert_eq "halt-race: no second halt event was appended under the signal" \
+  "0" "$(events_have halt signalled)"
+assert_eq "halt-race: halt()'s own halt event is the only one" \
+  "1" "$(events_have halt stalled)"
+# The pairing the vocabulary forbids, asserted directly rather than inferred
+# from the four fields above: no state.json a reader ever sees may carry status
+# `signalled` alongside a non-null terminus.
+assert_eq "halt-race: no record pairs a 'signalled' status with a classified terminus" \
+  "false" "$(jq -r '.status == "signalled" and .terminus != null' "$STATE_DIR/state.json")"
+make_seq_fake "$DISPATCH/dispatch-spawn-job" spawnjob
 make_seq_fake "$LADDER/dispatch-ladder-await" await
 
 # --- a signal DURING the acquire must release the lock the child then took ----

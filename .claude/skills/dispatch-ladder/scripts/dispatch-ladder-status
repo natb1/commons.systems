@@ -41,8 +41,12 @@
 #              are missing by design, because both cost network reads the
 #              TimeoutStopSec clock cannot afford: <terminus> is null rather
 #              than classified, and the phase's `/rsi` evaluation was not
-#              spawned — the events.jsonl `eval ... skipped` record names the
-#              call that pays it. Read the journal and that record.
+#              spawned. Whether that leaves a debt depends on where the stop
+#              landed, so read events.jsonl rather than assuming: an
+#              `eval ... skipped` record names the call that pays it, and NO
+#              such record means nothing is owed — either no phase had
+#              launched yet, or the phase boundary had already spawned its
+#              evaluation. Read the journal, and that record if there is one.
 #   orphaned   state.json says running but the unit is not active — the driver
 #              died without writing a terminal state. Still means exactly that:
 #              a signal stop writes `signalled` instead, so `orphaned` is now
