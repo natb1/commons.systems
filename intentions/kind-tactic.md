@@ -90,11 +90,14 @@ clarifications:
 
 
       Where it reads as a defect, the fault is in the reader. `activeFrontier`
-      (`packages/intentionsutil/src/goals.ts`) filters on `status !==
-      "codified"` alone, so it retains every done leaf; the repair is a `phase`
-      clause there, not a migration here. Gate on `phase`, never on `status !==
-      "raw"` — the 3 nodes carrying `delegated` with `phase: done` are the
-      standing proof that `status` is the wrong axis for the question.
+      (`packages/intentionsutil/src/goals.ts`) filtered on `status !==
+      "codified"` alone, so it retained every done leaf; the repair was a
+      `phase` clause there, not a migration here. Gate on `phase`, never on
+      `status !== "raw"` — the 3 nodes carrying `delegated` with `phase: done`
+      are the standing proof that `status` is the wrong axis for the question.
+      Landed 2026-08-31: that `phase !== "done"` clause is now in
+      `activeFrontier`, taking the frontier from 381 nodes to 316; the repair
+      this clarification asked for is done and no migration was performed.
 tooling_goals: []
 success_signal: null
 attention: null

@@ -796,8 +796,13 @@ problem set rather than the first entry. It enforces:
     one DFS implementation with rule 15. Dangling edges are reported by rule 24,
     not traversed.
 26. A node superseded WHILE IN FLIGHT names its expiry event: when
-    `superseded_by` is non-empty and `execution` is non-null, `supersession_expiry`
-    must be a non-empty string. Supersession never parks live work — an in-flight
+    `superseded_by` is non-empty and the node is in flight — `execution`
+    non-null AND `phase` not yet `done` — `supersession_expiry`
+    must be a non-empty string. Both halves are needed because the execution
+    record is never cleared on completion, so `execution` alone means "was ever
+    dispatched": a completed node could otherwise never take a supersession
+    edge, and an expiry whose event has already fired could never be cleared.
+    Supersession never parks live work — an in-flight
     node takes the edge and keeps running — and that interim-live-risk exception
     is only permitted when an expiry is named, normally the in-flight PR's own
     merge or closure. The expiry is per-NODE, not per-edge: what is bounded is

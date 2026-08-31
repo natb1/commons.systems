@@ -2759,6 +2759,77 @@ describe("validateGraph", () => {
     ];
     expect(() => validateGraph(silent)).toThrow(/tactic-old.*superseded.*status_vocabulary/);
   });
+
+  it("rule 26 is inert at phase done even though execution is never cleared", () => {
+    // Regression: the rule keyed "in flight" on `execution !== null` alone, but
+    // nothing ever nulls the execution record — measured 2026-08-31, 151 of the
+    // 208 `phase: "done"` nodes on the live store still carry one. So a
+    // completed node could not take a supersession edge without inventing an
+    // expiry for work that finished long ago, and an expiry whose named event
+    // had already fired could never be set back to null.
+    const nodes = [
+      ...supersessionKinds(),
+      gnode({
+        id: "tactic-old",
+        kind: "tactic",
+        phase: "done",
+        execution: { branch: "b", pr: 1, attempts: {}, markers: [], strategy_fingerprint: null },
+        superseded_by: ["tactic-new"],
+        supersession_expiry: null,
+      }),
+      gnode({ id: "tactic-new", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("CHARACTERIZATION (known gap): status `superseded` and `superseded_by` are not coupled", () => {
+    // THIS TEST PINS A GAP. It records what the schema does TODAY; it does NOT
+    // assert that the behavior is correct. Read the whole comment before
+    // changing anything here.
+    //
+    // No rule ties the `superseded` STATUS to a non-empty `superseded_by`, in
+    // either direction, so both half-supersessions below validate clean today:
+    //
+    //   (a) status `superseded` with an EMPTY `superseded_by`. It escapes rule
+    //       26's expiry requirement entirely — `checkSupersessionExpiry`
+    //       returns on the length-0 guard before any other clause runs. Once
+    //       PR19b wires `isSuperseded` into selection, such a node drops out of
+    //       the frontier with NO successor recorded anywhere: the work is
+    //       retired and whatever replaced it is unnameable.
+    //
+    //   (b) the mirror — `superseded_by` populated while `status` is still
+    //       `raw`. Also clean, and the node stays LIVE forever: selection keys
+    //       on `status`, so the successor edge exists but the supersession
+    //       never takes effect.
+    //
+    // The coupling is DEFERRED BY DECISION, not by oversight. Closing it needs
+    // a new numbered rule plus its transcription into `intentions/kind-kind.md`,
+    // and the PR that introduced `supersession_expiry` was already carrying one
+    // piece of unratified design surface; compounding two invented rules in one
+    // PR was judged worse than deferring one. The decision belongs to the
+    // follow-on work (PR19b) that builds the readers making this hazard
+    // reachable.
+    //
+    // So this is a characterization test of the kind
+    // `.claude/rules/test-integrity.md` permits — it documents a gap honestly
+    // rather than blessing a bug. Whoever adds the coupling rule should EXPECT
+    // BOTH ASSERTIONS BELOW TO GO RED, and must then REPLACE them with
+    // `toThrow` expectations naming the new rule. Do not make a red here go
+    // green by loosening the rule; deleting or skipping this test is the one
+    // response that is never right.
+    const missingSuccessor = [
+      ...supersessionKinds(),
+      gnode({ id: "tactic-old", kind: "tactic", status: "superseded", superseded_by: [] }),
+    ];
+    expect(() => validateGraph(missingSuccessor)).not.toThrow();
+
+    const missingStatus = [
+      ...supersessionKinds(),
+      gnode({ id: "tactic-old", kind: "tactic", status: "raw", superseded_by: ["tactic-new"] }),
+      gnode({ id: "tactic-new", kind: "tactic" }),
+    ];
+    expect(() => validateGraph(missingStatus)).not.toThrow();
+  });
 });
 
 describe("supersession predicates", () => {

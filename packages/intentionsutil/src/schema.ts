@@ -1789,15 +1789,25 @@ function checkEdgeCycles(
  * Rule 26: a node superseded WHILE IN FLIGHT must name its supersession's
  * expiry event.
  *
- * The ruled exception is that an in-flight node (`execution` non-null) still
- * takes the supersession edge and still gets NO park, so a similarity judgment
- * never halts live work. That interim-live-risk exception is only permitted
- * when an expiry is named — normally the in-flight PR's own merge or closure.
- * Without this rule `supersession_expiry` would be another field nothing reads.
+ * The ruled exception is that an in-flight node still takes the supersession
+ * edge and still gets NO park, so a similarity judgment never halts live work.
+ * That interim-live-risk exception is only permitted when an expiry is named —
+ * normally the in-flight PR's own merge or closure. Without this rule
+ * `supersession_expiry` would be another field nothing reads.
  *
  * The expiry is per-NODE, not per-edge: the risk being bounded is that THIS
- * node is in flight, which is a property of its own `execution` and not of
- * which node supersedes it. A per-edge expiry would repeat one value.
+ * node is in flight, which is a property of the node's own dispatch state and
+ * not of which node supersedes it. A per-edge expiry would repeat one value.
+ *
+ * IN FLIGHT is `execution` non-null AND `phase` not yet `done`. Non-null
+ * `execution` ALONE is not the test: nothing ever clears the record, so it
+ * means "was ever dispatched", not "is running now" — measured 2026-08-31 on
+ * the live store, 151 of the 208 `phase: "done"` nodes still carry a non-null
+ * `execution`. Keying on `execution` alone would (a) refuse a supersession edge
+ * on any completed node until the author invented an expiry for work that
+ * finished long ago, and (b) make the expiry unclearable: once the named event
+ * fires and the PR merges to `phase: "done"`, setting the field back to `null`
+ * would trip a rule claiming the node is still in flight.
  *
  * Inert on a node that is not superseded, and on a superseded node that is not
  * in flight — there is no interim live risk to except.
@@ -1805,6 +1815,7 @@ function checkEdgeCycles(
 function checkSupersessionExpiry(node: IntentionNode, problems: string[]): void {
   if (node.superseded_by.length === 0) return;
   if (node.execution === null) return;
+  if (node.phase === "done") return; // completed, whatever `execution` still holds
   if (node.supersession_expiry === null || node.supersession_expiry.trim() === "") {
     problems.push(
       `${node.id}: superseded while in flight (execution is non-null) but supersession_expiry is not named — the interim-live-risk exception requires an expiry event, normally the in-flight PR's own merge or closure`,
@@ -1943,7 +1954,9 @@ function checkSupersessionExpiry(node: IntentionNode, problems: string[]): void 
  *      rather than copying it. Like rule 15 this is a whole-graph pass, wired
  *      outside the per-node loop.
  *  26. A node superseded WHILE IN FLIGHT names its expiry event. When
- *      `superseded_by` is non-empty AND `execution` is non-null, a non-empty
+ *      `superseded_by` is non-empty AND the node is in flight — `execution`
+ *      non-null and `phase` not `done`, since the execution record is never
+ *      cleared on completion — a non-empty
  *      `supersession_expiry` is required. The ruling is that supersession never
  *      parks live work — an in-flight node takes the edge and keeps running —
  *      and that interim-live-risk exception is only permitted when an expiry is
