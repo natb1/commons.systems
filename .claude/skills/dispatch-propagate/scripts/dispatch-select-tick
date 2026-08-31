@@ -309,10 +309,29 @@ else
   DISPATCH_CI_VERDICT_CACHE=$(mktemp -d)
 fi
 export DISPATCH_CI_VERDICT_CACHE
+
+# Tick-scoped `intentions/` enumeration memo, same shape as the CI-verdict cache
+# above: one dir per tick, exported so the merge-and-reconcile band
+# (graph-auto-merge, reconcile-graph-merged and the reconcile-graph.ts runs it
+# spawns, reconcile-graph-review-stall) shares one strict parse of the store per
+# distinct store state instead of re-parsing it in every process. Entries are
+# content-addressed on the store's bytes (packages/intentionsutil/src/store-cache.ts),
+# so a sweep that writes node files simply misses rather than serving stale nodes.
+# Each entry is ~3 MB at the current graph size and a tick creates at most a
+# handful — all removed by the trap below. Set BEFORE the BRANCH==main block for
+# the same reason as its sibling: the reconcile band runs on every tick.
+if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
+  mkdir -p "$CLAUDE_JOB_DIR/tmp"
+  DISPATCH_GRAPH_NODE_CACHE=$(mktemp -d "$CLAUDE_JOB_DIR/tmp/graph-nodes.XXXXXX")
+else
+  DISPATCH_GRAPH_NODE_CACHE=$(mktemp -d)
+fi
+export DISPATCH_GRAPH_NODE_CACHE
 # Re-register a COMBINED handler: the decision-log emit (registered early, above)
-# plus this tick's cache cleanup. `trap ... EXIT` REPLACES, so this must chain
-# _dlog_select_emit explicitly or the real routing paths would emit no record.
-trap '_dlog_select_emit; rm -rf "$DISPATCH_CI_VERDICT_CACHE"' EXIT
+# plus BOTH of this tick's cache cleanups. `trap ... EXIT` REPLACES, so this must
+# chain _dlog_select_emit explicitly or the real routing paths would emit no
+# record, and it must keep the CI-verdict removal or that dir would leak.
+trap '_dlog_select_emit; rm -rf "$DISPATCH_CI_VERDICT_CACHE" "$DISPATCH_GRAPH_NODE_CACHE"' EXIT
 
 # --- Step 1: sync local main with origin/main (only on the main branch) -------
 # The `--ff-only` merge is the precondition for all selection AND the recovery

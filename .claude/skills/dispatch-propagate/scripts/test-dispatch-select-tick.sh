@@ -160,6 +160,15 @@ FAKE
     _hname="${_hs%%:*}"; _hvar="${_hs#*:}"
     cat > "$TMPDIR_TEST/$_hname" <<FAKE
 #!/usr/bin/env bash
+# Record the two tick-scoped cache dirs this fake INHERITED, and whether each
+# existed at invocation time. That is the only vantage point from which the
+# node cache's arming (DISPATCH_GRAPH_NODE_CACHE, Step 0) is observable: the
+# tick's EXIT trap has removed both by the time the caller sees stdout.
+_gc="\${DISPATCH_GRAPH_NODE_CACHE:-}"; _vc="\${DISPATCH_CI_VERDICT_CACHE:-}"
+_gd=nodir; [[ -n "\$_gc" && -d "\$_gc" ]] && _gd=dir
+_vd=nodir; [[ -n "\$_vc" && -d "\$_vc" ]] && _vd=dir
+printf '%s\t%s\t%s\t%s\n' "\${_gc:-<unset>}" "\$_gd" "\${_vc:-<unset>}" "\$_vd" \
+  >> "$TMPDIR_TEST/logs/cache-env.log"
 [[ -n "\${$_hvar:-}" ]] && printf '%s\n' "\${$_hvar}"
 exit 0
 FAKE
@@ -479,6 +488,36 @@ assert_eq "empty: decision log last record .disposition" "empty" \
   "$(tail -n1 "$DLOG_FILE" | jq -r '.disposition')"
 assert_eq "empty: decision log last record .site" "select-tick" \
   "$(tail -n1 "$DLOG_FILE" | jq -r '.site')"
+sel_tick_teardown
+
+# --- tick-scoped graph node cache: armed during the tick, removed on exit ----
+# The reconcile band shares one strict `intentions/` parse per tick via
+# DISPATCH_GRAPH_NODE_CACHE (packages/intentionsutil/src/store-cache.ts). Step 0
+# creates the directory and the single EXIT trap removes it. The trap is the
+# fragile half: `trap ... EXIT` REPLACES rather than stacks, so this also
+# re-asserts that the decision-log emit and the CI-verdict cleanup registered
+# alongside it still fire — a clobbered trap would show up here as a surviving
+# ci-verdict dir or a missing decision-log record, not as a failure in the tick
+# under test.
+echo "Test: select-tick arms a tick-scoped DISPATCH_GRAPH_NODE_CACHE and removes it on exit"
+sel_tick_setup
+out=$(run_sel_tick) || true
+CACHE_ENV_LOG="$TMPDIR_TEST/logs/cache-env.log"
+assert_eq "nodecache: the reconcile band ran and recorded its environment" "1" \
+  "$([ -s "$CACHE_ENV_LOG" ] && echo 1 || echo 0)"
+cache_env_line="$(head -n1 "$CACHE_ENV_LOG" 2>/dev/null || true)"
+gnc_path="$(cut -f1 <<<"$cache_env_line")"; gnc_state="$(cut -f2 <<<"$cache_env_line")"
+civ_path="$(cut -f3 <<<"$cache_env_line")"; civ_state="$(cut -f4 <<<"$cache_env_line")"
+assert_eq "nodecache: exported to the band with a non-empty value" "1" \
+  "$([ -n "$gnc_path" ] && [ "$gnc_path" != "<unset>" ] && echo 1 || echo 0)"
+assert_eq "nodecache: the exported path was a real directory during the tick" "dir" "$gnc_state"
+assert_eq "nodecache: removed by the EXIT trap" "0" \
+  "$([ -d "$gnc_path" ] && echo 1 || echo 0)"
+assert_eq "nodecache: sibling ci-verdict cache still armed during the tick" "dir" "$civ_state"
+assert_eq "nodecache: sibling ci-verdict cache still removed by the same trap" "0" \
+  "$([ -d "$civ_path" ] && echo 1 || echo 0)"
+assert_eq "nodecache: decision-log emit still chained into the same trap" "empty" \
+  "$(tail -n1 "$DISPATCH_DECISION_LOG_DIR/routing-decisions.jsonl" | jq -r '.disposition')"
 sel_tick_teardown
 
 # --- primary checkout drifted off main → internal-error, exit 2 -------------

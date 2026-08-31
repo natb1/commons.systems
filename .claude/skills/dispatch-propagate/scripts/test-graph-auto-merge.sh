@@ -380,6 +380,18 @@ gam_hc_out=$(run_gam 2>/dev/null)
 assert_eq "graph-auto-merge (h): control — unflagged sweep merges both" \
   "merged #110 (tactic-h1)
 merged #111 (tactic-h2)" "$gam_hc_out"
+# DISPATCH_GRAPH_NODE_CACHE names a storage LOCATION for the enumeration memo
+# (packages/intentionsutil/src/store-cache.ts), never a node subset. Re-run the
+# SAME fixture with it pointed at an empty directory: the candidate set and the
+# stdout must be byte-identical to the unflagged control above. A regression
+# that let the variable narrow the sweep — the failure mode `--node`'s
+# process.argv contract exists to prevent — shows up here as a shorter list.
+rm -f "$GAM_ROOT/stub/merge-calls.log"
+GAM_NODE_CACHE_DIR="$GAM_ROOT/nodecache"; mkdir -p "$GAM_NODE_CACHE_DIR"
+gam_hn_out=$(DISPATCH_GRAPH_NODE_CACHE="$GAM_NODE_CACHE_DIR" run_gam 2>/dev/null)
+unset DISPATCH_GRAPH_NODE_CACHE
+assert_eq "graph-auto-merge (h): DISPATCH_GRAPH_NODE_CACHE set → identical candidate set and stdout" \
+  "$gam_hc_out" "$gam_hn_out"
 
 # ---- (i) --node with an unknown id merges nothing (empty candidate set) -----
 gam_reset
