@@ -362,8 +362,11 @@ candidate set but never a write target (--slug ledger is refused, exit 64).
 --like <text> ranks the whole population by lexical overlap with <text> and
 emits the top --limit rows (default 40) PLUS every row carrying measurements
 whatever its score, adding a numeric `score` to each row. What was left out is
-reported on stderr as `population=N emitted=N elided=N score_cut=F`; widen it
-with --limit. Bare --list elides nothing. An explicitly EMPTY --like or --limit
+reported on stderr as
+`population=N emitted=N elided=N score_cut=F cut_ties_elided=N`; widen it with
+--limit. The cut is NOT a threshold — cut_ties_elided counts the elided rows
+scoring EXACTLY score_cut, dropped on id order rather than relevance. Bare
+--list elides nothing. An explicitly EMPTY --like or --limit
 is refused (exit 64), never read as "flag absent" — otherwise `--like ""` would
 skip the bound and dump the whole population with no disclosure.
 --resolved-by states the FACT that a commit sha or a PR reference ('#3079',
@@ -566,9 +569,16 @@ fi
 #                         score — the durable records must never be elided.
 #
 # stdout stays a bare JSON array (callers already jq it); the elision is
-# disclosed on stderr as `population=<n> emitted=<n> elided=<n> score_cut=<f>`.
-# An elision the caller cannot see is the same defect as a namespace; one it can
-# see and widen with --limit is not.
+# disclosed on stderr as `population=<n> emitted=<n> elided=<n> score_cut=<f>
+# cut_ties_elided=<n>`. An elision the caller cannot see is the same defect as a
+# namespace; one it can see and widen with --limit is not — and score_cut alone
+# does not make it visible. The score is shared/min(|a|,|b|) over a short query,
+# so it takes few distinct values and rows tie at the cut in bulk; which of them
+# survive is decided by recurrence_count then id, i.e. alphabetically. A caller
+# reading score_cut as "everything at or above this was emitted" would never
+# widen. cut_ties_elided is the count of equal-ranked rows dropped AT the cut,
+# and it is a count rather than the rows themselves because emitting the whole
+# tie group would blow the bound.
 list_entries() {
   if [[ ${#LIST_CMD[@]} -gt 0 ]]; then
     "${LIST_CMD[@]}" "$INTENTIONS_DIR"
@@ -679,11 +689,21 @@ list_entries() {
       emitted = candidates.filter((c) => top.has(c.row.id) || c.measured);
       const elided = candidates.length - emitted.length;
       const cut = candidates.length > limit ? candidates[limit - 1].row.score : 0;
+      // THE CUT IS NOT A SCORE THRESHOLD, and reporting only `score_cut`
+      // implies it is: the score takes few distinct values, so rows tie at the
+      // cut in bulk and which of them survive is decided by recurrence_count
+      // then id, not by relevance. Report the tie casualties so a caller can
+      // see the cut was arbitrary and widen; emitting the whole tie group
+      // instead would blow the bound this flag exists to impose.
+      const cutTiesElided = candidates.filter(
+        (c) => !top.has(c.row.id) && !c.measured && c.row.score === cut,
+      ).length;
       process.stderr.write(
         "population=" + candidates.length +
           " emitted=" + emitted.length +
           " elided=" + elided +
-          " score_cut=" + cut.toFixed(4) + "\n",
+          " score_cut=" + cut.toFixed(4) +
+          " cut_ties_elided=" + cutTiesElided + "\n",
       );
     }
     process.stdout.write(

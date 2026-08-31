@@ -990,6 +990,70 @@ assert_contains "(15e) with the score cut that produced it" "score_cut=1.0000" \
 assert_eq "(15e) bare --list discloses nothing, because it elides nothing" "" \
   "$(DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list 2>&1 >/dev/null)"
 
+# (15e-ties) THE CUT IS NOT A SCORE THRESHOLD. score = shared / min(|a|,|b|)
+# over a short query takes few distinct values, so rows tie at the cut in bulk
+# and which of them survive is decided by recurrence_count then id — i.e.
+# alphabetically, not by relevance. A caller reading score_cut alone takes it as
+# "everything at or above this was emitted" and never widens, so the tie
+# casualties are disclosed by their own count. Four rows: one scoring 1.0 on
+# both query tokens, three tying at 0.5 on one of them. Under --limit 2 the
+# 1.0 row and the alphabetically-first tied row are emitted, and the other two
+# tied rows — equal-ranked, dropped on id order alone — are the casualties.
+TIE_DIR="$WORK/tie-intentions"
+mkdir -p "$TIE_DIR"
+write_tie_fixture() {
+  cat > "$TIE_DIR/$1.md" <<MD
+---
+id: $1
+kind: tactic
+statement: $2
+owner: ai
+status: raw
+parent: null
+rationale: Fixture for test-dispatch-eval-finding.sh.
+reading: null
+serves:
+  - strategy-recursive-self-improvement
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: null
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: false
+rounds: null
+attributes: {}
+---
+# fixture body
+MD
+}
+write_tie_fixture tactic-tie-alpha 'A quark gluon fixture row.'
+write_tie_fixture tactic-tie-beta 'A quark fixture row.'
+write_tie_fixture tactic-tie-gamma 'A quark fixture row.'
+write_tie_fixture tactic-tie-delta 'A quark fixture row.'
+
+TIE_ERR="$WORK/tie.err"
+TIE_RC=0
+TIE_OUT=$(DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$TIE_DIR" "$SUT" --list \
+  --like 'quark gluon' --limit 2 2>"$TIE_ERR") || TIE_RC=$?
+assert_eq "(15e-ties) --like exits 0" "0" "$TIE_RC"
+assert_eq "(15e-ties) the two-token row ranks first" "tactic-tie-alpha" \
+  "$(jq -r '.[0].id' <<<"$TIE_OUT")"
+assert_eq "(15e-ties) only one of the three tied rows is emitted" "2" \
+  "$(jq 'length' <<<"$TIE_OUT")"
+assert_eq "(15e-ties) and it is the alphabetically-first one, not the most relevant" \
+  "tactic-tie-beta" "$(jq -r '.[1].id' <<<"$TIE_OUT")"
+assert_contains "(15e-ties) the cut is disclosed" \
+  "population=4 emitted=2 elided=2 score_cut=0.5000" "$(cat "$TIE_ERR")"
+assert_contains "(15e-ties) AND the equal-ranked rows dropped AT the cut are counted" \
+  "cut_ties_elided=2" "$(cat "$TIE_ERR")"
+assert_contains "(15e) no rows tie at that cut, so the count is zero, not absent" \
+  "cut_ties_elided=0" "$(cat "$LIKE_ERR")"
+
 # --like/--limit shape the --list view and are refused anywhere else, rather
 # than accepted and silently ignored.
 LIKE_RC=0

@@ -220,29 +220,46 @@ namespace — bare `--list` is the audit view and prints all of it (~490 rows /
 population by lexical overlap with the statement in hand and emits the top
 `--limit` rows (default 40) plus every row carrying measurements whatever its
 score, so no durable record is ever elided. What it left out is reported on
-stderr as `population=N emitted=N elided=N score_cut=F`; if the shortlist looks
-too narrow to judge against, widen it with `--limit <n>` rather than dropping
-the bound. An empty `--like ""` is refused, not treated as absent.
+stderr as `population=N emitted=N elided=N score_cut=F cut_ties_elided=N`; if
+the shortlist looks too narrow to judge against, widen it with `--limit <n>`
+rather than dropping the bound. **`score_cut` is not a threshold**: rows tie at
+it in bulk and the survivors are picked by id order, not relevance, so a
+non-zero `cut_ties_elided` means that many equal-ranked rows were dropped
+arbitrarily — widen before judging. An empty `--like ""` is refused, not treated as absent.
 
 It prints open **and retired** entries as JSON (`id`, `slug`, `state`,
 `statement`, `first_seen`, `recurrence_count`, `last_seen`, `in_flight`,
 `resolved_by`, `addressable_by`, and `score` under `--like`). Decide whether the
-finding in hand **is** one of them:
+finding in hand **is** one of them. There are exactly three outcomes, and each
+has exactly one action — a match you cannot address is **not** a "genuinely
+new" finding, so never reach the third bullet by elimination:
 
-- It is the same finding → reuse that entry's `slug`. The script increments
+- **The same finding, and that row's `addressable_by` is `slug`** — open or
+  retired → reuse that entry's `slug`. The script increments
   `recurrence_count` — that figure is the whole point of the ledger, and a
-  near-duplicate slug destroys it. Only a row whose `addressable_by` is `slug`
-  can be reused this way; a row addressed by `id` (including the ledger's own
-  planning node `tactic-eval-finding-ledger`, which carries a null slug) is
-  context for the judgment, not a write target — never invent a slug for it.
-- A retired entry describes it → reuse that slug too. A recurrence after
-  retirement is evidence the landed fix did not hold, and the script resumes the
-  count rather than restarting at 1.
-- Genuinely new → mint a fresh lowercase-kebab slug, 3–60 characters, named for
-  the finding rather than for this run (`qa-rerun-after-clean-pass`, not
+  near-duplicate slug destroys it. A retired row belongs here too: a recurrence
+  after retirement is evidence the landed fix did not hold, and the script
+  resumes the count rather than restarting at 1.
+- **The same finding, but that row's `addressable_by` is `id`** — the common
+  case, not a corner one: membership is the whole open tactic population, and
+  only the `tactic-eval-finding-` prefix carries slugs (39 of 493 rows,
+  measured 2026-08-31). **Mint nothing, and write nothing.** No flag reaches an
+  id-addressed row yet — `--id` arrives with Unit 4 of
+  `intentions/tactic-eval-finding-ledger.md`, which has not landed — so this
+  occurrence is **uncounted**, exactly as `skipped-in-flight` is. Say so in the
+  Step 7 report, quoting the matched row's `id` and the finding statement, and
+  move to the next finding. Do NOT invent a `tactic-eval-finding-<slug>` for a
+  row you have already matched: that mints a second graph node for one finding
+  and freezes the recurrence figure on the real record — the exact duplicate
+  this read exists to prevent. The ledger's own planning node
+  `tactic-eval-finding-ledger` is one of these rows.
+- **Genuinely new** — no listed row is this finding, whatever its
+  `addressable_by` → mint a fresh lowercase-kebab slug, 3–60 characters, named
+  for the finding rather than for this run (`qa-rerun-after-clean-pass`, not
   `tactic-foo-qa-2026-08-12`).
 
-Then record the occurrence:
+Then record the occurrence — for the **first and third** outcomes only. An
+id-only match never reaches this call; it is reported, not written:
 
 ```bash
 .claude/skills/dispatch-propagate/scripts/dispatch-eval-finding \
@@ -309,6 +326,11 @@ One short report: the node and phase evaluated, the measured figures per lens,
 and every ledger entry touched with its slug and the script's one-word answer
 (`landed` / `noop` / `skipped-locked` / `skipped-in-flight`). Name the lenses
 that had nothing to report.
+
+Report the id-only matches from Step 6 here too — each as `uncounted (id match:
+<the matched row's id>)` with the finding statement. Those findings were
+recognised and deliberately not written; the report is the only record that the
+occurrence happened, and it is what a later run resumes from once `--id` lands.
 
 Then stop. There is no next step in this job — no fix, no follow-up spawn, no
 message to the driver, which has already moved on.
