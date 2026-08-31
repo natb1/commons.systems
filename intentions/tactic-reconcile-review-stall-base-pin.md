@@ -179,8 +179,9 @@ is five: the lib, `test-graph-write-rollback.sh`, and the three consumers
 but how many test harnesses copy the two scripts gaining the new `source` into a
 seed repo. `grep -rln 'cp .*reconcile-graph-merged\|cp .*reconcile-graph-review-stall'`
 over `.claude`, `packages` and `.github` returns exactly one file:
-`test-graph-write-rollback.sh`. (`test-dispatch-select-tick.sh:141-153` names
-both sweeps, but writes silent no-op *fakes* rather than copying the real
+`test-graph-write-rollback.sh`. (`test-dispatch-select-tick.sh`'s `for _hs in …`
+silent-fake loop names both sweeps (`:155-156`, re-measured 2026-08-30), but it
+writes silent no-op *fakes* rather than copying the real
 scripts, so it is unaffected.) One `cp` line in one `build_seed_repo()` covers
 the whole fixture cost. There is therefore no brownfield/greenfield split to
 make: the ideal design ships in this PR.
@@ -219,8 +220,9 @@ stale and every anchor below was re-measured at this HEAD.
 
 **Sibling precedent in `.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged`:**
 
-- `declare -A BASE_BLOB=()` at `:230`.
-- `validate_node_id()` at `:253-259` — hard-errors on an id that is unsafe as the
+- `declare -A BASE_BLOB=()` — locate by name (`:269`, re-measured 2026-08-30).
+- `validate_node_id()` (locate by name; `:292-297`, re-measured 2026-08-30) —
+  hard-errors on an id that is unsafe as the
   KEY of `--base <id>=<blobsha>`. `add_blob_pair()` splits the pair at the FIRST
   `=`, so an id of the shape tactic-a=b records the pin under the truncated id
   tactic-a with a garbage sha, silently re-keying the pin onto a different node.
@@ -230,15 +232,20 @@ stale and every anchor below was re-measured at this HEAD.
   control characters are equally unsafe. Regex: `^[A-Za-z0-9][A-Za-z0-9._-]*$`.
   It is defined **only here** — it is not in `lib.sh` and
   `reconcile-graph-review-stall` has no copy.
-- The rationale comment at `:205-230` explaining the pin, and specifically
-  **Ruling 31, read side vs write side** (`:215-220`): the pin governs the WRITE
+- The rationale comment block opened by the `# --- Decide + apply the store
+  mutations ---` banner explaining the pin, and specifically the paragraph
+  beginning `# Ruling 31, read side vs write side` (`:238-267` and `:254-259`
+  respectively, re-measured 2026-08-30): the pin governs the WRITE
   side only and must NOT be "simplified" into a read-side skip. The review-stall
   sweep's own read-side exclusions (parked nodes at the `office_hours != null`
   enumeration gate, open blockers) are a separate mechanism and stay exactly as
   they are.
-- The pin loop at `:294-300`: `blob=$(git -C "$REPO_ROOT" hash-object -w --
-  "intentions/$sid.md")`, preceded by `validate_node_id "$sid"`. The rationale at
-  `:278-293` records two things the implementer must preserve:
+- The pin loop — the `while IFS= read -r sid` loop whose body is
+  `blob=$(git -C "$REPO_ROOT" hash-object -w --
+  "intentions/$sid.md")`, preceded by `validate_node_id "$sid"` (`:333-339`,
+  re-measured 2026-08-30). The comment block immediately above it, opened by
+  `# Step 2: pin every planned edit id's diagnosis-time base blob` (`:317-332`),
+  records two things the implementer must preserve:
   - `-w` is **MANDATORY**, not an optimization: `check_base_freshness` resolves
     the base with `git cat-file -p <sha>` and `die()`s "base blob … is unreadable
     in the local object database" when it misses. A disk blob differing from
@@ -250,7 +257,8 @@ stale and every anchor below was re-measured at this HEAD.
     close. (Contrast `lib-frozen-session-park.sh`, which pins with `git rev-parse
     "origin/main:intentions/<id>.md"` because its source IS a git ref. Do not
     swap the two forms.)
-- `--base` threading at `:329-348`: re-validates the id at the pair-construction
+- `--base` threading — the `for id in "${EDIT[@]}"` pair-building loop
+  (`:414-420`, re-measured 2026-08-30): re-validates the id at the pair-construction
   site (defense in depth against plan drift), hard-errors when a planned edit id
   has no pin ("a skipped pin is an UNPROTECTED write"), then appends
   `GC_ARGS+=(--base "$id=${BASE_BLOB[$id]}")` followed by the positional ids.
@@ -259,7 +267,8 @@ stale and every anchor below was re-measured at this HEAD.
 
 - `add_blob_pair()` at `:670`, `parse_blob_arg()` at `:685` — the `<id>=<sha>`
   pair parser, dies on a malformed pair.
-- Flag parsing at `:3659-3660` accepts BOTH repeated `--base <id>=<sha>` flags and
+- Flag parsing — the `--base)` case arm of the argument loop (`:3723-3724`,
+  re-measured 2026-08-30) — accepts BOTH repeated `--base <id>=<sha>` flags and
   a manifest file path. The repeated-pair form is what the sibling uses and what
   drops straight into this sweep's existing id loop. **No graph-commit change is
   needed** — it is the consumer this sweep must feed correctly.
@@ -325,41 +334,56 @@ Three functions, parameterized by a `<label>` argument the way
 `graph_rollback_node_writes` is, so diagnostics name the calling sweep:
 
 1. `node_id_is_safe <id>` — pure predicate, returns 0/1, prints nothing, never
-   exits. Body is the regex from `reconcile-graph-merged:254`:
+   exits. Body is the regex inside `reconcile-graph-merged`'s `validate_node_id()`
+   (`:293`, re-measured 2026-08-30):
    `[[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]`. Carry over the explanatory
-   comment from `reconcile-graph-merged:243-252` (the first-`=` re-keying hazard,
-   whitespace/control chars, "a skipped pin is an UNPROTECTED write").
+   comment block immediately above `reconcile-graph-merged`'s `validate_node_id()`,
+   the one opened by `# A node id must be safe both as a single path component`
+   (`:276-291`, re-measured 2026-08-30) — the first-`=` re-keying hazard,
+   whitespace/control chars, "a skipped pin is an UNPROTECTED write".
 2. `require_safe_node_id <label> <id>` — calls `node_id_is_safe`; on failure
    prints the diagnostic to stderr (`<label>: unsafe node id …` naming the
-   regex, using `printf '%q'` on the id as `reconcile-graph-merged:255` does) and
+   regex, using `printf '%q'` on the id as the `unsafe node id` echo inside
+   `reconcile-graph-merged`'s `validate_node_id()` does — `:294`, re-measured
+   2026-08-30) and
    `exit 1`. This is `validate_node_id`'s exact behavior, label-parameterized.
 3. `pin_base_blob <repo-root> <label> <id>` — prints the blob sha on stdout;
    on failure prints a diagnostic to stderr and **returns non-zero without
    exiting**, so each caller chooses skip-vs-abort. Body:
    `git -C "$1" hash-object -w -- "intentions/$3.md"`. Carry over the `-w`-is-
-   mandatory and pin-the-on-disk-blob comments from `reconcile-graph-merged:278-293`
-   verbatim in substance.
+   mandatory and pin-the-on-disk-blob comments from `reconcile-graph-merged`'s
+   Step 2 comment block, the one opened by `# Step 2: pin every planned edit id's
+   diagnosis-time base blob` (`:317-332`, re-measured 2026-08-30), verbatim in
+   substance.
 
 Then repoint `.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged`:
 
 - Add `source "$SCRIPT_DIR/lib-graph-base-pin.sh"` beside its existing
-  `source "$SCRIPT_DIR/lib-graph-rollback.sh"` at `:87`.
-- Delete the local `validate_node_id()` definition at `:253-259`, moving its
-  explanatory comment block (`:243-252`) into the lib rather than dropping it.
-- Replace `validate_node_id "$sid"` (`:296`) with
+  `source "$SCRIPT_DIR/lib-graph-rollback.sh"` line (`:105`, re-measured
+  2026-08-30).
+- Delete the local `validate_node_id()` definition (`:292-297`, re-measured
+  2026-08-30), moving its explanatory comment block — the one opened by `# A node
+  id must be safe both as a single path component` (`:276-291`) — into the lib
+  rather than dropping it.
+- Replace `validate_node_id "$sid"` inside the pin loop (`:335`, re-measured
+  2026-08-30) with
   `require_safe_node_id reconcile-graph-merged "$sid"`, and the pin line
-  (`:297-298`) with
+  `blob=$(git -C "$REPO_ROOT" hash-object -w -- "intentions/$sid.md")`
+  (`:336-337`) with
   `blob=$(pin_base_blob "$REPO_ROOT" reconcile-graph-merged "$sid") || exit 1`
   — preserving its current hard-error-with-message posture.
-- Replace `validate_node_id "$id"` at `:342` with
+- Replace `validate_node_id "$id"` inside the `--base` pair-building loop
+  (`:415`, re-measured 2026-08-30) with
   `require_safe_node_id reconcile-graph-merged "$id"`.
-- Leave the `no pinned base blob for planned edit id` hard-error at `:343-345`
-  and every `--base` pair construction at `:346` untouched.
+- Leave the `no pinned base blob for planned edit id` hard-error (`:416-418`,
+  re-measured 2026-08-30) and the `GC_ARGS+=(--base "$id=${BASE_BLOB[$id]}")`
+  pair construction (`:419`) untouched.
 
 Finally, in `.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh`,
 add one `cp` inside `build_seed_repo()` — beside the existing
-`cp "$HARNESS_DIR/lib-graph-rollback.sh" …` line (the file's `build_seed_repo`
-runs roughly `:124-157`, with the lib copies at its tail) — copying
+`cp "$HARNESS_DIR/lib-graph-rollback.sh" …` line, which is the last of the lib
+copies at the tail of `build_seed_repo()` (the function runs `:131-161` and that
+`cp` sits at `:158`, re-measured 2026-08-30) — copying
 `lib-graph-base-pin.sh` to
 `$dst/.claude/skills/dispatch-propagate/scripts/lib-graph-base-pin.sh`.
 
@@ -414,7 +438,9 @@ keep the message text identical rather than weakening the assertion
 
 4. **Thread `--base` into the landing call.** In the block at `:323-326`, between
    the `GC_ARGS=(…)` initializer (`:323`) and the positional-id loop (`:324`),
-   insert a loop over `RECOVERED_IDS` mirroring `reconcile-graph-merged:341-347`:
+   insert a loop over `RECOVERED_IDS` mirroring `reconcile-graph-merged`'s
+   `for id in "${EDIT[@]}"` pair-building loop (`:414-420`, re-measured
+   2026-08-30):
 
    - `require_safe_node_id reconcile-graph-review-stall "$id"` — re-gate at the
      exact point the `<id>=<sha>` pair is built (defense in depth; `graph-commit`
@@ -433,7 +459,8 @@ keep the message text identical rather than weakening the assertion
 
 5. **Comment the write-side/read-side split.** Above the landing block, add the
    Ruling 31 note in this sweep's own terms, mirroring
-   `reconcile-graph-merged:215-220`: the pin governs the WRITE side only and must
+   `reconcile-graph-merged`'s `# Ruling 31, read side vs write side` comment
+   (`:254-259`, re-measured 2026-08-30): the pin governs the WRITE side only and must
    not be "simplified" into a read-side skip. This sweep already excludes parked
    nodes at enumeration for a different reason (a human owns a parked node's
    state); the pin exists so that a park landing *after* enumeration is merged in
@@ -481,9 +508,14 @@ and a red check-runs verdict), `review_stall_node()` (seeds
 exactly the enumeration's candidate shape). `build_seed_repo()` already copies
 `apply-fix-state.ts`, `merge-node.ts`, `graph-commit`, `lib.sh` and
 `lib-graph-rollback.sh`; Unit 1 adds `lib-graph-base-pin.sh` to it. Each case
-still copies the sweep under test itself, as case 10a does at `:1319-1320`.
+still copies the sweep under test itself, as case 10a does with its
+`cp "$HARNESS_DIR/reconcile-graph-review-stall" …` + `chmod +x` pair
+(`:1476-1477`, re-measured 2026-08-30).
 
-**Case 12 — pin construction.** Transpose case 10a's shape (`:1313-1361`) and
+**Case 12 — pin construction.** Transpose the shape of the case under the
+`# Case 10a:` banner — locate it by that banner, not by a number: re-measured
+2026-08-30 it runs `:1471-1517`, a 158-line drift from the number this plan
+used to carry — and
 case 6's assertions:
 
 - Seed two candidates via `review_stall_node`, both eligible for the `fix` route.
@@ -491,7 +523,9 @@ case 6's assertions:
   (`git -C "$CLONE" hash-object -- intentions/<id>.md` — no `-w` needed to
   compute the expected value).
 - Install the argv-capturing `graph-commit` stub (`printf '%s\n' "$@" >file;
-  exit 0`) exactly as case 10a does at `:1330-1335`, at
+  exit 0`) exactly as case 10a does in its
+  `cat >"$C10A/packages/intentionsutil/scripts/graph-commit" <<SH` heredoc
+  (`:1487-1492`, re-measured 2026-08-30), at
   `$CLONE/packages/intentionsutil/scripts/graph-commit`.
 - Run the sweep with `PATH="$BIN:$PATH" GC_FIXTURE_DIR="$FIX"`.
 - Assert: rc 0; the captured argv contains exactly **one** `--base` flag per
@@ -507,13 +541,17 @@ case 6's assertions:
   `t-r2` node.
 
 **Case 13 — THE RACE.** This is the case that reproduces bug X and must go red if
-Unit 2's `--base` threading is reverted. Port case 7's mechanism (`:863-979`)
-wholesale, swapping only the sweep and the fields:
+Unit 2's `--base` threading is reverted. Port the mechanism of the case under the
+`# Case 7: THE RACE` banner (`:869-986`, re-measured 2026-08-30) wholesale,
+swapping only the sweep and the fields:
 
 - Seed one candidate node via `review_stall_node`, `office_hours: null`.
 - Move the real `graph-commit` aside to `graph-commit.real` and install the
-  sentinel-guarded wrapper from case 7 (`:900-947`) **in the SEED, then push it** —
-  never in the clone. Case 7's comment at `:889-899` records why this is
+  sentinel-guarded wrapper from case 7 — the `mv … graph-commit.real` plus
+  `cat >… <<'SH'` heredoc block (`:906-952`, re-measured 2026-08-30) — **in the
+  SEED, then push it** —
+  never in the clone. Case 7's comment opened by `# The concurrent-park wrapper is
+  installed in the SEED and pushed` (`:893-905`) records why this is
   load-bearing and not tidiness: a wrapper committed in the clone makes the
   worktree "ahead of origin/main with non-intentions changes", `graph-commit`
   then takes its `ensure_intentions_only_base()` `git reset --hard FETCH_HEAD`
@@ -524,19 +562,24 @@ wholesale, swapping only the sweep and the fields:
   pushes to `origin/main`, then runs `git -C "$GC_CLONE" fetch -q origin main`
   followed by `git -C "$GC_CLONE" reset -q --mixed FETCH_HEAD` on the caller's
   checkout, then `exec`s `graph-commit.real`. The `--mixed` (not `--hard`) is
-  load-bearing per case 7's comment at `:928-940`: it fast-forwards HEAD past the
+  load-bearing per case 7's comment opened by `# Fast-forward THIS checkout's
+  HEAD onto the park commit` (`:934-946`, re-measured 2026-08-30): it
+  fast-forwards HEAD past the
   park while leaving the sweep's stale-read working-tree edit in place, so the
   push has no textual conflict for layer-2 to rescue and `--base` is the ONLY
   thing that can still catch the lost update. With `--hard`, or with HEAD left
   behind, the case passes with or without the pin and proves nothing.
 - Export `GC_ORIGIN`, `GC_NODE`, `GC_CLONE`, plus
   `GRAPH_COMMIT_CHECK_POLL_SECONDS=1 GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS=20` as
-  case 7 does at `:955-958`. Only `gh` is stubbed
+  case 7 does in the `export` block inside its `out="$( … )"` subshell
+  (`:965-968`, re-measured 2026-08-30). Only `gh` is stubbed
   (`review_stall_gh_stub`); the REAL `graph-commit` runs, because
   `check_base_freshness` is the machinery under test.
 - Before writing the assertions, check whether `reconcile-graph-review-stall` has
   its own clock gate needing a fixed-clock env var the way
-  `reconcile-graph-merged` needs `RECON_ENV` (`:725`): the sweep reads
+  `reconcile-graph-merged` needs `RECON_ENV` (the
+  `RECON_ENV=(GRAPH_RECONCILE_GRACE=0 GRAPH_RECONCILE_NOW=1800000000)`
+  assignment, `:731`, re-measured 2026-08-30): the sweep reads
   `MAX_HOLD_SECONDS` around `:73`. Determine whether it gates candidate
   eligibility (in which case the case needs an equivalent fixed value) or only
   the lock heartbeat (in which case it does not). Do not assume `RECON_ENV`
@@ -544,8 +587,9 @@ wholesale, swapping only the sweep and the fields:
 - Assert, against `git show origin/main:intentions/<id>.md` after the run: rc 0;
   the concurrently landed `office_hours` park text is **present** (it survived);
   AND the sweep's own `execution.fix` write is present (the node file carries a
-  `since:` key under `fix`, the same grep discriminator case 10a uses at
-  `:1341-1345`). Both halves matter — a case that only asserts the park survives
+  `since:` key under `fix`, the same `grep -qE '^\s*since:'` discriminator case
+  10a uses (`:1500-1506`, re-measured 2026-08-30)). Both halves matter — a case
+  that only asserts the park survives
   would also pass if the sweep landed nothing at all.
 - Add a header comment on Case 13 stating the fail-today property in the same
   words case 7's header uses: *revert Unit 2's `--base` threading and this case
@@ -562,10 +606,15 @@ Out of scope: any edit to cases 1–11b's assertions.
 
 ## Reuse
 
-- `.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged:253-259`
-  (`validate_node_id()`), `:294-300` (the `hash-object -w` pin loop), `:329-348`
-  (the `--base` threading loop with its re-validation and missing-pin
-  hard-error), and its rationale comments at `:205-230` and `:278-293` — the
+- `.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged` —
+  `validate_node_id()`, the `hash-object -w` pin loop (`while IFS= read -r sid`),
+  the `--base` threading loop (`for id in "${EDIT[@]}"`, with its re-validation
+  and missing-pin hard-error), and its rationale comments (the
+  `# --- Decide + apply the store mutations ---` block and the `# Step 2: pin
+  every planned edit id's diagnosis-time base blob` block). Locate every one by
+  name: re-measured 2026-08-30 they sit at `:292-297`, `:333-339`, `:414-420`,
+  `:238-267` and `:317-332`, each a 36-to-76-line drift from the numbers this
+  bullet used to carry — the
   source of truth for every function body and comment Unit 1 relocates. Unit 2
   mirrors its structure, not a fresh derivation.
 - `.claude/skills/dispatch-propagate/scripts/lib-graph-rollback.sh:1-28` — the
@@ -575,7 +624,9 @@ Out of scope: any edit to cases 1–11b's assertions.
   `reconcile-graph-review-stall` via `restore_staged_writes()` — do not
   re-derive or modify it.
 - `packages/intentionsutil/scripts/graph-commit:670` (`add_blob_pair()`), `:685`
-  (`parse_blob_arg()`), `:3659-3660` (flag parsing), `:766`
+  (`parse_blob_arg()`), the `--base)` case arm of the argument loop
+  (`:3723-3724`, re-measured 2026-08-30 — the number this bullet used to carry
+  pointed into an unrelated `git status --refresh` comment), `:766`
   (`check_base_freshness()`) — the consumer contract. Repeated `--base <id>=<sha>`
   flags are already accepted; **no graph-commit change is needed**.
 - `.claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh:580-591`
