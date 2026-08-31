@@ -249,10 +249,8 @@ each fork site.
    the base):
 
    ```bash
-   DIFF_BASE=$(.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh --at-remote-tip first-parent)
-   ```
-   ```bash
-   git diff --name-only "$DIFF_BASE"..HEAD
+   DIFF_BASE=$(.claude/skills/dispatch-propagate/scripts/resolve-diff-base.sh --at-remote-tip first-parent) \
+     && git diff --name-only "$DIFF_BASE"..HEAD
    ```
 
    A browser component exists if any changed path is a `vite.config.*`, a frontend

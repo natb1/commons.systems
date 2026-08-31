@@ -134,7 +134,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib-verify-fence.sh"
 
 REPO_ROOT=""
+REPO_ROOT_EXPLICIT=false
 INTENTIONS_DIR=""
+INTENTIONS_DIR_EXPLICIT=false
 BASELINE_FILE="$SCRIPT_DIR/verify-fence-path-baseline.json"
 STATUS_WARN=true
 
@@ -142,10 +144,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo-root)
       [[ $# -lt 2 ]] && { echo "lint-verify-fence-paths.sh: --repo-root requires an argument" >&2; exit 2; }
-      REPO_ROOT="$2"; shift 2 ;;
+      REPO_ROOT="$2"; REPO_ROOT_EXPLICIT=true; shift 2 ;;
     --intentions-dir)
       [[ $# -lt 2 ]] && { echo "lint-verify-fence-paths.sh: --intentions-dir requires an argument" >&2; exit 2; }
-      INTENTIONS_DIR="$2"; shift 2 ;;
+      INTENTIONS_DIR="$2"; INTENTIONS_DIR_EXPLICIT=true; shift 2 ;;
     --baseline)
       [[ $# -lt 2 ]] && { echo "lint-verify-fence-paths.sh: --baseline requires an argument" >&2; exit 2; }
       BASELINE_FILE="$2"; shift 2 ;;
@@ -162,7 +164,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$REPO_ROOT" ]]; then
+if [[ "$REPO_ROOT_EXPLICIT" == false ]]; then
   # Resolve from the CALLER's CWD — the same rule every sibling linter uses
   # (lint-prose-rules.sh, lint-ds-drift.sh, get-changed-apps.sh). The tree under
   # test is the one the caller is standing in, never the one this script file
@@ -242,10 +244,7 @@ else
   fi
   REPO_ROOT="$GIT_TOPLEVEL"
 fi
-INTENTIONS_DIR_EXPLICIT=false
-if [[ -n "$INTENTIONS_DIR" ]]; then
-  INTENTIONS_DIR_EXPLICIT=true
-else
+if [[ "$INTENTIONS_DIR_EXPLICIT" == false ]]; then
   INTENTIONS_DIR="$REPO_ROOT/intentions"
 fi
 
