@@ -162,7 +162,7 @@ fi
 # Invoke the gate. set -e is deliberately NOT used (see header): a non-zero
 # exit here (12/13/other) must be captured, not kill the script. Mirrors
 # provision-node-worktree's GATE_FP/GATE_RC capture shape.
-GATE_FP=$(cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/check-node-selection.ts \
+GATE_FP=$(cd "$REPO_ROOT" && node --import tsx/esm packages/intentionsutil/scripts/check-node-selection.ts \
   "$NODE_ID" "$SELECTED_PHASE" --dir "$DIR" --stamp "$STAMP_PATH" "${SNAPSHOT_FLAGS[@]}")
 GATE_RC=$?
 

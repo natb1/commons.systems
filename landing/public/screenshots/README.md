@@ -10,7 +10,7 @@ A helper script uses Playwright (already installed at the workspace root) to
 capture all three at a consistent 1200×800 (3:2) viewport:
 
 ```bash
-npx tsx landing/scripts/capture-screenshots.ts
+node --import tsx/esm landing/scripts/capture-screenshots.ts
 ```
 
 The script navigates each production URL, waits for `domcontentloaded` plus a 2.5 s timeout, scrolls 540 px past the project's own hero band to frame the actual UI — adjust `scrollY` in `capture-screenshots.ts` if a project's hero height changes — waits 500 ms for the scroll to settle, and writes each file into

@@ -6,7 +6,7 @@
 // no committed roadmap file.
 //
 // Run from anywhere (the store dir is resolved relative to this file, not cwd):
-//   npx tsx packages/intentionsutil/scripts/frontier-view.ts
+//   node --import tsx/esm packages/intentionsutil/scripts/frontier-view.ts
 //
 // Determinism: `listNodes` returns nodes in id-sorted order, the projection
 // sort has a unique `id` final tiebreak, and the output carries no

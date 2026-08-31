@@ -19,8 +19,8 @@
 // themselves resolve).
 //
 // Usage:
-//   npx tsx ladder-terminus-census.ts [<intentions-dir>] [--intentions <dir>]
-//     [--lint] [--strict]
+//   node --import tsx/esm packages/intentionsutil/scripts/ladder-terminus-census.ts \
+//     [<intentions-dir>] [--intentions <dir>] [--lint] [--strict]
 //
 // The intentions dir may be given positionally, via `--intentions`, or
 // omitted entirely (defaults to `<repoRoot>/intentions`) — the plan's

@@ -10,9 +10,9 @@
 #
 # The SUT is run IN PLACE (not copied to a scratch dir), so its own
 # SCRIPT_DIR/REPO_ROOT derivation resolves to the real repo root — which is
-# exactly what lets it invoke the REAL `npx tsx
+# exactly what lets it invoke the REAL `node --import tsx/esm
 # packages/intentionsutil/scripts/check-node-selection.ts` against the fixture
-# snapshot. No npx/gh stubbing: the point of this suite is the plumbing PLUS
+# snapshot. No tsx/gh stubbing: the point of this suite is the plumbing PLUS
 # the verdict, not an isolated unit test of the gate script (that lives in
 # check-node-selection.ts's own test suite).
 set -uo pipefail
@@ -224,7 +224,7 @@ fi
 # validator emits kind-edge complaints too; the assertion keys on the rule-23
 # message specifically, which is what this row is about.)
 VALIDATOR="$SCRIPT_DIR/../../../../packages/intentionsutil/scripts/validate-graph.ts"
-VALIDATE_OUT=$(npx tsx "$VALIDATOR" "$REPO/intentions" 2>&1)
+VALIDATE_OUT=$(node --import tsx/esm "$VALIDATOR" "$REPO/intentions" 2>&1)
 VALIDATE_RC=$?
 if [ "$VALIDATE_RC" -eq 0 ]; then
   assert_eq "squatter-office-hours: validate-graph exits non-zero (rule 23)" "nonzero" "0"

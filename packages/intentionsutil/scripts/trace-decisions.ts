@@ -15,7 +15,7 @@
 // technique `readTacticVelocity` uses (`read-sensors.ts`).
 //
 // Run from anywhere (the repo root is resolved relative to this file, not cwd):
-//   npx tsx packages/intentionsutil/scripts/trace-decisions.ts [--since <git-date>] [--json]
+//   node --import tsx/esm packages/intentionsutil/scripts/trace-decisions.ts [--since <git-date>] [--json]
 //
 // `--since` accepts any git approxidate (default `30 days ago`); `--json` emits
 // the events as a JSON array instead of the human-readable digest. A git failure

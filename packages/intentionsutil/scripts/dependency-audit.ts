@@ -52,7 +52,7 @@
 // `package-lock.json`.
 //
 // Run from anywhere (the repo root is resolved relative to this file, not cwd):
-//   npx tsx packages/intentionsutil/scripts/dependency-audit.ts
+//   node --import tsx/esm packages/intentionsutil/scripts/dependency-audit.ts
 //
 // TOTAL-FUNCTION CONTRACT. `computeDependencyAudit` returns a result describing
 // the reading; a nonzero unjustified/dead-upstream count is a normal reading,

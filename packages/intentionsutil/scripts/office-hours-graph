@@ -209,7 +209,7 @@ node_kind_on_main() {
 resolve_directive() {
   if [[ -n "$TARGET" ]]; then
     local sel sel_verb sel_node
-    sel=$(npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$TARGET")
+    sel=$(node --import tsx/esm "$SCRIPT_DIR/office-hours-select.ts" "$TARGET")
     read -r sel_verb sel_node _ <<<"$sel"
     if [[ "$sel_verb" == launch ]]; then
       # An explicit human target on an already-live node is a collision to
@@ -238,7 +238,7 @@ resolve_directive() {
   # aborting store validation) would otherwise be swallowed and misreported as
   # an empty queue. Fail loudly instead.
   local listing
-  if ! listing=$(npx tsx "$SCRIPT_DIR/office-hours-select.ts" --list); then
+  if ! listing=$(node --import tsx/esm "$SCRIPT_DIR/office-hours-select.ts" --list); then
     echo "office-hours: selector --list failed" >&2
     exit 1
   fi
@@ -282,7 +282,7 @@ resolve_directive() {
       held_count=$((held_count + 1))
       continue
     fi
-    npx tsx "$SCRIPT_DIR/office-hours-select.ts" "$nid"
+    node --import tsx/esm "$SCRIPT_DIR/office-hours-select.ts" "$nid"
     return 0
   done <<<"$listing"
   if [[ "$held_count" -gt 0 ]]; then

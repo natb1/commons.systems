@@ -12,7 +12,7 @@
 // Deliberately NOT registered in `read-sensors.ts`'s default registry: that
 // registry is local-first no-network by design; this instrument fetches live
 // production URLs. Run from a network-enabled shell:
-//   npx tsx packages/intentionsutil/scripts/audit-publishing.ts
+//   node --import tsx/esm packages/intentionsutil/scripts/audit-publishing.ts
 //
 // Exit 0 when every piece passes the no-account check; exit 1 when any fails
 // (the failure list is the gap evidence). A fetch failure, non-200 on a
