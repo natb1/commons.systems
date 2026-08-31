@@ -28,7 +28,7 @@
 #     durable heartbeat under `user@1000.service` — none of which have
 #     _SYSTEMD_UNIT=dispatch-tick, so a -u match silently drops them all. The
 #     exact lines are (the four reclaim rules of reservation_sweep, named as its
-#     own header block names them at lib-reservation-ledger.sh:172-231):
+#     own header block names them at lib-reservation-ledger.sh:233-240):
 #       <ISO-ts> host dispatch-tick[pid]: lib-reservation-ledger: reclaimed reservation <wt> (live-worker-redundant)
 #         rule (a), lib-reservation-ledger.sh:662 — a live worker already owns
 #         the worktree; the marker is redundant. Age-independent.
@@ -52,7 +52,7 @@
 #     `reclaim_events_reason_unparsed` — never silently dropped. Two ledger lines
 #     that look similar are NOT reclaims and are excluded by the
 #     `reclaimed reservation ` anchor: `keeping malformed reservation <wt> (no
-#     session= line)` (rule (b), :670) and the `(stranded reclaim of <wt> — ...)`
+#     session= line)` (rule (b), :669) and the `(stranded reclaim of <wt> — ...)`
 #     follow-up note (:716).
 #
 #     CAUSE stays `dead-session-stranded`-only. A handoff expiry or a TTL expiry
@@ -381,7 +381,10 @@ DEAD_EVENTS_FILE="$TMP/dead_events.tsv"
 : >"$DEAD_EVENTS_FILE"
 while IFS= read -r line; do
   ts=$(printf '%s\n' "$line" | awk '{print $1}')
-  wt=$(printf '%s\n' "$line" | sed -n 's/.*reclaimed reservation \([0-9][0-9]*-[^ ]*\) (dead-session-stranded)/\1/p')
+  # Capture ANY non-space basename. Requiring a numeric prefix here dropped
+  # every real fleet worktree (`agent-*`, `align-*`, `tactic-*`, `g2-fence-sweep`)
+  # silently at the `continue` below -- RATE stayed non-zero while CAUSE read 0.
+  wt=$(printf '%s\n' "$line" | sed -n 's/.*reclaimed reservation \([^ ]*\) (dead-session-stranded)/\1/p')
   [[ -n "$wt" ]] || continue
   printf '%s\t%s\n' "$ts" "$wt" >>"$DEAD_EVENTS_FILE"
 done < <(grep -E 'lib-reservation-ledger: reclaimed reservation .+ \(dead-session-stranded\)' "$SWEEP_RAW" || true)

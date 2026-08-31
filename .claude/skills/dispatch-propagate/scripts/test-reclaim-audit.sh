@@ -467,6 +467,52 @@ assert_eq "clause exit code" "0" "$CLAUSE_RC"
 
 export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
 
+# --- case G: a NON-NUMERIC worktree basename --------------------------------
+# The regression lock for the CAUSE-half basename capture. The parse used to
+# require a numeric prefix (`\([0-9][0-9]*-[^ ]*\)`), which no real fleet
+# worktree has: live basenames are `agent-a67cb7cd9bfa78d2b`, `align-rank-model`,
+# `g2-fence-sweep`, `tactic-...`. Every genuine reclaim therefore fell out at the
+# `[[ -n "$wt" ]] || continue` below the capture, with no counter incremented --
+# the exact silent-drop class `reclaim_events_reason_unparsed` was added to
+# close, one parse further on. RATE stayed non-zero while CAUSE read 0, and the
+# header's promise that CAUSE "apportions the dead-session-stranded events"
+# quietly did not hold.
+#
+# Every other fixture in this file uses numeric names, so nothing caught it.
+CASE_G_LOG="$ROOT/sweep-nonnumeric.txt"
+{
+  printf '%s host dispatch-tick[301]: lib-reservation-ledger: reclaimed reservation agent-deadbeef (dead-session-stranded)\n' "$T"
+  printf '%s host dispatch-tick[302]: lib-reservation-ledger: reclaimed reservation g2-fence-sweep (dead-session-stranded)\n' "$T"
+  printf '%s host dispatch-tick[303]: lib-reservation-ledger: reclaimed reservation 3001-nnn (dead-session-stranded)\n' "$T"
+} > "$CASE_G_LOG"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$CASE_G_LOG"
+
+NONNUM_RC=0
+NONNUM_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json) || NONNUM_RC=$?
+
+echo ""
+echo "--- assertions (non-numeric worktree basenames) ---"
+
+assert_eq "nonnumeric sweep.reclaim_events_total" "3" \
+  "$(jq '.sweep.reclaim_events_total' <<<"$NONNUM_OUT")"
+assert_eq 'nonnumeric reclaim_events_by_reason["dead-session-stranded"]' "3" \
+  "$(jq '.sweep.reclaim_events_by_reason["dead-session-stranded"]' <<<"$NONNUM_OUT")"
+# The bug lived HERE: the RATE count above came from the reason table and was
+# always right, while the two counters below are fed by the basename capture and
+# read 1 instead of 3 -- only the numeric fixture survived the parse.
+assert_eq "nonnumeric sweep.dead_session_stranded_events (basename-fed)" "3" \
+  "$(jq '.sweep.dead_session_stranded_events' <<<"$NONNUM_OUT")"
+assert_eq "nonnumeric sweep.dead_session_stranded_distinct_worktrees" "3" \
+  "$(jq '.sweep.dead_session_stranded_distinct_worktrees' <<<"$NONNUM_OUT")"
+assert_eq "nonnumeric cause_buckets sum (every event apportioned)" "3" \
+  "$(jq '[.cause_buckets[]] | add' <<<"$NONNUM_OUT")"
+assert_eq "nonnumeric sweep.reclaim_events_reason_unparsed" "0" \
+  "$(jq '.sweep.reclaim_events_reason_unparsed' <<<"$NONNUM_OUT")"
+assert_eq "nonnumeric exit code" "0" "$NONNUM_RC"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
+
 # --- case F: a reason token the parse does not recognize --------------------
 # The fail-open closer. A reclaim line whose reason will not parse is counted in
 # the total and reported in its own figure — never silently dropped into no
