@@ -2331,6 +2331,120 @@ else
   printf '%s\n' "$out12d"
 fi
 
+# ===========================================================================
+# Case 13: DISPATCH_PR_JSON_CACHE — the armed reconciler PAIR shares one
+# `pulls/<n>` read across a PROCESS boundary
+# (tactic-review-stall-pr-json-duplicate-fetch).
+#
+# reconcile-graph-review-stall's candidate set is a strict subset of
+# reconcile-graph-merged's, and it skips every PR whose state is not OPEN as
+# "reconcile-graph-merged's job" — so within one tick it re-reads exactly the
+# PR JSON the merged sweep just read. dispatch-select-tick arms the memo across
+# those two commands only, via a per-command env prefix that is NEVER exported.
+#
+# This is the only harness that drives both sweeps as REAL separate processes,
+# which is the point: a bash associative array could not cross that boundary,
+# so the shared directory is what is actually under test. `review_stall_gh_stub`
+# alone is installed — `reconcile_gh_stub` serves a MERGED pr and would drive
+# reconcile-graph-merged into its absorb path instead of the OPEN skip this case
+# needs. The stub's inline default is OPEN and serves both surfaces, so the
+# merged sweep fetches, classifies OPEN, plans nothing and exits 0, and the
+# review-stall sweep then routes `fix` off the red check-runs fixture.
+#
+# Case 13a is the anti-vacuity control: the identical sequence with the variable
+# genuinely UNSET must log TWO `/pulls/` reads and take the IDENTICAL route.
+# Without it, "1" would be consistent with the sweep simply never fetching.
+# ===========================================================================
+
+T13="$WORK/t13-seed"
+build_seed_repo "$T13"
+for s in reconcile-graph-merged reconcile-graph-review-stall; do
+  cp "$HARNESS_DIR/$s" "$T13/.claude/skills/dispatch-propagate/scripts/$s"
+  chmod +x "$T13/.claude/skills/dispatch-propagate/scripts/$s"
+done
+# One node satisfying BOTH enumerations: phase:review is `absorbable` for the
+# merged sweep, and the `reviewed` marker + null fix + OPEN pr make it a
+# review-stall candidate too.
+review_stall_node "$T13/intentions/t-rs1.md" t-rs1 201
+new_origin t13
+init_and_push "$T13"
+
+BIN13="$WORK/t13-bin"; FIX13="$WORK/t13-fixtures"
+review_stall_gh_stub "$BIN13" "$FIX13"
+
+# rs_pair <clone> <cache-dir-or-empty> — run the two reconcilers back to back as
+# two separate `bash` invocations against ONE clone, reproducing the tick's
+# arming across the process boundary. An empty cache-dir runs both genuinely
+# UNSET (case 13a), mirroring rs_sweep's idiom in case 12.
+rs_pair() {
+  local clone="$1" cache="$2"
+  ( cd "$clone" || exit 99
+    export PATH="$BIN13:$PATH" GC_FIXTURE_DIR="$FIX13"
+    if [[ -n "$cache" ]]; then
+      export DISPATCH_PR_JSON_CACHE="$cache"
+    else
+      unset DISPATCH_PR_JSON_CACHE
+    fi
+    bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+    bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall 2>&1 )
+}
+
+# pair_clone <dst> <argv-file> — a clone whose graph-commit records its argv,
+# as case 10c's does.
+pair_clone() {
+  clone_with_node_modules "$1"
+  cat >"$1/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$2"
+exit 0
+SH
+  chmod +x "$1/packages/intentionsutil/scripts/graph-commit"
+}
+
+# ---------------------------------------------------------------------------
+# Case 13: armed — one `/pulls/` read serves both sweeps, route unchanged.
+# ---------------------------------------------------------------------------
+C13="$WORK/t13-clone"; pair_clone "$C13" "$WORK/t13-argv.txt"
+CACHE13="$(mktemp -d "$WORK/t13-cache.XXXXXX")"
+: > "$FIX13/gh-calls.log"
+out13="$(rs_pair "$C13" "$CACHE13")"; rc13=$?
+pulls13="$(grep -c '/pulls/' "$FIX13/gh-calls.log" || true)"
+argv13="$(cat "$WORK/t13-argv.txt" 2>/dev/null || true)"
+
+if [[ $rc13 -eq 0 ]] \
+   && [[ "$pulls13" == "1" ]] \
+   && grep -q '^recovered t-rs1 -> fix' <<<"$out13" \
+   && grep -qE '^\s*since:' "$C13/intentions/t-rs1.md" \
+   && grep -q '^t-rs1$' <<<"$argv13"; then
+  ok "DISPATCH_PR_JSON_CACHE armed: the reconciler pair shares ONE pulls/ read across the process boundary, and the cached body drives the identical fix route"
+else
+  no "armed reconciler pair (rc=$rc13, pulls reads=$pulls13, expected 1)"
+  printf '%s\n' "$out13"
+  printf 'argv: %s\n' "$argv13"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 13a: UNARMED mirror — two reads, identical route. Without this control
+# case 13's "1" would prove nothing.
+# ---------------------------------------------------------------------------
+C13A="$WORK/t13a-clone"; pair_clone "$C13A" "$WORK/t13a-argv.txt"
+: > "$FIX13/gh-calls.log"
+out13a="$(rs_pair "$C13A" "")"; rc13a=$?
+pulls13a="$(grep -c '/pulls/' "$FIX13/gh-calls.log" || true)"
+argv13a="$(cat "$WORK/t13a-argv.txt" 2>/dev/null || true)"
+
+if [[ $rc13a -eq 0 ]] \
+   && [[ "$pulls13a" == "2" ]] \
+   && grep -q '^recovered t-rs1 -> fix' <<<"$out13a" \
+   && grep -qE '^\s*since:' "$C13A/intentions/t-rs1.md" \
+   && grep -q '^t-rs1$' <<<"$argv13a"; then
+  ok "DISPATCH_PR_JSON_CACHE unset: each sweep fetches its own pulls/ read (2), route identical to the armed case — the memo is a pure cost optimisation"
+else
+  no "unarmed reconciler pair (rc=$rc13a, pulls reads=$pulls13a, expected 2)"
+  printf '%s\n' "$out13a"
+  printf 'argv: %s\n' "$argv13a"
+fi
+
 echo
 echo "passed: $PASS  failed: $FAIL"
 [[ $FAIL -eq 0 ]] || exit 1

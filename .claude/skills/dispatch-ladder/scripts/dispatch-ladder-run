@@ -258,14 +258,45 @@
 #   GRAPH_RECONCILE_GRACE. Overriding it would be the driver setting policy,
 #   which it may not do.
 #
-# THE CI VERDICT CACHE MUST STAY UNSET, load-bearing.
+# THE CI VERDICT CACHE AND THE PR-JSON CACHE MUST BOTH STAY UNSET, load-bearing.
 # dispatch_ci_verdict_rest memoizes per-SHA into $DISPATCH_CI_VERDICT_CACHE with
 # NO TTL and NO invalidation (lib.sh:796-824). A driver that exported a cache
 # dir and then re-polled would read its first `pending` forever and never see CI
 # resolve — the poll loop would run to its budget on a PR that went green
-# minutes in. So this script exports no cache dir and explicitly `unset`s the
-# variable before each reconciler call. See
-# intentions/tactic-review-stall-ci-verdict-cache-miss.md:40.
+# minutes in. See intentions/tactic-review-stall-ci-verdict-cache-miss.md:40.
+#
+# gh_pr_view_rest's $DISPATCH_PR_JSON_CACHE memo has the same shape and the same
+# hazard, one surface over: no TTL, no invalidation, keyed only on the resolved
+# REST path. This driver polls graph-auto-merge --node, reconcile-graph-merged
+# --node and reconcile-graph-review-stall --node at different wall-clock times,
+# so an inherited PR-JSON directory would pin every one of them to a single
+# pre-merge snapshot and the loop would never observe the merge. That memo is
+# armed ONLY inside dispatch-select-tick's back-to-back reconciler pair, where
+# the directory is created, passed as a per-command env prefix on exactly those
+# two commands under one lock hold, and torn down straight after.
+#
+# THAT WINDOW IS MINUTES WIDE, NOT MICROSECONDS. Between the first sweep's PR
+# reads and the second's, reconcile-graph-merged lands its whole plan as one
+# graph-commit (reconcile-graph-merged:371-435), and graph-commit waits on the
+# global landing lock for up to LOCK_WAIT_SECONDS — well past the 300s
+# MAX_HOLD_SECONDS reconcile-graph-review-stall's own header cites for the lock
+# it runs under. lib.sh's gh_pr_view_rest header states the real bound: the
+# staleness the second sweep sees equals the first sweep's runtime. At that
+# width the accepted residual is wider than the human merge lib.sh enumerates —
+# a PUSH inside the window leaves review-stall classifying CI off a stale
+# `.headRefOid` (reconcile-graph-review-stall:256). Both are accepted THERE,
+# bounded by one lock hold over a candidate set of two, and both are reversible
+# on the next tick. Neither is acceptable in a poll loop that re-reads the same
+# PR for its whole ci-wait budget, so the memo must never reach one.
+#
+# So this script exports neither cache dir, and `unset`s BOTH variables ONCE at
+# the top level, immediately after `set -uo pipefail`, so the clearing covers
+# the WHOLE process rather than three call sites. The reconcilers are not the
+# only exposed reader: `"$ADVANCE"` runs earlier in every pass and reaches
+# graph-select-target's `mergedAt` freshness reads through gh_pr_view_rest.
+# A per-call-site unset also cannot cover the `ci-waiting` branch, which
+# `continue`s without entering reconcile_pass at all. The unsets kept beside
+# the reconciler calls are a local restatement, not the guarantee.
 #
 # THE GRAPH NODE CACHE IS DELIBERATELY LEFT ALONE — not an oversight.
 # DISPATCH_GRAPH_NODE_CACHE (packages/intentionsutil/src/store-cache.ts) keys
@@ -274,7 +305,11 @@
 # therefore cannot pin the poll loop to stale node state the way the TTL-less
 # verdict memo can. This script neither exports nor unsets it, and with nothing
 # in the environment the reconcilers self-enumerate — the ladder's existing
-# behavior, unchanged.
+# behavior, unchanged. The two paragraphs are not in tension: the disposition
+# follows the KEY, not the variable's shape. A content-addressed key
+# self-invalidates, so that cache is safe to inherit; the CI-verdict and PR-JSON
+# memos are keyed on a sha and a REST path, neither of which moves when the
+# world underneath them does, so those two go in the unset list.
 #
 # EXIT CODES — deliberately the primitives' codes, so a journald reader sees
 # one vocabulary across the whole ladder:
@@ -360,6 +395,30 @@
 #
 # NOT set -e — exits are handled explicitly, matching the dispatch siblings.
 set -uo pipefail
+
+# BOTH REST MEMO DIRECTORIES ARE CLEARED HERE, ONCE, FOR THE WHOLE PROCESS —
+# see the cache note above for why neither may ever reach this poll loop.
+#
+# The clearing used to live only beside the three reconciler calls inside
+# reconcile_pass, and that left the ADVANCE path uncovered. `"$ADVANCE"` runs
+# earlier in every pass than reconcile_pass does, and dispatch-ladder-advance
+# calls graph-select-target, whose `mergedAt` freshness reads go through
+# gh_pr_view_rest — exactly one of the two readers lib.sh's gh_pr_view_rest
+# header names as never allowed to see that memo. An inherited directory
+# therefore pinned every advance in the loop to one pre-merge snapshot. Worse,
+# a pass that keeps answering `ci-waiting` (the normal state right after
+# implement opens a draft PR) `continue`s without ever entering reconcile_pass,
+# so nothing downstream cleared it either and the driver could poll to its
+# whole ci-wait budget against a PR that had already landed.
+#
+# This is a CONTAINMENT backstop, not a cleanup of something this script sets:
+# the driver exports neither variable. The hazard is inheritance from whatever
+# environment invoked it — a hand-run from a shell that armed the memo, or any
+# future caller that forwards its own environment. Clearing before anything
+# runs is the only placement that cannot be routed around by a branch. The
+# per-call-site `unset`s inside reconcile_pass are kept as a local restatement
+# beside the calls they protect.
+unset DISPATCH_CI_VERDICT_CACHE DISPATCH_PR_JSON_CACHE
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # .claude/skills/dispatch-ladder/scripts → four levels up is the checkout root.
@@ -1130,11 +1189,14 @@ reconcile_pass() {
   refresh_lock
 
   # ---- The merge ------------------------------------------------------------
-  # dispatch_ci_verdict_rest memoizes per-SHA with no TTL and no invalidation
-  # (lib.sh:796-824), so a cache dir inherited from anywhere would pin this
-  # poll loop to the first `pending` it ever read and it would never see CI go
-  # green. The driver exports none and unsets it before every reconciler call.
-  unset DISPATCH_CI_VERDICT_CACHE
+  # dispatch_ci_verdict_rest memoizes per-SHA, and gh_pr_view_rest memoizes per
+  # resolved REST path, both with no TTL and no invalidation (lib.sh:796-824,
+  # lib.sh's gh_pr_view_rest header). A cache dir for either, inherited from
+  # anywhere, would pin this poll loop to the first snapshot it ever read — the
+  # first `pending` verdict, or a pre-merge PR body — and it would never see CI
+  # go green or the PR land. The driver exports neither and unsets both before
+  # every reconciler call.
+  unset DISPATCH_CI_VERDICT_CACHE DISPATCH_PR_JSON_CACHE
   STEP=merge; write_state
   out=$("$AUTO_MERGE" --node "$NODE_ID"); rc=$?
   case "$rc" in
@@ -1167,7 +1229,7 @@ reconcile_pass() {
   refresh_lock
 
   # ---- The absorb -----------------------------------------------------------
-  unset DISPATCH_CI_VERDICT_CACHE   # see the cache note above
+  unset DISPATCH_CI_VERDICT_CACHE DISPATCH_PR_JSON_CACHE   # see the cache note above
   STEP=absorb; write_state
   out=$("$RECONCILE" --node "$NODE_ID"); rc=$?
   case "$rc" in
@@ -1201,7 +1263,7 @@ reconcile_pass() {
   # red CI. This sweep enters execution.fix for it, after which the router's
   # fix-aware carve-out re-surfaces the node and the next advance launches
   # /fix-checks. The driver reads the answer; it computes nothing.
-  unset DISPATCH_CI_VERDICT_CACHE   # see the cache note above
+  unset DISPATCH_CI_VERDICT_CACHE DISPATCH_PR_JSON_CACHE   # see the cache note above
   STEP=review-stall; write_state
   out=$("$REVIEW_STALL" --node "$NODE_ID"); rc=$?
   case "$rc" in

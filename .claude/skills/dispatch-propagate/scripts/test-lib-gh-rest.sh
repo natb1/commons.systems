@@ -854,6 +854,142 @@ assert_eq "pr: gh-failure stderr names the helper" "yes" "$mpf"
 teardown
 
 # ============================================================================
+# gh_pr_view_rest memoisation — DISPATCH_PR_JSON_CACHE
+# (tactic-review-stall-pr-json-duplicate-fetch)
+# ============================================================================
+# The memo carries NO state filter and NO TTL: its safety comes from arming
+# scope, not from what is cached (see the helper's header note in lib.sh). These
+# cases pin the four properties that scope depends on — a hit serves the stored
+# projection without a REST call, an UNARMED caller is unaffected, the key is
+# the resolved REST path rather than the bare number, and a failed fetch leaves
+# nothing behind.
+
+# Count the pr-view REST reads made so far (the log is truncated per test).
+# Sibling of suite_call_count() above, deliberately not a reuse of it: that one
+# counts check-suites lookups.
+pr_view_call_count() {
+  local f="$STUB_DIR/gh-pr-view-rest-calls.log"
+  [[ -f "$f" ]] || { echo 0; return 0; }
+  wc -l < "$f" | tr -d ' '
+}
+
+echo "Test: gh_pr_view_rest -- armed cache hit serves stored projection without re-fetch"
+setup
+# Same proof shape as the REST verdict cache case above: prime the cache, then
+# overwrite the fixture with a conflicting body. The second call must still
+# return the FIRST body.
+export DISPATCH_PR_JSON_CACHE="$TMPDIR_TEST/pr-json-cache"
+mkdir -p "$DISPATCH_PR_JSON_CACHE"
+printf '%s\n' '{
+  "number": 9301,
+  "title": "first title",
+  "body": "",
+  "state": "open",
+  "mergeable": true,
+  "mergeable_state": "clean",
+  "head": {"ref": "first-branch", "sha": "aaaa00009301"},
+  "labels": []
+}' > "$STUB_DIR/view-pr-9301.json"
+pvc1=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9301)
+assert_eq "pr cache: first call → first title (and primes cache)" "first title" "$(jq -r '.title' <<<"$pvc1")"
+printf '%s\n' '{
+  "number": 9301,
+  "title": "second title",
+  "body": "",
+  "state": "closed",
+  "merged_at": "2026-08-01T00:00:00Z",
+  "mergeable": null,
+  "head": {"ref": "second-branch", "sha": "bbbb00009301"},
+  "labels": []
+}' > "$STUB_DIR/view-pr-9301.json"
+pvc2=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9301)
+assert_eq "pr cache: second call → cached first title despite changed fixture" "first title" "$(jq -r '.title' <<<"$pvc2")"
+assert_eq "pr cache: cached body is the PROJECTION (state upcased, not raw)" "OPEN" "$(jq -r '.state' <<<"$pvc2")"
+assert_eq "pr cache: hit is byte-identical to the priming miss" "$pvc1" "$pvc2"
+unset DISPATCH_PR_JSON_CACHE
+teardown
+
+echo "Test: gh_pr_view_rest -- armed pair makes exactly ONE REST call"
+setup
+export DISPATCH_PR_JSON_CACHE="$TMPDIR_TEST/pr-json-cache"
+mkdir -p "$DISPATCH_PR_JSON_CACHE"
+printf '%s\n' '{
+  "number": 9301, "title": "counted", "body": "", "state": "open",
+  "mergeable": true, "mergeable_state": "clean",
+  "head": {"ref": "counted-branch", "sha": "cccc00009301"}, "labels": []
+}' > "$STUB_DIR/view-pr-9301.json"
+: > "$STUB_DIR/gh-pr-view-rest-calls.log"
+_=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9301)
+_=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9301)
+assert_eq "pr cache: two armed calls → 1 REST read" "1" "$(pr_view_call_count)"
+unset DISPATCH_PR_JSON_CACHE
+teardown
+
+echo "Test: gh_pr_view_rest -- UNARMED (var unset) always fetches"
+setup
+# The anti-vacuity control for the case above: with the var unset, the identical
+# sequence must see the CHANGED body and log TWO reads. Without this, a memo
+# that never fired would pass the hit case by accident.
+printf '%s\n' '{
+  "number": 9301, "title": "first title", "body": "", "state": "open",
+  "mergeable": true, "mergeable_state": "clean",
+  "head": {"ref": "first-branch", "sha": "aaaa00009301"}, "labels": []
+}' > "$STUB_DIR/view-pr-9301.json"
+: > "$STUB_DIR/gh-pr-view-rest-calls.log"
+pvu1=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9301)
+assert_eq "pr unarmed: first call → first title" "first title" "$(jq -r '.title' <<<"$pvu1")"
+printf '%s\n' '{
+  "number": 9301, "title": "second title", "body": "", "state": "open",
+  "mergeable": true, "mergeable_state": "clean",
+  "head": {"ref": "second-branch", "sha": "bbbb00009301"}, "labels": []
+}' > "$STUB_DIR/view-pr-9301.json"
+pvu2=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9301)
+assert_eq "pr unarmed: second call → CHANGED second title (no memo)" "second title" "$(jq -r '.title' <<<"$pvu2")"
+assert_eq "pr unarmed: two calls → 2 REST reads" "2" "$(pr_view_call_count)"
+teardown
+
+echo "Test: gh_pr_view_rest -- cache key is the resolved path, not the bare number"
+setup
+# `--repo other/repo 9302` and the default `{owner}/{repo}` form address
+# DIFFERENT PRs under the same number, so they must not share an entry.
+export DISPATCH_PR_JSON_CACHE="$TMPDIR_TEST/pr-json-cache"
+mkdir -p "$DISPATCH_PR_JSON_CACHE"
+printf '%s\n' '{
+  "number": 9302, "title": "keyed", "body": "", "state": "open",
+  "mergeable": true, "mergeable_state": "clean",
+  "head": {"ref": "keyed-branch", "sha": "dddd00009302"}, "labels": []
+}' > "$STUB_DIR/view-pr-9302.json"
+: > "$STUB_DIR/gh-pr-view-rest-calls.log"
+_=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9302)
+_=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest --repo other/repo 9302)
+assert_eq "pr key: same number, two repos → two distinct cache entries" "2" \
+  "$(find "$DISPATCH_PR_JSON_CACHE" -type f | wc -l | tr -d ' ')"
+assert_eq "pr key: neither call was served from the other's entry" "2" "$(pr_view_call_count)"
+unset DISPATCH_PR_JSON_CACHE
+teardown
+
+echo "Test: gh_pr_view_rest -- a failed fetch is never cached"
+setup
+export DISPATCH_PR_JSON_CACHE="$TMPDIR_TEST/pr-json-cache"
+mkdir -p "$DISPATCH_PR_JSON_CACHE"
+printf '%s\n' '{
+  "number": 9301, "title": "recovered", "body": "", "state": "open",
+  "mergeable": true, "mergeable_state": "clean",
+  "head": {"ref": "recovered-branch", "sha": "eeee00009301"}, "labels": []
+}' > "$STUB_DIR/view-pr-9301.json"
+: > "$STUB_DIR/gh-fail-rest"
+rc_pvc=0
+_=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9301 2>/dev/null) || rc_pvc=$?
+assert_eq "pr cache: failed fetch → non-zero" "1" "$rc_pvc"
+assert_eq "pr cache: failed fetch wrote no cache entry" "0" \
+  "$(find "$DISPATCH_PR_JSON_CACHE" -type f | wc -l | tr -d ' ')"
+rm -f "$STUB_DIR/gh-fail-rest"
+pvcr=$(source "$TMPDIR_TEST/lib.sh"; gh_pr_view_rest 9301)
+assert_eq "pr cache: retry after the failure succeeds" "recovered" "$(jq -r '.title' <<<"$pvcr")"
+unset DISPATCH_PR_JSON_CACHE
+teardown
+
+# ============================================================================
 # REST read helpers: run-view / closing-commit / compare (#2480)
 # ============================================================================
 echo "=== REST read helpers: run-view / closing-commit / compare (#2480) ==="

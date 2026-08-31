@@ -130,6 +130,11 @@ make_seq_fake() {
 n=\$(cat "$SEQ_DIR/$name.count")
 echo \$((n + 1)) >"$SEQ_DIR/$name.count"
 printf '%s\n' "\$*" >>"$SEQ_DIR/$name.argv"
+# Record the two REST memo variables the driver must unset before every
+# reconciler call (see dispatch-ladder-run's cache note). Same
+# \${VAR:-<unset>} shape as the lib-frozen-session-park.sh stub above.
+printf 'CI=%s PRJSON=%s\n' "\${DISPATCH_CI_VERDICT_CACHE:-<unset>}" \
+  "\${DISPATCH_PR_JSON_CACHE:-<unset>}" >>"$SEQ_DIR/$name.env"
 line=\$(sed -n "\$((n + 1))p" "$SEQ_DIR/$name.script")
 [[ -n "\$line" ]] || line=\$(tail -n1 "$SEQ_DIR/$name.script")
 out="\${line#*|}"
@@ -190,6 +195,7 @@ set_seq() { # <name> <line>...
   : >"$SEQ_DIR/$name.script"
   : >"$SEQ_DIR/$name.argv"
   echo 0 >"$SEQ_DIR/$name.count"
+  : >"$SEQ_DIR/$name.env"
   local l
   for l in "$@"; do printf '%s\n' "$l" >>"$SEQ_DIR/$name.script"; done
 }
@@ -550,7 +556,16 @@ set_seq advance '10|idle tactic-fixture-node not-selectable' \
 set_seq await   '0|advanced tactic-fixture-node fix -> origin/main'
 set_seq landed  '4|' '0|'
 set_seq stall   '0|recovered tactic-fixture-node -> fix (ci=failing merge=MERGEABLE)'
+# Poison the environment with both REST memo directories before the driver runs.
+# Neither may reach a reconciler: this driver polls the three of them at
+# different wall-clock times, and both memos are TTL-less and non-invalidating,
+# so an inherited directory would pin the loop to one snapshot forever — the
+# first `pending` verdict, or a pre-merge PR body. Asserted below, in the
+# node-scope case that reads this same pass's recordings.
+export DISPATCH_CI_VERDICT_CACHE="$SEQ_DIR/bogus-ci-verdict-cache"
+export DISPATCH_PR_JSON_CACHE="$SEQ_DIR/bogus-pr-json-cache"
 run_ladder
+unset DISPATCH_CI_VERDICT_CACHE DISPATCH_PR_JSON_CACHE
 assert_eq "routed: exit 0" "0" "$RC"
 assert_eq "routed: a review-stall/recovered event was recorded" "1" \
   "$(events_have review-stall recovered)"
@@ -565,6 +580,32 @@ echo "Test: --node reaches all three reconcilers, never an unscoped sweep"
 assert_eq "node-scope: graph-auto-merge" "--node $NODE" "$(head -n1 "$SEQ_DIR/merge.argv")"
 assert_eq "node-scope: reconcile-graph-merged" "--node $NODE" "$(head -n1 "$SEQ_DIR/reconcile.argv")"
 assert_eq "node-scope: reconcile-graph-review-stall" "--node $NODE" "$(head -n1 "$SEQ_DIR/stall.argv")"
+
+echo "Test: neither REST memo cache reaches advance or a reconciler, however the environment arrives"
+# The pass above exported both variables to bogus paths. Every recorded
+# invocation of all three reconcilers must nonetheless read <unset> for both:
+# dispatch-ladder-run clears them for the whole process. This is the containment
+# backstop for gh_pr_view_rest's DISPATCH_PR_JSON_CACHE memo, which is armed
+# only inside dispatch-select-tick's back-to-back reconciler pair; it also
+# closes the pre-existing gap that the CI cache's `unset` was never asserted.
+#
+# ADVANCE IS IN THE LIST, AND IS THE REASON THE LIST IS NOT JUST THE THREE
+# RECONCILERS. dispatch-ladder-advance is not a reconciler and runs EARLIER in
+# every pass than any of them, but it calls graph-select-target, whose
+# `mergedAt` freshness reads go through gh_pr_view_rest — one of the two
+# readers lib.sh's header names as never allowed to see the memo. A driver that
+# unset only beside the reconciler calls left every advance reading a pinned
+# pre-merge snapshot, and this loop asserted nothing about it. The routed pass
+# above calls advance three times, so a per-call-site unset fails here on the
+# FIRST recorded advance while the later two (after reconcile_pass has run in
+# the same shell) look clean — which is exactly the shape that made the gap
+# invisible in production.
+for _seq in advance merge reconcile stall; do
+  assert_eq "no-cache: $_seq recorded at least one invocation" "1" \
+    "$([[ -s "$SEQ_DIR/$_seq.env" ]] && echo 1 || echo 0)"
+  assert_eq "no-cache: every $_seq call saw both memos unset" "0" \
+    "$(grep -cv '^CI=<unset> PRJSON=<unset>$' "$SEQ_DIR/$_seq.env" || true)"
+done
 
 echo "Test: a merge is absorbed across passes, and a 'deferred' re-polls"
 reset_seqs

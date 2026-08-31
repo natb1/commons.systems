@@ -328,10 +328,23 @@ else
 fi
 export DISPATCH_GRAPH_NODE_CACHE
 # Re-register a COMBINED handler: the decision-log emit (registered early, above)
-# plus BOTH of this tick's cache cleanups. `trap ... EXIT` REPLACES, so this must
+# plus ALL of this tick's cache cleanups. `trap ... EXIT` REPLACES, so this must
 # chain _dlog_select_emit explicitly or the real routing paths would emit no
 # record, and it must keep the CI-verdict removal or that dir would leak.
-trap '_dlog_select_emit; rm -rf "$DISPATCH_CI_VERDICT_CACHE" "$DISPATCH_GRAPH_NODE_CACHE"' EXIT
+# $PR_JSON_CACHE is the third member and is NOT created here: it is armed far
+# below, across the reconciler pair only, and torn down explicitly straight
+# after. This entry is the crash backstop for the window between those two
+# points. It is guarded as ${PR_JSON_CACHE:+"$PR_JSON_CACHE"}, UNQUOTED at the
+# outer level: the `:+` form expands to ZERO WORDS when the variable is unset or
+# empty, so `rm -rf` is handed no operand at all.
+#
+# The earlier spelling here was "${PR_JSON_CACHE:-}", with the claim that it
+# meant `rm -rf ""` was never issued. It did not. A quoted `:-` expansion still
+# passes an empty-string argument, so every tick that never armed the memo — the
+# common case — really did issue `rm -rf ""`. That was benign only because
+# `rm -f` ignores a nonexistent operand, which is a property of rm, not a
+# guarantee this trap was making. `:-` guards `set -u` and nothing more.
+trap '_dlog_select_emit; rm -rf "$DISPATCH_CI_VERDICT_CACHE" "$DISPATCH_GRAPH_NODE_CACHE" ${PR_JSON_CACHE:+"$PR_JSON_CACHE"}' EXIT
 
 # --- Step 1: sync local main with origin/main (only on the main branch) -------
 # The `--ff-only` merge is the precondition for all selection AND the recovery
@@ -663,7 +676,36 @@ fi
 # whole script runs with the sandbox disabled (see the header note), so
 # reconcile-graph-merged's gh (TLS) + node --import tsx/esm (npm cache) needs
 # are covered without an extra wrapper.
-RECONCILE_GRAPH_OUT=$("$SCRIPT_DIR/reconcile-graph-merged") || true
+# PR-JSON memo, armed across the reconciler PAIR ONLY
+# (tactic-review-stall-pr-json-duplicate-fetch). reconcile-graph-review-stall's
+# candidate set is a strict subset of reconcile-graph-merged's, and it skips
+# every PR whose state is not OPEN as "reconcile-graph-merged's job" — so the
+# second sweep re-reads, per candidate, the exact PR JSON the first just read
+# under this same lock hold. One shared directory collapses that to one REST
+# read per PR per tick.
+#
+# THE CACHE IS ARMED FOR THESE TWO COMMANDS ONLY AND IS NEVER EXPORTED. That
+# absence is the whole safety argument: graph-auto-merge ran a few lines above
+# and MUTATES PR state (`gh pr ready`), and graph-select-target's `mergedAt`
+# freshness reads further down would re-acquire the stale-review-target bug if
+# fed a cached pre-merge body. A per-command env prefix keeps both outside the
+# window by construction. (The "avoid inline env var prefixes" guidance in
+# .claude/rules/sandbox.md is about allowedTools prefix matching on Bash-TOOL
+# invocations; it does not apply to a prefix written inside a committed script.)
+#
+# Accepted residual: within the window review-stall reads the snapshot the
+# merged sweep took, so its maximum staleness is the merged sweep's own runtime.
+# A human merge landing inside it could let review-stall enter a fix interrupt
+# on an already-merged PR — reversible via `apply-fix-state --clear-fix`, and
+# the next tick's reconcile-graph-merged absorbs the merge to done regardless.
+if [[ -n "${CLAUDE_JOB_DIR:-}" ]]; then
+  mkdir -p "$CLAUDE_JOB_DIR/tmp"
+  PR_JSON_CACHE=$(mktemp -d "$CLAUDE_JOB_DIR/tmp/pr-json.XXXXXX")
+else
+  PR_JSON_CACHE=$(mktemp -d)
+fi
+
+RECONCILE_GRAPH_OUT=$(DISPATCH_PR_JSON_CACHE="$PR_JSON_CACHE" "$SCRIPT_DIR/reconcile-graph-merged") || true
 if [[ -n "$RECONCILE_GRAPH_OUT" ]]; then
   while IFS= read -r graph_line; do
     [[ -n "$graph_line" ]] && echo "reconcile-graph: $graph_line"
@@ -679,12 +721,19 @@ fi
 # main-broken episode. This whole script already runs with the sandbox
 # disabled (see the header note), covering the new script's gh (TLS) + node
 # --import tsx/esm (npm cache) needs — no new sandbox wiring required.
-REVIEW_STALL_OUT=$("$SCRIPT_DIR/reconcile-graph-review-stall") || true
+REVIEW_STALL_OUT=$(DISPATCH_PR_JSON_CACHE="$PR_JSON_CACHE" "$SCRIPT_DIR/reconcile-graph-review-stall") || true
 if [[ -n "$REVIEW_STALL_OUT" ]]; then
   while IFS= read -r stall_line; do
     [[ -n "$stall_line" ]] && echo "review-stall: $stall_line"
   done <<< "$REVIEW_STALL_OUT"
 fi
+
+# Disarm the PR-JSON memo the moment the pair is done. The tick continues for
+# hundreds of lines past here — three graph-select-target invocations among them
+# — and the directory must not outlive the two commands it was armed for. The
+# EXIT trap above lists it too, as the backstop for a crash between arming and
+# this line; `rm -rf` on an already-removed path is a no-op.
+rm -rf "$PR_JSON_CACHE"
 
 # Standing per-tick reconciliation-debt duty (tactic-graph-census-recurrence
 # Unit 2). Runs right after the same-tick reconciler above absorbs what it can,
