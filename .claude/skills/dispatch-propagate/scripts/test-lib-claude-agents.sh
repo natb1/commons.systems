@@ -1931,4 +1931,173 @@ rm -f "$lockfile"
 rm -rf "$noflock_bin"
 ca_teardown
 
+# --- Test 76: claude_job_id_for_name_all — exact name match yields the id -----
+#
+# claude_job_id_for_name_all shipped uncovered. Its documented return contract
+# is the thing worth pinning, because callers are told they must honor it:
+#   return 0 — daemon queried. Stdout is the job id, or EMPTY if no name match.
+#              Empty stdout + 0 is a DEFINITE "no such job".
+#   return 1 — UNKNOWN (claude missing / non-zero exit / non-array output).
+#              Stdout empty. Callers MUST NOT read this as "no job".
+# Note the sole production caller, office-hours' job_id_for_name(), wraps the
+# call in `|| true` and so collapses the 0/1 distinction at that one call site.
+# That is a production concern, deliberately not changed here — these cases pin
+# the library's contract, which is what any other caller sees.
+
+echo "Test: claude_job_id_for_name_all returns the matching entry's job id"
+ca_setup
+write_fake_claude '[{"id":"aaaa1111","sessionId":"sess-a","name":"other-job"},{"id":"bbbb2222","sessionId":"sess-b","name":"wanted-job"}]' 0
+if out=$(claude_job_id_for_name_all "wanted-job"); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: exact name match exits 0" "0" "$rc"
+assert_eq "job-id-all: exact name match prints that entry's job id" "bbbb2222" "$out"
+ca_teardown
+
+# --- Test 77: claude_job_id_for_name_all — it is `.id`, never `.sessionId` ----
+#
+# The single most valuable case here: the whole reason the helper exists is that
+# the daemon JOB ID (the short `.id`) and the SESSION id are different fields,
+# and `claude attach` wants the former.
+
+echo "Test: claude_job_id_for_name_all returns .id and not .sessionId"
+ca_setup
+write_fake_claude '[{"id":"c0ffee11","sessionId":"deadbeef-session-uuid","name":"attach-me"}]' 0
+if out=$(claude_job_id_for_name_all "attach-me"); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: id-not-sessionId exits 0" "0" "$rc"
+# Three-way, not two-way: an `else leaked=id` arm maps EVERY wrong answer
+# -- including an empty string -- onto the passing value, so it could only
+# ever catch one specific wrong output.
+case "$out" in
+  c0ffee11) emitted=id ;;
+  deadbeef-session-uuid) emitted=sessionId ;;
+  *) emitted="neither:$out" ;;
+esac
+assert_eq "job-id-all: stdout is the .id field and not .sessionId" "id" "$emitted"
+ca_teardown
+
+# --- Test 78: claude_job_id_for_name_all — no name match is a DEFINITE no -----
+#
+# Both halves are asserted: rc alone cannot distinguish this from UNKNOWN, and
+# stdout alone cannot either (UNKNOWN also prints nothing).
+
+echo "Test: claude_job_id_for_name_all reports no match as rc 0 + empty stdout"
+ca_setup
+write_fake_claude '[{"id":"aaaa1111","sessionId":"sess-a","name":"some-other-job"}]' 0
+if out=$(claude_job_id_for_name_all "wanted-job"); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: no name match exits 0 (definite, not unknown)" "0" "$rc"
+assert_eq "job-id-all: no name match prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 79: claude_job_id_for_name_all — an empty [] registry is definite ---
+
+echo "Test: claude_job_id_for_name_all treats an empty [] registry as definite"
+ca_setup
+write_fake_claude '[]' 0
+if out=$(claude_job_id_for_name_all "wanted-job"); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: empty registry exits 0 (definite, not unknown)" "0" "$rc"
+assert_eq "job-id-all: empty registry prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 80: claude_job_id_for_name_all — a non-zero claude exit is UNKNOWN --
+
+echo "Test: claude_job_id_for_name_all reports a non-zero claude exit as unknown"
+ca_setup
+# The payload is VALID and name-matching on purpose. An empty one would
+# also trip the blank-output guard (lib-claude-agents.sh:776-778), so both
+# guards would fire and deleting the exit-status guard at :773-775 would
+# leave this case green. With a payload that would otherwise MATCH, the
+# exit status is the only thing that can produce rc 1. Test 82 covers the
+# zero-exit/blank-output branch.
+write_fake_claude '[{"id":"aaaa1111","sessionId":"sess-a","name":"wanted-job"}]' 1
+if out=$(claude_job_id_for_name_all "wanted-job"); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: non-zero claude exit is unknown (rc 1)" "1" "$rc"
+assert_eq "job-id-all: non-zero claude exit prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 81: claude_job_id_for_name_all — a missing claude binary is UNKNOWN -
+
+echo "Test: claude_job_id_for_name_all reports a missing claude binary as unknown"
+ca_setup
+CLAUDE_AGENTS_CMD="$CA_DIR/no-such-claude"
+if out=$(claude_job_id_for_name_all "wanted-job"); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: missing claude binary is unknown (rc 1)" "1" "$rc"
+assert_eq "job-id-all: missing claude binary prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 82: claude_job_id_for_name_all — zero exit, blank output is UNKNOWN -
+#
+# Both halves matter. jq exits 0 on whitespace-only input too, so it is the
+# helper's own `[[ -z "${out//[[:space:]]/}" ]]` guard — not jq — that makes
+# either shape unknown rather than a definite "no such job".
+
+echo "Test: claude_job_id_for_name_all reports blank daemon output as unknown"
+ca_setup
+write_fake_claude '' 0
+if out=$(claude_job_id_for_name_all "wanted-job"); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: zero exit with empty output is unknown (rc 1)" "1" "$rc"
+assert_eq "job-id-all: zero exit with empty output prints nothing" "" "$out"
+ca_teardown
+
+ca_setup
+write_fake_claude '   ' 0
+if out=$(claude_job_id_for_name_all "wanted-job"); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: zero exit with whitespace-only output is unknown (rc 1)" "1" "$rc"
+assert_eq "job-id-all: zero exit with whitespace-only output prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 83: claude_job_id_for_name_all — non-array output is UNKNOWN --------
+
+echo "Test: claude_job_id_for_name_all reports non-array output as unknown"
+ca_setup
+write_fake_claude '{"name":"x","id":"deadbeef"}' 0
+if out=$(claude_job_id_for_name_all "x"); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: non-array output is unknown (rc 1)" "1" "$rc"
+assert_eq "job-id-all: non-array output prints nothing" "" "$out"
+ca_teardown
+
+# --- Test 84: claude_job_id_for_name_all — a missing <name> argument fails ----
+#
+# assert_contains_local does the substring match with [[ "$hay" == *"$needle"* ]],
+# so it cannot take SIGPIPE the way a `printf … | grep -q` would.
+
+echo "Test: claude_job_id_for_name_all rejects a missing <name> argument"
+ca_setup
+write_fake_claude '[{"id":"aaaa1111","sessionId":"sess-a","name":"some-job"}]' 0
+if err=$(claude_job_id_for_name_all 2>&1 >/dev/null); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: missing name argument exits 1" "1" "$rc"
+assert_contains_local "job-id-all: missing name argument explains itself on stderr" \
+  "claude_job_id_for_name_all requires a <name> argument" "$err"
+ca_teardown
+
+# --- Test 85: claude_job_id_for_name_all — `--all` is actually passed ---------
+#
+# write_fake_claude ignores argv, so proving the flag reaches the daemon needs a
+# bespoke argv-recording fake. Without --all a job in a terminal state is hidden
+# from the default active-only listing and office-hours' attach-by-name path
+# breaks — this is the case that would catch that regression.
+
+echo "Test: claude_job_id_for_name_all invokes claude with --all"
+ca_setup
+cat > "$CA_FAKE" <<FAKE
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$CA_DIR/argv"
+echo '[]'
+FAKE
+chmod +x "$CA_FAKE"
+CLAUDE_AGENTS_CMD="$CA_FAKE"
+if out=$(claude_job_id_for_name_all "wanted-job"); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: argv-recording fake still exits 0" "0" "$rc"
+assert_eq "job-id-all: claude invoked as 'agents --json --all'" \
+  "$(printf 'agents\n--json\n--all')" "$(cat "$CA_DIR/argv")"
+ca_teardown
+
+# --- Test 86: claude_job_id_for_name_all — first match wins on a duplicate ----
+
+echo "Test: claude_job_id_for_name_all returns the FIRST match on a duplicate name"
+ca_setup
+write_fake_claude '[{"id":"first111","sessionId":"sess-1","name":"dup-job"},{"id":"second22","sessionId":"sess-2","name":"dup-job"}]' 0
+if out=$(claude_job_id_for_name_all "dup-job"); then rc=0; else rc=$?; fi
+assert_eq "job-id-all: duplicate name exits 0" "0" "$rc"
+assert_eq "job-id-all: duplicate name yields the FIRST array element's id" "first111" "$out"
+ca_teardown
+
 report_results
