@@ -102,7 +102,7 @@ blocks your `graph-commit` rebase, and a stale read races live phase state
    proceed on unverified state.
 4. **Load the ancestry projection.** After entering the worktree, load the
    ancestry projection for the claimed node: read `.claude/ancestry-context.md`
-   if `provision-node-worktree` wrote it, otherwise run `npx tsx
+   if `provision-node-worktree` wrote it, otherwise run `node --import tsx/esm
    packages/intentionsutil/scripts/node-ancestry.ts <node-id> --dir
    "$(pwd)/intentions"` and hold its output.
 
@@ -131,7 +131,7 @@ clarification records.
    `graph-commit` call in step 5. Do not force unrelated concerns into one
    node to avoid re-running the interview.
 2. **Duplicate / overlap detection.** Run
-   `npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions`
+   `node --import tsx/esm packages/intentionsutil/scripts/align-strategy-census.ts intentions`
    and grep its per-strategy statement dump for keyword overlap with the
    requirement (statement, rationale, and clarification text) — one flat
    dump to scan instead of grepping N separate `intentions/strategy-*.md`
@@ -182,10 +182,10 @@ actually works, then walk them to a prompt and run the interview on it.
    three local checks (no `gh`, no network) and reports each result with its
    own remediation diagnostic:
    - **Workspace installed** — `npm test --prefix packages/intentionsutil`.
-     On failure (tests fail, or `npx tsx` cannot resolve) the workspace is
+     On failure (tests fail, or `node --import tsx/esm` cannot resolve) the workspace is
      not installed: the script says to run `npm ci` at the repo root and
      rerun.
-   - **Graph clean** — `npx tsx packages/intentionsutil/scripts/validate-graph.ts
+   - **Graph clean** — `node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts
      intentions` (dangling refs, cycles, schema). The store directory is a
      REQUIRED argument with no default (strategy-graph-native-dispatch
      clarification 194/242) — that is what makes a missing or unreadable
@@ -464,7 +464,7 @@ recommendation on trust, never a quiet drop. When the author accepts one:
 ## Step 3 — Delegation advice
 
 Run
-`npx tsx packages/intentionsutil/scripts/align-strategy-census.ts intentions`
+`node --import tsx/esm packages/intentionsutil/scripts/align-strategy-census.ts intentions`
 and read its "Delegations" section — it already dumps id, statement,
 `attributes.delegated`, `attributes.divergence.level`, and
 `attributes.irreversibility.{gated,recovery_cost}` for every delegation
@@ -505,7 +505,7 @@ For each such byproduct, write a draft tactic node:
 cat > "$TMPDIR/tactic-draft.json" <<'JSON'
 {"id":"tactic-<slug>","kind":"tactic","statement":"<one-line>","owner":"ai","status":"raw","parent":null,"serves":["<strategy-id>"],"rationale":"<why this surfaced, from the interview>"}
 JSON
-npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions \
+node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --dir intentions \
   --file "$TMPDIR/tactic-draft.json"
 ```
 
@@ -560,7 +560,7 @@ frontmatter:
   which records no base):
 
   ```bash
-  BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts --dir intentions \
+  BASE=$(node --import tsx/esm packages/intentionsutil/scripts/dump-node.ts --dir intentions \
     --out-dir "$TMPDIR/dump" <strategy-id>)
   # reconcile from "$TMPDIR/dump/<strategy-id>.json"; pass "$BASE" to graph-commit below
   ```
@@ -582,7 +582,7 @@ frontmatter:
   to `write-node.ts`. Never transcribe frontmatter by hand.
 
 ```bash
-npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions \
+node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --dir intentions \
   --file "$TMPDIR/strategy.json"
 ```
 
@@ -642,7 +642,7 @@ edit has landed via `graph-commit` in this **same** round (so it is on
 origin/main), run:
 
 ```bash
-npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts <tactic-id>
+node --import tsx/esm packages/intentionsutil/scripts/restamp-scope-fingerprint.ts <tactic-id>
 ```
 
 It must run post-`graph-commit`: the script reads the tactic's current
@@ -803,7 +803,7 @@ Prose only — this is an interactive-dialectic skill with no automated
 test surface, so no ```verify block:
 
 - Dry-run on a toy requirement in an interactive session. Confirm:
-  - the written node passes `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions`;
+  - the written node passes `node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions`;
   - it landed via `graph-commit` (visible on `origin/main`, not just
     locally committed);
   - any draft tactics from step 4 landed in the same commit and read back

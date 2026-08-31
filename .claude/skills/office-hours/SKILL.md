@@ -486,10 +486,10 @@ an explicit `/office-hours <node-id>` naming an already-live node errors (the
 
 5. **Blocked-by readiness signal.** Run the selector in single-item mode and
    relay its stderr `NOTE —` advisory — a single offline implementation, no
-   `gh`, no daemon (use `dangerouslyDisableSandbox: true` for `npx`):
+   `gh`, no daemon, so it runs **sandboxed**:
 
    ```bash
-   npx tsx packages/intentionsutil/scripts/office-hours-select.ts <node-id>
+   node --import tsx/esm packages/intentionsutil/scripts/office-hours-select.ts <node-id>
    ```
 
    Relay the `NOTE —` line when present. Open-blocker status is a **signal, not

@@ -191,7 +191,7 @@ re-evaluation session (strategy clarification 10) — the session does
    <origin/main sha>}`, where `hash` is the value printed by
 
    ```bash
-   npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <re-evaluated-strategy-id>
+   node --import tsx/esm packages/intentionsutil/scripts/strategy-fingerprint.ts <re-evaluated-strategy-id>
    ```
 
    (the single runnable callsite for `strategyFingerprint(strategy)`,
@@ -231,7 +231,7 @@ re-evaluation session (strategy clarification 10) — the session does
    origin/main), run:
 
    ```bash
-   npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts <tactic-id>
+   node --import tsx/esm packages/intentionsutil/scripts/restamp-scope-fingerprint.ts <tactic-id>
    ```
 
    It must run post-`graph-commit`: the script reads the tactic's current
@@ -280,7 +280,7 @@ Enumerate the open children of the sweep above with the census script
 enumeration hook for this sweep:
 
 ```bash
-npx tsx packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> intentions
+node --import tsx/esm packages/intentionsutil/scripts/align-tactics-census.ts <strategy-id> intentions
 ```
 
 Sweep the children it classifies `open` (and the `draft` ones the decompose

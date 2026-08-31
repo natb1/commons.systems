@@ -257,7 +257,7 @@ All of the run's writes — the run clarification and refreshed `reading` on
   blob and take no `--base` entry.
 
   ```bash
-  BASE=$(npx tsx packages/intentionsutil/scripts/dump-node.ts \
+  BASE=$(node --import tsx/esm packages/intentionsutil/scripts/dump-node.ts \
     --out-dir "$TMPDIR/dump" strategy-graph-integrity [<other-pre-existing-id> ...])
   ```
 
@@ -266,7 +266,7 @@ All of the run's writes — the run clarification and refreshed `reading` on
   single validation gate. For a park, set `office_hours: {reason, since}`.
 
   ```bash
-  npx tsx packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/node.json"
+  node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --file "$TMPDIR/node.json"
   ```
 
 - **Body via `Edit`** for any node whose body content changes (`writeNode`

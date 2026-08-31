@@ -196,7 +196,7 @@ Mid-session author notes never die in scrollback. Each note exits two ways:
 ## Recording rules
 
 Record every edit through
-`npx tsx packages/intentionsutil/scripts/write-node.ts --dir intentions --file <json>` on a
+`node --import tsx/esm packages/intentionsutil/scripts/write-node.ts --dir intentions --file <json>` on a
 `readNode`-dumped, `jq`-patched JSON. Never hand-edit YAML frontmatter.
 
 The write-node gate, the provenance-sentence format, the delegation audit
@@ -623,7 +623,7 @@ Prose only — a SKILL.md is model instructions with no automated test surface.
   `tactic-reading-chunk-1-plato-cave` without landing (stop before
   `graph-commit`): confirm the skill selects chunk 1 by priority, surfaces its
   three questions, produces valid patched JSON that
-  `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions` accepts,
+  `node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions` accepts,
   and plans exactly one graph-commit bundle.
 - Dry-run the candidate branch against
   `tactic-reading-chunk-10-hirschman-exit-voice` without landing (stop before
@@ -631,7 +631,7 @@ Prose only — a SKILL.md is model instructions with no automated test surface.
   `## Questions to establish relevance`, offers the three resolutions (a
   record / marks only / dismissal) with the author's articulation preceding
   any account of Claude's, and for outcome (a) produces JSON that
-  `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions` accepts (a
+  `node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions` accepts (a
   `tradition-hirschman` record plus `attributes.traditions` stamps), with the
   delegation stamp and the chunk resolution in the same bundle. Confirm the
   verify-chunk flow is unchanged by the edit.
@@ -643,7 +643,7 @@ Prose only — a SKILL.md is model instructions with no automated test surface.
   [strategy-philosophical-grounding]`, `validates: []`, no
   `attributes.curriculum`, and an `office_hours.reason` naming the record, the
   chunk, and the three duties — producing JSON that
-  `npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions` accepts; with
+  `node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions` accepts; with
   `deepens` naming two records, two capstones are planned. Then dry-run a
   `tactic-context-capstone-*` target and confirm the **## Capstone sittings**
   branch surfaces the three-duty agenda with the author articulating before any
@@ -651,7 +651,7 @@ Prose only — a SKILL.md is model instructions with no automated test surface.
   unchanged by the edit.
 - **Mode-B dry-run.** Target an author-owned durable node the coverage table
   marks mode B / `frontier-reachable` (confirm the projection first by running
-  `npx tsx packages/intentionsutil/scripts/review-coverage.ts` and reading the
+  `node --import tsx/esm packages/intentionsutil/scripts/review-coverage.ts` and reading the
   target's `mode` / `path` columns). Confirm the skill selects it, surfaces the
   broadened-context agenda with the author articulating before any account of
   Claude's, plans a re-affirm/amend recording on the durable node (not on a

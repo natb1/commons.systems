@@ -60,6 +60,7 @@
       "Bash(gh search:*)",
       "Bash(go build:*)",
       "Bash(go test:*)",
+      "Bash(node --import tsx/esm:*)",
       "Bash(npm ci:*)",
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
