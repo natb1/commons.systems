@@ -2158,10 +2158,19 @@ All anchors *(from node bodies — re-locate)* in
   enumerations across four files** that route through the same materialized
   node enumeration: `reconcile-graph-merged`, `reconcile-graph-review-stall`,
   `graph-auto-merge`, and `packages/intentionsutil/scripts/reconcile-graph.ts`
-  (whose **single** enumeration `reconcile-graph-merged` invokes **twice** —
-  once `--no-apply`, once applying — so the second is a guaranteed cache hit;
-  the fifth enumeration is that second invocation, not a second call site in
-  the file). The node
+  (whose **single** enumeration at `:207` `reconcile-graph-merged` invokes
+  **twice** — once `--no-apply` at `:314`, once applying at `:351`; the fifth
+  enumeration is that second invocation, not a second call site in the file).
+  *(Corrected 2026-08-30.* An earlier revision of this bullet called that second
+  invocation "a guaranteed cache hit". Measured on `origin/main`: the two
+  invocations are separate `node` processes, so no in-process memo can survive
+  between them, and `packages/intentionsutil/` contains no store-level scan
+  cache at all — so today the second invocation is a second **full scan**. It
+  becomes a cache hit only once P1's on-disk content-addressed `store-cache`
+  lands **and** `reconcile-graph.ts` reads through it. That is the win this unit
+  buys, not a property it already has. Note also that `reconcile-graph-merged`
+  carries its own independent enumeration at `:176`, so the tick performs
+  **four** `listNodesStrict` scans per pass, not two.*)* The node
   explicitly scopes three other call sites **out**, and not as an oversight:
   `select-targets.ts:58` belongs to U17, and
   `dispatch-graph-census:73` / `dispatch-graph-scope-sweep:98` are reached in
