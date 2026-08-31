@@ -53,6 +53,8 @@
 //
 // --emit-nodes never affects the answer. The write is best-effort and its
 // failure is swallowed: whether it lands changes only the cost of a later run.
+// It also declines to publish an EMPTY array, mirroring the refusal above — an
+// entry the reader is guaranteed to reject is worse than no entry at all.
 
 import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -108,8 +110,16 @@ function readNodesJson(path: string): IntentionNode[] {
  * Every failure is swallowed, and the temp is removed when it is. A full or
  * read-only cache directory must cost the next run a re-parse, never cost this
  * run its selection.
+ *
+ * An EMPTY node set is never published, because `readNodesJson` refuses an
+ * empty array outright (a truncated entry must not read as "no candidates").
+ * Writing one would file an entry this script has already guaranteed to
+ * reject, so a store with no nodes would re-archive, re-parse and log a
+ * spurious "cache entry unusable" warning on every single selection forever.
+ * Not writing costs that store nothing: its enumeration is empty anyway.
  */
 function emitNodesJson(path: string, nodes: IntentionNode[]): void {
+  if (nodes.length === 0) return;
   const tmp = `${path}.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
   try {
     writeFileSync(tmp, JSON.stringify(nodes));

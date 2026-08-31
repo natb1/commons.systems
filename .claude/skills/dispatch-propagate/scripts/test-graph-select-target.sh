@@ -1560,6 +1560,52 @@ GSCC_TREE2=$(git -C "$GSCC_ROOT" rev-parse origin/main:intentions)
 assert_eq "graph-select-target cache: the second entry is named for the new tree sha" \
   "1" "$([ -f "$GSCC_CACHE/nodes-tree-$GSCC_TREE2.json" ] && echo 1 || echo 0)"
 
+# --- Case 4b: the archive is pinned to the tree the KEY names -----------------
+# `origin/main` is a moving ref. The key comes from `rev-parse
+# origin/main:intentions`, and the archive used to re-resolve `origin/main`
+# independently — so a sibling worktree's `graph-commit` push+fetch landing
+# between the two published tree B's nodes under `nodes-tree-<A>.json`. A later
+# selection resolving back to tree A would then be served B's nodes: a wrong
+# phase/`blocked_by` view with no strictness violation to catch it.
+#
+# Racing that window inside a test is not reliable. Asserting that the archive
+# never names the moving ref is, and it is exactly the property that closes it.
+echo "Test: graph-select-target — the snapshot archives the pinned tree, not origin/main"
+cat > "$GSCC_ROOT/bin/git" <<GSCCPIN
+#!/usr/bin/env bash
+_isarchive=0
+for _a in "\$@"; do
+  [ "\$_a" = "archive" ] && _isarchive=1
+done
+if [ "\$_isarchive" = 1 ]; then
+  for _a in "\$@"; do
+    if [ "\$_a" = "origin/main" ]; then
+      echo "stub git: archive re-resolved the moving ref instead of the pinned tree" >&2
+      exit 96
+    fi
+  done
+fi
+exec "$GSCC_REAL_GIT" "\$@"
+GSCCPIN
+chmod +x "$GSCC_ROOT/bin/git"
+rm -f "$GSCC_CACHE"/nodes-tree-*.json
+# `|| true` so a regression FAILs rather than aborting the suite under `set -e`.
+gscc_pinned=$(gscc_run "$GSCC_CACHE") || true
+assert_eq "graph-select-target cache: a cold keyed run archives the pinned tree, not origin/main" \
+  "$GSCC_EXPECTED" "$gscc_pinned"
+# Negative control for the shim itself. With NO cache dir there is no key and
+# nothing to pin, so the archive legitimately names origin/main and the SAME
+# shim must break that run. Without this, the pass above could mean the shim
+# simply never fired.
+gscc_pinned_nokey=$(gscc_run) || gscc_pinned_rc=$?
+assert_eq "graph-select-target cache: the unkeyed path still names origin/main (shim fires)" \
+  "2" "${gscc_pinned_rc:-0}"
+assert_eq "graph-select-target cache: the broken unkeyed run emits no selection" \
+  "" "$gscc_pinned_nokey"
+rm -f "$GSCC_ROOT/bin/git"
+# Re-warm so the cases below find the entry they rewrite.
+gscc_run "$GSCC_CACHE" >/dev/null
+
 # --- Cases 5-7: an unusable entry degrades to a fresh strict enumeration ------
 # `[]` is the one that matters most: it is valid JSON and a valid array, so an
 # entry truncated to nothing would otherwise read as "no candidates today" and

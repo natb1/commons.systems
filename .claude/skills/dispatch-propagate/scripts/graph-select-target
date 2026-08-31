@@ -498,8 +498,13 @@ SNAPSHOT_DIR=$(mktemp -d) || { echo "graph-select-target: mktemp failed" >&2; ex
 # EXIST rather than with what changed, which is what makes a retained done node
 # expensive: it is re-extracted and re-parsed on every selection forever.
 #
-# DISPATCH_GRAPH_NODE_CACHE names a tick-scoped directory (created and
-# trap-removed by dispatch-select-tick, exactly as DISPATCH_CI_VERDICT_CACHE is).
+# DISPATCH_GRAPH_NODE_CACHE names a tick-scoped directory, to be created and
+# trap-removed by dispatch-select-tick exactly as DISPATCH_CI_VERDICT_CACHE is.
+# NOTHING SETS IT YET: dispatch-select-tick creates only
+# DISPATCH_CI_VERDICT_CACHE today, so this whole block is inert until the
+# sibling unit that exports it lands. That is a deliberate dependency rather
+# than an oversight — but read what follows as describing what happens once the
+# var is set, not as a claim that any caller sets it now.
 # It names a STORAGE LOCATION only — never a node subset, never a filter. When
 # the var is unset or empty this block does nothing at all and the path below is
 # byte-identical to what it has always been, which is the /dispatch-ladder and
@@ -524,6 +529,8 @@ SNAPSHOT_DIR=$(mktemp -d) || { echo "graph-select-target: mktemp failed" >&2; ex
 # is deleted and the full archive path runs ONCE; there is no retry loop.
 CACHE_DIR="${DISPATCH_GRAPH_NODE_CACHE:-}"
 SNAPSHOT_ENTRY=""
+# Initialized unconditionally: the archive below reads it, and `set -u` is on.
+INTENTIONS_TREE=""
 if [[ -n "$CACHE_DIR" ]]; then
   # rev-parse only; a failure here just means no key, so today's path runs.
   INTENTIONS_TREE=$(git -C "$REPO_ROOT" rev-parse origin/main:intentions 2>/dev/null) || INTENTIONS_TREE=""
@@ -551,7 +558,27 @@ if [[ -n "$SNAPSHOT_ENTRY" && -f "$SNAPSHOT_ENTRY" ]]; then
 fi
 
 if [[ -z "$SELECTION_DONE" ]]; then
-  if ! git -C "$REPO_ROOT" archive origin/main intentions | tar -x -C "$SNAPSHOT_DIR"; then
+  # Archive the tree the KEY names, not the ref that key was resolved from.
+  # `origin/main` moves: a sibling worktree's `graph-commit` push+fetch landing
+  # between the `rev-parse` above and this line — routine in this fleet — would
+  # make `--emit-nodes` publish tree B's node array under `nodes-tree-<A>.json`.
+  # A later selection that resolves back to tree A is then served B's nodes: a
+  # silently wrong phase/`blocked_by` view, with no strictness violation to
+  # catch it, breaking the "pure function of the tree being selected over"
+  # invariant stated above. Pinning to the tree sha closes that window.
+  #
+  # `--prefix=intentions/` restores the path component. A tree object carries no
+  # path of its own, so `git archive <tree>` emits its entries at the root while
+  # `git archive origin/main intentions` emits them under `intentions/`. With
+  # the prefix the two extractions are byte-identical (verified with `diff -r`).
+  #
+  # With no cache dir there is no key and nothing to pin, so that path keeps the
+  # original spelling and is unchanged in every respect.
+  ARCHIVE_ARGS=(origin/main intentions)
+  if [[ -n "$INTENTIONS_TREE" ]]; then
+    ARCHIVE_ARGS=(--prefix=intentions/ "$INTENTIONS_TREE")
+  fi
+  if ! git -C "$REPO_ROOT" archive "${ARCHIVE_ARGS[@]}" | tar -x -C "$SNAPSHOT_DIR"; then
     echo "graph-select-target: failed to snapshot intentions/ from origin/main" >&2
     exit 2
   fi
