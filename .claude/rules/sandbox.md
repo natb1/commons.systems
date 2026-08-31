@@ -221,9 +221,14 @@ are auto-approved; write/execute commands are not — `cd /path && command` stil
 misses rules like `Bash(npx vitest:*)`. Use a directory flag instead:
 `npm run build --prefix print`.
 
-For app vitest suites, root at the worktree/repo root and select the app with
-`--project`: `npx vitest run --project <app> --root <repo_root>`, or from a
-worktree root `npx vitest run --project print --root .`. Rooting at the app dir
+For vitest suites, root at the worktree/repo root and select the workspace with
+`--project`: `npx vitest run --project <workspace-dir> --root <repo_root>`, or
+from a worktree root `npx vitest run --project print --root .`. The flag is not
+apps-only — it takes any workspace directory `vitest.config.ts` builds a project
+for, `packages/*` included (e.g. `npx vitest run --project
+packages/intentionsutil --root .`); the apps-only narrowing belongs to
+`run-unit-tests.sh`, which only ever feeds changed app dirs into its
+`PROJECT_ARGS`, not to `--project` itself. Rooting at the app dir
 (`--root print`) scopes vite's `server.fs.allow` to `print/`, so root-hoisted
 `?url` asset imports (`pdfjs-dist`'s worker, hoisted to the root `node_modules`
 by npm workspaces) are denied and correct changes false-fail. The repo-root form
