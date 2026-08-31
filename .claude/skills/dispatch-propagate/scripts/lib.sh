@@ -1192,6 +1192,40 @@ gh_commit_is_ancestor_rest() {
 #     the full REST label objects through (same as gh_issue_view_rest's labels).
 # On gh failure: errors to stderr and returns 1 (clear-errors convention, no
 # fallback).
+# Memoisation: when DISPATCH_PR_JSON_CACHE names a non-empty directory, the
+# PROJECTED object (not the raw REST body) is cached per resolved REST path at
+# $DISPATCH_PR_JSON_CACHE/<sanitised-path> — a cache hit cats the stored
+# projection and makes no REST call; a miss fetches, projects, writes, then
+# prints. The key is the resolved path and never the bare PR number: a
+# `--repo owner/repo` call and a default `{owner}/{repo}` call address
+# different PRs under the same number. Failed fetches are never cached. The var
+# is UNSET BY DEFAULT, and unset means every call fetches, so every unarmed
+# caller is unaffected. The caller owns the directory's lifecycle (this helper
+# does not mkdir it).
+# THERE IS NO STATE FILTER AND NO TTL, deliberately: safety here comes from
+# ARMING SCOPE, not from what is cached. dispatch_ci_verdict_rest above can
+# store TERMINAL verdicts only because its mutable half is also its useless
+# half. For PR JSON that relation inverts — the half that is safe to cache
+# (merged/closed) is exactly the half the armed consumer skips, and the half it
+# needs (OPEN) is exactly the mutable one — so a terminal-only rule here would
+# cache nothing useful.
+# THE ONLY SANCTIONED ARMING is dispatch-select-tick's back-to-back
+# reconcile-graph-merged / reconcile-graph-review-stall pair, where the second
+# sweep's candidate set is a strict subset of the first's. There the directory
+# is created, passed as a per-command env prefix on exactly those two commands,
+# and torn down immediately after — it is NEVER exported. Two readers must
+# never see it: graph-auto-merge, which runs EARLIER in the same tick and
+# MUTATES PR state (`gh pr ready`), and graph-select-target's `mergedAt`
+# freshness checks, which would re-acquire the stale-review-target bug if fed a
+# cached pre-merge body.
+# Accepted residual: inside the armed window the review-stall sweep reads the
+# snapshot the merged sweep took, so its maximum staleness equals the merged
+# sweep's own runtime. If a human merges a PR inside that window, review-stall
+# could enter a `fix` interrupt on an already-merged PR. Accepted: the write is
+# reversible (`apply-fix-state --clear-fix`), the next tick's
+# reconcile-graph-merged absorbs the merge to `done` regardless, and every
+# same-tick reader whose correctness depends on `mergedAt` freshness sits
+# outside the armed window by construction.
 gh_pr_view_rest() {
   local num="" repo=""
   while [[ $# -gt 0 ]]; do
@@ -1219,13 +1253,26 @@ gh_pr_view_rest() {
     path="repos/{owner}/{repo}/pulls/$num"
   fi
 
+  # Memoisation hit: return the cached projection without a REST call. Keyed on
+  # the resolved path (see the header note), sanitised into a single filename.
+  local cache_file="" key
+  if [[ -n "${DISPATCH_PR_JSON_CACHE:-}" ]]; then
+    key=$(printf '%s' "$path" | tr -c 'A-Za-z0-9._-' '_')
+    cache_file="$DISPATCH_PR_JSON_CACHE/$key"
+    if [[ -f "$cache_file" ]]; then
+      cat "$cache_file"
+      return 0
+    fi
+  fi
+
   local raw
   raw=$(gh_retry gh api "$path") || {
     echo "error: gh_pr_view_rest: gh api failed for $path" >&2
     return 1
   }
 
-  printf '%s' "$raw" | jq '{
+  local projected
+  projected=$(jq '{
     number,
     title,
     body: (.body // ""),
@@ -1241,7 +1288,18 @@ gh_pr_view_rest() {
     headRefName: .head.ref,
     headRefOid: .head.sha,
     labels: ((.labels // []) | map({name}))
-  }'
+  }' <<<"$raw") || {
+    echo "error: gh_pr_view_rest: projection failed for $path" >&2
+    return 1
+  }
+
+  # Memoisation miss: persist the PROJECTION, never the raw body, so a hit and a
+  # miss emit the same bytes.
+  if [[ -n "$cache_file" && -n "$projected" ]]; then
+    printf '%s\n' "$projected" > "$cache_file"
+  fi
+
+  printf '%s\n' "$projected"
 }
 
 # REST-backed mutation: add one or more labels to an issue (#2255).
