@@ -270,6 +270,20 @@ sd_write_orphan_branch() {
   git -C "$SD_REPO" update-ref "refs/heads/$node" "$commit"
 }
 
+# sd_write_ghost_branch <node> — leave refs/heads/<node> holding a well-formed
+# sha that is NOT a reachable object, so the ref exists but cannot be walked.
+# This is the third state of the no-worktree arm: `rev-parse --verify --quiet`
+# accepts it (MEASURED on this host: exit 0), while `rev-list --count` fails,
+# so the ahead-count is unavailable and the arm must report UNKNOWN rather than
+# an all-clear. Written as a loose ref because `update-ref` refuses a missing
+# object — which is precisely the state being fabricated.
+sd_write_ghost_branch() {
+  local node="$1" gitdir
+  gitdir=$(git -C "$SD_REPO" rev-parse --absolute-git-dir)
+  mkdir -p "$gitdir/refs/heads"
+  printf '%s\n' 0000000000000000000000000000000000000001 > "$gitdir/refs/heads/$node"
+}
+
 # sd_write_transcript <sid> <mtime-epoch>
 sd_write_transcript() {
   printf '{}\n' > "$SD_PROJ/proj-a/$1.jsonl"
@@ -316,6 +330,15 @@ sd_marker_field() {
 sd_log_dispositions() {
   [[ -f "$DECISION_LOG_FILE" ]] || return 0
   jq -r 'select(.site == "standdown-recheck-sweep") | .disposition' "$DECISION_LOG_FILE"
+}
+
+# The RAW `unpushed` field, `jq -c` and NOT `-r`, so the tri-state's three
+# encodings stay distinguishable: true/false (measured), "unknown" (asked,
+# unanswerable) and null (never asked). `-r` would print `unknown` and `null`
+# as bare words and lose exactly the distinction under test.
+sd_log_unpushed() {
+  [[ -f "$DECISION_LOG_FILE" ]] || return 0
+  jq -c 'select(.site == "standdown-recheck-sweep") | .unpushed' "$DECISION_LOG_FILE"
 }
 
 # --- Test 1: THE INVARIANT — a declared marker never times out ---------------
@@ -799,6 +822,12 @@ assert_eq "orphan-branch: the recommendation drops 'do NOT create one'" "no" \
   "$(case "$(sd_park_recommendation)" in *'do NOT create one'*) printf 'yes' ;; *) printf 'no' ;; esac)"
 assert_eq "orphan-branch: the recommendation names the recut command" "yes" \
   "$(case "$(sd_park_recommendation)" in *'worktree add'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# The torn-removal case this arm exists for leaves the registration under
+# .git/worktrees/ behind, and `worktree add` refuses while it is there — so a
+# recut instruction without the prune is one an operator cannot follow.
+assert_eq "orphan-branch: the recut command prunes the stale registration first" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'worktree prune &&'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "orphan-branch: the decision record encodes unpushed as true" "true" "$(sd_log_unpushed)"
 assert_eq "orphan-branch: one decision record, disposition=parked" "parked" "$(sd_log_dispositions)"
 sd_teardown
 
@@ -844,7 +873,7 @@ assert_eq "no-worktree-nobody-left: stderr reports the clear" "yes" \
   "$(sd_contains 'cleared-no-live-session tactic-no-worktree-nobody-left')"
 sd_teardown
 
-# --- Test 15c: the motivating strategy-lane scenario, end to end -------------
+# --- Test 15e: the motivating strategy-lane scenario, end to end -------------
 
 # The strategy lane spawns with --cwd "$PROJECT_ROOT" and never pre-provisions
 # a worktree, so this is the worst case the fix exists for. The branch reads no
@@ -867,6 +896,67 @@ case "$(sd_park_reason)" in
 esac
 assert_eq "strategy-no-worktree: reason carries the no-worktree tag" "yes" "$sd_reason_tag"
 assert_eq "strategy-no-worktree: one decision record, disposition=parked" "parked" "$(sd_log_dispositions)"
+sd_teardown
+
+# --- Test 15f: the branch-absent arm scopes its claim to the node id ---------
+
+# Round 2's finding on the round-1 fix. The arm probes refs/heads/<node> and
+# nothing else, then reported an UNSCOPED all-clear and told the operator "do
+# NOT create one". Native EnterWorktree lets a session claim its checkout under
+# any name, and on this host every worktree in fact uses one (agent-<hash> or a
+# slug), so the branch carrying the work is routinely NOT the one probed. The
+# verdict stays false -- that is what was measured -- but the prose must report
+# what was measured and name the gap rather than paper over it.
+echo "Test: the no-branch arm scopes its all-clear to the node id"
+sd_setup
+sd_write_node "tactic-scoped-allclear" unparked
+sd_commit_nodes
+sd_add_session "0bb2-2222" "tactic-scoped-allclear"
+sd_install_claude 0
+standdown_write "tactic-scoped-allclear" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "scoped-allclear: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "scoped-allclear: the reason scopes the all-clear to the node id" "yes" \
+  "$(case "$(sd_park_reason)" in *'under the node id'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "scoped-allclear: the reason names the other-name gap" "yes" \
+  "$(case "$(sd_park_reason)" in *'claimed its checkout under a different name'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# The recommendation used to assert a merge measurement in the very arm where
+# no branch existed to measure -- reporting a measurement never taken.
+assert_eq "scoped-allclear: the recommendation claims no merge measurement" "no" \
+  "$(case "$(sd_park_recommendation)" in *'fully merged into origin/main'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "scoped-allclear: the recommendation names the other-name branch hunt" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'branch --no-merged origin/main'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "scoped-allclear: the decision record encodes unpushed as false" "false" "$(sd_log_unpushed)"
+sd_teardown
+
+# --- Test 15h: an unmeasurable branch is UNKNOWN, and says so in the log -----
+
+# The third state. refs/heads/<node> exists and `rev-parse --verify` accepts it
+# (MEASURED: a ref holding a well-formed sha that is not a reachable object
+# exits 0), but `rev-list --count` cannot walk it, so no ahead-count is
+# available. Reporting that as "false" would tell an operator nothing is at risk
+# on the strength of a measurement that never succeeded.
+#
+# It also pins the decision-log encoding: `unknown` used to serialize to null,
+# byte-identical to a disposition where the question never arose -- collapsing
+# "we asked and could not answer" into "we never asked", in the durable record.
+echo "Test: an unmeasurable branch reports UNKNOWN, distinct from null in the log"
+sd_setup
+sd_write_node "tactic-unmeasurable-branch" unparked
+sd_commit_nodes
+sd_write_ghost_branch "tactic-unmeasurable-branch"
+sd_add_session "0bb2-2222" "tactic-unmeasurable-branch"
+sd_install_claude 0
+standdown_write "tactic-unmeasurable-branch" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "unmeasurable: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "unmeasurable: the reason reports UNKNOWN" "yes" \
+  "$(case "$(sd_park_reason)" in *UNKNOWN*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "unmeasurable: the reason does NOT claim nothing survives" "no" \
+  "$(case "$(sd_park_reason)" in *'no unpushed work survives'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "unmeasurable: the recommendation refuses the all-clear" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'do NOT assume nothing is at risk'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "unmeasurable: the log distinguishes unknown from null" '"unknown"' "$(sd_log_unpushed)"
 sd_teardown
 
 # --- Test 16: a name with no node file on origin/main is kept, not parked ----
