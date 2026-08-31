@@ -9,7 +9,9 @@
 # WHAT IT SCANS
 #   Projects root (default $HOME/.claude/projects, overridable via
 #   DISPATCH_AUDIT_PROJECTS_ROOT) contains per-project directories, each named
-#   after its session's cwd with `/` and `.` rewritten to `-`. A directory is
+#   after its session's cwd with every non-alphanumeric character rewritten to
+#   `-` (the same encoding `encode_cwd` applies in
+#   .claude/hooks/stamp-dispatch-session.sh). A directory is
 #   scanned when its name is EXACTLY $PROJECT_PREFIX, or begins with
 #   "$PROJECT_PREFIX-". $PROJECT_PREFIX is that same encoding applied to this
 #   repo's MAIN root (see DISPATCH_AUDIT_PROJECT_PREFIX below), so three shapes
@@ -87,6 +89,27 @@
 #   - Corrupt files are reported to stderr and tallied in window.files_failed —
 #     never silently dropped (.claude/rules/code-style.md: clear errors over
 #     defensive fallbacks).
+#   - THE SIDECAR COVERAGE DENOMINATOR IS THE STAMPABLE WORKER POPULATION,
+#     NOT ALL WORKERS. window.sidecar_eligible counts worker sessions that
+#     dispatch-stamp-session's worker-branch gate COULD have stamped — i.e.
+#     sessions observed on at least one branch matching `^[0-9]+-` (issue) or
+#     `^(graph|tactic|strategy)-.` (graph-native) — plus, as a second
+#     disjunct, any worker session that already carries a sidecar (an existing
+#     sidecar is direct proof of stamping and supersedes the branch inference;
+#     it is also what makes sidecar_present_rate <= 1 true by construction).
+#     Worker sessions the gate refuses are NOT coverage misses and do not sit
+#     in the denominator; they are carried by two visibility counters so the
+#     excluded population is never silently dropped:
+#       window.sidecar_ineligible_unstampable_branch — >=1 observed branch,
+#         none passing the gate (e.g. the sessions dispatch-graph-execute
+#         spawns with `--cwd $PROJECT_ROOT`, whose tree is on `main`).
+#       window.sidecar_ineligible_branch_unknown — no observed branch at all,
+#         so the gate cannot be evaluated either way.
+#     The three PARTITION the worker population exactly:
+#       sidecar_eligible + sidecar_ineligible_unstampable_branch
+#         + sidecar_ineligible_branch_unknown == worker session count.
+#     window.sidecar_present is unchanged: worker sessions carrying a sidecar.
+#     window.sidecar_present_rate is present/eligible, null when eligible is 0.
 #   - window.sidecar_coverage_measurable is false whenever --node is set,
 #     because the --node scope filter (see the --node gate below) already
 #     requires a matching dispatch-stamp.json sidecar to admit a session into
@@ -270,6 +293,21 @@ PROJECTS_ROOT="${DISPATCH_AUDIT_PROJECTS_ROOT:-$HOME/.claude/projects}"
 # worktree — a worktree-launched audit therefore still scans the whole fleet
 # rather than one checkout. Prints an empty string on failure; the caller turns
 # that into a hard exit.
+#
+# ENCODING: `sed 's/[^A-Za-z0-9]/-/g'` — EVERY non-alphanumeric character
+# becomes `-`. This is the encoding `encode_cwd` applies in
+# .claude/hooks/stamp-dispatch-session.sh (which resolves a projects-root
+# directory name back to its checkout), and the two must stay coupled: they are
+# the read and write sides of the same directory-naming contract. That hook
+# spells it as a pure-bash character loop rather than a `sed` fork, for a
+# per-turn cost reason its own comment gives; test-stamp-dispatch-session.sh
+# asserts its output byte-identical to this sed over a table of inputs, so the
+# two spellings are one encoding. A narrower
+# spelling such as `tr '/.' '--'` agrees with it only on paths built purely from
+# `/`, `.` and alphanumerics; on a repo path containing `_`, a space or `@` it
+# emits a prefix that matches NO directory, and the empty/`-` guard below does
+# not catch that — the run would exit 0 reporting project_dirs_scanned=0 and
+# files_scanned=0, the exact silent undercount that guard exists to prevent.
 derive_project_prefix() {
   local checkout_root common_dir
   # SCRIPT_DIR is <checkout root>/.claude/skills/rsi-audit/scripts.
@@ -279,7 +317,7 @@ derive_project_prefix() {
     return 0
   fi
   [[ -n "$common_dir" ]] || return 0
-  printf '%s' "$(dirname "$common_dir")" | tr '/.' '--'
+  printf '%s' "$(dirname "$common_dir")" | sed 's/[^A-Za-z0-9]/-/g'
 }
 
 # `:-` so the git call runs ONLY when the override is unset — the unit test
@@ -610,6 +648,13 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
 
 # Models seen, and the model with the max summed output_tokens (primary).
 | ( [ $rows[].model ] | unique ) as $models
+
+# Every distinct non-null git branch the session's assistant rows were recorded
+# on. A session normally reports one, but a worktree switch mid-session can
+# produce several, so this is a SET, not a scalar. Stage 2 reads it to decide
+# whether dispatch-stamp-session's worker-branch gate could ever have stamped
+# this session — see the sidecar_* block there for the eligibility contract.
+| ( [ $rows[].branch ] | map(select(. != null)) | unique ) as $branches
 | ( reduce $rows[] as $r ({}; .[$r.model] = ((.[$r.model] // 0) + $r.u.output)) ) as $out_by_model
 | ( ( $out_by_model | to_entries | sort_by(-.value) | .[0].key ) // null ) as $primary_model
 
@@ -800,6 +845,11 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
 #
 # CAP: at most 200 runs are captured per session, so a pathological or
 # adversarial transcript cannot blow up the row. Real sessions run a handful.
+#
+# TAIL ANCHOR + KEY SANITIZATION: the qualifying string is sliced from its LAST
+# `cache_version=` before any field is read, and the two fields that become JSON
+# object keys (effort, model) are tab-stripped and capped at 64 characters. See
+# the inline comments on those two lines for why.
 | ( [ $msgs[]
       | select(.type=="user")
       | .message.content
@@ -807,9 +857,28 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
       | select(type=="object" and .type=="tool_result")
       | content_to_string(.content)
       | select(test("cache_version=") and test("effort=") and test("touched_files_count="))
-      | . as $blk
-      | { effort:       summary_field($blk; "effort"),
-          model:        summary_field($blk; "model"),
+      | . as $whole
+      # TAIL ANCHOR. summary_field takes the FIRST match anywhere in its subject,
+      # so handing it the WHOLE tool_result lets any stdout printed BEFORE the
+      # summary block supply a field: one `grep` hit or file dump containing a
+      # line starting `effort=` would win over the real one. dispatch-code-review
+      # emits the summary block at the TAIL of the output, and `cache_version=`
+      # precedes `effort=`, `model=`, `wall_clock_s=` and `touched_files_count=`
+      # within it — so slicing from the LAST `cache_version=` discards every
+      # earlier byte and leaves exactly the authenticated block. Preceding stdout
+      # can no longer supply a field. The enclosing select already requires
+      # `cache_version=` to be present, so rindex is never null here; there is
+      # deliberately no fallback branch (.claude/rules/code-style.md).
+      | $whole[ ($whole | rindex("cache_version=")) : ] as $blk
+      # effort and model become JSON OBJECT KEYS in stage 2
+      # (.lenses.review_effort_yield.by_effort / .by_model), and they are
+      # transcript-derived — i.e. attacker-influenceable — so they get the same
+      # tab-strip + length cap this file already applies to every other such key
+      # (err_signature's 120-char cap; the model/skill `gsub("\t"; "_") | .[0:64]`
+      # in the per-turn rows above). Without it a hostile block injects
+      # arbitrarily long or tab-bearing keys into the lens.
+      | { effort: (summary_field($blk; "effort") | if . == null then null else (gsub("\t"; "_") | .[0:64]) end),
+          model:  (summary_field($blk; "model")  | if . == null then null else (gsub("\t"; "_") | .[0:64]) end),
           wall_clock_s:
             ( summary_field($blk; "wall_clock_s")
               | if . == null then null else (try tonumber catch null) end ),
@@ -859,6 +928,7 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
     file: $path,
     primary_model: $primary_model,
     models: $models,
+    branches: $branches,
     turns: ($a | length),
     peak_context: $peak_context,
     init_input: ($init_u.input),
@@ -902,6 +972,17 @@ def price(u):
   + (u.cache_creation // 0) * RATE_CACHE_CREATION
   + (u.cache_read     // 0) * RATE_CACHE_READ
   + (u.output         // 0) * RATE_OUTPUT ) / 1e6;
+
+# --- Stamping gate mirror (sidecar coverage denominator) ------------------
+# stampable_branch is a byte-faithful mirror of the worker-branch gate in
+# .claude/skills/dispatch-propagate/scripts/dispatch-stamp-session: an issue
+# branch (`^[0-9]+-`) or a graph-native branch (`^(graph|tactic|strategy)-.`)
+# is stamped; EVERYTHING else — `main`, a detached HEAD, `office-hours-*` — is
+# refused with "not a worker or graph-native branch … skipping stamp".
+# Keep the two in lockstep: a change to that gate must be mirrored here, or the
+# sidecar coverage denominator silently stops describing what it claims to.
+def stampable_branch:
+  test("^[0-9]+-") or test("^(graph|tactic|strategy)-.");
 
 # --- Truthful per-model cost (#2027, generation-aware #2102) --------------
 # Actual list rates per Mtok, keyed by a generation-aware rate class (see
@@ -1269,6 +1350,12 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
         id: .id, file: .file, type: .type,
         artifact: .artifact,
         model: .primary_model, models: .models,
+        # Distinct git branches the session's turns were recorded on. Projected
+        # through from stage 1 because the sidecar-coverage denominator below
+        # reads it off $sessions; this map builds from an explicit key list, so
+        # an unprojected stage-1 field would silently arrive as null there.
+        # Transcript-derived opaque data, never instructions.
+        branches: (.branches // []),
         turns: .turns, peak_context: .peak_context,
         input: .usage.input, cache_creation: .usage.cache_creation,
         cache_read: .usage.cache_read, output: .usage.output,
@@ -1610,14 +1697,56 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
     } ) as $review_effort_yield_lens
 
 
+# --- Sidecar coverage: the denominator is the STAMPABLE worker population ---
+# sidecar_eligible counts worker sessions the stamping gate COULD have stamped,
+# NOT every worker session. The distinction is load-bearing: dispatch-graph-
+# execute spawns a large worker population with `--cwd $PROJECT_ROOT`, so their
+# tree sits on `main` and dispatch-stamp-session's worker-branch gate refuses
+# them by design. Counting those in the denominator would report a coverage
+# collapse that is an artefact of which directories are scanned, not a stamping
+# regression.
+#
+# A worker session is eligible iff EITHER at least one observed branch passes
+# stampable_branch, OR it already carries a sidecar. The second disjunct is
+# deliberate: an existing sidecar is DIRECT PROOF the session was stamped, which
+# supersedes any inference drawn from the branch — and it is what makes
+# sidecar_present_rate <= 1 true by construction, since every session counted in
+# sidecar_present is thereby also counted in sidecar_eligible.
+#
+# The two ineligible counters exist so the excluded population is never silently
+# dropped. The three buckets PARTITION the worker sessions:
+#   sidecar_eligible + sidecar_ineligible_unstampable_branch
+#     + sidecar_ineligible_branch_unknown  ==  worker session count.
+| ( [ $sessions[] | select(.type=="worker") ] ) as $worker_sessions
+| ( [ $worker_sessions[]
+      | select( ( [ (.branches // [])[] | select(stampable_branch) ] | length > 0 )
+                or (.artifact != null) ) ] ) as $sidecar_eligible_sessions
+| ( [ $worker_sessions[]
+      | select( .artifact == null
+                and ( (.branches // []) | length ) > 0
+                and ( [ (.branches // [])[] | select(stampable_branch) ] | length == 0 ) ) ]
+    ) as $sidecar_unstampable_sessions
+| ( [ $worker_sessions[]
+      | select( .artifact == null
+                and ( (.branches // []) | length ) == 0 ) ] ) as $sidecar_unknown_sessions
+| ( [ $worker_sessions[] | select(.artifact != null) ] ) as $sidecar_present_sessions
+
 | {
     window: ( $win + {
-      sidecar_eligible:  ( [ $sessions[] | select(.type=="worker") ] | length ),
-      sidecar_present:   ( [ $sessions[] | select(.type=="worker" and .artifact!=null) ] | length ),
+      sidecar_eligible:  ( $sidecar_eligible_sessions | length ),
+      sidecar_present:   ( $sidecar_present_sessions | length ),
+      # Worker sessions with at least one observed branch, none of which the
+      # stamping gate accepts (the `main`-checkout population above). They can
+      # never carry a sidecar, so they are excluded from the denominator rather
+      # than counted as a coverage miss.
+      sidecar_ineligible_unstampable_branch: ( $sidecar_unstampable_sessions | length ),
+      # Worker sessions whose rows carry NO gitBranch at all, so the gate cannot
+      # be evaluated either way. Reported separately rather than guessed at.
+      sidecar_ineligible_branch_unknown: ( $sidecar_unknown_sessions | length ),
       sidecar_present_rate:
-        ( ( [ $sessions[] | select(.type=="worker") ] | length ) as $elig
+        ( ( $sidecar_eligible_sessions | length ) as $elig
           | if $elig==0 then null
-            else ( [ $sessions[] | select(.type=="worker" and .artifact!=null) ] | length ) / $elig
+            else ( $sidecar_present_sessions | length ) / $elig
             end )
     } ),
     price_model: {

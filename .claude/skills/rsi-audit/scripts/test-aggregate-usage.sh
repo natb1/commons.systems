@@ -2473,6 +2473,76 @@ assert_eq "prefix: window.project_dirs_scanned == 2" "2" \
 rm -rf "$PREFIX_ROOT"
 
 # ---------------------------------------------------------------------------
+# derive_project_prefix's ENCODING must equal the hook's `encode_cwd`
+# (.claude/hooks/stamp-dispatch-session.sh): EVERY non-alphanumeric character
+# becomes `-`. The two are the read and write sides of one directory-naming
+# contract, so a narrower spelling (e.g. `tr '/.' '--'`) agrees only on paths
+# made of `/`, `.` and alphanumerics — on a repo path carrying `_`, a space or
+# `@` it emits a prefix matching NO directory, and the empty/`-` guard does not
+# catch it: the run exits 0 with project_dirs_scanned=0 and files_scanned=0.
+#
+# The function is extracted from the script text and evaluated against a stubbed
+# `git`, so the probe exercises the REAL production line rather than a copy.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- derive_project_prefix encoding == stamp-dispatch-session.sh encode_cwd ---"
+
+# hook_encode_cwd — a byte-faithful copy of encode_cwd from
+# .claude/hooks/stamp-dispatch-session.sh. The oracle the probe is compared to.
+hook_encode_cwd() {
+  printf '%s' "$1" | sed 's/[^A-Za-z0-9]/-/g'
+}
+
+# derive_prefix_probe <repo path> — run aggregate-usage.sh's own
+# derive_project_prefix with `git` stubbed to report "<repo path>/.git" as the
+# git common dir. Extraction is by an anchored sed range over the live script;
+# an empty extraction is reported as a distinct failure token rather than a
+# silent empty pass.
+derive_prefix_probe() {
+  local repo="$1" fn
+  fn=$(sed -n '/^derive_project_prefix() {$/,/^}$/p' "$SCRIPT_DIR/aggregate-usage.sh")
+  if [[ -z "$fn" ]]; then
+    printf '%s' "PROBE-EXTRACTION-FAILED"
+    return 0
+  fi
+  (
+    SCRIPT_DIR="/unused"
+    PROBE_REPO="$repo"
+    git() { printf '%s\n' "$PROBE_REPO/.git"; }
+    eval "$fn"
+    derive_project_prefix
+  )
+}
+
+# Guard the probe itself: on a plain path both spellings agree, so this case
+# cannot discriminate — it only proves the extraction + stub wiring works.
+assert_eq "prefix-encoding: probe wiring (plain path) matches encode_cwd" \
+  "$(hook_encode_cwd /home/n8/natb1/commons.systems)" \
+  "$(derive_prefix_probe /home/n8/natb1/commons.systems)"
+
+# THE DISCRIMINATING CASES. Each contains a character `tr '/.' '--'` leaves
+# untouched, so each FAILS against that spelling.
+assert_eq "prefix-encoding: underscore in repo path encodes to '-' (not '_')" \
+  "$(hook_encode_cwd /home/n8/my_repo/commons.systems)" \
+  "$(derive_prefix_probe /home/n8/my_repo/commons.systems)"
+assert_eq "prefix-encoding: space in repo path encodes to '-'" \
+  "$(hook_encode_cwd '/home/n8/my repo/commons.systems')" \
+  "$(derive_prefix_probe '/home/n8/my repo/commons.systems')"
+assert_eq "prefix-encoding: '@' in repo path encodes to '-'" \
+  "$(hook_encode_cwd /home/n8/repo@v2/commons.systems)" \
+  "$(derive_prefix_probe /home/n8/repo@v2/commons.systems)"
+
+# Literal-value assertions, so the pair does not pass vacuously if BOTH the
+# probe and the oracle were to drift together.
+assert_eq "prefix-encoding: underscore case has the exact expected literal" \
+  "-home-n8-my-repo-commons-systems" \
+  "$(derive_prefix_probe /home/n8/my_repo/commons.systems)"
+assert_eq "prefix-encoding: '@' case has the exact expected literal" \
+  "-home-n8-repo-v2-commons-systems" \
+  "$(derive_prefix_probe /home/n8/repo@v2/commons.systems)"
+
+# ---------------------------------------------------------------------------
 # RSI FAMILY WHOLE-SESSION RE-KEY (Unit 2). /rsi and /rsi-audit joined
 # `worker_skills`, so an /rsi session now types as "worker" and its turns fold
 # onto its launch skill instead of sitting in the "<none>" bucket. Modelled on
@@ -2685,26 +2755,31 @@ covnode_worktree="$COVNODE_ROOT/-home-x-worktrees-cov-node"
 mkdir -p "$covnode_worktree"
 
 # Three real-worker-command transcripts (first line classifies as worker via
-# the /qa-fix alternation entry).
+# the /qa-fix alternation entry). The branch is `tactic-cov-node`: these
+# sessions carry node_id sidecars, so they model GRAPH-NATIVE workers, and the
+# branch has to be one dispatch-stamp-session's worker-branch gate ACCEPTS —
+# otherwise sess-cov-node-b (deliberately unstamped) would be excluded from
+# window.sidecar_eligible as unstampable, and the 2/3 fleet-rate assertion below
+# would be testing the wrong thing.
 for s in a b c; do
   covnode_jsonl="$covnode_worktree/sess-cov-node-$s.jsonl"
   printf '%s\n' '{"type":"user","message":{"content":"<command-name>/qa-fix</command-name>"}}' \
     >> "$covnode_jsonl"
-  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"cov-node","message":{"model":"claude-opus-4-8","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
+  printf '%s\n' '{"type":"assistant","attributionSkill":"plan-implement","isSidechain":false,"gitBranch":"tactic-cov-node","message":{"model":"claude-opus-4-8","usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}' \
     >> "$covnode_jsonl"
   jq . "$covnode_jsonl" >/dev/null
   touch "$covnode_jsonl"
 done
 
 # sess-cov-node-a: stamped for the target node.
-printf '%s\n' '{"schema":1,"session_id":"sess-cov-node-a","repo":"natb1/commons.systems","issue":null,"pr":null,"branch":"cov-node","base_sha":"aaa111","node_id":"fixture-cov-node","stamped_at":"2026-01-01T00:00:00Z"}' \
+printf '%s\n' '{"schema":1,"session_id":"sess-cov-node-a","repo":"natb1/commons.systems","issue":null,"pr":null,"branch":"tactic-cov-node","base_sha":"aaa111","node_id":"fixture-cov-node","stamped_at":"2026-01-01T00:00:00Z"}' \
   > "$covnode_worktree/sess-cov-node-a.dispatch-stamp.json"
 jq . "$covnode_worktree/sess-cov-node-a.dispatch-stamp.json" >/dev/null
 
 # sess-cov-node-b: NO sidecar at all — the unstamped drop.
 
 # sess-cov-node-c: stamped, but for a DIFFERENT node — the other-node drop.
-printf '%s\n' '{"schema":1,"session_id":"sess-cov-node-c","repo":"natb1/commons.systems","issue":null,"pr":null,"branch":"cov-node","base_sha":"ccc333","node_id":"fixture-cov-other","stamped_at":"2026-01-01T00:00:00Z"}' \
+printf '%s\n' '{"schema":1,"session_id":"sess-cov-node-c","repo":"natb1/commons.systems","issue":null,"pr":null,"branch":"tactic-cov-node","base_sha":"ccc333","node_id":"fixture-cov-other","stamped_at":"2026-01-01T00:00:00Z"}' \
   > "$covnode_worktree/sess-cov-node-c.dispatch-stamp.json"
 jq . "$covnode_worktree/sess-cov-node-c.dispatch-stamp.json" >/dev/null
 
@@ -3003,7 +3078,228 @@ assert_eq "review_effort_yield: window with no review runs -> sessions_mixed_eff
 assert_eq "review_effort_yield: window with no review runs -> by_effort == {} (NOT a fabricated zero bucket)" \
   "{}" "$(jq -c "$RY_LENS.by_effort" <<<"$OUT_RY_NONE")"
 
-rm -rf "$RY_ROOT" "$RY_NONE_ROOT"
+# ---------------------------------------------------------------------------
+# SIDECAR ELIGIBILITY = THE STAMPABLE WORKER POPULATION (round-1 review
+# finding 1). The main-checkout project dir came into scope with $PROJECT_PREFIX,
+# and it holds a large worker population spawned `--cwd $PROJECT_ROOT` — trees on
+# `main`, which dispatch-stamp-session's worker-branch gate refuses by design.
+# Counting those as coverage misses reports a collapse that is an artefact of
+# which directories are scanned, not a stamping regression.
+#
+# Four worker sessions, one per case, in an isolated root:
+#   sess-el-main         — branch `main`, NO sidecar. The gate would refuse it,
+#                          so it is INELIGIBLE (unstampable_branch) and must not
+#                          depress the rate.
+#   sess-el-tactic       — branch `tactic-el-fixture`, NO sidecar. The gate WOULD
+#                          have stamped it, so it IS eligible and DOES depress
+#                          the rate — the genuine coverage miss the metric exists
+#                          to surface.
+#   sess-el-main-stamped — branch `main`, but a sidecar is present. Eligible via
+#                          the artifact disjunct: an existing sidecar is direct
+#                          proof of stamping and supersedes the branch inference.
+#                          This is what keeps sidecar_present_rate <= 1 true by
+#                          construction.
+#   sess-el-nobranch     — NO gitBranch on any row. The gate cannot be evaluated
+#                          either way, so it lands in branch_unknown, never
+#                          silently in one of the other two.
+#
+# Expected: workers 4, eligible 2, present 1, rate 1/2, unstampable 1, unknown 1.
+#
+# ISOLATED fixture: own mktemp -d root, own trap, own
+# DISPATCH_AUDIT_PROJECT_PREFIX="-home-x".
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- sidecar eligibility: denominator is the STAMPABLE worker population ---"
+
+# assert_sidecar_partition — THE VACUITY PROOF for the whole eligibility change.
+# The three buckets must partition the worker population exactly; a bucket that
+# fills while another silently empties fails here even when every individual
+# count assertion still reads the number it was written to expect. Applied to
+# several independent fixture outputs, not just the one built for this case.
+# Defined at top level and called at top level, so its assert_eq updates the
+# shared PASS/FAIL counters (a call inside $( ) would lose them to a subshell).
+#
+# THE TYPE CHECK IS LOAD-BEARING, not belt-and-braces. jq treats null as the
+# identity for `+`, so an output missing BOTH ineligible counters computes
+# `eligible + null + null == worker count` as TRUE whenever eligible happens to
+# equal the worker count — which is exactly the pre-fix behaviour. Without the
+# `type == "number"` conjuncts this assertion passes with and against the fix
+# and proves nothing.
+assert_sidecar_partition() {
+  local label="$1" out="$2"
+  assert_eq "$label: eligible + unstampable + branch_unknown == worker sessions" "true" \
+    "$(jq '(.window.sidecar_eligible                      | type) == "number"
+           and (.window.sidecar_ineligible_unstampable_branch | type) == "number"
+           and (.window.sidecar_ineligible_branch_unknown     | type) == "number"
+           and ((.window.sidecar_eligible
+                 + .window.sidecar_ineligible_unstampable_branch
+                 + .window.sidecar_ineligible_branch_unknown)
+                == ([ .sessions[] | select(.type=="worker") ] | length))' <<<"$out")"
+}
+
+EL_ROOT=$(mktemp -d)
+trap 'rm -rf "$EL_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+el_worktree="$EL_ROOT/-home-x-worktrees-eligibility"
+mkdir -p "$el_worktree"
+
+el_write_session() {
+  # el_write_session <path> <gitBranch json fragment, or empty for no key>
+  printf '%s\n' '{"type":"user","message":{"content":"<command-name>/qa-fix</command-name>"}}' \
+    >> "$1"
+  printf '%s\n' "{\"type\":\"assistant\",\"attributionSkill\":\"qa\",\"isSidechain\":false,${2}\"message\":{\"model\":\"claude-opus-4-8\",\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":1}}}" \
+    >> "$1"
+}
+
+el_write_session "$el_worktree/sess-el-main.jsonl"         '"gitBranch":"main",'
+el_write_session "$el_worktree/sess-el-tactic.jsonl"       '"gitBranch":"tactic-el-fixture",'
+el_write_session "$el_worktree/sess-el-main-stamped.jsonl" '"gitBranch":"main",'
+el_write_session "$el_worktree/sess-el-nobranch.jsonl"     ''
+
+printf '%s\n' '{"schema":1,"session_id":"sess-el-main-stamped","repo":"natb1/commons.systems","issue":null,"pr":null,"branch":"main","base_sha":"eee555","node_id":"fixture-el","stamped_at":"2026-01-01T00:00:00Z"}' \
+  > "$el_worktree/sess-el-main-stamped.dispatch-stamp.json"
+jq . "$el_worktree/sess-el-main-stamped.dispatch-stamp.json" >/dev/null
+
+for el_f in "$el_worktree"/sess-el-*.jsonl; do
+  jq . "$el_f" >/dev/null
+done
+touch "$el_worktree"/sess-el-*.jsonl
+
+OUT_EL=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$EL_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# Pin the population first, so no count below can pass because a session
+# silently failed to classify as a worker at all.
+assert_eq "eligibility: 4 worker sessions in the fixture" "4" \
+  "$(jq '[ .sessions[] | select(.type=="worker") ] | length' <<<"$OUT_EL")"
+assert_eq "eligibility: sess-el-nobranch observed NO branch" "[]" \
+  "$(jq -c '[ .sessions[] | select(.id=="sess-el-nobranch") ][0].branches' <<<"$OUT_EL")"
+assert_eq "eligibility: sess-el-main observed branch main" '["main"]' \
+  "$(jq -c '[ .sessions[] | select(.id=="sess-el-main") ][0].branches' <<<"$OUT_EL")"
+
+EXPECTED_EL_RATE=$(jq -n '1/2')
+assert_eq "eligibility: sidecar_eligible == 2 (tactic-* + the main session that IS stamped)" "2" \
+  "$(jq '.window.sidecar_eligible' <<<"$OUT_EL")"
+assert_eq "eligibility: sidecar_present == 1" "1" \
+  "$(jq '.window.sidecar_present' <<<"$OUT_EL")"
+assert_eq "eligibility: unstamped tactic-* worker DOES depress the rate (1/2, not 1)" \
+  "$EXPECTED_EL_RATE" "$(jq '.window.sidecar_present_rate' <<<"$OUT_EL")"
+assert_eq "eligibility: unstampable main-branch worker is NOT in the denominator (rate is not 1/3)" "false" \
+  "$(jq '.window.sidecar_present_rate == (1/3)' <<<"$OUT_EL")"
+assert_eq "eligibility: sidecar_ineligible_unstampable_branch == 1 (sess-el-main)" "1" \
+  "$(jq '.window.sidecar_ineligible_unstampable_branch' <<<"$OUT_EL")"
+assert_eq "eligibility: sidecar_ineligible_branch_unknown == 1 (sess-el-nobranch)" "1" \
+  "$(jq '.window.sidecar_ineligible_branch_unknown' <<<"$OUT_EL")"
+# The artifact disjunct: a main-branch session that nonetheless HAS a sidecar is
+# eligible, which is exactly what forbids present > eligible.
+assert_eq "eligibility: artifact disjunct keeps sidecar_present_rate <= 1" "true" \
+  "$(jq '.window.sidecar_present_rate <= 1' <<<"$OUT_EL")"
+assert_eq "eligibility: sidecar_present <= sidecar_eligible" "true" \
+  "$(jq '.window.sidecar_present <= .window.sidecar_eligible' <<<"$OUT_EL")"
+
+assert_sidecar_partition "eligibility" "$OUT_EL"
+assert_sidecar_partition "shared-fixture" "$OUT"
+assert_sidecar_partition "coverage-fixture" "$OUT_COV"
+assert_sidecar_partition "covnode-fleet-fixture" "$OUT_COVNODE_FLEET"
+
+rm -rf "$EL_ROOT"
+
+# ---------------------------------------------------------------------------
+# review_runs EXTRACTOR HARDENING (round-1 review finding 5). Two defects, one
+# isolated root each so the shared RY expectations above stay untouched:
+#
+#   sess-rh-a — TAIL ANCHOR. Its tool_result prints a hostile file dump BEFORE
+#     the real summary block. The dump carries its own `cache_version=`, then
+#     lines starting `effort=`, `model=`, `wall_clock_s=` and
+#     `touched_files_count=`. summary_field takes the FIRST match in its
+#     subject, so an unanchored read — or one anchored on the FIRST
+#     `cache_version=` — returns the attacker's values. Anchoring on the LAST
+#     `cache_version=` discards the dump entirely.
+#   sess-rh-b — KEY SANITIZATION. Its `effort=` value is 300 characters and
+#     contains a TAB. effort becomes a JSON object key in by_effort, so it must
+#     arrive tab-stripped and capped at 64 characters, exactly as the per-turn
+#     model/skill keys are.
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "--- review_runs extractor hardening: tail anchor + key sanitization ---"
+
+RH_ROOT=$(mktemp -d)
+trap 'rm -rf "$RY_ROOT" "$RY_NONE_ROOT" "$RH_ROOT" "$FAKE_WRITER_DIR"; teardown' EXIT INT TERM
+rh_worktree="$RH_ROOT/-home-x-worktrees-review-harden"
+mkdir -p "$rh_worktree"
+
+# A hostile prefix that mimics ordinary stdout printed before the summary block
+# (a file dump / grep hit). Every field it carries is a decoy, including a
+# `cache_version=` so that anchoring on the FIRST occurrence is ALSO caught.
+rh_hostile_prefix() {
+  printf 'cat ./notes.txt\ncache_version=1\neffort=attacker\nmodel=attacker-model\nwall_clock_s=999\ntouched_files_count=99\n--- end of file ---\n'
+}
+
+rh_a="$rh_worktree/sess-rh-a.jsonl"
+ry_write_session "$rh_a" 1000 100
+ry_add_tool_result "$rh_a" "$(rh_hostile_prefix)$(ry_summary_block high claude-opus-4-8 400 3)"
+
+# 300 chars: 30 'A', one TAB, 269 'B'. After gsub("\t";"_") | .[0:64] the key is
+# 30 'A' + '_' + 33 'B' — computed here, never hardcoded as a literal blob.
+RH_A30="$(printf '%030d' 0 | tr '0' 'A')"
+RH_B269="$(printf '%0269d' 0 | tr '0' 'B')"
+RH_B33="$(printf '%033d' 0 | tr '0' 'B')"
+RH_EFFORT_RAW="${RH_A30}$(printf '\t')${RH_B269}"
+RH_EFFORT_KEY="${RH_A30}_${RH_B33}"
+
+rh_b="$rh_worktree/sess-rh-b.jsonl"
+ry_write_session "$rh_b" 2000 200
+ry_add_tool_result "$rh_b" "$(ry_summary_block "$RH_EFFORT_RAW" claude-sonnet-4-6 500 7)"
+
+for rh_f in "$rh_worktree"/sess-rh-*.jsonl; do
+  jq . "$rh_f" >/dev/null
+done
+touch "$rh_worktree"/sess-rh-*.jsonl
+
+OUT_RH=$(
+  export DISPATCH_AUDIT_PROJECTS_ROOT="$RH_ROOT"
+  export DISPATCH_AUDIT_PROJECT_PREFIX="-home-x"
+  bash "$SCRIPT_DIR/aggregate-usage.sh" --days 7
+)
+
+# Vacuity guard: if the fixture stopped producing runs at all, every field
+# assertion below would compare null to null-ish and could pass for the wrong
+# reason. Pin the run counts first.
+assert_eq "review_runs harden: sess-rh-a yields exactly one run" "1" \
+  "$(jq '[ .sessions[] | select(.id=="sess-rh-a") ][0].review_runs | length' <<<"$OUT_RH")"
+assert_eq "review_runs harden: sess-rh-b yields exactly one run" "1" \
+  "$(jq '[ .sessions[] | select(.id=="sess-rh-b") ][0].review_runs | length' <<<"$OUT_RH")"
+
+RH_A_RUN='[ .sessions[] | select(.id=="sess-rh-a") ][0].review_runs[0]'
+RH_B_RUN='[ .sessions[] | select(.id=="sess-rh-b") ][0].review_runs[0]'
+
+assert_eq "review_runs tail anchor: preceding stdout cannot supply effort" '"high"' \
+  "$(jq "$RH_A_RUN.effort" <<<"$OUT_RH")"
+assert_eq "review_runs tail anchor: preceding stdout cannot supply model" '"claude-opus-4-8"' \
+  "$(jq "$RH_A_RUN.model" <<<"$OUT_RH")"
+assert_eq "review_runs tail anchor: preceding stdout cannot supply wall_clock_s" "400" \
+  "$(jq "$RH_A_RUN.wall_clock_s" <<<"$OUT_RH")"
+assert_eq "review_runs tail anchor: preceding stdout cannot supply touched_files_count" "3" \
+  "$(jq "$RH_A_RUN.touched_files_count" <<<"$OUT_RH")"
+assert_eq "review_runs tail anchor: by_effort has no 'attacker' bucket" "false" \
+  "$(jq "$RY_LENS.by_effort | has(\"attacker\")" <<<"$OUT_RH")"
+
+assert_eq "review_runs key cap: 300-char effort is capped to 64 chars" "64" \
+  "$(jq "$RH_B_RUN.effort | length" <<<"$OUT_RH")"
+assert_eq "review_runs key cap: TAB in effort is replaced by '_'" "\"$RH_EFFORT_KEY\"" \
+  "$(jq -c "$RH_B_RUN.effort" <<<"$OUT_RH")"
+assert_eq "review_runs key cap: by_effort carries the sanitized key" "true" \
+  "$(jq --arg k "$RH_EFFORT_KEY" "$RY_LENS.by_effort | has(\$k)" <<<"$OUT_RH")"
+assert_eq "review_runs key cap: no by_effort key contains a TAB" "true" \
+  "$(jq "[ $RY_LENS.by_effort | keys[] | test(\"\\t\") ] | any | not" <<<"$OUT_RH")"
+assert_eq "review_runs key cap: no by_effort key exceeds 64 chars" "true" \
+  "$(jq "[ $RY_LENS.by_effort | keys[] | length > 64 ] | any | not" <<<"$OUT_RH")"
+
+rm -rf "$RY_ROOT" "$RY_NONE_ROOT" "$RH_ROOT"
 
 report_results
 exit $FAIL

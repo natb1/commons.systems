@@ -22,9 +22,11 @@
 #      `-`. Each candidate — $CLAUDE_PROJECT_DIR and every directory under
 #      $CLAUDE_PROJECT_DIR/.claude/worktrees/ (all worktrees live there, per
 #      .claude/rules/sandbox.md) — is encoded the same way and compared against
-#      the transcript's parent directory name. A SUBAGENT transcript sits one
-#      level deeper (<projdir>/<sid>/…), so a miss retries ONCE against the
-#      grandparent directory name; it never walks further.
+#      the transcript's parent directory name. A SUBAGENT transcript sits
+#      DEEPER than that — by three or five levels, in the two layouts Claude
+#      Code actually writes — so a miss walks UP the ancestor directory names
+#      instead of stopping at the parent. The walk's own comment below carries
+#      the measured layouts, their file counts, and why the bound is 6.
 #   2. the payload's `.cwd`, when non-empty and a directory.
 #   3. the hook process's own cwd — today's behaviour, kept so nothing regresses
 #      for callers whose cwd is already right.
@@ -49,14 +51,21 @@
 #
 # IMPLEMENTED BACKSTOP: the hook is also bound to Stop, where it passes
 # --only-if-absent. Stop fires in detached workers (verified: a 2026-08-14 bg
-# worker transcript carries "hookName":"Stop") and on every turn yield, so
-# --only-if-absent short-circuits on the sidecar-exists check BEFORE any git
-# work, and a session whose birth stamp was missed still gets one — carrying its
+# worker transcript carries "hookName":"Stop") and on every turn yield, so a
+# session whose birth stamp was missed still gets one — carrying its
 # first-Stop base_sha rather than none. A scripted dispatch-stamp-session call
 # in each phase SKILL.md is NOT the fix: ~/.claude/projects is read-only to
 # sandboxed Bash, so a call that forgets `dangerouslyDisableSandbox` fails
 # silently at exit 0 — an unenforceable prose instruction that would have to be
 # repeated in 7+ skill bodies and would still miss every lane with no chokepoint.
+#   THE SHORT-CIRCUIT IS PAID HERE, NOT DOWNSTREAM. `--only-if-absent` does
+#   short-circuit inside dispatch-stamp-session before that script's git work,
+#   but only after this hook has already resolved the session tree — which it
+#   did unconditionally, encoding every worktree under .claude/worktrees/ on
+#   every turn yield of every session in the project. So Stop now tests the
+#   sidecar path itself FIRST, in this hook, and returns before any resolution
+#   when one is already there; only the create case (the backstop actually
+#   doing its job) reaches the resolver.
 #
 # MONITOR: rsi-audit surfaces window.sidecar_eligible (worker sessions scanned),
 # window.sidecar_present (those carrying a .dispatch-stamp.json), and the
@@ -86,6 +95,17 @@ if [[ -z "$SESSION_ID" || -z "$TRANSCRIPT_PATH" ]]; then
   exit 0
 fi
 
+# Stop fast path. Stop fires on every turn yield of every session in the
+# project, and in the overwhelming majority of those yields the sidecar is
+# already there — so everything below, tree resolution first of all, is work
+# whose only possible outcome is a no-op downstream. The sidecar path is a pure
+# string transform of transcript_path, so test it here and leave.
+# SessionStart deliberately does NOT take this path: a birth stamp is the one
+# write that must still happen, and its resolution is what --repo-dir exists for.
+if [[ "$HOOK_EVENT" == "Stop" && -f "${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json" ]]; then
+  exit 0
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 0
 STAMP_SCRIPT="$SCRIPT_DIR/../skills/dispatch-propagate/scripts/dispatch-stamp-session"
 
@@ -97,9 +117,26 @@ fi
 # --- resolve the session's own working tree ---------------------------------
 
 # encode_cwd — the projects-root directory-name encoding: every non-alphanumeric
-# character becomes `-`.
+# character becomes `-`. Spelled in pure bash rather than `sed` because
+# resolve_from_encoded calls it once per candidate worktree, and the Stop
+# binding runs that on every turn yield: a fork per candidate makes the
+# per-yield cost proportional to the number of worktrees on disk. That number is
+# volatile — worktrees are cut and reaped continuously — so none is recorded
+# here; the point is that it is unbounded and grows, not that it is any given N.
+# The case patterns are the same explicit ASCII sets `sed 's/[^A-Za-z0-9]/-/g'`
+# used, and test-stamp-dispatch-session.sh asserts byte-identical output against
+# the real sed over a table of inputs (underscore, space, @, ., /, a multi-byte
+# UTF-8 character, and the empty string).
 encode_cwd() {
-  printf '%s' "$1" | sed 's/[^A-Za-z0-9]/-/g'
+  local s="$1" out="" i ch
+  for (( i = 0; i < ${#s}; i++ )); do
+    ch="${s:i:1}"
+    case "$ch" in
+      [0-9a-zA-Z]) out+="$ch" ;;
+      *)           out+="-"   ;;
+    esac
+  done
+  printf '%s' "$out"
 }
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-}"
@@ -126,15 +163,43 @@ resolve_from_encoded() {
   return 1
 }
 
-if resolve_from_encoded "$(basename "$(dirname "$TRANSCRIPT_PATH")")"; then
-  SESSION_DIR_SOURCE="transcript_path"
-elif resolve_from_encoded "$(basename "$(dirname "$(dirname "$TRANSCRIPT_PATH")")")"; then
-  # A subagent transcript sits one level deeper; retry ONCE, no further.
-  SESSION_DIR_SOURCE="transcript_path (subagent, grandparent)"
-elif [[ -n "$PAYLOAD_CWD" && -d "$PAYLOAD_CWD" ]]; then
+# Encoded-ancestor walk. For a top-level session the encoded cwd IS the
+# transcript's parent directory, but a subagent transcript sits deeper. Measured
+# over ~/.claude/projects on 2026-08-31, subagent transcripts occur in exactly
+# two shapes, counted as path components below the projects root:
+#
+#   4 components (2294 files)  <projdir>/<sid>/subagents/agent-*.jsonl
+#   6 components (4724 files)  <projdir>/<sid>/subagents/workflows/<wf>/agent-*.jsonl
+#
+# The encoded name is <projdir>, so those need THREE and FIVE dirname steps
+# respectively (deepest: file → <wf> → workflows → subagents → <sid> →
+# <projdir>). Hence the bound of 6: five for the deepest layout measured, plus
+# one so a layout one level deeper still resolves, and no more — the walk stays
+# bounded rather than climbing to /.
+#
+# The code this replaces retried exactly ONCE, against the grandparent. In the
+# 4-component layout that lands on <sid> and in the 6-component layout on
+# `workflows`; neither is ever an encoded cwd, so the retry could not fire in
+# production at all. It passed its test only because the fixture built a
+# <projdir>/<sid>/sub-agent.jsonl layout that Claude Code does not write.
+ANCESTOR="$TRANSCRIPT_PATH"
+for (( UP = 1; UP <= 6; UP++ )); do
+  ANCESTOR="$(dirname "$ANCESTOR")"
+  [[ "$ANCESTOR" != "/" && "$ANCESTOR" != "." ]] || break
+  if resolve_from_encoded "$(basename "$ANCESTOR")"; then
+    if (( UP == 1 )); then
+      SESSION_DIR_SOURCE="transcript_path"
+    else
+      SESSION_DIR_SOURCE="transcript_path (ancestor $UP levels up)"
+    fi
+    break
+  fi
+done
+
+if [[ -z "$SESSION_DIR" && -n "$PAYLOAD_CWD" && -d "$PAYLOAD_CWD" ]]; then
   SESSION_DIR="$PAYLOAD_CWD"
   SESSION_DIR_SOURCE="payload cwd"
-else
+elif [[ -z "$SESSION_DIR" ]]; then
   SESSION_DIR="$PWD"
   SESSION_DIR_SOURCE="process cwd"
 fi

@@ -55,6 +55,23 @@ assert_contains() {
   esac
 }
 
+assert_not_contains() {
+  local desc="$1" needle="$2" haystack="$3"
+  TOTAL=$((TOTAL + 1))
+  case "$haystack" in
+    *"$needle"*)
+      FAIL=$((FAIL + 1))
+      echo "  FAIL: $desc"
+      echo "    expected NOT to contain: '$needle'"
+      echo "    actual:                  '$haystack'"
+      ;;
+    *)
+      PASS=$((PASS + 1))
+      echo "  PASS: $desc"
+      ;;
+  esac
+}
+
 # --- fixture ----------------------------------------------------------------
 
 ROOT=""; WT=""; PROJECTS=""; ENC_WT=""; HOOK_RC=0; HOOK_ERR=""
@@ -100,6 +117,27 @@ run_hook() {
     printf '%s' "$payload" | "$hook" ) 2>&1 >/dev/null ) || HOOK_RC=$?
 }
 
+# setup_spy — a copy of the hook in an isolated directory tree whose sibling
+# dispatch-stamp-session is a SPY: it appends its argv to $SPY_LOG and writes
+# nothing. The hook resolves the stamp script relative to its own location
+# ($SCRIPT_DIR/../skills/...), so a relocated copy is the only way to observe
+# WHETHER THE DOWNSTREAM SCRIPT RAN AT ALL — which is the observation the Stop
+# fast-path case needs and no sidecar assertion can make. Call after setup_root.
+SPY_HOOK=""; SPY_LOG=""
+setup_spy() {
+  mkdir -p "$ROOT/spy/hooks" "$ROOT/spy/skills/dispatch-propagate/scripts"
+  cp "$HOOK" "$ROOT/spy/hooks/stamp-dispatch-session.sh"
+  chmod +x "$ROOT/spy/hooks/stamp-dispatch-session.sh"
+  SPY_HOOK="$ROOT/spy/hooks/stamp-dispatch-session.sh"
+  SPY_LOG="$ROOT/spy-invocations.log"
+  rm -f "$SPY_LOG"
+  cat > "$ROOT/spy/skills/dispatch-propagate/scripts/dispatch-stamp-session" <<SPY
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$SPY_LOG"
+SPY
+  chmod +x "$ROOT/spy/skills/dispatch-propagate/scripts/dispatch-stamp-session"
+}
+
 # --- 1. THE REGRESSION: transcript encodes the worktree, cwd is main --------
 #
 # A detached `claude --bg` worker is born in its own worktree, but its
@@ -130,20 +168,64 @@ assert_contains "regression: stderr names transcript_path as the source" \
   "resolved from transcript_path" "$HOOK_ERR"
 rm -rf "$ROOT"
 
-# --- 1b. Subagent transcript (one level deeper) resolves via the grandparent --
+# --- 1b. Subagent transcripts: the two layouts Claude Code actually writes ---
+#
+# Measured over ~/.claude/projects on 2026-08-31, every subagent transcript on
+# disk has one of exactly two shapes, counted as path components below the
+# projects root:
+#
+#   4 components (2294 files)  <projdir>/<sid>/subagents/agent-*.jsonl
+#   6 components (4724 files)  <projdir>/<sid>/subagents/workflows/<wf>/agent-*.jsonl
+#
+# In BOTH the encoded name is <projdir> — three and five dirname steps above the
+# transcript. The superseded implementation retried exactly once, against the
+# grandparent, which lands on <sid> in the first layout and on `workflows` in
+# the second; it therefore resolved NEITHER in production, and passed only
+# against a synthetic <projdir>/<sid>/sub-agent.jsonl fixture that Claude Code
+# does not produce. Both cases below MUST fail against that single-retry hook:
+# resolution falls through to the process cwd (the main checkout, on `main`),
+# whose worker-branch gate no-ops, so no sidecar is written at all.
+# aggregate-usage.sh's own header documents the 4-component layout.
 
 setup_root
-SID="sess-subagent"
-mkdir -p "$PROJECTS/$ENC_WT/$SID"
-TRANSCRIPT="$PROJECTS/$ENC_WT/$SID/sub-agent.jsonl"
-SIDECAR="$PROJECTS/$ENC_WT/$SID/sub-agent.dispatch-stamp.json"
+SID="sess-subagent-4"
+mkdir -p "$PROJECTS/$ENC_WT/$SID/subagents"
+TRANSCRIPT="$PROJECTS/$ENC_WT/$SID/subagents/agent-a1b2c3d.jsonl"
+SIDECAR="$PROJECTS/$ENC_WT/$SID/subagents/agent-a1b2c3d.dispatch-stamp.json"
 run_hook "$(jq -nc --arg s "$SID" --arg t "$TRANSCRIPT" \
   '{hook_event_name:"SessionStart", session_id:$s, transcript_path:$t}')" "$ROOT"
-assert_eq       "subagent: exit 0" "0" "$HOOK_RC"
-assert_eq       "subagent: .branch is the worktree's branch" "tactic-hook-fixture" \
+assert_eq       "subagent(4-component): exit 0" "0" "$HOOK_RC"
+assert_eq       "subagent(4-component): sidecar written" "yes" \
+  "$([ -f "$SIDECAR" ] && echo yes || echo no)"
+assert_eq       "subagent(4-component): .branch is the worktree's branch" "tactic-hook-fixture" \
   "$(jq -r .branch "$SIDECAR" 2>/dev/null || echo '<no sidecar>')"
-assert_contains "subagent: stderr names the grandparent retry" \
-  "subagent, grandparent" "$HOOK_ERR"
+assert_contains "subagent(4-component): stderr reports the 3-level walk" \
+  "resolved from transcript_path (ancestor 3 levels up)" "$HOOK_ERR"
+
+SID="sess-subagent-6"
+mkdir -p "$PROJECTS/$ENC_WT/$SID/subagents/workflows/align-tactics"
+TRANSCRIPT="$PROJECTS/$ENC_WT/$SID/subagents/workflows/align-tactics/agent-e4f5g6h.jsonl"
+SIDECAR="$PROJECTS/$ENC_WT/$SID/subagents/workflows/align-tactics/agent-e4f5g6h.dispatch-stamp.json"
+run_hook "$(jq -nc --arg s "$SID" --arg t "$TRANSCRIPT" \
+  '{hook_event_name:"SessionStart", session_id:$s, transcript_path:$t}')" "$ROOT"
+assert_eq       "subagent(6-component): exit 0" "0" "$HOOK_RC"
+assert_eq       "subagent(6-component): sidecar written" "yes" \
+  "$([ -f "$SIDECAR" ] && echo yes || echo no)"
+assert_eq       "subagent(6-component): .branch is the worktree's branch" "tactic-hook-fixture" \
+  "$(jq -r .branch "$SIDECAR" 2>/dev/null || echo '<no sidecar>')"
+assert_contains "subagent(6-component): stderr reports the 5-level walk" \
+  "resolved from transcript_path (ancestor 5 levels up)" "$HOOK_ERR"
+
+# The walk is BOUNDED, not a climb to /: a transcript deeper than the bound
+# falls through to the ordinary fallbacks rather than matching by accident.
+SID="sess-subagent-too-deep"
+mkdir -p "$PROJECTS/$ENC_WT/$SID/a/b/c/d/e/f"
+TRANSCRIPT="$PROJECTS/$ENC_WT/$SID/a/b/c/d/e/f/agent-deep.jsonl"
+run_hook "$(jq -nc --arg s "$SID" --arg t "$TRANSCRIPT" \
+  '{hook_event_name:"SessionStart", session_id:$s, transcript_path:$t}')" "$ROOT"
+assert_eq       "subagent(beyond the bound): exit 0" "0" "$HOOK_RC"
+assert_contains "subagent(beyond the bound): walk gives up, falls back to process cwd" \
+  "resolved from process cwd" "$HOOK_ERR"
 rm -rf "$ROOT"
 
 # --- 2. Unknown project dir -> falls back to the payload's .cwd -------------
@@ -256,6 +338,92 @@ assert_contains "robustness: missing stamp script diagnosed" \
 assert_eq       "robustness: missing stamp script writes no sidecar" "no" \
   "$([ -f "$PROJECTS/$ENC_WT/$SID.dispatch-stamp.json" ] && echo yes || echo no)"
 rm -rf "$ROOT"
+
+# --- 7. Stop fast path: an existing sidecar short-circuits BEFORE resolving --
+#
+# Stop fires on every turn yield of every session in the project, and tree
+# resolution encodes CLAUDE_PROJECT_DIR plus every directory under
+# .claude/worktrees/. Doing that on a yield whose only possible outcome is a
+# downstream no-op is pure waste, and its cost scales with the worktree count on
+# disk (volatile: worktrees are cut and reaped continuously, so no count is
+# asserted here). The two observations are the ABSENCE of the resolution stderr
+# line and the ABSENCE of any downstream invocation; both go red if the fast
+# path is removed.
+
+setup_root
+setup_spy
+SID="sess-stop-fastpath"
+TRANSCRIPT="$PROJECTS/$ENC_WT/$SID.jsonl"
+SIDECAR="$PROJECTS/$ENC_WT/$SID.dispatch-stamp.json"
+printf '%s\n' '{"schema":1,"session_id":"sess-stop-fastpath"}' > "$SIDECAR"
+run_hook "$(jq -nc --arg s "$SID" --arg t "$TRANSCRIPT" \
+  '{hook_event_name:"Stop", session_id:$s, transcript_path:$t}')" "$ROOT" "$SPY_HOOK"
+assert_eq           "stop/fast path: exit 0" "0" "$HOOK_RC"
+assert_not_contains "stop/fast path: no tree resolution ran" "resolved from" "$HOOK_ERR"
+assert_eq           "stop/fast path: downstream stamp script NOT invoked" "no" \
+  "$([ -f "$SPY_LOG" ] && echo yes || echo no)"
+
+# Control A — Stop with NO sidecar: the backstop still resolves and still runs,
+# so the fast path has not disabled the thing it sits in front of.
+SID="sess-stop-backstop"
+TRANSCRIPT="$PROJECTS/$ENC_WT/$SID.jsonl"
+rm -f "$SPY_LOG"
+run_hook "$(jq -nc --arg s "$SID" --arg t "$TRANSCRIPT" \
+  '{hook_event_name:"Stop", session_id:$s, transcript_path:$t}')" "$ROOT" "$SPY_HOOK"
+assert_contains "stop/no sidecar: tree resolution still runs" \
+  "resolved from transcript_path" "$HOOK_ERR"
+assert_eq       "stop/no sidecar: downstream stamp script invoked" "yes" \
+  "$([ -f "$SPY_LOG" ] && echo yes || echo no)"
+assert_contains "stop/no sidecar: --only-if-absent still passed through" \
+  "--only-if-absent" "$(cat "$SPY_LOG" 2>/dev/null || echo '<not invoked>')"
+
+# Control B — SessionStart never takes the fast path, sidecar present or not:
+# a birth stamp is exactly the write that must still be attempted.
+SID="sess-start-with-sidecar"
+TRANSCRIPT="$PROJECTS/$ENC_WT/$SID.jsonl"
+SIDECAR="$PROJECTS/$ENC_WT/$SID.dispatch-stamp.json"
+printf '%s\n' '{"schema":1,"session_id":"sess-start-with-sidecar"}' > "$SIDECAR"
+rm -f "$SPY_LOG"
+run_hook "$(jq -nc --arg s "$SID" --arg t "$TRANSCRIPT" \
+  '{hook_event_name:"SessionStart", session_id:$s, transcript_path:$t}')" "$ROOT" "$SPY_HOOK"
+assert_contains "sessionstart/sidecar present: tree resolution still runs" \
+  "resolved from transcript_path" "$HOOK_ERR"
+assert_eq       "sessionstart/sidecar present: downstream stamp script invoked" "yes" \
+  "$([ -f "$SPY_LOG" ] && echo yes || echo no)"
+rm -rf "$ROOT"
+
+# --- 8. encode_cwd: no fork per candidate, byte-identical to the sed it replaced
+
+# resolve_from_encoded calls encode_cwd once per candidate worktree, so the sed
+# spelling forked a process per worktree on every turn yield. The hook's OWN
+# function is extracted here (renamed so it does not shadow this file's
+# sed-based helper) and checked on both counts: that it forks nothing, and that
+# it still agrees byte-for-byte with the real `sed 's/[^A-Za-z0-9]/-/g'`.
+
+HOOK_ENCODE_SRC=$(awk '/^encode_cwd\(\)/,/^[}]$/' "$HOOK" | sed '1s/^encode_cwd/hook_encode_cwd/')
+assert_contains "encode_cwd: the hook's own function was extracted" \
+  "hook_encode_cwd() {" "$HOOK_ENCODE_SRC"
+assert_eq       "encode_cwd: implemented without forking a process per call" "no fork" \
+  "$(case "$HOOK_ENCODE_SRC" in *sed*) echo "forks sed" ;; *) echo "no fork" ;; esac)"
+eval "$HOOK_ENCODE_SRC"
+
+ENCODE_CASES=(
+  "/home/n8/repo/.claude/worktrees/tactic-hook-fixture"
+  "under_score"
+  "with space"
+  "at@sign"
+  "dot.dot.dot"
+  "/leading/and/trailing/"
+  "Unicode: Ünïcødé"
+  "MiXeD09azAZ"
+  '!@#$%^&*()[]{}'
+  ""
+)
+for RAW in "${ENCODE_CASES[@]}"; do
+  assert_eq "encode_cwd matches sed for '$RAW'" \
+    "$(printf '%s' "$RAW" | sed 's/[^A-Za-z0-9]/-/g')" \
+    "$(hook_encode_cwd "$RAW")"
+done
 
 # --- Summary ----------------------------------------------------------------
 
