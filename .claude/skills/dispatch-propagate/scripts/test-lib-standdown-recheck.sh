@@ -284,6 +284,47 @@ sd_write_ghost_branch() {
   printf '%s\n' 0000000000000000000000000000000000000001 > "$gitdir/refs/heads/$node"
 }
 
+# sd_write_squashed_branch <node> — refs/heads/<node> is one commit AHEAD of
+# origin/main while its TREE is byte-identical to origin/main's. That is the
+# signature a squash merge leaves on the feature branch, and post-merge with the
+# worktree reaped is the NORMAL end state in this fleet — not an edge case.
+# MEASURED on git 2.55.0: `origin/main..<branch>` counts 1 while
+# `git diff --quiet origin/main <branch>` exits 0.
+sd_write_squashed_branch() {
+  local node="$1" base tree commit
+  base=$(git -C "$SD_REPO" rev-parse refs/remotes/origin/main)
+  tree=$(git -C "$SD_REPO" rev-parse "$base^{tree}")
+  commit=$(git -C "$SD_REPO" commit-tree "$tree" -p "$base" -m "squash-merged upstream; tree already on main")
+  git -C "$SD_REPO" update-ref "refs/heads/$node" "$commit"
+}
+
+# sd_write_pushed_branch <node> — refs/heads/<node> carries work that is ALSO
+# reachable from refs/remotes/origin/<node>. Nothing is at risk: the commits are
+# on a remote. `origin/main..<branch>` still counts them, because that predicate
+# answers "is it unmerged", not "is it unpushed". MEASURED: `origin/main..` 1,
+# `--not --remotes` 0.
+sd_write_pushed_branch() {
+  local node="$1" base blob tree commit
+  base=$(git -C "$SD_REPO" rev-parse refs/remotes/origin/main)
+  blob=$(printf 'work already pushed to its own remote branch\n' | git -C "$SD_REPO" hash-object -w --stdin)
+  tree=$(printf '100644 blob %s\tpushed.txt\n' "$blob" | git -C "$SD_REPO" mktree)
+  commit=$(git -C "$SD_REPO" commit-tree "$tree" -p "$base" -m "work pushed to origin/<node>")
+  git -C "$SD_REPO" update-ref "refs/heads/$node" "$commit"
+  git -C "$SD_REPO" update-ref "refs/remotes/origin/$node" "$commit"
+}
+
+# sd_write_broken_branch <node> — a loose ref whose CONTENT is not a sha at all,
+# i.e. a torn ref write. Distinct from sd_write_ghost_branch: MEASURED on this
+# host, a garbage or empty loose ref exits 1 with `warning: ignoring broken ref`
+# on stderr, while an ABSENT ref exits 1 with empty stderr. Same rc, so stderr is
+# the only discriminator — and the commits are still in the reflog.
+sd_write_broken_branch() {
+  local node="$1" gitdir
+  gitdir=$(git -C "$SD_REPO" rev-parse --absolute-git-dir)
+  mkdir -p "$gitdir/refs/heads"
+  printf 'not-a-sha\n' > "$gitdir/refs/heads/$node"
+}
+
 # sd_write_transcript <sid> <mtime-epoch>
 sd_write_transcript() {
   printf '{}\n' > "$SD_PROJ/proj-a/$1.jsonl"
@@ -957,6 +998,90 @@ assert_eq "unmeasurable: the reason does NOT claim nothing survives" "no" \
 assert_eq "unmeasurable: the recommendation refuses the all-clear" "yes" \
   "$(case "$(sd_park_recommendation)" in *'do NOT assume nothing is at risk'*) printf 'yes' ;; *) printf 'no' ;; esac)"
 assert_eq "unmeasurable: the log distinguishes unknown from null" '"unknown"' "$(sd_log_unpushed)"
+sd_teardown
+
+# --- Test 15i: a squash-merged branch is NOT stranded work -------------------
+
+# Round 3's first finding. The arm measured `rev-list --count origin/main..`,
+# which counts 1 for a squash-merged branch even though its tree already landed.
+# Post-merge-with-worktree-reaped is the NORMAL end state here, so the common
+# case produced a park saying "That work is at risk", recording unpushed=true,
+# and telling the operator to recut the checkout and "push it FIRST" —
+# resurrecting an already-landed branch. Rule (h) five lines below avoids exactly
+# this with worktree_merged_in_sync's tree-identity fallback
+# (lib-worktree-in-sync.sh:103, added for #1845); this arm had no equivalent.
+echo "Test: a squash-merged branch with no worktree is not reported as work at risk"
+sd_setup
+sd_write_node "tactic-squashed-branch" unparked
+sd_commit_nodes
+sd_write_squashed_branch "tactic-squashed-branch"
+sd_add_session "0bb2-2222" "tactic-squashed-branch"
+sd_install_claude 0
+standdown_write "tactic-squashed-branch" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "squashed-branch: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "squashed-branch: the reason does NOT claim the work is at risk" "no" \
+  "$(case "$(sd_park_reason)" in *'That work is at risk'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "squashed-branch: the reason names the tree-identity verdict" "yes" \
+  "$(case "$(sd_park_reason)" in *'tree is IDENTICAL to origin/main'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# The operative half: a recut instruction here sends the operator to push
+# commits that are already on main.
+assert_eq "squashed-branch: the recommendation does NOT tell the operator to recut" "no" \
+  "$(case "$(sd_park_recommendation)" in *'worktree add'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "squashed-branch: the recommendation does NOT tell the operator to push" "no" \
+  "$(case "$(sd_park_recommendation)" in *'push it FIRST'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "squashed-branch: the decision record encodes unpushed as false" "false" "$(sd_log_unpushed)"
+sd_teardown
+
+# --- Test 15j: a branch already on its own remote is not unpushed ------------
+
+# Round 3's third finding. `origin/main..` answers "is it unmerged", not "is it
+# unpushed". worktree_in_sync (lib-worktree-in-sync.sh:62) calls this exact state
+# in sync via `rev-list --count HEAD --not --remotes`, so the two arms produced
+# contradictory park records depending only on whether the checkout survived.
+echo "Test: a branch already pushed to its own remote ref is not unpushed"
+sd_setup
+sd_write_node "tactic-pushed-branch" unparked
+sd_commit_nodes
+sd_write_pushed_branch "tactic-pushed-branch"
+sd_add_session "0bb2-2222" "tactic-pushed-branch"
+sd_install_claude 0
+standdown_write "tactic-pushed-branch" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "pushed-branch: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "pushed-branch: the reason does NOT claim the work is at risk" "no" \
+  "$(case "$(sd_park_reason)" in *'That work is at risk'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "pushed-branch: the reason names the remote-reachability verdict" "yes" \
+  "$(case "$(sd_park_reason)" in *'fully reachable from a remote ref'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "pushed-branch: the decision record encodes unpushed as false" "false" "$(sd_log_unpushed)"
+sd_teardown
+
+# --- Test 15k: a BROKEN ref is UNKNOWN, not "no branch exists" ---------------
+
+# Round 3's second finding. `2>&1` discarded the only discriminator between an
+# absent ref and a torn one — both exit 1. A torn ref write (which this repo
+# already expects from torn sandboxed worktree removals) therefore produced
+# unpushed=false and "there is nothing to recut ... do NOT create one", while the
+# commits were still recoverable from .git/logs/refs/heads/<node>.
+echo "Test: a broken ref reports UNKNOWN and points at the reflog, not an all-clear"
+sd_setup
+sd_write_node "tactic-broken-ref" unparked
+sd_commit_nodes
+sd_write_broken_branch "tactic-broken-ref"
+sd_add_session "0bb2-2222" "tactic-broken-ref"
+sd_install_claude 0
+standdown_write "tactic-broken-ref" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "broken-ref: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "broken-ref: the reason reports UNKNOWN" "yes" \
+  "$(case "$(sd_park_reason)" in *UNKNOWN*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "broken-ref: the reason does NOT claim no branch exists" "no" \
+  "$(case "$(sd_park_reason)" in *'No branch refs/heads/tactic-broken-ref exists'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "broken-ref: the recommendation refuses the all-clear" "no" \
+  "$(case "$(sd_park_recommendation)" in *'do NOT create one'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "broken-ref: the recommendation points at the reflog" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'logs/refs/heads/tactic-broken-ref'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "broken-ref: the log distinguishes unknown from null" '"unknown"' "$(sd_log_unpushed)"
 sd_teardown
 
 # --- Test 16: a name with no node file on origin/main is kept, not parked ----

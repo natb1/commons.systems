@@ -712,7 +712,7 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
       # local merge commit (which `rev-list --not --remotes` over-counts as
       # unpushed) from being misread as stranded work.
       local unpushed_flag reason_tag reason recommendation unpushed_head="" rec_wt_clause
-      local branch_ahead="" branch_clause=""
+      local unpushed_count="" branch_clause=""
       if (( no_wt )); then
         # FIRST arm, so the sync predicates are never called on a missing
         # directory: both return 1 when `git -C` fails, which rule (h) would
@@ -738,9 +738,29 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
         # drifted: the recommendation asserted "fully merged into origin/main"
         # in the very arm where no branch existed to measure. Keep them
         # adjacent so that cannot recur.
-        local rev_rc=0
-        git -C "$repo_root" rev-parse --verify --quiet "refs/heads/$node" >/dev/null 2>&1 || rev_rc=$?
-        if (( rev_rc == 1 )); then
+        local rev_rc=0 rev_err=""
+        # stderr is CAPTURED, not discarded, because rc 1 covers two states that
+        # must not be reported the same way: the ref is genuinely ABSENT, or it
+        # exists and is BROKEN (a torn ref write -- a state this repo already
+        # expects from torn sandboxed worktree removals). The old `2>&1`
+        # discarded the only thing that tells them apart.
+        #
+        # MEASURED on this host, git 2.55.0:
+        #   absent            -> rc 1, stderr ''
+        #   garbage loose ref -> rc 1, stderr 'warning: ignoring broken ref <ref>'
+        #   empty loose ref   -> rc 1, stderr 'warning: ignoring broken ref <ref>'
+        #   unreachable sha   -> rc 0, stderr ''   (handled by the arms below)
+        #
+        # A broken ref reported as "no branch exists" issues an all-clear over
+        # commits that are still recoverable from .git/logs/refs/heads/<node>.
+        # That is the exact failure class this arm exists to close, and it
+        # contradicts the arm's own "unmeasurable reports UNKNOWN" posture.
+        rev_err=$(git -C "$repo_root" rev-parse --verify --quiet "refs/heads/$node" 2>&1 >/dev/null) || rev_rc=$?
+        if (( rev_rc == 1 )) && [[ "$rev_err" == *"broken ref"* ]]; then
+          unpushed_flag="unknown"
+          branch_clause="A ref for refs/heads/$node exists but is BROKEN (git reported: $rev_err), so whether unpushed work survives is UNKNOWN -- do not assume there is none."
+          rec_wt_clause="No worktree exists at $wt, and refs/heads/$node is a BROKEN ref -- do NOT assume nothing is at risk. Its commits may still be recoverable: read '$repo_root/.git/logs/refs/heads/$node' and repair the ref before releasing the node."
+        elif (( rev_rc == 1 )); then
           # rc 1 is specifically "no such ref". MEASURED on this host: an absent
           # branch AND a corrupt or empty loose ref all exit 1 (the corrupt one
           # with `warning: ignoring broken ref`), while an unreadable repository
@@ -762,22 +782,53 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
           branch_clause="Whether branch refs/heads/$node exists could not be determined (git rev-parse exited $rev_rc, neither 0 nor 1), so whether unpushed work survives is UNKNOWN -- do not assume there is none."
           rec_wt_clause="No worktree exists at $wt, and whether branch refs/heads/$node even exists could not be determined -- do NOT assume nothing is at risk. Re-run 'git -C $repo_root rev-parse --verify refs/heads/$node' and resolve the repository error before proceeding."
         else
-          branch_ahead=$(git -C "$repo_root" rev-list --count "origin/main..refs/heads/$node" 2>/dev/null) || branch_ahead=""
-          if ! [[ "$branch_ahead" =~ ^[0-9]+$ ]]; then
+          # TWO predicates, in this order -- the same pair rule (h) already
+          # uses five lines below via worktree_in_sync (lib-worktree-in-sync.sh:62)
+          # and worktree_merged_in_sync (:103). The two arms must not reach
+          # OPPOSITE verdicts on identical repository state merely because one
+          # has a checkout to look at and the other does not.
+          #
+          # (1) REACHABILITY, not "unmerged". `origin/main..<branch>` answers
+          #     "is it unmerged", which is a different question. A branch already
+          #     pushed to origin/<node> is entirely safe and still counts ahead
+          #     of origin/main. Ask instead whether any commit sits on NO remote.
+          #     MEASURED: pushed-to-own-remote -> `origin/main..` 1, but
+          #     `--not --remotes` 0.
+          # (2) TREE IDENTITY as the fallback, for the squash merge. MEASURED on
+          #     git 2.55.0: after a squash merge the ahead-count is 1 while
+          #     `git diff --quiet origin/main <branch>` exits 0. Post-merge with
+          #     the worktree reaped is the NORMAL end state in this fleet, so
+          #     counting alone told the operator that an already-landed branch
+          #     was "at risk" and to recut it and "push it FIRST" -- resurrecting
+          #     work that had already landed.
+          local diff_rc=0
+          unpushed_count=$(git -C "$repo_root" rev-list --count "refs/heads/$node" --not --remotes 2>/dev/null) || unpushed_count=""
+          if ! [[ "$unpushed_count" =~ ^[0-9]+$ ]]; then
             unpushed_flag="unknown"
-            branch_clause="Branch refs/heads/$node exists but could not be measured against origin/main, so whether unpushed work survives is UNKNOWN -- check it before assuming there is none."
-            rec_wt_clause="No worktree exists at $wt, and branch refs/heads/$node could not be measured -- do NOT assume nothing is at risk. Check 'git -C $repo_root rev-list --count origin/main..refs/heads/$node' before proceeding."
-          elif (( branch_ahead > 0 )); then
-            unpushed_flag="true"
-            branch_clause="Branch refs/heads/$node survived the missing checkout and still carries $branch_ahead commit(s) not on origin/main. That work is at risk."
-            # `worktree prune` FIRST: the torn sandboxed removal this arm exists
-            # for leaves the registration under .git/worktrees/ behind, and
-            # `worktree add` refuses while that stale entry is present.
-            rec_wt_clause="No worktree exists at $wt, but branch refs/heads/$node still carries $branch_ahead commit(s) not on origin/main. Recut the checkout with 'git -C $repo_root worktree prune && git -C $repo_root worktree add $wt $node', verify that work, and push it FIRST."
-          else
+            branch_clause="Branch refs/heads/$node exists but its unpushed-commit count could not be measured, so whether unpushed work survives is UNKNOWN -- check it before assuming there is none."
+            rec_wt_clause="No worktree exists at $wt, and branch refs/heads/$node could not be measured -- do NOT assume nothing is at risk. Check 'git -C $repo_root rev-list --count refs/heads/$node --not --remotes' before proceeding."
+          elif (( unpushed_count == 0 )); then
             unpushed_flag="false"
-            branch_clause="Branch refs/heads/$node is fully contained in origin/main (0 commits ahead), so no unpushed work survives under the node id."
-            rec_wt_clause="No worktree exists at $wt and branch refs/heads/$node is fully merged into origin/main, so no unpushed work is at risk — do NOT create one."
+            branch_clause="Branch refs/heads/$node is fully reachable from a remote ref (0 commits on no remote), so no unpushed work survives under the node id."
+            rec_wt_clause="No worktree exists at $wt and every commit on branch refs/heads/$node is already on a remote, so no unpushed work is at risk — do NOT create one."
+          else
+            git -C "$repo_root" diff --quiet origin/main "refs/heads/$node" 2>/dev/null || diff_rc=$?
+            if (( diff_rc == 0 )); then
+              unpushed_flag="false"
+              branch_clause="Branch refs/heads/$node carries $unpushed_count commit(s) on no remote, but its tree is IDENTICAL to origin/main — the signature of a squash merge that already landed. No unpushed work survives under the node id."
+              rec_wt_clause="No worktree exists at $wt, and branch refs/heads/$node has a tree identical to origin/main (already landed, squash-merged), so no unpushed work is at risk — do NOT create one."
+            elif (( diff_rc == 1 )); then
+              unpushed_flag="true"
+              branch_clause="Branch refs/heads/$node survived the missing checkout and still carries $unpushed_count commit(s) not on any remote, with a tree that differs from origin/main. That work is at risk."
+              # `worktree prune` FIRST: the torn sandboxed removal this arm exists
+              # for leaves the registration under .git/worktrees/ behind, and
+              # `worktree add` refuses while that stale entry is present.
+              rec_wt_clause="No worktree exists at $wt, but branch refs/heads/$node still carries $unpushed_count commit(s) not on any remote. Recut the checkout with 'git -C $repo_root worktree prune && git -C $repo_root worktree add $wt $node', verify that work, and push it FIRST."
+            else
+              unpushed_flag="unknown"
+              branch_clause="Branch refs/heads/$node carries $unpushed_count commit(s) on no remote, but comparing its tree against origin/main failed (git diff exited $diff_rc), so whether that work already landed is UNKNOWN -- do not assume it did."
+              rec_wt_clause="No worktree exists at $wt, and branch refs/heads/$node could not be compared against origin/main -- do NOT assume nothing is at risk. Re-run 'git -C $repo_root diff --quiet origin/main refs/heads/$node' and resolve the repository error before proceeding."
+            fi
           fi
         fi
         reason_tag="standdown-winner-dead-node-held-no-worktree"
