@@ -203,8 +203,13 @@ Otherwise (opus-fixable items present), choose exactly one path:
 
    Run it from the node's worktree, exactly as the clean path runs
    `transition-node "$N" --set-pr "$PR_NUM"` (`.claude/skills/qa-fix/SKILL.md`,
-   the node-lane **Completion** bullet). Use `dangerouslyDisableSandbox: true` —
-   `graph-commit` pushes over the network:
+   the node-lane **Completion** bullet). Use `dangerouslyDisableSandbox: true`
+   on the **first** attempt — not because of the network (`github.com` is
+   allowlisted, so `git push` needs no override), but because `graph-commit`
+   rebases onto an `intentions/`-only base and that rebase meets the
+   read-only `.claude/` carve-outs. When it aborts it **reverts the
+   uncommitted node edit**, so a retry has nothing left to land. See
+   `.claude/rules/sandbox.md`, §graph-commit:
    ```bash
    node --import tsx/esm packages/intentionsutil/scripts/apply-lane-pass.ts "$N" --stamp \
      --lane qa-fix --phase qa --sha "$(git rev-parse HEAD)"

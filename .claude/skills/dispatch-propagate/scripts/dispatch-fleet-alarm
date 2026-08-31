@@ -73,7 +73,7 @@
 #       degrades to journald-only for that pass — but must still report this
 #       graph-write failure in its own output.
 #   64  usage error / unknown kind.
-#   69  environment error (missing node/npx/git/jq/flock, the graph-write mutex
+#   69  environment error (missing node/git/jq/flock, the graph-write mutex
 #       could not be established at all — never downgrade that to an
 #       unserialized write — or refs/remotes/origin/main does not resolve in this
 #       checkout, which makes the pre-write blob capture meaningless; nothing is
@@ -267,7 +267,7 @@ else
 fi
 
 # --- Environment -------------------------------------------------------------
-for bin in date flock git jq node npx; do
+for bin in date flock git jq node; do
   command -v "$bin" >/dev/null 2>&1 || { log "required command '$bin' not found on PATH"; exit 69; }
 done
 

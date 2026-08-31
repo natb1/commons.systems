@@ -402,7 +402,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # --- Environment -------------------------------------------------------------
-for bin in date flock git jq node npx; do
+for bin in date flock git jq node; do
   command -v "$bin" >/dev/null 2>&1 || { log "required command '$bin' not found on PATH"; exit 69; }
 done
 

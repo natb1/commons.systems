@@ -159,7 +159,7 @@ unit-tests
   ruleset; without it, `graph-commit`'s scratch-branch stamp step never goes
   green and the push loop times out.
 - Further host couplings: the office_hours parking fallback shells out to
-  `node --import tsx/esm` against `STORE_MODULE` (`graph-commit:1085,3324`), and the script
+  `node --import tsx/esm` against `STORE_MODULE` (`graph-commit:3382`), and the script
   mirrors `.claude/skills/dispatch-propagate/scripts/lib.sh` conventions
   (`graph-commit:60-61`).
 
