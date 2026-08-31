@@ -334,9 +334,17 @@ export DISPATCH_GRAPH_NODE_CACHE
 # $PR_JSON_CACHE is the third member and is NOT created here: it is armed far
 # below, across the reconciler pair only, and torn down explicitly straight
 # after. This entry is the crash backstop for the window between those two
-# points, so it is guarded as ${PR_JSON_CACHE:-} — the trap is registered long
-# before the variable exists and `rm -rf ""` must never be issued.
-trap '_dlog_select_emit; rm -rf "$DISPATCH_CI_VERDICT_CACHE" "$DISPATCH_GRAPH_NODE_CACHE" "${PR_JSON_CACHE:-}"' EXIT
+# points. It is guarded as ${PR_JSON_CACHE:+"$PR_JSON_CACHE"}, UNQUOTED at the
+# outer level: the `:+` form expands to ZERO WORDS when the variable is unset or
+# empty, so `rm -rf` is handed no operand at all.
+#
+# The earlier spelling here was "${PR_JSON_CACHE:-}", with the claim that it
+# meant `rm -rf ""` was never issued. It did not. A quoted `:-` expansion still
+# passes an empty-string argument, so every tick that never armed the memo — the
+# common case — really did issue `rm -rf ""`. That was benign only because
+# `rm -f` ignores a nonexistent operand, which is a property of rm, not a
+# guarantee this trap was making. `:-` guards `set -u` and nothing more.
+trap '_dlog_select_emit; rm -rf "$DISPATCH_CI_VERDICT_CACHE" "$DISPATCH_GRAPH_NODE_CACHE" ${PR_JSON_CACHE:+"$PR_JSON_CACHE"}' EXIT
 
 # --- Step 1: sync local main with origin/main (only on the main branch) -------
 # The `--ff-only` merge is the precondition for all selection AND the recovery

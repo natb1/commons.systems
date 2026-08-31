@@ -581,14 +581,26 @@ assert_eq "node-scope: graph-auto-merge" "--node $NODE" "$(head -n1 "$SEQ_DIR/me
 assert_eq "node-scope: reconcile-graph-merged" "--node $NODE" "$(head -n1 "$SEQ_DIR/reconcile.argv")"
 assert_eq "node-scope: reconcile-graph-review-stall" "--node $NODE" "$(head -n1 "$SEQ_DIR/stall.argv")"
 
-echo "Test: neither REST memo cache reaches a reconciler, however the environment arrives"
+echo "Test: neither REST memo cache reaches advance or a reconciler, however the environment arrives"
 # The pass above exported both variables to bogus paths. Every recorded
 # invocation of all three reconcilers must nonetheless read <unset> for both:
-# dispatch-ladder-run unsets them at each call site. This is the containment
+# dispatch-ladder-run clears them for the whole process. This is the containment
 # backstop for gh_pr_view_rest's DISPATCH_PR_JSON_CACHE memo, which is armed
 # only inside dispatch-select-tick's back-to-back reconciler pair; it also
 # closes the pre-existing gap that the CI cache's `unset` was never asserted.
-for _seq in merge reconcile stall; do
+#
+# ADVANCE IS IN THE LIST, AND IS THE REASON THE LIST IS NOT JUST THE THREE
+# RECONCILERS. dispatch-ladder-advance is not a reconciler and runs EARLIER in
+# every pass than any of them, but it calls graph-select-target, whose
+# `mergedAt` freshness reads go through gh_pr_view_rest — one of the two
+# readers lib.sh's header names as never allowed to see the memo. A driver that
+# unset only beside the reconciler calls left every advance reading a pinned
+# pre-merge snapshot, and this loop asserted nothing about it. The routed pass
+# above calls advance three times, so a per-call-site unset fails here on the
+# FIRST recorded advance while the later two (after reconcile_pass has run in
+# the same shell) look clean — which is exactly the shape that made the gap
+# invisible in production.
+for _seq in advance merge reconcile stall; do
   assert_eq "no-cache: $_seq recorded at least one invocation" "1" \
     "$([[ -s "$SEQ_DIR/$_seq.env" ]] && echo 1 || echo 0)"
   assert_eq "no-cache: every $_seq call saw both memos unset" "0" \
