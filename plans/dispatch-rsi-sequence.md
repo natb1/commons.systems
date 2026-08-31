@@ -1464,15 +1464,22 @@ thrashed for sixteen rounds on PR #3146.
 3. **Cite tool behaviour, never derive it.** A plan document carries the
    decision and a `path:line` pointer. The derivation belongs beside the code,
    where drift is visible.
-4. **Tier by diff kind.** Code and scripts: `high` + `opus` until a round is
-   blocking-clean. **Docs-only diffs: exactly one `high` round**, triaged per
-   rule 1, then merge. The gate is never skipped — this changes its depth, not
-   its existence. This rule also **completes the definition of "settled"** that
-   grant 1 defers to: for code, settled means a blocking-clean round; for a
-   docs-only diff, settled means that one round has been triaged, whether or not
-   it was blocking-clean, with any blocking finding fixed in-branch and merged
-   without a second round. Rule 4 wins where the two readings differ — a
-   docs-only diff never earns a second round on the strength of rule 1 alone.
+4. **Tier by diff kind, and cap the rounds.** Code and scripts touching the
+   dispatch/graph write paths: `high` + `opus`. Docs, plan and test-only diffs:
+   one `medium` round. **Two rounds per PR is a hard cap either way** — a
+   finding that arrives *after* round 2 becomes a follow-up node, never a round
+   3. The gate is never skipped — this changes its depth, not its existence.
+   This rule also **completes the definition of "settled"** that grant 1 defers
+   to: settled means the round budget is spent and every blocking finding is
+   resolved. The cap bounds **review rounds, not correctness** — a blocking
+   finding surfaced *by* round 2 is fixed in-branch and merged without buying a
+   round 3, and it is never a licence to merge past one. Rule 4 wins where the
+   two readings differ: no diff earns a further round on the strength of rule 1
+   alone. The cap is **executor-tracked — no script enforces it** (nothing in
+   `dispatch-code-review`, `dispatch-review-plan-gate` or `lib.sh` counts
+   rounds), so count them yourself before launching one. This text replaces the
+   earlier `high`-for-docs-only, no-cap version, per the author's 2026-08-31
+   ruling recorded in `plans/dispatch-rsi-batch-state.md`.
 
 **Why, in one measurement.** PR #3146's findings per round ran
 `11, 6, 5, 2, 1, 2, 4, 4, 6, 2, 3, 2, 2, 1, 3, 2` — 56 across 16 rounds, with no
