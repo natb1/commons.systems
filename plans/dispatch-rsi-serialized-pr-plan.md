@@ -1084,8 +1084,9 @@ rather than blocking each other.
 
 *Model: per unit — **opus** for the timing node's Unit 1, **sonnet** for the
 rest.* *(Corrected 2026-08-31.* This line read "*Model: sonnet* — verified
-anchors, merge existing helper output". It is the one **downward** flattening in
-PR2 and the more dangerous direction: it runs an opus-rated unit on sonnet.
+anchors, merge existing helper output". It is one of PR2's **two downward**
+flattenings — Unit 4 below is the other — and downward is the more dangerous
+direction: it runs an opus-rated unit on sonnet.
 `intentions/tactic-eval-finding-halt-path-emits-no-timing-fields.md` Unit 1
 *"`halt()` carries the phase's timing fields when a phase was in flight"*
 (`:181`) is **opus** (`:233`); its Units 2 (`:235`), 3 (`:270`) and 4 (`:322`)
@@ -4508,7 +4509,7 @@ than the queue baseline?
 > The distribution is the point: `strategy-recursive-self-improvement` alone
 > carries **9** — more than a quarter of the graph's total, and on the strategy
 > node this whole plan serves. The rest:
-> `tactic-rsi-plan-render-retire` 4, `tactic-graph-read-at-ref-cli` 3,
+> `tactic-rsi-plan-render-retire` 4, `tactic-graph-read-at-ref-cli` 4,
 > `tactic-rsi-research-skill` 3 *(leave alone, see above)*,
 > `tactic-attention-namespaced-rank` 2, `tactic-rsi-plan-skill` 2, and one each
 > on `tactic-ladder-await-phase-only-completion-test`,

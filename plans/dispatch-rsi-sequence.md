@@ -826,8 +826,18 @@ Ruling 3 (`:187`, option (a)). The fourth,
 `tactic-eval-finding-deferred-unit-diff-only-in-ephemeral-jobdir` (PR9 Unit 8),
 is not a content question at all — a `dispatch-tick` frozen-session sweep parked
 it on `2026-08-19` after a worker stalled at a permission denial, and its
-recommendation is a mechanical release script. All four take `clear-park`; none
-is the completion-record case. **This position is not blocked on the author.**
+recommendation is a mechanical release script. **Three of the four take
+`clear-park`; the Ruling-1 node does NOT.** *("All four take `clear-park`; none
+is the completion-record case" is struck 2026-08-31 — it contradicted this
+paragraph's own Ruling-1 citation two sentences earlier.)*
+`tactic-dispatch-code-review-concurrent-write-attribution` is `status: raw`,
+`phase: null` on `origin/main` and its work already shipped under a sibling
+carrier, which is precisely the shape Ruling 1 rules a **completion record** for
+— `status: raw → codified`, `phase: null → done`, do not prune
+(`plans/dispatch-rsi-author-rulings.md:137-145`; the node's own body says the
+same at `:290-293`). Clearing it instead would make a node whose work has
+shipped router-eligible rather than terminal, which Ruling 4's BOUND clause
+forbids by name. **This position is not blocked on the author.**
 
 **Its 16 flattened model tags are the largest concentration in the plan.** Each
 is marked inline in the plan's PR2, PR6, PR7, PR8 and PR9 sections with the node
@@ -975,8 +985,8 @@ PR20 Unit 5.
 
 #### The PR20 split
 
-PR20 does not ship as one PR. The split is by **write surface**, and two of the
-four pieces are constrained from outside:
+PR20 does not ship as one PR. The split is by **write surface**, and three of
+the five pieces are constrained from outside:
 
 | | units | surface | constraint |
 |---|---|---|---|
@@ -984,6 +994,7 @@ four pieces are constrained from outside:
 | **20b** | Units 4, 5, 8 | `.claude/skills/align-tactics/SKILL.md`, its `references/`, `.claude/workflows/align-tactics.js` | **MUST land before PR13**, which renames that skill; the failure is silent, not a merge conflict |
 | **20c** | Unit 6 | `packages/intentionsutil/src/schema.ts`, `scripts/validate-graph.ts`, `src/digest.ts` + tests — **and `.claude/skills/align-audit/SKILL.md`** | collides with 20d, below |
 | **20d** | Unit 9 (the rider) | `.claude/docs/delegability.md`, `.claude/docs/signal-identification.md`, the two `ref-*` skills, `packages/intentionsutil/scripts/read-sensors.ts:28` — **and `.claude/skills/align-audit/SKILL.md`** | collides with 20c |
+| **20e** | Unit 7 | `intentions/tactic-align-tactics-premise-preflight.md` **only** — a graph-only completion record, no code | **MUST land after PR4**, whose Unit 1 re-keys the prune exemption to `measured_impact` presence; retiring the node before that puts its evidence on the owed-prune list |
 
 > **⚠ "20c is `packages/intentionsutil` only" is REFUTED (2026-08-31).** That
 > claim is what made 20c and 20d look independent, and it appears twice in the
@@ -998,8 +1009,12 @@ four pieces are constrained from outside:
 
 Units 1 and 3 are **descoped by Ruling 7** and appear in no piece — Unit 3
 writes nothing at all, which is why the PR13-gating banner's old "Units 3–5" was
-wrong at both ends. Unit 7 is a recorded decision with no code and rides with
-whichever piece lands last.
+wrong at both ends. Unit 7 is a recorded decision with no code; it is **20e**,
+and it is the one piece with a constraint pointing *backwards* — it must land
+after PR4, not merely with whatever else ships. *(This row said "rides with
+whichever piece lands last" until 2026-08-31, which contradicted the plan's own
+Unit 7 callout — see PR20 Unit 7 in `plans/dispatch-rsi-serialized-pr-plan.md`,
+which names it `20e` and sequences it after PR4.)*
 
 ### Position 10 · Bundle 6 — PR13, the skill rename
 
@@ -1246,11 +1261,14 @@ Most of the sequence can flex — Bundles 3 and 4 can swap or overlap, since the
 share no files, and PR2 and PR5–PR9 are mutually independent. Seven constraints
 cannot:
 
-1. **PR20b before PR13** (position 9 before 10). A rename orphans the paths the
-   other PR writes, silently.
+1. **PR20b before PR13** (one slice of position 9 before position 10 — **not**
+   the whole position). A rename orphans the paths the other PR writes,
+   silently.
 
-   *(Was "PR20 before PR13" until 2026-08-31 — too coarse in one direction and
-   wrong in the other. **Only Units 4, 5 and 8** write the renamed surface
+   *(Was "PR20 before PR13" until 2026-08-31, and the parenthetical read
+   "position 9 before 10" — too coarse in one direction and wrong in the other,
+   and the parenthetical contradicted this note's own next-but-one sentence.
+   **Only Units 4, 5 and 8** write the renamed surface
    (`.claude/skills/align-tactics/SKILL.md`, its `references/`, and
    `.claude/workflows/align-tactics.js`), and those three are exactly PR20b —
    see §"Position 9 · The PR20 split". PR20a, PR20c and PR20d are **not**
