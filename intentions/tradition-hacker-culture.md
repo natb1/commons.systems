@@ -34,12 +34,15 @@ rounds: null
 attributes:
   origin: chosen
   adopted:
-    - "the two-pole aphorism → the virtue-right-livelihood /
-      virtue-knowledge-as-gift tension_with pair: both pulls are real and
-      neither wins; the pair records the fight rather than resolving it"
+    - "the two-pole aphorism → the capture pressure the platform/market mount
+      exerts on strategy-financial-sustainability's monetization decisions,
+      where virtue-right-livelihood and virtue-knowledge-as-gift both bind: both
+      pulls are real; the conflict arrives through the mount, not between the
+      virtues (re-pointed 2026-08-30 resolution round (decision: deferred,
+      delegation-anthropic-claude, 2026-08-30))"
   diverged:
     - free-software moralism's stronger claim that charging is itself a wrong —
-      the pair holds monetization ratifiable under recorded tension, not
+      the pair holds monetization ratifiable under recorded capture pricing, not
       forbidden
   chosen_over: []
   texts:

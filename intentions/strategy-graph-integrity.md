@@ -28,7 +28,6 @@ rationale: "The three requirements arrived as fragments: internal consistency
   the author by condition. serves is empty by the sub-strategy inheritance rule
   (kind-strategy): no virtue claim beyond parent strategy-explicit-intent."
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
@@ -132,6 +131,18 @@ clarifications:
       tactic-serves-inheritance-full-strip, coordinated with
       tactic-graph-self-consistency-sweep Unit 4's seven full sets. Recorded
       2026-07-09 interview."
+  - question: Where did the sensor move when /align-audit was retired (2026-08-30)?
+    answer: "(Recorded 2026-08-30, resolution round.) (Resolution round.) /exetasis
+      supersedes all author-owned graph review processes, and /align-audit is
+      deprecated-and-removed (tactic-align-audit-retirement) — but this
+      strategy's concern (internal consistency, closure, parsimony) is OBJECTIVE
+      validity, which the author's mounts ruling assigns to non-author
+      processes, so the sensor did not move to /exetasis. It re-homed to the
+      graph-digest check tables, read by the RSI-family delegated-review batch
+      function chartered in tactic-rsi-graph-review (also the digest tooling's
+      new charter home). Author amendment, verbatim intent: NO office-hours
+      interim — 'the functionality is tracked, but may lapse/regress until RSI
+      batch review is built.'"
 tooling_goals:
   - kind: sensor
     statement: "graph-digest.ts — token-bounded whole-graph digest: per-node summary
@@ -143,7 +154,11 @@ success_signal:
   observable: "per audit cycle: findings by requirement (consistency, closure,
     parsimony) and each finding's disposition — fixed, drafted as a tactic,
     already-tracked, ratified exception, or deferred with a review item"
-  sensor: the /align-audit report, reviewed at office-hours
+  sensor: "the graph-digest check tables (deterministic, token-bounded), read by
+    the RSI-family delegated-review batch function (WIP —
+    tactic-rsi-graph-review); no office-hours interim: the author accepts the
+    signal may lapse/regress until that function is built (2026-08-30 resolution
+    round)"
   threshold: a cycle completes with zero undispositioned findings and zero repeats
     of the prior cycle's findings
   is_proxy: true
@@ -157,6 +172,7 @@ pace_exempt: false
 rounds:
   count: 0
   last_completed: null
+  last_aligned: null
 attributes:
   conditions:
     - the audit stays token-bounded — digest-first reading, full node bodies

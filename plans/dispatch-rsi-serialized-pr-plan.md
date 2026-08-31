@@ -2098,8 +2098,9 @@ in this plan.
 **Recommended model: per unit — this PR is NOT uniformly sonnet.**
 *(Corrected 2026-08-30.* This line used to read "**Recommended model: sonnet** —
 five localized efficiency fixes in one 340-line script, plus one CAS pin." A
-PR-level `sonnet` tag silently overrides the `opus` rating that 12 of Position
-4's 22 units carry on their own nodes.*)* The assignment:
+PR-level `sonnet` tag silently overrides the `opus` rating that 11 of Position
+4's 22 units carry outright on their own nodes — plus two of U18's three
+sub-units.*)* The assignment:
 
 | Units | Work | Model |
 |---|---|---|
@@ -2112,7 +2113,7 @@ PR-level `sonnet` tag silently overrides the `opus` rating that 12 of Position
 | U13 | base-pin 1 | sonnet |
 | U14–U15 | base-pin 2–3 | opus |
 | U16–U17 | retention-scan 1–2 | opus |
-| U18 | the absorbed ci-pending liveness bound (3 sub-units) | opus |
+| U18 | the absorbed ci-pending liveness bound (3 sub-units) | sonnet (Unit 1 — hold-kind vocabulary); opus (Units 2–3) |
 | U19 | PR9 Unit 2 standdown | opus |
 | U20 | PR9 Unit 6 reclaim audit 1 | opus |
 | U21 | PR9 Unit 6 reclaim audit 2 | sonnet |
@@ -2148,26 +2149,65 @@ to evaluate a pure two-string predicate.
 All anchors *(from node bodies — re-locate)* in
 `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall`:
 
-- **`:146-150`** — second full `intentions/` scan per tick. Share one
-  materialized node enumeration with `reconcile-graph-merged`.
-- **`:186`** — duplicate `gh_pr_view_rest` fetch. Memoize the PR JSON
+- **`:188-207`** (the `listNodesStrict("./intentions")` at `:192`) — second full
+  `intentions/` scan per tick. *(Anchor corrected 2026-08-30.* This bullet used
+  to read `:146-150`, which is the `restore_staged_writes` /
+  `graph_rollback_node_writes` block — unrelated to enumeration.
+  `tactic-review-stall-listnodes-duplicate-scan` Unit 2 gives the range
+  itself.*)* Per that same Unit 2, this is one of **five
+  enumerations across four files** that route through the same materialized
+  node enumeration: `reconcile-graph-merged`, `reconcile-graph-review-stall`,
+  `graph-auto-merge`, and `packages/intentionsutil/scripts/reconcile-graph.ts`
+  (whose **single** enumeration at `:207` `reconcile-graph-merged` invokes
+  **twice** — once `--no-apply` at `:314`, once applying at `:351`; the fifth
+  enumeration is that second invocation, not a second call site in the file).
+  *(Corrected 2026-08-30.* An earlier revision of this bullet called that second
+  invocation "a guaranteed cache hit". Measured on `origin/main`: the two
+  invocations are separate `node` processes, so no in-process memo can survive
+  between them, and `packages/intentionsutil/` contains no store-level scan
+  cache at all — so today the second invocation is a second **full scan**. It
+  becomes a cache hit only once P1's on-disk content-addressed `store-cache`
+  lands **and** `reconcile-graph.ts` reads through it. That is the win this unit
+  buys, not a property it already has. Note also that `reconcile-graph-merged`
+  carries its own independent enumeration at `:176`, so a tick that reaches the
+  apply run performs all **five** of the enumerations above per pass, not two.
+  `graph-auto-merge:264` is one of the five: `dispatch-select-tick:618` invokes
+  it unconditionally on every tick, ahead of `reconcile-graph-merged` (`:647`)
+  and `reconcile-graph-review-stall` (`:663`). The count is five and not a
+  floor-of-five only because `reconcile-graph-merged` early-exits at its
+  `[[ -z "$OPEN_TACTICS" ]] && exit 0` (`:192`) when nothing is absorbable, in
+  which case neither `reconcile-graph.ts` invocation runs and the pass costs
+  three.*)* The node
+  explicitly scopes three other call sites **out**, and not as an oversight:
+  `select-targets.ts:58` belongs to U17, and
+  `dispatch-graph-census:73` / `dispatch-graph-scope-sweep:98` are reached in
+  U16, through their underlying `.ts` scripts.
+- **`:224`** — duplicate `gh_pr_view_rest` fetch. Memoize the PR JSON
   **narrowly, within the review-stall sweep only — never exported tick-wide.**
+  *(Anchor corrected 2026-08-30 — `:186` is a header comment inside the
+  enumeration block above; the `gh_pr_view_rest "$pr"` call is at `:224`.)*
   *(Corrected 2026-08-30.* The former wording offered "memoize per-PR JSON for
   the tick" as an option. `intentions/tactic-review-stall-pr-json-duplicate-fetch.md`
   rejects it by name — *"That option is rejected here … do not take it"*, and
   *"the memo must be narrowly armed … never exported tick-wide"* — because a
   tick-wide memo feeds a cached **pre-merge** body to `graph-select-target`'s
   freshness read and **reintroduces the stale-review-target bug**.*)*
-- **`:214`** (with `.claude/skills/dispatch-propagate/scripts/lib.sh:829-831`) —
+- **`:238`** (the `MERGEABLE=$(jq -r '.mergeable' <<<"$PR_JSON")` read; the CI
+  call it must short-circuit is `dispatch_ci_verdict_rest` at `:252`, defined at
+  `.claude/skills/dispatch-propagate/scripts/lib.sh:840`) —
   read `.mergeable` first so `CONFLICTING` short-circuits without a CI call.
+  *(Anchors corrected 2026-08-30 — this bullet read `:214` with
+  `lib.sh:829-831`; both had drifted.)*
   *(Corrected 2026-08-30.* This bullet used to add "and skip candidates whose
   head sha is unchanged since the last sweep found no regression". That is
   verbatim the node's Fix 2, which
   `intentions/tactic-review-stall-ci-verdict-cache-miss.md` marks *"is
   deliberately SCOPED OUT"*. Keep only the `.mergeable`-first short-circuit.*)*
-- **`:220`** — add the **documented superset cost pre-filter** that already ships
+- **`:258`** — add the **documented superset cost pre-filter** that already ships
   on the sibling callsite, so the `node --import tsx/esm` subprocess is skipped
   on the overwhelmingly common quiet candidate.
+  *(Anchor corrected 2026-08-30 — this bullet read `:220`; the per-candidate
+  `ROUTE=$( … reviewStallRoute … )` spawn is at `:258`.)*
   *(Corrected 2026-08-30.* This bullet used to offer "evaluate the pure
   `reviewStallRoute` predicate inline in bash, or batch all candidates through
   one subprocess". `intentions/tactic-review-stall-predicate-subprocess-spawn.md`
@@ -2266,8 +2306,10 @@ retaining done tactics on disk for the every-tick full-scan callers.
 *Model: per unit — read the table under the PR heading, and each node's own
 `**Recommended model**` line; do NOT apply one PR-level tag.* This line used to
 read "*Model: sonnet* — localized efficiency fixes, clear shapes". Corrected
-2026-08-30: **12 of Position 4's 22 units are rated `opus`**, and a PR-level
-`sonnet` silently overrides every one of them.
+2026-08-30: **11 of Position 4's 22 units are rated `opus` outright** — U1, U2,
+U6, U7, U14, U15, U16, U17, U19, U20, U22 — **and U18 is mixed** (`sonnet` for
+its Unit 1, `opus` for its Units 2–3). A PR-level `sonnet` silently overrides
+every one of them.
 
 *(Attribution corrected again 2026-08-30.* An intermediate revision of this
 paragraph said "8 … units are rated `opus`" and named "the retention-scan,
@@ -2875,8 +2917,14 @@ than printing `8`.
 > Unit 3 is `tactic-graph-execute-fresh-main-read`'s contested half
 > (`provision-node-worktree:113`, `test-provision-node-worktree.sh`).
 
-**Recommended model: opus** for Units 1–2 (a reap that can delete the wrong
-checkout), **sonnet** for the rest. Split if convenient.
+**Recommended model: per unit — read each unit's own `*Model:*` line and the
+node's own `**Recommended model**`; do NOT apply one PR-level tag.** `opus` for
+Units 1–2 (a reap that can delete the wrong checkout) and for Unit 6's bucketing
+half; `sonnet` for the rest, including Unit 6's test half. Split if convenient.
+*(Corrected 2026-08-30.* This line used to read "**Recommended model: opus** for
+Units 1–2 …, **sonnet** for the rest", which silently overrode the `opus` that
+`tactic-reclaim-audit-spawn-handoff-expired-count` Unit 1 carries on its own
+node — the same defect PR5's heading was corrected for.*)*
 
 ### Context
 
@@ -2908,10 +2956,48 @@ checkout as removable.
 *Model: opus* — misclassification deletes wrong checkout
 
 **Unit 2 — standdown clear must not race a live session.**
-`.claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh:619`,
-`dispatch-graph-execute:185-200` *(from node bodies — re-locate)*. The
-cleared-no-worktree branch erases a stand-down while a live session still holds
-the node name, silently re-creating the deadlock the tactic removes.
+Two files change, per the node's own Scope ("Two files change. Nothing else.") —
+but **three sites inside the first file**, all in the same commit:
+
+1. `.claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh`, the
+   unlettered no-worktree branch and its `standdown_clear "$node"` call
+   (currently `:663-677`). Replace the clear-and-`continue` with a `no_wt` flag;
+   the `wt` derivation stays, because the reason/recommendation strings
+   interpolate it.
+2. **Same file, the (h)/(i) site** (currently `:686-707`). Add the `no_wt` arm
+   **first**, producing the third reason variant
+   `standdown-winner-dead-node-held-no-worktree`, and keep `recommendation` as
+   one shared template with only its worktree sentence swapped. **This half is
+   not optional.** The node rejects bare deletion of the branch by name —
+   *"Bare deletion of the branch (fall straight through to (h)/(i)) — WRONG,
+   mechanically"* — because `worktree_in_sync` and `worktree_merged_in_sync`
+   both `return 1` on a missing directory, so every no-worktree node would park
+   as `standdown-winner-dead-work-unpushed` telling the operator to push from a
+   path that is not on disk.
+3. **Same file, the rule-ladder header comment** (currently `:107-147`). Delete
+   the `cleared-no-worktree` bullet at `:133-135`, replace it in the same slot
+   with the no-clear rule and its `n_live >= 1` invariant, and extend the (h)/(i)
+   description to three reason tags. The node: *"the header ladder is the
+   authoritative contract … it must change in the SAME commit."*
+
+Plus `test-lib-standdown-recheck.sh` — invert Test 15, add two cases, tighten
+Test 3's prefix glob to `standdown-winner-dead-node-held:*`.
+
+*(All four anchors above are from the node body — re-locate before editing.)*
+
+**`dispatch-graph-execute` is not edited.** It
+appears only as the shape being mirrored: the branch's worktree-path derivation
+follows `dispatch-graph-execute`'s `"$PROJECT_ROOT/.claude/worktrees/$id"`
+composition, nothing there changes. *(Do not grep for `CONFLICT_WT`. The
+in-file comment at `lib-standdown-recheck.sh:665` and this unit's node body
+still name that variable, but `tactic-node-worker-fresh-skill-body`
+(`phase: done`) deleted its
+`CONFLICT_WT="$PROJECT_ROOT/.claude/worktrees/$id"` binding from
+`dispatch-graph-execute`, so no definition survives anywhere in the tree —
+every remaining mention is a historical citation. The nearest live binding of
+the same composition is `RESIDUE_WT` at `dispatch-graph-execute:490`.)*
+The cleared-no-worktree branch erases a stand-down while a live session
+still holds the node name, silently re-creating the deadlock the tactic removes.
 
 > **⛔ The `strategy-*` framing is superseded, and the kind gate must NOT be
 > built.** *(Corrected 2026-08-30.* This unit used to end "...the deadlock the
@@ -2966,7 +3052,13 @@ shows up nowhere.
 >    whatever it is, so a reason added later is counted without editing this
 >    script. A third literal recreates the same blindness on the next reason.
 
-*Model: sonnet* — reason-generic bucketing, not a literal list
+*Model: per sub-unit, matching table rows U20/U21 — `opus` for the bucketing
+change (the node's Unit 1: reason-generic bucketing, not a literal list),
+`sonnet` for the regression coverage in `test-reclaim-audit.sh` (its Unit 2).*
+*(Corrected 2026-08-30.* This line used to read a flat "*Model: sonnet*", then a
+flat "*Model: opus*". `intentions/tactic-reclaim-audit-spawn-handoff-expired-count.md`
+rates its two units differently — `opus` for Unit 1, `sonnet` for Unit 2 — and
+either flat tag overrides one of them.*)*
 
 **Unit 7 — explicit lane waits out CI.** Make the explicit-node dispatch lane
 wait out in-flight CI up to the reservation TTL instead of skipping, leaving the

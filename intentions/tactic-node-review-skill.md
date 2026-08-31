@@ -126,16 +126,7 @@ capture-model clarification, both 2026-08-30.
 - **Virtues are reviewed as ancestors, never ranked directly** (author-ratified)
   — preserves kind-kind's virtues-stay-unranked doctrine and resolves the
   rank-domain problem for virtues (non-goal-layer kinds all default to rank
-  zero, mutually unordered). How kinds/traditions/delegations get position is a
-  dependents-count metric of its own (decision: delegated-pending-review,
-  delegation-anthropic-claude, 2026-08-30) — NOT the capture model, which
-  weights by root-distance and has no dependents term; a landed citation
-  claiming otherwise was a defect, corrected post-review. Whether traditions/delegations are review subjects was
-RESOLVED by kind-tradition's 2026-08-30 amendment (landed 3267e474):
-/exetasis reviews mount records for reference-accuracy and capture pricing,
-and their review fingerprint fingerprints the record itself — this line
-updated 2026-08-30 post-review (H6), which caught the same commit both
-resolving and leaving open the question.
+  zero, mutually unordered). How non-goal kinds get position was RESOLVED at the 2026-08-30 resolution round (author-ratified, retiring the earlier dependents-count stamp): traditions and delegations carry NO author dispositions — they are references, accurate or objectively invalid, repaired by other processes and never queued here; kinds inherit rank via their keystone position. No separate position metric exists. Whether traditions/delegations are review subjects: RESOLVED — they are NOT (2026-08-30 resolution round, author-ratified, superseding the interim kind-tradition clause that had them reviewed for reference-accuracy): mount records carry no author dispositions; accuracy is objective and repaired through normal QA/office-hours processes.
 - **"Changed" = per-kind review fingerprint** (author-ratified): strategies →
   freeze-substance set PLUS rationale; other durable kinds → statement +
   rationale + clarifications + kind-normative attributes; router-owned stamps
@@ -154,14 +145,7 @@ resolving and leaving open the question.
   (reinforcement material) and the frontier extensions a sitting identifies must
   be recorded in the metadata model so virtual derivation reads them — schema
   scope below.
-- **Session-type penalty and 30-minute bound**: the virtual node enters the
-  office-hours queue at its target's unpenalized rank (the 0.5x penalty demotes
-  re-picks among minted parks; a derived singleton is not that), and a sitting
-  may discharge any root-first prefix of the owed ancestor chain, the stamp
-  advancing per node completed. (decision: delegated-pending-review,
-  delegation-anthropic-claude, 2026-08-30 — these landed marked Claude-owned
-  without ever being dispositioned by the author; stamped pending-review by the
-  post-hoc adversarial review, and listed in the delegation class entry.)
+- **Sitting scope (2026-08-30 resolution round, author-ratified)**: single-disposition review with opportunistic may-batch — the sitting reviews the selected disposition and MAY clear hot-context sibling dispositions on the same node, never must, preserving the ranking's attention allocation and keeping sittings bounded. The earlier session-type-penalty/30-minute/ancestor-prefix stamp is retired as superseded; its unpenalized-rank clause (a derived item is not a minted park, so no 0.5x re-pick penalty) is carried forward held deferred (decision: deferred, delegation-anthropic-claude, 2026-08-30).
 
 **Schema scope (delegated-pending-review — the one review sitting this design
 still owes):** the decision-stamp schema — {state: doctrine |
@@ -173,10 +157,7 @@ enforcing lint (a pending-review stamp survives revision of its content — neve
 silently doctrine or declined). Weight tables for the capture function's
 position/state gradients are schema detail and land here too. The lint also carries the migration's drain rule: the null
 marker — stamp ABSENCE, not a fourth enum state — is tolerated only while
-legacy declarations remain; upon draining them all the lint forbids it. The
-drain rule itself is author-directed; the lint as its enforcement home is
-Claude's choice (decision: delegated-pending-review,
-delegation-anthropic-claude, 2026-08-30).
+legacy declarations remain; upon draining them all the lint forbids it. The drain rule itself is author-directed; the full drain design — census (author dispositions on virtue/strategy/kind nodes recorded before 2026-08-30 without a stamp; mounts and tactics excluded), the lint as enforcement home, and the mechanical null-forbidding flip at count zero — was accepted as DELEGATED at the resolution round (decision: delegated, delegation-anthropic-claude, 2026-08-30; author: 'don't care, it's a migration detail').
 
 **Skill name (author-chosen, 2026-08-30 migration round): /exetasis** — the
 Socratic examination (ho anexetastos bios, Apology 38a), chosen by the author
@@ -205,3 +186,23 @@ including ratification of this design's own pending items.
 the body above ("seed the stamps or accept a cold start") now also covers
 stamping existing recorded deferrals and delegations into the three-state form
 — the migration is part of this node's decomposition, not decided here.
+
+## Disposition model (2026-08-30 resolution round — governs the build)
+
+Author-ratified redesign of the selection unit: /exetasis selects a
+DISPOSITION, not a node. A disposition is the unit that can be ratified,
+deferred, or delegated, and a node carries many. Ranking = f(node rank, graph
+position with keystone dispositions prioritized, timestamp, disposition
+category); category order deferred > null > ratified > delegated. Canonical
+state vocabulary: ratified / deferred / delegated (interim names migrate:
+delegated-pending-review → deferred, delegated-review-declined → delegated;
+sweep carried by tactic-substantiation-edge-migration). /exetasis supersedes
+every other author-owned graph review process except telemetry monitoring
+(WIP dashboard); the curriculum reading-and-review program is deprecated and
+the sitting metadata model must capture its outputs (author learning,
+reinforcement material, frontier extensions). The build also carries the
+ratified /align adjacency duty into the /align skill: any legacy-null
+disposition a round quotes, amends, or touches an edge incident to must be
+dispositioned in that round — silence is a defect of the round. Interview
+mechanics everywhere: every question offers at least the recommendation,
+accept-as-deferred, and accept-as-delegated.

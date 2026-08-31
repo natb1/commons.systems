@@ -72,6 +72,21 @@ clarifications:
       wage-for-labor resolution (sell the labor, never the truth) already
       operating; when that sibling's pending review ratifies, the gift clause's
       root-level home is that node. (decision: author-ratified, 2026-08-30)"
+  - question: Why do the Brand and SDT anchors now point at this strategy's
+      monetization decisions (2026-08-30)?
+    answer: "(Resolution round; implemented under an accepted-as-deferred
+      recommendation (decision: deferred, delegation-anthropic-claude,
+      2026-08-30).) The author dissolved the root-level tension edge: the felt
+      conflict in 'I ratify this decision to monetize, though it conflicts with
+      an implicit value that knowledge should be free' is CAPTURE pressure
+      arriving through the platform-delegation graft into this strategy's
+      monetization decisions — not an inter-virtue contradiction. So Brand's
+      two-pole aphorism (tradition-hacker-culture) and SDT's motivational
+      crowding (tradition-motivation-psychology) re-point here: the place where
+      'wants to be expensive' actually speaks is the mount, and the decisions it
+      pressures live on this node. The ratification derivation runs ratified
+      stamp + serves flow (virtue-right-livelihood AND the deferred
+      virtue-knowledge-as-gift both bind) + the graft edge's capture price."
 tooling_goals: []
 success_signal:
   observable: projected runway (available funds / trailing monthly spend) against
