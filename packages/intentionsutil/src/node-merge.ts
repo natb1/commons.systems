@@ -35,22 +35,29 @@ export interface MergeResult {
  * theirs then ours. `attributes.conditions` follows the same rule but is
  * handled key-by-key inside `attributes` (not listed here).
  */
-export const LIST_FIELDS: readonly (keyof IntentionNode)[] = [
+export const LIST_FIELDS = [
   "serves",
   "recovers",
   "clarifications",
   "tooling_goals",
   "validates",
   "blocked_by",
-];
+  "superseded_by",
+] as const satisfies readonly (keyof IntentionNode)[];
 
 /**
  * Top-level scalar/object fields merged by the three-way scalar rule. Every
  * IntentionNode field that is neither a LIST_FIELD nor `attributes` (which is
  * merged key-by-key). The synthetic pseudo-field `body` is merged by the same
  * rule but handled separately since it is not an IntentionNode key.
+ *
+ * These two lists must between them name EVERY `keyof IntentionNode` except
+ * `attributes`. A field missing from both is not merged at all: `merged` starts
+ * as a shallow clone of `theirs`, so the omitted field silently takes theirs'
+ * value and reports no conflict — ours' edit to it is lost with nothing to
+ * park on. Adding a field to `IntentionNode` therefore means adding it here.
  */
-const SCALAR_FIELDS: readonly (keyof IntentionNode)[] = [
+const SCALAR_FIELDS = [
   "id",
   "kind",
   "statement",
@@ -63,10 +70,27 @@ const SCALAR_FIELDS: readonly (keyof IntentionNode)[] = [
   "attention",
   "phase",
   "execution",
+  "supersession_expiry",
   "office_hours",
   "pace_exempt",
   "rounds",
-];
+] as const satisfies readonly (keyof IntentionNode)[];
+
+/**
+ * Compile-time exhaustiveness probe over the two field lists above, in the same
+ * spirit as `schema.ts`'s `FIRST_CLASS_FIELD_PROBE`: the object literal is
+ * `Record<never, never>` exactly when every `keyof IntentionNode` other than
+ * `attributes` is named by `LIST_FIELDS` or `SCALAR_FIELDS`. Add a field to
+ * `IntentionNode` and forget it here, and this line stops compiling with the
+ * missing name in the error — instead of the merge silently taking theirs'
+ * value for it and reporting no conflict.
+ */
+type UnmergedNodeField = Exclude<
+  keyof IntentionNode,
+  (typeof LIST_FIELDS)[number] | (typeof SCALAR_FIELDS)[number] | "attributes"
+>;
+const MERGE_FIELD_COVERAGE_PROBE: Record<UnmergedNodeField, never> = {};
+void MERGE_FIELD_COVERAGE_PROBE;
 
 /**
  * Recursive structural deep-equality. Order-INDEPENDENT for plain-object keys

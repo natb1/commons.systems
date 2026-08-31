@@ -37,6 +37,8 @@ function node(partial: Partial<IntentionNode> & { id: string }): IntentionNode {
     execution: partial.execution ?? null,
     validates: partial.validates ?? [],
     blocked_by: partial.blocked_by ?? [],
+    superseded_by: partial.superseded_by ?? [],
+    supersession_expiry: partial.supersession_expiry ?? null,
     office_hours: partial.office_hours ?? null,
     pace_exempt: partial.pace_exempt ?? false,
     rounds: partial.rounds ?? null,
@@ -67,6 +69,28 @@ describe("activeFrontier", () => {
     const b = node({ id: "b", status: "raw" });
     const frontier = activeFrontier([b, a]);
     expect(frontier.map((n) => n.id)).toEqual(["b", "a"]);
+  });
+
+  it("excludes a finished leaf whose status was never advanced past raw", () => {
+    // `status` is write-once authoring provenance the dispatch ladder never
+    // advances, so without the `phase` clause a done leaf stays in the frontier
+    // forever, reported as work still needing attention.
+    const done = node({ id: "done-raw", status: "raw", phase: "done" });
+    const live = node({ id: "live-raw", status: "raw", phase: "implement" });
+
+    const frontier = activeFrontier([done, live]);
+    expect(frontier.map((n) => n.id)).toEqual(["live-raw"]);
+  });
+
+  it("excludes a done leaf at status delegated — the clause is on phase, not status", () => {
+    // The standing proof that `status !== "raw"` is the WRONG spelling of this
+    // clause: on the live store 3 of the 65 done frontier leaves carry
+    // `delegated`, and a status-axis clause would retain every one of them.
+    const doneDelegated = node({ id: "done-delegated", status: "delegated", phase: "done" });
+    const liveDelegated = node({ id: "live-delegated", status: "delegated", phase: null });
+
+    const frontier = activeFrontier([doneDelegated, liveDelegated]);
+    expect(frontier.map((n) => n.id)).toEqual(["live-delegated"]);
   });
 });
 

@@ -23,6 +23,8 @@ function node(overrides: Partial<IntentionNode> = {}): IntentionNode {
     execution: null,
     validates: [],
     blocked_by: [],
+    superseded_by: [],
+    supersession_expiry: null,
     office_hours: null,
     pace_exempt: false,
     rounds: null,
@@ -253,9 +255,57 @@ describe("eq", () => {
 });
 
 describe("LIST_FIELDS", () => {
-  it("contains exactly the six union-merged fields", () => {
+  it("contains exactly the seven union-merged fields", () => {
     expect([...LIST_FIELDS].sort()).toEqual(
-      ["blocked_by", "clarifications", "recovers", "serves", "tooling_goals", "validates"].sort(),
+      [
+        "blocked_by",
+        "clarifications",
+        "recovers",
+        "serves",
+        "superseded_by",
+        "tooling_goals",
+        "validates",
+      ].sort(),
     );
+  });
+});
+
+describe("supersession fields are merged, not silently taken from theirs", () => {
+  // Regression: both fields were absent from LIST_FIELDS/SCALAR_FIELDS when they
+  // were added to IntentionNode. `merged` starts as a shallow clone of theirs,
+  // so an ours-side supersession edge was dropped with NO conflict reported —
+  // graph-commit would land the merge as a clean success and the edge would be
+  // gone. The compile-time probe in node-merge.ts now prevents the recurrence;
+  // this asserts the runtime behavior it protects.
+  it("keeps an ours-only superseded_by edge and expiry", () => {
+    const base = node();
+    const ours = node({
+      superseded_by: ["tactic-new"],
+      supersession_expiry: "merge or closure of PR #1",
+    });
+    const theirs = node({ rationale: "an unrelated edit" });
+    const result = mergeIntentionNodes(
+      { node: base, body: "b" },
+      { node: ours, body: "b" },
+      { node: theirs, body: "b" },
+    );
+    expect(result.merged.superseded_by).toEqual(["tactic-new"]);
+    expect(result.merged.supersession_expiry).toBe("merge or closure of PR #1");
+    expect(result.conflicts).toEqual([]);
+  });
+
+  it("reports a genuine same-field expiry divergence instead of dropping it", () => {
+    const base = node();
+    const ours = node({ supersession_expiry: "closure of PR #1" });
+    const theirs = node({ supersession_expiry: "merge of PR #2" });
+    const result = mergeIntentionNodes(
+      { node: base, body: "b" },
+      { node: ours, body: "b" },
+      { node: theirs, body: "b" },
+    );
+    expect(result.conflicts).toEqual([
+      { field: "supersession_expiry", ours: "closure of PR #1", theirs: "merge of PR #2" },
+    ]);
+    expect(result.merged.supersession_expiry).toBe("merge of PR #2");
   });
 });

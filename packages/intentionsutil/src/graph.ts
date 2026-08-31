@@ -14,6 +14,9 @@ export {
   STATUSES,
   TOOLING_KINDS,
   PHASES,
+  SUPERSEDED_STATUS,
+  isSuperseded,
+  isRetired,
 } from "./schema.js";
 export type {
   IntentionNode,

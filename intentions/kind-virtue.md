@@ -174,5 +174,7 @@ attributes:
     delegated: the author consciously holds no view on the virtue's substance
       ('don't care') — Claude owns it, periodically re-confirmed through the
       /exetasis category ranking; no bearer yet
+    superseded: the intent moved to another node — abandoned, not completed;
+      superseded_by names the successor
 ---
 # Virtue — a disposition held and exercised, never completed
