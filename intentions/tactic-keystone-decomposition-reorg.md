@@ -6,7 +6,7 @@ statement: Re-organize the keystone cluster under the decomposition corollary �
   motivation profiles decompose; matching profiles may merge) now that
   sustenance has a first-class home
 owner: ai
-status: raw
+status: codified
 parent: null
 rationale: "Retained from the 2026-08-30 /align sustenance round (landed
   b51df73f), recorded at the author's direction. That round minted
@@ -81,153 +81,201 @@ clarifications:
       every affected node still reaches a kind:virtue root after any
       disposition. Per .claude/rules/sandbox.md, spell these `node --import
       tsx/esm <script>`, not `npx tsx`.
+  - question: What is the keystone cluster's membership (finalize interview, 2026-08-31)?
+    answer: "(Recorded 2026-08-31 finalize interview.) 'Keystone' is informal
+      vocabulary the author used for ancestor nodes whose changes would
+      potentially have cascading effects on the graph. There is no fixed roster:
+      inclusion is a judgment call that depends on the topography of the graph.
+      (decision: author-ratified, 2026-08-31) The plan therefore carries an
+      operational criterion - ancestor nodes selected by measured blast radius
+      over the parent+serves relations - evaluated at execution time, with the
+      four repeatedly-named nodes (virtue-right-livelihood,
+      virtue-knowledge-as-gift, strategy-financial-sustainability,
+      strategy-open-source-as-gift) the expected core but not a bound."
+  - question: Is the deliverable findings-only or restructuring (finalize interview,
+      2026-08-31)?
+    answer: "(Recorded 2026-08-31 finalize interview; supersedes the findings-only
+      reading of this node's Constraints paragraph.) The plan must outline
+      restructuring, with execution steps that re-evaluate the structure at
+      execution time to account for drift since planning. (decision:
+      author-ratified, 2026-08-31) Bounded by the overrule algebra recorded on
+      strategy-explicit-intent the same day: restructures that overrule
+      delegated or deferred dispositions are executed by AI with every
+      superseding disposition stamped deferred (entering the /exetasis queue); a
+      restructure that would overrule a RATIFIED disposition still routes
+      through interview (/align) - no execution or rsi session may overrule
+      ratified content."
+  - question: How does the graft half sequence against the unlanded mount schema
+      (finalize interview, 2026-08-31)?
+    answer: "(Recorded 2026-08-31 finalize interview.) Delegated to Claude as a
+      brownfield migration detail, with the author's directive to prioritize
+      integrity and efficiency of execution. Claude's exercise: run now on the
+      serves half; mount/graft-adjacent findings and restructures carry an
+      explicit provisional-pending-mount-structure caveat and are re-checked by
+      the execution-time drift re-evaluation step; no blocked_by edge on
+      tactic-mount-schema, so the serves-half work is not serialized behind an
+      unlanded sibling. (decision: delegated, delegation-anthropic-claude,
+      2026-08-31)"
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: implement
 execution: null
 validates: []
 blocked_by: []
-office_hours:
-  reason: "Three unrecorded premises the plan depends on need author ratification
-    before a clean-session plan can be authored for this node. (1) SCOPE
-    UNDEFINED — the tactic's statement scopes work to \"the keystone cluster\",
-    but measured at HEAD 2026-08-30 `keystone` appears in five intentions files
-    and outside this node always denotes a graph-POSITION ranking property
-    (strategy-explicit-intent.md:753,772;
-    strategy-graph-review-curriculum.md:447,461;
-    tactic-node-review-skill.md:129,195), never an enumerated set; the draft's
-    candidates 3 and 4 are unbounded sweeps (\"any keystone-adjacent node whose
-    serves predates the livelihood root\", \"if any two cluster nodes\") that no
-    plan can anchor. Ratify a roster, a mechanical membership rule, or a
-    narrowing to the two named candidates. (2) DELIVERABLE AMBIGUOUS — the
-    node's own Constraints paragraph routes any serves/edge change on a ratified
-    node through /align, \"not through this tactic's implementer acting alone\",
-    yet all four candidate examinations terminate in exactly such a change; that
-    leaves the tactic's autonomous scope as findings-only (dated
-    motivation-coherence clarifications, per the precedent at
-    intentions/tactic-graph-refsplit-read-coherence.md:71-78, since a
-    tactic-target session may not write a serving strategy —
-    .claude/skills/align-tactics/references/tactic-target.md:146-157). Ratify
-    findings-only versus restructuring; the two produce wholly different plans.
-    (3) HALF THE TEST HAS NO STRUCTURE — the corollary tests \"a different
-    serves set or different graft constraints\", and the graft half has zero
-    footprint at HEAD (grep -c graft packages/intentionsutil/src/schema.ts = 0;
-    no kind-mount node; tactic-mount-schema's PR 2856 open and unlanded with the
-    mount tree blocked on it), while candidate 1 — the flagship examination —
-    turns explicitly on graft constraints. Ratify the sequencing: run now on the
-    serves half with provisional dispositions, add blocked_by:
-    [tactic-mount-schema], or split into a serves-half pass now and a graft-half
-    follow-up. Side A: no recorded condition on strategy-graph-mounts failed —
-    all five were checked against HEAD and none is contradicted; note only that
-    every condition and clarification describes a design ratified in prose with
-    no structural footprint yet, which is the state premise (3) turns on, not a
-    failed condition. Recommend (Claude, from the ratified record): ratify the
-    findings-only reading — the node's own Constraints paragraph and the
-    tactic-graph-refsplit-read-coherence precedent both point there, and a
-    tactic-target session may not write a serving strategy anyway; fix the
-    roster to the four named nodes (virtue-right-livelihood,
-    virtue-knowledge-as-gift, strategy-financial-sustainability,
-    strategy-open-source-as-gift) with the two open-ended sweeps split out as a
-    later tactic; and run now on the serves half with each finding carrying an
-    explicit provisional-pending-mount-structure caveat rather than adding
-    blocked_by: [tactic-mount-schema]. Then re-run /align-tactics
-    tactic-keystone-decomposition-reorg."
-  since: 2026-08-30
-  recommendation: null
-  session_type: other
+superseded_by: []
+supersession_expiry: null
+office_hours: null
 pace_exempt: false
 rounds: null
 attributes: {}
 ---
-# Re-organize the keystone cluster under the decomposition corollary — test each keystone node for motivation-coherence (materially different motivation profiles decompose; matching profiles may merge) now that sustenance has a first-class home
+# Re-organize the keystone cluster under the decomposition corollary — test each keystone node for motivation-coherence now that sustenance has a first-class home
 
-# Keystone re-organization under the decomposition corollary
+## Context
 
-Draft (retain-not-refine): scope and known candidates recorded here; a later
-/align-tactics round plans it. The test to apply is strategy-graph-mounts'
-DECOMPOSITION COROLLARY (author-ratified): node-level influence granularity is
-accurate only while nodes are motivation-coherent — decompose a node when its
-decisions would carry materially different motivation profiles (a different
-serves set or different graft constraints); compose or merge only when
-profiles match. It is the structural dual of /align's multi-topic separation
-rule (that one keys on independent success signals; this keys on motivation).
+strategy-graph-mounts' DECOMPOSITION COROLLARY (author-ratified) keys node
+granularity on motivation-coherence: decompose a node when its decisions would
+carry materially different motivation profiles (a different serves set or
+different graft constraints); compose or merge only when profiles match. The
+2026-08-30 sustenance round (landed b51df73f) changed the cluster's motivation
+topology after most of its nodes were composed — sustenance gained a
+first-class home (virtue-right-livelihood, ratified), virtue-knowledge-as-gift
+entered `status: deferred`, and strategy-financial-sustainability's serves was
+re-homed onto the livelihood root — so nodes composed earlier were shaped
+without the corollary's test being runnable.
 
-## Why now
+The 2026-08-30 park was resolved by the 2026-08-31 finalize interview (three
+clarifications on this node): "keystone" is informal vocabulary for ancestor
+nodes whose changes would potentially cascade — no fixed roster, membership is
+a topology-dependent judgment call made at execution time; the deliverable is
+a restructuring outline whose execution steps re-evaluate the structure at
+execution time to account for drift since planning (superseding the
+findings-only reading of the Constraints below); and graft-half sequencing is
+delegated — run now on the serves half, mount/graft-adjacent work carrying an
+explicit provisional-pending-mount-structure caveat, no blocked_by on
+tactic-mount-schema.
 
-The 2026-08-30 sustenance round (landed b51df73f) changed the cluster's
-motivation topology after most of its nodes were composed: sustenance gained a
-first-class home (virtue-right-livelihood, ratified), its tension sibling
-virtue-knowledge-as-gift entered delegated-pending-review, and
-strategy-financial-sustainability's serves was re-homed to include the
-livelihood root. Every keystone node composed before that round was shaped
-without the corollary's test being runnable — sustenance motivation had
-nowhere to point, so it hid inside instrumental framings.
+Constraints that still bind:
 
-## Candidate examinations (each is a corollary test, not a foregone split)
+- virtue-knowledge-as-gift is `status: deferred` (unratified): this tactic
+  must not ratify, restate, or pre-empt its content — structural re-homing
+  that depends on its resolution waits for the sitting (candidate 2 below
+  records the dependency; it does not discharge it).
+- The overrule algebra (strategy-explicit-intent, 2026-08-31 clarification)
+  bounds execution: restructures overruling delegated or deferred dispositions
+  are executed here, every superseding disposition stamped
+  `(decision: deferred, delegation-anthropic-claude, YYYY-MM-DD)`; a
+  restructure that would overrule a RATIFIED disposition routes to /align and
+  is never executed by this tactic.
+- Read the three-state decision model and stamp grammar on
+  strategy-explicit-intent at origin/main before touching any stamped content.
 
-1. **strategy-financial-sustainability's mixed serves** — now
-   [alignment-of-attachments, respect-for-persons, virtue-right-livelihood],
-   recorded in that node's 2026-08-30 clarification as genuinely mixed and
-   coherent. Test whether its decision classes actually share that profile:
-   livelihood-driven monetization decisions (pricing, what to charge for)
-   versus alignment-driven attachment management (keeping funding reversible,
-   platform-graft containment) may carry materially different graft
-   constraints. If they do, the corollary says decompose; if the profiles
-   genuinely travel together, record the pass as an explicit
-   motivation-coherence finding rather than silence.
-2. **The gift clause's home when the pending review resolves** — the
-   knowledge-should-be-free clause currently shadows
-   strategy-financial-sustainability (its clarification names the pending
-   root's shadow). When an /exetasis sitting or adjacent /align round
-   resolves virtue-knowledge-as-gift, its tension_with edge starts binding
-   real monetization decisions; test whether the constraint belongs as graft
-   edges on the deciding strategies rather than prose in the funding node.
-3. **Pre-livelihood serves sweep** — any keystone-adjacent node whose serves
-   predates the livelihood root and whose rationale smuggles sustenance
-   motivation inside an instrumental framing ("fund the project" phrasing is
-   the marker) now has a first-class virtue to cite; re-point or decompose
-   per the corollary.
-4. **Merge direction** — the corollary cuts both ways: if any two cluster
-   nodes turn out to carry the same motivation profile (same serves set, same
-   graft constraints), they are merge candidates, and keeping them separate
-   needs a reason the corollary can see.
+## Unit 1 — keystone selection by measured topography
 
-## Constraints
+**Recommended model:** opus
 
-- virtue-knowledge-as-gift is delegated-pending-review: this tactic must not
-  ratify, restate, or pre-empt its content — structural re-homing that
-  depends on its resolution waits for the sitting (candidate 2 records the
-  dependency; it does not discharge it).
-- Any serves/edge change to a ratified node is doctrine motion: it goes
-  through /align (adjacent-doctrine path), not through this tactic's
-  implementer acting alone.
-- The three-state decision model and stamp grammar are recorded on
-  strategy-explicit-intent (2026-08-30 clarifications); read them at
-  origin/main before touching any stamped content.
+- Compute a per-node blast-radius measurement over the `parent` + `serves`
+  relations across the virtue/strategy layers: transitive descendant count and
+  serves fan-in (how many nodes' motivation chains pass through this one).
+  Emit a ranked shortlist with the measurement recorded.
+- Select the review set by judgment over that measurement — the four
+  repeatedly-named nodes (virtue-right-livelihood, virtue-knowledge-as-gift,
+  strategy-financial-sustainability, strategy-open-source-as-gift) are the
+  expected core, but the measurement decides, not the list (2026-08-31 roster
+  clarification).
+- Record the selected set and the criterion as a dated clarification on this
+  node at execution time.
+- Reuse: `packages/intentionsutil/scripts/node-ancestry.ts:47-53` (serves
+  chain and ancestor roots; `AncestorEntry` at `:99-111`),
+  `packages/intentionsutil/src/digest.ts:144-184` (`tableClosure`),
+  `packages/intentionsutil/scripts/align-strategy-census.ts:63-75`
+  (`printUnservedVirtues`).
 
-## Parked 2026-08-30 — three author rulings needed before a plan exists
+## Unit 2 — corollary test and restructuring outline per selected node
 
-Parked by the /align-tactics per-node drift review (office_hours carries the
-full reason). The three questions, in brief:
+**Recommended model:** opus
 
-1. **Scope** — "the keystone cluster" has no defined membership: everywhere
-   else in the graph `keystone` is a graph-position ranking property, never an
-   enumerated set, and candidates 3–4 above are unbounded sweeps no plan can
-   anchor. Ratify a roster, a mechanical membership rule, or a narrowing to
-   the named candidates.
-2. **Deliverable** — the Constraints section routes every serves/edge change
-   on a ratified node through /align, yet all four candidate examinations
-   terminate in exactly such a change. Ratify findings-only (dated
-   motivation-coherence clarifications, per the
-   tactic-graph-refsplit-read-coherence precedent) versus actual
-   restructuring; the two produce wholly different plans.
-3. **Sequencing** — the corollary's graft-constraint half has no structural
-   form yet (no `graft` in schema.ts, no kind-mount node, tactic-mount-schema
-   PR 2856 open), and candidate 1 turns explicitly on graft constraints.
-   Ratify: run now on the serves half with provisional dispositions, block on
-   tactic-mount-schema, or split serves-half/graft-half passes.
+Dependencies: Unit 1.
 
-Claude's recommendation is appended to the office_hours reason: findings-only,
-roster fixed to the four named nodes with the sweeps split out, run now on the
-serves half with a provisional-pending-mount-structure caveat on each finding.
+- For each selected node, run the motivation-coherence test on the serves
+  half: do its decision classes share one motivation profile (one serves set),
+  or do materially different profiles hide inside it? Graft-constraint aspects
+  carry the provisional-pending-mount-structure caveat (2026-08-31 sequencing
+  clarification) — the graft half has no landed structure yet.
+- The retained draft's four candidate examinations seed the test (each is a
+  test, not a foregone split):
+  1. strategy-financial-sustainability's mixed serves — livelihood-driven
+     monetization decisions versus alignment-driven attachment management may
+     carry materially different profiles; if they do, decompose; if they
+     genuinely travel together, record the pass explicitly.
+  2. The gift clause's home — the knowledge-should-be-free clause shadows
+     strategy-financial-sustainability while virtue-knowledge-as-gift is
+     unresolved; test where the constraint belongs once the sitting resolves
+     it (record the dependency, do not discharge it).
+  3. Pre-livelihood serves sweep over the Unit 1 selected set — nodes whose
+     rationale smuggles sustenance motivation inside an instrumental framing
+     ("fund the project" phrasing is the marker) now have a first-class virtue
+     to cite; re-point or decompose per the corollary.
+  4. Merge direction — two selected nodes carrying the same motivation
+     profile are merge candidates; keeping them separate needs a reason the
+     corollary can see.
+- Output per node: a finding, and where the test says decompose / merge /
+  re-point, a concrete restructuring step (which edges move, which nodes
+  split or merge, which text moves) tagged with its disposition-state check:
+  delegated/deferred-overrulable (execute in Unit 3) or ratified-touching
+  (route to /align).
+- Record every finding — passes included — as dated clarifications on the
+  affected nodes ("record the pass rather than silence").
+- Reuse: `packages/intentionsutil/src/digest.ts:202-217` (`tableDupServes`,
+  the merge-candidate half) and `:251-273` (`tableNearDup`, a shortlist for
+  disposition, never a disposition itself — its own comment at `:247-248`).
+
+## Unit 3 — execute the delegated restructures behind the drift re-evaluation gate
+
+**Recommended model:** opus
+
+Dependencies: Unit 2.
+
+- Before executing each step, re-evaluate it against then-current origin/main
+  (the author's execution-time re-evaluation ruling): re-run the Unit 1
+  measurement for the affected nodes and the Unit 2 test for the step; a step
+  whose premise drifted is re-derived or dropped with the drop recorded.
+- Execute only steps whose overruled dispositions are delegated or deferred;
+  stamp every superseding disposition deferred (overrule algebra). Compile
+  ratified-touching steps into an /align hand-off list recorded on this node —
+  never executed here.
+- All writes via `packages/intentionsutil/scripts/write-node.ts` →
+  `graph-commit`; validate-graph green after each landed batch; spell scripts
+  `node --import tsx/esm`, never `npx tsx` (.claude/rules/sandbox.md).
+
+## Reuse
+
+- `packages/intentionsutil/scripts/node-ancestry.ts` — ancestry projection
+  and serves chains (`:47-53`, `AncestorEntry :99-111`).
+- `packages/intentionsutil/scripts/align-strategy-census.ts:63-75` —
+  `printUnservedVirtues`, catches a virtue left unserved by a decompose or
+  merge.
+- `packages/intentionsutil/src/digest.ts` — `tableClosure :144-184` (every
+  affected node still reaches a virtue root), `tableDupServes :202-217`,
+  `tableNearDup :251-273`.
+- `packages/intentionsutil/scripts/write-node.ts` + `graph-commit` — the only
+  write path.
+
+## Verification
+
+```verify
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
+```
+
+```verify
+npm test --prefix packages/intentionsutil
+```
+
+Manual checks: after Unit 1, the selected set and criterion are recorded on
+this node; after Unit 2, every selected node carries a dated
+motivation-coherence clarification (pass or restructure) and each
+restructuring step is tagged executable-here or /align-routed; after Unit 3,
+every executed step's superseding disposition carries a deferred stamp, the
+/align hand-off list exists if any ratified-touching step was found, and the
+digest closure table is clean.
