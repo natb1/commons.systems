@@ -121,7 +121,7 @@ export function App({ data }: { data: PageData }) {
         </span>
       </div>
 
-      <PlanTable rows={rows} titles={payload.titles} />
+      <PlanTable rows={rows} titles={payload.titles} filtered={filtered} />
 
       <footer className="pv-footer">
         <p>

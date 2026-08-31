@@ -43,9 +43,18 @@ function PhasePip(props: { phase: string | null; phaseIndex: number }) {
 export interface PlanTableProps {
   rows: PlanRow[];
   titles: Record<string, string>;
+  /**
+   * Whether a filter is narrowing `rows`. Load-bearing for the empty state
+   * ONLY: zero rows has two unrelated causes and one message cannot serve both.
+   * A store window with no open tactics is a legitimate state of the graph —
+   * `scripts/render-smoke.mjs` synthesizes it and asserts it renders — and
+   * telling that reader their filter matched nothing names a filter they never
+   * set.
+   */
+  filtered: boolean;
 }
 
-export function PlanTable({ rows, titles }: PlanTableProps) {
+export function PlanTable({ rows, titles, filtered }: PlanTableProps) {
   const slots = assignLaneSlots(rows);
 
   // Span extents are computed over the FULL rendered row set, which is what
@@ -63,7 +72,11 @@ export function PlanTable({ rows, titles }: PlanTableProps) {
   const startsSpan1 = new Map(level1.map((run) => [run.start, run]));
 
   if (rows.length === 0) {
-    return <p className="pv-empty">No rows match the active filter.</p>;
+    return (
+      <p className="pv-empty">
+        {filtered ? "No rows match the active filter." : "No open tactics in this snapshot."}
+      </p>
+    );
   }
 
   return (
