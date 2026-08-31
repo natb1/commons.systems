@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { IntentionSchemaError } from "../src/errors.js";
 import { validateNode } from "../src/schema.js";
 import { listNodesStrictCached, storeFingerprint } from "../src/store-cache.js";
@@ -233,6 +233,64 @@ describe("listNodesStrictCached stays fail-closed", () => {
 
     expect(() => listNodesStrictCached(dir, cacheDir)).toThrow(IntentionSchemaError);
     expect(cacheEntries(cacheDir)).toHaveLength(1);
+  });
+});
+
+describe("listNodesStrictCached compare-and-swaps the publish", () => {
+  afterEach(() => {
+    vi.doUnmock("../src/store.js");
+    vi.resetModules();
+  });
+
+  /**
+   * The key's fingerprint is necessarily taken BEFORE the parse it names, so a
+   * writer landing in that window would otherwise file post-write nodes under a
+   * pre-write key — an entry describing a state its own key does not, which a
+   * later call at the pre-write state would then serve. Standing in for that
+   * writer: a `listNodesStrict` that mutates the store as it returns, which is
+   * exactly the interleaving without the flakiness of a real race.
+   *
+   * Without the re-fingerprint in `writeCacheEntry` this test fails on the
+   * entry count alone — verified by deleting that line, which leaves every
+   * other case in this file green.
+   */
+  it("writes no entry when a writer lands between the key and the parse", async () => {
+    const dir = tempDir("intentions-");
+    const cacheDir = tempDir("intentions-cache-");
+    seedStore(dir);
+
+    vi.resetModules();
+    vi.doMock("../src/store.js", async () => {
+      const actual = await vi.importActual<typeof import("../src/store.js")>("../src/store.js");
+      return {
+        ...actual,
+        listNodesStrict(target: string) {
+          const nodes = actual.listNodesStrict(target);
+          seedStore(target, ["landed-mid-parse"]);
+          return nodes;
+        },
+      };
+    });
+    const { listNodesStrictCached: cached } = await import("../src/store-cache.js");
+
+    // The answer is still the parse's own result — the CAS costs the entry,
+    // never the correctness of the call that paid for it.
+    expect(cached(dir, cacheDir).map((n) => n.id)).toEqual(["good-a", "good-b"]);
+    expect(cacheEntries(cacheDir)).toEqual([]);
+    expect(readdirSync(cacheDir)).toEqual([]);
+  });
+});
+
+describe("listNodesStrictCached with the cache pointed at the store", () => {
+  it("degrades to an uncached strict enumeration instead of littering the store", () => {
+    const dir = tempDir("intentions-");
+    seedStore(dir);
+    const before = readdirSync(dir).sort();
+
+    expect(listNodesStrictCached(dir, dir)).toEqual(listNodesStrict(dir));
+    // An entry written here would change the very fingerprint it was filed
+    // under, so every later call would miss and drop another one.
+    expect(readdirSync(dir).sort()).toEqual(before);
   });
 });
 

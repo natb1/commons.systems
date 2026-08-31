@@ -16,8 +16,20 @@ import { listNodesStrict } from "./store.js";
  * and `apply-fix-state`. A "materialize once, pass a file path" share would
  * therefore hand a later consumer a stale node set. Keying the cache on a hash
  * of the store's bytes turns that hazard into an automatic miss: the entry is a
- * pure function of the store state, so it can never describe a state the store
- * has left.
+ * pure function of the store state, so a state the store has left cannot be
+ * served under a key naming the state it is in.
+ *
+ * The residual window is ABA, and it is worth naming because a reader will look
+ * for it. The fingerprint and the parse are separate passes over the directory,
+ * so a writer that changes a node file and then restores its exact prior bytes
+ * during the parse — `graph-commit`'s bounded rebase-retry resetting the tree is
+ * the shape to picture — can leave the parse holding a torn mix while both
+ * fingerprints still read as the pre-write state, and the mix is then published.
+ * The uncached path tears identically under that interleaving; what caching adds
+ * is that the torn read persists for later calls instead of dying with the
+ * process. Closing it needs a snapshot or a lock over the whole read, which is a
+ * larger contract than this layer has; the CAS below narrows the window to the
+ * change-and-revert case rather than eliminating it.
  *
  * That is a property of the WRITE path as much as of the key. The fingerprint
  * is necessarily taken before the parse it names, so a writer landing in that
@@ -162,6 +174,15 @@ function fingerprintOrNull(dir: string): string | null {
  * the temp is removed when the publish fails, so a full or read-only cache
  * directory cannot leave litter behind. Every failure is swallowed: whether the
  * write lands changes only the cost of the next call, never its answer.
+ *
+ * The temp name carries a random suffix as well as the pid, matching
+ * `store.ts`'s `writeFileAtomic`. The pid alone is NOT unique here: the whole
+ * point of this cache is several processes sharing one directory, and under the
+ * sandbox's PID namespace those processes draw from the same tiny pid range —
+ * measured 2026-08-30, three separate sandboxed `node` invocations reported pids
+ * 4, 5 and 4. Two of them colliding on one temp path would let one process
+ * rename the file the other is still writing, publishing a truncated entry that
+ * every later call at this fingerprint then has to reject and re-parse.
  */
 function writeCacheEntry(
   file: string,
@@ -169,7 +190,7 @@ function writeCacheEntry(
   fingerprint: string,
   nodes: IntentionNode[],
 ): void {
-  const tmp = `${file}.tmp.${process.pid}`;
+  const tmp = `${file}.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
   try {
     if (fingerprintOrNull(dir) !== fingerprint) return;
     writeFileSync(tmp, JSON.stringify(nodes));
@@ -199,12 +220,20 @@ function writeCacheEntry(
  * key can be taken at all the call is simply uncached (`fingerprintOrNull`),
  * never failed.
  *
+ * A `cacheDir` that IS the store degrades the same way. The fingerprint hashes
+ * every entry in the directory, so an entry written into the store would change
+ * the very key it was filed under: each call would miss, re-parse, and drop
+ * another `nodes-*.json` into the versioned `intentions/` tree forever. That is
+ * a caller misconfiguration (a mis-set `DISPATCH_GRAPH_NODE_CACHE`), and this
+ * layer may not fail a sweep the uncached path would have completed, so it is
+ * answered by simply not caching.
+ *
  * Writing the entry is best-effort and compare-and-swapped on the store bytes;
  * see `writeCacheEntry`. Whether the write lands changes only the cost of the
  * next call, never its answer.
  */
 export function listNodesStrictCached(dir: string, cacheDir: string): IntentionNode[] {
-  if (!cacheDir) return listNodesStrict(dir);
+  if (!cacheDir || resolve(cacheDir) === resolve(dir)) return listNodesStrict(dir);
 
   const fingerprint = fingerprintOrNull(dir);
   if (fingerprint === null) return listNodesStrict(dir);
