@@ -637,6 +637,15 @@ export function ownTier(node: IntentionNode): number {
  *
  * One implementation rather than a predicate re-spelled at each call site: a
  * consumer that spells it differently silently un-exempts the measurements.
+ *
+ * SCOPE: "names no namespace" is about the PRODUCER, not the kind — this
+ * returns `false` for a non-tactic node however many measurements it holds.
+ * Rule 21 (`checkMeasuredImpactShape`) validates `attributes.measured_impact`
+ * on ANY kind, so that shape is legal elsewhere; the narrowing is safe for the
+ * one live consumer only because rule 10 makes `phase` tactic-only, so no other
+ * kind can reach `phase: "done"` and be a prune candidate at all. A future
+ * consumer that can delete or drop a non-tactic node must widen this predicate
+ * rather than assume it already covers one.
  */
 export function hasMeasurements(node: IntentionNode): boolean {
   const attributes = isPlainObject(node.attributes) ? node.attributes : {};

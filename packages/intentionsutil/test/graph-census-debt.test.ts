@@ -272,6 +272,32 @@ describe("computeDebt", () => {
     ]);
   });
 
+  // The RETIRED CLASS MARKER no longer exempts anything on its own. This is the
+  // un-exempting direction of PR4 Unit 1, and it is the half no other case
+  // covers: every fixture above simply omits `ledger_entry`, so a predicate that
+  // still read it — `hasMeasurements(n) || isLedgerEntry(n)` — would keep the
+  // whole suite green. `dispatch-eval-finding` still stamps the marker until
+  // Unit 2 lands, so a marker-carrying node with no measurements is a shape the
+  // store can actually hold, and it must be prunable like any other done node.
+  it("does not exempt a done node carrying only the retired ledger_entry marker", () => {
+    const nodes = [
+      strategy(),
+      validateNode({
+        id: "tactic-marker-without-measurements",
+        kind: "tactic",
+        statement: "t",
+        owner: "ai",
+        status: "codified",
+        serves: [STRATEGY],
+        phase: "done",
+        attributes: { ledger_entry: true },
+      }),
+    ];
+    expect(computeDebt(nodes, new Set()).donePresent).toEqual([
+      "tactic-marker-without-measurements",
+    ]);
+  });
+
   it("keeps a retired ledger entry out of the batch a birthed census would drain", () => {
     const nodes = [
       strategy(),
