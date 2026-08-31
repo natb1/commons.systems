@@ -271,7 +271,7 @@ dc_real_cleanup() { [ -n "${DC_REAL_TMP:-}" ] && rm -rf "$DC_REAL_TMP"; return 0
 # leak guards. Those guards exist precisely to catch an abort partway through a
 # suite, and disarming them turns a leak into a green run — the same
 # safety-check-silently-disabled shape this PR is about. Same idiom as
-# test-dispatch-verify-instrument-invocation.sh:27.
+# `test-dispatch-verify-instrument-invocation.sh`'s own chained handler.
 #
 # $? is preserved across the chain by hand. The fixture's trap opens with
 # `local rc=$?` and exits with it, so it must see the SUITE's status, not the
