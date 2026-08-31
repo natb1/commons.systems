@@ -27,7 +27,12 @@ result
 # Claude Code sandbox /dev/null bind-mount artifacts — character device nodes
 # bind-mounted over host shell/tool/editor config inside every worktree. Not
 # repo content and not committable (git cannot stage a character device); listed
-# here only to keep `git status` clean. Caveat: .gitmodules, .mcp.json,
+# here only to keep `git status` clean. Not every entry is a device, though:
+# measured unsandboxed 2026-08-31, .claude/agents is a REGULAR empty file
+# (mode 0444, no mountinfo entry) that the session harness drops in each
+# checkout — it presents as a character device only through the sandbox
+# overlay. So it is genuinely stageable, and one `git add -A` really would
+# commit it; that is why it is listed. Caveat: .gitmodules, .mcp.json,
 # .claude/agents, and .claude/commands are names this repo could legitimately
 # track in the future — .claude/agents is where project subagent definitions
 # would live — so a real file at one of those paths needs a one-time

@@ -412,10 +412,18 @@ over the denied path, and that mount leaks into the worktree's visible
 namespace for the life of the session.
 
 It was committed once by a `git add -A` in a worktree, and removed again in
-`83d490ae`. **The fix is procedural, not a `.gitignore` entry** —
-`.claude/agents/` is a real Claude Code directory for agent definitions, and
-ignoring it repo-wide would hide legitimate files from every future session to
-suppress a phantom that does not exist on disk.
+`83d490ae`. This section used to rule that the fix is procedural and **not** a
+`.gitignore` entry, on the grounds that ignoring `.claude/agents/` repo-wide
+would hide legitimate agent definitions from every future session. **That
+ruling was reversed 2026-08-31**: `/.claude/agents` now sits in `.gitignore`'s
+sandbox bind-mount block beside `.gitmodules`, `.mcp.json` and
+`.claude/commands`, and the block's caveat carries the cost — `.claude/agents/`
+is a real Claude Code directory for project subagent definitions, so a real
+file there needs a one-time `git add -f`.
+
+The procedural rules below still stand. The ignore entry silences `git status`
+only for the paths that block lists; a phantom at any other denied path is
+still one `git add -A` away from being committed.
 
 - Never `git add -A` from a sandboxed worktree session; stage named paths.
 - Before trusting any `git status`-driven file collection, re-run it with
@@ -5795,10 +5803,21 @@ Seven hazards on this path, each of which has bitten before:
   fast-forward the user's `main` at all. What works: run the closing batch from a
   **fresh worktree cut at `origin/main`** and verify *that* checkout is 0 ahead.
   PR1's own closing batch ran this way.
-- **A node *create* must not ride in a `--base` batch of *edits*.** The
-  compare-and-swap manifest pins pre-images per id; an id with no pre-image
-  corrupts the batch. File new nodes in a separate `graph-commit` call. This is
-  why PR1's two follow-up nodes were filed after the closing batch, not in it.
+- **A node *create* rides the same `--base` batch as edits.** This bullet said
+  the opposite until 2026-08-31; only its premise was true. `--base` is a
+  **per-id opt-in** compare-and-swap: `check_base_freshness()` returns early on
+  an empty manifest and otherwise iterates the manifest's own keys
+  (`for id in "${!BASE[@]}"`, `graph-commit:771-774`), so a positional id absent
+  from the manifest is simply not CAS-checked. The ordinary-id guard asks only
+  that `intentions/<id>.md` be on disk (`graph-commit:3793`), never that it
+  exist on `origin/main`, and the header documents `--prune <id>` as
+  "(repeatable, mixable with ordinary positional ids)". So one invocation can
+  carry creates, edits and prunes together, with `--base` entries for exactly
+  the ids that have an `origin/main` pre-image. PR1's two follow-up nodes were
+  filed after the closing batch rather than in it — that split paid an extra
+  serialized landing for a constraint that does not exist. See
+  `plans/dispatch-rsi-sequence.md`'s "budget by invocation count, not by node
+  count" note.
 - **`write-node.ts` drops unknown keys**, and re-dumping a node after editing it
   wipes the edit. Dump once, edit, write. This is the same mechanism that makes
   `execution.resolved_by` vanish without complaint.
