@@ -438,27 +438,34 @@ done <<<"$CANDIDATES"
 # WHAT A REFUSED --base COSTS THE REST OF THE BATCH. Threading --base here makes
 # check_base_freshness()'s fail-closed park reachable for this sweep for the
 # first time: before this change the sweep passed no pins, so the guard
-# short-circuited on an empty manifest and could never park. The cost is not
-# confined to the diverged node. park_and_exit() partitions into bystander
-# PRUNES (re-applied and landed) and park_ids, where park_ids is ALL_IDS minus
-# those prunes (graph-commit:3436-3459). This sweep passes no prune ids, so
-# bystander_prunes is always empty and EVERY id in the invocation parks -- and
-# the conflicted_ids() fallback sets park_ids=("${ALL_IDS[@]}") outright.
+# short-circuited on an empty manifest and could never park.
 #
-# So one node's unresolvable execution.fix divergence parks this tick's other
-# CLEAN recovered nodes into office_hours. That is not self-healing: the
-# enumeration above skips any node with `office_hours != null`, and the selector
-# excludes on REVIEWED_MARKER, so the collateral nodes leave this sweep's
-# candidate set entirely. A later tick does NOT pick them back up; they need an
-# office-hours park clear.
+# The cost is now confined to the node that actually diverged. park_and_exit()
+# partitions ALL_IDS per id (graph-commit:3499-3537): an id in the conflicted
+# set parks, and every other id takes the BYSTANDER path -- re-applied after the
+# park's reset and landed with the park commit -- when it is either a --prune id
+# or an ordinary edit id whose --base pin still matches the tip the park
+# re-fetched (base_pin_still_fresh(), graph-commit:2975). This sweep pins EVERY
+# id it commits, so one node's unresolvable execution.fix divergence parks that
+# node and lands the rest.
 #
-# Kept fail-closed deliberately -- refusing beats landing over a stale base --
-# but it is a real behaviour change, not a no-op, and it is written down here
-# because nothing else in the file says it. The two ways out both cost more than
-# this unit owns: pinning and landing per node breaks the "AT MOST ONE
-# graph-commit per tick" lock budget stated in the header above, and teaching
-# park_and_exit() to partition on which --base key actually refused is a
-# graph-commit change.
+# THAT DEPENDS ON THE PIN, so do not drop it. An id committed with no --base
+# entry has no evidence behind it -- "unchanged since this writer read it" is
+# unanswerable -- and park_and_exit() fails closed on it, which is the old
+# whole-batch park all over again. The `continue` above that SKIPS a candidate
+# which cannot be pinned is what keeps that from happening here: an unpinnable
+# id never reaches the invocation at all.
+#
+# Why it mattered: the collateral never self-healed. The enumeration above skips
+# any node with `office_hours != null`, and the selector excludes on
+# REVIEWED_MARKER, so a wrongly-parked node left this sweep's candidate set
+# entirely. A later tick did NOT pick it back up; it needed an office-hours park
+# clear by hand.
+#
+# The diverged node itself is still fail-closed, deliberately -- refusing beats
+# landing over a stale base. The other way out, pinning and landing per node,
+# would still break the "AT MOST ONE graph-commit per tick" lock budget stated
+# in the header above, so it stays rejected.
 #
 # The idempotency note further up is a DIFFERENT path and remains true: it
 # justifies the per-candidate SKIP taken when an id fails node_id_is_safe or
