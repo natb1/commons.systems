@@ -104,11 +104,15 @@ marginal per-scan cost near zero**.
 
 **The permanently-unprunable cohort is real but small.** `graph-census-debt.ts`'s
 `computeDebt` exempts ledger entries from the prune batch at its `donePresent.push`
-guard (`if (n.phase === "done" && !isLedgerEntry(n)) donePresent.push(n.id)` — `:179-180`,
-re-measured 2026-08-30; `isLedgerEntry` in `packages/intentionsutil/src/schema.ts`,
-located by name — `:580`, re-measured 2026-08-30) because a retired
+guard (`if (n.phase === "done" && !isLedgerEntry(n) && !isLiveRearmTarget(n))
+donePresent.push(n.id)` — `:179-181`, re-measured 2026-08-30; `isLedgerEntry` in
+`packages/intentionsutil/src/schema.ts`, located by name — `:580`, re-measured
+2026-08-30) because a retired
 `tactic-eval-finding-*` keeps its summary metrics so `dispatch-eval-finding` can *resume* an
-occurrence count rather than restart it at 1. Measured: 39 ledger nodes (21 already done),
+occurrence count rather than restart it at 1. The guard's third condition exempts a different
+and transient cohort — a released WAIT node re-arms in place, so its exemption lasts one
+released window and adds nothing to the permanently-unprunable count (measured 2026-08-30:
+zero nodes in the store satisfy it today). Measured: 39 ledger nodes (21 already done),
 avg 12.8 KB each, **8.5 % of total parse cost**, all 39 created in a 3-day burst (2026-08-12…14).
 This cohort never drains — but at 8.5 % it does not justify an archive-directory migration, and
 moving files out of `intentions/<id>.md` would break every prose `path:line` reference and every
