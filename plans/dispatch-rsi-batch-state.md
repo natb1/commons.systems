@@ -143,7 +143,10 @@ their own source inline — do not read them as user rules.
   main had a 55-line hook and no `review_runs` at all — so an anchor that finds
   nothing means the checkout predates `35fc5573`, never "already fixed". The
   three: the `$PWD` sidecar misattribution
-  (`.claude/hooks/stamp-dispatch-session.sh:203`); the Stop fast-path cost
+  (`.claude/hooks/stamp-dispatch-session.sh:217`, the `SESSION_DIR="$PWD"`
+  last-resort branch — re-measured on `origin/main` at `35fc5573`; the
+  previously recorded `:203` lands in the ancestor-walk loop, not on the
+  `$PWD` fallback); the Stop fast-path cost
   (`:105`, raised independently by *both* round-2 runs); and the `review_runs`
   replay double-count (`.claude/skills/rsi-audit/scripts/aggregate-usage.sh:859`
   — measured runs 5 / sessions 2, one review counted twice, which inflates the
