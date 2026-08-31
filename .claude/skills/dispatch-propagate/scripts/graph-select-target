@@ -917,16 +917,17 @@ _hold_node_ci_pending() {
 }
 
 # The PR-sensor globals _read_pr_ci owns. Declared here because `set -u` is on
-# and the qa|review arm reads _CI_PR/_CI_RC to decide whether a fetch is needed
-# at all — a read that must not depend on some earlier gate having run first.
+# and the qa|review arm reads _CI_RC to decide whether the sensors below it have
+# any input at all — a read that must not depend on some earlier gate having run
+# first.
 _CI_MERGED=""; _CI_STATE=""; _CI_HEAD=""; _CI_VERDICT=""; _CI_MERGEABLE=""; _CI_DRAFT=""
 _CI_PR=""; _CI_RC=1; _CI_VERDICT_RC=1
 
 # _read_pr_ci <pr> — one gh_pr_view_rest + one CI verdict, into globals
 # _CI_MERGED / _CI_STATE / _CI_HEAD / _CI_VERDICT / _CI_MERGEABLE / _CI_DRAFT, plus the
-# bookkeeping globals _CI_PR / _CI_RC / _CI_VERDICT_RC that say WHICH candidate
-# the sensors describe and how well the read went. rc 1 when the PR is
-# unreadable.
+# bookkeeping globals _CI_RC / _CI_VERDICT_RC that say how well the read went
+# (and the write-only _CI_PR stamp described below). rc 1 when the PR is
+# unreadable — which now includes a PR whose `state` could not be read.
 #
 # Every field is read off the SAME already-fetched PR view (no extra gh
 # round-trip): gh_pr_view_rest projects REST's boolean `.mergeable` into the
@@ -934,11 +935,18 @@ _CI_PR=""; _CI_RC=1; _CI_VERDICT_RC=1
 # the porcelain `isDraft` (lib.sh, the `mergeable:` and `isDraft:` branches of
 # its jq projection).
 #
-# ONE FETCH PER CANDIDATE is the contract the callers rely on. _CI_PR is stamped
-# BEFORE the fetch, so it records ATTEMPTED-FOR rather than succeeded-for: a
-# caller comparing _CI_PR against its own `$pr` learns "these sensors are about
-# my candidate" without being tricked into re-fetching a PR whose read already
-# failed once this iteration. _CI_RC carries the success/failure half.
+# ONE FETCH PER CANDIDATE is the contract the callers rely on, and `_CI_RC` is
+# the half the callers actually read: rc 0 means the sensors below it have an
+# input.
+#
+# `_CI_PR` IS WRITE-ONLY. It is stamped here and read by NOTHING — its one
+# reader was a `[[ "$_CI_PR" != "$pr" ]]` re-fetch guard in the qa|review arm,
+# removed as dead code on two independent counts (the reasoning is recorded at
+# that site). It is retained only as a diagnostic stamp of WHICH candidate the
+# sensors were attempted for, stamped BEFORE the fetch so it records
+# ATTEMPTED-FOR rather than succeeded-for. It is NOT a contract any caller
+# relies on today, and no caller should be written on the assumption that it is;
+# the live invariant is `_CI_RC`.
 _read_pr_ci() {
   local pr="$1" pv
   _CI_MERGED=""; _CI_STATE=""; _CI_HEAD=""; _CI_VERDICT=""; _CI_MERGEABLE=""; _CI_DRAFT=""
@@ -958,6 +966,19 @@ _read_pr_ci() {
   _CI_DRAFT=$(jq -r '.isDraft | tostring' <<<"$pv" 2>/dev/null)
   _CI_HEAD=$(jq -r '.headRefOid // empty' <<<"$pv" 2>/dev/null)
   [[ -n "$_CI_HEAD" ]] || return 1
+  # `state` is a HARD REQUIREMENT beside `headRefOid`, for the same reason and
+  # with the same answer: every consumer below treats a non-`OPEN` state as
+  # TERMINAL, so an EMPTY — i.e. UNREAD — state reads as CLOSED. Failing the
+  # read once, HERE, is what makes that inversion structurally impossible rather
+  # than incidentally impossible. Today `state: (.state | ascii_upcase)`
+  # (lib.sh:1364-1381) makes jq exit 5 on an absent key, so an unread state
+  # already surfaces as `pr-state-unknown`; a null-safe projection edit — the
+  # shape `mergeStateStatus` in that same projection ALREADY uses — would end
+  # that by handing back `""`, and every qa/review candidate would then retire
+  # as `pr-closed-unmerged` with no strike, no hold and no park, halting the lane
+  # while the interrupt gate kept working. Guarding at the source rather than
+  # spelling `-n` at each call site is what keeps the next call site correct.
+  [[ -n "$_CI_STATE" ]] || return 1
   # The verdict's OWN exit code is kept, separately from its value.
   # dispatch_ci_verdict_rest returns 1 when its check-runs fetch, a check-suites
   # fetch or a jq projection fails, and collapsing that into the string
@@ -1023,16 +1044,14 @@ _gate_maybe_interrupt() {
   # read-only. The candidate falls through to its phase's normal gate instead,
   # where qa|review reports the accurate `pr-closed-unmerged` skip.
   #
-  # The `-n` half is load-bearing and is NOT redundant with the `_read_pr_ci`
-  # check above: an empty `_CI_STATE` means the projection yielded no `.state`,
-  # which is an UNREAD state, not a closed one. Treating empty as closed would
-  # silently disable the whole interrupt lane the first time lib.sh's projection
-  # changed shape. That branch is unreachable against the CURRENT projection —
-  # `state: (.state | ascii_upcase)` (lib.sh:1368) makes jq exit 5 on a missing
-  # key, and the projection is `|| return 1`, so an absent `.state` surfaces as
-  # `pr-state-unknown` rather than as an empty one — so it is deliberately left
-  # uncovered, for the same reason and on the same terms as the
-  # `mergeable-unreadable` rc-3 branch below (see the suite's fixture header).
+  # The `-n` half now RESTATES an invariant `_read_pr_ci` enforces rather than
+  # defending against a reachable input: that function requires a non-empty
+  # `_CI_STATE` and returns 1 without one, so an UNREAD state never reaches this
+  # line — it surfaces as `pr-state-unknown` at the `|| return 1` above. The
+  # spelling is kept because the distinction it names is exactly the one the
+  # requirement exists to protect: an empty `_CI_STATE` is an UNREAD state, NOT
+  # a closed one, and treating empty as closed would silently disable the whole
+  # interrupt lane. Enforced at the source; restated here.
   [[ -n "$_CI_STATE" && "$_CI_STATE" != "OPEN" ]] && return 1
 
   # Cost guard, NOT the routing rule: interruptRoute returns null unless CI is
@@ -1125,6 +1144,30 @@ _gate_fix_active() {
   if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
   if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
   if [[ -n "$_CI_MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+  # The OTHER terminal PR state, guarded HERE because this function IS
+  # sensor_gate's whole `fix` arm (`sensor_gate` case `fix` calls it and returns
+  # its rc; nothing else runs on this path). `_gate_maybe_interrupt`'s
+  # terminal-state decline only guards ENTRY, and a PR closed AFTER the
+  # interrupt was entered never passes through it again.
+  #
+  # Such a PR still reports `mergedAt` null (so the merged branch above
+  # correctly did not fire) and KEEPS its last CI verdict, so the `failing` case
+  # below re-emitted `fix` every tick: /fix-checks dispatched against a PR
+  # nobody can merge, until FIX_ATTEMPT_CAP, and then a tracked hold whose
+  # reason misstates the cause. That is the same non-read-only failure the
+  # decline at entry exists to prevent — guarding entry but not the
+  # already-entered interrupt would fix half the class this change names.
+  #
+  # The node is NOT stranded at `fix` by this skip. reconcile-graph-merged
+  # enumerates every merge-absorbable tactic carrying an execution.pr and
+  # absorbs a closed-not-merged PR's node to `done` with all-null completion
+  # evidence (its header: "merged without residue, or closed-not-merged ->
+  # done"). That is the same disposal route the qa|review arm's identical
+  # `pr-closed-unmerged` skip already relies on.
+  #
+  # Spelled `!= "OPEN"` with no `-n`, matching the qa|review arm: `_read_pr_ci`
+  # guarantees a non-empty `_CI_STATE` whenever it returns 0.
+  if [[ "$_CI_STATE" != "OPEN" ]]; then echo "pr-closed-unmerged"; return 1; fi
   case "$_CI_VERDICT" in
     passing)
       # Resolution: clear the interrupt (+ the re-review reset when past review),

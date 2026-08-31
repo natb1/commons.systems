@@ -2342,4 +2342,126 @@ assert_eq "graph-select-target closed-pr write-guard control: interruptRoute saw
   "review failing MERGEABLE" "$(tail -n 1 "$GSCI_ROOT/node-calls.log")"
 gsc_interrupt_teardown
 
+# ============================================================================
+# Test: graph-select-target — an UNREAD `state` is not a CLOSED one
+# ============================================================================
+# `_read_pr_ci` REQUIRES a non-empty `state`, beside its `headRefOid`
+# requirement. Without that requirement an empty `_CI_STATE` — an UNREAD state,
+# not a closed one — satisfies the qa|review arm's `[[ "$_CI_STATE" != "OPEN" ]]`
+# and EVERY qa/review candidate retires as `pr-closed-unmerged`: no strike, no
+# hold, no park, the lane silently halted, while the interrupt gate (which
+# spells its own `-n`) keeps working. That asymmetry is what makes the failure
+# hard to see from the outside.
+#
+# The input is a PR body whose `state` is the EMPTY STRING, which is the one
+# shape that survives lib.sh's projection carrying an empty value: `state:
+# (.state | ascii_upcase)` errors on an absent or null key (jq exits 5, so the
+# read fails as `pr-state-unknown` and proves nothing about this guard), but
+# `"" | ascii_upcase` is `""`, and `.state // empty` keeps it — jq's `//`
+# replaces only `false` and `null`. So the fixture reaches the inversion by the
+# same road a future null-safe projection edit would, without stubbing the
+# projection itself.
+echo "Test: graph-select-target — an EMPTY PR state does not retire the candidate as closed"
+gscip_setup 1
+printf '%s\n' '{"number":2999,"state":"","merged_at":null,"merge_commit_sha":null,"mergeable":true,"mergeable_state":"clean","draft":true,"title":"t","body":"","head":{"sha":"deadbee","ref":"tactic-fixture"},"labels":[]}' \
+  > "$GSCI_ROOT/pr-2999.json"
+gscip_seed deadbee 7
+gscipe_out=$(gsci_run)
+assert_eq "graph-select-target empty-state: an unread state selects nothing" \
+  "empty" "$gscipe_out"
+# THE assertion. The inversion being guarded is precisely that an unread state
+# reads as a CLOSED one.
+assert_eq "graph-select-target empty-state: an unread state is NOT retired as pr-closed-unmerged" \
+  "0" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+# What it is instead: an unreadable PR read, which is what _read_pr_ci's rc 1
+# already means to this arm (the `_CI_RC != 0` guard).
+assert_eq "graph-select-target empty-state: the skip names the unreadable read" \
+  "1" "$(grep -c 'ci-verdict-unreadable' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+# Neither counted nor cleared, and nothing held at the cap boundary: a failed
+# read is not evidence either way.
+assert_eq "graph-select-target empty-state: the strike ladder is left untouched" \
+  "deadbee 7" "$(gscip_sidecar)"
+assert_eq "graph-select-target empty-state: nothing is held at the cap boundary" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- Control: an OPEN state on the same fixture still reads normally ---------
+# Without this, the case above would pass just as well if the requirement had
+# made EVERY PR read fail. The only difference between the two runs is `state`.
+echo "Test: graph-select-target — an OPEN state on the same fixture still reads normally (empty-state control)"
+gscip_setup 1
+gscip_seed deadbee 3
+gsci_run >/dev/null
+assert_eq "graph-select-target empty-state control: an OPEN state still accrues its ci-pending strike" \
+  "deadbee 4" "$(gscip_sidecar)"
+assert_eq "graph-select-target empty-state control: an OPEN state is NOT reported as an unreadable read" \
+  "0" "$(grep -c 'ci-verdict-unreadable' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+gsc_interrupt_teardown
+
+# ============================================================================
+# Test: a PR closed AFTER its fix interrupt was entered leaves the fix arm
+# ============================================================================
+# `_gate_fix_active` IS sensor_gate's whole `fix` arm, so
+# `_gate_maybe_interrupt`'s entry-time terminal-state decline never runs for a
+# candidate that already carries the interrupt. A PR closed WITHOUT MERGING
+# after entry still reports `mergedAt` null and KEEPS its last CI verdict, so
+# the `failing` case re-emitted `fix` every tick: /fix-checks dispatched against
+# an unmergeable PR until FIX_ATTEMPT_CAP, then a tracked hold under a reason
+# that misstates the cause.
+#
+# The load-bearing assertion is the ABSENCE OF THE CAP READ, not the emitted
+# token: `apply-fix-state --check-cap` is the first thing the failing case
+# touches, so an absent `apply-fix-calls.log` proves the arm returned ahead of
+# it rather than merely producing a different string.
+#
+# The skip does not strand the node at `fix`: reconcile-graph-merged absorbs a
+# closed-not-merged PR's node to `done`, the same disposal the qa|review arm's
+# `pr-closed-unmerged` skip already relies on.
+echo "Test: graph-select-target — an active fix interrupt on a closed-unmerged PR skips instead of re-dispatching"
+gscip_setup 1
+gsci_candidate fix
+gsci_pr_closed
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+gscipf1_out=$(gsci_run)
+assert_eq "graph-select-target fix-arm closed-pr: a closed-unmerged PR at fix is not selected" \
+  "empty" "$gscipf1_out"
+assert_eq "graph-select-target fix-arm closed-pr: the skip reason names the closed PR" \
+  "1" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+assert_eq "graph-select-target fix-arm closed-pr: the retry cap is never read" \
+  "0" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target fix-arm closed-pr: no fix-attempt-cap hold lands" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- Control: an OPEN red PR at fix still retries -----------------------------
+# Without this the case above would pass just as well if the guard had disabled
+# the fix arm outright. The only difference between the two runs is `state`.
+echo "Test: graph-select-target — an OPEN red PR at fix still re-emits fix (fix-arm control)"
+gscip_setup 1
+gsci_candidate fix
+gsci_pr true
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+gscipf2_out=$(gsci_run)
+assert_eq "graph-select-target fix-arm control: an OPEN red PR is re-emitted at fix" \
+  "node tactic-fixture tactic fix" "$gscipf2_out"
+assert_eq "graph-select-target fix-arm control: an OPEN red PR DOES read the retry cap" \
+  "1" "$(grep -q -- '--check-cap' "$GSCI_ROOT/apply-fix-calls.log" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- A MERGED PR at fix still routes to reconcile ----------------------------
+# The two terminal states share `state: CLOSED` in REST and are told apart only
+# by `mergedAt`, so the new guard must sit BELOW the merged check, not above it.
+echo "Test: graph-select-target — a MERGED PR at fix still routes to reconcile, not to the closed-unmerged outcome"
+gscip_setup 1
+gsci_candidate fix
+gsci_pr_merged
+gscipf3_out=$(gsci_run)
+assert_eq "graph-select-target fix-arm closed-pr: a merged PR at fix is not selected" \
+  "empty" "$gscipf3_out"
+assert_eq "graph-select-target fix-arm closed-pr: a merged PR at fix still routes to reconcile" \
+  "1" "$(grep -c 'pr-merged-awaiting-reconcile' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+assert_eq "graph-select-target fix-arm closed-pr: a merged PR at fix is NOT reported as closed-unmerged" \
+  "0" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+gsc_interrupt_teardown
+
 report_results
