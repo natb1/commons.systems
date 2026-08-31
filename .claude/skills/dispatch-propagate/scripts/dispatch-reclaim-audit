@@ -730,6 +730,17 @@ printf 'un-transcripted stranded reclaims = %d\n' "${BUCKET[genuine-strand]}"
 echo "  Reclaim events with NO contemporaneous worker (no assistant work within"
 echo "  +/-1 day of the reclaim, or nearest work far later than the reclaim)."
 echo "  Genuine boot/never-started death — the real abnormal-death signal."
+# The second self-contained headline (POPULATION SPLIT below is the other), and
+# it prints the SAME under-accounted genuine-strand number. A reader who stops
+# here sees a bare figure billed as "the real abnormal-death signal" with
+# nothing saying it is a floor. Identical reasoning to the caveat on the split;
+# a caveat on one of two headlines is not a caveat.
+if (( DEAD_BASENAME_UNPARSED > 0 )); then
+  printf '  INCOMPLETE: %d dead-session-stranded event(s) reached no bucket (their\n' \
+    "$DEAD_BASENAME_UNPARSED"
+  echo "    worktree basename would not parse), so this count is a FLOOR, not the"
+  echo "    population — any of them could be un-transcripted strands as well."
+fi
 echo
 
 echo "--- CAUSE BREAKDOWN (ranked, over reclaim EVENTS) ---"

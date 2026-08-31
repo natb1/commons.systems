@@ -548,11 +548,27 @@ CASE_I_LOG="$ROOT/sweep-drift.txt"
 } > "$CASE_I_LOG"
 
 export DISPATCH_RECLAIM_SWEEP_LOG="$CASE_I_LOG"
-DRIFT_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json)
-DRIFT_TEXT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650)
+# Capture the status instead of letting `set -e` abort the suite on it. Case I
+# is the ONE fixture that deliberately drives
+# dead_session_stranded_basename_unparsed > 0, and that counter is REPORT-ONLY
+# by design: it never touches EXIT_CODE. Uncaptured, a regression that made the
+# condition exit 3 would kill the run before report_results, surfacing as a bare
+# non-zero exit with no FAIL: line and no counts -- which reads as harness
+# breakage rather than as the contract change it actually is. Asserting the 0
+# locks the report-only posture, exactly as case F already does for the sibling
+# reason-unparsed counter.
+DRIFT_RC=0
+DRIFT_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json) || DRIFT_RC=$?
+DRIFT_TEXT_RC=0
+DRIFT_TEXT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650) || DRIFT_TEXT_RC=$?
 
 echo ""
 echo "--- assertions (a drifted reason is UNPARSED, never a fabricated bucket) ---"
+
+assert_eq "drift: the basename-unparsed counter is report-only (--json exits 0)" "0" \
+  "$DRIFT_RC"
+assert_eq "drift: the basename-unparsed counter is report-only (text exits 0)" "0" \
+  "$DRIFT_TEXT_RC"
 
 assert_eq "drift: every line is still counted for the rate" "9" \
   "$(jq '.sweep.reclaim_events_total' <<<"$DRIFT_OUT")"
@@ -584,6 +600,11 @@ assert_eq "drift: the RATE/CAUSE shortfall is counted" "1" \
   "$(jq '.sweep.dead_session_stranded_basename_unparsed' <<<"$DRIFT_OUT")"
 assert_eq "drift: the conclusion block flags the incomplete population" "yes" \
   "$(case "$DRIFT_TEXT" in *'INCOMPLETE: 1 dead-session-stranded event(s) are NOT in the split above'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# The OTHER headline. Both self-contained sections print the same shortfall-bearing
+# number, so both must carry the caveat; asserting only the split let the strands
+# headline ship a bare floor billed as the real abnormal-death signal.
+assert_eq "drift: the un-transcripted strands headline flags it too" "yes" \
+  "$(case "$DRIFT_TEXT" in *'INCOMPLETE: 1 dead-session-stranded event(s) reached no bucket'*) printf 'yes' ;; *) printf 'no' ;; esac)"
 
 export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
 
