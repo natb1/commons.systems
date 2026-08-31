@@ -80,9 +80,15 @@
 #
 # The THIRD write arm is the CI-pending liveness bound
 # (tactic-autonomous-ci-pending-liveness-bound). The `qa|review` sensor arm's
-# `ci-pending` outcome — a draft PR whose CI has reported no verdict; a verdict
-# the fetch could not READ at all is a different thing, emitted as
-# `ci-verdict-unreadable` without touching the ladder — used to be an
+# `ci-pending` outcome — a draft PR whose CI has reported no verdict; a read
+# the fetch could not complete AT ALL is a different thing, emitted as
+# `ci-verdict-unreadable` without touching the ladder. That token covers BOTH
+# unreadable reads on this arm: a failed verdict read (`_CI_VERDICT_RC != 0`)
+# and a failed `pulls/{n}` read (`_CI_RC != 0`). Every SIBLING arm spells that
+# second half `pr-state-unknown` instead, so one underlying failure carries two
+# different tokens depending on which arm observes it. The spelling here is
+# pinned by an assertion in the suite, so this COMMENT was the wrong half, not
+# the code — used to be an
 # unbounded skip: no counter, no timestamp,
 # forever. It is now counted per node in a SIDECAR FILE keyed on the PR's head
 # SHA (`ci_pending_strike_bump` / `ci_pending_strike_clear`, lib.sh), and on the
@@ -218,8 +224,12 @@
 # daemon over a Unix socket (see .claude/rules/sandbox.md).
 #
 # Exit codes: 0 on `node`/`empty`; 2 on usage or environment errors (a broken
-# store snapshot, a failed selector run, or a sensor_gate rc-2 environment
-# error).
+# store snapshot or a failed selector run). A `sensor_gate` rc-2 environment
+# error is a DECLARED BUT UNREACHABLE cause: no arm produces rc 2 today — see
+# the note at the STANDALONE_CLAIMED declaration below — so the
+# `(( rc == 2 )) && exit 2` branch and the claim rollback it guards are both
+# dead code, kept deliberately as the declared contract at that seam so a
+# future arm that needs rc 2 does not have to re-introduce the rollback.
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch
 # scripts).
@@ -1122,8 +1132,10 @@ _gate_maybe_interrupt() {
 
 # _gate_fix_active <id> <pr> <pushed_sha> <fix_since> — the candidate already
 # carries an active interrupt (router emitted phase `fix`). Resolve on green,
-# guard/retry otherwise. Prints the phase to emit (rc 0), a skip reason
-# (rc 1), or an env error (rc 2).
+# guard/retry otherwise. Prints the phase to emit (rc 0) or a skip reason
+# (rc 1). It NEVER returns rc 2: that return is part of sensor_gate's declared
+# contract, but no arm produces it today (see the exit-code note in the file
+# header), so do not write a caller that branches on it.
 #
 # DELIBERATELY CONFLICT-BLIND: this function reads CI only (`_read_pr_ci`'s
 # `_CI_VERDICT`) and never consults `_CI_MERGEABLE`. A node that entered `fix`
