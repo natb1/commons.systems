@@ -88,7 +88,17 @@ import { listNodes, listNodesStrict } from "./store.js";
  * It buys a second key space for a hit rate of approximately zero: census and
  * scope-sweep each run ONCE per tick, so a tolerant-namespace entry would be
  * written by the only call that could ever have used it. The cost of a miss here
- * is one `listNodes` — today's behavior exactly.
+ * is one `listNodes` PLUS the `storeFingerprint` that produced the key — a
+ * second read and hash of every file in the store. That is a real surcharge, not
+ * "today's behavior exactly", and it is paid on every miss.
+ *
+ * WHICH TODAY IS EVERY CALL: no caller anywhere wires `listNodesStrictCached`,
+ * so nothing publishes an entry for `listNodesCached` to read. The reconcile band
+ * (`graph-auto-merge`, `reconcile-graph-merged`, `reconcile-graph-review-stall`)
+ * still imports `listNodesStrict` from `store.js` directly. Until that wiring
+ * lands, setting `DISPATCH_GRAPH_NODE_CACHE` makes the census and scope-sweep
+ * strictly SLOWER than leaving it unset. Wire the writers before exporting the
+ * var.
  *
  * The caller owns the cache directory's lifecycle: this module never creates it
  * and never prunes it, mirroring `dispatch_ci_verdict_rest`.
@@ -345,8 +355,10 @@ export function listNodesStrictCached(dir: string, cacheDir: string): IntentionN
  * Every failure is one answer — `listNodes(dir)`. A missing entry, an
  * unreadable one, malformed JSON, a non-array payload, an element
  * `validateNode` rejects, or a store whose fingerprint cannot be taken: each
- * costs one tolerant parse and nothing else. This layer may never fail a sweep
- * the uncached path would have completed.
+ * costs one tolerant parse PLUS the `storeFingerprint` already spent on the key,
+ * and nothing else. This layer may never fail a sweep the uncached path would
+ * have completed — but it is not free on a miss, and NOTHING WIRES THE STRICT
+ * WRITER TODAY, so every call is a miss. See the module header.
  *
  * A `cacheDir` that IS the store degrades the same way, for the same reason as
  * in `listNodesStrictCached`: an entry filed there would change the very key it

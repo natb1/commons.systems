@@ -72,6 +72,15 @@ const repoRoot = dirname(dirname(dirname(scriptDir)));
 // --- Materialized node sets -------------------------------------------------
 
 /**
+ * Raised ONLY for "the --nodes-json payload is unusable". It exists so the
+ * caller can tell that apart from every other way this script can fail: the
+ * wrapper's response to an unusable payload is to DELETE the cache entry, and
+ * doing that on an unrelated selector failure destroys a perfectly good entry
+ * and misreports the cause. See the exit-3 mapping at the bottom of this file.
+ */
+class NodesJsonError extends Error {}
+
+/**
  * Read a materialized node array, or throw.
  *
  * Every rejection is loud on purpose. This function stands where
@@ -85,15 +94,6 @@ const repoRoot = dirname(dirname(dirname(scriptDir)));
  * The caller decides what to do about the throw. `graph-select-target` deletes
  * the offending entry and re-runs the full archive path exactly once.
  */
-/**
- * Raised ONLY for "the --nodes-json payload is unusable". It exists so the
- * caller can tell that apart from every other way this script can fail: the
- * wrapper's response to an unusable payload is to DELETE the cache entry, and
- * doing that on an unrelated selector failure destroys a perfectly good entry
- * and misreports the cause. See the exit-3 mapping at the bottom of this file.
- */
-class NodesJsonError extends Error {}
-
 function readNodesJson(path: string): IntentionNode[] {
   let parsed: unknown;
   try {

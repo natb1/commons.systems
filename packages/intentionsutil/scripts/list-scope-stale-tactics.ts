@@ -37,8 +37,17 @@
 // This runs once per dispatch tick over the whole store, so the enumeration is
 // read back through `listNodesCached` (../src/store-cache.ts) when
 // DISPATCH_GRAPH_NODE_CACHE names the tick-scoped cache directory: the same node
-// set the tick's earlier sweeps already YAML-parsed, deserialized from JSON
-// instead. That path READS cache entries and never WRITES one, because a
+// set the tick's earlier sweeps are MEANT to have already YAML-parsed,
+// deserialized from JSON instead.
+//
+// NO WRITER IS WIRED YET, so that read cannot hit: the reconcile band
+// (`graph-auto-merge`, `reconcile-graph-merged`, `reconcile-graph-review-stall`)
+// still imports `listNodesStrict` from ../src/store.js rather than
+// `listNodesStrictCached`, and nothing else publishes an entry. Until they are
+// wired, setting the var makes this sweep SLOWER — a guaranteed-miss
+// `storeFingerprint` on top of the same `listNodes`.
+//
+// That path READS cache entries and never WRITES one, because a
 // tolerant enumeration legitimately omits a corrupt node and publishing that
 // shorter set under the shared content key would later hand a STRICT gate caller
 // a store with a `blocked_by` target missing, which SATISFIES

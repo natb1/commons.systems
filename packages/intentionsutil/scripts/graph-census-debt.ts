@@ -49,9 +49,16 @@
 //
 // It runs once per dispatch tick over the entire store, which on a 717-node
 // store is ~0.3 s of `yaml.parse` for a node set the tick's earlier
-// reconcile-band sweeps have usually already parsed. So `main()` reads that
+// reconcile-band sweeps are MEANT to have already parsed. So `main()` reads that
 // parse back through `listNodesCached` (../src/store-cache.ts) when
-// DISPATCH_GRAPH_NODE_CACHE names the tick-scoped cache directory. That path
+// DISPATCH_GRAPH_NODE_CACHE names the tick-scoped cache directory.
+//
+// NO WRITER IS WIRED YET, so that read cannot hit: `graph-auto-merge`,
+// `reconcile-graph-merged` and `reconcile-graph-review-stall` still import
+// `listNodesStrict` from ../src/store.js rather than `listNodesStrictCached`,
+// and nothing else publishes an entry. Until they are wired, setting the var
+// makes this tool SLOWER — a guaranteed-miss `storeFingerprint` on top of the
+// same `listNodes`. Leaving the var unset is byte-for-byte today's call. That path
 // READS entries and never writes one: a tolerant enumeration legitimately omits
 // a corrupt node, and publishing that shorter set under the shared content key
 // would later hand a STRICT gate caller a store with a `blocked_by` target
