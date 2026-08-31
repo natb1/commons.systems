@@ -254,6 +254,22 @@ sd_write_worktree() {
   fi
 }
 
+# sd_write_orphan_branch <node> — leave refs/heads/<node> one commit ahead of
+# origin/main with NO worktree at all. This is exactly what `git worktree
+# remove` leaves behind — and what the `rm -rf` + `git worktree prune` recovery
+# a torn sandboxed removal requires leaves behind too: the checkout is gone, the
+# branch and its commits are not. Built with plumbing (hash-object / mktree /
+# commit-tree / update-ref) so the fixture never creates a checkout, which is
+# the whole point of the state under test.
+sd_write_orphan_branch() {
+  local node="$1" base blob tree commit
+  base=$(git -C "$SD_REPO" rev-parse refs/remotes/origin/main)
+  blob=$(printf 'work that outlived its checkout\n' | git -C "$SD_REPO" hash-object -w --stdin)
+  tree=$(printf '100644 blob %s\tstranded.txt\n' "$blob" | git -C "$SD_REPO" mktree)
+  commit=$(git -C "$SD_REPO" commit-tree "$tree" -p "$base" -m "work that outlived its checkout")
+  git -C "$SD_REPO" update-ref "refs/heads/$node" "$commit"
+}
+
 # sd_write_transcript <sid> <mtime-epoch>
 sd_write_transcript() {
   printf '{}\n' > "$SD_PROJ/proj-a/$1.jsonl"
@@ -750,6 +766,60 @@ assert_eq "no-worktree: the recommendation omits the push-from-there instruction
 assert_eq "no-worktree: stderr reports no clear disposition" "no" "$(sd_contains 'cleared-')"
 assert_eq "no-worktree: the sweep summary counts zero clears" "yes" "$(sd_contains 'cleared=0')"
 assert_eq "no-worktree: one decision record, disposition=parked" "parked" "$(sd_log_dispositions)"
+sd_teardown
+
+# --- Test 15c: no worktree, but the BRANCH survived --------------------------
+
+# The regression lock for the no-worktree arm's safety claim. That arm used to
+# assert "NO work can be unpushed", and recommend "do NOT create one", from
+# `[[ -d "$wt" ]]` failing and nothing else. A missing checkout does not prove a
+# missing branch: `git worktree remove` leaves refs/heads/<node> carrying its
+# commits, and provision-node-worktree re-attaches that same branch rather than
+# recutting it. The park record is the durable artifact an operator acts on, so
+# the old text actively told them not to look at the one place the work was.
+#
+# Every other fixture in this file either has a worktree, or has no branch
+# either — the case that decides the two apart was the one nobody wrote.
+echo "Test: no worktree but a surviving branch reports the work at risk"
+sd_setup
+sd_write_node "tactic-orphan-branch" unparked
+sd_commit_nodes
+sd_write_orphan_branch "tactic-orphan-branch"
+sd_add_session "0bb2-2222" "tactic-orphan-branch"
+sd_install_claude 0
+standdown_write "tactic-orphan-branch" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "orphan-branch: sweep returns 0" "0" "$SD_RC"
+assert_eq "orphan-branch: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "orphan-branch: the reason reports the surviving branch and its count" "yes" \
+  "$(case "$(sd_park_reason)" in *'survived the missing checkout and still carries 1 commit(s)'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "orphan-branch: the reason does NOT claim nothing survives" "no" \
+  "$(case "$(sd_park_reason)" in *'no unpushed work survives'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "orphan-branch: the recommendation drops 'do NOT create one'" "no" \
+  "$(case "$(sd_park_recommendation)" in *'do NOT create one'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "orphan-branch: the recommendation names the recut command" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'worktree add'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "orphan-branch: one decision record, disposition=parked" "parked" "$(sd_log_dispositions)"
+sd_teardown
+
+# --- Test 15d: no worktree AND no branch stays determinate -------------------
+
+# The other half of the pair, so the fix above cannot be "call everything
+# unknown". With neither checkout nor branch there really is nothing to strand,
+# and the arm must still say so plainly rather than hedging.
+echo "Test: no worktree and no branch reports no surviving work, not unknown"
+sd_setup
+sd_write_node "tactic-no-branch-either" unparked
+sd_commit_nodes
+sd_add_session "0bb2-2222" "tactic-no-branch-either"
+sd_install_claude 0
+standdown_write "tactic-no-branch-either" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "no-branch-either: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "no-branch-either: the reason says no branch exists either" "yes" \
+  "$(case "$(sd_park_reason)" in *'No branch refs/heads/tactic-no-branch-either exists either'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "no-branch-either: the verdict is not hedged as UNKNOWN" "no" \
+  "$(case "$(sd_park_reason)" in *UNKNOWN*) printf 'yes' ;; *) printf 'no' ;; esac)"
 sd_teardown
 
 # --- Test 15b: the clear path was NARROWED, not removed ----------------------

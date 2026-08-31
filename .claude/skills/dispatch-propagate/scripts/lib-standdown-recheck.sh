@@ -699,15 +699,48 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
       # local merge commit (which `rev-list --not --remotes` over-counts as
       # unpushed) from being misread as stranded work.
       local unpushed_flag reason_tag reason recommendation unpushed_head="" rec_wt_clause
+      local branch_ahead="" branch_clause=""
       if (( no_wt )); then
         # FIRST arm, so the sync predicates are never called on a missing
         # directory: both return 1 when `git -C` fails, which rule (h) would
         # read as stranded unpushed work in a worktree that does not exist.
-        unpushed_flag="false"
+        # A missing checkout does NOT prove a missing branch, so the safety of
+        # this arm is MEASURED, never inferred from `[[ -d ]]`. `git worktree
+        # remove` -- and the `rm -rf` + `git worktree prune` recovery that a
+        # torn sandboxed removal requires -- both leave `refs/heads/<node>`
+        # behind carrying its commits, and provision-node-worktree re-attaches
+        # that same branch rather than recutting it (it runs `worktree add
+        # "$WT" "$NODE_ID"` whenever `rev-parse --verify` succeeds). The same
+        # gap opens when the session claimed its worktree under a name other
+        # than the node id, which native `EnterWorktree` permits and which every
+        # worktree on this host in fact does.
+        #
+        # Unmeasurable reports UNKNOWN, never "safe": this park record is the
+        # durable artifact the operator acts on, and telling them there is
+        # nothing to look at is worse than telling them we could not tell.
+        if ! git -C "$repo_root" rev-parse --verify --quiet "refs/heads/$node" >/dev/null 2>&1; then
+          # DETERMINATE, not unknown: no checkout and no branch together do mean
+          # there is nothing left to strand. Only an existing-but-unmeasurable
+          # branch is genuinely unknown, below.
+          unpushed_flag="false"
+          branch_clause="No branch refs/heads/$node exists either, so no unpushed work survives."
+        else
+          branch_ahead=$(git -C "$repo_root" rev-list --count "origin/main..refs/heads/$node" 2>/dev/null) || branch_ahead=""
+          if ! [[ "$branch_ahead" =~ ^[0-9]+$ ]]; then
+            unpushed_flag="unknown"
+            branch_clause="Branch refs/heads/$node exists but could not be measured against origin/main, so whether unpushed work survives is UNKNOWN -- check it before assuming there is none."
+          elif (( branch_ahead > 0 )); then
+            unpushed_flag="true"
+            branch_clause="Branch refs/heads/$node survived the missing checkout and still carries $branch_ahead commit(s) not on origin/main. That work is at risk."
+          else
+            unpushed_flag="false"
+            branch_clause="Branch refs/heads/$node is fully contained in origin/main (0 commits ahead), so no unpushed work survives."
+          fi
+        fi
         reason_tag="standdown-winner-dead-node-held-no-worktree"
         printf -v reason \
-          'standdown-winner-dead-node-held-no-worktree: a session stood down for this node in favour of winner session %s, which is no longer registered with the Claude daemon. No worktree exists at %s — this node lane spawns without one (strategy nodes and the align-tactics rung claim their own), so NO work can be unpushed — but the node is still held by session(s) %s waiting on a session that no longer exists, so nothing will advance it without intervention.' \
-          "${m_winner:-(unattributed — observed duplicate, no winner declared)}" "$wt" "${survivors:-none}"
+          'standdown-winner-dead-node-held-no-worktree: a session stood down for this node in favour of winner session %s, which is no longer registered with the Claude daemon. No worktree exists at %s. %s The node is still held by session(s) %s waiting on a session that no longer exists, so nothing will advance it without intervention.' \
+          "${m_winner:-(unattributed — observed duplicate, no winner declared)}" "$wt" "$branch_clause" "${survivors:-none}"
       elif ! worktree_in_sync "$wt" && ! worktree_merged_in_sync "$wt"; then
         unpushed_flag="true"
         reason_tag="standdown-winner-dead-work-unpushed"
@@ -727,7 +760,17 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
       # One shared template; only the worktree sentence varies, so the long
       # prose below is never duplicated per reason variant.
       if (( no_wt )); then
-        rec_wt_clause="No worktree exists at $wt, so no unpushed work is at risk — do NOT create one."
+        # Mirrors the measured verdict above -- never a blanket "nothing at
+        # risk". Recutting the worktree is the recovery when the branch still
+        # carries commits, so the "do NOT create one" advice is given only in
+        # the branch that actually established there is nothing to recover.
+        if [[ "$unpushed_flag" == "true" ]]; then
+          rec_wt_clause="No worktree exists at $wt, but branch refs/heads/$node still carries $branch_ahead commit(s) not on origin/main. Recut the checkout with 'git -C $repo_root worktree add $wt $node', verify that work, and push it FIRST."
+        elif [[ "$unpushed_flag" == "unknown" ]]; then
+          rec_wt_clause="No worktree exists at $wt, and branch refs/heads/$node could not be measured -- do NOT assume nothing is at risk. Check 'git -C $repo_root rev-list --count origin/main..refs/heads/$node' before proceeding."
+        else
+          rec_wt_clause="No worktree exists at $wt and branch refs/heads/$node is fully merged into origin/main, so no unpushed work is at risk — do NOT create one."
+        fi
       else
         rec_wt_clause="If the worktree at $wt has unpushed commits, verify them and push them from there FIRST."
       fi
