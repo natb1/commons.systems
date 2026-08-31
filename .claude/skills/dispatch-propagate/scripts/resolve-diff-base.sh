@@ -466,6 +466,22 @@ if [ "$BASE" = "$HEAD_SHA" ]; then
   # (`source=fork-point`), so a reader who was expecting the full range since
   # --remote-ref can see they are not getting it. That is what a warning is
   # for; a refusal here buys nothing it does not also break.
+  #
+  # HOISTED ABOVE THE SPLIT, because BOTH arms need HEAD's first parent and a
+  # root HEAD has none. On-chain it is the base itself. Off-chain the fork-point
+  # walk presupposes a line that LEFT the chain, which a parentless commit does
+  # not have: its `^@` expands to nothing, the walk runs to --remote-ref's own
+  # root, and that root has no first parent either — so the arm died exit 10,
+  # whose text blames corrupt or unreadable history. That was a lie about a
+  # perfectly readable repository. A second root merged into --remote-ref is an
+  # off-chain root HEAD and reaches here, so the shape is real, not theoretical.
+  # Exit 9 is what the header documents for a root HEAD, unqualified, and the
+  # cause is the same in both arms — so the check belongs to neither.
+  if ! PARENT=$(git -C "$ROOT" rev-parse --verify --quiet "${HEAD_SHA}^1^{commit}"); then
+    die 9 "ERROR: --at-remote-tip first-parent was requested but HEAD ($HEAD_SHA)" \
+          "is a root commit with no first parent, so 'what this push introduced'" \
+          "is undefined."
+  fi
   ON_FIRST_PARENT=no
   if [ "$HEAD_SHA" = "$REMOTE_SHA" ]; then
     ON_FIRST_PARENT=yes
@@ -473,9 +489,9 @@ if [ "$BASE" = "$HEAD_SHA" ]; then
     # Bounded walk: `--not <head>^@` prunes at HEAD's PARENTS, so this visits
     # only --remote-ref's first-parent chain down to HEAD's own generation
     # rather than the whole history. HEAD itself is not excluded, so it is
-    # printed exactly when it lies on that chain. A root HEAD has no parents,
-    # `^@` expands to nothing and the walk runs to the root — correct, merely
-    # unbounded, and that shape exits 9 below anyway.
+    # printed exactly when it lies on that chain. A root HEAD would make `^@`
+    # expand to nothing and run the walk unbounded to the root, but it cannot
+    # reach here: the hoisted check above exits 9 first.
     #
     # No `| grep -q`: this script runs under `set -o pipefail`, and grep's
     # early exit would SIGPIPE rev-list and turn a MATCH into a non-zero
@@ -523,11 +539,7 @@ if [ "$BASE" = "$HEAD_SHA" ]; then
     BASE="$FORK"
     SOURCE="fork-point"
   else
-    if ! PARENT=$(git -C "$ROOT" rev-parse --verify --quiet "${HEAD_SHA}^1^{commit}"); then
-      die 9 "ERROR: --at-remote-tip first-parent was requested but HEAD ($HEAD_SHA)" \
-            "is a root commit with no first parent, so 'what this push introduced'" \
-            "is undefined."
-    fi
+    # $PARENT is already resolved by the hoisted root-commit check above.
     # Every first-parent call site is ALSO a developer-invoked script, and on a
     # developer's checkout the on-chain strict-ancestor shape is just a stale
     # local tree, where `fail` mode's exit 5 was the only signal that their tree

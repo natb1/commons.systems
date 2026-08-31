@@ -50,6 +50,12 @@ TMP_ROOT=$(mktemp -d)
 #                  and any drift between the two is invisible. Here a commit
 #                  sits between, and the base resolves OLDER than HEAD^1 even
 #                  though HEAD's line is one commit long.
+#     "off-chain-root"
+#                — a SECOND ROOT commit merged into origin/main. HEAD is parked
+#                  on it: contained in origin/main, OFF its first-parent chain,
+#                  AND parentless. The only shape that is both off-chain and a
+#                  root, so the only one that reaches the fork-point walk with
+#                  no first parent to resolve.
 #     (default)  — a feature branch one commit ahead of origin/main
 # Sets: REPO
 # ---------------------------------------------------------------------------
@@ -175,6 +181,26 @@ make_repo() {
         -m "landing merge: reroutes the chain through the lander"
       git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
       git -C "$REPO" checkout -q "$FORKED_TIP_SHA"
+      ;;
+    off-chain-root)
+      # A SECOND ROOT merged into main. R2 has no parents at all, so it is both
+      # OFF origin/main's first-parent chain and parentless — the one shape that
+      # reaches the fork-point walk with no HEAD^1 to fall back on.
+      #
+      # Not a hypothetical: merging an independently-started repository in (a
+      # vendored tree, a docs site, a subtree import) lands exactly this, and a
+      # workflow re-run on that root commit then runs the helper against it.
+      git -C "$REPO" checkout -q --orphan second-root
+      git -C "$REPO" rm -q -rf . >/dev/null 2>&1 || true
+      printf 'second root\n' > "$REPO/SECOND_ROOT"
+      git -C "$REPO" add SECOND_ROOT
+      git -C "$REPO" commit -q -m "a second, unrelated root"
+      OFF_CHAIN_ROOT_SHA=$(git -C "$REPO" rev-parse HEAD)
+      git -C "$REPO" checkout -q main
+      git -C "$REPO" merge -q --no-ff --allow-unrelated-histories \
+        "$OFF_CHAIN_ROOT_SHA" -m "merge the second root into main"
+      git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse HEAD)"
+      git -C "$REPO" checkout -q "$OFF_CHAIN_ROOT_SHA"
       ;;
     *)
       git -C "$REPO" update-ref refs/remotes/origin/main "$BASELINE_SHA"
@@ -549,6 +575,49 @@ git -C "$REPO" update-ref refs/remotes/origin/main "$(git -C "$REPO" rev-parse H
 run_sut --repo-root "$REPO" --at-remote-tip first-parent
 assert_eq "root commit: exit 9" "yes" "$(rc_of "$RC" 9)"
 assert_contains "root commit: names the condition" "root commit" "$ERR"
+
+# ---------------------------------------------------------------------------
+# Test 8b: exit 9 for an OFF-CHAIN root HEAD — a second root merged into
+# origin/main.
+#
+# Test 8 above only covers the ON-chain root (HEAD == origin/main), and the
+# `behind` fixture in Test 4 only the on-chain strict-ancestor root. Both reach
+# the root-commit guard through the first-parent arm. This shape does not: HEAD
+# is contained in origin/main but sits OFF its first-parent chain, so it fell
+# through into the FORK-POINT walk — which then found origin/main's own root at
+# the chain tail, could not resolve its first parent either, and died exit 10
+# blaming "corrupt or unreadable history" about a repository that is neither.
+#
+# The header documents exit 9 for a root HEAD UNQUALIFIED, so exit 10 here was
+# the script contradicting its own contract. The guard is now hoisted ABOVE the
+# on-chain/off-chain split, where it belongs: both arms need HEAD's first
+# parent, and a root HEAD has none regardless of which arm it would take.
+# ---------------------------------------------------------------------------
+echo "Test 8b: first-parent on an OFF-CHAIN root commit"
+make_repo off-chain-root
+# Pin the fixture's own shape first, so a later change that stops producing an
+# off-chain root cannot make the assertions below pass vacuously.
+assert_eq "off-chain root: HEAD is parentless" \
+  "" "$(git -C "$REPO" rev-parse --verify --quiet 'HEAD^1' || true)"
+assert_eq "off-chain root: HEAD is contained in origin/main" \
+  "$(git -C "$REPO" rev-parse HEAD)" \
+  "$(git -C "$REPO" merge-base refs/remotes/origin/main HEAD)"
+assert_not_contains "off-chain root: HEAD is NOT on origin/main's first-parent chain" \
+  "$(git -C "$REPO" rev-parse HEAD)" \
+  "$(git -C "$REPO" rev-list --first-parent refs/remotes/origin/main)"
+
+run_sut --repo-root "$REPO" --at-remote-tip first-parent
+assert_eq "off-chain root: exit 9, not the fork-point arm's exit 10" "yes" "$(rc_of "$RC" 9)"
+assert_contains "off-chain root: names the condition" "root commit" "$ERR"
+assert_eq "off-chain root: stdout is empty" "" "$OUT"
+# The specific misdiagnosis this replaces: the fork-point arm's message blamed
+# the repository's history, which sent a reader looking for corruption.
+assert_not_contains "off-chain root: does not blame the fork point" \
+  "fork point" "$ERR"
+
+# ... and the default mode is untouched: the strict-ancestor refusal, as before.
+run_sut --repo-root "$REPO"
+assert_eq "off-chain root/default: exit 5 (unchanged)" "yes" "$(rc_of "$RC" 5)"
 
 # ---------------------------------------------------------------------------
 # Test 9: exit 3 — repo-root resolution failures.

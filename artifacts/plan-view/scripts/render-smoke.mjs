@@ -16,7 +16,9 @@
  * with no open tactics, or with no lineage in scope, is a legitimate state of
  * the graph — the queue being empty is a thing that happens, not a build
  * defect — and the page has explicit, designed empty states for both
- * (`No rows match the active filter.`, `No lineage in scope.`). Asserting a
+ * (`No open tactics in this snapshot.` when no filter is narrowing the table,
+ * `No rows match the active filter.` when one is; `No lineage in scope.`).
+ * Asserting a
  * positive row count made this smoke red on `main` for a store that rendered
  * exactly as designed. So each of the two regions is checked for reaching ONE
  * of its two legitimate rendered states, which still fails loudly when a region
@@ -95,9 +97,19 @@ function writeEmptyStoreCopy(builtFile, intoDir) {
 const scratch = mkdtempSync(join(tmpdir(), "plan-view-smoke-"));
 
 const executablePath = process.env.DS_CHROMIUM_PATH;
-const browser = await chromium.launch(
-  executablePath === undefined || executablePath === "" ? {} : { executablePath },
-);
+let browser;
+try {
+  browser = await chromium.launch(
+    executablePath === undefined || executablePath === "" ? {} : { executablePath },
+  );
+} catch (error) {
+  // The launch is the one fallible step the finally below cannot cover, and it
+  // fails routinely (no browser downloaded, a sandbox that denies the profile
+  // socket). Without this the scratch dir is orphaned in TMPDIR on every such
+  // run. Rethrown unchanged — playwright's own message is the diagnostic.
+  rmSync(scratch, { recursive: true, force: true });
+  throw error;
+}
 
 const failures = [];
 function check(name, ok, detail) {
