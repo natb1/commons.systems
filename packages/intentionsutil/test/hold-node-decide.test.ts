@@ -6,6 +6,7 @@ import {
   RESOLUTION_SENTENCE,
   type HoldInput,
 } from "../scripts/hold-node-decide.js";
+import { KIND_SLUGS, RESERVED_KIND_SLUGS } from "../src/holds.js";
 
 // tactic-mechanical-park-producers Unit 1 — the network-free hold-node decision.
 // `decideHold` / `holdIdFor` are pure over an in-memory node array, so these
@@ -72,6 +73,12 @@ describe("holdIdFor", () => {
   it("derives the residue slug id for worktree-residue", () => {
     expect(holdIdFor("worktree-residue", "tactic-some-work")).toBe(
       "tactic-hold-residue-some-work",
+    );
+  });
+
+  it("derives the ci-stalled slug id for ci-pending-stalled", () => {
+    expect(holdIdFor("ci-pending-stalled", "tactic-some-work")).toBe(
+      "tactic-hold-ci-stalled-some-work",
     );
   });
 
@@ -163,8 +170,30 @@ describe("decideHold dispositions", () => {
     });
   });
 
+  it("uses the ci-stalled hold id when the kind is ci-pending-stalled", () => {
+    const d = decideHold([source()], input({ kind: "ci-pending-stalled" }));
+    expect(d.disposition).toBe("NONE");
+    expect(d.hold_id).toBe("tactic-hold-ci-stalled-some-work");
+    expect(d.node?.attributes).toEqual({
+      hold_for: SOURCE,
+      hold_kind: "ci-pending-stalled",
+    });
+    expect(d.source_edge_needed).toBe(true);
+    expect(d.node_body).toContain(RESOLUTION_SENTENCE);
+  });
+
   it("throws when the source node is not in the store", () => {
     expect(() => decideHold([], input())).toThrow(/is not in the store/);
+  });
+});
+
+describe("the reserved no-progress slug", () => {
+  // Pins the ruling that the CI-stall bound minted its own `ci-stalled` slug
+  // rather than claiming the reserved general-fuse name. Without this, a later
+  // kind could quietly take `no-progress` and leave the general fuse unnameable.
+  it("stays reserved and is claimed by no implemented kind", () => {
+    expect(RESERVED_KIND_SLUGS).toContain("no-progress");
+    expect(Object.values(KIND_SLUGS)).not.toContain("no-progress");
   });
 });
 

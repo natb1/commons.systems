@@ -75,7 +75,7 @@
 # `blocked_by` still names the hold is rejected by validate-graph, so prune
 # ordering is a separate concern (the owed-prune census), not this script's.
 #
-# Usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap|worktree-residue>]
+# Usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap|worktree-residue|ci-pending-stalled>]
 #                     [--hold-id <hold-node-id>]
 #
 # --kind defaults to `provision-conflict` (the Lane-3 case). It selects which
@@ -119,7 +119,7 @@ DUMP_NODE_TS="$SCRIPT_DIR/dump-node.ts"
 WRITE_NODE_TS="$SCRIPT_DIR/write-node.ts"
 GRAPH_COMMIT="$SCRIPT_DIR/graph-commit"
 
-USAGE="usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap|worktree-residue>] [--hold-id <hold-node-id>]"
+USAGE="usage: resolve-hold <source-node-id> [--kind <provision-conflict|fix-attempt-cap|worktree-residue|ci-pending-stalled>] [--hold-id <hold-node-id>]"
 
 SOURCE_ID=""
 KIND="provision-conflict"
