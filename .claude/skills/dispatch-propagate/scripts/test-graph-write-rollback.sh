@@ -101,7 +101,7 @@ REAL_REPO_ROOT="$(cd "$HARNESS_DIR/../../../.." && pwd)"
 UTIL_SCRIPTS_SRC="$REAL_REPO_ROOT/packages/intentionsutil/scripts"
 INTENTIONSUTIL_SRC="$REAL_REPO_ROOT/packages/intentionsutil/src"
 
-for f in transition-node dispatch-graph-census dispatch-graph-main-red-sync lib.sh lib-graph-rollback.sh lib-graph-base-pin.sh dispatch-config-load; do
+for f in transition-node dispatch-graph-census dispatch-graph-main-red-sync lib.sh lib-graph-rollback.sh lib-graph-base-pin.sh lib-graph-worktree.sh dispatch-config-load; do
   [[ -f "$HARNESS_DIR/$f" ]] || { echo "error: $f not found at $HARNESS_DIR/$f" >&2; exit 1; }
 done
 command -v jq >/dev/null || { echo "error: jq not found" >&2; exit 1; }
@@ -160,6 +160,11 @@ build_seed_repo() {
   # reconcile sweeps — without this every seeded case that runs one dies at
   # `source`.
   cp "$HARNESS_DIR/lib-graph-base-pin.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib-graph-base-pin.sh"
+  # resolve_main_worktree — sourced by reconcile-graph-review-stall since the
+  # CI-pending liveness bound, to resolve the strike sidecar's root. Without it
+  # the `source` fails and writes to stderr, which case 10b (which asserts the
+  # sweep is completely silent on an unknown --node id) reads as output.
+  cp "$HARNESS_DIR/lib-graph-worktree.sh" "$dst/.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh"
   cp "$HARNESS_DIR/dispatch-config-load" "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
   chmod +x "$dst/.claude/skills/dispatch-propagate/scripts/dispatch-config-load"
 }
