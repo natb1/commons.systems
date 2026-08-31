@@ -58,3 +58,99 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: echo "graph fast path — intentions/-only push; required context stamped (real check runs in PR CI for code changes)"
+
+  # ---------------------------------------------------------------------------
+  # Contexts below are NOT required today. They exist so that a graph/** landing
+  # reports them at all — which is the precondition for ever promoting them.
+  #
+  # WHY A CONTEXT MUST BE PRODUCED HERE OR NOWHERE. `graph-commit` lands an
+  # intentions/-only node edit WITHOUT opening a PR: it pushes a scratch SHA to
+  # `graph/<id>-$$`, polls for check runs on that SHA, then fast-forwards `main`
+  # to the SAME SHA. The only workflow a `graph/**` push triggers is this one —
+  # `unit-tests.yml` excludes `graph/**` from its push trigger, and
+  # `pr-checks.yml` is `pull_request`-only. So a context that does not report
+  # here never gets a check run before the push lands, and the only ref where it
+  # would run is `main` — which is exactly the push it would be gating. Making
+  # such a context required is a deadlock, not a safety net: it can never be
+  # satisfied, and every graph write in the repo stops. That is why the three
+  # contexts currently required by ruleset 12884700 (`acceptance`, `lint`,
+  # `unit-tests`) are required PRECISELY because this workflow stamps those
+  # names, and why `unit-tests.yml`'s `graph-validate` job carries a comment
+  # refusing to be promoted for want of exactly this.
+  #
+  # WHY STUBS ARE CORRECT HERE AND NOT LAZINESS. Every job in this workflow
+  # declares `needs: guard`, and `guard` runs
+  # `.github/scripts/check-graph-fast-path.sh`, which REJECTS any `graph/**`
+  # push touching a path outside `intentions/` (and rejects merge commits, and
+  # examines every pushed commit, not just HEAD). So by the time a job below
+  # runs, it is already proven that no source file changed. `hook-tests`,
+  # `typecheck` and `test-integrity` read only source, config and test files —
+  # none of which can differ from what `main` already carries and already ran
+  # these checks against. Re-running them would spend CI minutes recomputing a
+  # known answer; omitting them leaves the context absent and permanently
+  # unpromotable. The stub is the honest third option, and it FAILS CLOSED: if
+  # `guard` rejects the push, these jobs are skipped, never success.
+  #
+  # A consequence to keep in view: a `guard` failure now knocks out eight
+  # dependent contexts rather than four (the 2026-08-14 shape — see
+  # `validate-graph.ts` and `read-sensors.ts`, which is why
+  # `validateRegisteredSensorNames` is non-fatal at this call site).
+  # `graph-commit`'s poll is unaffected — it filters check runs to the exact
+  # names `["acceptance","preview-and-smoke","lint","unit-tests"]` and requires
+  # four greens, so extra rows are ignored by construction
+  # (`packages/intentionsutil/scripts/graph-commit:1976`).
+  #
+  # PROMOTION IS A SEPARATE STEP. Nothing here edits ruleset 12884700. Merging
+  # this only makes the contexts appear; promoting one requires first MEASURING
+  # that it actually lands on the scratch SHA before the fast-forward, on a real
+  # graph-commit landing.
+
+  hook-tests:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "graph fast path — guard proved this push is intentions/-only, so no hook script or hook test changed; context stamped (real check runs in PR CI for code changes)"
+
+  typecheck:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "graph fast path — guard proved this push is intentions/-only, so no TypeScript source changed; context stamped (real check runs in PR CI for code changes)"
+
+  test-integrity:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "graph fast path — guard proved this push is intentions/-only, so no test file changed; context stamped (real check runs in PR CI for code changes)"
+
+  # graph-validate is NOT a coverage stub like the three above, and the
+  # distinction matters. The real validation — `validate-graph.ts` over the
+  # pushed content — ALREADY RAN, in `guard`, on this exact tree; it merely
+  # reported under the name `guard`. This job re-reports that same verdict under
+  # the name the rest of CI uses for it. `needs: guard` is what carries the
+  # meaning: this context can only conclude success when the real validation
+  # passed, so the name is backed by a genuine run and not by an assumption.
+  #
+  # Chosen over renaming `guard`'s context to `graph-validate` deliberately.
+  # `guard` does two things, only one of which is graph validation: it also runs
+  # check-graph-fast-path.sh, the intentions/-only path gate. Renaming would
+  # report a path-gate rejection under a name claiming the graph failed to
+  # validate. The name is also referenced by prose across the repo — see
+  # `packages/intentionsutil/scripts/validate-graph.ts:217`,
+  # `read-sensors.ts:1457`,
+  # `.claude/skills/dispatch-propagate/scripts/detect-changes.sh:83`,
+  # `.github/workflows/unit-tests.yml:133`,
+  # `packages/intentionsutil/test/reader-required-dir.test.ts:94`,
+  # `packages/intentionsutil/SEPARABILITY.md:137` — all of which a rename would
+  # strand. No machine reference to the name exists (`graph-commit`'s poll
+  # excludes `guard` by name filter), so the rename would have been safe
+  # mechanically and wrong descriptively.
+  graph-validate:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "graph fast path — the real validate-graph.ts run for this content is the guard job, which this job needs; context stamped to surface that verdict under the graph-validate name"
