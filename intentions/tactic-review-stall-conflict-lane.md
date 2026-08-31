@@ -11,8 +11,10 @@ rationale: "Byproduct of the 2026-07-29 /align-strategy dispatch-containment
   interview, implementing the author's clarification that merge conflicts are
   not expected to self-heal and that a conflict always enters the resolution
   lane. Two producers currently diverge: provision exit 11 spawns Lane 3
-  immediately (dispatch-graph-execute:274) and is correct;
-  reconcile-graph-review-stall:320 calls hold-node --kind provision-conflict
+  immediately (the FIRST RESPONDER arm of dispatch-graph-execute's exit-11
+  handling; :300 re-measured 2026-08-30) and is correct;
+  the conflict route arm of reconcile-graph-review-stall calls hold-node --kind
+  provision-conflict
   immediately with no resolution attempt and is now a defect. Adjacent
   tactic-conflict-lane-exit11-retry-bound bounds ineffective lane kicks and is
   not superseded by this — it remains the backstop for a lane that runs and does
