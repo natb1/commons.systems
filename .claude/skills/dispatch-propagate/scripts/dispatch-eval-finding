@@ -69,9 +69,13 @@
 # hold, and the count says how many times.
 #
 # Resumption only works if the retired node still EXISTS, so the owed-prune
-# census exempts `attributes.ledger_entry` nodes from its prunable set
-# (packages/intentionsutil/scripts/graph-census-debt.ts). That exemption and
-# this script are one mechanism in two halves; neither is useful alone.
+# census exempts every tactic carrying a non-empty `attributes.measured_impact`
+# from its prunable set (hasMeasurements in
+# packages/intentionsutil/src/schema.ts, applied by
+# packages/intentionsutil/scripts/graph-census-debt.ts). The exemption is keyed
+# on the MEASUREMENTS, in no namespace and behind no class marker: whoever wrote
+# the figures, a node that holds them is never pruned. That exemption and this
+# script are one mechanism in two halves; neither is useful alone.
 #
 # The same reasoning guards the mint path against classify()'s catch-all
 # `absent`: `absent` covers every readNode failure (an unparseable or
@@ -201,7 +205,7 @@
 #     this entry. It writes `attributes.resolved_by` (and refreshes the body's
 #     generated region if --body-file is given — see "THE OWNED BODY REGION"
 #     above), and does NOT touch recurrence_count, its `measured`
-#     stamp, first_seen, phase, or ledger_entry. Stating a resolution is not an
+#     stamp, first_seen, or phase. Stating a resolution is not an
 #     occurrence, so nothing about the recurrence figure may move.
 #   --retire                      makes the JUDGMENT that the entry is closed.
 #     Unchanged: phase -> done with the metrics intact.
@@ -318,7 +322,7 @@ SERVES_RE='^[a-z0-9]+(-[a-z0-9]+)*$'
 
 usage() {
   cat <<'USAGE'
-usage: dispatch-eval-finding --list
+usage: dispatch-eval-finding --list [--like <text>] [--limit <n>]
        dispatch-eval-finding --list-retirable
        dispatch-eval-finding --slug <slug> --statement <text> --body-file <path>
                              --sensor <name> [--impact-file <path>]
@@ -335,8 +339,18 @@ occurrence). Only the mint writes a whole body: on an existing node the write is
 confined to the <!-- generated:dispatch-eval-finding --> region, so anything
 authored around it survives.
 
---list prints the whole ledger as JSON (open AND retired entries) so the caller
-can judge whether the finding in hand IS one of them before choosing a slug.
+--list prints the mint-or-reuse candidate population as JSON so the caller can
+judge whether the finding in hand IS one of them before minting a near-duplicate.
+Membership is namespace-free: every tactic that is not phase "done", plus every
+retired tactic still carrying attributes.measured_impact (a recurrence after
+retirement RESUMES the count, so the retired record must stay visible). Each row
+says how to address it: addressable_by "slug" under the tactic-eval-finding-
+prefix, "id" outside it.
+--like <text> ranks the whole population by lexical overlap with <text> and
+emits the top --limit rows (default 40) PLUS every row carrying measurements
+whatever its score, adding a numeric `score` to each row. What was left out is
+reported on stderr as `population=N emitted=N elided=N score_cut=F`; widen it
+with --limit. Bare --list elides nothing.
 --resolved-by states the FACT that a commit sha or a PR reference ('#3079',
 '3079') addresses the entry: it writes attributes.resolved_by and refreshes the
 generated body region, and never moves the recurrence count.
@@ -366,6 +380,8 @@ RESOLVED_BY=""
 RETIRE=0
 LIST=0
 LIST_RETIRABLE=0
+LIKE=""
+LIMIT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -394,12 +410,38 @@ while [[ $# -gt 0 ]]; do
     --resolved-by)
       [[ $# -ge 2 ]] || { log "--resolved-by requires a value"; usage >&2; exit 64; }
       RESOLVED_BY="$2"; shift 2 ;;
+    --like)
+      [[ $# -ge 2 ]] || { log "--like requires a value"; usage >&2; exit 64; }
+      LIKE="$2"; shift 2 ;;
+    --limit)
+      [[ $# -ge 2 ]] || { log "--limit requires a value"; usage >&2; exit 64; }
+      LIMIT="$2"; shift 2 ;;
     --retire) RETIRE=1; shift ;;
     --list) LIST=1; shift ;;
     --list-retirable) LIST_RETIRABLE=1; shift ;;
     *) log "unknown argument: $1"; usage >&2; exit 64 ;;
   esac
 done
+
+# --like/--limit shape the --list view and mean nothing on any other mode, so
+# they are refused there rather than silently ignored.
+if [[ "$LIST" != "1" ]] && [[ -n "$LIKE" || -n "$LIMIT" ]]; then
+  log "--like and --limit are only valid with --list"
+  usage >&2
+  exit 64
+fi
+if [[ -n "$LIMIT" ]]; then
+  if [[ -z "$LIKE" ]]; then
+    log "--limit bounds the --like ranking, so it needs a --like <text> to rank by; bare --list prints the whole candidate population and elides nothing"
+    usage >&2
+    exit 64
+  fi
+  if [[ ! "$LIMIT" =~ ^[1-9][0-9]*$ ]]; then
+    log "invalid --limit '$LIMIT' — must be a positive integer"
+    usage >&2
+    exit 64
+  fi
+fi
 
 # --- Environment -------------------------------------------------------------
 for bin in date flock git jq node; do
@@ -450,23 +492,52 @@ else
 fi
 
 # --- --list ------------------------------------------------------------------
-# The similarity judgment's input (divergence 1). Pure read, no mutex, and it
-# lists RETIRED entries alongside open ones so a recurrence after retirement is
-# addressed to the existing slug instead of minting a near-duplicate.
+# The similarity judgment's input (divergence 1). Pure read, no mutex.
 #
-# MEMBERSHIP IS THE ID PREFIX, NOT THE ATTRIBUTE. The id prefix
-# (tactic-eval-finding-<slug>, minted by this script) and attributes.ledger_entry
-# are two spellings of one membership; a node can carry either without the
-# other (a hand-authored node landed under the prefix with no attribute, or —
-# in principle — the attribute set on a node outside the prefix). Filtering on
-# the attribute alone made such a node invisible to the similarity judgment
-# above, which is exactly how a real duplicate slug got minted. So membership
-# here is prefix-OR-attribute, and a node where the two disagree is emitted
-# anyway with "unregistered": true and recurrence_count forced to 0 — the
-# judgment must see it, and the zeroed count marks it as not a script-managed
-# figure so a caller can tell a script-managed entry from a hand-written one.
-# The doctrine root tactic-eval-finding-ledger is excluded from the prefix
-# side of the test: it is the ledger's own planning node, not an entry in it.
+# MEMBERSHIP IS THE WHOLE OPEN TACTIC POPULATION, IN NO NAMESPACE. A node is a
+# candidate iff it is a tactic AND (its phase is not "done" OR it carries a
+# non-empty attributes.measured_impact). Both halves are load-bearing:
+#
+#   - the OPEN tactic set is the search set, because a duplicate is minted
+#     against an open node. A finding already recorded as an ordinary planned
+#     tactic — under any id, by any producer — is a duplicate the judgment must
+#     see, and an id-prefix filter hid exactly those.
+#   - a RETIRED tactic carrying measurements stays visible, because a recurrence
+#     after retirement RESUMES the count rather than restarting at 1, and that
+#     only works if the judgment can still see the retired record.
+#
+# What stood here was prefix-OR-attribute — the id prefix
+# tactic-eval-finding-<slug> OR attributes.ledger_entry === true — with rows
+# where the two disagreed emitted as "unregistered": true and recurrence_count
+# forced to 0. Both are gone. The class marker is retired (nothing writes it and
+# nothing reads it), and under a single membership test there is nothing left
+# for two spellings to disagree about, so recurrence_count/last_seen are read
+# from each row's own measured_impact record — that field is now the general
+# recurrence carrier for every producer, not a private figure this script
+# manages. The doctrine root tactic-eval-finding-ledger is NO LONGER excluded:
+# under a whole-population membership, special-casing this one node would be
+# exactly the special-casing being retired.
+#
+# `slug` stays — the mint namespace is still live — beside `addressable_by`,
+# which says which flag reaches the row ("slug" under the prefix, "id" outside).
+#
+# BOUNDING, AND THE DISCLOSURE THAT MAKES IT HONEST. The candidate population is
+# the whole open tactic set (482 rows / ~59k tokens, measured 2026-08-19) and
+# /rsi reads it at every ladder phase boundary, so an unbounded dump would
+# regress the per-workflow spend fold strategy-recursive-self-improvement
+# measures itself by. It is bounded WITHOUT reintroducing a namespace:
+#
+#   --list                prints the WHOLE candidate population. The audit view.
+#   --list --like <text>  scores every member by lexical overlap between <text>
+#                         and the member's id + " " + statement, then emits the
+#                         top --limit rows (default 40) PLUS every member
+#                         carrying a non-empty measured_impact whatever its
+#                         score — the durable records must never be elided.
+#
+# stdout stays a bare JSON array (callers already jq it); the elision is
+# disclosed on stderr as `population=<n> emitted=<n> elided=<n> score_cut=<f>`.
+# An elision the caller cannot see is the same defect as a namespace; one it can
+# see and widen with --limit is not.
 list_entries() {
   if [[ ${#LIST_CMD[@]} -gt 0 ]]; then
     "${LIST_CMD[@]}" "$INTENTIONS_DIR"
@@ -475,31 +546,50 @@ list_entries() {
   (cd "$REPO_ROOT" && node --import tsx/esm -e '
     const { listNodes } = await import("./packages/intentionsutil/src/store.js");
     const prefix = "tactic-eval-finding-";
-    const doctrineRootId = "tactic-eval-finding-ledger";
-    const rows = listNodes(process.argv[1])
+    const like = process.argv[2] ?? "";
+    const limit = Number(process.argv[3] ?? "") || 40;
+    // Lexical overlap, deliberately crude: it ranks a shortlist for a model to
+    // read, it decides nothing. Tokens under 3 characters and a small stopword
+    // set carry no signal about WHICH finding is meant.
+    const STOP = new Set([
+      "the", "and", "for", "that", "this", "with", "from", "not", "but", "are",
+      "was", "its", "has", "have", "into", "than", "then", "when", "what",
+      "which", "who", "will", "would", "can", "does", "did", "been", "being",
+      "they", "them", "their", "there", "here", "over", "under", "more", "most",
+      "less", "all", "any", "one", "own", "out", "off", "per", "via", "use",
+      "used", "uses", "every", "each", "only", "also", "after", "before",
+      "because", "while", "still", "when", "how", "why",
+    ]);
+    const tokenize = (s) =>
+      new Set(
+        String(s ?? "")
+          .toLowerCase()
+          .split(/[^a-z0-9]+/)
+          .filter((w) => w.length >= 3 && !STOP.has(w)),
+      );
+    const likeTokens = tokenize(like);
+    const overlap = (a, b) => {
+      if (a.size === 0 || b.size === 0) return 0;
+      let shared = 0;
+      for (const w of a) if (b.has(w)) shared += 1;
+      return shared / Math.min(a.size, b.size);
+    };
+    const candidates = listNodes(process.argv[1])
       .map((n) => {
-        const hasPrefix =
-          n.kind === "tactic" && n.id.startsWith(prefix) && n.id !== doctrineRootId;
-        const hasAttr = n.kind === "tactic" && n.attributes?.ledger_entry === true;
-        if (!hasPrefix && !hasAttr) {
-          return null;
-        }
-        // The two membership tests disagree: a defect the caller must see, not
-        // silently paper over. Force recurrence_count/last_seen to 0/null
-        // rather than trusting measured_impact on a node this script never
-        // wrote through its normal recurrence path.
-        const unregistered = hasPrefix !== hasAttr;
+        if (n.kind !== "tactic") return null;
         const impact = Array.isArray(n.attributes?.measured_impact)
           ? n.attributes.measured_impact
           : [];
-        const rec = unregistered
-          ? undefined
-          : impact.find(
-              (m) => m !== null && typeof m === "object" && m.metric === "recurrence_count",
-            );
+        // The membership test, entire.
+        if (n.phase === "done" && impact.length === 0) return null;
+        const hasPrefix = n.id.startsWith(prefix);
+        const rec = impact.find(
+          (m) => m !== null && typeof m === "object" && m.metric === "recurrence_count",
+        );
         const row = {
           id: n.id,
           slug: hasPrefix ? n.id.slice(prefix.length) : null,
+          addressable_by: hasPrefix ? "slug" : "id",
           state: n.phase === "done" ? "retired" : "open",
           statement: n.statement,
           first_seen: n.attributes?.first_seen ?? null,
@@ -508,26 +598,54 @@ list_entries() {
           in_flight: n.execution !== null,
           // The stated resolution, surfaced verbatim: the similarity judgment
           // reads very differently for an entry someone has already said is
-          // fixed, and --list-retirable filters on exactly this field. Not
-          // zeroed for an unregistered row the way recurrence_count is — it is
-          // a fact a human wrote down, not a script-managed figure.
+          // fixed, and --list-retirable filters on exactly this field.
           resolved_by: n.attributes?.resolved_by ?? null,
         };
-        if (unregistered) {
-          row.unregistered = true;
-        }
-        return row;
+        return { row, measured: impact.length > 0 };
       })
-      .filter((row) => row !== null)
-      .sort((a, b) => b.recurrence_count - a.recurrence_count || a.id.localeCompare(b.id));
-    process.stdout.write(JSON.stringify(rows, null, 2) + "\n");
-  ' "$INTENTIONS_DIR")
+      .filter((c) => c !== null);
+    let emitted;
+    if (like.length === 0) {
+      candidates.sort(
+        (a, b) =>
+          b.row.recurrence_count - a.row.recurrence_count ||
+          a.row.id.localeCompare(b.row.id),
+      );
+      emitted = candidates;
+    } else {
+      for (const c of candidates) {
+        c.row.score = overlap(likeTokens, tokenize(c.row.id + " " + c.row.statement));
+      }
+      candidates.sort(
+        (a, b) =>
+          b.row.score - a.row.score ||
+          b.row.recurrence_count - a.row.recurrence_count ||
+          a.row.id.localeCompare(b.row.id),
+      );
+      // The measurement carriers ride along whatever their score: a durable
+      // record silently dropped from the judgment is how a duplicate gets minted
+      // over a finding that already has figures on it.
+      const top = new Set(candidates.slice(0, limit).map((c) => c.row.id));
+      emitted = candidates.filter((c) => top.has(c.row.id) || c.measured);
+      const elided = candidates.length - emitted.length;
+      const cut = candidates.length > limit ? candidates[limit - 1].row.score : 0;
+      process.stderr.write(
+        "population=" + candidates.length +
+          " emitted=" + emitted.length +
+          " elided=" + elided +
+          " score_cut=" + cut.toFixed(4) + "\n",
+      );
+    }
+    process.stdout.write(
+      JSON.stringify(emitted.map((c) => c.row), null, 2) + "\n",
+    );
+  ' "$INTENTIONS_DIR" "$LIKE" "$LIMIT")
 }
 
 if [[ "$LIST" == "1" ]]; then
   if [[ -n "$SLUG$STATEMENT$BODY_FILE$SENSOR$IMPACT_FILE$NOW$RESOLVED_BY" \
      || "$RETIRE" == "1" || "$LIST_RETIRABLE" == "1" ]]; then
-    log "--list takes no other arguments"
+    log "--list takes no arguments other than --like/--limit"
     exit 64
   fi
   if ! list_entries; then
@@ -1181,8 +1299,9 @@ STATE="${STATE//[$'\t\r\n ']/}"
 
 # --- --retire ----------------------------------------------------------------
 # Retirement is phase "done" WITH the summary metrics intact. Nothing is
-# deleted and nothing is reset: the owed-prune census exempts
-# attributes.ledger_entry nodes precisely so this record survives to be resumed.
+# deleted and nothing is reset: the owed-prune census exempts every tactic
+# carrying a non-empty attributes.measured_impact, precisely so this record —
+# which keeps its figures through retirement — survives to be resumed.
 if [[ "$RETIRE" == "1" ]]; then
   if [[ "$STATE" != "open" ]]; then
     log "no open $ID to retire (state: $STATE) — nothing to do"
@@ -1237,9 +1356,10 @@ fi
 # --- --resolved-by -----------------------------------------------------------
 # States the fact that a named change addresses this entry. This is the
 # recurrence update pass MINUS the increment: no recurrence_count change, no new
-# `measured` stamp, no first_seen, no phase change, and ledger_entry is left
-# exactly as it was (registering an unregistered node is a different act, and
-# doing it here would hide the disagreement --list flags).
+# `measured` stamp, no first_seen and no phase change. Attributes this script
+# does not own are left exactly as they were, including the retired
+# `ledger_entry` marker still carried by legacy entries — this pass neither
+# reads it nor re-stamps it.
 if [[ -n "$RESOLVED_BY" ]]; then
   if [[ "$STATE" == "absent" ]]; then
     log "no ledger entry $ID to mark resolved (state: absent) — --resolved-by states a fact about an EXISTING entry, so record the occurrence first, or check the slug against --list"
@@ -1364,7 +1484,6 @@ case "$STATE" in
         pace_exempt: true,
         rounds: null,
         attributes: {
-          ledger_entry: true,
           first_seen: $now,
           measured_impact: ($supplied + [{
             metric: $metric,
@@ -1465,7 +1584,6 @@ case "$STATE" in
                (.; map(select(.metric != $r.metric or .window != $r.window)) + [$r])
           ) as $merged
         | .attributes = ($attrs + {
-            ledger_entry: true,
             first_seen: ($attrs.first_seen // $now),
             measured_impact: ($merged + [{
               metric: $metric,

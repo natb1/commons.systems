@@ -17,9 +17,9 @@
 #        refused with no graph read, an unknown-but-well-shaped one is accepted
 #        (divergence 1 — the key is NOT a closed enum).
 #   (2)  --list emits open AND retired entries, the similarity judgment's input.
-#   (3)  absent -> mint: exact node JSON (ledger_entry, first_seen,
-#        recurrence_count 1, attention null, pace_exempt true), graph-commit
-#        WITHOUT --base, body spliced over the placeholder.
+#   (3)  absent -> mint: exact node JSON (NO ledger_entry class marker,
+#        first_seen, recurrence_count 1, attention null, pace_exempt true),
+#        graph-commit WITHOUT --base, body spliced over the placeholder.
 #   (4)  a second occurrence with a BYTE-IDENTICAL body still commits and moves
 #        the count to 2, and mints NO second node. This is the divergence-2
 #        consequence: fleet-alarm's cmp -s body-identity gate would swallow
@@ -54,16 +54,19 @@
 #        the `skipped-locked` disposition, but the log line must state the loss
 #        outright (not counted, nothing will re-invoke) rather than the sibling's
 #        benign "re-invoke to record it".
-#   (15) --list membership is the id prefix, not attributes.ledger_entry alone:
-#        a node under the prefix with no attribute, and (symmetrically) a node
-#        carrying the attribute outside the prefix, are both listed with
-#        "unregistered": true and recurrence_count forced to 0 rather than
-#        silently dropped from the similarity judgment's input — and the
-#        doctrine root tactic-eval-finding-ledger stays excluded, and every row
-#        surfaces `resolved_by` so the similarity judgment can see a stated
-#        resolution. This exercises the REAL default list_entries() path (the
-#        node/store.js one-liner), not the LIST_CMD stub the rest of this suite
-#        uses, so it invokes the real, uncopied SUT directly.
+#   (15) --list membership is the whole open tactic population, in no namespace:
+#        every tactic that is not phase "done", plus every retired tactic still
+#        carrying a non-empty measured_impact. An open tactic OUTSIDE the id
+#        prefix is a candidate reporting its real recurrence_count — the row the
+#        prefix search missed — the doctrine root tactic-eval-finding-ledger is
+#        no longer excluded from its own list, a retired tactic with no
+#        measurements is not a candidate, no row carries `unregistered`, and
+#        every row surfaces `resolved_by` and `addressable_by`. `--like` ranks
+#        the population and `--limit` bounds it, but the measurement carriers
+#        ride a floor past the cut and the elision is disclosed on stderr. This
+#        exercises the REAL default list_entries() path (the node/store.js
+#        one-liner), not the LIST_CMD stub the rest of this suite uses, so it
+#        invokes the real, uncopied SUT directly.
 #   (16) --resolved-by states a FACT without counting an occurrence: it writes
 #        attributes.resolved_by and leaves recurrence_count, its `measured`
 #        stamp, first_seen and phase exactly as they were. Reference forms are
@@ -395,7 +398,11 @@ assert_eq "(3) stdout says landed" "landed" "$SOUT"
 GC3="$(log_lines graph-commit.log)"
 assert_contains "(3) graph-commit got the entry id" "$ID" "$GC3"
 assert_not_contains "(3) mint passes NO --base" "--base" "$GC3"
-assert_eq "(3) attributes.ledger_entry is true" "true" "$(written '.attributes.ledger_entry')"
+# The class marker is retired (PR4 unit 2): membership and the pruning exemption
+# are both keyed on attributes.measured_impact now, so a fresh mint must carry no
+# ledger_entry key at all — not `false`, absent.
+assert_eq "(3) the minted node carries NO ledger_entry class marker" "false" \
+  "$(written '.attributes | has("ledger_entry")')"
 assert_eq "(3) first_seen stamped" "2026-08-01" "$(written '.attributes.first_seen')"
 assert_eq "(3) recurrence_count starts at 1" "1" \
   "$(written '.attributes.measured_impact[] | select(.metric=="recurrence_count") | .value')"
@@ -436,6 +443,11 @@ assert_eq "(4) last-seen is the measured date, not a second field" "2026-08-05" 
   "$(written '.attributes.measured_impact[] | select(.metric=="recurrence_count") | .measured')"
 assert_eq "(4) no separate last_seen attribute" "null" "$(written '.attributes.last_seen')"
 assert_eq "(4) first_seen preserved" "2026-08-01" "$(written '.attributes.first_seen')"
+# OPEN_JSON is a LEGACY landed entry: minted before the class marker was retired,
+# so it still carries ledger_entry. The recurrence pass neither reads it nor
+# re-stamps it — the attribute merge carries it through untouched.
+assert_eq "(4) a legacy ledger_entry marker is carried through, never re-stamped" "true" \
+  "$(written '.attributes.ledger_entry')"
 assert_eq "(4) statement NOT rewritten on an update" \
   "the Stop hook HOLDs forever when no terminal marker is written" "$(written '.statement')"
 assert_eq "(4) exactly one classify (no second node minted)" "1" \
@@ -466,7 +478,7 @@ printf '%s\n' '[{"metric":"recoverable_tokens","value":42000,"unit":"tokens","wi
 IMPACT_JSON=$(jq -c . <<'JSON'
 {"id":"tactic-eval-finding-stop-hook-hold-loop","phase":null,"execution":null,
  "statement":"s",
- "attributes":{"ledger_entry":true,"first_seen":"2026-08-01",
+ "attributes":{"first_seen":"2026-08-01",
    "measured_impact":[
      {"metric":"recurrence_count","value":2,"unit":"occurrences","window":"all-time","sensor":"dispatch-phase-eval","measured":"2026-08-05"},
      {"metric":"recoverable_tokens","value":100,"unit":"tokens","window":"7d","sensor":"token-economy","measured":"2026-08-05"}]}}
@@ -482,6 +494,11 @@ assert_eq "(6) rewritten to the new figure" "42000" \
   "$(written '.attributes.measured_impact[] | select(.metric=="recoverable_tokens") | .value')"
 assert_eq "(6) the script's own recurrence record survived and incremented" "3" \
   "$(written '.attributes.measured_impact[] | select(.metric=="recurrence_count") | .value')"
+# IMPACT_JSON carries no class marker (it is a post-retirement entry), and the
+# recurrence pass must not put one back: the second of the two writers retired in
+# PR4 unit 2 lives on exactly this path.
+assert_eq "(6) and the retired class marker is not stamped onto a node that lacks it" "false" \
+  "$(written '.attributes | has("ledger_entry")')"
 
 # --- (7) --retire keeps the metrics ------------------------------------------
 run_ef STUB_STATE=open STUB_GC_LAND=1 STUB_NODE_JSON="$IMPACT_JSON" -- --retire --slug "$SLUG"
@@ -495,7 +512,7 @@ assert_eq "(7) the recurrence figure is preserved for a later resume" "2" \
 # --- (8) the in-flight guard -------------------------------------------------
 INFLIGHT_JSON=$(jq -c . <<'JSON'
 {"id":"tactic-eval-finding-stop-hook-hold-loop","phase":"implement",
- "execution":{"pr":123},"statement":"s","attributes":{"ledger_entry":true}}
+ "execution":{"pr":123},"statement":"s","attributes":{}}
 JSON
 )
 run_ef STUB_STATE=open STUB_NODE_JSON="$INFLIGHT_JSON" -- \
@@ -670,23 +687,28 @@ assert_contains "(14) and names the checkout that repairs the local copy" \
 assert_eq "(14) no local node file was created" "0" "$([[ -e "$LANDED_MD" ]] && echo 1 || echo 0)"
 git -C "$FR" checkout -q origin/main -- "intentions/$ID.md"
 
-# --- (15) --list membership: id prefix vs attributes.ledger_entry -----------
+# --- (15) --list membership is the whole open tactic population --------------
 # The default list_entries() path (LIST_CMD unset) needs the REAL store.js, so
 # this section calls the real SUT directly at $SUT — never the FR fixture
 # copy, whose SCRIPT_DIR/../../../.. math resolves to the miniature repo where
 # packages/intentionsutil/src/store.js does not exist — against an isolated
 # intentions/ directory of full, schema-valid node bodies (each field copied
 # from the shape of a real landed ledger entry, so validateNode accepts it).
+#
+# Membership is namespace-free (PR4 unit 3): a tactic is a candidate iff its
+# phase is not "done", or it still carries a non-empty measured_impact. Neither
+# the id prefix nor the retired ledger_entry marker decides anything, so the
+# fixtures below carry no marker at all.
 LIST_DIR="$WORK/list-intentions"
 mkdir -p "$LIST_DIR"
 
-# (a) properly registered: id prefix AND attributes.ledger_entry both true —
-# listed normally, unflagged, with its real recurrence_count.
+# (a) an OPEN tactic under the mint prefix carrying measurements — the ordinary
+# script-managed entry: listed with its real recurrence_count and its slug.
 cat > "$LIST_DIR/tactic-eval-finding-registered-example.md" <<'MD'
 ---
 id: tactic-eval-finding-registered-example
 kind: tactic
-statement: A properly registered ledger entry for the --list membership test.
+statement: An open ledger entry under the mint prefix, for the --list membership test.
 owner: ai
 status: raw
 parent: null
@@ -707,7 +729,6 @@ office_hours: null
 pace_exempt: true
 rounds: null
 attributes:
-  ledger_entry: true
   first_seen: 2026-08-01
   resolved_by: '#4242'
   measured_impact:
@@ -721,13 +742,15 @@ attributes:
 # fixture body
 MD
 
-# (b) id-prefix match, NO attribute — the lock-wait / utc-bounds-local-newermt
-# shape: a hand-authored tactic landed under the prefix with attributes: {}.
-cat > "$LIST_DIR/tactic-eval-finding-unregistered-example.md" <<'MD'
+# (b) an OPEN tactic under the prefix with attributes: {} — and it is the
+# doctrine root itself, which the retired prefix test excluded from its own
+# list. Under a whole-population membership that exclusion would be exactly the
+# special-casing being retired, so the root is now an ordinary candidate.
+cat > "$LIST_DIR/tactic-eval-finding-ledger.md" <<'MD'
 ---
-id: tactic-eval-finding-unregistered-example
+id: tactic-eval-finding-ledger
 kind: tactic
-statement: An unregistered ledger-shaped node for the --list membership test.
+statement: The ledger's own doctrine root, no longer excluded from its own list.
 owner: ai
 status: raw
 parent: null
@@ -752,12 +775,15 @@ attributes: {}
 # fixture body
 MD
 
-# (c) attribute true, id OUTSIDE the prefix — the reverse disagreement.
+# (c) an OPEN tactic OUTSIDE the mint prefix carrying measurements — the row the
+# id-prefix search missed, and the whole reason for the widening. Its
+# recurrence_count is REPORTED, not zeroed: measured_impact is the general
+# recurrence carrier now, whoever wrote it.
 cat > "$LIST_DIR/tactic-not-under-the-ledger-prefix.md" <<'MD'
 ---
 id: tactic-not-under-the-ledger-prefix
 kind: tactic
-statement: A node carrying ledger_entry outside the id prefix, for the --list membership test.
+statement: The dispatch worker leaks orphaned kubernetes sidecars during rollout.
 owner: ai
 status: raw
 parent: null
@@ -778,7 +804,6 @@ office_hours: null
 pace_exempt: true
 rounds: null
 attributes:
-  ledger_entry: true
   first_seen: 2026-08-01
   measured_impact:
     - metric: recurrence_count
@@ -791,13 +816,14 @@ attributes:
 # fixture body
 MD
 
-# (d) the doctrine root itself — id starts with the prefix and carries no
-# attribute either, but must stay EXCLUDED from its own membership test.
-cat > "$LIST_DIR/tactic-eval-finding-ledger.md" <<'MD'
+# (d) a RETIRED tactic outside the prefix that still carries measurements —
+# visible on purpose: a recurrence after retirement RESUMES the count, which
+# only works if the judgment can still see the retired record.
+cat > "$LIST_DIR/tactic-retired-finding-outside-the-prefix.md" <<'MD'
 ---
-id: tactic-eval-finding-ledger
+id: tactic-retired-finding-outside-the-prefix
 kind: tactic
-statement: The ledger's own doctrine root, excluded from its own membership test.
+statement: A retired tactic outside the prefix that kept its figures.
 owner: ai
 status: raw
 parent: null
@@ -810,7 +836,47 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: null
+phase: done
+execution: null
+validates: []
+blocked_by: []
+office_hours: null
+pace_exempt: true
+rounds: null
+attributes:
+  first_seen: 2026-07-02
+  measured_impact:
+    - metric: recurrence_count
+      value: 6
+      unit: occurrences
+      window: all-time
+      sensor: fixture-sensor
+      measured: 2026-07-30
+---
+# fixture body
+MD
+
+# (e) a RETIRED tactic with no measurements — an ordinary completed piece of
+# work, and the half of the population the membership test must NOT admit. Every
+# done tactic in the graph would otherwise land in the similarity judgment.
+cat > "$LIST_DIR/tactic-retired-with-no-measurements.md" <<'MD'
+---
+id: tactic-retired-with-no-measurements
+kind: tactic
+statement: An ordinary completed tactic carrying no measurements at all.
+owner: ai
+status: raw
+parent: null
+rationale: Fixture for test-dispatch-eval-finding.sh.
+reading: null
+serves:
+  - strategy-recursive-self-improvement
+recovers: []
+clarifications: []
+tooling_goals: []
+success_signal: null
+attention: null
+phase: done
 execution: null
 validates: []
 blocked_by: []
@@ -825,33 +891,78 @@ MD
 LIST_RC=0
 LIST_OUT=$(DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list) || LIST_RC=$?
 assert_eq "(15) --list against the real store.js exits 0" "0" "$LIST_RC"
-assert_eq "(15) exactly the three prefix-or-attribute rows are listed" "3" \
+assert_eq "(15) exactly the four candidate rows are listed" "4" \
   "$(jq 'length' <<<"$LIST_OUT")"
-assert_eq "(15) the doctrine root is excluded" "0" \
+assert_eq "(15) the doctrine root is no longer excluded from its own list" "1" \
   "$(jq '[.[] | select(.id == "tactic-eval-finding-ledger")] | length' <<<"$LIST_OUT")"
+assert_eq "(15) a retired tactic carrying NO measurements is not a candidate" "0" \
+  "$(jq '[.[] | select(.id == "tactic-retired-with-no-measurements")] | length' <<<"$LIST_OUT")"
+assert_eq "(15) and no row carries the retired unregistered flag" "0" \
+  "$(jq '[.[] | select(has("unregistered"))] | length' <<<"$LIST_OUT")"
 
-assert_eq "(15a) the registered entry is NOT flagged unregistered" "false" \
-  "$(jq '[.[] | select(.id == "tactic-eval-finding-registered-example")][0] | has("unregistered")' <<<"$LIST_OUT")"
-assert_eq "(15a) and keeps its real recurrence_count" "4" \
+assert_eq "(15a) an open entry under the prefix keeps its real recurrence_count" "4" \
   "$(jq '[.[] | select(.id == "tactic-eval-finding-registered-example")][0].recurrence_count' <<<"$LIST_OUT")"
-assert_eq "(15a) and surfaces its stated resolution to the judgment" "#4242" \
+assert_eq "(15a) its slug is derived from the prefix" "registered-example" \
+  "$(jq -r '[.[] | select(.id == "tactic-eval-finding-registered-example")][0].slug' <<<"$LIST_OUT")"
+assert_eq "(15a) so the caller addresses it by slug" "slug" \
+  "$(jq -r '[.[] | select(.id == "tactic-eval-finding-registered-example")][0].addressable_by' <<<"$LIST_OUT")"
+assert_eq "(15a) and it surfaces its stated resolution to the judgment" "#4242" \
   "$(jq -r '[.[] | select(.id == "tactic-eval-finding-registered-example")][0].resolved_by' <<<"$LIST_OUT")"
 
-assert_eq "(15b) prefix without attribute is flagged unregistered" "true" \
-  "$(jq '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].unregistered' <<<"$LIST_OUT")"
-assert_eq "(15b) its recurrence_count is forced to 0" "0" \
-  "$(jq '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].recurrence_count' <<<"$LIST_OUT")"
-assert_eq "(15b) its slug is still derived from the prefix" "unregistered-example" \
-  "$(jq -r '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].slug' <<<"$LIST_OUT")"
-assert_eq "(15b) an entry with no stated resolution reports null" "null" \
-  "$(jq '[.[] | select(.id == "tactic-eval-finding-unregistered-example")][0].resolved_by' <<<"$LIST_OUT")"
+assert_eq "(15b) a candidate with no measurements reports recurrence_count 0" "0" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-ledger")][0].recurrence_count' <<<"$LIST_OUT")"
+assert_eq "(15b) and no stated resolution reports null" "null" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-ledger")][0].resolved_by' <<<"$LIST_OUT")"
 
-assert_eq "(15c) attribute without prefix is flagged unregistered too" "true" \
-  "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].unregistered' <<<"$LIST_OUT")"
-assert_eq "(15c) its recurrence_count is forced to 0, not its real 9" "0" \
+assert_eq "(15c) an OPEN tactic outside the prefix is a candidate" "1" \
+  "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")] | length' <<<"$LIST_OUT")"
+assert_eq "(15c) reporting its real recurrence_count, not a zeroed one" "9" \
   "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].recurrence_count' <<<"$LIST_OUT")"
 assert_eq "(15c) it has no slug (outside the prefix)" "null" \
   "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].slug' <<<"$LIST_OUT")"
+assert_eq "(15c) so the caller addresses it by id" "id" \
+  "$(jq -r '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")][0].addressable_by' <<<"$LIST_OUT")"
+
+assert_eq "(15d) a retired tactic carrying measurements stays visible" "retired" \
+  "$(jq -r '[.[] | select(.id == "tactic-retired-finding-outside-the-prefix")][0].state' <<<"$LIST_OUT")"
+assert_eq "(15d) with the figure a later recurrence resumes from" "6" \
+  "$(jq '[.[] | select(.id == "tactic-retired-finding-outside-the-prefix")][0].recurrence_count' <<<"$LIST_OUT")"
+
+# --like ranks the whole population, --limit bounds it, the measurement carriers
+# ride a floor past the cut, and what was left out is stated on stderr.
+LIKE_ERR="$WORK/like.err"
+LIKE_RC=0
+LIKE_OUT=$(DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list \
+  --like 'orphaned kubernetes sidecars rollout' --limit 1 2>"$LIKE_ERR") || LIKE_RC=$?
+assert_eq "(15e) --like exits 0" "0" "$LIKE_RC"
+assert_eq "(15e) the phrase-matching row ranks first" "tactic-not-under-the-ledger-prefix" \
+  "$(jq -r '.[0].id' <<<"$LIKE_OUT")"
+assert_eq "(15e) and scores 1 on a phrase drawn entirely from its statement" "1" \
+  "$(jq '.[0].score' <<<"$LIKE_OUT")"
+assert_eq "(15e) the measurement carriers ride the floor past --limit 1" "3" \
+  "$(jq 'length' <<<"$LIKE_OUT")"
+assert_eq "(15e) including the RETIRED carrier, which scored nothing" "1" \
+  "$(jq '[.[] | select(.id == "tactic-retired-finding-outside-the-prefix")] | length' <<<"$LIKE_OUT")"
+assert_eq "(15e) while the unmeasured row below the cut IS elided" "0" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-ledger")] | length' <<<"$LIKE_OUT")"
+assert_contains "(15e) and the elision is disclosed on stderr, not hidden" \
+  "population=4 emitted=3 elided=1" "$(cat "$LIKE_ERR")"
+assert_contains "(15e) with the score cut that produced it" "score_cut=1.0000" \
+  "$(cat "$LIKE_ERR")"
+assert_eq "(15e) bare --list discloses nothing, because it elides nothing" "" \
+  "$(DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list 2>&1 >/dev/null)"
+
+# --like/--limit shape the --list view and are refused anywhere else, rather
+# than accepted and silently ignored.
+LIKE_RC=0
+DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --like x --list-retirable >/dev/null 2>&1 || LIKE_RC=$?
+assert_eq "(15f) --like outside --list exits 64" "64" "$LIKE_RC"
+LIKE_RC=0
+DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list --limit 5 >/dev/null 2>&1 || LIKE_RC=$?
+assert_eq "(15f) --limit with nothing to rank by exits 64" "64" "$LIKE_RC"
+LIKE_RC=0
+DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list --like x --limit 0 >/dev/null 2>&1 || LIKE_RC=$?
+assert_eq "(15f) a non-positive --limit exits 64" "64" "$LIKE_RC"
 
 # --- (16) --resolved-by states a fact, and never counts an occurrence --------
 # The gap this closes: the only update path was the recurrence path, so a
@@ -920,7 +1031,7 @@ assert_contains "(16) because one states a fact and the other makes a call" \
 RESOLVED_JSON=$(jq -c . <<'JSON'
 {"id":"tactic-eval-finding-stop-hook-hold-loop","phase":null,"execution":null,
  "statement":"s",
- "attributes":{"ledger_entry":true,"first_seen":"2026-08-01","resolved_by":"#3079",
+ "attributes":{"first_seen":"2026-08-01","resolved_by":"#3079",
    "measured_impact":[{"metric":"recurrence_count","value":1,"unit":"occurrences",
      "window":"all-time","sensor":"dispatch-phase-eval","measured":"2026-08-01"}]}}
 JSON
