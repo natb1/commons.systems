@@ -85,11 +85,15 @@ CI never reaches a verdict.
 
 Two independent surfaces observe that state every tick and both do nothing but skip:
 
-1. **Selection** — `.claude/skills/dispatch-propagate/scripts/graph-select-target:639-644`.
-   In `sensor_gate`'s `qa|review` arm, `dispatch-ci-ready` exits 1 and the gate does
-   `echo "ci-pending"; return 1`. The outer loop (`graph-select-target:694-700` area)
-   records a `skip_note` and `continue`s. No counter, no timestamp, no graph write,
-   no bound. It repeats forever.
+1. **Selection** — `sensor_gate`'s `qa|review` arm in
+   `.claude/skills/dispatch-propagate/scripts/graph-select-target`. `dispatch-ci-ready`
+   exits 1 and the gate did `echo "ci-pending"; return 1`. The outer loop records a
+   `skip_note` and `continue`s. No counter, no timestamp, no graph write, no bound.
+   It repeated forever. (Post-landing anchors, measured 2026-08-31 on `origin/main`
+   `c7a96c24`: the arm is `:1315-1404`, `dispatch-ci-ready` is invoked at `:1354`,
+   the `case "$rc"` is `:1356`, and the bounded `1)` arm is `:1363-1402`. Both the
+   `:639-644` this line used to carry and the Re-landing brief's `:1117-1142` /
+   `:1136` / `:1140` were stale before the work shipped.)
 2. **Review-stall sweep** — `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall:214-217`.
    A tactic at `phase: review` carrying the `reviewed` marker is excluded from
    selection entirely (router.ts's `REVIEWED_MARKER` exclusion), so surface 1 never
@@ -107,13 +111,16 @@ anywhere in the classification layer.
 Contrast the two existing bounds this codebase already uses for mechanical
 stuck states:
 
-- `CONFLICT_STRIKE_CAP=5` (`.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:145`)
+- `CONFLICT_STRIKE_CAP=5` (`.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:165`)
   — a per-node **sidecar file** counter outside every checkout
-  (`$PROJECT_ROOT/.claude/worktrees/<id>.conflict-strikes`, written at :289/:320-340),
-  deliberately fail-open, escalating to `hold-node` at cap (:340-370).
+  (`$PROJECT_ROOT/.claude/worktrees/<id>.conflict-strikes`, `STRIKE_FILE` assigned
+  at `:337`), deliberately fail-open, escalating to `hold-node` at cap.
 - `FIX_ATTEMPT_CAP=3` (`packages/intentionsutil/src/transitions.ts:101`, mirrored at
-  `graph-select-target:465`) — a graph-state counter escalating to
-  `hold-node --kind fix-attempt-cap` via `_hold_node_fix_cap` (`graph-select-target:476-509`).
+  `graph-select-target:815`) — a graph-state counter escalating to
+  `hold-node --kind fix-attempt-cap` via `_hold_node_fix_cap` (`graph-select-target:826-862`,
+  behind its header comment at `:817-825`). All four anchors re-measured 2026-08-31
+  on `origin/main` `c7a96c24`; the `:145` / `:465` / `:476-509` this bullet pair used
+  to carry were stale.
 
 **Intended outcome.** Pending CI stops being the one unbounded stuck state: a
 node whose checks stay pending on the *same head SHA* for `DISPATCH_CI_PENDING_STRIKE_CAP`
@@ -161,11 +168,37 @@ double-count and could hold at half the intended budget. Unit 2 records this
 reasoning as a comment at the exit-10 handler so a future reader does not "fix"
 the apparent gap.
 
-**(e) The explicit-node lane (`--node`) is excluded from counting.** The tactic's
-scope is the *autonomous* path. `tactic-dispatch-explicit-ci-wait` owns the
-explicit lane and chose a different mechanism (a bounded in-session wait against
+**(e) The explicit-node lane (`--node`) is excluded from counting — at BOTH
+surfaces, not just the selector.** The tactic's scope is the *autonomous* path.
+`tactic-dispatch-explicit-ci-wait` owns the explicit lane and chose a different
+mechanism (a bounded in-session wait against
 `DISPATCH_RESERVATION_STANDALONE_TTL_S`). A human running `dispatch <node-id>`
 repeatedly must not burn the autonomous strike budget.
+
+> **CORRECTED 2026-08-31, on the evidence of the A-P7 landing.** As written above
+> and in Unit 2, this decision named only `graph-select-target`'s `NODE_TARGET`.
+> That is not an exemption. **The two surfaces write ONE sidecar per node** —
+> `<main-root>/.claude/worktrees/<id>.ci-pending-strikes`, both resolving
+> `<main-root>` through `resolve_main_worktree` (`lib.sh:939-948` documents the
+> shared file; the callers are `graph-select-target:642-643` and
+> `reconcile-graph-review-stall:148`). Exempting one caller while the other keeps
+> bumping the same file exempts nothing.
+>
+> And the unexempted caller is not hypothetical. `dispatch-ladder-run` invokes
+> `reconcile-graph-review-stall --node "$NODE_ID"` (`dispatch-ladder-run:1267`)
+> from inside its CI-wait poll — once per `sleep "$POLL_S"` (`poll_wait`,
+> `:1099-1102`; `POLL_S=60` at `:442`), for up to `CI_WAIT_S` (3600 at `:443`).
+> A cap of 8 sized for the 15-minute `OnCalendar=*:0/15` tick is therefore reached
+> in about **eight minutes** of perfectly ordinary CI runtime, on a node nobody
+> asked to bound. Worse, the driver would not even report it: it greps only
+> `^recovered <id> ` (`dispatch-ladder-run:1274`), never sees the `held …` line,
+> and goes on polling its full 3600s before halting idle at `:1601`.
+>
+> The shipped code carries the exemption on both sides:
+> `reconcile-graph-review-stall:388` gates the bump on `[[ -z "$NODE_FILTER" ]]`,
+> with this exact reasoning recorded at `:382-387`. `NODE_FILTER` is parsed at
+> `:131`/`:137` and documented at `:59-64`. Unit 3's own scope, and its test case 5
+> below, named the selector only; both are corrected in place.
 
 **(f) A cancelled CI run is already bounded and is out of scope.** `CANCELLED`
 maps to `failing` in `dispatch_classify_rollup` (`lib.sh:712-721`, the failing-conclusions
@@ -258,22 +291,32 @@ sonnet
 Add the shared strike-counter helper and wire the selector's `ci-pending` arm to it.
 
 **A. New shared helper + cap in `.claude/skills/dispatch-propagate/scripts/lib.sh`.**
-Insert immediately after `dispatch_ci_verdict_rest` (which ends around `:820`), so
-the CI-verdict helpers stay together. `lib.sh` is reachable from both call sites
-(`graph-select-target` gets it transitively via `lib-reservation-ledger.sh:263`;
-`reconcile-graph-review-stall` sources it directly at its `:81`).
+Insert immediately after `dispatch_ci_verdict_rest`, so the CI-verdict helpers stay
+together. `lib.sh` is reachable from both call sites (`graph-select-target` gets it
+transitively via `lib-reservation-ledger.sh`; `reconcile-graph-review-stall` sources
+it directly). As landed: the block is `lib.sh:926-1005`, with
+`dispatch_ci_verdict_rest` at `:840` and `gh_pr_view_rest` at `:1308`
+(measured 2026-08-31 on `origin/main` `c7a96c24`).
 
 ```
 # Consecutive-observation cap for a draft PR whose CI verdict stays `pending`
 # on the SAME head SHA. A baked-in constant, deliberately NOT a dispatch.config
-# tunable — parity with CONFLICT_STRIKE_CAP (dispatch-graph-execute:145) and
-# FIX_ATTEMPT_CAP (packages/intentionsutil/src/transitions.ts:101). The tick
-# fires every 15 minutes (OnCalendar=*:0/15, lib.sh:3082), so 8 consecutive
-# observations is ~2 hours of a single CI run never concluding — far past any
-# legitimate run in this repo, and cheap because every observation below the
-# cap is a file write, never a graph record.
+# tunable — parity with CONFLICT_STRIKE_CAP (dispatch-graph-execute) and
+# FIX_ATTEMPT_CAP (packages/intentionsutil/src/transitions.ts). The tick fires
+# every 15 minutes (OnCalendar=*:0/15), so 8 consecutive observations is
+# ~2 hours of a single CI run never concluding — far past any legitimate run in
+# this repo, and cheap because every observation below the cap is a file write,
+# never a graph record.
 DISPATCH_CI_PENDING_STRIKE_CAP=8
 ```
+
+Note the three line numbers this comment carried in the plan and does **not** carry
+as shipped (`dispatch-graph-execute:145`, `transitions.ts:101`, `lib.sh:3082`). Two
+were already wrong — `CONFLICT_STRIKE_CAP` is `dispatch-graph-execute:165`, and the
+`OnCalendar=*:0/15` cadence is nowhere near `lib.sh:3082` (the unit template is
+`:4156`, prose at `:3996`). Rather than re-pin numbers inside a comment that no test
+reads, the shipped block cites the constructs by name only. **Do not reintroduce a
+line number here.**
 
 Two functions, both fail-open and both making zero graph writes:
 
@@ -282,7 +325,23 @@ Two functions, both fail-open and both making zero graph writes:
   single line `<sha> <count>`. If the file is absent, unparseable, or its recorded
   SHA differs from `<head-sha>`, the count resets to 1; otherwise it increments.
   Writes the file back and prints the new count on stdout. Returns 1 without
-  writing when `<head-sha>` is empty (an unreadable PR must not be counted).
+  writing when `<head-sha>` is empty **or the literal four-character string
+  `null`** (an unreadable PR must not be counted).
+
+  > **CORRECTED 2026-08-31.** This bullet used to say "empty" alone, and that guard
+  > is insufficient. The two callers reach the helper from two different
+  > projections: the selector spells `jq -r '.headRefOid // empty'`
+  > (`graph-select-target:1339`), which yields the empty string on a missing field,
+  > but the review-stall sweep spells a **bare** `jq -r '.headRefOid'`
+  > (`reconcile-graph-review-stall:339`), which yields the literal string `null`.
+  > An empty-only guard therefore lets every unreadable PR the sweep sees share
+  > ONE `null`-keyed counter — eight unreadable PRs across eight sweeps would walk
+  > that single counter to the cap and hold whichever node happened to be observed
+  > eighth. Shipped guard, `lib.sh:974`:
+  > `[[ -z "$sha" || "$sha" == "null" ]] && return 1`, with the two-projection
+  > rationale recorded above it at `lib.sh:965-970` and restated at the sweep's own
+  > call site (`reconcile-graph-review-stall:378-381`).
+
   Validate `<count>` with `[[ "$c" =~ ^[0-9]+$ ]] || c=0` before any `(( ))`
   context — same defensive shape as `dispatch-graph-execute:330` and
   `reconcile-graph-review-stall:91-95` (bash arithmetic evaluates array-index
@@ -299,16 +358,48 @@ dirties a tree and never trips `graph-commit`'s `assert_clean_outside_ids`.
 
 **B. `.claude/skills/dispatch-propagate/scripts/graph-select-target`.**
 
-1. Add `_hold_node_ci_pending() { id; pr; strikes; sha; }` modelled line-for-line
-   on `_hold_node_fix_cap` (`:476-509`): `mktemp -d`, write a reason file and a
-   recommendation file, invoke
+1. Add `_hold_node_ci_pending() { id; pr; strikes; sha; }` modelled on
+   `_hold_node_fix_cap` (`graph-select-target:826-862`, header `:817-825`):
+   `mktemp -d`, write a reason file and a recommendation file, invoke
    `( cd "$NATIVE_ROOT" && packages/intentionsutil/scripts/hold-node "$id" --kind ci-pending-stalled --reason-file … --recommendation-file … ) >/dev/null 2>&1`,
-   `rm -rf` the tmpdir, return `hold-node`'s rc.
+   `rm -rf` the tmpdir, return `hold-node`'s rc. As landed: `:864-915`, header
+   `:864-875`.
+
+   > **CORRECTED 2026-08-31 — "line-for-line" was the wrong instruction, because
+   > the model was DEFECTIVE.** This step used to say to copy `_hold_node_fix_cap`
+   > line for line. Doing that reproduced a live bug rather than avoiding one.
+   > `hold-node` lands its own `graph-commit`, which waits up to
+   > `LOCK_WAIT_SECONDS` (1050s) for the global landing lock — far past the
+   > `MAX_HOLD_SECONDS` (300s) after which `dispatch-acquire-lock` reclaims a
+   > holder. `dispatch-select-tick` invokes selection while holding the tick's own
+   > dispatch lock and then runs hundreds more lines, so a contended landing inside
+   > either hold producer leaves that lock reclaimable and a second tick
+   > double-books the same candidate set. `_hold_node_fix_cap` had no
+   > post-landing heartbeat refresh; its sibling `_graph_commit_conflict` always
+   > did (`:798-799`).
+   >
+   > The fix is `_refresh_lock` (defined `graph-select-target:783-786`, header
+   > `:776-782`) called immediately after the `hold-node` invocation, and it
+   > shipped at **BOTH** sites, not just the new one: `_hold_node_fix_cap:859`
+   > (with the "same heartbeat requirement … the class is fixed at both sites
+   > rather than half of it" note at `:857-858`) and `_hold_node_ci_pending:912`
+   > (rationale `:903-911`). Not `_conflict_budget_charge`:
+   > `GRAPH_CONFLICT_COMMIT_BUDGET` bounds the merge-conflict lane specifically,
+   > and spending it here would let a couple of conflicts silently disable
+   > ci-pending holds altogether.
+   >
+   > The general lesson, worth more than the fix: **a copy-this-shape instruction
+   > inherits the model's bugs.** Name the properties the new code must have, and
+   > when the model turns out to lack one, repair the model too.
    - **The `>/dev/null 2>&1` redirect is load-bearing**: `sensor_gate` is invoked in
-     a command substitution (`emit_phase=$(sensor_gate …)` at `graph-select-target:695`),
-     so any stray stdout from `hold-node` would be parsed as the emitted phase.
-     `_hold_node_fix_cap:507` does exactly this for the same reason.
+     a command substitution (`emit_phase=$(sensor_gate …)`), so any stray stdout
+     from `hold-node` would be parsed as the emitted phase. `_hold_node_fix_cap`
+     does exactly this for the same reason (`:855`). Note the review-stall sweep's
+     own producer deliberately does the opposite — it CAPTURES stdout, because it
+     parses the hold id off it for its `held … via <hold-id>` protocol line and is
+     not inside a contractual command substitution.
    - No `--reset-fix-attempt` — this hold has nothing to do with the fix ladder.
+   - No `--body-file` — there is no cross-iteration accumulator for this kind.
    - Reason text (single paragraph): this tactic's draft PR #`<pr>` has reported a
      `pending` CI verdict on head SHA `<sha>` for `<strikes>` consecutive autonomous
      ticks (~`<strikes*15>` minutes); its checks either never started (an empty
@@ -351,15 +442,44 @@ dirties a tree and never trips `graph-commit`'s `assert_clean_outside_ids`.
        `ci_pending_strike_clear` and emit skip reason `ci-pending-cap-held`; on
        failure emit `ci-pending-hold-failed` and `return 1` **without** clearing the
        sidecar (so the next tick retries the hold — the same posture
-       `graph-select-target:499-503` and `dispatch-graph-execute:363-368` take).
-     - `*)` — unchanged.
+       `_hold_node_fix_cap`'s caller and `dispatch-graph-execute`'s strike ladder
+       take). As landed, the do-not-clear comment is `graph-select-target:1399-1401`.
+
+       > **CORRECTED 2026-08-31 — `graph-select-target:499-503` never was that
+       > posture.** That range is the `DISPATCH_GRAPH_NODE_CACHE` snapshot-cache
+       > doc comment, which has nothing to do with hold retries. Worse, the claim
+       > it carried — that *nothing sets the variable yet* — was **already false
+       > when it was written**: `dispatch-select-tick` `mktemp -d`s the cache
+       > directory, exports it, and drops it in the same `EXIT` trap that drops
+       > `DISPATCH_CI_VERDICT_CACHE`, so the block is LIVE on the autonomous tick
+       > path. A reader who trusted the comment would have believed a live cache
+       > was dead code.
+       >
+       > A-P7 sub-unit 2 (`8d8cbd76`) corrected that comment while it was in the
+       > file — an **undocumented scope addition**: Unit 2's file list above never
+       > mentions it, and nothing in the plan authorised the edit. It is recorded
+       > here so the node accounts for what the PR actually changed. The corrected
+       > text is `graph-select-target:519-528`, with the retraction at `:521-524`.
+     - `*)` — unchanged. A **third** outcome was added on this arm that the plan
+       did not anticipate: `dispatch-ci-ready` exit 1 is AMBIGUOUS. It exits 1 both
+       for a genuine pending verdict (printing `waiting` first) and for its own
+       death under `set -euo pipefail` on a failed fetch or jq projection (printing
+       nothing). So the arm captures stdout and, when it is not `waiting`, emits
+       `ci-verdict-unreadable` without touching the ladder (`:1363-1379`). Counting
+       a failed fetch would let one `gh` outage walk every reviewed node to the cap
+       and park it under a reason that misstates the cause — and the empty-`head_sha`
+       exemption does not catch it, because that node's `pulls/{n}` read succeeded
+       and only its check-runs read did not.
 
    All skip reasons flow into `skip_note` (`:436-439`) and the selection log, which
    is where an operator sees the strike count accrue before the hold lands.
 
-3. Update the script's header comment block (`:20-42`, the paragraph enumerating the
-   graph writes selection makes) to name the new hold producer alongside the
-   fix-attempt-cap one.
+3. Update the script's header comment block — the paragraph enumerating the graph
+   writes selection makes — to name the new hold producer alongside the
+   fix-attempt-cap one. The `:20-42` this step used to cite is not that paragraph.
+   What A-P7 actually extended is the **"THIRD write arm"** paragraph, which as
+   landed is `graph-select-target:81-97`, sitting after the fix and conflict arms
+   and before the `Usage:` block at `:103`.
 
 **C. `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute`, exit-10 arm
 (`:250` area).** Comment only — no behaviour change. Record decision (d): exit 10 is
@@ -390,8 +510,16 @@ that records its argv to a file and exits 0. Cases:
    `--kind ci-pending-stalled` and the node id; the sidecar is gone.
 5. **`--node <id>` does not count** (decision (e)) — pre-seed `<sha> 7`; run with
    `--node`; the sidecar is unchanged at `7` and the hold stub was NOT invoked.
+   **This case pins only HALF the exemption.** The sidecar is shared with
+   `reconcile-graph-review-stall`, so an identical `--node` case must exist in
+   that script's own suite or decision (e) is unenforced — see the corrected
+   decision (e) above. Unit 3's test list carries it.
 6. **Ready clears** — stub `dispatch-ci-ready` to exit 0, pre-seed `<sha> 4`; the
    node is selected and the sidecar is gone.
+7. **Unreadable verdict neither counts nor clears** — stub `dispatch-ci-ready` to
+   exit 1 with EMPTY stdout; pre-seed `<sha> 4`; the sidecar still reads `<sha> 4`
+   and the skip reason is `ci-verdict-unreadable`. (Added during implementation
+   with the ambiguity fix recorded on the `1)` arm above.)
 
 **Out of scope for this unit:** `reconcile-graph-review-stall` (Unit 3);
 `dispatch-ci-ready` itself, which stays a stateless predicate by design (its
@@ -419,10 +547,16 @@ the same bound at its own observer.
 **File: `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall`.**
 
 1. Resolve the main checkout for the sidecar path so both surfaces agree on one
-   file. Source `lib-graph-worktree.sh` alongside the existing `lib.sh` source
-   (`:81`) and add, next to the `REPO_ROOT` assignment (`:83`):
+   file. Source `lib-graph-worktree.sh` alongside the existing `lib.sh` source and
+   add, next to the `REPO_ROOT` assignment:
    `MAIN_ROOT=$(resolve_main_worktree "$REPO_ROOT"); MAIN_ROOT="${MAIN_ROOT:-$REPO_ROOT}"`
-   — verbatim the shape at `graph-select-target:433-434`.
+   — verbatim the shape `graph-select-target` uses. **This is what makes decision
+   (e) enforceable**: one sidecar, two callers, so the `--node` exemption has to
+   exist on both. As landed: `lib.sh` sourced at `reconcile-graph-review-stall:116`,
+   `lib-graph-worktree.sh` at `:128`, `REPO_ROOT` `:144`, `MAIN_ROOT` `:148`; the
+   selector's matching pair is `graph-select-target:642-643`, and
+   `resolve_main_worktree` itself is `lib-graph-worktree.sh:27`. (The `:81` / `:83`
+   / `:433-434` this step used to cite were all stale.)
 
 2. In the per-candidate loop, keep the `RAW_VERDICT` → `VERDICT` normalization
    fold unchanged (`reviewStallRoute` stays a pure closed-union function over
@@ -472,40 +606,102 @@ the same bound at its own observer.
    - If `RAW_VERDICT` is neither empty nor the literal string `pending`, call
      `ci_pending_strike_clear "$MAIN_ROOT" "$id"` and **fall through** to the
      guard and the existing routing. Behaviour is otherwise unchanged.
-   - If `RAW_VERDICT` is `pending`:
-     `strikes=$(ci_pending_strike_bump "$MAIN_ROOT" "$id" "$HEAD_SHA")`. Below the
+   - If `RAW_VERDICT` is `pending`, **and `NODE_FILTER` is empty** (decision (e) —
+     the shared sidecar means the exemption must live here too):
+     `strikes=$(ci_pending_strike_bump "$MAIN_ROOT" "$id" "$HEAD_SHA")`. A non-zero
+     return means "do not count" (empty or `null` head SHA) and the candidate falls
+     through to the guard untouched. Below the
      cap: `continue` (a sidecar write is free, so it must NOT consume the `ACTED`
      budget — `ACTED`/`CAP` exist to bound *lock-holding* work). At or above the
      cap: record the node in a new `CI_STALL_IDS` array — **recorded, not
      landed**, for the reason stated in the loop header: `hold-node` refreshes
      from `origin/main` and lands its own `graph-commit`, whose
      `assert_clean_outside_ids` guard would trip on the still-uncommitted
-     `--set-fix` writes staged by this loop. Increment `ACTED` here (a hold *is*
-     lock-holding work), then `continue`.
+     `--set-fix` writes staged by this loop. Then `continue`.
+
+   > **CORRECTED 2026-08-31 — "Increment `ACTED` here" is wrong as written, and
+   > was fixed on the way in.** Charging `ACTED` at *every* at-cap recording
+   > spends a budget on work the sweep never performs. Only **`CI_STALL_IDS[0]`**
+   > is ever landed (step 4's tail block, and the one-hold-per-run rule below), so
+   > with the default `CAP=3` three at-cap pending nodes would drive `ACTED` to
+   > `CAP`, the loop would `break` at its top guard after landing a **single**
+   > hold, and a genuinely red-CI node later in the enumeration would never be
+   > fix-routed at all. The bound would starve the route it shares a budget with.
+   >
+   > The shipped rule: charge `ACTED` **only for the one recording that will
+   > actually be landed** — i.e. gate the whole record-and-charge on
+   > `[[ "${#CI_STALL_IDS[@]}" -eq 0 ]]`. `reconcile-graph-review-stall:408-413`,
+   > with the reasoning at `:396-407`; the loop's `break` guard is `:274` and
+   > `ACTED=0` is `:269`.
+   >
+   > Note what is **not** refuted here, since an earlier framing of this
+   > correction had it: the out-of-scope line below, which excludes any change to
+   > the `GRAPH_REVIEW_STALL_CAP` env-var contract, **held**.
+   > `CAP="${GRAPH_REVIEW_STALL_CAP:-3}"` is unchanged on main
+   > (`reconcile-graph-review-stall:156`, validated `:157-160`). The defect was in
+   > how the new route *spends* that budget, never in the budget's own contract.
 
    *(The `CONFLICT_IDS` array this item used to say to copy no longer exists — see
    "Unit 3 — the conflict-hold route it reuses no longer exists" in the Re-landing
    brief. Build `CI_STALL_IDS` fresh, on `graph-select-target`'s
    `_hold_node_fix_cap` shape.)*
 
-3. Land at most **one** `hold-node` call per sweep run **across both hold routes
-   combined**. The existing conflict route already self-limits to one
-   (`:258`, `[[ "${#CONFLICT_IDS[@]}" -ge 1 ]] && continue`). Extend that guard so
-   the ci-stall route is skipped when a conflict hold is already recorded, and vice
-   versa. The lock-budget header comment (`:64-76`) states "AT MOST TWO
-   graph-commits per tick" (one batched `--set-fix` commit + one hold) — that
-   invariant must survive verbatim, so update the comment to say the single hold
-   slot is now shared between the conflict and ci-stall routes rather than raising
-   the budget. A skipped node still matches the enumeration next tick and its
-   strike count is already at cap, so it is held on the following sweep.
+3. Land at most **one** `hold-node` call per sweep run. There is no shared slot to
+   negotiate: the conflict route is gone twice over (see the Re-landing brief), so
+   the ci-stall route is this sweep's **only** hold producer. Landing the first
+   entry of `CI_STALL_IDS` and leaving the rest for the next sweep is the whole
+   rule. A skipped node still matches the enumeration next tick and its strike
+   count is already at cap, so it is held on the following sweep. The lock-budget
+   header comment goes from "at most one `graph-commit` per tick" to "at most one
+   `graph-commit` PLUS AT MOST ONE `hold-node` per tick" — as landed,
+   `reconcile-graph-review-stall:92-95`.
 
-4. Land the recorded ci-stall hold in a new block after the existing conflict-hold
-   block (`:307-331`), reusing that block's exact structure: `refresh_lock`, the
-   already-installed `TMPDIR_HOLD` scratch dir (the single `EXIT` trap at `:127`
-   removes it), `printf '%s\n' … > "$REASON_FILE"` / `"$RECOMMENDATION_FILE"`, then
-   `( cd "$REPO_ROOT" && "$UTIL_SCRIPTS/hold-node" "$id" --kind ci-pending-stalled … )`,
-   parse the hold id with `awk '{print $2}'`, `ci_pending_strike_clear` on success,
-   and `refresh_lock`.
+   *(This step used to describe extending a `[[ "${#CONFLICT_IDS[@]}" -ge 1 ]] &&
+   continue` guard at `:258` and preserving an "AT MOST TWO graph-commits"
+   invariant. Neither the guard, the array, nor that wording exists any more.)*
+
+4. Land the recorded ci-stall hold in a new block **after** the batched
+   `graph-commit`, at the tail of the script — not inline in the loop, and not
+   beside any conflict block. As landed:
+   `reconcile-graph-review-stall:641-726`, entered on
+   `if [[ "${#CI_STALL_IDS[@]}" -gt 0 ]]` at `:661`.
+
+   > **REWRITTEN 2026-08-31.** The step this replaces told the implementer to copy
+   > "the existing conflict-hold block (`:307-331`)" and reuse "the
+   > already-installed `TMPDIR_HOLD` scratch dir (the single `EXIT` trap at
+   > `:127`)". **None of that survives.** The conflict-hold block, `CONFLICT_IDS`,
+   > `TMPDIR_HOLD` and its reason/recommendation-file writes were all removed by
+   > `tactic-graph-router-conflict-routing` before this work started; the
+   > Re-landing brief recorded that fact but this step's prose was never rewritten
+   > to match its own brief. An implementer following the step verbatim would have
+   > looked for four constructs that no longer exist.
+
+   The block's actual shape, and why each part is where it is:
+
+   - **Ordering is the reason it sits at the tail.** The batched `graph-commit`
+     above is what clears the staged `--set-fix` writes from the tree, and
+     `hold-node` runs its own `graph-commit`, which refuses to start while a
+     tracked file outside its own node set is dirty (`assert_clean_outside_ids`).
+     When `RECOVERED_IDS` is empty nothing was staged and the hold can land at
+     once; when it is non-empty the commit had to land first. Sitting after the
+     `fi` satisfies both with no branch.
+   - `refresh_lock` on the way in, its own `mktemp -d` (with an explicit failure
+     arm — there is no pre-installed scratch dir to inherit), `printf` the reason
+     and recommendation files, then
+     `( cd "$REPO_ROOT" && "$UTIL_SCRIPTS/hold-node" "$id" --kind ci-pending-stalled … )`.
+   - **Capture stdout, redirect only stderr** — the opposite of Unit 2's producer.
+     The hold id is parsed off `hold-node`'s own output line with
+     `awk '{print $2}'` for the `held … via <hold-id>` protocol line. Unit 2
+     discards stdout because it runs inside a command substitution whose value is
+     contractual; this does not.
+   - `ci_pending_strike_clear` on success only. On failure the sidecar is
+     deliberately left in place so the next sweep re-observes the node at cap and
+     retries the landing.
+   - `refresh_lock` again **after** the `hold-node` call, on **both** arms — the
+     same `MAX_HOLD_SECONDS`-vs-`LOCK_WAIT_SECONDS` requirement recorded under
+     Unit 2 step B.1. The failure arm needs it too: a `hold-node` that blocked on
+     the landing lock and then failed has aged the caller's heartbeat exactly as
+     much as one that succeeded. Then `rm -rf` the scratch dir.
    - Reason text must state what is specific to this surface and is NOT true of
      Unit 2's: this tactic completed review and its auto-merge is armed, so the
      selector's reviewed-marker exclusion means no worker lane observes it; its PR's
@@ -514,14 +710,23 @@ the same bound at its own observer.
    - Recommendation: same remediation as Unit 2's (re-trigger or re-run the checks;
      a new head SHA resets the counter), plus — explicitly — do NOT route this
      through the CI-fix interrupt, which would strip the `reviewed` marker and
-     re-draft the PR, discarding a completed review verdict (the rationale already
-     recorded at `transitions.ts:272-283` and this script's `:294-306` comment).
+     re-draft the PR, discarding a completed review verdict (the rationale recorded
+     in `transitions.ts` and above this script's own `fix` arm).
      Close with the standard "resolve THIS HOLD TACTIC to `phase: done` and prune it
      — clearing `office_hours` alone does not unblock the source."
 
-5. Update the stdout protocol comment (`:44-48`) with the new line shape, e.g.
-   `held <id> -> ci-stalled via <hold-id> (sha=<sha> strikes=<n>)`, and the header's
-   route summary (`:16-36`).
+5. Update the stdout protocol comment with the new line shape —
+   `held <id> -> ci-stalled via <hold-id> (sha=<sha> strikes=<n>)`, as landed at
+   `reconcile-graph-review-stall:72` — and the header's route summary.
+
+   **The consumer does not read it.** `dispatch-ladder-run` greps this script's
+   stdout for `^recovered $NODE_ID ` only (`dispatch-ladder-run:1274`); there is no
+   `held` grep, so a hold landed by a sweep the driver itself invoked would be
+   invisible to it and the driver would poll its full `CI_WAIT_S` before halting
+   idle at `:1601`. Under the corrected decision (e) the driver's own `--node` runs
+   never count, so it cannot *cause* such a hold — but the protocol line is
+   operator-facing only, not a driver signal, and nothing should be built on the
+   assumption that a caller sees it.
 
 Note the natural termination property that makes this safe to run every tick:
 once the hold lands, the source gains a `blocked_by` edge, and this sweep's own
@@ -541,13 +746,30 @@ invoked; (2) pending verdict at cap → `hold-node` invoked with
 `--kind ci-pending-stalled`, sidecar cleared, one `held … -> ci-stalled` line;
 (3) a `passing` verdict clears an existing sidecar and lands no hold; (4) a
 gh call failure (empty `RAW_VERDICT`) neither bumps nor clears the sidecar; (5)
-with both a CONFLICTING node and an at-cap pending node present, exactly one
-`hold-node` invocation occurs (pins decision 3).
+an at-cap pending node is held even when the sweep also has `fix`-routed work,
+so the tail block runs after the batched commit; (6) **an explicit `--node` run
+neither bumps the ladder nor holds, while still enumerating and routing the
+candidate** — the second half of decision (e), and the case without which the
+selector's own `--node` exemption is worthless against the shared sidecar; (7)
+with two at-cap pending nodes present, exactly **one** `hold-node` invocation
+occurs and the first entry is the one landed (pins step 3 and the `ACTED`
+correction above); (8) a `null` head SHA is refused rather than counted (pins
+the `ci_pending_strike_bump` guard correction).
+
+*(The file exists now: `.claude/skills/dispatch-propagate/scripts/test-reconcile-graph-review-stall.sh`,
+landed with this work. The original case (5) — "with both a CONFLICTING node and
+an at-cap pending node, exactly one `hold-node` invocation" — was not buildable:
+a CONFLICTING candidate is short-circuited before the CI fetch, so it can never
+reach the counter and there is no second producer to contend with. The
+one-hold-per-run property is pinned by case (7) instead.)*
 
 **Out of scope:** changing `reviewStallRoute`'s signature, return type, or the
 `CiVerdict`/`Mergeable` unions in `packages/intentionsutil/src/transitions.ts`;
-changing the `GRAPH_REVIEW_STALL_CAP` env-var contract or its validation
-(`:88-95`); touching `reconcile-graph-merged`.
+changing the `GRAPH_REVIEW_STALL_CAP` env-var contract or its validation.
+**This one held** — `CAP="${GRAPH_REVIEW_STALL_CAP:-3}"` is unchanged at
+`reconcile-graph-review-stall:156`; what the corrected `ACTED` rule above changes
+is only how the new route spends that budget. Also out of scope: touching
+`reconcile-graph-merged`.
 
 ### Recommended model
 
@@ -573,36 +795,43 @@ calls).
   find-or-create idempotency; `decideHold` (`:236-268`) gives NONE/EXISTING/REOPENED
   dispositions; `buildHoldBody` (`:198-224`) and `RESOLUTION_SENTENCE` (`:94-96`)
   give the operator-facing body for free. A new kind gets all of it with no new code.
-- `.claude/skills/dispatch-propagate/scripts/graph-select-target:476-509`
-  (`_hold_node_fix_cap`) — the caller-side pattern for a selector-embedded hold
-  producer: `mktemp -d`, reason/recommendation files, `( cd "$NATIVE_ROOT" && hold-node … ) >/dev/null 2>&1`,
-  `rm -rf`, return rc. Copy this shape for `_hold_node_ci_pending`.
-- `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:289,320-370` —
-  the strike-sidecar ladder: sidecar path convention, numeric validation, bump-and-print
-  below cap, escalate-and-`rm -f` at cap, and the fail-open rationale.
-- `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:230-235` — reset
-  the sidecar on success so the count means *consecutive* failures, not a lifetime total.
-- `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall:63-70,97-127,307-331` —
-  `refresh_lock()`, the snapshot/`RESTORE_ON_FAILURE`/`restore_snapshot` discipline, the
-  single `EXIT` trap, the `TMPDIR_HOLD` reason/recommendation-file pattern, and the
-  batched-`graph-commit` + one-hold-per-sweep lock budget.
-- `.claude/skills/dispatch-propagate/scripts/lib.sh` — `gh_pr_view_rest` (`:1097`) for
-  the PR projection (`mergedAt`, `headRefOid`) and `dispatch_ci_verdict_rest` (`:792`,
+- `.claude/skills/dispatch-propagate/scripts/graph-select-target:826-862`
+  (`_hold_node_fix_cap`, header `:817-825`) — the caller-side pattern for a
+  selector-embedded hold producer: `mktemp -d`, reason/recommendation files,
+  `( cd "$NATIVE_ROOT" && hold-node … ) >/dev/null 2>&1`, `_refresh_lock`, `rm -rf`,
+  return rc. Take the shape for `_hold_node_ci_pending` — but see the correction
+  under Unit 2 step B.1: the `_refresh_lock` in that list was **missing** from this
+  model until this work added it at both sites. Copy properties, not lines.
+- `.claude/skills/dispatch-propagate/scripts/dispatch-graph-execute:165` (the cap)
+  and `:337` (`STRIKE_FILE`) — the strike-sidecar ladder: sidecar path convention,
+  numeric validation, bump-and-print below cap, escalate-and-`rm -f` at cap, and the
+  fail-open rationale. Clear-on-success so the count means *consecutive* failures,
+  not a lifetime total.
+- `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall` —
+  `refresh_lock()` (`:165`), the snapshot/`RESTORE_ON_FAILURE`/`restore_snapshot`
+  discipline, the single `EXIT` trap, and the batched-`graph-commit`
+  + one-hold-per-sweep lock budget (header `:92-95`). The `TMPDIR_HOLD`
+  reason/recommendation-file pattern this bullet used to cite **no longer exists**;
+  the ci-stall block mints its own scratch dir.
+- `.claude/skills/dispatch-propagate/scripts/lib.sh` — `gh_pr_view_rest` (`:1308`) for
+  the PR projection (`mergedAt`, `headRefOid`) and `dispatch_ci_verdict_rest` (`:840`,
   with its per-SHA `DISPATCH_CI_VERDICT_CACHE` memoisation) for the verdict. Add no
   second REST fetch path.
-- `.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh` — `resolve_main_worktree`,
-  used the same way as `graph-select-target:433-434`.
+- `.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh:27` —
+  `resolve_main_worktree`, used the same way as `graph-select-target:642-643` and
+  `reconcile-graph-review-stall:148`.
 - `.claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh` and
   `test-dispatch-graph-execute.sh` — the bash fixture idiom (physical script copies,
   fake `npx`/`gh`/`claude` on `PATH`, `assert_eq` from `dispatch-test-fixture.sh`,
-  sidecar-content assertions at `test-dispatch-graph-execute.sh:207-290`).
+  and the `assert_eq … "gone" "$([ -e … ] && echo present || echo gone)"`
+  sidecar-content pair in `test-dispatch-graph-execute.sh`).
 - `packages/intentionsutil/test/hold-node-decide.test.ts:100-170` — the existing
   per-kind assertion shape to mirror for the fourth kind.
 
 ## Verification
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-unit-tests.sh --pr-scripts
+test -x .claude/skills/dispatch-propagate/scripts/test-reconcile-graph-review-stall.sh && test -x .claude/skills/dispatch-propagate/scripts/test-graph-select-target.sh && .claude/skills/dispatch-propagate/scripts/run-unit-tests.sh --pr-scripts
 ```
 
 ```verify
@@ -610,12 +839,44 @@ npx vitest run --project packages/intentionsutil --root .
 ```
 
 ```verify
-.claude/skills/dispatch-propagate/scripts/run-typecheck.sh --app packages/intentionsutil
+npx tsc --noEmit --project packages/intentionsutil
 ```
 
 ```verify
 .claude/skills/dispatch-propagate/scripts/run-lint.sh --prose
 ```
+
+**Why fences 1 and 3 are spelled that way** (recorded 2026-08-31, after the A-P7
+landing; fences 2 and 4 are unchanged and were confirmed non-vacuous by execution).
+
+- **Fence 1** was `run-unit-tests.sh --pr-scripts` alone. That is correct but it
+  names none of the suites this node's units add: `--pr-scripts` iterates
+  `for test_script in "$SCRIPTS"/test-*.sh`
+  (`run-unit-tests.sh:202`), so a suite that was never created simply fails to
+  match the glob and the fence still passes green. An existence assumption a
+  missing file satisfies is not a check. The two `test -x` guards make the two
+  suites this work is responsible for load-bearing on the fence; both exist and
+  are executable on `origin/main`.
+- **Fence 3** was `run-typecheck.sh --app packages/intentionsutil`. That script is
+  a documented **fail-open**: a workspace whose *baseline* fails the probe lands in
+  `SKIPPED_BASELINE` and the run exits 0 with only a stderr WARNING — its own
+  header says so at `:57-58` ("That is a check failing OPEN"). It also `git fetch`es
+  to resolve that baseline, so a fence-runner without network resolves a different
+  baseline than CI does, and it is diff-scoped against a **commit** baseline, which
+  means it verifies nothing at all about an uncommitted node edit. Replaced with
+  the single per-workspace command `run-typecheck.sh` itself runs (`:260`),
+  which has no skip path: it either typechecks and exits 0, or fails.
+  Measured 2026-08-31 on `origin/main` `c7a96c24`: exits 0 with no output.
+
+An earlier framing of this correction claimed "2 bad verify fences" of a different
+kind. **That premise was refuted on measurement** and is recorded here so it is not
+re-derived: there are exactly four fences; every one is a single command whose exit
+status *is* the assertion; all four callees run `set -euo pipefail` and end in a
+FAILURES tally then `exit 1`; no fence contains a `grep`, a pinned line number or a
+sha; the `npx tsx` count in this node is zero; and fence 2 already used the correct
+repo-root `--project`/`--root .` vitest form. Fences 2 and 4 were proven
+non-vacuous by execution (fence 2: 59 files / 1324 tests passed; fence 4: four real
+lint checks, all PASS). The two real defects were the weaker ones above.
 
 Manual and judgment checks:
 
@@ -729,23 +990,41 @@ classified and `:17-25` a non-empty `why`; the entry satisfies both.
 
 ### Unit 2 — scope holds; only the anchors moved
 
-- `graph-select-target` still skips with a bare, uncounted `ci-pending`. The `qa|review`
-  arm is `.claude/skills/dispatch-propagate/scripts/graph-select-target:1117-1142`; it calls
-  `dispatch-ci-ready` at `:1136` and maps exit 1 to `echo "ci-pending"; return 1` at `:1140`.
-  `dispatch-ci-ready:11-13` still documents exit 1 as a draft PR whose verdict is pending.
+- ~~`graph-select-target` still skips with a bare, uncounted `ci-pending`.~~ **Landed.**
+  The bound shipped in `c7a96c24` (sub-unit 2, `8d8cbd76`). Post-landing anchors,
+  measured 2026-08-31 on `origin/main` `c7a96c24`: the `qa|review` arm is
+  `.claude/skills/dispatch-propagate/scripts/graph-select-target:1315-1404`;
+  `dispatch-ci-ready` is invoked at `:1354`, the `case "$rc"` is `:1356`, and the
+  bounded `1)` arm is `:1363-1402`. The `:1117-1142` / `:1136` / `:1140` this bullet
+  used to carry were measured on `4b8ebde3` and were already stale by the landing.
+  `dispatch-ci-ready:11-13` still documents exit 1 as a draft PR whose verdict is
+  pending — but note that exit 1 is AMBIGUOUS in practice (see the `1)` arm's
+  `ci-verdict-unreadable` note in Unit 2), which is why the arm captures stdout.
 - `dispatch_classify_rollup` is `.claude/skills/dispatch-propagate/scripts/lib.sh:708`; an
   empty rollup still returns `pending` at `:713-717`. `CANCELLED` is still in the
   failing-conclusions jq branch (`:719-741`, conclusion list at `:728`), so decision (f) —
   cancelled runs out of scope — still holds; the body's `lib.sh:712-721` is stale.
-- `dispatch_ci_verdict_rest` is `lib.sh:840-925` (not ~`:792`/`:820`), with per-SHA
-  `DISPATCH_CI_VERDICT_CACHE` memoisation at `:845-846` and `:920`; `gh_pr_view_rest` is
-  `lib.sh:1195` (not `:1097`). Insert the new helper and cap after `lib.sh:925`.
+- `dispatch_ci_verdict_rest` is `lib.sh:840` (not ~`:792`/`:820`), with per-SHA
+  `DISPATCH_CI_VERDICT_CACHE` memoisation. The helper and cap went in after it, as
+  planned: the CI-pending block is `lib.sh:926-1005`
+  (`DISPATCH_CI_PENDING_STRIKE_CAP` `:937`, shared-sidecar doc `:939-948`,
+  `ci_pending_strike_bump` `:971` with its guard at `:974`, `ci_pending_strike_clear`
+  `:999`). `gh_pr_view_rest` is now `lib.sh:1308` — post-landing, since the new block
+  sits above it; the brief's `:1195` and the body's `:1097` are both superseded.
 - `CONFLICT_STRIKE_CAP` is `dispatch-graph-execute:165`, not `:145` — value still 5.
-  `FIX_ATTEMPT_CAP` confirmed at `packages/intentionsutil/src/transitions.ts:101`, value 3.
-- The `OnCalendar=*:0/15` cadence comment is `lib.sh:4019` (also `:3859`), not `:3082`.
-- `lib.sh` reachability from both call sites still holds: `graph-select-target:200` sources
-  `lib-reservation-ledger.sh`, which sources `lib.sh` at `lib-reservation-ledger.sh:299`
-  (not `:263`); `reconcile-graph-review-stall:91` sources `lib.sh` directly (not `:81`).
+  `FIX_ATTEMPT_CAP` confirmed at `packages/intentionsutil/src/transitions.ts:101`,
+  value 3, mirrored at `graph-select-target:815` (not `:465`).
+- The `OnCalendar=*:0/15` cadence: `lib.sh:4156` is the timer-unit template and
+  `:3996` the prose; `:4019` / `:3859` / `:3082` are all stale. **The shipped
+  `DISPATCH_CI_PENDING_STRIKE_CAP` comment cites no line number at all** — the
+  cadence is named by its `OnCalendar` string and nothing else (`lib.sh:933`).
+  Mirror that; do not re-pin it.
+- `lib.sh` reachability from both call sites still holds: `graph-select-target:233`
+  sources `lib-reservation-ledger.sh` (not `:200`), which sources `lib.sh` at
+  `lib-reservation-ledger.sh:299` (not `:263`); `reconcile-graph-review-stall:116`
+  sources `lib.sh` directly (not `:91`, not `:81`), and `:128` now also sources
+  `lib-graph-worktree.sh` — the source Unit 3 step 1 asked for, next to
+  `REPO_ROOT` `:144` / `UTIL_SCRIPTS` `:149` and the `MAIN_ROOT` assignment `:148`.
 
 ### Unit 3 — the conflict-hold route it reuses no longer exists
 
@@ -775,25 +1054,32 @@ header goes from "at most one graph-commit" to "at most one graph-commit plus at
 `( cd "$NATIVE_ROOT" && packages/intentionsutil/scripts/hold-node … ) >/dev/null 2>&1`,
 `rm -rf`, return rc) — the surviving in-repo example.
 
-Remaining Unit 3 anchors in that script, all re-measured 2026-08-31 on `origin/main`
-`4b8ebde3` (510 lines): `REPO_ROOT` `:117`; `UTIL_SCRIPTS` `:118`; the cap
-(`GRAPH_REVIEW_STALL_CAP`) declared `:81`, defaulted `:86`, read `:125-127`; `refresh_lock`
-defined `:131-134` and called at `:239`, `:468`, `:505`; the single `EXIT` trap `:170`;
-`ACTED=0` `:232`; `HEAD_SHA` `:302`; `RAW_VERDICT` `:304` (still empty on call failure, as
-the plan assumes); the `passing|failing` fold `:305-308` — **this fold, not the
-`case "$ROUTE"` arm, is Unit 3's landing site; see the ⛔ box in Unit 3 step 2**; the
-superset pre-filter guard `:324-326` with its rationale at `:310-323`; the
-`reviewStallRoute` eval `:328-336`; the `case "$ROUTE"` at `:338` whose `*)` no-regression
-arm is `:392-394`, which a pending candidate **stops reaching** once
-`tactic-review-stall-predicate-subprocess-spawn` Unit 1's superset guard lands above it.
+Remaining Unit 3 anchors in that script. The set this paragraph carried was measured
+on `4b8ebde3` at 510 lines; the work has since landed and the file is **727 lines**,
+so every one of those numbers moved again. Re-measured 2026-08-31 on `origin/main`
+`c7a96c24`, post-landing: `lib.sh` sourced `:116`; `lib-graph-worktree.sh` sourced
+`:128` (it now does — the grep count was 0 before this work); `NODE_FILTER` parsed
+`:131`/`:137`; `REPO_ROOT` `:144`; `MAIN_ROOT` `:148`; `UTIL_SCRIPTS` `:149`; the cap
+`CAP="${GRAPH_REVIEW_STALL_CAP:-3}"` `:156` with validation `:157-160`;
+`refresh_lock` defined `:165`; the single `EXIT` trap `:201`; `RECOVERED_IDS=()`
+`:261`; `CI_STALL_IDS=()` `:266`; `ACTED=0` `:269` and the loop's `break` guard
+`:274`; `HEAD_SHA` `:339`; `RAW_VERDICT` `:341` (still empty on call failure, as the
+plan assumed); the `passing|failing` fold `:342-345` — **this fold, not the
+`case "$ROUTE"` arm, is Unit 3's landing site; see the ⛔ box in Unit 3 step 2** —
+with the ci-stall counter block landing immediately after it at `:376-427`; the
+superset pre-filter guard's rationale `:428-437`; the `reviewStallRoute` eval
+`:446-452`; the widened early exit `:529`; the batched-commit guard `:598`; and the
+ci-stall hold block `:641-726`.
+
 `resolve_main_worktree` is defined at
-`.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh:27` — the one anchor in
-this brief that did **not** move. The two-line `NATIVE_ROOT` idiom to copy is
-`graph-select-target:625-626` (not `:500-501` and not `:433-434`), and `_hold_node_fix_cap`
-is `graph-select-target:809-842` behind its header comment at `:800-808` (not `:684-717`).
-The script still does not source `lib-graph-worktree.sh` (grep count 0 at `4b8ebde3`), so
-step 1 still applies: add the source next to `:118` and the `MAIN_ROOT` assignment next to
-`:117`.
+`.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh:27` — the one anchor
+in this brief that has still never moved. The two-line `NATIVE_ROOT` idiom to copy is
+`graph-select-target:642-643` (not `:625-626`, not `:500-501`, not `:433-434`), and
+`_hold_node_fix_cap` is `graph-select-target:826-862` behind its header comment at
+`:817-825` (not `:809-842`/`:800-808`, not `:684-717`, not `:476-509`). **Five
+successive measurements of the same two constructs, five different answers.** Do not
+trust a number in this paragraph; re-derive it. The reason the shipped code cites
+constructs rather than lines wherever it can is exactly this.
 
 ### Unit 3's early exit must widen, or the whole unit is dead code
 
@@ -801,9 +1087,13 @@ Neither the Scope above nor any step of Unit 3 says this, and an implementer who
 exactly what the Scope describes ships a unit that can never fire. Recording it here so the
 node is executable from its own text.
 
+**Landed as described** — the widened exit is `reconcile-graph-review-stall:529` on
+`origin/main` `c7a96c24`, with the reasoning below transcribed into the comment at
+`:515-528`. The rest of this subsection is kept as the derivation.
+
 Unit 3 accumulates at-cap nodes into a new `CI_STALL_IDS` array inside the per-candidate
-loop (at the `passing|failing` fold, `:305-308`), and lands the hold *after* the loop. But
-the statement immediately following that loop is
+loop (at the `passing|failing` fold, now `:342-345`), and lands the hold *after* the loop.
+But the statement immediately following that loop is
 
 ```
 [[ "${#RECOVERED_IDS[@]}" -eq 0 ]] && exit 0
@@ -823,15 +1113,15 @@ Widen the exit to cover both producers:
 ```
 
 This is safe without any further change because the batched `--set-fix` land is already
-guarded independently, by `if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]` at `:467`. Letting a
+guarded independently, by `if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]` (now `:598`). Letting a
 ci-stall-only tick past the early exit therefore cannot produce an empty `graph-commit`; it
-falls through that guard to the hold call Unit 3 adds. Widening the exit and leaving `:467`
-alone is the complete change.
+falls through that guard to the hold call Unit 3 adds. Widening the exit and leaving that
+guard alone was the complete change.
 
 Two related corrections to the doctrine that cites this line:
 
-- The doctrine's citation of the early exit as `:311` is **87 lines stale**, not the 53
-  lines an earlier note recorded — it was `:364` at `2d5faa71` and is `:398` at `4b8ebde3`.
+- The doctrine's citation of the early exit as `:311` is stale, and so is every
+  correction of it: `:364` at `2d5faa71`, `:398` at `4b8ebde3`, `:529` at `c7a96c24`.
   Re-derive it rather than trusting any number written here; this file moves constantly.
 - Because CONFLICTING candidates are now short-circuited before the CI fetch (see the
   subsection above), a conflicting PR never reaches the `passing|failing` fold and so can
@@ -851,3 +1141,49 @@ Two related corrections to the doctrine that cites this line:
   `:325-335` as the second worked example. Not `:283-298` and not `:207-290`.
 - `packages/intentionsutil/test/holds.test.ts` (37 lines) is a new file this plan does not
   know about; the fourth kind must satisfy its assertions at `:9-14`, `:17-25`, `:27-29`.
+
+Both script anchors above were measured on `4b8ebde3` and have drifted again
+(`dispatch-graph-execute` is 554 lines on `c7a96c24`, `STRIKE_FILE` `:337`,
+`CONFLICT_STRIKE_CAP` `:165`; `test-dispatch-graph-execute.sh` is unchanged at 499).
+Locate both by construct.
+
+## What A-P7 landed, and the five claims it refuted (2026-08-31)
+
+PR #3169, branch `a-p7-ci-pending-liveness-bound`, merged as `c7a96c24`. All three
+units shipped as scoped. Unit 1's vocabulary is in `packages/intentionsutil/src/holds.ts`
+(155 lines): `HOLD_KINDS` entry `:53`, `KIND_SLUGS` `:62`, doc bullet `:30`, the
+reserved-`no-progress` sentence `:44`, and the settled `KIND_RECHECK`
+`policy: "manual"` entry `:147`.
+
+Implementing the plan **refuted five of its own claims**. Each is corrected in place
+above; they are indexed here so the pattern is visible in one reading.
+
+1. **A cited anchor pointed at unrelated text carrying an already-false claim.**
+   `graph-select-target:499-503`, cited as a hold-retry posture, was the
+   `DISPATCH_GRAPH_NODE_CACHE` comment — and its "nothing sets it yet" was false when
+   written. Corrected in the file at `:519-528` as an **undocumented scope addition**
+   to sub-unit 2 (`8d8cbd76`): no unit's file list authorised it.
+2. **A budget was charged for work that never happens.** "Increment `ACTED` here" at
+   every at-cap recording, when only `CI_STALL_IDS[0]` is ever landed, would let
+   three pending nodes exhaust `CAP=3` and starve the `fix` route. Gated at
+   `reconcile-graph-review-stall:408-413`. The `GRAPH_REVIEW_STALL_CAP` out-of-scope
+   line was **not** refuted; it held.
+3. **A one-sided exemption is no exemption.** Both surfaces write ONE sidecar
+   (`lib.sh:939-948`), so decision (e)'s `--node` carve-out had to exist on both.
+   Unexempted, `dispatch-ladder-run`'s per-poll `--node` sweep would reach a cap
+   sized for a 15-minute tick in ~8 minutes — and the driver greps only
+   `^recovered`, so it would never report the hold it caused.
+4. **"Model it line-for-line" propagated the model's bug.** `_hold_node_fix_cap` had
+   no post-landing heartbeat refresh, so a contended `graph-commit` could age the
+   tick's lock past `MAX_HOLD_SECONDS` and let a second tick double-book. Fixed at
+   both sites, not half of them (`graph-select-target:859` and `:912`).
+5. **An "empty" guard is not a "null" guard.** Two callers, two `jq` projections, one
+   of them yielding the literal string `null`; an empty-only refusal would let every
+   unreadable PR share one counter. `lib.sh:974`.
+
+The common shape of all five: **a claim that was never measured against the thing it
+described** — an anchor nobody re-read, a budget nobody traced to its consumer, an
+exemption nobody checked against the second caller, a model nobody audited before
+copying, a guard nobody tested against the other projection. The remedy this node now
+tries to embody is to cite constructs rather than lines wherever a construct will do,
+and to name the property required rather than the code to copy.
