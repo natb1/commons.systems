@@ -80,8 +80,11 @@
 #
 # The THIRD write arm is the CI-pending liveness bound
 # (tactic-autonomous-ci-pending-liveness-bound). The `qa|review` sensor arm's
-# `ci-pending` outcome — `dispatch-ci-ready` exit 1, a draft PR whose CI has
-# reported no verdict — used to be an unbounded skip: no counter, no timestamp,
+# `ci-pending` outcome — `dispatch-ci-ready` exit 1 WITH `waiting` on stdout, a
+# draft PR whose CI has reported no verdict; an exit 1 with EMPTY stdout is that
+# script dying on a failed fetch/projection under its own `set -e`, and is
+# emitted as `ci-verdict-unreadable` without touching the ladder — used to be an
+# unbounded skip: no counter, no timestamp,
 # forever. It is now counted per node in a SIDECAR FILE keyed on the PR's head
 # SHA (`ci_pending_strike_bump` / `ci_pending_strike_clear`, lib.sh), and on the
 # `DISPATCH_CI_PENDING_STRIKE_CAP`-th consecutive observation of the SAME SHA it
@@ -1276,7 +1279,7 @@ _gate_conflict_active() {
 #       fresh interrupt emits `fix`; a resolved interrupt emits the ladder phase).
 #   1 = not satisfied (skip reason on stdout); 2 = environment error.
 sensor_gate() {
-  local id="$1" phase="$2" pr="$3" pushed_sha="$4" fix_since="$5" rc merged_at
+  local id="$1" phase="$2" pr="$3" pushed_sha="$4" fix_since="$5" rc merged_at ci_ready_out
   case "$phase" in
     fix)
       # An active interrupt (router override). Resolve/guard/retry.
@@ -1339,7 +1342,16 @@ sensor_gate() {
       # NOT _CI_HEAD: _gate_maybe_interrupt returns early on a null PR BEFORE
       # _read_pr_ci resets the globals, so _CI_HEAD can still hold a previous
       # candidate's SHA at this point.
-      "$SCRIPT_DIR/dispatch-ci-ready" "$id" >/dev/null 2>&1
+      # CAPTURE stdout rather than discarding it: exit 1 is AMBIGUOUS and the
+      # stdout word is the only thing that disambiguates it. dispatch-ci-ready
+      # runs `set -euo pipefail`, and its `VERDICT=$(dispatch_ci_verdict_rest
+      # ...)` also exits 1 when the check-runs fetch, the check-suites fetch or
+      # a jq projection fails (lib.sh's dispatch_ci_verdict_rest returns 1 on
+      # each) — and so does a failed `pr_list_import` self-fetch. Those deaths
+      # happen BEFORE anything is printed, so stdout is empty; a genuine pending
+      # verdict prints exactly `waiting` first. Nothing else on stdout is
+      # possible: the READY paths print `ready` and exit 0.
+      ci_ready_out=$("$SCRIPT_DIR/dispatch-ci-ready" "$id" 2>/dev/null)
       rc=$?
       case "$rc" in
         0)
@@ -1349,6 +1361,22 @@ sensor_gate() {
           ci_pending_strike_clear "$NATIVE_ROOT" "$id"
           echo "$phase"; return 0 ;;
         1)
+          # FAIL-OPEN GUARD, ahead of everything else on this arm. An exit 1
+          # with no `waiting` on stdout is a fetch/projection failure, not a
+          # pending verdict (see the capture above). A failed fetch is not
+          # evidence either way, so it must neither COUNT nor CLEAR: counting it
+          # would let one gh outage walk every reviewed node to the cap and park
+          # it to `office_hours` under a reason that misstates the cause, and
+          # the empty-head_sha exemption below does not catch it — that node's
+          # `pulls/{n}` read succeeded, only its check-runs read did not.
+          #
+          # This is the posture reconcile-graph-review-stall already takes on
+          # the SHARED sidecar ("RAW_VERDICT empty ... reaches here having
+          # neither counted nor cleared"). One surface counting what the other
+          # refuses to count is no bound at all.
+          if [[ "$ci_ready_out" != "waiting" ]]; then
+            echo "ci-verdict-unreadable"; return 1
+          fi
           # ci-pending, now BOUNDED. Two cases keep today's behaviour verbatim:
           # an explicit --node run (a human re-running `dispatch <id>` must not
           # burn the autonomous budget), and an unreadable PR (no head SHA to

@@ -212,6 +212,7 @@ SH
   cat >"$RGS_ROOT/packages/intentionsutil/scripts/hold-node" <<SH
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$RGS_FIX/hold-node-calls.log"
+printf 'hold\n' >> "$RGS_FIX/lock-order.log"
 if [[ -f "$RGS_FIX/hold-node-fail" ]]; then
   echo "hold-node stub: simulated failure" >&2
   exit 1
@@ -262,6 +263,33 @@ rgs_sidecar_for() {
 rgs_sidecar() { [ -e "$RGS_SIDECAR" ] && cat "$RGS_SIDECAR" || echo gone; }
 
 rgs_holds() { [ -f "$RGS_FIX/hold-node-calls.log" ] && cat "$RGS_FIX/hold-node-calls.log" || echo none; }
+
+# rgs_lock_stub — install a dispatch-acquire-lock stub NEXT TO the SUT copy, so
+# refresh_lock's `[[ -x "$SCRIPT_DIR/dispatch-acquire-lock" ]]` guard passes and
+# each heartbeat is appended to the SAME ordered log the hold-node stub writes
+# `hold` to. Ordering, not counting, is what discriminates the bracket: a
+# refresh only BEFORE the hold leaves `hold` as the last line.
+#
+# Installed per-case rather than in rgs_setup: every pre-existing case asserts
+# against a fixture where refresh_lock is a no-op, and the ordering cases are
+# the only ones that need the seam.
+rgs_lock_stub() {
+  cat >"$RGS_ROOT/.claude/skills/dispatch-propagate/scripts/dispatch-acquire-lock" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "heartbeat \$*" >> "$RGS_FIX/lock-order.log"
+[[ "\${1:-}" == --wait ]] && echo acquired
+exit 0
+SH
+  chmod +x "$RGS_ROOT/.claude/skills/dispatch-propagate/scripts/dispatch-acquire-lock"
+}
+
+# rgs_lock_order — the interleaved hold/heartbeat log, or `none` when absent.
+rgs_lock_order() {
+  [ -f "$RGS_FIX/lock-order.log" ] && cat "$RGS_FIX/lock-order.log" || echo none
+}
+
+# rgs_last_event — the LAST line's event word (`hold` or `heartbeat`).
+rgs_last_event() { rgs_lock_order | tail -1 | awk '{print $1}'; }
 
 # rgs_run — run the sweep from the fixture root with the stubs on PATH.
 # DISPATCH_GRAPH_MAIN_WORKTREE pins resolve_main_worktree at the fixture, so the
@@ -436,5 +464,57 @@ assert_eq "review-stall ci-stall: the hold that landed is the first at-cap candi
 # never acted on, so nothing about it should have changed.
 assert_eq "review-stall ci-stall: the unlanded at-cap node keeps its ladder" \
   "deadbee202 8" "$(rgs_sidecar_for t-rs2)"
+
+# --- Case 8: the landed hold refreshes the caller's heartbeat AFTERWARDS -----
+# The block refreshed only on the way IN, which covers nothing: hold-node lands
+# its own graph-commit, which waits up to LOCK_WAIT_SECONDS (1050s) for the
+# GLOBAL landing lock — far past the MAX_HOLD_SECONDS (300s) after which
+# dispatch-acquire-lock reclaims a holder. dispatch-select-tick runs this sweep
+# while holding its dispatch lock and then continues for hundreds more lines, so
+# one contended landing leaves the tick's lock reclaimable and a second tick
+# double-books the same candidate set.
+#
+# ORDERING is the assertion, not a count: a before-only refresh still logs a
+# heartbeat, so `grep -c heartbeat` would pass under the bug. What only the
+# bracket produces is a heartbeat as the LAST event after the hold.
+echo "Test: reconcile-graph-review-stall — a landed ci-stall hold refreshes the lock heartbeat afterwards"
+rgs_setup c8
+rgs_lock_stub
+rgs_node "$RGS_ROOT/intentions/t-rs1.md" t-rs1 201
+rgs_seal
+rgs_seed_sidecar deadbee201 7
+c8_out=$(rgs_run)
+assert_eq "review-stall ci-stall: the hold really landed in this case too" \
+  "1" "$(grep -c '^held t-rs1 -> ci-stalled via ' <<<"$c8_out")"
+assert_eq "review-stall ci-stall: a --heartbeat follows the landed hold" \
+  "heartbeat" "$(rgs_last_event)"
+# Every refresh on this path must be the strict-owner --heartbeat form; an
+# --acquire/--wait here would BLOCK on the very lock the caller already holds.
+assert_eq "review-stall ci-stall: every refresh is a --heartbeat, never an acquire" \
+  "0" "$(grep '^heartbeat ' "$RGS_FIX/lock-order.log" | grep -cv -- '^heartbeat --heartbeat$')"
+
+# --- Case 9: a FAILED hold refreshes the heartbeat too -----------------------
+# hold-node can block on the global landing lock for its full wait and THEN
+# fail; the caller's heartbeat has aged exactly as much either way. Bracketing
+# only the success arm would leave the lock reclaimable on precisely the path
+# that already went wrong.
+echo "Test: reconcile-graph-review-stall — a FAILED ci-stall hold still refreshes the heartbeat"
+rgs_setup c9
+rgs_lock_stub
+rgs_node "$RGS_ROOT/intentions/t-rs1.md" t-rs1 201
+rgs_seal
+touch "$RGS_FIX/hold-node-fail"
+rgs_seed_sidecar deadbee201 7
+c9_out=$(rgs_run)
+assert_eq "review-stall ci-stall: a failed hold prints no held line" \
+  "0" "$(grep -c '^held t-rs1 -> ci-stalled via ' <<<"$c9_out")"
+# hold-node's own stderr is swallowed by the sweep's `2>/dev/null`, so the
+# evidence the failure ARM ran is the sweep's own diagnostic.
+assert_eq "review-stall ci-stall: hold-node really ran and the failure arm was taken" \
+  "1" "$(grep -c 'hold-node --kind ci-pending-stalled failed for t-rs1' "$RGS_FIX/stderr.txt")"
+assert_eq "review-stall ci-stall: a --heartbeat follows the FAILED hold too" \
+  "heartbeat" "$(rgs_last_event)"
+assert_eq "review-stall ci-stall: a failed hold leaves the sidecar for the next sweep" \
+  "deadbee201 8" "$(rgs_sidecar)"
 
 report_results

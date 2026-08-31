@@ -704,6 +704,20 @@ if [[ "${#CI_STALL_IDS[@]}" -gt 0 ]]; then
       # producer and dispatch-graph-execute's ladder take.
       echo "reconcile-graph-review-stall: hold-node --kind ci-pending-stalled failed for $ci_stall_id" >&2
     fi
+    # AFTER the hold, on BOTH arms — the refresh above this block only covers
+    # the walk INTO it. hold-node lands its own graph-commit, which waits up to
+    # LOCK_WAIT_SECONDS (1050s) for the GLOBAL landing lock, far past the
+    # MAX_HOLD_SECONDS (300s) after which dispatch-acquire-lock reclaims a
+    # holder. dispatch-select-tick invokes this sweep while holding its dispatch
+    # lock and then runs hundreds more lines, so without this a contended
+    # landing leaves the tick's lock reclaimable and a second tick double-books
+    # the same candidate set. Every sibling landing brackets the same way —
+    # graph-select-target's _graph_commit_conflict, _hold_node_fix_cap and
+    # _hold_node_ci_pending, and this script's own batched graph-commit above.
+    # The FAILURE arm needs it too: a hold-node that blocked on the landing lock
+    # and then failed has aged the caller's heartbeat exactly as much as one
+    # that succeeded.
+    refresh_lock
     rm -rf "$ci_stall_tmp"
   else
     echo "reconcile-graph-review-stall: mktemp failed for the $ci_stall_id ci-stall hold" >&2

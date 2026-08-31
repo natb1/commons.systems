@@ -1708,15 +1708,40 @@ rm -rf "$GSCC_ROOT" "$GSCC_BARE" "$GSCC_CACHE"
 # gscip_setup <ci-ready-exit> — the interrupt fixture with a MERGEABLE, green
 # PR (so _gate_maybe_interrupt declines and the qa arm's merged check passes)
 # and dispatch-ci-ready pinned to a fixed exit code.
+#
+# The stub prints the SAME stdout word the real script prints on that exit:
+# `ready` on 0, `waiting` on 1. That is not cosmetic — the exit code alone is
+# ambiguous. dispatch-ci-ready runs `set -euo pipefail`, so it ALSO exits 1 when
+# dispatch_ci_verdict_rest's check-runs/check-suites fetch or its jq projection
+# fails, dying before it prints anything; the selector reads the stdout word to
+# tell a real `pending` from that death. A silent exit-1 stub would therefore
+# model the FAILURE case while the case names claim to model pending — see
+# gscip_setup_silent, which models the failure case deliberately.
 gscip_setup() {
   gsc_interrupt_setup
   gsci_candidate qa
   gsci_pr true
   gsci_checks '{"check_runs":[{"status":"completed","conclusion":"success"}]}'
   printf '%s\n' "#!/usr/bin/env bash" > "$GSCI_SCRIPTS/dispatch-ci-ready"
+  case "$1" in
+    0) printf '%s\n' "echo ready" >> "$GSCI_SCRIPTS/dispatch-ci-ready" ;;
+    1) printf '%s\n' "echo waiting" >> "$GSCI_SCRIPTS/dispatch-ci-ready" ;;
+  esac
   printf '%s\n' "exit $1" >> "$GSCI_SCRIPTS/dispatch-ci-ready"
   chmod +x "$GSCI_SCRIPTS/dispatch-ci-ready"
   GSCIP_SIDECAR="$GSCI_ROOT/.claude/worktrees/tactic-fixture.ci-pending-strikes"
+}
+
+# gscip_setup_silent <ci-ready-exit> — the same fixture, but with a
+# dispatch-ci-ready that prints NOTHING before exiting. This is the shape a
+# `set -e` death produces: the fetch/projection failure aborts the script inside
+# the `VERDICT=$(dispatch_ci_verdict_rest ...)` substitution, upstream of the
+# `echo waiting`.
+gscip_setup_silent() {
+  gscip_setup 0
+  printf '%s\n' "#!/usr/bin/env bash" > "$GSCI_SCRIPTS/dispatch-ci-ready"
+  printf '%s\n' "exit $1" >> "$GSCI_SCRIPTS/dispatch-ci-ready"
+  chmod +x "$GSCI_SCRIPTS/dispatch-ci-ready"
 }
 
 # gscip_seed <sha> <count> — pre-seed the sidecar.
@@ -1847,6 +1872,54 @@ assert_eq "graph-select-target ci-pending: a ci-ready candidate is emitted at it
 assert_eq "graph-select-target ci-pending: a concluded verdict clears the sidecar" \
   "gone" "$(gscip_sidecar)"
 assert_eq "graph-select-target ci-pending: a concluded verdict lands no hold" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- Case 7: an UNREADABLE verdict is not a pending observation --------------
+# The fail-open this closes. `dispatch-ci-ready` runs `set -euo pipefail`, and
+# `VERDICT=$(dispatch_ci_verdict_rest "$sha")` exits 1 when the check-runs
+# fetch, a check-suites fetch or a jq projection fails (lib.sh's
+# dispatch_ci_verdict_rest returns 1 on each) — the same exit 1 a genuine
+# `pending` uses. Reading the code alone, a node whose `pulls/{n}` read SUCCEEDS
+# (so the empty-head_sha exemption below does not catch it) but whose check-runs
+# read FAILS accrues a strike every tick and is parked to `office_hours` after
+# eight, under a reason that misstates the cause.
+#
+# Seeded at 7, one below the cap, so a single un-guarded bump would land the
+# hold: the assertion discriminates the guard directly rather than inferring it.
+# The sidecar is asserted LITERALLY so BOTH wrong directions are caught — a
+# failed fetch is not evidence either way, so it must neither count NOR clear,
+# exactly as reconcile-graph-review-stall already treats an empty RAW_VERDICT on
+# the SHARED sidecar.
+echo "Test: graph-select-target — an unreadable CI verdict neither counts a strike nor holds"
+gscip_setup_silent 1
+gscip_seed deadbee 7
+gscip7_out=$(gsci_run)
+assert_eq "graph-select-target ci-pending: an unreadable verdict selects nothing" \
+  "empty" "$gscip7_out"
+assert_eq "graph-select-target ci-pending: an unreadable verdict leaves the sidecar untouched" \
+  "deadbee 7" "$(gscip_sidecar)"
+assert_eq "graph-select-target ci-pending: an unreadable verdict lands no hold at the cap boundary" \
+  "none" "$(gscip_holds)"
+assert_eq "graph-select-target ci-pending: the skip reason names the unreadable verdict, not pending" \
+  "1" "$(grep -q 'ci-verdict-unreadable' "$GSCI_ROOT/seldir/graph-selection.jsonl" && echo 1 || echo 0)"
+assert_eq "graph-select-target ci-pending: an unreadable verdict is NOT logged as a strike" \
+  "0" "$(grep -c 'ci-pending (strike' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+gsc_interrupt_teardown
+
+# --- Case 8: an unreadable verdict does not CLEAR a live ladder either -------
+# The mirror-image failure. Treating the failure as `ready` (rc 0) would clear
+# the sidecar and reset a node that really has been stalled for seven ticks,
+# so one flaky fetch would restart the bound from zero forever. Asserted with a
+# below-cap seed so the surviving count is visible rather than consumed by a
+# hold.
+echo "Test: graph-select-target — an unreadable CI verdict does not clear a live ladder"
+gscip_setup_silent 1
+gscip_seed deadbee 3
+gsci_run >/dev/null
+assert_eq "graph-select-target ci-pending: a live ladder survives an unreadable verdict intact" \
+  "deadbee 3" "$(gscip_sidecar)"
+assert_eq "graph-select-target ci-pending: no hold lands off an unreadable verdict" \
   "none" "$(gscip_holds)"
 gsc_interrupt_teardown
 
