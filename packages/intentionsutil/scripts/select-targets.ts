@@ -85,16 +85,41 @@ const repoRoot = dirname(dirname(dirname(scriptDir)));
  * The caller decides what to do about the throw. `graph-select-target` deletes
  * the offending entry and re-runs the full archive path exactly once.
  */
+/**
+ * Raised ONLY for "the --nodes-json payload is unusable". It exists so the
+ * caller can tell that apart from every other way this script can fail: the
+ * wrapper's response to an unusable payload is to DELETE the cache entry, and
+ * doing that on an unrelated selector failure destroys a perfectly good entry
+ * and misreports the cause. See the exit-3 mapping at the bottom of this file.
+ */
+class NodesJsonError extends Error {}
+
 function readNodesJson(path: string): IntentionNode[] {
-  const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch (err) {
+    // A truncated or unreadable entry is a payload problem, not a selector one.
+    throw new NodesJsonError(
+      `select-targets: --nodes-json ${path} could not be read as JSON: ${String(err)}`,
+    );
+  }
   if (!Array.isArray(parsed)) {
-    throw new Error(`select-targets: --nodes-json ${path} is not a JSON array`);
+    throw new NodesJsonError(`select-targets: --nodes-json ${path} is not a JSON array`);
   }
   const items: unknown[] = parsed;
   if (items.length === 0) {
-    throw new Error(`select-targets: --nodes-json ${path} is an empty array`);
+    throw new NodesJsonError(`select-targets: --nodes-json ${path} is an empty array`);
   }
-  return items.map((item) => validateNode(item));
+  try {
+    return items.map((item) => validateNode(item));
+  } catch (err) {
+    // validateNode's own message is preserved; only the CLASS changes, so the
+    // wrapper can route it while the operator still reads the real reason.
+    throw new NodesJsonError(
+      `select-targets: --nodes-json ${path} holds an invalid node: ${String(err)}`,
+    );
+  }
 }
 
 /**
@@ -187,5 +212,18 @@ function main(argv: string[]): void {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv.slice(2));
+  try {
+    main(process.argv.slice(2));
+  } catch (err) {
+    // Exit 3 means EXACTLY "the --nodes-json payload was unusable" — the one
+    // failure a caller may answer by discarding its cache entry. Every other
+    // failure keeps the default non-zero exit, so a selectGraphTargets throw, a
+    // missing node_modules, or a tsx startup failure is never reported to an
+    // operator as a corrupt cache.
+    if (err instanceof NodesJsonError) {
+      process.stderr.write(`${err.message}\n`);
+      process.exit(3);
+    }
+    throw err;
+  }
 }

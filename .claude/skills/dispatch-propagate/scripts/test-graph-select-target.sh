@@ -1397,6 +1397,7 @@ cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh
 # live. SCRIPT_DIR is scripts -> dispatch-propagate -> skills -> .claude -> root.
 GSCC_REPO="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 GSCC_REAL_GIT="$(command -v git)"
+GSCC_REAL_NPX="$(command -v npx)"
 
 # Forward `npx tsx <relative-script> ARGS…` to the real select-targets.ts. The
 # `cd` is required: `node --import tsx/esm` resolves the tsx loader from cwd,
@@ -1625,6 +1626,57 @@ echo "Test: graph-select-target — a valid-JSON invalid-node entry degrades to 
 gscc_expect_degrades "an invalid-node entry" '[{"id":5}]'
 echo "Test: graph-select-target — an empty-array entry is refused, not read as 'no candidates'"
 gscc_expect_degrades "an empty-array entry" '[]'
+
+# --- Case 8: a SELECTOR failure is not a cache failure ----------------------
+# Cases 5-7 cover the three unusable PAYLOADS, all of which exit 3. This is the
+# other half of that contract: any other non-zero exit must NOT be read as a
+# corrupt entry. Before the exit-code split, `select-targets.ts failed` for any
+# reason at all — a selectGraphTargets throw, a missing node_modules, a tsx
+# startup failure — deleted a perfectly good entry, re-ran the selector over the
+# same nodes, republished the identical array, failed anyway, and left the
+# operator a single line blaming the cache.
+#
+# The shim fails ONLY the --nodes-json invocation, so it targets the hit path
+# precisely and leaves the archive path's own selector call alone.
+echo "Test: graph-select-target — a selector failure keeps the entry and blames the selector"
+# Case 7 left a rewritten, usable entry (it asserts that itself). Case 8
+# deliberately does NOT re-warm: a re-warm runs the wrapper, so a wrapper
+# regression would destroy the entry before the assertions below could
+# observe it, and the failure would surface as a broken precondition
+# instead of as the defect it is.
+gscc_good_entry="$GSCC_CACHE/nodes-tree-$GSCC_TREE2.json"
+assert_eq "graph-select-target cache: the selector-failure case starts from a real entry" "1" \
+  "$([ -s "$gscc_good_entry" ] && echo 1 || echo 0)"
+gscc_good_bytes=$(cat "$gscc_good_entry")
+cat > "$GSCC_ROOT/bin/npx" <<GSCCSEL2
+#!/usr/bin/env bash
+for _a in "\$@"; do
+  if [ "\$_a" = "--nodes-json" ]; then
+    echo "stub npx: simulated selector failure (not a payload problem)" >&2
+    exit 9
+  fi
+done
+exec "$GSCC_REAL_NPX" "\$@"
+GSCCSEL2
+chmod +x "$GSCC_ROOT/bin/npx"
+gscc_sel_rc=0
+PATH="$GSCC_ROOT/bin:$SAVED_PATH" \
+  CLAUDE_AGENTS_CMD="$GSCC_ROOT/bin/claude" \
+  CLAUDE_AGENTS_PGREP_CMD="$GSCC_ROOT/bin/pgrep-daemon-visible" \
+  DISPATCH_RESERVATION_DIR="$GSCC_ROOT/reservations" \
+  DISPATCH_SELECTION_LOG_DIR="$GSCC_ROOT/seldir" \
+  DISPATCH_GRAPH_NODE_CACHE="$GSCC_CACHE" \
+  "$GSCC_SCRIPTS/graph-select-target" --top 1 >/dev/null 2>"$GSCC_ROOT/sel-err.log" || gscc_sel_rc=$?
+rm -f "$GSCC_ROOT/bin/npx"
+assert_eq "graph-select-target cache: a selector failure exits non-zero" "1" \
+  "$([ "$gscc_sel_rc" -ne 0 ] && echo 1 || echo 0)"
+# The operative assertion: the entry SURVIVES. Deleting it is the bug.
+assert_eq "graph-select-target cache: a selector failure does NOT delete the entry" \
+  "$gscc_good_bytes" "$(cat "$gscc_good_entry" 2>/dev/null)"
+assert_eq "graph-select-target cache: the message does NOT blame the cache" "no" \
+  "$(case "$(cat "$GSCC_ROOT/sel-err.log")" in *unusable*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "graph-select-target cache: the message names the selector" "yes" \
+  "$(case "$(cat "$GSCC_ROOT/sel-err.log")" in *"SELECTOR failure"*) printf 'yes' ;; *) printf 'no' ;; esac)"
 
 rm -rf "$GSCC_ROOT" "$GSCC_BARE" "$GSCC_CACHE"
 

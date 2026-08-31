@@ -527,6 +527,14 @@ SNAPSHOT_DIR=$(mktemp -d) || { echo "graph-select-target: mktemp failed" >&2; ex
 # A corrupt or unusable entry degrades to a fresh STRICT enumeration — never to a
 # partial set, never to the tolerant reader, never to a silent `empty`. The entry
 # is deleted and the full archive path runs ONCE; there is no retry loop.
+#
+# "Unusable" is decided by an EXIT CODE, not by "the selector exited non-zero".
+# select-targets.ts exits 3 for exactly one reason: the --nodes-json payload
+# could not be read as a node array. Any other non-zero exit is a SELECTOR
+# failure, and answering that by deleting the entry destroys a valid cache, runs
+# the selector twice over identical nodes, republishes the identical array, fails
+# anyway, and prints one operator-visible line blaming the cache for a fault in
+# the router.
 CACHE_DIR="${DISPATCH_GRAPH_NODE_CACHE:-}"
 SNAPSHOT_ENTRY=""
 # Initialized unconditionally: the archive below reads it, and `set -u` is on.
@@ -547,13 +555,24 @@ if [[ -n "$SNAPSHOT_ENTRY" && -f "$SNAPSHOT_ENTRY" ]]; then
   # still created above because it also hosts the conflict-commit-budget counter
   # (see CONFLICT_BUDGET_FILE below); mktemp is under a millisecond, and the 75 ms
   # this skips is the archive and the extraction, not the directory.
-  if SELECTION=$(cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/select-targets.ts \
-    --nodes-json "$SNAPSHOT_ENTRY"); then
+  _sel_rc=0
+  SELECTION=$(cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/select-targets.ts \
+    --nodes-json "$SNAPSHOT_ENTRY") || _sel_rc=$?
+  if (( _sel_rc == 0 )); then
     SELECTION_DONE=1
-  else
+  elif (( _sel_rc == 3 )); then
+    # 3 is select-targets.ts's ONLY "this payload is unusable" code. Deleting the
+    # entry is the correct answer to that, and to nothing else.
     echo "graph-select-target: cache entry $SNAPSHOT_ENTRY unusable, re-snapshotting" >&2
     rm -f "$SNAPSHOT_ENTRY"
     SELECTION=""
+  else
+    # A SELECTOR failure. Deleting the entry here would destroy a valid cache,
+    # run the selector a second time over the same nodes, republish the identical
+    # array, fail again anyway — and leave the operator one visible line blaming
+    # the cache for a fault in the router. Keep the entry; report the real cause.
+    echo "graph-select-target: select-targets.ts failed (exit $_sel_rc) reading $SNAPSHOT_ENTRY — this is a SELECTOR failure, not a cache problem; the entry is kept" >&2
+    exit 2
   fi
 fi
 
