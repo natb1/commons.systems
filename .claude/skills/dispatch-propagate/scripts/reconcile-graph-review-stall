@@ -518,7 +518,7 @@ while IFS=$'\t' read -r id pr; do
       RESTORE_ON_FAILURE=1
       if ! node --import tsx/esm "$UTIL_SCRIPTS/apply-fix-state.ts" "$id" --set-fix --dir "$REPO_ROOT/intentions" >/dev/null; then
         echo "reconcile-graph-review-stall: apply-fix-state --set-fix failed for $id (write rolled back)" >&2
-        git -C "$REPO_ROOT" checkout -- "intentions/$id.md" || true
+        git -C "$REPO_ROOT" checkout HEAD -- "intentions/$id.md" || true
         continue
       fi
       RECOVERED_IDS+=("$id")

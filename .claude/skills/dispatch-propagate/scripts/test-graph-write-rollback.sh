@@ -2176,6 +2176,237 @@ else
 fi
 
 # ===========================================================================
+# Case 9L: THE ROLLBACK MUST RESTORE FROM HEAD, NOT FROM THE INDEX.
+#
+# graph-commit `git add`s every node file BEFORE assert_staged_safe and
+# `git commit`, and its cleanup() never unstages. So a die anywhere between the
+# add and a successful commit — a missing git identity, a .githooks pre-commit
+# refusal, the staged-set guard — leaves the MUTATION in the index with HEAD
+# still clean. A bare `git checkout -- <path>` restores from the index, so it
+# would copy the mutated bytes back, exit 0, and print "rolled the node write(s)
+# back to HEAD" plus "not left dirty" — while the staged leak still bricks
+# assert_clean_outside_ids for every other writer in the shared checkout. That
+# is the claim-outruns-evidence class the rest of this file exists to remove,
+# reintroduced by one missing word.
+#
+# HEAD never moves here, so the sweep falls through to the terminal restore —
+# the plain success path, not a refusal. `git checkout HEAD -- <path>` resets
+# BOTH index and working tree to HEAD, which is what makes `status --porcelain`
+# empty; the bare form leaves the staged `M ` behind. That single assertion is
+# what separates the two spellings.
+# ===========================================================================
+T9L="$WORK/t9l-seed"
+build_seed_repo "$T9L"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9L/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9L/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T9L/intentions/t-strand.md" t-strand 909
+new_origin t9l
+init_and_push "$T9L"
+
+C9L="$WORK/t9l-clone"
+clone_with_node_modules "$C9L"
+BIN9L="$WORK/t9l-bin"; FIX9L="$WORK/t9l-fixtures"
+reconcile_gh_stub "$BIN9L" "$FIX9L"
+# The stub stages and then dies WITHOUT committing — graph-commit's real
+# behaviour on any failure between commit_files()'s `git add` and `git commit`.
+cat >"$C9L/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""; ids=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m|--base) shift 2 ;;
+    *) ids+=("$1"); shift ;;
+  esac
+done
+cd "$dir" || exit 2
+for id in "${ids[@]}"; do
+  git add -- "intentions/$id.md"
+done
+echo "error: graph-commit: *** Please tell me who you are. unable to auto-detect email address" >&2
+exit 1
+SH
+chmod +x "$C9L/packages/intentionsutil/scripts/graph-commit"
+
+head9l_before="$(git -C "$C9L" rev-parse HEAD)"
+node9l_head="$(git -C "$C9L" show HEAD:intentions/t-strand.md)"
+out="$(
+  cd "$C9L" || exit 99
+  export PATH="$BIN9L:$PATH" GC_FIXTURE_DIR="$FIX9L"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+head9l_after="$(git -C "$C9L" rev-parse HEAD)"
+status9l="$(git -C "$C9L" status --porcelain intentions/)"
+node9l_after="$(cat "$C9L/intentions/t-strand.md")"
+if [[ $rc -ne 0 ]] \
+   && [[ "$head9l_after" == "$head9l_before" ]] \
+   && [[ -z "$status9l" ]] \
+   && [[ "$node9l_after" == "$node9l_head" ]] \
+   && grep -q 'rolled the node write' <<<"$out"; then
+  ok "graph write rollback restores from HEAD, not the index: a graph-commit that STAGED the mutation and then died before committing leaves no staged leak — the working tree AND the index are both back at HEAD, so the success claim is true"
+else
+  no "graph write rollback must use 'checkout HEAD --': a bare 'checkout --' restores the STAGED mutation and still claims a clean rollback (rc=$rc, status='$status9l', head moved: $([[ "$head9l_after" == "$head9l_before" ]] && echo no || echo yes))"
+  printf '%s\n' "$out"
+  printf 'node after:\n%s\n' "$node9l_after"
+fi
+
+# ===========================================================================
+# Case 9M: A TORN REWIND MUST NOT BE REPORTED AS A REFUSED ONE.
+#
+# _graph_restore_paths_to_rev runs `reset --mixed <head_at_arm>` FIRST and then
+# restores each touched path off the resulting index. If a per-path restore
+# then fails, HEAD is already rewound and the commits are already gone — but
+# the caller used to fall through to the same message as the pre-reset gate
+# refusal: "they are NOT safely discardable — the write was NOT rolled back.
+# Drop them by hand". Acting on that instruction after a torn rewind would
+# discard whatever is on HEAD *now*, which is the operator's own good state.
+# The two cases need opposite remedies, so they need distinct rcs (1 vs 2) and
+# distinct messages.
+#
+# Forcing the tear: the stub's commit CREATES intentions/t-created.md, a path
+# head_at_arm does not have, so the restore loop takes the `rm -f` branch for
+# it. Replacing that working-tree slot with a directory makes `rm -f` fail.
+# ===========================================================================
+T9M="$WORK/t9m-seed"
+build_seed_repo "$T9M"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9M/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9M/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T9M/intentions/t-strand.md" t-strand 909
+new_origin t9m
+init_and_push "$T9M"
+
+C9M="$WORK/t9m-clone"
+clone_with_node_modules "$C9M"
+BIN9M="$WORK/t9m-bin"; FIX9M="$WORK/t9m-fixtures"
+reconcile_gh_stub "$BIN9M" "$FIX9M"
+cat >"$C9M/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""; ids=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m|--base) shift 2 ;;
+    *) ids+=("$1"); shift ;;
+  esac
+done
+cd "$dir" || exit 2
+for id in "${ids[@]}"; do
+  git add -- "intentions/$id.md"
+done
+printf '%s\n' 'a node this commit CREATES, which head_at_arm does not have' >"intentions/t-created.md"
+git add -- "intentions/t-created.md"
+git commit -qm "graph: reconcile terminal tactics (record completion)
+
+Graph-Writer: ${GRAPH_WRITER:-graph-commit}"
+# Make the per-path `rm -f` fail, so the rewind tears AFTER reset --mixed has
+# already moved HEAD.
+rm -f -- "intentions/t-created.md"
+mkdir -p -- "intentions/t-created.md"
+echo "error: graph-commit: could not land ${ids[*]} — main advanced through every push attempt" >&2
+exit 1
+SH
+chmod +x "$C9M/packages/intentionsutil/scripts/graph-commit"
+
+head9m_before="$(git -C "$C9M" rev-parse HEAD)"
+out="$(
+  cd "$C9M" || exit 99
+  export PATH="$BIN9M:$PATH" GC_FIXTURE_DIR="$FIX9M"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+head9m_after="$(git -C "$C9M" rev-parse HEAD)"
+if [[ $rc -ne 0 ]] \
+   && [[ "$head9m_after" == "$head9m_before" ]] \
+   && grep -q 'HALF-DONE' <<<"$out" \
+   && grep -q 'ALREADY GONE' <<<"$out" \
+   && grep -q 'Do NOT drop the commit(s) by hand' <<<"$out" \
+   && ! grep -q 'the write was NOT rolled back' <<<"$out" \
+   && ! grep -q 'discarded by moving HEAD back to' <<<"$out"; then
+  ok "graph write rollback torn-rewind report: when reset --mixed SUCCEEDED and a per-path restore then failed, the operator is told the commits are ALREADY GONE and not to drop them by hand — the opposite remedy from the pre-reset gate refusal"
+else
+  no "graph write rollback must not report a TORN rewind as a REFUSED one — 'drop them by hand' after HEAD already moved discards the operator's good state (rc=$rc, head moved back: $([[ "$head9m_after" == "$head9m_before" ]] && echo yes || echo no))"
+  printf '%s\n' "$out"
+fi
+
+# ===========================================================================
+# Case 9N: THE DISCARD ARM OWES A CLAIM ON ITS FAILURE PATH TOO.
+#
+# _graph_restore_and_claim's contract is "EVERY exit from
+# graph_rollback_node_writes owes this, the refusals included". The discard arm
+# was the one exit that skipped it. That is right on the discard's SUCCESS path
+# — the rewind already restored the paths it touched — but wrong on its failure
+# path, where the discard either refused before touching anything or tore
+# part-way. Neither restores THIS writer's own pinned ids, so any of them left
+# dirty above the stranded commit stays dirty, unclaimed, and bricks
+# assert_clean_outside_ids for every other writer in the shared checkout.
+#
+# Forcing the refusal: the stub's commit touches a path outside intentions/,
+# which the discard's shape gate rejects (unsafe=1). The node file is then
+# re-dirtied above that commit, standing in for a retry leg that wrote merged
+# content back before dying — case 9K's residue, at the one arm 9K does not
+# reach.
+# ===========================================================================
+T9N="$WORK/t9n-seed"
+build_seed_repo "$T9N"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9N/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9N/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T9N/intentions/t-strand.md" t-strand 909
+new_origin t9n
+init_and_push "$T9N"
+
+C9N="$WORK/t9n-clone"
+clone_with_node_modules "$C9N"
+BIN9N="$WORK/t9n-bin"; FIX9N="$WORK/t9n-fixtures"
+reconcile_gh_stub "$BIN9N" "$FIX9N"
+cat >"$C9N/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""; ids=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m|--base) shift 2 ;;
+    *) ids+=("$1"); shift ;;
+  esac
+done
+cd "$dir" || exit 2
+for id in "${ids[@]}"; do
+  git add -- "intentions/$id.md"
+done
+printf '%s\n' 'residue outside intentions/' >"NOTES-stray.md"
+git add -- "NOTES-stray.md"
+git commit -qm "graph: reconcile terminal tactics (record completion)
+
+Graph-Writer: ${GRAPH_WRITER:-graph-commit}"
+for id in "${ids[@]}"; do
+  printf '%s\n' 'retry-leg residue' >>"intentions/$id.md"
+done
+echo "error: graph-commit: could not land ${ids[*]} — main advanced through every push attempt" >&2
+exit 1
+SH
+chmod +x "$C9N/packages/intentionsutil/scripts/graph-commit"
+
+out="$(
+  cd "$C9N" || exit 99
+  export PATH="$BIN9N:$PATH" GC_FIXTURE_DIR="$FIX9N"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+status9n="$(git -C "$C9N" status --porcelain intentions/)"
+if [[ $rc -ne 0 ]] \
+   && grep -q 'they are NOT safely discardable' <<<"$out" \
+   && grep -q 'WERE restored to HEAD' <<<"$out" \
+   && [[ -z "$status9n" ]]; then
+  ok "graph write rollback discard-arm claim: when the discard REFUSES, this writer's own dirty node file is still restored and claimed — the 'EVERY exit owes a claim' contract holds at the one arm that used to skip it"
+else
+  no "graph write rollback discard-arm must restore and claim on its FAILURE path — a refused discard restores nothing, so an id left dirty above the stranded commit stays dirty and unclaimed (rc=$rc, status='$status9n')"
+  printf '%s\n' "$out"
+fi
+
+# ===========================================================================
 # Case 9i: THE ZERO-WRITE CLAIM GUARD SURVIVES PLAN DRIFT.
 #
 # reconcile-graph-merged's empty-plan exit relies on the shared rollback's

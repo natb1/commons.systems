@@ -167,7 +167,18 @@ _graph_commit_writer() {
 }
 
 # _graph_restore_ids_to_head <repo-root> <label> <id>... — bring each of THIS
-# writer's own node files back to HEAD's content. Non-destructive to every
+# writer's own node files back to HEAD's content.
+#
+# `checkout HEAD --`, never a bare `checkout --`. A bare `checkout -- <path>`
+# restores from the INDEX, and graph-commit `git add`s each node file before
+# `assert_staged_safe` and `git commit`, and its `cleanup()` never unstages. So
+# on any die between the add and a successful commit — a missing git identity,
+# a `.githooks` pre-commit refusal, the staged-set guard — the index holds the
+# MUTATION, and the bare form copies those bytes back and reports success. The
+# leak then bricks `assert_clean_outside_ids` for every other writer in the
+# shared checkout, while this function's own claim says the tree is clean: the
+# exact claim-outruns-evidence failure the rest of this file exists to remove.
+# `HEAD` names the source explicitly and is immune to what is staged. Non-destructive to every
 # peer: it touches only the ids this writer pinned, moves no commit, and
 # writes no path outside intentions/<id>.md. rc 1 when any restore failed.
 _graph_restore_ids_to_head() {
@@ -175,7 +186,7 @@ _graph_restore_ids_to_head() {
   shift 2
   local sid rc=0
   for sid in "$@"; do
-    git -C "$repo_root" checkout -- "intentions/$sid.md" || {
+    git -C "$repo_root" checkout HEAD -- "intentions/$sid.md" || {
       echo "$label: rollback could not restore intentions/$sid.md to HEAD" >&2
       rc=1
     }
@@ -367,14 +378,22 @@ graph_rollback_node_writes() {
         echo "$label: HEAD carries this writer's un-landed commit(s) (${mine[0]:0:8}) BELOW or beside an unpushed graph-commit park commit (${parks[0]:0:8}) — rewinding to ${head_at_arm:0:8} would erase a park record a human still needs whoever made it, so NOTHING was discarded and this writer's commit(s) are LEFT on HEAD. $_GRAPH_RESTORE_CLAIM Drop this writer's commit(s) by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
         return 1
       fi
-      # The discard leg restores the paths its own rewind touched, so the
-      # terminal `checkout --` below must not run and must not be claimed for
-      # it. The two refusals above are NOT in that position: they restore
-      # first (see _graph_restore_and_claim) and return, because refusing the
-      # rewind is not a reason to leave this writer's own file dirty for every
-      # other writer in the checkout.
-      _graph_discard_stranded_commits "$repo_root" "$head_at_arm" "$label" "${mine[@]}"
-      return $?
+      # On SUCCESS the discard leg has already restored the paths its own
+      # rewind touched, so the terminal `checkout HEAD --` below must not run
+      # and must not be claimed for it. On FAILURE it has not: it either
+      # refused before touching anything, or tore part-way. Neither of those
+      # restores this writer's own ids, so the "EVERY exit owes a claim"
+      # contract applies to the failure path exactly as it does to the two
+      # refusals above — which restore first and then return, because refusing
+      # the rewind is not a reason to leave this writer's own file dirty for
+      # every other writer in the checkout.
+      local discard_rc=0
+      _graph_discard_stranded_commits "$repo_root" "$head_at_arm" "$label" "${mine[@]}" || discard_rc=$?
+      if [[ "$discard_rc" -ne 0 ]]; then
+        _graph_restore_and_claim "$repo_root" "$label" "${ids[@]}"
+        echo "$label: $_GRAPH_RESTORE_CLAIM" >&2
+      fi
+      return $discard_rc
     fi
     # Nothing above <head-at-arm> is ours. Everything there is KEPT, and the
     # per-id `checkout --` below restores only our own node files to HEAD — it
@@ -454,9 +473,21 @@ _graph_discard_stranded_commits() {
       [[ "$seen" -eq 1 ]] || touched+=("$path")
     done <<<"$files"
   done
-  if [[ "$unsafe" -eq 0 ]] && _graph_restore_paths_to_rev "$repo_root" "$head_at_arm" "${touched[@]}"; then
-    echo "$label: graph-commit committed but never landed ${#stranded[@]} commit(s) (${stranded[0]:0:8}) — discarded by moving HEAD back to ${head_at_arm:0:8} and restoring only the ${#touched[@]} intentions/ path(s) they touched; NOTHING was written to main, and no unrelated working-tree file was touched" >&2
-    return 0
+  local restore_rc=0
+  if [[ "$unsafe" -eq 0 ]]; then
+    _graph_restore_paths_to_rev "$repo_root" "$head_at_arm" "${touched[@]}" || restore_rc=$?
+    if [[ "$restore_rc" -eq 0 ]]; then
+      echo "$label: graph-commit committed but never landed ${#stranded[@]} commit(s) (${stranded[0]:0:8}) — discarded by moving HEAD back to ${head_at_arm:0:8} and restoring only the ${#touched[@]} intentions/ path(s) they touched; NOTHING was written to main, and no unrelated working-tree file was touched" >&2
+      return 0
+    fi
+  fi
+  # rc 2 means the rewind is HALF-DONE. Telling the operator to "drop the
+  # commits by hand" here would be false in the most damaging direction: the
+  # commits are already gone, and acting on that instruction would drop
+  # whatever now sits on HEAD instead.
+  if [[ "$restore_rc" -eq 2 ]]; then
+    echo "$label: graph-commit left un-landed commit(s) (${stranded[0]}) and the rollback is HALF-DONE. HEAD was ALREADY moved back to ${head_at_arm:0:8} and those commit(s) are ALREADY GONE, but restoring the ${#touched[@]} intentions/ path(s) they touched FAILED, so those paths still hold the discarded content. Do NOT drop the commit(s) by hand — that would discard whatever is on HEAD now. Restore those paths to ${head_at_arm:0:8} by hand instead, before any other graph-commit runs from this checkout" >&2
+    return 1
   fi
   echo "$label: graph-commit left un-landed commit(s) on HEAD (${stranded[0]}) that never passed check_base_freshness, and they are NOT safely discardable — the write was NOT rolled back. Drop them by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
   return 1
@@ -464,6 +495,13 @@ _graph_discard_stranded_commits() {
 
 # Move the recorded state back to <rev> and bring exactly <path>... to <rev>'s
 # content, leaving every other working-tree file exactly as found.
+#
+# rc contract: 0 = done; 1 = the `reset --mixed` itself failed, so NOTHING moved
+# and HEAD still carries the commits; 2 = the reset SUCCEEDED and a per-path
+# restore then failed, so HEAD is already rewound, the commits are already gone,
+# and only the paths are left holding discarded content. Callers must not
+# collapse 1 and 2 into one message — the operator remedy is opposite in each
+# case (drop the commits by hand vs. do NOT, they are already dropped).
 #
 # `--mixed` rather than `--hard`: it rewinds HEAD and the index and stops there,
 # so no file outside <path>... is read or written. The per-path restore then
@@ -482,9 +520,9 @@ _graph_restore_paths_to_rev() {
   git -C "$repo_root" reset -q --mixed "$rev" || return 1
   for path in "$@"; do
     if git -C "$repo_root" cat-file -e "$rev:$path" 2>/dev/null; then
-      git -C "$repo_root" checkout -q -- "$path" || return 1
+      git -C "$repo_root" checkout -q -- "$path" || return 2
     else
-      rm -f -- "$repo_root/$path" || return 1
+      rm -f -- "$repo_root/$path" || return 2
     fi
   done
   return 0
