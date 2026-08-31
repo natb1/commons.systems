@@ -180,8 +180,24 @@ STAMP_PATH="$PROJECT_ROOT/.claude/worktrees/$NODE_ID.scope-fingerprint"
 # This site deliberately stays on `npx tsx` rather than the `node --import
 # tsx/esm` spelling used everywhere else: test-provision-node-worktree.sh
 # intercepts the gate with a `$BIN_DIR/npx` shim keyed on that exact argv
-# shape, so re-spelling it here silently disarms the test's only hook into
-# the selection gate. Convert the shim and this line together, not apart.
+# shape. Shim and call site are a matched pair -- convert them in the same
+# commit, never apart.
+#
+# Measured 2026-08-31: converting this line alone does NOT fail silently, and
+# an earlier revision of this comment was wrong to say it did. The fixture
+# root is a mktemp dir carrying neither `tsx` nor the real `.ts` files, so a
+# converted call cannot fall through to anything -- it dies at module
+# resolution, and the gate's own `rc != 0` arm below turns that into a hard
+# refusal. The suite goes 57/57 -> rc=128, with `FAIL: case1 exit 11`,
+# `FAIL: case2 exit 14`, `FAIL: case3 exit 0 after auto-repair`.
+#
+# That mechanism is structural and holds at every one of the eleven excluded
+# sites, so the exclusion set is a coherent category -- "matched pair" -- with
+# an incorrect recorded justification, not an undetectable trap. What does
+# argue for deferring the remaining conversions is coverage, not silence: of
+# the five suites pinning these sites, only this one and
+# test-dispatch-terminal-gap-audit.sh run in CI. For the other eight sites the
+# loud failure appears only when someone runs the suite by hand.
 GATE_FP=$(cd "$PROJECT_ROOT" && npx tsx packages/intentionsutil/scripts/check-node-selection.ts \
   "$NODE_ID" "$SELECTED_PHASE" --dir "$PROJECT_ROOT/intentions" --stamp "$STAMP_PATH")
 GATE_RC=$?
