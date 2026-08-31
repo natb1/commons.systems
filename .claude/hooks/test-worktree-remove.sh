@@ -164,6 +164,57 @@ worktree $WT"
   export STUB_CLAUDE_RC=0
 }
 
+# setup_root_symlinked_wt — same fixture shape as setup_root, except
+# `.claude/worktrees` is a SYMLINK to a directory that lives entirely outside
+# $ROOT. Regression fixture for the WORKTREES_ROOT/CANON symlink-resolution
+# mismatch: CANON is always realpath-resolved (`realpath -m "$TARGET"`), so a
+# WORKTREES_ROOT left unresolved diverges from it the moment `.claude/worktrees`
+# is (or sits under) a symlink — the containment `case "$CANON/" in
+# "$WORKTREES_ROOT"/*)` guard and the `!= "$WORKTREES_ROOT/main"` guard both
+# compare a resolved path against an unresolved one and misfire "not under
+# $WORKTREES_ROOT", refusing a perfectly legitimate removal.
+setup_root_symlinked_wt() {
+  TMPDIR="$ORIG_TMPDIR"
+  ROOT=$(realpath "$(mktemp -d)")
+  export TMPDIR="$ROOT"
+
+  BRANCH="42-foo"
+  # The REAL worktrees directory lives OUTSIDE $ROOT; .claude/worktrees is only
+  # a symlink pointing at it.
+  REAL_WT_DIR=$(realpath "$(mktemp -d)")
+  mkdir -p "$ROOT/.git/worktrees/$BRANCH" "$REAL_WT_DIR/main" "$REAL_WT_DIR/$BRANCH"
+  mkdir -p "$ROOT/.claude"
+  ln -s "$REAL_WT_DIR" "$ROOT/.claude/worktrees"
+
+  # WT is the path a caller would use — via the symlinked worktrees root, since
+  # that's the path worktree-create.sh and the WorktreeRemove payload both use.
+  WT="$ROOT/.claude/worktrees/$BRANCH"
+  printf 'gitdir: %s\n' "$ROOT/.git/worktrees/$BRANCH" >"$REAL_WT_DIR/$BRANCH/.git"
+
+  REMOVED_LOG="$ROOT/removed.log"
+  HOOK_LOG="$ROOT/tmp/worktree-remove.log"
+
+  export STUB_GIT_COMMON_DIR="$ROOT/.git"
+  export STUB_REVPARSE_RC=0
+  # Registered via the symlinked form, exactly like the real worktree_path
+  # payload — the registration check already realpath-resolves both sides, so
+  # this alone was never the defect; it is the containment `case` afterward.
+  export STUB_WT_LIST="worktree $ROOT/.claude/worktrees/main
+worktree $WT"
+  export STUB_STATUS=""
+  export STUB_STATUS_RC=0
+  export STUB_REVLIST="0"
+  export STUB_REVLIST_RC=0
+  export STUB_REMOVE_RC=0
+  export STUB_REMOVED_LOG="$REMOVED_LOG"
+  export STUB_POST_STATUS=""
+  export STUB_POST_STATUS_RC=0
+  unset STUB_REMOVE_TEARS
+  unset STUB_TEAR_TARGET
+  export STUB_CLAUDE_JSON="[]"
+  export STUB_CLAUDE_RC=0
+}
+
 # run_hook <payload> [cwd] — feed the payload on stdin, capture the exit code.
 run_hook() {
   local payload="$1" cwd="${2:-$ROOT}"
@@ -490,6 +541,42 @@ run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
 assert_exit0        "refused: intact checkout -> exit 0"
 assert_log          "refused: intact checkout -> kept" "git worktree remove failed"
 assert_path_present "refused: intact checkout -> checkout NOT deleted" "$WT"
+
+# --- Symlinked worktrees root: containment must still match -----------------
+# Before the fix, CANON resolved through the .claude/worktrees symlink to
+# $REAL_WT_DIR/$BRANCH while WORKTREES_ROOT stayed as the unresolved
+# $ROOT/.claude/worktrees, so the containment `case` refused a target that was
+# genuinely inside the worktrees root — an in-sync, unoccupied worktree that
+# should have been removed was silently kept instead, logged as "not under".
+
+setup_root_symlinked_wt
+run_hook "$(jq -nc --arg p "$WT" '{worktree_path: $p}')"
+assert_exit0          "symlinked worktrees root: exit 0"
+assert_remove_called  "symlinked worktrees root: git worktree remove called (containment matched through the symlink)"
+assert_log            "symlinked worktrees root: log shows IN SYNC" "IN SYNC: removing"
+_symlink_refused=absent
+grep -qF "not under" "$HOOK_LOG" 2>/dev/null && _symlink_refused=present
+TOTAL=$((TOTAL + 1))
+if [ "$_symlink_refused" = "absent" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL: symlinked worktrees root: containment guard misfired (\"not under\" in log)"
+  sed 's/^/    /' "$HOOK_LOG"
+fi
+
+# The main-worktree guard must ALSO resolve both sides: a symlinked worktrees
+# root's own `main` entry, addressed via the symlink, must still be recognized
+# as main and refused — not because containment fails (it would still be
+# "under" the unresolved WORKTREES_ROOT string, coincidentally, since it's the
+# same prefix), but because `$CANON != "$WORKTREES_ROOT/main"` needs
+# WORKTREES_ROOT resolved to compare correctly against a fully-resolved CANON
+# in general. Exercised directly against the symlinked main path.
+setup_root_symlinked_wt
+run_hook "$(jq -nc --arg p "$ROOT/.claude/worktrees/main" '{worktree_path: $p}')"
+assert_exit0          "symlinked worktrees root, main target: exit 0"
+assert_remove_not_called "symlinked worktrees root, main target: git worktree remove NOT called"
+assert_log             "symlinked worktrees root, main target: log shows refusal" "is main"
 
 # --- Summary ----------------------------------------------------------------
 

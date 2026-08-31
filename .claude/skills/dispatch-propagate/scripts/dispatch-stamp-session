@@ -2,8 +2,32 @@
 # dispatch-stamp-session — write/backfill a per-session GitHub-artifact sidecar.
 #
 # Usage:
-#   dispatch-stamp-session --session-id <id> --transcript-path <path>   (Mode A)
-#   dispatch-stamp-session --backfill-pr <N>                            (Mode B)
+#   dispatch-stamp-session --session-id <id> --transcript-path <path> \
+#                          [--repo-dir <path>] [--only-if-absent]      (Mode A)
+#   dispatch-stamp-session --backfill-pr <N>                           (Mode B)
+#
+# --repo-dir <path>  The working tree every git read is taken against
+#                    (`git -C <path> ...`). Empty/absent keeps the legacy
+#                    behaviour of reading ambient cwd, so existing callers are
+#                    unchanged. It exists because A HOOK PROCESS DOES NOT
+#                    NECESSARILY RUN IN THE SESSION'S OWN WORKING TREE: measured
+#                    2026-08-18, a detached `claude --bg` worker born in its own
+#                    worktree ran its SessionStart hook with cwd = the MAIN
+#                    checkout (on `main`), so the worker-branch gate below
+#                    correctly no-opped and four days of workers were born
+#                    unstamped. The sidecar's PATH comes from --transcript-path
+#                    while its CONTENT came from ambient cwd, so the same
+#                    mismatch could also mint a sidecar carrying ANOTHER
+#                    session's node_id. Callers now supply the tree explicitly.
+#                    A supplied path that is not a directory is a caller bug,
+#                    not something to fall back from -> exit 2.
+# --only-if-absent   Mode A only. If the resolved sidecar already exists, exit 0
+#                    immediately without deriving anything -- a true
+#                    create-if-missing, which protects the birth-time `base_sha`
+#                    the audit joins on. Combining it with --backfill-pr is
+#                    incoherent -> exit 2. Used by the Stop backstop, which
+#                    fires on every turn yield and so must do no git work once
+#                    the sidecar exists.
 #
 # A dispatch worker session does not otherwise record the GitHub artifact it
 # acted on (repo/issue/pr/branch/base_sha), so the token audit cannot join a
@@ -73,9 +97,11 @@ set -euo pipefail
 SESSION_ID=""
 TRANSCRIPT_PATH=""
 BACKFILL_PR=""
+REPO_DIR=""
+ONLY_IF_ABSENT=false
 
 usage() {
-  echo "usage: dispatch-stamp-session --session-id <id> --transcript-path <path>" >&2
+  echo "usage: dispatch-stamp-session --session-id <id> --transcript-path <path> [--repo-dir <path>] [--only-if-absent]" >&2
   echo "       dispatch-stamp-session --backfill-pr <N>" >&2
 }
 
@@ -108,6 +134,19 @@ while [[ $# -gt 0 ]]; do
       BACKFILL_PR="$2"
       shift 2
       ;;
+    --repo-dir)
+      if [[ $# -lt 2 ]]; then
+        echo "dispatch-stamp-session: --repo-dir requires a value" >&2
+        usage
+        exit 2
+      fi
+      REPO_DIR="$2"
+      shift 2
+      ;;
+    --only-if-absent)
+      ONLY_IF_ABSENT=true
+      shift
+      ;;
     *)
       echo "dispatch-stamp-session: unexpected argument: $1" >&2
       usage
@@ -116,12 +155,29 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# --repo-dir resolution. Empty keeps the legacy ambient-cwd behaviour ("."); a
+# supplied path that is not a directory is a clear caller bug, so it errors
+# rather than silently falling back to the wrong tree (code-style.md) -- falling
+# back is precisely the failure this flag exists to prevent.
+if [[ -n "$REPO_DIR" && ! -d "$REPO_DIR" ]]; then
+  echo "dispatch-stamp-session: --repo-dir is not a directory: $REPO_DIR" >&2
+  exit 2
+fi
+REPO_DIR="${REPO_DIR:-.}"
+
 # --- mode selection ---------------------------------------------------------
 # Exactly one mode per invocation. --backfill-pr selects Mode B; --session-id /
 # --transcript-path select Mode A. Mixing them is incoherent → exit 2.
 if [[ -n "$BACKFILL_PR" ]]; then
   if [[ -n "$SESSION_ID" || -n "$TRANSCRIPT_PATH" ]]; then
     echo "dispatch-stamp-session: --backfill-pr cannot be combined with --session-id/--transcript-path" >&2
+    usage
+    exit 2
+  fi
+  # --only-if-absent is a Mode A create-if-missing guard; Mode B updates a
+  # sidecar that must already exist, so the combination is incoherent.
+  if [[ "$ONLY_IF_ABSENT" == true ]]; then
+    echo "dispatch-stamp-session: --backfill-pr cannot be combined with --only-if-absent" >&2
     usage
     exit 2
   fi
@@ -202,8 +258,22 @@ case "$TRANSCRIPT_PATH" in
     ;;
 esac
 
+# Locate the sidecar path: transcript with .jsonl -> .dispatch-stamp.json. It is
+# derived HERE, above every git read, because --only-if-absent needs it first:
+# that flag is a true create-if-missing, and deciding it from the path alone is
+# what makes the Stop backstop cheap enough to fire on every turn yield. The
+# early exit also protects the birth-time `base_sha` (an audit join key) and a
+# backfilled `.pr` from any re-derivation.
+sidecar="${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json"
+if [[ "$ONLY_IF_ABSENT" == true && -f "$sidecar" ]]; then
+  exit 0
+fi
+
 # Derive the branch. A failure here is not fatal to session start — no-op.
-branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || {
+# Every git read below is taken against $REPO_DIR (the caller-supplied working
+# tree, or "." for legacy callers) rather than ambient cwd -- see the --repo-dir
+# note in the header.
+branch=$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null) || {
   echo "dispatch-stamp-session: could not resolve current branch (not a git checkout?); skipping stamp" >&2
   exit 0
 }
@@ -244,7 +314,7 @@ elif [[ "$branch" == graph-* ]]; then
   # itself, then the tactic-/strategy- prefixed forms, against
   # intentions/<id>.md at the repo root. No match → node_id stays null.
   slug="${branch#graph-}"
-  if toplevel=$(git rev-parse --show-toplevel 2>/dev/null); then
+  if toplevel=$(git -C "$REPO_DIR" rev-parse --show-toplevel 2>/dev/null); then
     for cand in "$slug" "tactic-$slug" "strategy-$slug"; do
       if [[ -f "$toplevel/intentions/$cand.md" ]]; then
         node_id=$(jq -n --arg v "$cand" '$v')
@@ -258,7 +328,7 @@ else
 fi
 
 # base_sha = current HEAD.
-base_sha=$(git rev-parse HEAD 2>/dev/null) || {
+base_sha=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null) || {
   echo "dispatch-stamp-session: could not resolve HEAD sha; skipping stamp" >&2
   exit 0
 }
@@ -267,7 +337,7 @@ base_sha=$(git rev-parse HEAD 2>/dev/null) || {
 # If origin can't be resolved we still write the sidecar with an empty repo
 # rather than block session start.
 repo=""
-if origin_url=$(git remote get-url origin 2>/dev/null); then
+if origin_url=$(git -C "$REPO_DIR" remote get-url origin 2>/dev/null); then
   # Normalize both forms to owner/name:
   #   git@github.com:owner/name.git    → owner/name
   #   https://github.com/owner/name.git → owner/name
@@ -278,9 +348,6 @@ if origin_url=$(git remote get-url origin 2>/dev/null); then
   path="${path#github.com/}"      # drop the HTTPS host + '/' separator
   repo="$path"
 fi
-
-# Locate the sidecar path: transcript with .jsonl → .dispatch-stamp.json.
-sidecar="${TRANSCRIPT_PATH%.jsonl}.dispatch-stamp.json"
 
 # Idempotency: Mode A runs on both `startup` and `resume`. `base_sha` is one of
 # the audit join keys {repo, issue, pr, base_sha} and must anchor the session's

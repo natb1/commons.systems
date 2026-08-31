@@ -54,6 +54,20 @@ PROJECT_ROOT=$(resolve_project_root) || { err "git rev-parse --git-common-dir fa
 # is centralised in lib-repo-roots.sh's resolve_project_root; see its header
 # for the full contract.
 WORKTREES_ROOT="$PROJECT_ROOT/.claude/worktrees"
+# Resolved through the SAME realpath call CANON uses below (-m, tolerating
+# a not-yet-existing tail) so a symlinked worktrees root cannot desync the
+# two sides of the containment check further down: CANON is always
+# canonicalized (symlinks in it resolved), so comparing it against an
+# UNresolved WORKTREES_ROOT would silently misfire the `case "$CANON/" in
+# "$WORKTREES_ROOT"/*)` guard and the `!= "$WORKTREES_ROOT/main"` guard the
+# moment .claude/worktrees itself is (or sits under) a symlink.
+#
+# Resolved into a scratch var first, then only overwritten on success:
+# self-assigning through a failed `$(...)` would blank WORKTREES_ROOT
+# outright (command substitution assigns its possibly-empty stdout before
+# the exit status is even tested), which is the opposite of CANON's
+# fail-open fallback to the ORIGINAL string a few lines down.
+_resolved_worktrees_root=$(realpath -m "$WORKTREES_ROOT" 2>/dev/null) && WORKTREES_ROOT="$_resolved_worktrees_root"
 
 # Relocate the log to a stable place outside any worktree, carrying over.
 mkdir -p "$PROJECT_ROOT/tmp" 2>/dev/null || true

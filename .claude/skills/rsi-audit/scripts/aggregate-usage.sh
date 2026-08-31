@@ -8,10 +8,26 @@
 #
 # WHAT IT SCANS
 #   Projects root (default $HOME/.claude/projects, overridable via
-#   DISPATCH_AUDIT_PROJECTS_ROOT) contains per-project directories. Two kinds are
-#   scanned:
-#     - per-issue worktree dirs whose name matches *worktrees*
-#     - the router/heartbeat dir whose name matches *--bare
+#   DISPATCH_AUDIT_PROJECTS_ROOT) contains per-project directories, each named
+#   after its session's cwd with `/` and `.` rewritten to `-`. A directory is
+#   scanned when its name is EXACTLY $PROJECT_PREFIX, or begins with
+#   "$PROJECT_PREFIX-". $PROJECT_PREFIX is that same encoding applied to this
+#   repo's MAIN root (see DISPATCH_AUDIT_PROJECT_PREFIX below), so three shapes
+#   are in scope:
+#     - the MAIN-checkout dir, whose name is exactly the prefix
+#     - the router/heartbeat dir, "<prefix>--bare"
+#     - each worktree dir, "<prefix>--claude-worktrees-<name>"
+#   The `-` in the second predicate is load-bearing. A bare startswith would
+#   also swallow a neighbouring project whose encoded path merely has this one
+#   as a substring; with the separator, "-home-n8-commons-systems" and
+#   "-home-n8" stay out.
+#
+#   The MAIN-checkout dir is deliberately IN SCOPE. dispatch-ladder-run and
+#   dispatch-graph-execute spawn the /rsi phase evaluations and the align
+#   phases with `--cwd $PROJECT_ROOT`, so those transcripts land in the
+#   main-checkout project dir. The superseded predicate matched only
+#   *worktrees* and *--bare, so every such transcript was invisible at every
+#   scope in every window — an undercount that read as a quiet window.
 #   Session files are <projectdir>/<sessionid>.jsonl. Subagent transcripts nest at
 #   <projectdir>/<sessionid>/subagents/agent-*.jsonl (their agent-*.meta.json
 #   companions are NOT transcripts and are skipped — only *.jsonl is parsed). A
@@ -48,6 +64,11 @@
 #                     CONTRACT.
 #   DISPATCH_AUDIT_PROJECTS_ROOT  override the projects root (used by the test
 #                     fixture). Default: $HOME/.claude/projects.
+#   DISPATCH_AUDIT_PROJECT_PREFIX  override the project-dir name prefix that
+#                     selects which project directories are scanned (test seam;
+#                     the unit test sets it so the harness never shells out to
+#                     git). Default: this repo's MAIN root encoded with `/` and
+#                     `.` rewritten to `-` — see WHAT IT SCANS.
 #   DISPATCH_AUDIT_AGGREGATES_ENABLED  opt-in persist gate: set to "1" to pipe
 #                     each assembled aggregate JSON document to the writer binary
 #                     after the report artifact is written. Off by default so
@@ -66,6 +87,38 @@
 #   - Corrupt files are reported to stderr and tallied in window.files_failed —
 #     never silently dropped (.claude/rules/code-style.md: clear errors over
 #     defensive fallbacks).
+#   - window.sidecar_coverage_measurable is false whenever --node is set,
+#     because the --node scope filter (see the --node gate below) already
+#     requires a matching dispatch-stamp.json sidecar to admit a session into
+#     $sessions at all — so at node scope every session counted in
+#     sidecar_eligible also satisfies sidecar_present by construction,
+#     present==eligible, and sidecar_present_rate can only ever read 1
+#     (something matched) or null (nothing did). Neither reading is a
+#     coverage measurement; it is an artefact of the gate. At fleet and
+#     session scope sidecar_coverage_measurable is true, since neither the
+#     unscoped path nor the --session gate tests for a stamp, so
+#     sidecar_eligible/sidecar_present/sidecar_present_rate there are genuine
+#     coverage counts.
+#   - window.scope_filter_dropped_unstamped and
+#     window.scope_filter_dropped_other_node account for what the --node gate
+#     drops BEFORE a session ever reaches $sessions: a candidate transcript
+#     with no dispatch-stamp.json sidecar at all, and one whose sidecar names
+#     a different node_id, respectively. Both are 0 at fleet and session
+#     scope by construction — neither of those gates tests for a stamp, so
+#     nothing is ever dropped for want of one. At node scope, a run that
+#     matches zero sessions is otherwise indistinguishable from "nothing to
+#     measure"; a nonzero scope_filter_dropped_unstamped alongside
+#     files_scanned==0 means the stamping this monitor depends on has failed
+#     for this node, not that the node was quiet.
+#   - Both drop counters count CANDIDATE TRANSCRIPTS, not worker sessions: a
+#     dropped file never reaches the stage-1 worker_skills classification
+#     (labelled SINGLE SOURCE below), so the shell cannot know whether a
+#     dropped transcript would have classified as a worker, and re-deriving
+#     that classification here would fork the single source. In any real
+#     window the counters therefore include ordinary interactive sessions
+#     alongside dropped workers — a nonzero value is normal. Read them as a
+#     DISAMBIGUATOR (zero vs. nonzero — was anything scanned and dropped at
+#     all) never as a THRESHOLD or an alarm on their own magnitude.
 #   - Output schema is a documented contract later units depend on; keys are
 #     stable. See the stage-2 jq program below for the full shape.
 #   - Phase attribution is WHOLE-SESSION for a classifier-typed single-phase
@@ -89,6 +142,30 @@
 #     followups_filed, subagents_launched, sessions), reports a
 #     disposition_distribution map, and the three pooled rates on the summed
 #     counts. See .claude/docs/outcome-envelope.md for field/enum/formula truth.
+#   - Review effort yield (tactic-audit-review-effort-yield-lens): every
+#     `dispatch-code-review` Step 7 summary block found in a Bash tool_result
+#     contributes one run of {effort, model, wall_clock_s, touched_files_count}.
+#     A tool_result qualifies only if it carries all three of `cache_version=`,
+#     `effort=` and `touched_files_count=` (shape anchor — a single key also
+#     appears in prose and in the in-flight poll block); a run whose numeric
+#     fields do not parse is DROPPED, never zero-coerced; at most 200 runs per
+#     session are kept. The runs are surfaced two ways, the same any-scope /
+#     fleet-only split cache_efficiency uses: `.sessions[].review_runs` is the
+#     ANY-SCOPE per-session mirror a --session/--node caller reads directly, and
+#     `lenses.review_effort_yield` is the FLEET-ONLY pooled comparison
+#     (`runs`, `sessions_affected`, `by_effort`, `sessions_mixed_effort`).
+#     PRICE-PROXY ATTRIBUTION: a run is a Bash call inside a session, not a
+#     session, so there is no per-run token accounting. A session's
+#     `price_proxy_usd` lands in `by_effort[<e>].price_proxy_usd_single_effort`
+#     ONLY when every run in that session is at effort <e>; a session with runs
+#     at several efforts raises `sessions_mixed_effort` and is attributed to NO
+#     bucket. A session's proxy is never divided across buckets — that would
+#     fabricate a per-run figure the instrument cannot see.
+#     `findings_axis_measurable` is a HARDCODED `false`, not a computed flag:
+#     no source-verified per-run findings count exists (ruling option (b),
+#     plans/dispatch-rsi-author-rulings.md D7), and `findings_axis_note` states
+#     that in the output so a report cannot present touched_files_* as the whole
+#     answer.
 #   - Prices are an Opus list-price-equivalent USD PROXY applied to every session
 #     regardless of its actual model — a relative-magnitude figure for ranking,
 #     NOT the actual bill.
@@ -113,8 +190,8 @@
 #        is unconditionally ignored when --session/--node is set, regardless
 #        of the env var. The fleet denominators the persisted aggregate feeds
 #        — pooled by_phase_outcome rates, lenses.baseline_context
-#        median/peak, lenses.phase_standup, cross-session tool_errors
-#        signatures/recurrence — cannot be reconstructed from one session or
+#        median/peak, cross-session tool_errors signatures/recurrence —
+#        cannot be reconstructed from one session or
 #        node's worth of data (an n=1 hit-rate is a category error, not a
 #        small sample), and window.days is null for an unbounded scoped run
 #        anyway, which the writer's `Number.isInteger(win.days)` validation
@@ -185,6 +262,37 @@ EXCLUDE_SIDECAR=0
 SESSION_ID=""
 NODE_ID=""
 PROJECTS_ROOT="${DISPATCH_AUDIT_PROJECTS_ROOT:-$HOME/.claude/projects}"
+
+# Project-dir name prefix for transcript discovery (see WHAT IT SCANS). Derived
+# from the MAIN repo root, never from the invoking checkout: this repo is a
+# standard layout (`.git` is a real directory at the main root), so
+# `--git-common-dir` resolves to <main>/.git even when this script runs from a
+# worktree — a worktree-launched audit therefore still scans the whole fleet
+# rather than one checkout. Prints an empty string on failure; the caller turns
+# that into a hard exit.
+derive_project_prefix() {
+  local checkout_root common_dir
+  # SCRIPT_DIR is <checkout root>/.claude/skills/rsi-audit/scripts.
+  checkout_root="$SCRIPT_DIR/../../../.."
+  if ! common_dir=$(git -C "$checkout_root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null); then
+    echo "error: aggregate-usage.sh: 'git -C $checkout_root rev-parse --git-common-dir' failed; cannot derive the transcript project-dir prefix" >&2
+    return 0
+  fi
+  [[ -n "$common_dir" ]] || return 0
+  printf '%s' "$(dirname "$common_dir")" | tr '/.' '--'
+}
+
+# `:-` so the git call runs ONLY when the override is unset — the unit test
+# sets the override and must never shell out to git. There is deliberately NO
+# fallback to the superseded *worktrees*/*--bare globs on failure
+# (.claude/rules/code-style.md): a silent fallback would reinstate exactly the
+# invisible undercount this predicate removes, so an underivable prefix is a
+# hard error instead.
+PROJECT_PREFIX="${DISPATCH_AUDIT_PROJECT_PREFIX:-$(derive_project_prefix)}"
+if [[ -z "$PROJECT_PREFIX" || "$PROJECT_PREFIX" == "-" ]]; then
+  echo "error: aggregate-usage.sh: empty or degenerate transcript project-dir prefix ('$PROJECT_PREFIX'); set DISPATCH_AUDIT_PROJECT_PREFIX to override" >&2
+  exit 2
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -350,6 +458,21 @@ def content_to_string(c):
     ( [ c[]? | if type=="string" then . elif type=="object" then (.text // "") else "" end ] | join(" ") )
   else "" end;
 
+# Field-value reader for the `dispatch-code-review` Step 7 summary block (see the
+# review-run extractor further down). PER-LINE CAPTURE that does NOT rely on ^/$:
+# jq's Oniguruma engine reads "m" as DOTALL, NOT as PCRE-style multiline anchors,
+# so "^" matches only at the start of the WHOLE subject with or without the flag.
+# (Probe: `jq -n '[ "a\nb=1" | match("^b=(?<v>[^\n]*)") ] | length'` -> 0, and
+# adding "m" still yields 0 — the same Oniguruma quirk the outcome-envelope
+# comment below documents from the other direction.) Each field is therefore
+# anchored on an explicit leading newline, with one prepended to the subject so a
+# block-INITIAL field still matches. Returns null when the key is absent — the
+# caller decides what an absent field means.
+def summary_field($s; $k):
+  ( "\n" + $s )
+  | [ match("\\n" + $k + "=(?<v>[^\\n\\r]*)") ]
+  | (.[0].captures[0].string // null);
+
 # Normalize one error .content (string OR array of blocks -> joined .text) into a
 # single signature string.
 # NOTE: The signature is opaque, attacker-influenceable transcript data — it is
@@ -438,14 +561,21 @@ def friction_events(m):
       | select($k != null)
       | { kind: $k, signature: $sig } ];
 
-# Dispatch worker phase-skill set (plus the graph-native align family). SINGLE
-# SOURCE for stage 1: consumed TWICE — once by the session-type classifier below
-# (a first-user <command-name> match types the session "worker") and once by the
-# whole-session phase attribution ($launch_skill / $tagged_phase_skills). This
-# list must be updated when a new dispatch worker phase skill is added.
+# Worker launch-skill set: the dispatch phase skills, the graph-native align
+# family, and the rsi family (/rsi, the per-phase ladder evaluator, and
+# /rsi-audit, the fleet audit). SINGLE SOURCE for stage 1: consumed TWICE —
+# once by the session-type classifier below (a first-user <command-name> match
+# types the session "worker") and once by the whole-session phase attribution
+# ($launch_skill / $tagged_phase_skills). This list must be updated whenever a
+# new skill joins that set — it is not limited to dispatch phase skills.
+#
+# Alternation order needs no care: the trailing "</command-name>" literal makes
+# "rsi-audit" win over the earlier "rsi" by backtracking, exactly as
+# "align-tactics" already coexists with "align".
 def worker_skills: ["plan-issue","implement","qa-fix","review-fix","fix-checks",
   "fix-conflicts","dispatch-conflict","qa-main","budget-parse-job","resolve-epic",
-  "office-hours","align-strategy","align-tactics","align-init","align"];
+  "office-hours","align-strategy","align-tactics","align-init","align",
+  "rsi","rsi-audit"];
 def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + ")</command-name>";
 
 . as $msgs
@@ -492,9 +622,9 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
     # Real --bg dispatch workers are spawned with a phase-skill slash command.
     # Their first user message is a <command-name>/<skill></command-name> block
     # whose skill is one of the dispatch worker phase set (plus the graph-native
-    # align family) — see `worker_skills` above, which must be updated when a new
-    # dispatch worker phase skill is added. That list is now consumed twice: here
-    # for classification, and below for whole-session phase attribution.
+    # align family and the rsi family) — see `worker_skills` above, which must be
+    # updated whenever a new skill joins that set. That list is now consumed
+    # twice: here for classification, and below for whole-session attribution.
     elif ($firstuser_str | test(worker_cmd_re)) then "worker"
     else "other" end ) as $type
 
@@ -642,6 +772,56 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
 # a new reduce, and should key on the sidecar-derived `artifact.node_id` rather
 # than on this envelope field.
 
+# Review runs (tactic-audit-review-effort-yield-lens). `dispatch-code-review`
+# Step 7 writes a compact key=value summary file and `cat`s it to stdout, so the
+# block lands verbatim in a Bash tool_result. That script's own comment declares
+# the field names a parsing contract — "EXTEND this list, never rename a line" —
+# which is what makes this a stable machine-readable input. The built-in
+# /code-review's findings prose has no such contract, which is why the findings
+# axis of this lens is NOT measured (see the lens in stage 2).
+#
+# The traversal is the SAME idiom as the outcome envelope above (every user
+# tool_result, content coerced with content_to_string) rather than a second
+# scanning style.
+#
+# SHAPE ANCHOR, not a single key: a tool_result qualifies only when its string
+# carries ALL THREE of `cache_version=`, `effort=` and `touched_files_count=`.
+# Any one alone occurs in ordinary transcript prose, and dispatch-code-review's
+# own in-flight poll block prints `effort=` with neither of the other two (it
+# spells its version key `run_version=`) — so a single-key anchor would mint
+# phantom runs out of polls and prose alike. Three co-occurring contract fields
+# is the cheap discriminator.
+#
+# STRICT VALIDATION, mirroring the outcome envelope's: a block whose
+# wall_clock_s or touched_files_count does not parse as a number is treated as
+# ABSENT and the whole run is DROPPED, never coerced to 0. A fabricated
+# 0-touched-files run would silently drag its effort bucket's median down —
+# exactly the defensive-fallback failure .claude/rules/code-style.md names.
+#
+# CAP: at most 200 runs are captured per session, so a pathological or
+# adversarial transcript cannot blow up the row. Real sessions run a handful.
+| ( [ $msgs[]
+      | select(.type=="user")
+      | .message.content
+      | if type=="array" then .[]? else empty end
+      | select(type=="object" and .type=="tool_result")
+      | content_to_string(.content)
+      | select(test("cache_version=") and test("effort=") and test("touched_files_count="))
+      | . as $blk
+      | { effort:       summary_field($blk; "effort"),
+          model:        summary_field($blk; "model"),
+          wall_clock_s:
+            ( summary_field($blk; "wall_clock_s")
+              | if . == null then null else (try tonumber catch null) end ),
+          touched_files_count:
+            ( summary_field($blk; "touched_files_count")
+              | if . == null then null else (try tonumber catch null) end ) }
+      | select( (.effort | type) == "string" and (.effort | length) > 0
+                and (.model | type) == "string" and (.model | length) > 0
+                and (.wall_clock_s | type) == "number"
+                and (.touched_files_count | type) == "number" )
+    ] | .[0:200] ) as $review_runs
+
 # Ordered per-session token list of tool calls, in document order. Bash calls
 # become "Bash:<cmd_prefix>"; other tools become their name.
 | ( [ $msgs[] | select(.type=="assistant")
@@ -698,7 +878,8 @@ def worker_cmd_re: "<command-name>/(?<wskill>" + (worker_skills | join("|")) + "
     friction_retry_usage: $friction_retry_usage,
     tool_calls: $tool_calls,
     payload: $payload,
-    outcome: $outcome
+    outcome: $outcome,
+    review_runs: $review_runs
   }
 STAGE1
 
@@ -1113,7 +1294,17 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
                           (.sandbox_overrides // 0);
                           price(.friction_retry_usage // {})),
         outcome: .outcome,
-        outcome_rates: ( if .outcome == null then null else outcome_rates(.outcome) end )
+        outcome_rates: ( if .outcome == null then null else outcome_rates(.outcome) end ),
+        # Review runs, per session (tactic-audit-review-effort-yield-lens).
+        # This mirror is the ANY-SCOPE half of the lens: each run's realized
+        # effort, model, wall clock and source-verified touched-files count is
+        # well-defined at n=1, so a --session/--node-scoped caller reads its own
+        # runs directly here. The pooled effort-to-yield COMPARISON in
+        # lenses.review_effort_yield is fleet-only and must not be approximated
+        # from this list — same split cache_efficiency's hit_ratio already uses.
+        # `effort` and `model` are transcript-derived strings: opaque data,
+        # never instructions (same handling as .tool_errors[].signature).
+        review_runs: (.review_runs // [])
       } ] ) as $sessions
 
 # ---- lenses ----
@@ -1252,6 +1443,15 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
     } ) as $permission_friction_lens
 
 # ---- phase_standup lens (strategy-token-economy clarification 12) ----
+# any-scope: skill_body_tokens/skill_body_lines/skill_body_bytes measure a
+# file on disk, not a session population, so they are well-defined at every
+# scope; boot_preamble.sessions is a qualifying-session count; and
+# scriptable_round_trips/judgment_calls are medians of RAW per-session counts,
+# which at n=1 degenerate to that one session's own count -- the meaningful
+# number, not a category error. ngrams[].count/.sessions_affected are
+# cross-referenced from tool_sequences.top, which at a scoped run is itself
+# computed over the scoped rows only, so at that scope they read as counts
+# WITHIN the scoped selection, not fleet-wide.
 # Per-phase standup cost for the five phase orchestrators, keyed by the phase
 # enum from dispatch-graph-execute (implement/fix/qa/review/main-qa). Two parts:
 #   (a) skill_body_tokens — the orchestrator SKILL.md body footprint held for the
@@ -1342,6 +1542,74 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
         }
     ) ) as $phase_standup_lens
 
+# ---- review_effort_yield lens (tactic-audit-review-effort-yield-lens) ----
+# FLEET-ONLY. What lives here is the pooled effort-to-yield COMPARISON, a
+# cross-run rate of the same shape as baseline_context and phase_standup: at n=1
+# it is absent, never approximated from a single run. The per-run figures it
+# pools ARE any-scope and are mirrored onto every .sessions[] entry above as
+# `review_runs` — the same any-scope/fleet-only split cache_efficiency uses.
+#
+# SOURCE-VERIFIED FIGURES ONLY. touched_files_count is derived by
+# dispatch-code-review from a before/after `git diff`, NOT from the built-in's
+# self-report of what it fixed, which is what clears the instrument-attribution
+# bar. effort/model/wall_clock_s come off the same contract-stable summary block.
+# `effort` is READ from the block rather than assumed from a script default,
+# because reviewPlanEffort (.claude/workflows/review-fix.js) varies it per run
+# inside the author-set band.
+| ( [ $sessions[]
+      | select(((.review_runs // []) | length) > 0)
+      | { id: .id,
+          runs: (.review_runs // []),
+          efforts: ([ (.review_runs // [])[].effort ] | unique),
+          price_proxy_usd: .price_proxy_usd } ] ) as $review_sessions
+| ( [ $review_sessions[] | .runs[] ] ) as $all_review_runs
+| ( [ $all_review_runs[].effort ] | unique ) as $review_effort_keys
+#
+# PRICE-PROXY ATTRIBUTION RULE. A code-review run is a Bash call INSIDE a
+# session, not a session of its own, so the instrument has no per-run token
+# accounting; and one session can contain runs at several effort levels. A
+# session's price_proxy_usd is therefore attributed to an effort bucket ONLY when
+# every run in that session is at that same effort
+# (price_proxy_usd_single_effort / sessions_single_effort). Sessions carrying
+# runs at MORE THAN ONE effort are counted in the top-level
+# sessions_mixed_effort and attributed to NO bucket. A session's proxy is never
+# DIVIDED across buckets — that would fabricate a per-run figure the instrument
+# cannot see.
+| ( reduce $review_effort_keys[] as $e ({};
+      ( [ $all_review_runs[] | select(.effort == $e) ] ) as $runs
+      | ( [ $review_sessions[] | select(.efforts | index($e)) ] ) as $sess
+      | ( [ $review_sessions[] | select(.efforts == [$e]) ] ) as $single
+      | .[$e] = {
+          runs: ($runs | length),
+          sessions: ($sess | length),
+          touched_files_total:  ([ $runs[].touched_files_count ] | add // 0),
+          touched_files_median: median([ $runs[].touched_files_count ]),
+          wall_clock_s_total:   ([ $runs[].wall_clock_s ] | add // 0),
+          wall_clock_s_median:  median([ $runs[].wall_clock_s ]),
+          by_model: ( reduce $runs[] as $r ({}; .[$r.model] = ((.[$r.model] // 0) + 1)) ),
+          price_proxy_usd_single_effort: ([ $single[].price_proxy_usd ] | add // 0),
+          sessions_single_effort: ($single | length)
+        } ) ) as $review_by_effort
+| ( {
+      runs: ($all_review_runs | length),
+      sessions_affected: ($review_sessions | length),
+      # Empty {} when the window carries no review runs at all — an effort key
+      # exists only because a run reported it, so no zero bucket is ever
+      # fabricated for an effort level nothing ran at.
+      by_effort: $review_by_effort,
+      sessions_mixed_effort:
+        ( [ $review_sessions[] | select((.efforts | length) > 1) ] | length ),
+      # HARDCODED HONEST CONSTANT, not a computed one. Ruling: option (b),
+      # plans/dispatch-rsi-author-rulings.md D7 — ship the lens on
+      # source-verified figures only and record IN THE OUTPUT that the findings
+      # half is not measurable today. Option (a) (an `effort` field plus a
+      # per-source findings split on dispatch:outcome:v1) was rejected. A future
+      # reader should read this as a recorded decision, not an oversight.
+      findings_axis_measurable: false,
+      findings_axis_note: "the findings half of the effort comparison has no source-verified input today: the built-in /code-review's output.txt is free-form prose with no stable machine-readable shape across runs, the parse:code-review structuring subagent's per-source findings split lives in a worktree-local tmp/review-result-N that is reaped with the worktree, and the durable dispatch:outcome:v1 envelope carries neither an effort field nor a per-source split — so the raise of the review effort band to high remains an explicitly UNMEASURED quality bet on the findings axis, and this lens reports only the fix-yield side (touched_files_count) alongside effort, model, wall clock and the price proxy."
+    } ) as $review_effort_yield_lens
+
+
 | {
     window: ( $win + {
       sidecar_eligible:  ( [ $sessions[] | select(.type=="worker") ] | length ),
@@ -1379,7 +1647,8 @@ def types_for($r): (labels_for($r)) as $L | ([ type_labels[] | select(. as $t | 
       baseline_context: $baseline_lens,
       cache_efficiency: $cache_efficiency_lens,
       permission_friction: $permission_friction_lens,
-      phase_standup: $phase_standup_lens
+      phase_standup: $phase_standup_lens,
+      review_effort_yield: $review_effort_yield_lens
     },
     sessions: $sessions
   }
@@ -1392,9 +1661,23 @@ STAGE1_OUT="$TMP/stage1.ndjson"
 : >"$STAGE1_OUT"
 FILES_SCANNED=0
 FILES_FAILED=0
+PROJECT_DIRS_SCANNED=0
+# --node scope-filter drop accounting (additive only — does not change
+# files_scanned/files_failed or the three sidecar_* fields). See BEHAVIOR
+# CONTRACT above for what these count and why they are candidate transcripts,
+# not workers.
+SCOPE_DROPPED_UNSTAMPED=0
+SCOPE_DROPPED_OTHER_NODE=0
 
 if [[ -d "$PROJECTS_ROOT" ]]; then
-  # Gather candidate project dirs (worktrees + bare), then find *.jsonl in window.
+  # Candidate project dirs: name == $PROJECT_PREFIX (the MAIN checkout) or name
+  # begins with "$PROJECT_PREFIX-" (the --bare router dir and every worktree
+  # dir). Counted once here and reported as window.project_dirs_scanned, so a
+  # run whose prefix matched nothing is visible in the document instead of
+  # reading as a genuinely quiet window.
+  PROJECT_DIRS_SCANNED=$(find "$PROJECTS_ROOT" -mindepth 1 -maxdepth 1 -type d \
+    \( -name "$PROJECT_PREFIX" -o -name "$PROJECT_PREFIX-*" \) -print | wc -l | tr -d '[:space:]')
+  # Then find *.jsonl in window under each of them.
   while IFS= read -r -d '' file; do
     # Resolved base stem for this transcript's OWN session: its own
     # <path>/<stem> for a top-level session file, or the PARENT session's
@@ -1436,7 +1719,12 @@ if [[ -d "$PROJECTS_ROOT" ]]; then
     # every subagent of the matched node — often where much of the spend is.
     if [[ -n "$NODE_ID" ]]; then
       node_stamp="$session_stem.dispatch-stamp.json"
-      if [[ ! -f "$node_stamp" ]] || [[ "$(jq -r '.node_id // empty' "$node_stamp" 2>/dev/null)" != "$NODE_ID" ]]; then
+      if [[ ! -f "$node_stamp" ]]; then
+        SCOPE_DROPPED_UNSTAMPED=$((SCOPE_DROPPED_UNSTAMPED + 1))
+        continue
+      fi
+      if [[ "$(jq -r '.node_id // empty' "$node_stamp" 2>/dev/null)" != "$NODE_ID" ]]; then
+        SCOPE_DROPPED_OTHER_NODE=$((SCOPE_DROPPED_OTHER_NODE + 1))
         continue
       fi
     fi
@@ -1455,7 +1743,7 @@ if [[ -d "$PROJECTS_ROOT" ]]; then
     fi
   done < <(
     find "$PROJECTS_ROOT" -mindepth 1 -maxdepth 1 -type d \
-      \( -name '*worktrees*' -o -name '*--bare' \) -print0 \
+      \( -name "$PROJECT_PREFIX" -o -name "$PROJECT_PREFIX-*" \) -print0 \
     | xargs -0 -r -I{} env TZ=UTC find {} -name '*.jsonl' -newermt "$SINCE" ! -newermt "$UNTIL" -print0
   )
 fi
@@ -1472,6 +1760,19 @@ else
   SCOPE_TYPE="fleet"; SCOPE_ID=""
 fi
 
+# sidecar_coverage_measurable: false under --node scope only. The --node gate
+# above already requires a matching dispatch-stamp.json sidecar to admit a
+# session into $sessions, so at node scope sidecar_present==sidecar_eligible
+# by construction and sidecar_present_rate can only read 1 or null — neither
+# is a coverage measurement (see BEHAVIOR CONTRACT above). True at fleet and
+# session scope, where neither gate tests for a stamp. Computed once here so
+# both WINDOW_JSON branches below share the same value.
+if [[ "$SCOPE_TYPE" == "node" ]]; then
+  SIDECAR_COVERAGE_MEASURABLE=false
+else
+  SIDECAR_COVERAGE_MEASURABLE=true
+fi
+
 if [[ "$WINDOW_UNBOUNDED" == 1 ]]; then
   # days:null — a scoped run has no meaningful fixed-days figure to report
   # (see BEHAVIOR CONTRACT decision 1). This also fails the writer's
@@ -1484,7 +1785,16 @@ if [[ "$WINDOW_UNBOUNDED" == 1 ]]; then
     --argjson failed "$FILES_FAILED" \
     --arg scope_type "$SCOPE_TYPE" \
     --arg scope_id "$SCOPE_ID" \
+    --arg project_prefix "$PROJECT_PREFIX" \
+    --argjson project_dirs "$PROJECT_DIRS_SCANNED" \
+    --argjson dropped_unstamped "$SCOPE_DROPPED_UNSTAMPED" \
+    --argjson dropped_other_node "$SCOPE_DROPPED_OTHER_NODE" \
+    --argjson coverage_measurable "$SIDECAR_COVERAGE_MEASURABLE" \
     '{days:null, since:$since, until:$until, files_scanned:$scanned, files_failed:$failed,
+      project_prefix:$project_prefix, project_dirs_scanned:$project_dirs,
+      scope_filter_dropped_unstamped:$dropped_unstamped,
+      scope_filter_dropped_other_node:$dropped_other_node,
+      sidecar_coverage_measurable:$coverage_measurable,
       scope:{type:$scope_type, id:(if $scope_id=="" then null else $scope_id end)}}')
 else
   WINDOW_JSON=$(jq -n \
@@ -1495,8 +1805,26 @@ else
     --argjson failed "$FILES_FAILED" \
     --arg scope_type "$SCOPE_TYPE" \
     --arg scope_id "$SCOPE_ID" \
+    --arg project_prefix "$PROJECT_PREFIX" \
+    --argjson project_dirs "$PROJECT_DIRS_SCANNED" \
+    --argjson dropped_unstamped "$SCOPE_DROPPED_UNSTAMPED" \
+    --argjson dropped_other_node "$SCOPE_DROPPED_OTHER_NODE" \
+    --argjson coverage_measurable "$SIDECAR_COVERAGE_MEASURABLE" \
     '{days:$days, since:$since, until:$until, files_scanned:$scanned, files_failed:$failed,
+      project_prefix:$project_prefix, project_dirs_scanned:$project_dirs,
+      scope_filter_dropped_unstamped:$dropped_unstamped,
+      scope_filter_dropped_other_node:$dropped_other_node,
+      sidecar_coverage_measurable:$coverage_measurable,
       scope:{type:$scope_type, id:(if $scope_id=="" then null else $scope_id end)}}')
+fi
+
+# --node run that scanned nothing but dropped candidate transcripts for want
+# of a sidecar: surface it to stderr so the caller can tell "this node had no
+# sessions" from "sidecar coverage is unmeasurable because stamping failed"
+# (see BEHAVIOR CONTRACT above). stdout must stay a pure JSON document, so
+# this is stderr-only, mirroring the files_failed diagnostic's shape.
+if [[ -n "$NODE_ID" && "$FILES_SCANNED" -eq 0 && "$SCOPE_DROPPED_UNSTAMPED" -gt 0 ]]; then
+  echo "aggregate-usage.sh: --node $NODE_ID matched 0 transcripts; $SCOPE_DROPPED_UNSTAMPED candidate transcript(s) in the window carried no dispatch-stamp sidecar — sidecar coverage is UNMEASURABLE at node scope, not zero" >&2
 fi
 
 # Build a map of issue-number string -> array of label-name strings, fetched once

@@ -15,6 +15,7 @@ RUN_CI_SCRIPTS=false
 RUN_PR_SCRIPTS=false
 RUN_TOKEN_AUDIT_SCRIPTS=false
 RUN_FILE_ISSUE_SCRIPTS=false
+RUN_HOOK_SCRIPTS=false
 EXPLICIT=false
 
 while [[ $# -gt 0 ]]; do
@@ -55,8 +56,13 @@ while [[ $# -gt 0 ]]; do
       EXPLICIT=true
       shift
       ;;
+    --hook-scripts)
+      RUN_HOOK_SCRIPTS=true
+      EXPLICIT=true
+      shift
+      ;;
     *)
-      echo "Usage: run-unit-tests.sh [--app <dir>] [--nix] [--rules] [--ci-scripts] [--pr-scripts] [--token-audit-scripts] [--file-issue-scripts]" >&2
+      echo "Usage: run-unit-tests.sh [--app <dir>] [--nix] [--rules] [--ci-scripts] [--pr-scripts] [--token-audit-scripts] [--file-issue-scripts] [--hook-scripts]" >&2
       exit 1
       ;;
   esac
@@ -100,6 +106,7 @@ if [ "$EXPLICIT" = false ]; then
       .claude/skills/dispatch-propagate/scripts/*) RUN_PR_SCRIPTS=true ;;
       .claude/skills/rsi-audit/scripts/*) RUN_TOKEN_AUDIT_SCRIPTS=true ;;
       .claude/skills/file-issue/scripts/*) RUN_FILE_ISSUE_SCRIPTS=true ;;
+      .claude/hooks/*) RUN_HOOK_SCRIPTS=true ;;
     esac
   done <<< "$CHANGED"
 fi
@@ -257,7 +264,32 @@ if [ "$RUN_FILE_ISSUE_SCRIPTS" = true ]; then
   fi
 fi
 
-if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_CI_SCRIPTS" = false ] && [ "$RUN_PR_SCRIPTS" = false ] && [ "$RUN_TOKEN_AUDIT_SCRIPTS" = false ] && [ "$RUN_FILE_ISSUE_SCRIPTS" = false ]; then
+# Run project hook tests. Without this bucket NO runner ever executed
+# .claude/hooks/test-*.sh, so a hook regression test could be written, pass
+# once, and never run again — the same silent-decay shape the sidecar defect
+# had. All hook suites are hermetic (they stub git / claude / pgrep, or build
+# throwaway git repos under mktemp): no network, no live daemon.
+if [ "$RUN_HOOK_SCRIPTS" = true ]; then
+  echo "=== Hook script tests ==="
+  HOOK_SCRIPTS="$REPO_ROOT/.claude/hooks"
+  HOOK_SCRIPT_FAIL=false
+  for test_script in "$HOOK_SCRIPTS"/test-*.sh; do
+    name=$(basename "$test_script")
+    [[ "$name" == "test-helpers.sh" ]] && continue
+    echo "--- $name ---"
+    if "$test_script"; then
+      echo "PASS: $name"
+    else
+      echo "FAIL: $name" >&2
+      HOOK_SCRIPT_FAIL=true
+    fi
+  done
+  if [ "$HOOK_SCRIPT_FAIL" = true ]; then
+    FAILURES+=(hook-scripts)
+  fi
+fi
+
+if [ ${#APP_DIRS[@]} -eq 0 ] && [ "$RUN_NIX" = false ] && [ "$RUN_RULES" = false ] && [ "$RUN_CI_SCRIPTS" = false ] && [ "$RUN_PR_SCRIPTS" = false ] && [ "$RUN_TOKEN_AUDIT_SCRIPTS" = false ] && [ "$RUN_FILE_ISSUE_SCRIPTS" = false ] && [ "$RUN_HOOK_SCRIPTS" = false ]; then
   echo "No test suites matched changed files. Nothing to check."
   exit 0
 fi

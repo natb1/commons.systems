@@ -20,7 +20,17 @@ model=$(echo "$input" | jq -r '.model.display_name')
 cwd_raw=$(echo "$input" | jq -r '.workspace.current_dir')
 usage=$(echo "$input" | jq '.context_window.current_usage')
 ctx_size=$(echo "$input" | jq -r '.context_window.context_window_size')
-if [ "$usage" != "null" ]; then
+# ctx_size must be a positive integer to divide by. jq -r turns a JSON `null`
+# or a missing key into the literal string "null", and a malformed/zero
+# context_window_size is not impossible either — either way `$(( ... /
+# ctx_size ))` is a bash arithmetic error (division by zero, or "value too
+# great for base" on a non-numeric string), which is FATAL even without
+# `set -e`: the whole script dies right there, silently, before this segment
+# — and before the dispatch-phase segment below ever runs. That would wedge
+# the status line to nothing, which the fail-open posture documented at the
+# top of this file forbids. Falls back to the plain model-only branch, same
+# as the no-usage case, rather than crash.
+if [[ "$usage" != "null" && "$ctx_size" =~ ^[0-9]+$ && "$ctx_size" -gt 0 ]]; then
   current=$(echo "$usage" | jq '.input_tokens + .cache_creation_input_tokens + .cache_read_input_tokens')
   pct=$((current * 100 / ctx_size))
   printf "\033[36m%s\033[0m | \033[35m%dk/%dk tokens (%d%%)\033[0m" \

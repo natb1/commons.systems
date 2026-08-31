@@ -181,6 +181,49 @@ json_without_tokens() {
     }'
 }
 
+# current_usage present (so the hook enters the token branch) but
+# context_window_size is either 0 or absent (jq -r renders a missing/null key
+# as the literal string "null") — the two shapes #2260-style silently
+# division-by-zero / arithmetic-error the old `pct=$((current * 100 /
+# ctx_size))` line.
+json_with_zero_ctx() {
+  local model="$1" cwd="$2"
+  jq -nc \
+    --arg m "$model" \
+    --arg d "$cwd" \
+    '{
+      model: {display_name: $m},
+      workspace: {current_dir: $d},
+      context_window: {
+        current_usage: {
+          input_tokens: 10000,
+          cache_creation_input_tokens: 5000,
+          cache_read_input_tokens: 2000
+        },
+        context_window_size: 0
+      }
+    }'
+}
+
+json_with_null_ctx() {
+  local model="$1" cwd="$2"
+  jq -nc \
+    --arg m "$model" \
+    --arg d "$cwd" \
+    '{
+      model: {display_name: $m},
+      workspace: {current_dir: $d},
+      context_window: {
+        current_usage: {
+          input_tokens: 10000,
+          cache_creation_input_tokens: 5000,
+          cache_read_input_tokens: 2000
+        },
+        context_window_size: null
+      }
+    }'
+}
+
 # =============================================================================
 # Case 1: branch `main` — no dispatch segment (model+cwd+tokens still render)
 # =============================================================================
@@ -262,6 +305,34 @@ export STUB_TOPLEVEL=""     # rev-parse --show-toplevel now exits non-zero
 run_hook "$(json_with_tokens "claude-sonnet-4" "/home/user/project")"
 assert_nonempty     "case8: toplevel failure still renders model+cwd+tokens" "$HOOK_OUT"
 assert_not_contains "case8: toplevel failure emits no dispatch segment" "[" "$HOOK_OUT"
+
+# =============================================================================
+# Case 9: context_window_size: 0 with current_usage present — must NOT crash
+# on a division-by-zero; falls back to the no-usage (model-only) rendering.
+# Before the fix, `pct=$((current * 100 / ctx_size))` aborted the whole script
+# on this input — bash treats division by zero in arithmetic as fatal even
+# without `set -e` — so NOTHING rendered, not even the model segment. That is
+# the fail-open posture violation this case guards.
+# =============================================================================
+setup_case
+export STUB_BRANCH="main"
+run_hook "$(json_with_zero_ctx "claude-sonnet-4" "/home/user/project")"
+assert_nonempty     "case9: zero ctx_size still renders (does not crash silent)" "$HOOK_OUT"
+assert_contains     "case9: zero ctx_size falls back to model-only" "claude-sonnet-4" "$HOOK_OUT"
+assert_not_contains "case9: zero ctx_size omits a bogus tokens line" "tokens" "$HOOK_OUT"
+
+# =============================================================================
+# Case 10: context_window_size missing/null with current_usage present — same
+# fallback. jq -r renders a null/missing key as the literal string "null",
+# which made the old arithmetic a non-numeric operand instead of a numeric
+# zero, but it is fatal for the identical reason.
+# =============================================================================
+setup_case
+export STUB_BRANCH="main"
+run_hook "$(json_with_null_ctx "claude-sonnet-4" "/home/user/project")"
+assert_nonempty     "case10: null ctx_size still renders (does not crash silent)" "$HOOK_OUT"
+assert_contains     "case10: null ctx_size falls back to model-only" "claude-sonnet-4" "$HOOK_OUT"
+assert_not_contains "case10: null ctx_size omits a bogus tokens line" "tokens" "$HOOK_OUT"
 
 # --- Summary ------------------------------------------------------------------
 

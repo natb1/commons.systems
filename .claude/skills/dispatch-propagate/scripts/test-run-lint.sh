@@ -280,4 +280,55 @@ _t4_absent=absent
 [[ "$OUT" == *"All lint checks passed"* ]] && _t4_absent=present
 assert_eq "unresolvable baseline: did not report a clean pass" "absent" "$_t4_absent"
 
+# ---------------------------------------------------------------------------
+# Test 5: get-changed-apps.sh itself failing (ISOLATED from the resolve-
+# diff-base.sh call at line ~85) must still abort run-lint, not lint zero apps.
+#
+# Test 4 above deletes refs/remotes/origin/main, which fails BOTH
+# get-changed-apps.sh's own internal baseline resolution AND run-lint.sh's own
+# separate `DIFF_BASE=$(resolve-diff-base.sh ...)` call a few lines later
+# (line ~85, a plain assignment under `set -e` that was already fatal on its
+# own). Measured by hand: reverting ONLY the `if !
+# CHANGED_APPS=$("$SCRIPTS/get-changed-apps.sh")` guard back to the old
+# `done < <(...)` process-substitution form, Test 4 still passes — because the
+# OTHER call aborts first regardless. So Test 4 alone does not isolate this
+# guard; it is coincidentally green on both the fixed and the broken form of
+# THIS specific line, which is exactly the vacuous-fence shape this whole
+# change exists to catch.
+#
+# This test isolates it: a scratch copy of run-lint.sh + the real lib.sh, with
+# get-changed-apps.sh replaced by a stub that exits 1 while origin/main stays
+# fully resolvable (so the line-85 resolve-diff-base.sh call would succeed).
+# The only remaining way for run-lint.sh to fail here is the guard this test
+# targets.
+# ---------------------------------------------------------------------------
+echo "Test 5: get-changed-apps.sh failing alone (baseline otherwise fine) aborts run-lint"
+make_main_push_repo
+SCRATCH_SCRIPTS=$(mktemp -d "$TMP_ROOT/scratch-scripts.XXXXXX")
+cp "$SCRIPT_DIR/run-lint.sh" "$SCRATCH_SCRIPTS/run-lint.sh"
+cp "$SCRIPT_DIR/lib.sh" "$SCRATCH_SCRIPTS/lib.sh"
+chmod +x "$SCRATCH_SCRIPTS/run-lint.sh"
+cat > "$SCRATCH_SCRIPTS/get-changed-apps.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "get-changed-apps-stub: simulated failure" >&2
+exit 1
+STUB
+chmod +x "$SCRATCH_SCRIPTS/get-changed-apps.sh"
+prev_dir=$(pwd)
+cd "$REPO"
+set +e
+OUT=$("$SCRATCH_SCRIPTS/run-lint.sh" 2>&1)
+RC=$?
+set -e
+cd "$prev_dir"
+[ "$RC" -ne 0 ] && _t5_rc=nonzero || _t5_rc=zero
+assert_eq "isolated get-changed-apps failure: exit non-zero" "nonzero" "$_t5_rc"
+assert_contains "isolated get-changed-apps failure: names the failure" "get-changed-apps.sh failed" "$OUT"
+_t5_absent=absent
+[[ "$OUT" == *"All lint checks passed"* ]] && _t5_absent=present
+assert_eq "isolated get-changed-apps failure: did not report a clean pass" "absent" "$_t5_absent"
+_t5_zeroapps=absent
+[[ "$OUT" == *"No changed-file lint targets matched"* ]] && _t5_zeroapps=present
+assert_eq "isolated get-changed-apps failure: did not silently fall through to zero apps" "absent" "$_t5_zeroapps"
+
 report_results
