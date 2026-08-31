@@ -2098,8 +2098,9 @@ in this plan.
 **Recommended model: per unit — this PR is NOT uniformly sonnet.**
 *(Corrected 2026-08-30.* This line used to read "**Recommended model: sonnet** —
 five localized efficiency fixes in one 340-line script, plus one CAS pin." A
-PR-level `sonnet` tag silently overrides the `opus` rating that 12 of Position
-4's 22 units carry on their own nodes.*)* The assignment:
+PR-level `sonnet` tag silently overrides the `opus` rating that 11 of Position
+4's 22 units carry outright on their own nodes — plus two of U18's three
+sub-units.*)* The assignment:
 
 | Units | Work | Model |
 |---|---|---|
@@ -2148,12 +2149,19 @@ to evaluate a pure two-string predicate.
 All anchors *(from node bodies — re-locate)* in
 `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall`:
 
-- **`:146-150`** — second full `intentions/` scan per tick. Per
-  `tactic-review-stall-listnodes-duplicate-scan` Unit 2, this is one of **five
+- **`:188-207`** (the `listNodesStrict("./intentions")` at `:192`) — second full
+  `intentions/` scan per tick. *(Anchor corrected 2026-08-30.* This bullet used
+  to read `:146-150`, which is the `restore_staged_writes` /
+  `graph_rollback_node_writes` block — unrelated to enumeration.
+  `tactic-review-stall-listnodes-duplicate-scan` Unit 2 gives the range
+  itself.*)* Per that same Unit 2, this is one of **five
   enumerations across four files** that route through the same materialized
   node enumeration: `reconcile-graph-merged`, `reconcile-graph-review-stall`,
   `graph-auto-merge`, and `packages/intentionsutil/scripts/reconcile-graph.ts`
-  (which runs the scan twice — once `--no-apply`, once applying). The node
+  (whose **single** enumeration `reconcile-graph-merged` invokes **twice** —
+  once `--no-apply`, once applying — so the second is a guaranteed cache hit;
+  the fifth enumeration is that second invocation, not a second call site in
+  the file). The node
   explicitly scopes three other call sites **out**, and not as an oversight:
   `select-targets.ts:58` belongs to U17, and
   `dispatch-graph-census:73` / `dispatch-graph-scope-sweep:98` are reached in
@@ -2274,8 +2282,10 @@ retaining done tactics on disk for the every-tick full-scan callers.
 *Model: per unit — read the table under the PR heading, and each node's own
 `**Recommended model**` line; do NOT apply one PR-level tag.* This line used to
 read "*Model: sonnet* — localized efficiency fixes, clear shapes". Corrected
-2026-08-30: **12 of Position 4's 22 units are rated `opus`**, and a PR-level
-`sonnet` silently overrides every one of them.
+2026-08-30: **11 of Position 4's 22 units are rated `opus` outright** — U1, U2,
+U6, U7, U14, U15, U16, U17, U19, U20, U22 — **and U18 is mixed** (`sonnet` for
+its Unit 1, `opus` for its Units 2–3). A PR-level `sonnet` silently overrides
+every one of them.
 
 *(Attribution corrected again 2026-08-30.* An intermediate revision of this
 paragraph said "8 … units are rated `opus`" and named "the retention-scan,
@@ -2883,8 +2893,14 @@ than printing `8`.
 > Unit 3 is `tactic-graph-execute-fresh-main-read`'s contested half
 > (`provision-node-worktree:113`, `test-provision-node-worktree.sh`).
 
-**Recommended model: opus** for Units 1–2 (a reap that can delete the wrong
-checkout), **sonnet** for the rest. Split if convenient.
+**Recommended model: per unit — read each unit's own `*Model:*` line and the
+node's own `**Recommended model**`; do NOT apply one PR-level tag.** `opus` for
+Units 1–2 (a reap that can delete the wrong checkout) and for Unit 6's bucketing
+half; `sonnet` for the rest, including Unit 6's test half. Split if convenient.
+*(Corrected 2026-08-30.* This line used to read "**Recommended model: opus** for
+Units 1–2 …, **sonnet** for the rest", which silently overrode the `opus` that
+`tactic-reclaim-audit-spawn-handoff-expired-count` Unit 1 carries on its own
+node — the same defect PR5's heading was corrected for.*)*
 
 ### Context
 
@@ -2916,11 +2932,36 @@ checkout as removable.
 *Model: opus* — misclassification deletes wrong checkout
 
 **Unit 2 — standdown clear must not race a live session.**
-Two files change, per the node's own Scope ("Two files change. Nothing else."):
-`.claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh` — the
-unlettered no-worktree branch and its `standdown_clear "$node"` call, currently
-at `:663-677` *(re-locate before editing — re-check the anchor)* — and
-`test-lib-standdown-recheck.sh`. **`dispatch-graph-execute` is not edited.** It
+Two files change, per the node's own Scope ("Two files change. Nothing else.") —
+but **three sites inside the first file**, all in the same commit:
+
+1. `.claude/skills/dispatch-propagate/scripts/lib-standdown-recheck.sh`, the
+   unlettered no-worktree branch and its `standdown_clear "$node"` call
+   (currently `:663-677`). Replace the clear-and-`continue` with a `no_wt` flag;
+   the `wt` derivation stays, because the reason/recommendation strings
+   interpolate it.
+2. **Same file, the (h)/(i) site** (currently `:686-707`). Add the `no_wt` arm
+   **first**, producing the third reason variant
+   `standdown-winner-dead-node-held-no-worktree`, and keep `recommendation` as
+   one shared template with only its worktree sentence swapped. **This half is
+   not optional.** The node rejects bare deletion of the branch by name —
+   *"Bare deletion of the branch (fall straight through to (h)/(i)) — WRONG,
+   mechanically"* — because `worktree_in_sync` and `worktree_merged_in_sync`
+   both `return 1` on a missing directory, so every no-worktree node would park
+   as `standdown-winner-dead-work-unpushed` telling the operator to push from a
+   path that is not on disk.
+3. **Same file, the rule-ladder header comment** (currently `:107-147`). Delete
+   the `cleared-no-worktree` bullet at `:133-135`, replace it in the same slot
+   with the no-clear rule and its `n_live >= 1` invariant, and extend the (h)/(i)
+   description to three reason tags. The node: *"the header ladder is the
+   authoritative contract … it must change in the SAME commit."*
+
+Plus `test-lib-standdown-recheck.sh` — invert Test 15, add two cases, tighten
+Test 3's prefix glob to `standdown-winner-dead-node-held:*`.
+
+*(All four anchors above are from the node body — re-locate before editing.)*
+
+**`dispatch-graph-execute` is not edited.** It
 appears only as the shape being mirrored: the branch's worktree-path derivation
 follows `dispatch-graph-execute`'s `CONFLICT_WT` composition, nothing there
 changes. The cleared-no-worktree branch erases a stand-down while a live session
@@ -2979,7 +3020,13 @@ shows up nowhere.
 >    whatever it is, so a reason added later is counted without editing this
 >    script. A third literal recreates the same blindness on the next reason.
 
-*Model: opus* — reason-generic bucketing, not a literal list
+*Model: per sub-unit, matching table rows U20/U21 — `opus` for the bucketing
+change (the node's Unit 1: reason-generic bucketing, not a literal list),
+`sonnet` for the regression coverage in `test-reclaim-audit.sh` (its Unit 2).*
+*(Corrected 2026-08-30.* This line used to read a flat "*Model: sonnet*", then a
+flat "*Model: opus*". `intentions/tactic-reclaim-audit-spawn-handoff-expired-count.md`
+rates its two units differently — `opus` for Unit 1, `sonnet` for Unit 2 — and
+either flat tag overrides one of them.*)*
 
 **Unit 7 — explicit lane waits out CI.** Make the explicit-node dispatch lane
 wait out in-flight CI up to the reservation TTL instead of skipping, leaving the
