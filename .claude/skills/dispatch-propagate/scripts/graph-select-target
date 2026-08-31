@@ -80,10 +80,15 @@
 #
 # The THIRD write arm is the CI-pending liveness bound
 # (tactic-autonomous-ci-pending-liveness-bound). The `qa|review` sensor arm's
-# `ci-pending` outcome — `dispatch-ci-ready` exit 1 WITH `waiting` on stdout, a
-# draft PR whose CI has reported no verdict; an exit 1 with EMPTY stdout is that
-# script dying on a failed fetch/projection under its own `set -e`, and is
-# emitted as `ci-verdict-unreadable` without touching the ladder — used to be an
+# `ci-pending` outcome — a draft PR whose CI has reported no verdict; a read
+# the fetch could not complete AT ALL is a different thing, emitted as
+# `ci-verdict-unreadable` without touching the ladder. That token covers BOTH
+# unreadable reads on this arm: a failed verdict read (`_CI_VERDICT_RC != 0`)
+# and a failed `pulls/{n}` read (`_CI_RC != 0`). Every SIBLING arm spells that
+# second half `pr-state-unknown` instead, so one underlying failure carries two
+# different tokens depending on which arm observes it. The spelling here is
+# pinned by an assertion in the suite, so this COMMENT was the wrong half, not
+# the code — used to be an
 # unbounded skip: no counter, no timestamp,
 # forever. It is now counted per node in a SIDECAR FILE keyed on the PR's head
 # SHA (`ci_pending_strike_bump` / `ci_pending_strike_clear`, lib.sh), and on the
@@ -219,7 +224,12 @@
 # daemon over a Unix socket (see .claude/rules/sandbox.md).
 #
 # Exit codes: 0 on `node`/`empty`; 2 on usage or environment errors (a broken
-# store snapshot, a failed selector run, dispatch-ci-ready env failure).
+# store snapshot or a failed selector run). A `sensor_gate` rc-2 environment
+# error is a DECLARED BUT UNREACHABLE cause: no arm produces rc 2 today — see
+# the note at the STANDALONE_CLAIMED declaration below — so the
+# `(( rc == 2 )) && exit 2` branch and the claim rollback it guards are both
+# dead code, kept deliberately as the declared contract at that seam so a
+# future arm that needs rc 2 does not have to re-introduce the rollback.
 #
 # NOT set -e: exits are handled explicitly (matching the sibling dispatch
 # scripts).
@@ -256,8 +266,10 @@ STANDALONE_LOCKED=""
 # STANDALONE_CLAIMED / STANDALONE_EMITTED gate the _cleanup EXIT trap's claim
 # ROLLBACK. Claims are written per-candidate inside the selection loop, but a
 # LATER candidate can abort the whole run before any selection reaches stdout
-# (sensor_gate rc==2 — a dispatch-ci-ready environment failure — exits 2 with no
-# output). Without rollback those already-written markers are handed to nobody:
+# (sensor_gate rc==2 — an environment failure — exits 2 with no output; no arm
+# produces rc 2 today, and the branch is kept as the declared contract at this
+# seam so a future arm that needs it does not have to re-introduce the
+# rollback). Without rollback those already-written markers are handed to nobody:
 # the caller launches nothing, so no dispatch-graph-execute ever clears them, and
 # reservation_sweep keeps them until the standalone TTL expires. The trap clears
 # every claim this invocation wrote unless the selection was actually emitted.
@@ -914,21 +926,86 @@ _hold_node_ci_pending() {
   return $rc
 }
 
+# The PR-sensor globals _read_pr_ci owns. Declared here because `set -u` is on
+# and the qa|review arm reads _CI_RC to decide whether the sensors below it have
+# any input at all — a read that must not depend on some earlier gate having run
+# first.
+_CI_MERGED=""; _CI_STATE=""; _CI_HEAD=""; _CI_VERDICT=""; _CI_MERGEABLE=""; _CI_DRAFT=""
+_CI_PR=""; _CI_RC=1; _CI_VERDICT_RC=1
+
 # _read_pr_ci <pr> — one gh_pr_view_rest + one CI verdict, into globals
-# _CI_MERGED / _CI_HEAD / _CI_VERDICT / _CI_MERGEABLE. rc 1 when the PR is
-# unreadable. _CI_MERGEABLE is read off the SAME already-fetched PR view (no
-# extra gh round-trip): gh_pr_view_rest projects REST's boolean `.mergeable`
-# into the porcelain enum MERGEABLE/CONFLICTING/UNKNOWN (lib.sh, the
-# `mergeable:` branch of its jq projection).
+# _CI_MERGED / _CI_STATE / _CI_HEAD / _CI_VERDICT / _CI_MERGEABLE / _CI_DRAFT, plus the
+# bookkeeping globals _CI_RC / _CI_VERDICT_RC that say how well the read went
+# (and the write-only _CI_PR stamp described below). rc 1 when the PR is
+# unreadable — which now includes a PR whose `state` could not be read.
+#
+# Every field is read off the SAME already-fetched PR view (no extra gh
+# round-trip): gh_pr_view_rest projects REST's boolean `.mergeable` into the
+# porcelain enum MERGEABLE/CONFLICTING/UNKNOWN and REST's boolean `.draft` into
+# the porcelain `isDraft` (lib.sh, the `mergeable:` and `isDraft:` branches of
+# its jq projection).
+#
+# ONE FETCH PER CANDIDATE is the contract the callers rely on, and `_CI_RC` is
+# the half the callers actually read: rc 0 means the sensors below it have an
+# input.
+#
+# `_CI_PR` IS WRITE-ONLY. It is stamped here and read by NOTHING — its one
+# reader was a `[[ "$_CI_PR" != "$pr" ]]` re-fetch guard in the qa|review arm,
+# removed as dead code on two independent counts (the reasoning is recorded at
+# that site). It is retained only as a diagnostic stamp of WHICH candidate the
+# sensors were attempted for, stamped BEFORE the fetch so it records
+# ATTEMPTED-FOR rather than succeeded-for. It is NOT a contract any caller
+# relies on today, and no caller should be written on the assumption that it is;
+# the live invariant is `_CI_RC`.
 _read_pr_ci() {
   local pr="$1" pv
-  _CI_MERGED=""; _CI_HEAD=""; _CI_VERDICT=""; _CI_MERGEABLE=""
+  _CI_MERGED=""; _CI_STATE=""; _CI_HEAD=""; _CI_VERDICT=""; _CI_MERGEABLE=""; _CI_DRAFT=""
+  _CI_VERDICT_RC=1
+  _CI_PR="$pr"; _CI_RC=1
   pv=$(gh_pr_view_rest "$pr" 2>/dev/null) || return 1
   _CI_MERGED=$(jq -r '.mergedAt // empty' <<<"$pv" 2>/dev/null)
+  # OPEN / CLOSED, upcased by the projection. REST has no MERGED state — a
+  # merged PR is `closed` too — so `state` alone never means "unmerged"; it is
+  # only decisive once `mergedAt` has been checked.
+  _CI_STATE=$(jq -r '.state // empty' <<<"$pv" 2>/dev/null)
   _CI_MERGEABLE=$(jq -r '.mergeable // empty' <<<"$pv" 2>/dev/null)
+  # `| tostring`, NOT `// empty`: jq's alternative operator treats `false` as
+  # absent, so `.isDraft // empty` would map a genuinely non-draft PR — the one
+  # value the readiness gate below actually branches on — to the empty string.
+  # tostring keeps all three states distinguishable: "true" / "false" / "null".
+  _CI_DRAFT=$(jq -r '.isDraft | tostring' <<<"$pv" 2>/dev/null)
   _CI_HEAD=$(jq -r '.headRefOid // empty' <<<"$pv" 2>/dev/null)
   [[ -n "$_CI_HEAD" ]] || return 1
-  _CI_VERDICT=$(dispatch_ci_verdict_rest "$_CI_HEAD" 2>/dev/null || echo pending)
+  # `state` is a HARD REQUIREMENT beside `headRefOid`, for the same reason and
+  # with the same answer: every consumer below treats a non-`OPEN` state as
+  # TERMINAL, so an EMPTY — i.e. UNREAD — state reads as CLOSED. Failing the
+  # read once, HERE, is what makes that inversion structurally impossible rather
+  # than incidentally impossible. Today `state: (.state | ascii_upcase)`
+  # (lib.sh:1364-1381) makes jq exit 5 on an absent key, so an unread state
+  # already surfaces as `pr-state-unknown`; a null-safe projection edit — the
+  # shape `mergeStateStatus` in that same projection ALREADY uses — would end
+  # that by handing back `""`, and every qa/review candidate would then retire
+  # as `pr-closed-unmerged` with no strike, no hold and no park, halting the lane
+  # while the interrupt gate kept working. Guarding at the source rather than
+  # spelling `-n` at each call site is what keeps the next call site correct.
+  [[ -n "$_CI_STATE" ]] || return 1
+  # The verdict's OWN exit code is kept, separately from its value.
+  # dispatch_ci_verdict_rest returns 1 when its check-runs fetch, a check-suites
+  # fetch or a jq projection fails, and collapsing that into the string
+  # `pending` — as this line did when `pending` was every caller's fail-safe —
+  # is precisely the fail-open the ci-pending liveness bound closed: an
+  # unreadable verdict read as pending accrues a strike every tick and parks a
+  # healthy node to `office_hours` under a reason that misstates the cause.
+  # `pending` stays the VALUE, so the interrupt gates and the fix/conflict arms
+  # keep their existing fail-safe behaviour unchanged; _CI_VERDICT_RC is the new
+  # discriminator, and only the CI-readiness decision below consults it.
+  if _CI_VERDICT=$(dispatch_ci_verdict_rest "$_CI_HEAD" 2>/dev/null); then
+    _CI_VERDICT_RC=0
+  else
+    _CI_VERDICT_RC=1
+    _CI_VERDICT="pending"
+  fi
+  _CI_RC=0
   return 0
 }
 
@@ -944,7 +1021,10 @@ _read_pr_ci() {
 #          This covers BOTH the `null` route and the `conflict` route: a
 #          CONFLICTING PR is DECLINED here — no execution.fix write, no
 #          graph-commit, no fix attempt consumed — and reaches the conflict lane
-#          through provision-node-worktree's exit 11 instead.
+#          through provision-node-worktree's exit 11 instead. It also covers a
+#          PR in a TERMINAL state (merged, or closed without merging): an
+#          interrupt is a request to go fix a PR, which is meaningless once the
+#          PR can no longer be merged.
 #   rc 3 — an interrupt was due but could not be acted on (write/commit failed,
 #          an unreadable `.mergeable`, or a failed interruptRoute eval); a short
 #          reason token is printed on stdout and the caller skips the node.
@@ -959,6 +1039,30 @@ _gate_maybe_interrupt() {
   [[ "$pr" == "null" || -z "$pr" ]] && return 1
   _read_pr_ci "$pr" || return 1               # unreadable PR → do not interrupt
   [[ -n "$_CI_MERGED" ]] && return 1          # merged-awaiting-reconcile → not an interrupt
+  # The OTHER terminal PR state, and it must be declined HERE rather than only
+  # in the qa|review arm's `pr-closed-unmerged` guard, which runs AFTER this
+  # function on both interruptible phases — and which the `implement` arm has no
+  # counterpart to at all.
+  #
+  # A PR closed without merging keeps its last CI verdict and reports
+  # `mergeable: null -> UNKNOWN` (REST stops computing mergeability once a PR
+  # closes). So a RED closed PR satisfies the cost guard below, and
+  # interruptRoute(review, failing, UNKNOWN) answers `fix`: the tick would WRITE
+  # execution.fix to main, land it, burn a fix attempt and dispatch /fix-checks
+  # against a PR nobody can merge. That is strictly worse than the wrong-reason
+  # park the arm's guard was added to prevent, because that failure was at least
+  # read-only. The candidate falls through to its phase's normal gate instead,
+  # where qa|review reports the accurate `pr-closed-unmerged` skip.
+  #
+  # The `-n` half now RESTATES an invariant `_read_pr_ci` enforces rather than
+  # defending against a reachable input: that function requires a non-empty
+  # `_CI_STATE` and returns 1 without one, so an UNREAD state never reaches this
+  # line — it surfaces as `pr-state-unknown` at the `|| return 1` above. The
+  # spelling is kept because the distinction it names is exactly the one the
+  # requirement exists to protect: an empty `_CI_STATE` is an UNREAD state, NOT
+  # a closed one, and treating empty as closed would silently disable the whole
+  # interrupt lane. Enforced at the source; restated here.
+  [[ -n "$_CI_STATE" && "$_CI_STATE" != "OPEN" ]] && return 1
 
   # Cost guard, NOT the routing rule: interruptRoute returns null unless CI is
   # failing or the PR is CONFLICTING, so skip the node subprocess when neither
@@ -1028,8 +1132,10 @@ _gate_maybe_interrupt() {
 
 # _gate_fix_active <id> <pr> <pushed_sha> <fix_since> — the candidate already
 # carries an active interrupt (router emitted phase `fix`). Resolve on green,
-# guard/retry otherwise. Prints the phase to emit (rc 0), a skip reason
-# (rc 1), or an env error (rc 2).
+# guard/retry otherwise. Prints the phase to emit (rc 0) or a skip reason
+# (rc 1). It NEVER returns rc 2: that return is part of sensor_gate's declared
+# contract, but no arm produces it today (see the exit-code note in the file
+# header), so do not write a caller that branches on it.
 #
 # DELIBERATELY CONFLICT-BLIND: this function reads CI only (`_read_pr_ci`'s
 # `_CI_VERDICT`) and never consults `_CI_MERGEABLE`. A node that entered `fix`
@@ -1050,6 +1156,30 @@ _gate_fix_active() {
   if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
   if ! _read_pr_ci "$pr"; then echo "pr-state-unknown"; return 1; fi
   if [[ -n "$_CI_MERGED" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+  # The OTHER terminal PR state, guarded HERE because this function IS
+  # sensor_gate's whole `fix` arm (`sensor_gate` case `fix` calls it and returns
+  # its rc; nothing else runs on this path). `_gate_maybe_interrupt`'s
+  # terminal-state decline only guards ENTRY, and a PR closed AFTER the
+  # interrupt was entered never passes through it again.
+  #
+  # Such a PR still reports `mergedAt` null (so the merged branch above
+  # correctly did not fire) and KEEPS its last CI verdict, so the `failing` case
+  # below re-emitted `fix` every tick: /fix-checks dispatched against a PR
+  # nobody can merge, until FIX_ATTEMPT_CAP, and then a tracked hold whose
+  # reason misstates the cause. That is the same non-read-only failure the
+  # decline at entry exists to prevent — guarding entry but not the
+  # already-entered interrupt would fix half the class this change names.
+  #
+  # The node is NOT stranded at `fix` by this skip. reconcile-graph-merged
+  # enumerates every merge-absorbable tactic carrying an execution.pr and
+  # absorbs a closed-not-merged PR's node to `done` with all-null completion
+  # evidence (its header: "merged without residue, or closed-not-merged ->
+  # done"). That is the same disposal route the qa|review arm's identical
+  # `pr-closed-unmerged` skip already relies on.
+  #
+  # Spelled `!= "OPEN"` with no `-n`, matching the qa|review arm: `_read_pr_ci`
+  # guarantees a non-empty `_CI_STATE` whenever it returns 0.
+  if [[ "$_CI_STATE" != "OPEN" ]]; then echo "pr-closed-unmerged"; return 1; fi
   case "$_CI_VERDICT" in
     passing)
       # Resolution: clear the interrupt (+ the re-review reset when past review),
@@ -1279,7 +1409,7 @@ _gate_conflict_active() {
 #       fresh interrupt emits `fix`; a resolved interrupt emits the ladder phase).
 #   1 = not satisfied (skip reason on stdout); 2 = environment error.
 sensor_gate() {
-  local id="$1" phase="$2" pr="$3" pushed_sha="$4" fix_since="$5" rc merged_at ci_ready_out
+  local id="$1" phase="$2" pr="$3" pushed_sha="$4" fix_since="$5" merged_at
   case "$phase" in
     fix)
       # An active interrupt (router override). Resolve/guard/retry.
@@ -1321,87 +1451,185 @@ sensor_gate() {
         3) return 1 ;;
       esac
       if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
+      # ONE `pulls/{n}` read per candidate, reused from here down, and this
+      # block issues no gh call of its own. Reaching this line means `$pr` is
+      # non-null, and _gate_maybe_interrupt's ONLY return ahead of its own
+      # `_read_pr_ci "$pr"` is the null-PR guard the `no-pr` line above has just
+      # excluded — so _read_pr_ci has already run for THIS `$pr` and stamped
+      # every _CI_* global off it.
+      #
+      # A `[[ "$_CI_PR" != "$pr" ]]` re-fetch guard stood here, documented as
+      # the CORRECTNESS half protecting against inheriting a PREVIOUS
+      # candidate's sensors. It was DEAD CODE on two independent counts and was
+      # removed rather than kept for looking defensive:
+      #
+      #   1. The globals cannot cross candidates at all. The selection loop
+      #      invokes this function as `emit_phase=$(sensor_gate ...)` — a
+      #      COMMAND SUBSTITUTION, hence a subshell — so every _CI_* assignment
+      #      dies with the candidate that made it and the next candidate starts
+      #      from the script-level initialisers. Measured by instrumenting
+      #      sensor_gate's entry across the selector suite: 62 invocations, all
+      #      62 entering with _CI_PR empty and _CI_RC 1.
+      #   2. Even within a single call the condition is never true: the one
+      #      _gate_maybe_interrupt return that skips the stamp is the null-PR
+      #      one, which the `no-pr` line above has already excluded. Measured by
+      #      instrumenting the branch body: taken ZERO times across the suite.
+      #
+      # What actually enforces the invariant is the `_CI_RC != 0` check
+      # immediately below, which is a LIVE check: were this arm ever reordered
+      # ahead of _gate_maybe_interrupt, _CI_RC would still hold its initialiser
+      # 1 and the candidate would be skipped as `ci-verdict-unreadable`.
+      if (( _CI_RC != 0 )); then
+        # The `pulls/{n}` read itself failed, so nothing below has an input.
+        # Skip WITHOUT touching the strike ladder, for the same reason the
+        # unreadable-verdict branch below does not touch it: a failed fetch is
+        # not evidence either way. The old code fell through to
+        # dispatch-ci-ready here and let its independent open-PR-list fetch
+        # decide; that second, differently-shaped read is exactly what this
+        # change removes, and inheriting its verdict-free "ready" would select a
+        # node whose PR state is unknown.
+        echo "ci-verdict-unreadable"; return 1
+      fi
       # Defense in depth (tactic-graph-census-recurrence Unit 1): a merge that
       # lands between the tick's reconcile-graph-merged sweep and this selection
       # within the same tick must NOT be re-selected as a stale review target —
       # reconcile absorbs it to done next tick. REST reports a merged PR as
       # state `closed`, not MERGED; the merged signal is `mergedAt != null`
-      # (same field reconcile-graph-merged reads). A read failure is non-fatal:
-      # fall through to the CI-verdict check rather than misclassify.
+      # (same field reconcile-graph-merged reads).
       #
-      # One PR read, two fields. The head SHA is what keys the CI-pending
-      # strike ladder below, and it comes off the SAME projection as mergedAt —
-      # no second REST round-trip. `<<<`, never `echo | jq`: zsh's builtin echo
-      # un-escapes \t/\n and corrupts valid JSON (.claude/rules/shell-json.md).
-      local pv head_sha=""
-      if pv=$(gh_pr_view_rest "$pr" 2>/dev/null); then
-        merged_at=$(jq -r '.mergedAt // empty' <<<"$pv" 2>/dev/null)
-        head_sha=$(jq -r '.headRefOid // empty' <<<"$pv" 2>/dev/null)
-        if [[ -n "$merged_at" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+      # STILL A LIVE READ, which is load-bearing: _read_pr_ci calls
+      # gh_pr_view_rest with DISPATCH_PR_JSON_CACHE unset on this path, so
+      # `_CI_MERGED` is this tick's own uncached `pulls/{n}` body, taken
+      # milliseconds earlier inside this same sensor_gate call — not a store
+      # field and not the reconciler pair's memo, whose deliberate invisibility
+      # to this selector tactic-review-stall-pr-json-duplicate-fetch pins.
+      merged_at="$_CI_MERGED"
+      if [[ -n "$merged_at" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+      # The OTHER terminal PR state, and the one every CI-shaped sensor below
+      # mistakes for a healthy draft. A PR CLOSED WITHOUT MERGING reports:
+      # `mergedAt` null (so the merged branch above correctly did not fire),
+      # `isDraft` still true (GitHub keeps `draft` set on a PR closed while
+      # draft), and `mergeable` null -> UNKNOWN (REST stops computing it once a
+      # PR closes) — which is precisely the value the CONFLICTING short-circuit
+      # below deliberately falls through. If that PR's head sha also carries an
+      # empty check rollup (path-filtered workflows, or checks that simply never
+      # ran), `dispatch_classify_rollup` maps it to `pending` with rc 0, so the
+      # unreadable guard does not fire either. The node then reads as `waiting`,
+      # accrues a strike EVERY tick, and at the cap is parked to `office_hours`
+      # as `ci-pending-stalled` — telling a human to go re-trigger CI on a PR
+      # that is closed. A true statement about the counter and a false one about
+      # the node.
+      #
+      # `state` is the one field that separates it, so it is checked HERE rather
+      # than folded into the readiness decision: the readiness decision answers
+      # "has CI concluded", and for a closed PR that question has no meaning to
+      # answer either way.
+      #
+      # Neither counts nor clears the strike ladder, matching the merged branch
+      # directly above: a terminal PR state is not evidence about CI in either
+      # direction. Nothing here reopens the PR or edits the graph — the node is
+      # skipped with an accurate reason and left for a human (or a future
+      # reconciler) to dispose of, which is the same posture
+      # `pr-merged-awaiting-reconcile` takes.
+      if [[ "$_CI_STATE" != "OPEN" ]]; then echo "pr-closed-unmerged"; return 1; fi
+      # The head SHA that keys the CI-pending strike ladder below, off the same
+      # projection as mergedAt. Guaranteed non-empty here: _read_pr_ci returns 1
+      # (hence _CI_RC != 0, handled above) when it cannot read one.
+      local head_sha="$_CI_HEAD"
+
+      # CI readiness, inlined from `dispatch-ci-ready`. That script STAYS for
+      # its other callers; what is removed is this arm's use of it, because the
+      # subprocess cost was a whole-repo open-PR listing
+      # (pr_list_import -> pr_list_open --limit 300, since nothing on this path
+      # sets DISPATCH_PR_LIST_FILE) issued PER CANDIDATE PER INVOCATION. It
+      # spent that listing only to resolve a node id back to a PR and then read
+      # four fields off the match — .isDraft, .mergeable, .headRefOid and
+      # dispatch_ci_verdict_rest's verdict — all four of which are already in
+      # hand above, resolved through `$pr` (execution.pr), the same node->PR
+      # authority this function already trusts at its three other call sites.
+      #
+      # A FAITHFUL transcription of dispatch-ci-ready:58-89, in ITS order — the
+      # order matters, because the two short-circuits run BEFORE that script
+      # ever fetches a verdict:
+      #   no matching PR      -> ready    (see the divergence note below)
+      #   isDraft == false    -> ready    (a non-draft PR has no CI gate)
+      #   mergeable CONFLICTING -> ready  (the conflict lane runs regardless of
+      #                                    CI; UNKNOWN deliberately falls through)
+      #   verdict == pending  -> waiting
+      #   otherwise           -> ready    (passing and failing are both actionable)
+      #
+      # ONE DELIBERATE DIVERGENCE, on the first line. dispatch-ci-ready resolves
+      # its argument against the OPEN-PR list, so a node whose PR is closed and
+      # unmerged matched nothing and came back `ready` — selecting the node on
+      # the strength of a lookup MISS. Resolving through `$pr` instead, that PR
+      # is read rather than missed.
+      #
+      # It is NOT, however, "gated like any other" — and an earlier revision of
+      # this note claimed exactly that, which was wrong in a way worth recording.
+      # Every sensor below describes a LIVE PR's CI, and a closed PR answers all
+      # of them like a healthy draft, so routing it through here traded "wrongly
+      # ready" for "wrongly parked under a wrong reason". Both terminal states
+      # are therefore settled ABOVE this block, on `mergedAt` and then on
+      # `state`, and only an OPEN PR reaches the readiness decision at all.
+      local ci_ready="ready"
+      if [[ "$_CI_DRAFT" != "false" && "$_CI_MERGEABLE" != "CONFLICTING" ]]; then
+        # Only here does the CI verdict matter — and so only here can an
+        # unreadable verdict change the outcome. _read_pr_ci fetches the verdict
+        # EAGERLY for the interrupt gate, unlike dispatch-ci-ready which reaches
+        # its fetch on exactly this condition; consulting _CI_VERDICT_RC any
+        # earlier would turn a PR that needs no CI gate at all into a skip.
+        if (( _CI_VERDICT_RC != 0 )); then
+          ci_ready="unreadable"
+        elif [[ "$_CI_VERDICT" == "pending" ]]; then
+          ci_ready="waiting"
+        fi
       fi
-      # NOT _CI_HEAD: _gate_maybe_interrupt returns early on a null PR BEFORE
-      # _read_pr_ci resets the globals, so _CI_HEAD can still hold a previous
-      # candidate's SHA at this point.
-      # CAPTURE stdout rather than discarding it: exit 1 is AMBIGUOUS and the
-      # stdout word is the only thing that disambiguates it. dispatch-ci-ready
-      # runs `set -euo pipefail`, and its `VERDICT=$(dispatch_ci_verdict_rest
-      # ...)` also exits 1 when the check-runs fetch, the check-suites fetch or
-      # a jq projection fails (lib.sh's dispatch_ci_verdict_rest returns 1 on
-      # each) — and so does a failed `pr_list_import` self-fetch. Those deaths
-      # happen BEFORE anything is printed, so stdout is empty; a genuine pending
-      # verdict prints exactly `waiting` first. Nothing else on stdout is
-      # possible: the READY paths print `ready` and exit 0.
-      ci_ready_out=$("$SCRIPT_DIR/dispatch-ci-ready" "$id" 2>/dev/null)
-      rc=$?
-      case "$rc" in
-        0)
-          # CI concluded. Clear the ladder so the count always means
-          # CONSECUTIVE pending observations, mirroring dispatch-graph-execute's
-          # clear-on-success.
+      case "$ci_ready" in
+        ready)
+          # CI concluded, or no CI gate applies. Clear the ladder so the count
+          # always means CONSECUTIVE pending observations, mirroring
+          # dispatch-graph-execute's clear-on-success.
           ci_pending_strike_clear "$NATIVE_ROOT" "$id"
           echo "$phase"; return 0 ;;
-        1)
-          # FAIL-OPEN GUARD, ahead of everything else on this arm. An exit 1
-          # with no `waiting` on stdout is a fetch/projection failure, not a
-          # pending verdict (see the capture above). A failed fetch is not
-          # evidence either way, so it must neither COUNT nor CLEAR: counting it
-          # would let one gh outage walk every reviewed node to the cap and park
-          # it to `office_hours` under a reason that misstates the cause, and
-          # the empty-head_sha exemption below does not catch it — that node's
-          # `pulls/{n}` read succeeded, only its check-runs read did not.
+        unreadable)
+          # FAIL-OPEN GUARD. dispatch_ci_verdict_rest returns 1 when its
+          # check-runs fetch, a check-suites fetch or a jq projection fails —
+          # and `pending` is the value _read_pr_ci leaves behind on that
+          # failure, so the VALUE alone cannot tell the two apart; _CI_VERDICT_RC
+          # is what does. A failed fetch is not evidence either way, so it must
+          # neither COUNT nor CLEAR: counting it would let one gh outage walk
+          # every reviewed node to the cap and park it to `office_hours` under a
+          # reason that misstates the cause. This node's `pulls/{n}` read
+          # SUCCEEDED — only its check-runs read did not — so no PR-level guard
+          # catches it either.
           #
           # This is the posture reconcile-graph-review-stall already takes on
           # the SHARED sidecar ("RAW_VERDICT empty ... reaches here having
           # neither counted nor cleared"). One surface counting what the other
           # refuses to count is no bound at all.
-          if [[ "$ci_ready_out" != "waiting" ]]; then
-            echo "ci-verdict-unreadable"; return 1
-          fi
-          # ci-pending, now BOUNDED. Two cases keep today's behaviour verbatim:
-          # an explicit --node run (a human re-running `dispatch <id>` must not
-          # burn the autonomous budget), and an unreadable PR (no head SHA to
-          # key the ladder on — counting every unreadable PR under one key would
-          # hold an arbitrary node).
-          if [[ -n "$NODE_TARGET" || -z "$head_sha" ]]; then
-            echo "ci-pending"; return 1
-          fi
-          local strikes
-          strikes=$(ci_pending_strike_bump "$NATIVE_ROOT" "$id" "$head_sha") || {
-            echo "ci-pending"; return 1
-          }
-          if (( strikes < DISPATCH_CI_PENDING_STRIKE_CAP )); then
-            echo "ci-pending (strike $strikes/$DISPATCH_CI_PENDING_STRIKE_CAP)"; return 1
-          fi
-          if _hold_node_ci_pending "$id" "$pr" "$strikes" "$head_sha"; then
-            ci_pending_strike_clear "$NATIVE_ROOT" "$id"
-            echo "ci-pending-cap-held"; return 1
-          fi
-          # Hold failed: do NOT clear the sidecar, so the next tick retries the
-          # landing at cap — the same posture the fix-attempt-cap producer and
-          # dispatch-graph-execute's strike ladder take.
-          echo "ci-pending-hold-failed"; return 1 ;;
-        *) echo "graph-select-target: dispatch-ci-ready failed (exit $rc) for $id" >&2; return 2 ;;
-      esac ;;
+          echo "ci-verdict-unreadable"; return 1 ;;
+      esac
+      # ci-pending, BOUNDED. The explicit --node lane keeps today's behaviour
+      # verbatim: a human re-running `dispatch <id>` must not burn the
+      # autonomous budget.
+      if [[ -n "$NODE_TARGET" ]]; then
+        echo "ci-pending"; return 1
+      fi
+      local strikes
+      strikes=$(ci_pending_strike_bump "$NATIVE_ROOT" "$id" "$head_sha") || {
+        echo "ci-pending"; return 1
+      }
+      if (( strikes < DISPATCH_CI_PENDING_STRIKE_CAP )); then
+        echo "ci-pending (strike $strikes/$DISPATCH_CI_PENDING_STRIKE_CAP)"; return 1
+      fi
+      if _hold_node_ci_pending "$id" "$pr" "$strikes" "$head_sha"; then
+        ci_pending_strike_clear "$NATIVE_ROOT" "$id"
+        echo "ci-pending-cap-held"; return 1
+      fi
+      # Hold failed: do NOT clear the sidecar, so the next tick retries the
+      # landing at cap — the same posture the fix-attempt-cap producer and
+      # dispatch-graph-execute's strike ladder take.
+      echo "ci-pending-hold-failed"; return 1 ;;
     main-qa)
       # PR merged before main-qa (the prod-deploy-landed half of the gate
       # lands with tactic-main-qa-phase; the phase enum does not carry main-qa
