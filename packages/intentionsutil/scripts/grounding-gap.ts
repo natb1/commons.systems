@@ -5,7 +5,7 @@
 // strategy-complete-grounding, not an error).
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/grounding-gap.ts [intentionsDir] [--json]
+//   node --import tsx/esm packages/intentionsutil/scripts/grounding-gap.ts [intentionsDir] [--json]
 //
 // Defaults to `intentions` (relative to cwd) when no directory is given.
 // `--json` emits the whole GroundingReport as one JSON object for tooling

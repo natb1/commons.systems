@@ -22,11 +22,11 @@
 // the node *store* moved to the ref, not worktree-path resolution.
 //
 // Run from anywhere (the repo root is resolved relative to this file, not cwd):
-//   npx tsx packages/intentionsutil/scripts/office-hours-select.ts            # queue head
-//   npx tsx packages/intentionsutil/scripts/office-hours-select.ts <node-id>  # single item
-//   npx tsx packages/intentionsutil/scripts/office-hours-select.ts --list     # human view
-//   npx tsx packages/intentionsutil/scripts/office-hours-select.ts --type <t> # queue head of type <t>
-//   npx tsx packages/intentionsutil/scripts/office-hours-select.ts --type <t> --list  # list restricted to type <t>
+//   node --import tsx/esm packages/intentionsutil/scripts/office-hours-select.ts            # queue head
+//   node --import tsx/esm packages/intentionsutil/scripts/office-hours-select.ts <node-id>  # single item
+//   node --import tsx/esm packages/intentionsutil/scripts/office-hours-select.ts --list     # human view
+//   node --import tsx/esm packages/intentionsutil/scripts/office-hours-select.ts --type <t> # queue head of type <t>
+//   node --import tsx/esm packages/intentionsutil/scripts/office-hours-select.ts --type <t> --list  # list restricted to type <t>
 //
 // `--type <t>` (or `--type=<t>`) takes one of the SessionType values (see
 // `../src/schema.ts` SESSION_TYPES): requirement-discovery,

@@ -28,7 +28,7 @@ invokes it on its hourly schedule.
 For local development you can run the TypeScript entry directly with `tsx`:
 
 ```
-npx tsx office-hours-snapshot/src/main.ts [flags]
+node --import tsx/esm office-hours-snapshot/src/main.ts [flags]
 ```
 
 ## Flags

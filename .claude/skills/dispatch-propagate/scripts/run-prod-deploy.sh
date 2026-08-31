@@ -41,7 +41,7 @@ fi
 if [ "$USES_FIRESTORE" = true ]; then
   NAMESPACE=$(get_firestore_namespace "$APP_NAME" "prod")
   echo "Seeding Firestore (namespace: ${NAMESPACE})..."
-  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="$NAMESPACE" npx tsx packages/firestoreutil/bin/run-seed.ts
+  APP_NAME="$APP_NAME" FIRESTORE_NAMESPACE="$NAMESPACE" node --import tsx/esm packages/firestoreutil/bin/run-seed.ts
 fi
 
 echo "Production deployment complete."
