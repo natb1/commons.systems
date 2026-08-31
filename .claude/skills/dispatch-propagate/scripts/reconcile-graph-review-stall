@@ -434,6 +434,36 @@ done <<<"$CANDIDATES"
 # other tree, find nothing dirty, commit nothing, exit 0 — and this sweep would
 # print `recovered` for state left stranded uncommitted. (Same reason
 # reconcile-graph-merged passes -C.)
+#
+# WHAT A REFUSED --base COSTS THE REST OF THE BATCH. Threading --base here makes
+# check_base_freshness()'s fail-closed park reachable for this sweep for the
+# first time: before this change the sweep passed no pins, so the guard
+# short-circuited on an empty manifest and could never park. The cost is not
+# confined to the diverged node. park_and_exit() partitions into bystander
+# PRUNES (re-applied and landed) and park_ids, where park_ids is ALL_IDS minus
+# those prunes (graph-commit:3436-3459). This sweep passes no prune ids, so
+# bystander_prunes is always empty and EVERY id in the invocation parks -- and
+# the conflicted_ids() fallback sets park_ids=("${ALL_IDS[@]}") outright.
+#
+# So one node's unresolvable execution.fix divergence parks this tick's other
+# CLEAN recovered nodes into office_hours. That is not self-healing: the
+# enumeration above skips any node with `office_hours != null`, and the selector
+# excludes on REVIEWED_MARKER, so the collateral nodes leave this sweep's
+# candidate set entirely. A later tick does NOT pick them back up; they need an
+# office-hours park clear.
+#
+# Kept fail-closed deliberately -- refusing beats landing over a stale base --
+# but it is a real behaviour change, not a no-op, and it is written down here
+# because nothing else in the file says it. The two ways out both cost more than
+# this unit owns: pinning and landing per node breaks the "AT MOST ONE
+# graph-commit per tick" lock budget stated in the header above, and teaching
+# park_and_exit() to partition on which --base key actually refused is a
+# graph-commit change.
+#
+# The idempotency note further up is a DIFFERENT path and remains true: it
+# justifies the per-candidate SKIP taken when an id fails node_id_is_safe or
+# fails to pin. Nothing is staged for a skipped id, so the next tick really does
+# re-enumerate it. Do not read that sentence as covering the park above.
 if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]; then
   refresh_lock
   GC_ARGS=(-C "$REPO_ROOT" -m "graph: enter fix-interrupt on stalled reviews (${#RECOVERED_IDS[@]} node(s))")
