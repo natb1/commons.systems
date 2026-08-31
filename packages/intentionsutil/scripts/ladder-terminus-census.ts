@@ -19,7 +19,7 @@
 // themselves resolve).
 //
 // Usage:
-//   npx tsx ladder-terminus-census.ts [<intentions-dir>] [--intentions <dir>]
+//   node --import tsx/esm ladder-terminus-census.ts [<intentions-dir>] [--intentions <dir>]
 //     [--lint] [--strict]
 //
 // The intentions dir may be given positionally, via `--intentions`, or

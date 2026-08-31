@@ -453,7 +453,7 @@ direnv exec "$WT" true 1>&2 \
 
 # Ancestry-context projection (tactic-node-ancestry-context): best-effort, non-fatal.
 # Read-only decision context for the phase worker; the node body stays the work contract.
-npx tsx "$PROJECT_ROOT/packages/intentionsutil/scripts/node-ancestry.ts" "$NODE_ID" \
+node --import tsx/esm "$PROJECT_ROOT/packages/intentionsutil/scripts/node-ancestry.ts" "$NODE_ID" \
   --dir "$PROJECT_ROOT/intentions" --out "$WT/.claude/ancestry-context.md" 1>&2 \
   || echo "provision-node-worktree: WARNING — ancestry-context projection failed for $NODE_ID (non-fatal; worker proceeds without it)" >&2
 

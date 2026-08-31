@@ -6,7 +6,7 @@
 // stdout — no committed file, no side effects.
 //
 // Run from anywhere (the store dir is resolved relative to this file, not cwd):
-//   npx tsx intentionsutil/scripts/detect-rung.ts
+//   node --import tsx/esm intentionsutil/scripts/detect-rung.ts
 //
 // An empty or absent `intentions/` directory is the bare-repo case and yields
 // `rung-0` (empty node list → no principle roots → rung-0).

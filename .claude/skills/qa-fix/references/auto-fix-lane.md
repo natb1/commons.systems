@@ -204,9 +204,9 @@ Otherwise (opus-fixable items present), choose exactly one path:
    Run it from the node's worktree, exactly as the clean path runs
    `transition-node "$N" --set-pr "$PR_NUM"` (`.claude/skills/qa-fix/SKILL.md`,
    the node-lane **Completion** bullet). Use `dangerouslyDisableSandbox: true` —
-   `npx` writes the npm cache and `graph-commit` pushes over the network:
+   `graph-commit` pushes over the network:
    ```bash
-   npx tsx packages/intentionsutil/scripts/apply-lane-pass.ts "$N" --stamp \
+   node --import tsx/esm packages/intentionsutil/scripts/apply-lane-pass.ts "$N" --stamp \
      --lane qa-fix --phase qa --sha "$(git rev-parse HEAD)"
    packages/intentionsutil/scripts/graph-commit -m "graph: record qa fixing pass on $N" "$N"
    ```

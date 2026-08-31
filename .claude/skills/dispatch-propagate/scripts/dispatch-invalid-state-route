@@ -314,8 +314,8 @@ fleet_latch_mint() {
     fi
   done
   # Only the committer is exec'd directly; the writer is a TypeScript source fed
-  # to `npx tsx`, and is checked in-repo non-executable (0644) on purpose, so an
-  # `-x` test on it would refuse every legitimate mint.
+  # to `node --import tsx/esm`, and is checked in-repo non-executable (0644) on
+  # purpose, so an `-x` test on it would refuse every legitimate mint.
   if [[ ! -x "$commit_exe" ]]; then
     printf 'dispatch-invalid-state-route: %s is not executable; not minting\n' "$commit_exe" >&2
     return 1
@@ -366,7 +366,7 @@ fleet_latch_mint() {
   # store explicitly, and invoke the copy of the script under the same root. Both
   # paths are the provenance-checked variables from above, never a freshly-composed
   # string.
-  ( cd "$PROJECT_ROOT" && npx tsx "$write_node_exe" --dir "$PROJECT_ROOT/intentions" --file "$tmp" ) >/dev/null 2>&1 || { rm -f "$tmp"; return 1; }
+  ( cd "$PROJECT_ROOT" && node --import tsx/esm "$write_node_exe" --dir "$PROJECT_ROOT/intentions" --file "$tmp" ) >/dev/null 2>&1 || { rm -f "$tmp"; return 1; }
   rm -f "$tmp"
   ( cd "$PROJECT_ROOT" && "$commit_exe" -m "graph: latch fleet invalid state $slug" "$id" ) >/dev/null 2>&1 || return 1
   printf 'dispatch-invalid-state-route: minted fleet latch %s\n' "$id" >&2

@@ -15,7 +15,7 @@
 // that clarification's scope.)
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <strategy-id> [--dir <path>]
+//   node --import tsx/esm packages/intentionsutil/scripts/strategy-fingerprint.ts <strategy-id> [--dir <path>]
 //
 // Stdout: the fingerprint hex string, followed by a newline.
 

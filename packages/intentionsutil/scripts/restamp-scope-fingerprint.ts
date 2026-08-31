@@ -32,7 +32,7 @@
 // traceable in worker logs.
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/restamp-scope-fingerprint.ts \
+//   node --import tsx/esm packages/intentionsutil/scripts/restamp-scope-fingerprint.ts \
 //     [--repo-root <dir>] [--main-root <dir>] [--from-rev <rev>] <id>
 //
 // Writes `<mainRoot>/.claude/worktrees/<id>.scope-fingerprint` with content

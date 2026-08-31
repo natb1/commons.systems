@@ -2,7 +2,7 @@
  * Offline script to render the 1200x630 Open Graph / Twitter card from its SVG source.
  * Manual regeneration step; the PNG is checked in.
  *
- * Usage: npx tsx landing/scripts/generate-og-card.ts
+ * Usage: node --import tsx/esm landing/scripts/generate-og-card.ts
  */
 import sharp from "sharp";
 import { readFileSync } from "node:fs";
