@@ -167,9 +167,10 @@ Otherwise (opus-fixable items present), choose exactly one path:
      this pass — the Step-2b triage, any Step-0.5 fallback fork, the Step-3.6
      filing subagents, and the Step-3.7 `/implement-unit` invocations.
 
-   qa-fix keeps **no** merge base (Step 1 runs only a name-only
-   `git diff origin/main...HEAD`), so **omit** `--base-sha` (it serializes as
-   null). Derive `repo` from the local remote (read-only git, sandbox-safe). On
+   qa-fix keeps **no** merge base for the ledger (Step 1 resolves a base through
+   `resolve-diff-base.sh` and runs one name-only `git diff "$DIFF_BASE"..HEAD`
+   against it — a base for that one diff, not a base the pass records), so
+   **omit** `--base-sha` (it serializes as null). Derive `repo` from the local remote (read-only git, sandbox-safe). On
    the node lane (`TARGET_KIND=node`) pass `--node-id "$N"` and omit `--issue`;
    on the legacy issue lane (`TARGET_KIND=issue`) keep `--issue "$N"` and omit
    `--node-id`:
