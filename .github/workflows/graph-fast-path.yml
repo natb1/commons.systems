@@ -104,15 +104,23 @@ jobs:
   # verdict: the same "gate that does not gate" the next paragraph raises for
   # `skipped`, except always-on rather than only on guard rejection.
   #
-  # THE PREMISE HAS ONE KNOWN BOUND, and it is not "every commit" without
+  # THE PREMISE HAS TWO KNOWN BOUNDS, and it is not "every commit" without
   # qualification. GitHub caps a push event's `commits` array at 20 entries, and
   # `github.event.commits.*.id` is exactly what the guard iterates — so a
   # `graph/**` push carrying more than 20 commits leaves commits 21+
   # unexamined, and these stubs would stamp green for a push that did change
   # source. `graph-commit` pushes a single rebased node commit, so the bound is
-  # not reached in practice, but nothing in the guard enforces that. Read the
-  # proof above as "proven for the commits GitHub reported", and close the bound
-  # in `check-graph-fast-path.sh` before promoting any context below.
+  # not reached in practice, but nothing in the guard enforces that. The second
+  # bound is the opposite end of the same array: on an EMPTY `commits` payload
+  # the guard's benign-already-landed branch
+  # (`check-graph-fast-path.sh:41-70`) exits 0 having examined no path at all,
+  # on the strength of `merge-base --is-ancestor <head> origin/main` alone. That
+  # one is benign for these stubs specifically — a SHA already reachable from
+  # `main` cannot admit new content by being fast-forwarded onto it — but it is
+  # a second exit-0 route that does not prove "intentions/-only", so a reader
+  # closing only the 20-commit bound has not closed the premise. Read the proof
+  # above as "proven for the commits GitHub reported", and close BOTH bounds in
+  # `check-graph-fast-path.sh` before promoting any context below.
   #
   # FAIL-CLOSED IS TRUE OF `graph-commit`'S POLL, NOT AUTOMATICALLY OF THE
   # RULESET. When `guard` rejects a push these jobs are skipped, and
@@ -134,11 +142,11 @@ jobs:
   # `graph-commit`'s poll is unaffected in its VERDICT — it filters check runs
   # to the exact names `["acceptance","preview-and-smoke","lint","unit-tests"]`
   # and requires four greens, so extra rows are ignored by construction
-  # (`packages/intentionsutil/scripts/graph-commit:1978`). Its TIMING is not
+  # (`packages/intentionsutil/scripts/graph-commit:1979`). Its TIMING is not
   # unaffected: all eight jobs become runnable at once when `guard` finishes and
   # compete for the same concurrent-job budget, while `await_checks` gives the
   # four required names a fixed 180s (`GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS`,
-  # `graph-commit:361`) before returning rc 1 and burning a push attempt. Under
+  # `graph-commit:362`) before returning rc 1 and burning a push attempt. Under
   # fleet load the four stubs below can queue ahead of the four required ones.
   # If graph landings start timing out with everything still `pending`, raise
   # `GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS` or drop these jobs — do not read it as
@@ -154,7 +162,7 @@ jobs:
   #
   # It also requires editing `graph-commit`'s poll IN THE SAME CHANGE. That jq
   # program hardcodes `["acceptance","preview-and-smoke","lint","unit-tests"]`
-  # and gates on `ngreen -eq 4` (`graph-commit:1978,2027`), so a context added
+  # and gates on `ngreen -eq 4` (`graph-commit:1979,2028`), so a context added
   # to the ruleset but not to that list is never waited on: `await_checks`
   # returns 0 as soon as ITS four are green and `push <sha>:main` fires with the
   # newly-required fifth context still `pending`. Branch protection rejects that
@@ -219,8 +227,10 @@ jobs:
   # `.github/workflows/unit-tests.yml:133`,
   # `packages/intentionsutil/test/reader-required-dir.test.ts:94`,
   # `packages/intentionsutil/SEPARABILITY.md:156` — all of which a rename would
-  # strand. (SEPARABILITY.md cited this workflow by PATH only until it grew a
-  # job-name citation describing this very job; re-measure
+  # strand. (That last one is NOT independent evidence: SEPARABILITY.md cited
+  # this workflow by PATH only, and the job-name citation at :156 was authored
+  # by the same change that added this comment, describing this very job. Count
+  # the five above it, not six; re-measure
   # `grep -in guard packages/intentionsutil/SEPARABILITY.md` before assuming
   # otherwise.) No machine reference to the name exists (`graph-commit`'s poll
   # excludes `guard` by name filter), so the rename would have been safe
