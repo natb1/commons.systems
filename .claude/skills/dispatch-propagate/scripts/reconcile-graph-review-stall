@@ -198,7 +198,10 @@ HEAD_AT_ARM=""
 # `fix` arm below, BEFORE apply-fix-state mutates the file.
 declare -A BASE_BLOB=()
 restore_staged_writes() {
-  [[ "${#WRITTEN_IDS[@]}" -gt 0 ]] || return 0
+  # No local zero-write guard: graph_rollback_node_writes owns that now (it
+  # returns silently on an empty id set), which is what let
+  # reconcile-graph-merged retire the hand-disarm its empty-plan exit carried.
+  # Re-deriving it here is the drift this library exists to end.
   graph_rollback_node_writes "$REPO_ROOT" "$HEAD_AT_ARM" reconcile-graph-review-stall \
     "${WRITTEN_IDS[@]}"
 }

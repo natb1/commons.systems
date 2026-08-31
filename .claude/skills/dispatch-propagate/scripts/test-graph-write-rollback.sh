@@ -1288,16 +1288,24 @@ else
 fi
 
 # ===========================================================================
-# Case 9b: an EMPTY apply plan DISARMS the rollback, so a concurrent writer's
-# unpushed commit SURVIVES a sweep that wrote nothing.
+# Case 9b: THE PROPERTY — a concurrent writer's unpushed commit SURVIVES a sweep
+# that wrote nothing, and no rollback is claimed for it.
 #
-# The empty-plan early exit (`${#EDIT[@]} -eq 0`) used to `exit` with
-# RESTORE_ON_FAILURE still armed, so the EXIT trap ran restore_node_files() over
-# a sweep that had written NOTHING. graph_rollback_node_writes() reads a HEAD
-# that has moved since HEAD_AT_ARM as "graph-commit landed and stranded a
-# commit", so a CONCURRENT graph writer that committed during this sweep's
-# planning window was handed straight to _graph_discard_stranded_commits and
-# `git reset --mixed`ed away — by a sweep with no write of its own to roll back.
+# Asserted as a property of the outcome, deliberately, and NOT as "the flag was
+# cleared". The mechanism has changed twice under this same assertion. It was
+# first a hand-written `RESTORE_ON_FAILURE=0` at reconcile-graph-merged's
+# empty-plan early exit, which kept the EXIT trap from running
+# restore_node_files() at all. That disarm is now retired: the shared rollback
+# returns silently on an empty id set (so it claims nothing), and the
+# `Graph-Writer:` attribution classifies the peer's commit as not-ours (so it
+# survives). A test written against the flag would have gone red on a change
+# that strictly improved the behaviour it exists to protect.
+#
+# What it is protecting against: graph_rollback_node_writes() reads a HEAD that
+# has moved since HEAD_AT_ARM as "graph-commit landed and stranded a commit", so
+# a CONCURRENT graph writer that committed during this sweep's planning window
+# was handed straight to _graph_discard_stranded_commits and `git reset
+# --mixed`ed away — by a sweep with no write of its own to roll back.
 #
 # The empty plan is ROUTINE, not exceptional, which is why it needs pinning: a
 # record-time mint sitting at `main-qa` with no recorded merge evidence is
@@ -1311,12 +1319,24 @@ fi
 # apply run of reconcile-graph.ts. The shim lands the other writer's commit once
 # (sentinel guarded), then execs the real node.
 #
+# The SILENCE assertion is what gives the retired disarm teeth. Survival alone
+# no longer distinguishes the mechanisms: with the no-ids guard removed, the
+# peer's unattributed commit is still preserved, because the fail-closed arm
+# refuses. But a sweep that wrote nothing has nothing to say about rollback, so
+# the refusal is itself a defect on this path — and asserting that no rollback
+# line of ANY kind is emitted goes red the moment the guard is removed.
+#
 # Assert the COMMIT's survival, not the exit code. The pre-fix sweep also exited
 # 0 — the trap's `exit $rc` preserves the status it inherited — so an
-# exit-code-only assertion would pass with the reset still happening. Verified
-# RED against a copy of reconcile-graph-merged with the `RESTORE_ON_FAILURE=0`
-# disarm line removed: `ahead=0`, the concurrent content gone from disk, and
-# `discarded by moving HEAD back to ...` on stderr.
+# exit-code-only assertion would pass with the reset still happening.
+#
+# Verified RED, when the disarm was the mechanism, against a copy of
+# reconcile-graph-merged with the `RESTORE_ON_FAILURE=0` line removed:
+# `ahead=0`, the concurrent content gone from disk, and `discarded by moving
+# HEAD back to ...` on stderr. The disarm has since been retired, and case 9c
+# is the RED-verified guard for the mechanism that replaced it — reverting
+# lib-graph-rollback.sh's classifier reproduces exactly that failure there,
+# with the flag ARMED and a real write in flight.
 # ===========================================================================
 T9C="$WORK/t9c-seed"
 build_seed_repo "$T9C"
@@ -1429,10 +1449,11 @@ if [[ $rc -eq 0 ]] \
    && grep -q 'landed by a concurrent graph writer' <<<"$disk9c" \
    && [[ -z "$status9c" ]] \
    && ! grep -q 'discarded by moving HEAD back to' <<<"$out" \
-   && ! grep -q 'rolled the node write' <<<"$out"; then
-  ok "reconcile-graph-merged empty-plan disarm: a concurrent writer's unpushed commit SURVIVES a zero-write sweep (still ahead by 1, content intact on HEAD and on disk, tree clean, no rollback claim)"
+   && ! grep -q 'rolled the node write' <<<"$out" \
+   && ! grep -q 'with NO Graph-Writer attribution' <<<"$out"; then
+  ok "reconcile-graph-merged zero-write path: a concurrent writer's unpushed commit SURVIVES a sweep that wrote nothing (still ahead by 1, content intact on HEAD and on disk, tree clean), and the sweep says NOTHING about rollback — no claim, no discard, no refusal"
 else
-  no "reconcile-graph-merged empty-plan disarm (rc=$rc, ahead=$ahead9c, subject='$subject9c')"
+  no "reconcile-graph-merged zero-write path (rc=$rc, ahead=$ahead9c, subject='$subject9c')"
   printf '%s\n' "$out"
   printf 'status: %s\n' "$status9c"
   printf 'disk:\n%s\n' "$disk9c"

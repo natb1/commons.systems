@@ -357,36 +357,35 @@ done < <(jq -c '.deferred[]?' <<<"$PLAN")
 # --- Land the plan as one graph-commit ---------------------------------------
 mapfile -t EDIT < <(jq -r '.edit[]?' <<<"$PLAN")
 if [[ "${#EDIT[@]}" -eq 0 ]]; then
-  # DISARM BEFORE EXITING. An empty apply plan means the apply run mutated
-  # nothing, so there is nothing to roll back — but the EXIT trap does not know
-  # that, and would call restore_node_files() anyway. Two harms follow, and the
-  # second is not confined to this sweep:
+  # NO HAND-DISARM HERE, and that is a deliberate retirement rather than an
+  # omission. An empty apply plan means the apply run mutated nothing, so the
+  # EXIT trap's restore_node_files() is a zero-write call — and a
+  # `RESTORE_ON_FAILURE=0` used to sit here to keep it from running at all,
+  # because the shared rollback did two harmful things on that path:
   #
-  #   1. It logs "rolled the node write(s) back to HEAD" for a sweep that wrote
-  #      nothing, which is simply false in the journal.
-  #   2. graph_rollback_node_writes() compares HEAD against HEAD_AT_ARM to tell
-  #      an ordinary rollback from graph-commit having moved HEAD. If a
-  #      CONCURRENT graph writer landed a commit while we were planning, that
-  #      comparison sees a moved HEAD, enters _graph_discard_stranded_commits,
-  #      and `git reset --mixed`es away a commit this sweep never made.
+  #   1. it logged "rolled the node write(s) back to HEAD" for a sweep that
+  #      wrote nothing, which is simply false in the journal;
+  #   2. it compared HEAD against HEAD_AT_ARM, read a CONCURRENT graph writer's
+  #      commit landed during our planning window as OUR stranded write, and
+  #      `git reset --mixed`ed away a commit this sweep never made.
+  #
+  # Both are now fixed where they were caused, in lib-graph-rollback.sh: (1) by
+  # the no-ids guard at the top of graph_rollback_node_writes, which returns
+  # silently rather than claiming a rollback it did not perform, and (2) by the
+  # `Graph-Writer:` attribution, which classifies a peer writer's commit as not
+  # ours and keeps it. A caller-side flag could only ever have covered harm (2)
+  # on the paths that remembered to set it — never the ARMED path, and never
+  # graph-select-target, which has no such flag at all.
   #
   # An empty plan is ROUTINE, not exceptional: unprovenMainQa enumerates a
   # merged record-time mint on every sweep and isMergeAbsorbable then refuses
-  # it, so this path is reached often. A rare-path bug would be survivable; a
-  # routine-path one is not.
+  # it, so this path is reached often. That is why it is pinned by a test
+  # (test-graph-write-rollback.sh case 9b) rather than left to reasoning.
   #
-  # Safe because an empty `.edit[]` means the apply run wrote nothing: every
-  # writeNode() in reconcile-graph.ts is paired with an editSet.add(), so
-  # `.edit[]` empty <=> no node file was written. There is nothing to restore.
-  #
-  # NOT "safe because BASE_BLOB is empty". That was the original rationale here
-  # and it is the wrong reason: the destructive
-  # `_graph_discard_stranded_commits` leg runs BEFORE the per-id loop and
-  # restores the STRANDED COMMITS' paths, not the caller's pinned ids. An empty
-  # BASE_BLOB therefore does not make the trap harmless, and stating it that
-  # way reads as if this disarm were cosmetic. It is not — the destructive leg
-  # is exactly what the disarm exists to keep out of a zero-write path.
-  RESTORE_ON_FAILURE=0
+  # The no-ids guard really does fire here: every writeNode() in
+  # reconcile-graph.ts is paired with an editSet.add(), so an empty `.edit[]`
+  # means no node file was written, and the same deterministic plan produced the
+  # BASE_BLOB pins restore_node_files() passes as its id set.
   [[ "$HARD_ERROR" -ne 0 ]] && exit 1
   exit 0
 fi

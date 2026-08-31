@@ -111,6 +111,9 @@
 #   be trusted to restore to. Pass "" only when it genuinely could not be read;
 #   the moved-HEAD classification is then skipped.
 #   <label> prefixes every diagnostic (the calling script's name).
+#   <id>... is the set of nodes this writer actually mutated. NO ids means no
+#   write happened, and the call is a silent no-op (see the guard at the top of
+#   the body).
 # _graph_commit_writer <repo-root> <sha> — print <sha>'s `Graph-Writer`
 # attribution, or NOTHING when it carries none (every commit made before the
 # trailer shipped, every hand-made commit, every other tool's commit).
@@ -130,6 +133,21 @@ graph_rollback_node_writes() {
   local repo_root="$1" head_at_arm="$2" label="$3"
   shift 3
   local -a ids=("$@")
+  # NO IDS => NOTHING WAS WRITTEN => NOTHING TO ROLL BACK, and nothing to say.
+  # A zero-write call used to walk the whole classification and then print
+  # "rolled the node write(s) back to HEAD" over an empty id loop — a claim that
+  # is simply false in the journal, and the reason reconcile-graph-merged's
+  # empty-plan early exit had to disarm its EXIT trap by hand before exiting.
+  # The guard belongs HERE, not in each caller: reconcile-graph-review-stall
+  # already carried its own copy (`[[ ${#WRITTEN_IDS[@]} -gt 0 ]] || return 0`),
+  # which is exactly the per-writer re-derivation this library exists to end.
+  #
+  # This is a CLAIM guard, not a safety one. What makes a zero-write trap safe
+  # is the `Graph-Writer:` attribution below, which refuses to read another
+  # writer's commit as this sweep's stranded write. Both are needed and neither
+  # substitutes for the other — a sweep that DID write is not covered by this
+  # guard at all, and that is the larger half of the surface.
+  [[ "${#ids[@]}" -gt 0 ]] || return 0
   local sid head_now
   head_now="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null)" || {
     echo "$label: cannot read HEAD — the node write(s) were NOT rolled back; inspect intentions/ by hand" >&2
