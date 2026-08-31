@@ -204,7 +204,8 @@ skip the spawn for conflicting PRs too.
   documents and `transitions.test.ts:295` pins. `ci == failing` alone is *not* pinned by
   anything — it would rely on the local, incidental fact that this sweep's `conflict` arm is
   currently retired.
-- `tactic-review-stall-conflict-lane` (open draft, `phase: null`) proposes un-retiring exactly
+- `tactic-review-stall-conflict-lane` (`phase: done` on `origin/main`, re-measured
+  2026-08-30) proposes un-retiring exactly
   that arm — routing a CONFLICTING reviewed node into the conflict resolution lane instead of
   no-oping. Clarification 135 records conflict-outranks-CI as doctrine everywhere. A narrower
   guard would silently become wrong the moment that lands, and would fail silently (the sweep
@@ -234,7 +235,8 @@ Everything above the guard — `refresh_lock`, `gh_pr_view_rest`, the `STATE != 
 
 ### Composition with the adjacent CI-verdict tactic (ordering-sensitive — read this)
 
-`tactic-review-stall-ci-verdict-cache-miss` (open draft, `phase: null`) proposes reading
+`tactic-review-stall-ci-verdict-cache-miss` (`phase: implement` on `origin/main`,
+re-measured 2026-08-30) proposes reading
 `.mergeable` **first** so that a CONFLICTING PR short-circuits without calling
 `dispatch_ci_verdict_rest` at all. That reorders the very two variables this guard reads. The
 composition rule, stated so neither tactic silently breaks the other:
