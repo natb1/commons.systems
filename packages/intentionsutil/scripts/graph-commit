@@ -486,6 +486,36 @@ declare -A EXPECTED=()
 SNAP_DIR=""
 KEEP_SNAP=0
 CURRENT_MSG=""
+# GRAPH_WRITER_LABEL — the DURABLE WRITER IDENTITY stamped as a `Graph-Writer:`
+# trailer onto every commit this script makes on a caller's behalf (the content
+# commit, the plumbing commit, and the park commit). Read once from the
+# `GRAPH_WRITER` environment variable, defaulting to this script's own name.
+#
+# It exists because nothing else in a graph commit identifies who made it.
+# Author/committer identity is whatever the ambient git config supplies (see
+# build_lock_commit's note), the subject is a fixed `graph: …` shape, and every
+# graph commit is single-parent and intentions/-only. Two concurrent graph
+# writers sharing the main checkout therefore produce commits that are
+# INDISTINGUISHABLE by every property a reader has — which is exactly the hole
+# lib-graph-rollback.sh's `_graph_discard_stranded_commits` fell into: it read a
+# peer writer's freshly landed commit as this sweep's own stranded write and
+# reset it away. A per-writer label makes that structurally impossible: a
+# foreign commit fails the ownership test and is preserved.
+#
+# A TRAILER rather than an author/committer override, deliberately. The trailer
+# is additive — it leaves `git blame`, `git shortlog` and every identity-keyed
+# tool reading the real human/CI identity, and it lives in the BODY, so the
+# subject-matching in id_divergence_is_own_orphan() and in
+# lib-graph-rollback.sh's park test are untouched by it.
+#
+# The label must be a single line: a trailer that spans lines is not a trailer.
+# Refuse a malformed one rather than emitting a commit whose attribution silently
+# does not parse (.claude/rules/code-style.md).
+GRAPH_WRITER_LABEL="${GRAPH_WRITER:-graph-commit}"
+if [[ ! "$GRAPH_WRITER_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]; then
+  echo "graph-commit: GRAPH_WRITER=$(printf '%q' "$GRAPH_WRITER_LABEL") is not a usable writer label — it must match ^[A-Za-z0-9][A-Za-z0-9._/-]*\$ (one line, no whitespace) so it can be stamped as a 'Graph-Writer:' commit trailer" >&2
+  exit 2
+fi
 # TMP_INDEX_DIR — tempdir holding the THROWAWAY index build_commit_plumbing()
 # builds its tree in (exported as GIT_INDEX_FILE for exactly those git calls).
 # Never the repo's own .git/index, which that writer must not touch. Non-empty
@@ -1505,7 +1535,23 @@ commit_files() {
     git add -- "intentions/$id.md"
   done
   assert_staged_safe
-  git commit -q -m "$CURRENT_MSG"
+  git commit -q -m "$(attributed_commit_message)"
+}
+
+# The commit message as it is actually written: CURRENT_MSG's subject, then the
+# `Graph-Writer:` attribution trailer (see GRAPH_WRITER_LABEL's declaration for
+# why the identity has to be in the commit at all, and why it is a trailer).
+#
+# ONE function for both writers. commit_files() and build_commit_plumbing() are
+# required to produce the same tree AND the same message for the same inputs —
+# that equivalence is what test-graph-commit.sh's plumbing cases assert — so the
+# trailer must not be appended at one call site and forgotten at the other.
+#
+# The subject is untouched: `%s` still reads exactly CURRENT_MSG, which is what
+# id_divergence_is_own_orphan() below and lib-graph-rollback.sh's
+# `graph: park `* park test both match on.
+attributed_commit_message() {
+  printf '%s\n\nGraph-Writer: %s\n' "$CURRENT_MSG" "$GRAPH_WRITER_LABEL"
 }
 
 # --- Commit, without a working tree (GRAPH_COMMIT_WRITER=plumbing) -----------
@@ -1668,7 +1714,13 @@ build_commit_plumbing() { # <base-commit>
   # land time.
   base_date="$(git log -1 --format=%cI "$base_sha")" \
     || plumb_die "build_commit_plumbing: could not read $base_sha's committer date"
-  sha="$(GIT_AUTHOR_DATE="$base_date" GIT_COMMITTER_DATE="$base_date" git commit-tree "$tree" -p "$base_sha" -m "$CURRENT_MSG")" \
+  # attributed_commit_message() rather than a bare CURRENT_MSG: the plumbing
+  # writer is the worktree writer's twin, and the `Graph-Writer:` trailer is
+  # part of the message both must produce. It is a pure function of
+  # GRAPH_WRITER_LABEL, which is read once at startup, so the pinned-date
+  # determinism above survives — the same base, content and label still yield
+  # the same SHA on a retry within this invocation.
+  sha="$(GIT_AUTHOR_DATE="$base_date" GIT_COMMITTER_DATE="$base_date" git commit-tree "$tree" -p "$base_sha" -m "$(attributed_commit_message)")" \
     || plumb_die "build_commit_plumbing: could not commit-tree $tree onto $base_sha"
 
   rm -rf "$TMP_INDEX_DIR"

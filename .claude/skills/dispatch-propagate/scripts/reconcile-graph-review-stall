@@ -117,6 +117,12 @@ source "$SCRIPT_DIR/lib.sh"
 # graph_rollback_node_writes — the shared roll-a-failed-node-write-back-to-HEAD
 # primitive this sweep shares with reconcile-graph-merged.
 source "$SCRIPT_DIR/lib-graph-rollback.sh"
+# The durable writer identity graph-commit stamps onto every commit it makes for
+# this sweep, and the string graph_rollback_node_writes below compares each
+# unpushed commit's `Graph-Writer:` trailer against — so a CONCURRENT writer's
+# commit is recognised as not-ours and kept. It MUST stay identical to the
+# <label> argument passed at the call site (see lib-graph-rollback.sh's header).
+export GRAPH_WRITER=reconcile-graph-review-stall
 # node_id_is_safe / require_safe_node_id / pin_base_blob — the shared
 # diagnosis-time compare-and-swap pin this sweep shares with
 # reconcile-graph-merged. Rollback-on-failure and compare-and-swap-on-land are

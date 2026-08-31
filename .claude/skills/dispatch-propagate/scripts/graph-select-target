@@ -237,6 +237,16 @@ source "$SCRIPT_DIR/lib-claude-agents.sh"
 source "$SCRIPT_DIR/lib-graph-worktree.sh"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib-graph-rollback.sh"
+# The durable writer identity graph-commit stamps onto every commit it makes for
+# this script, and the string _rollback_node_write's graph_rollback_node_writes
+# call compares each unpushed commit's `Graph-Writer:` trailer against — so a
+# CONCURRENT writer's commit is recognised as not-ours and kept. It MUST stay
+# identical to the <label> argument passed at that call site (see
+# lib-graph-rollback.sh's header). This script has no RESTORE_ON_FAILURE flag at
+# all — its five gate call sites invoke the rollback directly — so the
+# attribution is the ONLY thing standing between a peer writer's commit and the
+# discard.
+export GRAPH_WRITER=graph-select-target
 
 # The selection log reuses the decision-log appender with its own file: the lib
 # resolves its target from DISPATCH_DECISION_LOG_FILE at source time.

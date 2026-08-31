@@ -18,11 +18,19 @@
 #
 # Usage (source it, then call after a failed land):
 #   source "$SCRIPT_DIR/lib-graph-rollback.sh"
+#   export GRAPH_WRITER=my-script                        # SAME string as <label>
 #   HEAD_AT_ARM="$(git -C "$REPO_ROOT" rev-parse HEAD)"   # BEFORE the write
 #   ... mutate intentions/<id>.md ...
 #   if ! graph-commit ...; then
 #     graph_rollback_node_writes "$REPO_ROOT" "$HEAD_AT_ARM" my-script "$id"
 #   fi
+#
+# `export GRAPH_WRITER` is not optional bookkeeping — it is what makes this
+# writer's own commits recognisable as its own. graph-commit stamps that string
+# as a `Graph-Writer:` trailer; the <label> argument below is compared against
+# it. A caller that omits the export gets its commits stamped with
+# graph-commit's default and this rollback then classifies them as ANOTHER
+# writer's, which is safe (they are kept) but leaves them stranded on HEAD.
 #
 # No `source` of any other file: this library is copied standalone into test
 # fixtures, exactly as lib.sh is.
@@ -59,10 +67,43 @@
 #   - HEAD moved, unpushed commits that are all graph-commit PARK commits
 #                                  → keep them (an unpushed park is a record a
 #                                    human still needs) and say so loudly.
-#   - HEAD moved, any unpushed NON-park commit → that is the escaped write.
-#                                    Discard it by rewinding to <head-at-arm>
-#                                    and restoring the paths it touched when
-#                                    that is safe, else refuse loudly.
+#   - HEAD moved, unpushed NON-park commits attributed to ANOTHER writer
+#                                  → not ours to touch. Keep them and restore
+#                                    only our own node files to HEAD.
+#   - HEAD moved, unpushed NON-park commits carrying NO attribution
+#                                  → REFUSE. See the fail-closed note below.
+#   - HEAD moved, unpushed NON-park commits attributed to US → that is the
+#                                    escaped write. Discard it by rewinding to
+#                                    <head-at-arm> and restoring the paths it
+#                                    touched when that is safe, else refuse
+#                                    loudly.
+#
+# WHY ATTRIBUTION, AND WHY IT FAILS CLOSED.
+# The intentions/-only + single-parent gate in _graph_discard_stranded_commits
+# CANNOT TELL TWO CONCURRENT GRAPH WRITERS APART: both produce single-parent,
+# intentions/-only commits with a `graph: …` subject, so a peer writer's commit
+# landed into this shared checkout while we were planning read as OUR stranded
+# write and was reset away. graph-commit now stamps every commit it makes with a
+# `Graph-Writer: <label>` trailer (see GRAPH_WRITER_LABEL in
+# packages/intentionsutil/scripts/graph-commit), and <label> here is compared
+# against it. A caller gets its own commits attributed by exporting
+# GRAPH_WRITER=<the same label> before it invokes graph-commit.
+#
+# An UNATTRIBUTED commit is treated as `unknown` and REFUSED (rc 1), never
+# discarded. Every graph commit made before the trailer shipped carries none, as
+# does every hand-made commit and every stale worktree's leftovers — and the
+# destructive leg cannot tell those from our own un-landed write. Falling through
+# to the discard on `unknown` would simply reinstate the behaviour this
+# classification replaces, so the unknown case refuses and says what to inspect.
+# The cost of refusing wrongly is a dirty tree and a loud message; the cost of
+# discarding wrongly is another writer's committed work, unrecoverably.
+#
+# ATTRIBUTION AND THE PARK SUBJECT ANSWER DIFFERENT QUESTIONS, and the park test
+# is asked FIRST. Attribution answers "is this commit mine"; the subject answers
+# "is this a park". graph-commit makes the park commit on the caller's behalf, so
+# a park may legitimately carry EITHER the caller's label or graph-commit's own
+# default — and a park is kept in both cases, because an unpushed park is a
+# record a human still needs whoever made it. Never collapse the two tests.
 #
 # graph_rollback_node_writes <repo-root> <head-at-arm> <label> <id>...
 #   <head-at-arm> is HEAD as of the moment the rollback was armed — the exact
@@ -70,6 +111,21 @@
 #   be trusted to restore to. Pass "" only when it genuinely could not be read;
 #   the moved-HEAD classification is then skipped.
 #   <label> prefixes every diagnostic (the calling script's name).
+# _graph_commit_writer <repo-root> <sha> — print <sha>'s `Graph-Writer`
+# attribution, or NOTHING when it carries none (every commit made before the
+# trailer shipped, every hand-made commit, every other tool's commit).
+#
+# Read through git's own trailer parser (`%(trailers:key=…)`) rather than by
+# grepping the body: the parser only accepts a well-formed trailer in the
+# message's trailing block, so a `Graph-Writer:` string quoted inside a node
+# body that happened to reach a commit message cannot forge an attribution.
+# `head -n1` because a malformed message could carry two; the first wins and the
+# comparison then simply fails to match, which is the safe direction.
+_graph_commit_writer() {
+  git -C "$1" log -1 --format='%(trailers:key=Graph-Writer,valueonly)' "$2" 2>/dev/null \
+    | head -n1 | tr -d '[:space:]'
+}
+
 graph_rollback_node_writes() {
   local repo_root="$1" head_at_arm="$2" label="$3"
   shift 3
@@ -85,23 +141,65 @@ graph_rollback_node_writes() {
       echo "$label: HEAD moved to ${head_now:0:8} during the write and origin/main is unreadable ($rl_out) — the node write(s) were NOT rolled back; inspect by hand before any other graph-commit runs from this checkout" >&2
       return 1
     fi
-    local -a unpushed=() nonpark=()
+    local -a unpushed=() parks=() mine=() foreign=() unattributed=()
     [[ -n "$rl_out" ]] && mapfile -t unpushed <<<"$rl_out"
-    local sha
+    local sha writer
     for sha in "${unpushed[@]}"; do
-      # park_and_exit()'s commit subject is `graph: park <ids> (...)`; anything
-      # else on top of origin/main is the writer's own un-landed content commit.
-      [[ "$(git -C "$repo_root" log -1 --format=%s "$sha")" == 'graph: park '* ]] || nonpark+=("$sha")
+      # THE PARK TEST COMES FIRST, and is asked of the SUBJECT alone.
+      # park_and_exit()'s commit subject is `graph: park <ids> (...)` — since
+      # the per-id park partition it may carry further `; land …` / `; prune …`
+      # clauses, which is why this is a PREFIX test and not an equality one.
+      # graph-commit makes that commit on the caller's behalf, so its
+      # attribution may be the caller's label or graph-commit's own default; a
+      # park is kept either way (see the header).
+      if [[ "$(git -C "$repo_root" log -1 --format=%s "$sha")" == 'graph: park '* ]]; then
+        parks+=("$sha")
+        continue
+      fi
+      # Anything else on top of origin/main is SOME writer's un-landed content
+      # commit. Whose, is exactly what the attribution answers.
+      writer="$(_graph_commit_writer "$repo_root" "$sha")"
+      if [[ -z "$writer" ]]; then
+        unattributed+=("$sha")
+      elif [[ "$writer" == "$label" ]]; then
+        mine+=("$sha")
+      else
+        foreign+=("$sha")
+      fi
     done
-    if [[ "${#nonpark[@]}" -gt 0 ]]; then
+    # Fail closed on unknown: an unattributed commit may be our own un-landed
+    # write (which `checkout --` would "roll back" as a no-op, stranding it for
+    # the next graph-commit to push) or another process's work (which the
+    # discard would destroy). Nothing here can tell them apart, so nothing here
+    # touches the tree.
+    if [[ "${#unattributed[@]}" -gt 0 ]]; then
+      echo "$label: HEAD carries ${#unattributed[@]} unpushed commit(s) with NO Graph-Writer attribution (${unattributed[0]}) — this rollback cannot tell its own un-landed write from another process's work, so the node write(s) were NOT rolled back and NOTHING was discarded. Inspect them by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
+      return 1
+    fi
+    if [[ "${#mine[@]}" -gt 0 ]]; then
+      # The discard rewinds to <head-at-arm>, which drops EVERY commit above it
+      # — not only the ones the gate inspected. So a foreign commit anywhere in
+      # that range makes the rewind unsafe no matter how clean our own stranded
+      # commits look. Refuse rather than trade one writer's leak for another
+      # writer's loss.
+      if [[ "${#foreign[@]}" -gt 0 ]]; then
+        echo "$label: HEAD carries this writer's un-landed commit(s) (${mine[0]:0:8}) BELOW or beside another writer's commit(s) (${foreign[0]:0:8}, Graph-Writer: $(_graph_commit_writer "$repo_root" "${foreign[0]}")) — rewinding to ${head_at_arm:0:8} would destroy the other writer's work, so the node write(s) were NOT rolled back. Drop this writer's commit(s) by hand before any other graph-commit runs from this checkout" >&2
+        return 1
+      fi
       # Either the stranded commit is dropped (the tree is back at
       # <head-at-arm>, nothing left to check out) or the refusal was reported —
       # either way the `checkout --` below must not run and must not be claimed.
-      _graph_discard_stranded_commits "$repo_root" "$head_at_arm" "$label" "${nonpark[@]}"
+      _graph_discard_stranded_commits "$repo_root" "$head_at_arm" "$label" "${mine[@]}"
       return $?
     fi
-    if [[ "${#unpushed[@]}" -gt 0 ]]; then
-      echo "$label: graph-commit's park commit ${unpushed[0]:0:8} is not on the local origin/main ref — treat the park as possibly unpushed; the node files are restored to HEAD, which KEEPS it" >&2
+    # Nothing above <head-at-arm> is ours. Everything there is KEPT, and the
+    # per-id `checkout --` below restores only our own node files to HEAD — it
+    # touches no commit and no other writer's paths.
+    if [[ "${#foreign[@]}" -gt 0 ]]; then
+      echo "$label: another graph writer's unpushed commit ${foreign[0]:0:8} (Graph-Writer: $(_graph_commit_writer "$repo_root" "${foreign[0]}")) is on HEAD — it is NOT this sweep's stranded write and is KEPT; only this sweep's own node file(s) are restored to HEAD" >&2
+    fi
+    if [[ "${#parks[@]}" -gt 0 ]]; then
+      echo "$label: graph-commit's park commit ${parks[0]:0:8} is not on the local origin/main ref — treat the park as possibly unpushed; the node files are restored to HEAD, which KEEPS it" >&2
     fi
   fi
   local rc=0
@@ -118,10 +216,19 @@ graph_rollback_node_writes() {
 # Drop the un-landed commit(s) graph-commit left on HEAD, restoring the checkout
 # to the state the writer found. Only safe when HEAD still descends from
 # <head-at-arm> and every stranded commit is a single-parent, intentions/-only
-# commit — i.e. unmistakably this writer's own write and not some other process's
-# work in the shared checkout. When it is not safe, refuse loudly: leaving the
-# commit with a warning that names it beats both silently stranding it and
-# destroying someone else's commit.
+# commit. When it is not safe, refuse loudly: leaving the commit with a warning
+# that names it beats both silently stranding it and destroying someone else's
+# commit.
+#
+# WHO the commit belongs to is NOT decided here and never was decidable here:
+# a peer graph writer's commit is single-parent and intentions/-only too, so
+# these checks passed it just as readily. Ownership is settled by the
+# `Graph-Writer:` attribution in graph_rollback_node_writes() above, which only
+# reaches this function with commits it has already proved are the caller's own
+# — and refuses outright when any commit above <head-at-arm> is another
+# writer's or carries no attribution at all. What remains here is the SHAPE
+# gate: are these commits the kind graph-commit makes, and does the rewind
+# target still lie on HEAD's history.
 #
 # The gate's subject and the discard's subject are NOT the same thing, and
 # conflating them is how this destroyed unrelated work. The gate proves the

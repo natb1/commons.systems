@@ -61,12 +61,21 @@
 #      9a: that discard is scoped to the paths its safety gate proved — an
 #      unrelated modified tracked file (flake.lock) elsewhere in the checkout
 #      survives it intact, where the old whole-tree `reset --hard` destroyed it.
-#      9b: the ZERO-WRITE path — an empty apply plan must DISARM the
-#      rollback before its early exit, or the EXIT trap classifies a
-#      CONCURRENT writer's unpushed commit as this sweep's stranded write
-#      and discards it. The empty plan is routine, not exceptional: a
-#      record-time `main-qa` mint is enumerated on every sweep and then
-#      refused by isMergeAbsorbable.
+#      9b: the ZERO-WRITE path — a CONCURRENT writer's unpushed commit must
+#      survive a sweep that wrote nothing, rather than being classified as
+#      this sweep's stranded write and discarded. The empty plan is routine,
+#      not exceptional: a record-time `main-qa` mint is enumerated on every
+#      sweep and then refused by isMergeAbsorbable.
+#      9c: the same property on the ARMED path, where no disarm can help and
+#      a third of the surface (graph-select-target) has no flag at all. The
+#      peer's commit is told from this sweep's own by the `Graph-Writer:`
+#      trailer graph-commit stamps, and is KEPT.
+#      9d: an UNATTRIBUTED unpushed commit FAILS CLOSED — refusal, rc 1,
+#      nothing discarded. The control for case 9: same fixture, trailer
+#      withheld, opposite outcome.
+#      9e: the park SUBJECT is asked before attribution, so a park commit
+#      carrying graph-commit's own label rather than the caller's is still
+#      kept — and #3170's three-clause subject still matches the prefix.
 #   10. `reconcile-graph-review-stall --node <id>` (tactic-dispatch-ladder-skill
 #       Unit 6b): the same selection filter as case 6b, mirrored onto this
 #       sweep's sibling. --node narrows to the named node and leaves an
@@ -992,6 +1001,31 @@ else
   printf 'landed:\n%s\n' "$landed7"
 fi
 
+# ---------------------------------------------------------------------------
+# Case 7b: the attribution is really EMITTED, end to end, by the REAL
+# graph-commit — reusing case 7's landing rather than staging a new one.
+#
+# Every other attribution case in this file drives a graph-commit STAND-IN, so
+# each of them would keep passing if graph-commit itself stamped nothing. This
+# is the one that closes the loop: reconcile-graph-merged exported
+# GRAPH_WRITER, the real graph-commit built the message through
+# attributed_commit_message(), and git's own trailer parser reads the writer
+# back off the commit that reached origin/main.
+#
+# Read with `%(trailers:key=…)`, the same parser lib-graph-rollback.sh's
+# _graph_commit_writer uses — asserting on the parsed trailer rather than on a
+# grep of the body is what makes this a test of the classifier's input.
+# ---------------------------------------------------------------------------
+writer7="$(git -C "$C7" log -1 --format='%(trailers:key=Graph-Writer,valueonly)' origin/main | head -n1 | tr -d '[:space:]')"
+subject7="$(git -C "$C7" log -1 --format=%s origin/main)"
+if [[ "$writer7" == "reconcile-graph-merged" ]] \
+   && [[ "$subject7" == 'graph: reconcile terminal tactics (record completion)' ]]; then
+  ok "graph-commit writer attribution: the commit the REAL graph-commit landed carries Graph-Writer: reconcile-graph-merged, and its SUBJECT is unchanged by the trailer"
+else
+  no "graph-commit writer attribution end-to-end (writer='$writer7', subject='$subject7')"
+  printf '%s\n' "$(git -C "$C7" log -1 --format=%B origin/main)"
+fi
+
 # ===========================================================================
 # Case 8: the park-path rollback leaves a CLEAN tree (Unit 2's guard).
 #
@@ -1117,7 +1151,15 @@ cd "$dir" || exit 2
 for id in "${ids[@]}"; do
   git add -- "intentions/$id.md"
 done
-git commit -qm "graph: reconcile terminal tactics (record completion)"
+# The `Graph-Writer:` trailer the real graph-commit stamps on every commit it
+# makes (attributed_commit_message()). Load-bearing here, not decoration: the
+# rollback classifies an unpushed commit as its OWN only when this trailer
+# matches the label it was called with. A stub that omitted it would be
+# classified `unknown` and the rollback would fail closed and refuse — which is
+# exactly what case 9c asserts, with a stub that deliberately omits it.
+git commit -qm "graph: reconcile terminal tactics (record completion)
+
+Graph-Writer: ${GRAPH_WRITER:-graph-commit}"
 echo "error: graph-commit: could not land ${ids[*]} — main advanced through every push attempt" >&2
 exit 1
 SH
@@ -1140,7 +1182,7 @@ if [[ $rc -ne 0 ]] \
    && [[ "$node9_after" == "$node9_before" ]] \
    && grep -q 'discarded by moving HEAD back to' <<<"$out" \
    && ! grep -q 'rolled the node write' <<<"$out"; then
-  ok "reconcile-graph-merged busy-main rollback: an un-landed commit graph-commit left on HEAD is discarded (HEAD restored, node un-mutated) instead of being reported as a rollback"
+  ok "reconcile-graph-merged busy-main rollback: an un-landed commit graph-commit left on HEAD and attributed to THIS sweep is discarded (HEAD restored, node un-mutated) instead of being reported as a rollback"
 else
   no "reconcile-graph-merged busy-main rollback (rc=$rc, head moved: $([[ "$head9_after" == "$head9_before" ]] && echo no || echo yes))"
   printf '%s\n' "$out"
@@ -1199,7 +1241,15 @@ cd "$dir" || exit 2
 for id in "${ids[@]}"; do
   git add -- "intentions/$id.md"
 done
-git commit -qm "graph: reconcile terminal tactics (record completion)"
+# The `Graph-Writer:` trailer the real graph-commit stamps on every commit it
+# makes (attributed_commit_message()). Load-bearing here, not decoration: the
+# rollback classifies an unpushed commit as its OWN only when this trailer
+# matches the label it was called with. A stub that omitted it would be
+# classified `unknown` and the rollback would fail closed and refuse — which is
+# exactly what case 9c asserts, with a stub that deliberately omits it.
+git commit -qm "graph: reconcile terminal tactics (record completion)
+
+Graph-Writer: ${GRAPH_WRITER:-graph-commit}"
 echo "error: graph-commit: could not land ${ids[*]} — main advanced through every push attempt" >&2
 exit 1
 SH
@@ -1386,6 +1436,289 @@ else
   printf '%s\n' "$out"
   printf 'status: %s\n' "$status9c"
   printf 'disk:\n%s\n' "$disk9c"
+fi
+
+# ===========================================================================
+# Case 9c: THE HEADLINE. A concurrent writer's commit survives a sweep that DID
+# write and DID fail — with the rollback flag fully ARMED.
+#
+# Case 9b's protection is the empty-plan disarm: a sweep that wrote nothing
+# never enters the rollback at all. That leaves the whole armed surface
+# unguarded, and one third of it has no flag to disarm (graph-select-target
+# calls the rollback directly at five gates). On the armed path the old gate
+# — single-parent, intentions/-only, `graph: …` subject — matched a PEER graph
+# writer's commit exactly as readily as its own, because those three properties
+# are true of EVERY graph commit. It then reset the peer's commit away.
+#
+# What separates them is the `Graph-Writer:` trailer graph-commit now stamps.
+# Here the sweep is reconcile-graph-merged and the injected commit is stamped
+# graph-select-target: a different writer, so it is classified not-ours, KEPT,
+# and only this sweep's own node file is restored to HEAD.
+#
+# Verified RED before the classifier landed: the peer's commit was discarded
+# (`ahead=0`, `discarded by moving HEAD back to ...` on stderr, the content gone
+# from HEAD and from disk).
+# ===========================================================================
+T9D="$WORK/t9d-seed"
+build_seed_repo "$T9D"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9D/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9D/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+# The node this sweep really reconciles — so the plan is NON-empty, the disk
+# write really happens, and RESTORE_ON_FAILURE is armed when graph-commit fails.
+reconcile_node "$T9D/intentions/t-strand.md" t-strand 909
+# The peer writer's node. No execution.pr, so this sweep never enumerates it:
+# anything that happens to it is the rollback's doing.
+cat >"$T9D/intentions/t-concurrent.md" <<'NODE'
+---
+id: t-concurrent
+kind: tactic
+statement: another graph writer's node, committed during the sweep's window
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution: null
+---
+# another graph writer's node, committed during the sweep's window
+NODE
+new_origin t9d
+init_and_push "$T9D"
+
+C9D="$WORK/t9d-clone"
+clone_with_node_modules "$C9D"
+BIN9D="$WORK/t9d-bin"; FIX9D="$WORK/t9d-fixtures"
+reconcile_gh_stub "$BIN9D" "$FIX9D"
+# graph-commit fails WITHOUT committing anything of its own, so the only
+# unpushed commit on HEAD is the peer's. That isolates the question the case
+# asks: is a commit that is not ours preserved?
+cat >"$C9D/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+echo "error: graph-commit: could not land — simulated pre-commit failure" >&2
+exit 1
+SH
+chmod +x "$C9D/packages/intentionsutil/scripts/graph-commit"
+# Injection point, as in case 9b: wrap `node`, act once on the apply run (which
+# runs AFTER HEAD_AT_ARM is captured and AFTER RESTORE_ON_FAILURE=1), and hand
+# every other invocation to the real binary — resolved BEFORE the shim is on
+# PATH, or the shim would exec itself.
+REAL_NODE9D="$(command -v node)"
+cat >"$BIN9D/node" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+saw_script=0; saw_noapply=0
+for a in "$@"; do
+  case "$a" in
+    *reconcile-graph.ts) saw_script=1 ;;
+    --no-apply)          saw_noapply=1 ;;
+  esac
+done
+if [[ "$saw_script" -eq 1 && "$saw_noapply" -eq 0 && ! -f "$GC_SENTINEL" ]]; then
+  : >"$GC_SENTINEL"
+  # A DIFFERENT graph writer lands its own node into the shared checkout while
+  # this sweep is mid-write. Unpushed, single-parent, intentions/-only and a
+  # `graph: …` subject — indistinguishable from this sweep's own work by every
+  # property the old gate could see. The `Graph-Writer:` trailer is the one
+  # thing that tells them apart.
+  printf '%s\n' 'landed by a concurrent graph writer' >>"$GC_CLONE/intentions/t-concurrent.md"
+  git -C "$GC_CLONE" add -- intentions/t-concurrent.md
+  git -C "$GC_CLONE" commit -qm 'graph: concurrent writer content commit
+
+Graph-Writer: graph-select-target'
+fi
+exec "$GC_REAL_NODE" "$@"
+SH
+chmod +x "$BIN9D/node"
+
+node9d_before="$(cat "$C9D/intentions/t-strand.md")"
+out="$(
+  cd "$C9D" || exit 99
+  export PATH="$BIN9D:$PATH" GC_FIXTURE_DIR="$FIX9D"
+  export GC_CLONE="$C9D" GC_REAL_NODE="$REAL_NODE9D" GC_SENTINEL="$WORK/t9d-concurrent-landed"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+ahead9d="$(git -C "$C9D" rev-list --count origin/main..HEAD)"
+subject9d="$(git -C "$C9D" log -1 --format=%s)"
+committed9d="$(git -C "$C9D" show HEAD:intentions/t-concurrent.md)"
+disk9d="$(cat "$C9D/intentions/t-concurrent.md")"
+status9d="$(git -C "$C9D" status --porcelain intentions/)"
+node9d_after="$(cat "$C9D/intentions/t-strand.md")"
+if [[ $rc -ne 0 ]] \
+   && [[ -f "$WORK/t9d-concurrent-landed" ]] \
+   && [[ "$ahead9d" -eq 1 ]] \
+   && [[ "$subject9d" == 'graph: concurrent writer content commit' ]] \
+   && grep -q 'landed by a concurrent graph writer' <<<"$committed9d" \
+   && grep -q 'landed by a concurrent graph writer' <<<"$disk9d" \
+   && [[ -z "$status9d" ]] \
+   && [[ "$node9d_after" == "$node9d_before" ]] \
+   && grep -q "is NOT this sweep's stranded write and is KEPT" <<<"$out" \
+   && ! grep -q 'discarded by moving HEAD back to' <<<"$out"; then
+  ok "graph write rollback attribution: a CONCURRENT writer's unpushed commit survives an ARMED rollback (ahead by 1, content intact on HEAD and on disk) while this sweep's own write is still rolled back to a clean tree"
+else
+  no "graph write rollback attribution: concurrent commit survival with the flag ARMED (rc=$rc, ahead=$ahead9d, subject='$subject9d')"
+  printf '%s\n' "$out"
+  printf 'status: %s\n' "$status9d"
+  printf 'disk:\n%s\n' "$disk9d"
+fi
+
+# ===========================================================================
+# Case 9d: an UNATTRIBUTED unpushed commit FAILS CLOSED.
+#
+# Every graph commit made before the trailer shipped carries no attribution, as
+# does every hand-made commit and every stale worktree's leftovers. The
+# classifier cannot tell such a commit from this sweep's own un-landed write, so
+# it refuses: nothing is discarded, nothing is checked out, and the message says
+# what to inspect. Falling through to the discard on `unknown` would simply
+# reinstate the destruction the attribution replaces, so `unknown` must not be
+# the same branch as `mine`.
+#
+# Same rc-11 busy-main shape as case 9 — the ONE difference is the missing
+# trailer, which is what makes this the control for case 9: identical fixture,
+# opposite outcome.
+# ===========================================================================
+T9E="$WORK/t9e-seed"
+build_seed_repo "$T9E"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9E/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9E/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T9E/intentions/t-strand.md" t-strand 909
+new_origin t9e
+init_and_push "$T9E"
+
+C9E="$WORK/t9e-clone"
+clone_with_node_modules "$C9E"
+BIN9E="$WORK/t9e-bin"; FIX9E="$WORK/t9e-fixtures"
+reconcile_gh_stub "$BIN9E" "$FIX9E"
+# Case 9's stub with the `Graph-Writer:` trailer deliberately withheld — a
+# graph-commit from before the trailer shipped.
+cat >"$C9E/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""; ids=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m|--base) shift 2 ;;
+    *) ids+=("$1"); shift ;;
+  esac
+done
+cd "$dir" || exit 2
+for id in "${ids[@]}"; do
+  git add -- "intentions/$id.md"
+done
+git commit -qm "graph: reconcile terminal tactics (record completion)"
+echo "error: graph-commit: could not land ${ids[*]} — main advanced through every push attempt" >&2
+exit 1
+SH
+chmod +x "$C9E/packages/intentionsutil/scripts/graph-commit"
+
+head9e_before="$(git -C "$C9E" rev-parse HEAD)"
+out="$(
+  cd "$C9E" || exit 99
+  export PATH="$BIN9E:$PATH" GC_FIXTURE_DIR="$FIX9E"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+head9e_after="$(git -C "$C9E" rev-parse HEAD)"
+ahead9e="$(git -C "$C9E" rev-list --count origin/main..HEAD)"
+if [[ $rc -ne 0 ]] \
+   && [[ "$head9e_after" != "$head9e_before" ]] \
+   && [[ "$ahead9e" -eq 1 ]] \
+   && grep -q 'with NO Graph-Writer attribution' <<<"$out" \
+   && grep -q 'NOTHING was discarded' <<<"$out" \
+   && ! grep -q 'discarded by moving HEAD back to' <<<"$out" \
+   && ! grep -q 'rolled the node write' <<<"$out"; then
+  ok "graph write rollback attribution: an UNATTRIBUTED unpushed commit fails closed — the refusal is reported, the commit is left on HEAD, and nothing is discarded or claimed as rolled back"
+else
+  no "graph write rollback attribution: unattributed commit fail-closed (rc=$rc, ahead=$ahead9e, head moved: $([[ "$head9e_after" == "$head9e_before" ]] && echo no || echo yes))"
+  printf '%s\n' "$out"
+fi
+
+# ===========================================================================
+# Case 9e: the PARK SUBJECT still decides, and it is asked FIRST.
+#
+# graph-commit makes the park commit on the CALLER's behalf, so its attribution
+# is whatever the writer label says — and a stand-in that stamps graph-commit's
+# own default rather than the caller's label is exactly the mismatch that would
+# be classified `foreign` if attribution were asked first. It must not be:
+# attribution answers "is this commit mine", the subject answers "is this a
+# park", and an unpushed park is a record a human still needs WHOEVER made it.
+#
+# Case 8 is the same assertion against a park carrying NO trailer at all (the
+# `unknown` arm). This one covers the mismatched-label arm. Both must be KEPT,
+# and neither may reach the refusal or the discard.
+# ===========================================================================
+T9F="$WORK/t9f-seed"
+build_seed_repo "$T9F"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9F/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9F/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T9F/intentions/t-parked.md" t-parked 808
+new_origin t9f
+init_and_push "$T9F"
+
+C9F="$WORK/t9f-clone"
+clone_with_node_modules "$C9F"
+BIN9F="$WORK/t9f-bin"; FIX9F="$WORK/t9f-fixtures"
+reconcile_gh_stub "$BIN9F" "$FIX9F"
+# Case 8's park stub, with the park commit attributed to `graph-commit` rather
+# than to the calling sweep. The three-clause subject shape is #3170's — the
+# park clause first, then `; land …` — because the classifier's test is a
+# PREFIX test and this is what it has to keep matching.
+cat >"$C9F/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""; ids=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m|--base) shift 2 ;;
+    *) ids+=("$1"); shift ;;
+  esac
+done
+cd "$dir" || exit 2
+for id in "${ids[@]}"; do
+  awk '
+    /^office_hours: null$/ {
+      print "office_hours:"
+      print "  reason: graph-commit parked this node on an unresolvable divergence"
+      print "  since: 2026-08-05"
+      print "  recommendation: harness fixture park"
+      print "  session_type: other"
+      next
+    }
+    { print }
+  ' "intentions/$id.md" >"intentions/$id.md.new"
+  mv "intentions/$id.md.new" "intentions/$id.md"
+  git add "intentions/$id.md"
+done
+git commit -qm "graph: park ${ids[*]} (concurrent-edit conflict); land t-bystander
+
+Graph-Writer: graph-commit"
+echo "graph-commit: parked on unresolvable divergence" >&2
+exit 1
+SH
+chmod +x "$C9F/packages/intentionsutil/scripts/graph-commit"
+
+out="$(
+  cd "$C9F" || exit 99
+  export PATH="$BIN9F:$PATH" GC_FIXTURE_DIR="$FIX9F"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+status9f="$(git -C "$C9F" status --porcelain intentions/)"
+node9f="$(cat "$C9F/intentions/t-parked.md")"
+if [[ $rc -ne 0 ]] \
+   && [[ -z "$status9f" ]] \
+   && grep -q 'graph-commit parked this node on an unresolvable divergence' <<<"$node9f" \
+   && grep -q "graph-commit's park commit" <<<"$out" \
+   && ! grep -q 'discarded by moving HEAD back to' <<<"$out" \
+   && ! grep -q 'with NO Graph-Writer attribution' <<<"$out" \
+   && ! grep -q "is NOT this sweep's stranded write" <<<"$out"; then
+  ok "graph write rollback attribution: a park commit attributed to graph-commit rather than to the calling sweep is still classified a PARK and kept — the subject test is asked before attribution, and #3170's three-clause subject still matches the prefix"
+else
+  no "graph write rollback attribution: mismatched-attribution park still classified a park (rc=$rc)"
+  printf '%s\n' "$out"
+  printf 'status: %s\n' "$status9f"
+  printf 'node:\n%s\n' "$node9f"
 fi
 
 # ===========================================================================
@@ -2243,6 +2576,89 @@ if [[ -n "$status11b" ]]; then
 else
   no "graph-select-target fix-clear rollback teeth (neutered run left a clean tree — case 11 may be vacuous)"
   printf '%s\n' "$out11b"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 11c: the FLAGLESS path under the attribution classifier.
+#
+# graph-select-target has no RESTORE_ON_FAILURE flag at all — its gates call
+# graph_rollback_node_writes directly at five sites — so a disarm line could
+# never have protected a third of the rollback surface, and attribution is the
+# only thing that does. Same fixture as case 11, one addition: the graph-commit
+# stand-in lands a PEER writer's commit before it fails, so HEAD has moved
+# between the gate's arm and the rollback.
+#
+# The two outcomes are asserted together, because either alone is achievable by
+# doing nothing: the peer's commit SURVIVES, and this script's own --clear-fix
+# write is still rolled back to a byte-identical node file and a clean tree.
+# ---------------------------------------------------------------------------
+C11C="$WORK/t11c-clone"
+clone_with_node_modules "$C11C"
+# Not fail_graph_commit: this stand-in must move HEAD first, the way a peer
+# writer landing into the shared checkout does.
+cat >"$C11C/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""
+prev=""
+for a in "$@"; do
+  [[ "$prev" == "-C" ]] && dir="$a"
+  prev="$a"
+done
+cd "${dir:-.}" || exit 2
+printf '%s\n' '# a peer writer landed this while the gate was mid-write' \
+  >>"intentions/t-peer.md"
+git add -- intentions/t-peer.md
+git commit -qm 'graph: peer writer content commit
+
+Graph-Writer: reconcile-graph-merged'
+echo "graph-commit wrapper: simulated post-mutation failure" >&2
+exit 1
+SH
+chmod +x "$C11C/packages/intentionsutil/scripts/graph-commit"
+# The peer's node, created untracked in the clone: `git add` stages it just as
+# readily, and the resulting commit is single-parent and intentions/-only —
+# exactly the shape the pre-attribution gate waved through as "ours".
+cat >"$C11C/intentions/t-peer.md" <<'NODE'
+---
+id: t-peer
+kind: tactic
+statement: a peer writer's node, landed while graph-select-target was mid-write
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution: null
+---
+# a peer writer's node
+NODE
+
+node11c_before="$(cat "$C11C/intentions/t-gst.md")"
+out11c="$(
+  cd "$C11C" || exit 99
+  export PATH="$BIN11:$PATH"
+  export CLAUDE_AGENTS_CMD="$BIN11/claude" CLAUDE_AGENTS_PGREP_CMD="$BIN11/pgrep-daemon-visible"
+  export DISPATCH_RESERVATION_DIR="$WORK/t11c-reservations"
+  export DISPATCH_SELECTION_LOG_DIR="$WORK/t11c-seldir"
+  export DISPATCH_DECISION_LOG_DIR="$WORK/t11c-seldir"
+  export DISPATCH_CI_VERDICT_CACHE="$WORK/t11-ci-cache"
+  bash .claude/skills/dispatch-propagate/scripts/graph-select-target 2>&1
+)"
+ahead11c="$(git -C "$C11C" rev-list --count origin/main..HEAD)"
+subject11c="$(git -C "$C11C" log -1 --format=%s)"
+status11c="$(git -C "$C11C" status --porcelain intentions/)"
+node11c_after="$(cat "$C11C/intentions/t-gst.md")"
+if [[ "$ahead11c" -eq 1 ]] \
+   && [[ "$subject11c" == 'graph: peer writer content commit' ]] \
+   && [[ -z "$status11c" ]] \
+   && [[ "$node11c_after" == "$node11c_before" ]] \
+   && grep -q "is NOT this sweep's stranded write and is KEPT" <<<"$out11c" \
+   && ! grep -q 'discarded by moving HEAD back to' <<<"$out11c"; then
+  ok "graph-select-target flagless path under the attribution classifier: a peer writer's commit landed during the gate SURVIVES (ahead by 1) while the gate's own --clear-fix write is still rolled back to a clean tree"
+else
+  no "graph-select-target flagless path attribution (ahead=$ahead11c, subject='$subject11c', status='$status11c')"
+  printf '%s\n' "$out11c"
+  printf 'node diff:\n%s\n' "$(diff <(printf '%s' "$node11c_before") <(printf '%s' "$node11c_after") || true)"
 fi
 
 # ===========================================================================
