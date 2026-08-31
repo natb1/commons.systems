@@ -589,6 +589,29 @@ Each site below currently treats a superseded node as live work. All use
   parent === null && status === "codified"`). A superseded node falls to each
   one's default branch, which is the correct behavior. Confirm each by reading
   and record the confirmation — Verification asks for it.
+
+  **Add `&& node.phase !== "done"` in the same edit** (folded in 2026-08-30).
+  This predicate has a second live fall-through, independent of supersession:
+  it gates on `status` alone, and `status` is write-once authoring provenance
+  that the dispatch ladder never advances, so a finished leaf whose author
+  never codified it stays in the frontier permanently. Measured 2026-08-30 on
+  the 780-node store: `activeFrontier` returns 380 nodes, of which **65 are
+  `phase: done`** — 62 carrying `status: raw` and 3 carrying
+  `status: delegated`. Every one of the 65 is a leaf, so the clause removes
+  exactly those: **380 → 315**. Write the clause on `phase`; never spell it
+  `status !== "raw"` — the 3 `delegated` nodes are the standing proof that
+  `status` is the wrong axis for the question. The doc comment at `:35-51`
+  needs correcting in the same edit: it rationalizes the predicate as *"every
+  tactic leaf is currently `status: "raw"`, so gating on a
+  `delegated`/`codified` status would yield an empty frontier"*, a premise that
+  no longer describes a graph holding 197 done tactics. The ruling this
+  implements is `kind-tactic`'s clarification *"Is `status: raw` together with
+  `phase: done` a node defect to sweep?"* (landed 2026-08-30): the nodes are
+  correct and the reader is what changes, so this unit must not migrate any
+  node's `status` as part of the fix. Expected measured effect, stated up front
+  so it is not read as a regression: the frontier drops by those 65; `detectRung`
+  is unchanged, `strategyBacklogBand` is phase-based already and unchanged, and
+  no sensor reading moves (readings do not scope to the frontier).
 - `packages/intentionsutil/src/attention.ts:462` — `doneIds` is the set of nodes
   treated as inert for attention scoring (transparent-parent / severed-blockee
   rules, doc comment :428-441). Rename the local to `inertIds` and build it from
