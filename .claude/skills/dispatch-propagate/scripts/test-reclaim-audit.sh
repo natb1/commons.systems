@@ -520,6 +520,73 @@ assert_eq "nonnumeric exit code" "0" "$NONNUM_RC"
 
 export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
 
+# --- case I: reason tokens whose spelling has drifted -----------------------
+# The reason class had no delimiter after it, so it stopped at the first
+# out-of-class character and bucketed the PREFIX as though it were the whole
+# reason. MEASURED before the fix: `(weird_reason)` -> `weird`,
+# `(deadSessionStranded)` -> `dead`, `(spawn handoff expired)` -> `spawn`, and
+# reclaim_events_reason_unparsed 0 throughout -- the fail-open closer never
+# fired, because the parse "succeeded" with an invented key.
+#
+# All four LIVE shapes appear below and must still parse; four drifted
+# spellings appear beside them and must ALL land in unparsed. The ninth line
+# additionally drives the RATE/CAUSE shortfall, so the conclusion block's
+# INCOMPLETE caveat is exercised too -- it parses for the reason table
+# (`dead-session-stranded` followed by ` after `) but not for the basename
+# capture, which requires a literal `(dead-session-stranded)`.
+CASE_I_LOG="$ROOT/sweep-drift.txt"
+{
+  printf '%s host dispatch-tick[501]: lib-reservation-ledger: reclaimed reservation agent-i1 (dead-session-stranded)\n' "$T"
+  printf '%s host dispatch-tick[502]: lib-reservation-ledger: reclaimed reservation agent-i2 (live-worker-redundant)\n' "$T"
+  printf '%s host dispatch-tick[503]: lib-reservation-ledger: reclaimed reservation agent-i3 (spawn-handoff-expired after 300s with no live worker)\n' "$T"
+  printf '%s host dispatch-tick[504]: lib-reservation-ledger: reclaimed reservation agent-i4 (standalone-ttl-expired after 600s with no live worker)\n' "$T"
+  printf '%s host dispatch-tick[505]: lib-reservation-ledger: reclaimed reservation agent-i5 (weird_reason)\n' "$T"
+  printf '%s host dispatch-tick[506]: lib-reservation-ledger: reclaimed reservation agent-i6 (deadSessionStranded)\n' "$T"
+  printf '%s host dispatch-tick[507]: lib-reservation-ledger: reclaimed reservation agent-i7 (spawn handoff expired)\n' "$T"
+  printf '%s host dispatch-tick[508]: lib-reservation-ledger: reclaimed reservation agent-i8 (dead-session-stranded, forced)\n' "$T"
+  printf '%s host dispatch-tick[509]: lib-reservation-ledger: reclaimed reservation agent-i9 (dead-session-stranded after 30s with no live worker)\n' "$T"
+} > "$CASE_I_LOG"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$CASE_I_LOG"
+DRIFT_OUT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650 --json)
+DRIFT_TEXT=$(bash "$SCRIPT_DIR/dispatch-reclaim-audit" --days 3650)
+
+echo ""
+echo "--- assertions (a drifted reason is UNPARSED, never a fabricated bucket) ---"
+
+assert_eq "drift: every line is still counted for the rate" "9" \
+  "$(jq '.sweep.reclaim_events_total' <<<"$DRIFT_OUT")"
+assert_eq "drift: the four drifted spellings are reported unparsed" "4" \
+  "$(jq '.sweep.reclaim_events_reason_unparsed' <<<"$DRIFT_OUT")"
+assert_eq "drift: the five live lines all reached a bucket" "5" \
+  "$(jq '[.sweep.reclaim_events_by_reason[]] | add' <<<"$DRIFT_OUT")"
+assert_eq "drift: a bare-paren token parses" "2" \
+  "$(jq '.sweep.reclaim_events_by_reason["dead-session-stranded"]' <<<"$DRIFT_OUT")"
+assert_eq "drift: an ' after <N>s' token parses" "1" \
+  "$(jq '.sweep.reclaim_events_by_reason["spawn-handoff-expired"]' <<<"$DRIFT_OUT")"
+assert_eq "drift: an <origin>-ttl-expired token parses" "1" \
+  "$(jq '.sweep.reclaim_events_by_reason["standalone-ttl-expired"]' <<<"$DRIFT_OUT")"
+
+# The three keys the truncation used to invent. `has` is the assertion that
+# matters: a fabricated bucket is worse than a missing one, because it reads as
+# a successful parse.
+assert_eq "drift: no bucket invented from 'weird_reason'" "false" \
+  "$(jq '.sweep.reclaim_events_by_reason | has("weird")' <<<"$DRIFT_OUT")"
+assert_eq "drift: no bucket invented from 'deadSessionStranded'" "false" \
+  "$(jq '.sweep.reclaim_events_by_reason | has("dead")' <<<"$DRIFT_OUT")"
+assert_eq "drift: no bucket invented from 'spawn handoff expired'" "false" \
+  "$(jq '.sweep.reclaim_events_by_reason | has("spawn")' <<<"$DRIFT_OUT")"
+
+# The RATE/CAUSE shortfall the ninth line drives, and the conclusion block's
+# caveat about it -- which used to print only in the RATE section, ~40 lines
+# above the number it qualifies.
+assert_eq "drift: the RATE/CAUSE shortfall is counted" "1" \
+  "$(jq '.sweep.dead_session_stranded_basename_unparsed' <<<"$DRIFT_OUT")"
+assert_eq "drift: the conclusion block flags the incomplete population" "yes" \
+  "$(case "$DRIFT_TEXT" in *'INCOMPLETE: 1 dead-session-stranded event(s) are NOT in the split above'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+
+export DISPATCH_RECLAIM_SWEEP_LOG="$SWEEP_LOG"
+
 # --- case H: a NUL byte in the captured sweep text --------------------------
 # GNU grep treats a file containing a NUL as binary: it writes "binary file
 # matches" to stderr, emits nothing on stdout, and exits 0. Without `-a` on the

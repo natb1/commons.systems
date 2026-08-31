@@ -348,12 +348,31 @@ RECLAIM_TOTAL=0
 REASON_UNPARSED=0
 while IFS= read -r line; do
   RECLAIM_TOTAL=$(( RECLAIM_TOTAL + 1 ))
-  # Capture the reason TOKEN only. spawn-handoff-expired and <origin>-ttl-expired
-  # carry a trailing ` after <N>s with no live worker` clause inside the same
-  # parentheses, so a closing-paren anchor would match neither — let `.*` absorb
-  # the tail instead.
+  # Capture the reason TOKEN only, and REQUIRE a delimiter after it. The ledger
+  # emits exactly four shapes (lib-reservation-ledger.sh:662, :692, :710, :715):
+  # two bare `(<token>)`, and two `(<token> after <N>s with no live worker)`. So
+  # the token is followed by `)` or by ` after `, and by nothing else.
+  #
+  # Letting `.*` absorb the tail — as this did — did NOT make the match
+  # tolerant. The character class simply stopped at the first out-of-class
+  # character and bucketed the PREFIX as though it were the whole reason.
+  # MEASURED on this branch before the fix: `(weird_reason)` bucketed as
+  # `weird`, `(deadSessionStranded)` as `dead`, `(spawn handoff expired)` as
+  # `spawn` — three fabricated keys, with reclaim_events_reason_unparsed
+  # staying 0 throughout.
+  #
+  # That is the exact silent success the fail-open closer below exists to
+  # prevent: the parse "succeeds" with an invented bucket, so a drifted ledger
+  # spelling is never reported. Respell the ledger's reason and
+  # dead_session_stranded_events would read 0 while the real count sat in a
+  # bucket named after its first few letters — the same silent zero this whole
+  # script was written to remove.
+  #
+  # ERE (`-E`), not BRE: the anchor is the alternation `(\)| after )`, and BRE's
+  # `\|` is a GNU extension whose behaviour is not uniform across the greps and
+  # seds on this host.
   reason=$(printf '%s\n' "$line" \
-    | sed -n 's/.*reclaimed reservation [^ ]* (\([a-z][a-z0-9-]*\).*/\1/p')
+    | sed -nE 's/.*reclaimed reservation [^ ]+ \(([a-z][a-z0-9-]*)(\)| after ).*/\1/p')
   if [[ -z "$reason" ]]; then
     # The fail-open closer: a reclaim line whose reason will not parse is
     # reported, never dropped. Report-only — it does not touch EXIT_CODE, since
@@ -744,6 +763,19 @@ echo "    reclaimed (stale-liveness)."
 printf '  unclassified-no-timestamp (reported) ........ %d\n' "${BUCKET[unclassified-no-timestamp]}"
 echo "    Reclaim lines whose timestamp would not parse — counted for the rate,"
 echo "    reported here, never dropped."
+# The split above apportions only those dead-session-stranded events whose
+# worktree basename the CAUSE parse could read. When the two parses disagree the
+# buckets sum to LESS than dead_session_stranded_events, and this block — the
+# header's designated load-bearing conclusion — would otherwise present a
+# partial population as the whole one. The NOTE recording the shortfall prints
+# in the RATE section far above, which a reader who scrolled to the conclusion
+# never sees. Repeat it here, against the numbers it actually qualifies.
+if (( DEAD_BASENAME_UNPARSED > 0 )); then
+  printf '  INCOMPLETE: %d dead-session-stranded event(s) are NOT in the split above —\n' \
+    "$DEAD_BASENAME_UNPARSED"
+  echo "    their worktree basename would not parse, so they reached no bucket."
+  echo "    Read every count above as a floor, not as the population."
+fi
 echo
 
 # Full report printed above; the status only colors the exit code.
