@@ -14,7 +14,7 @@ docs PR.
 | pos | plan est | measured | status (2026-08-31) |
 |-----|----------|----------|---------------------|
 | 1-4 | - | done | landed |
-| 5 | 2 | 6-7 | in progress: PR #3178 at review round 2; PR3 building in a subagent |
+| 5 | 2 | 6-7 | **stopped mid-position** (2026-08-31, user-directed): #3178 merged 14:56Z; #3181 (Units 2+3) round 2 settled, auto-merge armed 17:26Z; #3180 (rsi-audit usage aggregation + session-stamp hooks) round 2 settled, fixes in flight, merge on green. Units 4-8 and the graph bookkeeping landing not started — tasks #127, #128 |
 | 6 | per plan | unmeasured | not started |
 | 7 | 1 (~20 units) | 6 PRs / 63 units | parks staged: 3 clear-park + 1 leave-held |
 | 8 | 3 | 4-5 | not started |
@@ -39,7 +39,7 @@ their own source inline — do not read them as user rules.
   touching dispatch/graph write paths; one `medium` round for docs/plan/
   test-only diffs. Hard cap: 2 rounds per PR; findings after round 2 become
   follow-up nodes, never a round 3. **This supersedes rule 4 of the index's
-  "The code-review gate" section (`plans/dispatch-rsi-sequence.md:1468`), which
+  "The code-review gate" section (`plans/dispatch-rsi-sequence.md:1467`), which
   reads `high` for docs-only diffs and no round cap on code diffs — apply this
   bullet, not that rule.** The cap is executor-tracked: **no script enforces
   it** (nothing in `dispatch-code-review`, `dispatch-review-plan-gate` or
@@ -64,6 +64,19 @@ their own source inline — do not read them as user rules.
 - Dropped (SOURCE: executor judgement, not a user ruling — revisitable) —
   positions 7/8/9 concurrency, on the reading that it buys wall-clock only and
   no token saving.
+- 2026-08-31 — **STOP. The batch is stopped, not paused mid-step.** The user
+  directed a drain to a stop: finish the work already in flight, close the
+  ledger/index gap this file's own protocol owes, then stop. No new units, no
+  new PRs, no Position 6 work. **A fresh session must not read this file as a
+  resume instruction** — resuming takes a new instruction from the user, and
+  the Resume protocol below applies only once that arrives.
+- 2026-08-31 (SOURCE: executor, applying the user's 2-round cap above) — The
+  cap bounds **review rounds, not correctness**. A blocking finding surfaced
+  *by* round 2 is fixed in-branch and merged without buying a round 3; only
+  design calls and non-blocking findings become follow-up nodes. Index rule 4
+  already carried this shape for docs-only diffs ("fixed in-branch and merged
+  without a second round"); this generalizes it to every diff class. It is not
+  a licence to merge past a blocking finding.
 
 ## Carry-forwards
 
@@ -82,10 +95,51 @@ their own source inline — do not read them as user rules.
   `intentions/tactic-supersession-edge-and-terminal.md` (needs a clean
   intentions-only branch; `graph-commit` pushes HEAD).
 - Task #120: 11 excluded `npx tsx` sites — unblocked (#3171, #3174 merged).
-- Index rule 4 (`plans/dispatch-rsi-sequence.md:1468`) still carries the
+- Index rule 4 (`plans/dispatch-rsi-sequence.md:1467`) still carries the
   superseded review-effort text (`high` for docs-only, no round cap); edit it at
   the next index touch. The supersession is recorded in Rulings above either
   way.
+- **RESOLVED 2026-08-31 (this commit)** — the carry-forward directly above is
+  discharged: index rule 4 now states the tiering and the 2-round cap directly,
+  so the index no longer contradicts this file. The Rulings bullet that declares
+  rule 4 superseded is kept as history; it is no longer a live divergence.
+- `dispatch-code-review` has a **two-phase contract, and phase 2 is not
+  optional.** The launcher returns **rc 5 = detached-and-running**; the
+  `setsid` child writes Claude's output to
+  `$CACHE_DIR/<sha256 of the --out-dir>.output` and its rc to `.rc`, then exits.
+  **The `--out-dir` is populated only when you re-invoke `dispatch-code-review`
+  with the same `--out-dir` to collect.** So a normal, successful completion is
+  indistinguishable from a death by the obvious signals: PID gone, out-dir
+  empty, no `output.txt`. On 2026-08-31 three round-2 gates were written off as
+  dead on exactly that evidence; all three had finished rc 0 with findings and
+  had already posted their inline comments, and relaunching one bought a
+  duplicate opus round (6782s and 1380s runs on the same PR, two comment sets)
+  for nothing. Collect before concluding anything — it is cheap and idempotent.
+  Two companion traps: `pgrep -f "<the --out-dir string>"` matches the polling
+  script's own argv, so a liveness loop keyed on it can never exit (parse the
+  launcher's `pid=` line and poll `kill -0`); and `touched_files_count=0` on a
+  diff under `.claude/skills/` or `.claude/hooks/` is the sandbox write-deny
+  (`denyWithinAllow`), never evidence of no findings.
+- Unit 5 was **partially pulled forward** into #3181, for the `--like` bound
+  only: three caller sites (`rsi/SKILL.md`, `rsi-audit/SKILL.md`,
+  `dispatch-ladder/SKILL.md`) now pass a bound, and `rsi`/`rsi-audit` each gained
+  an explicit terminal branch for an id-only match that names Unit 4 as where
+  `--id` arrives. Still owed: the `--id` flag itself, the slug→id addressing
+  rewrite, and the retired-stub prose. Both call sites carry a hard "mint
+  nothing" branch for Unit 4 to convert, and name Unit 4 in the prose, so they
+  are greppable. Task #128.
+- Task #127 — three design calls deferred out of #3180 round 2 want a follow-up
+  node: the `$PWD` sidecar misattribution
+  (`.claude/hooks/stamp-dispatch-session.sh:203`); the Stop fast-path cost
+  (`:105`, raised independently by *both* round-2 runs); and the `review_runs`
+  replay double-count (`.claude/skills/rsi-audit/scripts/aggregate-usage.sh:859`
+  — measured runs 5 / sessions 2, one review counted twice, which inflates the
+  very cost figures this ledger cites).
+- Task #128 — `intentions/kind-tactic.md:264` still declares
+  `attributes.ledger_entry` live, names it as the owed-prune exemption key, and
+  cites the deleted `isLedgerEntry` plus a non-existent `rsi.ts` /
+  `rsi-plan.md`. It is an `intentions/` node, so it wants `graph-commit` on a
+  clean intentions-only branch and could not ride this docs PR.
 
 ## Resume protocol
 
@@ -94,4 +148,5 @@ their own source inline — do not read them as user rules.
    and output were already shown (measurement-trust rule).
 3. Before stopping: rewrite the Positions table rows in place (never append a
    second row for a position), append any new rulings and carry-forwards, and
-   leave something running.
+   leave something running — except at a **directed stop**, where you leave
+   nothing running (see the 2026-08-31 STOP ruling).
