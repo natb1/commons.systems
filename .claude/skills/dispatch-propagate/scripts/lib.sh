@@ -924,6 +924,85 @@ dispatch_ci_verdict_rest() {
   printf '%s\n' "$verdict"
 }
 
+# --- CI-pending liveness bound ------------------------------------------------
+#
+# Consecutive-observation cap for a draft PR whose CI verdict stays `pending`
+# on the SAME head SHA. A baked-in constant, deliberately NOT a dispatch.config
+# tunable — parity with CONFLICT_STRIKE_CAP (dispatch-graph-execute) and
+# FIX_ATTEMPT_CAP (packages/intentionsutil/src/transitions.ts). The tick fires
+# every 15 minutes (OnCalendar=*:0/15), so 8 consecutive observations is
+# ~2 hours of a single CI run never concluding — far past any legitimate run in
+# this repo, and cheap because every observation below the cap is a file write,
+# never a graph record.
+DISPATCH_CI_PENDING_STRIKE_CAP=8
+
+# The two helpers below share one sidecar file per node:
+#
+#   <main-root>/.claude/worktrees/<node-id>.ci-pending-strikes
+#
+# It lives OUTSIDE every checkout — next to the node's worktree, not inside it —
+# the same convention as dispatch-graph-execute's `.conflict-strikes`. That is
+# what keeps it from dirtying a tree and from tripping graph-commit's
+# `assert_clean_outside_ids`. Both callers (graph-select-target's selection gate
+# and reconcile-graph-review-stall's sweep) resolve <main-root> through
+# resolve_main_worktree, so the two surfaces agree on one file per node.
+#
+# Format difference from `.conflict-strikes`, which stores a bare count: this
+# one stores `<head-sha> <count>`. The bound means "this ONE CI run never
+# concluded", not "this node has been slow over its lifetime", so a differing
+# observed SHA resets the count — a fresh push legitimately restarts CI.
+#
+# Both are FAIL-OPEN and make ZERO graph writes. Losing the sidecar grants a few
+# extra free retries and is harmless; a per-observation graph record would not
+# be, because a graph-commit can block on the global landing lock for up to
+# LOCK_WAIT_SECONDS against a caller whose heartbeat budget is far shorter.
+
+# ci_pending_strike_bump <main-root> <node-id> <head-sha>
+# Bumps the node's consecutive-pending count for <head-sha> and prints the new
+# count on stdout. Resets to 1 when the file is absent, unparseable, or records
+# a different SHA.
+#
+# Returns 1 WITHOUT writing when <head-sha> is empty or the literal string
+# `null`. Callers reach this helper from two different projections: one spells
+# `jq -r '.headRefOid // empty'` (empty on a missing field) and one spells a
+# bare `jq -r '.headRefOid'` (the four-character string `null`). An unreadable
+# PR must not be counted at all — keying every unreadable PR on `null` would
+# make them share one counter and hold an arbitrary node.
+ci_pending_strike_bump() {
+  local main_root="${1:-}" id="${2:-}" sha="${3:-}"
+  [[ -z "$main_root" || -z "$id" ]] && return 1
+  [[ -z "$sha" || "$sha" == "null" ]] && return 1
+
+  local file="$main_root/.claude/worktrees/$id.ci-pending-strikes"
+  local recorded="" c=0
+  if [[ -f "$file" ]]; then
+    read -r recorded c < "$file" 2>/dev/null || { recorded=""; c=0; }
+  fi
+  # Validate the count as a literal integer BEFORE any (( )) context: bash
+  # arithmetic evaluates array-index command substitution, so an untrusted file
+  # value must never reach it unchecked.
+  [[ "$c" =~ ^[0-9]+$ ]] || c=0
+  if [[ "$recorded" != "$sha" ]]; then
+    c=1
+  else
+    c=$(( c + 1 ))
+  fi
+
+  mkdir -p "$main_root/.claude/worktrees" 2>/dev/null
+  printf '%s %s\n' "$sha" "$c" > "$file" || return 1
+  printf '%s\n' "$c"
+}
+
+# ci_pending_strike_clear <main-root> <node-id>
+# Drops the node's sidecar. Always returns 0 — a missing file is the normal
+# case, and no caller has anything to do about a failed removal.
+ci_pending_strike_clear() {
+  local main_root="${1:-}" id="${2:-}"
+  [[ -n "$main_root" && -n "$id" ]] &&
+    rm -f "$main_root/.claude/worktrees/$id.ci-pending-strikes" 2>/dev/null
+  return 0
+}
+
 # REST-backed drop-in for `gh issue view <N> --json
 # number,title,body,state,stateReason,createdAt,labels,assignees` (#2255). The
 # dispatch fleet exhausts GitHub's shared GraphQL rate-limit bucket while the
