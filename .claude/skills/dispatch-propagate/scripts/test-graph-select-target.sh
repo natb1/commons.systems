@@ -977,29 +977,42 @@ GSCIPGREP
   export CLAUDE_AGENTS_PGREP_CMD="$GSCI_ROOT/bin/pgrep-daemon-visible"
   # graph-commit stub: _graph_commit_fix runs it from NATIVE_ROOT on the `fix`
   # route, so the control case exercises the clean emission path rather than
-  # `fix-write-failed`.
+  # `fix-write-failed`. Also logs GRAPH_WRITER as it lands in THIS process's
+  # environment (graph-commit-env.log) — the per-invocation scoping test below
+  # asserts this stub sees the script's own writer label, in contrast to the
+  # hold-node/park-node stubs below, which must NOT.
   cat > "$GSCI_ROOT/packages/intentionsutil/scripts/graph-commit" <<'GSCIGC'
 #!/usr/bin/env bash
+_root="$(cd "$(dirname "$0")/../../.." && pwd)"
+printf '%s\n' "${GRAPH_WRITER-<unset>}" >> "$_root/graph-commit-env.log"
 exit 0
 GSCIGC
   chmod +x "$GSCI_ROOT/packages/intentionsutil/scripts/graph-commit"
   # park-node stub: _park_conflict_cap runs it from NATIVE_ROOT on the
   # conflict-attempt-cap path. Logs its argv so the cap case can assert the park
-  # actually happened (and carried a reason + recommendation).
+  # actually happened (and carried a reason + recommendation). Also logs
+  # GRAPH_WRITER as it lands in THIS process's environment (park-node-env.log)
+  # — must read <unset> (never inherit the script's own label; see
+  # graph-select-target's GRAPH_WRITER_LABEL block).
   cat > "$GSCI_ROOT/packages/intentionsutil/scripts/park-node" <<'GSCIPARK'
 #!/usr/bin/env bash
 _root="$(cd "$(dirname "$0")/../../.." && pwd)"
 printf '%s\n' "$*" >> "$_root/park-node-calls.log"
+printf '%s\n' "${GRAPH_WRITER-<unset>}" >> "$_root/park-node-env.log"
 exit 0
 GSCIPARK
   chmod +x "$GSCI_ROOT/packages/intentionsutil/scripts/park-node"
   # hold-node stub: _hold_node_ci_pending (and _hold_node_fix_cap) run it from
   # NATIVE_ROOT. Logs its argv so the CI-pending cap case can assert the hold
-  # actually landed and carried --kind ci-pending-stalled.
+  # actually landed and carried --kind ci-pending-stalled. Also logs
+  # GRAPH_WRITER as it lands in THIS process's environment (hold-node-env.log)
+  # — must read <unset> (never inherit the script's own label; see
+  # graph-select-target's GRAPH_WRITER_LABEL block).
   cat > "$GSCI_ROOT/packages/intentionsutil/scripts/hold-node" <<'GSCIHOLD'
 #!/usr/bin/env bash
 _root="$(cd "$(dirname "$0")/../../.." && pwd)"
 printf '%s\n' "$*" >> "$_root/hold-node-calls.log"
+printf '%s\n' "${GRAPH_WRITER-<unset>}" >> "$_root/hold-node-env.log"
 exit 0
 GSCIHOLD
   chmod +x "$GSCI_ROOT/packages/intentionsutil/scripts/hold-node"
@@ -1169,6 +1182,8 @@ assert_eq "graph-select-target interrupt: the apply-fix-state call carries --set
   "1" "$(grep -q -- "--set-fix" "$GSCI_ROOT/apply-fix-calls.log" && echo 1 || echo 0)"
 assert_eq "graph-select-target interrupt: red + MERGEABLE hands the cascade MERGEABLE" \
   "implement failing MERGEABLE" "$(tail -n 1 "$GSCI_ROOT/node-calls.log")"
+assert_eq "graph-select-target interrupt: the script's own graph-commit write carries GRAPH_WRITER=graph-select-target (per-invocation, not export)" \
+  "1" "$(grep -qx 'graph-select-target' "$GSCI_ROOT/graph-commit-env.log" && echo 1 || echo 0)"
 gsc_interrupt_teardown
 
 # --- Case 3 (second half): pending CI normalizes to `unknown` ----------------
@@ -1319,6 +1334,8 @@ assert_eq "graph-select-target conflict: the park names the node and its recomme
   "1" "$(grep -q "dispatch-conflict tactic-fixture" "$GSCI_ROOT/park-node-calls.log" && echo 1 || echo 0)"
 assert_eq "graph-select-target conflict: a capped interrupt never spends another attempt" \
   "0" "$(grep -q -- "--spend-attempt" "$GSCI_ROOT/apply-conflict-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target conflict: the park-node child does NOT inherit GRAPH_WRITER (per-invocation scoping, not export)" \
+  "1" "$(grep -qx '<unset>' "$GSCI_ROOT/park-node-env.log" && echo 1 || echo 0)"
 gsc_interrupt_teardown
 
 # --- Case 12: MERGEABLE again backstop-clears the undeclared interrupt -------
@@ -1812,6 +1829,8 @@ assert_eq "graph-select-target ci-pending: the sidecar is cleared once the hold 
   "gone" "$(gscip_sidecar)"
 assert_eq "graph-select-target ci-pending: the skip reason reports the cap hold" \
   "1" "$(grep -q 'ci-pending-cap-held' "$GSCI_ROOT/seldir/graph-selection.jsonl" && echo 1 || echo 0)"
+assert_eq "graph-select-target ci-pending: the hold-node child does NOT inherit GRAPH_WRITER (per-invocation scoping, not export)" \
+  "1" "$(grep -qx '<unset>' "$GSCI_ROOT/hold-node-env.log" && echo 1 || echo 0)"
 gsc_interrupt_teardown
 
 # --- Case 4b: the hold's landing refreshes the caller's lock heartbeat -------

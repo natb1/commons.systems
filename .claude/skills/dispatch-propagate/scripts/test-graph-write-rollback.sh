@@ -1667,6 +1667,81 @@ else
 fi
 
 # ===========================================================================
+# Case 9J: restore BEFORE refusing — the unattributed fail-closed refusal must
+# not leave THIS writer's own node file dirty in the SHARED main checkout.
+#
+# Same shape as Case 9d (an untrailered peer commit above <head-at-arm> fails
+# closed), but here graph-commit's stub does NOT commit the node file at all
+# before dying — it lands an UNRELATED empty peer commit and refuses. The
+# reconciler's own on-disk mutation to t-strand.md (the merged->done rewrite
+# reconcile_node's fixture is built to trigger) is therefore left uncommitted
+# when the refusal fires. Before the ordering fix, the refusal returned above
+# the per-id `git checkout --` restore, so that dirty file stayed dirty —
+# bricking graph-commit's assert_clean_outside_ids for every OTHER writer in
+# this checkout, on top of the peer's already-kept commit. The fix restores
+# first, then refuses: the peer commit is still kept (nothing here may discard
+# what it cannot attribute), but this writer's own file is no longer left
+# dirty for everyone else.
+# ===========================================================================
+T9J="$WORK/t9j-seed"
+build_seed_repo "$T9J"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9J/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9J/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T9J/intentions/t-strand.md" t-strand 909
+new_origin t9j
+init_and_push "$T9J"
+
+C9J="$WORK/t9j-clone"
+clone_with_node_modules "$C9J"
+BIN9J="$WORK/t9j-bin"; FIX9J="$WORK/t9j-fixtures"
+reconcile_gh_stub "$BIN9J" "$FIX9J"
+# The stub does NOT commit the node file at all — it lands an UNRELATED empty
+# peer commit (untrailered, so it fails closed exactly like Case 9d's) and
+# then refuses, leaving the reconciler's own on-disk mutation UNCOMMITTED so
+# the pre-fix ordering bug (refuse above the restore) has something to leak.
+cat >"$C9J/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m|--base) shift 2 ;;
+    *) shift ;;
+  esac
+done
+cd "$dir" || exit 2
+git commit -q --allow-empty -m "graph: a peer writer landed this into the shared checkout"
+echo "error: graph-commit: refused to start — a tracked file outside the call's node set is dirty" >&2
+exit 1
+SH
+chmod +x "$C9J/packages/intentionsutil/scripts/graph-commit"
+
+head9j_before="$(git -C "$C9J" rev-parse HEAD)"
+out="$(
+  cd "$C9J" || exit 99
+  export PATH="$BIN9J:$PATH" GC_FIXTURE_DIR="$FIX9J"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+head9j_after="$(git -C "$C9J" rev-parse HEAD)"
+ahead9j="$(git -C "$C9J" rev-list --count origin/main..HEAD)"
+status9j="$(git -C "$C9J" status --porcelain intentions/)"
+if [[ $rc -ne 0 ]] \
+   && [[ "$head9j_after" != "$head9j_before" ]] \
+   && [[ "$ahead9j" -eq 1 ]] \
+   && grep -q 'with NO Graph-Writer attribution' <<<"$out" \
+   && grep -q 'NOTHING was discarded' <<<"$out" \
+   && ! grep -q 'discarded by moving HEAD back to' <<<"$out" \
+   && [[ -z "$status9j" ]]; then
+  ok "graph write rollback attribution: an unattributed peer commit's fail-closed refusal restores THIS writer's own dirty node file to HEAD first, leaving the shared checkout clean for every other graph writer"
+else
+  no "graph write rollback attribution: restore-before-refuse must leave a CLEAN shared checkout (rc=$rc, ahead=$ahead9j, git status --porcelain: '$status9j')"
+  printf '%s\n' "$out"
+  printf 'status --porcelain: %s\n' "$status9j"
+fi
+
+# ===========================================================================
 # Case 9e: the PARK SUBJECT still decides, and it is asked FIRST.
 #
 # graph-commit makes the park commit on the CALLER's behalf, so its attribution

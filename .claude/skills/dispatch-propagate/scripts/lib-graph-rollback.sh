@@ -32,6 +32,18 @@
 # graph-commit's default and this rollback then classifies them as ANOTHER
 # writer's, which is safe (they are kept) but leaves them stranded on HEAD.
 #
+# EXPORT IT ONLY IF THE CALLER RUNS NO OTHER GRAPH WRITER AS A CHILD.
+# `export` puts the label in every child process's environment, and
+# graph-commit reads it from there. A caller that also invokes hold-node,
+# park-node, or any other tool that lands its own graph-commit would stamp
+# THAT tool's commit with the caller's label too — and a concurrent instance
+# of the caller would then read the stranded hold/park commit as `mine` and
+# discard it, widening the same-script gap below from one tool to three.
+# Such a caller sets the label PER INVOCATION on the commands that land its
+# own writes (`GRAPH_WRITER=<label> graph-commit …`), or strips it from the
+# child (`env -u GRAPH_WRITER <tool> …`), instead of exporting it.
+# graph-select-target and reconcile-graph-review-stall both do this.
+#
 # No `source` of any other file: this library is copied standalone into test
 # fixtures, exactly as lib.sh is.
 
@@ -154,6 +166,23 @@ _graph_commit_writer() {
     | head -n1 | tr -d '[:space:]'
 }
 
+# _graph_restore_ids_to_head <repo-root> <label> <id>... — bring each of THIS
+# writer's own node files back to HEAD's content. Non-destructive to every
+# peer: it touches only the ids this writer pinned, moves no commit, and
+# writes no path outside intentions/<id>.md. rc 1 when any restore failed.
+_graph_restore_ids_to_head() {
+  local repo_root="$1" label="$2"
+  shift 2
+  local sid rc=0
+  for sid in "$@"; do
+    git -C "$repo_root" checkout -- "intentions/$sid.md" || {
+      echo "$label: rollback could not restore intentions/$sid.md to HEAD" >&2
+      rc=1
+    }
+  done
+  return $rc
+}
+
 graph_rollback_node_writes() {
   local repo_root="$1" head_at_arm="$2" label="$3"
   shift 3
@@ -173,7 +202,7 @@ graph_rollback_node_writes() {
   # substitutes for the other — a sweep that DID write is not covered by this
   # guard at all, and that is the larger half of the surface.
   [[ "${#ids[@]}" -gt 0 ]] || return 0
-  local sid head_now
+  local head_now
   head_now="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null)" || {
     echo "$label: cannot read HEAD — the node write(s) were NOT rolled back; inspect intentions/ by hand" >&2
     return 1
@@ -194,8 +223,23 @@ graph_rollback_node_writes() {
     # pre-attribution code handled that case correctly; keeping the range
     # narrow is what keeps it correct.
     #
-    # `HEAD --not origin/main <head-at-arm>` is the same set minus everything
-    # <head-at-arm> already reaches: precisely the rewind's blast radius.
+    # `HEAD --not origin/main <head-at-arm>` is that set minus everything
+    # <head-at-arm> already reaches. What it yields is the UNPUSHED part of the
+    # rewind's blast radius — NOT the whole of it, and the difference is a real
+    # residual rather than a rounding error. `reset --mixed <head-at-arm>` drops
+    # EVERY commit in `<head-at-arm>..HEAD`; this rev-list classifies only those
+    # of them that origin/main cannot reach. A commit above <head-at-arm> that
+    # IS reachable from origin/main — a peer's commit pulled in by graph-commit's
+    # own `git pull --rebase` mid-write, say — is therefore EXCLUDED from
+    # classification and yet still DROPPED by the rewind, leaving the local
+    # branch behind origin/main and that commit's files (the ones outside the
+    # restored intentions/ paths) reading as modified. Excluding it is
+    # deliberate — it is on origin/main, so it is not lost, and classifying it
+    # could only manufacture the refusal the paragraph above exists to avoid —
+    # but do not read this rev-list as proof that the rewind touches nothing
+    # else. It is not, and the recovery for that residual is a plain
+    # fetch/reset, not anything this function does.
+    #
     # <head-at-arm> is an EXCLUDE, not a range endpoint, so a <head-at-arm> that
     # is NOT an ancestor of HEAD still yields a well-defined set — and the
     # `merge-base --is-ancestor` gate in _graph_discard_stranded_commits is what
@@ -236,7 +280,21 @@ graph_rollback_node_writes() {
     # discard would destroy). Nothing here can tell them apart, so nothing here
     # touches the tree.
     if [[ "${#unattributed[@]}" -gt 0 ]]; then
-      echo "$label: HEAD carries ${#unattributed[@]} unpushed commit(s) with NO Graph-Writer attribution (${unattributed[0]}) — this rollback cannot tell its own un-landed write from another process's work, so the node write(s) were NOT rolled back and NOTHING was discarded. Inspect them by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
+      # ORDER MATTERS: restore, THEN refuse. The refusal is about the
+      # DESTRUCTIVE leg only — nothing here may discard a commit it cannot
+      # attribute. The per-id `git checkout --` is NOT that leg: it touches
+      # only the ids THIS writer pinned, moves no commit, and cannot reach a
+      # peer's work. Refusing above it also aborted the case where NOTHING on
+      # HEAD is ours and the discard could not have run at all, leaving this
+      # writer's node file dirty in the SHARED main checkout — which trips
+      # graph-commit's assert_clean_outside_ids for EVERY other writer there.
+      # That is the checkout-wide outage this file exists to prevent, inflicted
+      # by the guard instead of by the leak. The header accepts "a dirty tree
+      # and a loud message" as the price of refusing wrongly; it does not
+      # contemplate that dirty tree denying service to everyone else, and
+      # skipping the restore buys the refusal nothing.
+      _graph_restore_ids_to_head "$repo_root" "$label" "${ids[@]}" || true
+      echo "$label: HEAD carries ${#unattributed[@]} unpushed commit(s) with NO Graph-Writer attribution (${unattributed[0]}) — this rollback cannot tell its own un-landed write from another process's work, so NOTHING was discarded and the commit(s) are LEFT on HEAD. This writer's own node file(s) WERE restored to HEAD, so the shared checkout is not left dirty for every other graph writer. Inspect the commit(s) by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
       return 1
     fi
     if [[ "${#mine[@]}" -gt 0 ]]; then
@@ -281,12 +339,7 @@ graph_rollback_node_writes() {
     fi
   fi
   local rc=0
-  for sid in "${ids[@]}"; do
-    git -C "$repo_root" checkout -- "intentions/$sid.md" || {
-      echo "$label: rollback could not restore intentions/$sid.md to HEAD" >&2
-      rc=1
-    }
-  done
+  _graph_restore_ids_to_head "$repo_root" "$label" "${ids[@]}" || rc=1
   echo "$label: rolled the node write(s) back to HEAD ${head_now:0:8}" >&2
   return $rc
 }

@@ -748,7 +748,14 @@ if [[ "${#CI_STALL_IDS[@]}" -gt 0 ]]; then
     # own output line for the `held ... via <hold-id>` protocol line below.
     # (graph-select-target's _hold_node_fix_cap discards stdout instead — it runs
     # inside a command substitution whose value is contractual. This does not.)
-    if ci_stall_out=$( (cd "$REPO_ROOT" && "$UTIL_SCRIPTS/hold-node" "$ci_stall_id" \
+    # env -u GRAPH_WRITER: hold-node lands its OWN graph-commit, and this
+    # script's exported label would otherwise stamp that commit
+    # `Graph-Writer: reconcile-graph-review-stall`. A concurrent instance would
+    # then read a peer's stranded hold commit as `mine` and discard it. Stripped
+    # here so the hold commit keeps graph-commit's default label, which this
+    # script's rollback classifies as another writer's and KEEPS. See
+    # graph-select-target's GRAPH_WRITER_LABEL block for the full argument.
+    if ci_stall_out=$( (cd "$REPO_ROOT" && env -u GRAPH_WRITER "$UTIL_SCRIPTS/hold-node" "$ci_stall_id" \
         --kind ci-pending-stalled \
         --reason-file "$ci_stall_reason" \
         --recommendation-file "$ci_stall_rec") 2>/dev/null ); then
