@@ -1170,6 +1170,29 @@ assert_eq "torn-wt: the reason names the tear" "yes" \
   "$(case "$(sd_park_reason)" in *'git cannot read it as a checkout'*) printf 'yes' ;; *) printf 'no' ;; esac)"
 assert_eq "torn-wt: the recommendation says to clear the torn path first" "yes" \
   "$(case "$(sd_park_recommendation)" in *'worktree prune'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# Round 7's first finding, on the same fixture. Measuring the tear as ABSENT is
+# only half the answer: a tear destroys the .git link while LEAVING THE FILES on
+# disk, so the branch measurement that follows (here: no branch exists at all)
+# reports `false` over work that is still sitting in $wt. No probe above can see
+# it -- it was never committed, so refs/heads/<node> says nothing about it, and
+# the directory is unreadable as a checkout. `false` there is an all-clear
+# issued over the exact files this arm exists to protect.
+assert_eq "torn-wt: the verdict degrades to unknown, not a false all-clear" '"unknown"' \
+  "$(sd_log_unpushed)"
+assert_eq "torn-wt: the reason says uncommitted work in the torn path is UNKNOWN" "yes" \
+  "$(case "$(sd_park_reason)" in *'still holds UNCOMMITTED work is UNKNOWN'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# ORDER, not mere presence. The recommendation used to OPEN with `rm -rf`, the
+# one command that destroys what the paragraph above says is unknown and at
+# risk. An operator reading top-down would run it first. Assert that salvage is
+# ordered ahead of the destructive step, which a presence-only check cannot see.
+assert_eq "torn-wt: the recommendation salvages BEFORE it destroys" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'SALVAGE FIRST'*'rm -rf'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+# Test 15n asserts the tag follows the verdict for `true`; UNKNOWN is the third
+# verdict and had no tag of its own, so it fell through to the tag the header
+# ladder documents as "nothing at risk". The chosen tag shares the
+# `standdown-winner-dead-work-` prefix so ONE triage grep finds both.
+assert_eq "torn-wt: filed under the unknown tag, not the nothing-at-risk tag" "yes" \
+  "$(case "$(sd_park_reason)" in standdown-winner-dead-work-unknown*) printf 'yes' ;; *) printf 'no' ;; esac)"
 sd_teardown
 
 # --- Test 15m: uncommitted work in the SHARED checkout is not an all-clear ----
@@ -1198,6 +1221,44 @@ assert_eq "shared-dirt: the reason names the shared checkout" "yes" \
   "$(case "$(sd_park_reason)" in *'uncommitted tracked file(s)'*) printf 'yes' ;; *) printf 'no' ;; esac)"
 assert_eq "shared-dirt: the recommendation says to inspect it before releasing" "yes" \
   "$(case "$(sd_park_recommendation)" in *'status --porcelain'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+sd_teardown
+
+# --- Test 15p: an UNTRACKED node body in the shared checkout is not an all-clear
+
+# Round 7's second finding, and the sibling of Test 15m. That probe asked
+# `status --porcelain --untracked-files=no`, but the dominant shape of
+# shared-checkout work is a NEW FILE: a strategy or align-tactics session writes
+# intentions/<id>.md and dies before committing it. `-uno` cannot see an
+# untracked file at all, so the probe read CLEAN and the arm issued `false` over
+# precisely the case Test 15m exists for. The untracked probe is scoped to
+# intentions/ -- the worktrees root lives inside the working tree and is not
+# gitignored in this fixture, so an unscoped probe would report every torn
+# checkout's leftovers as shared-checkout work.
+echo "Test: an untracked node body in the shared checkout degrades the verdict to UNKNOWN"
+sd_setup
+sd_write_node "tactic-shared-untracked" unparked
+sd_commit_nodes
+# Untracked, NOT modified: this is invisible to `status --untracked-files=no`,
+# which is the whole point of the fixture. No worktree and no branch either, so
+# every other predicate in the arm answers "nothing at risk" and this file is
+# the only thing that can move the verdict.
+printf 'a node body written by a session that died before committing it\n' \
+  > "$SD_REPO/intentions/tactic-orphan-body.md"
+sd_add_session "0bb2-2222" "tactic-shared-untracked"
+sd_install_claude 0
+standdown_write "tactic-shared-untracked" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "shared-untracked: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "shared-untracked: the log reports unknown, not false" '"unknown"' "$(sd_log_unpushed)"
+# BOTH counts, so the assertion cannot pass on a probe that merely reported
+# something: the tracked half must read 0 (proving -uno saw nothing) while the
+# untracked half reads 1 (proving the new probe is what moved the verdict).
+assert_eq "shared-untracked: the reason reports the tracked probe as clean" "yes" \
+  "$(case "$(sd_park_reason)" in *'holds 0 uncommitted tracked file(s)'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "shared-untracked: the reason counts the untracked node body" "yes" \
+  "$(case "$(sd_park_reason)" in *'1 untracked file(s) under intentions/'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "shared-untracked: the recommendation names the ls-files probe" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'ls-files --others --exclude-standard -- intentions'*) printf 'yes' ;; *) printf 'no' ;; esac)"
 sd_teardown
 
 # --- Test 15n: the reason tag follows the VERDICT, not the arm ----------------

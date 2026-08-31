@@ -130,7 +130,8 @@
 #     f. node id absent from origin/main's `intentions/` → `not-a-node`, keep;
 #        or the node is already parked → `already-parked`, keep. Next.
 #        (Lazy `git fetch`, at most once per invocation, precedes this read.)
-#     -  worktree directory missing → NO clear. It selects the no-worktree
+#     -  worktree directory missing, OR present but unreadable as a checkout
+#        (the torn-removal state) → NO clear. It selects the no-worktree
 #        reason variant of the park below and SKIPS both sync predicates, which
 #        fail on a missing directory and would be misread as "unpushed". Rule
 #        (d) has already returned on `n_live == 0`, so a marker reaching this
@@ -140,6 +141,13 @@
 #        MEASURED and the park reports true/false/unknown from the measurement.
 #        Two lanes never pre-provision one (`kind == strategy`, and the
 #        `align-tactics` rung), so this is a normal state for a stranded node.
+#        Those same two lanes are why a `false` from the branch measurement is
+#        not the end of it: they leave UNCOMMITTED work in the shared
+#        checkout, which no branch predicate can see, so the arm probes the
+#        shared checkout (tracked AND untracked under `intentions/`) and
+#        degrades to `unknown` on any dirt or on a failed probe. A torn
+#        directory degrades to `unknown` for the same reason: the files are
+#        still on disk and nothing can measure them.
 #     g. the park cap for this pass is spent → `deferred`, keep, next. A
 #        no-worktree park consumes cap budget like any other.
 #     h. the worktree is NOT in sync — BOTH `worktree_in_sync` and
@@ -147,11 +155,16 @@
 #        `standdown-winner-dead-work-unpushed`. The second predicate is what
 #        keeps a post-squash-merge local merge commit from being misread as
 #        stranded work.
-#     i. otherwise (node still held) → PARK. Two reason tags:
+#     i. otherwise (node still held) → PARK. Three reason tags:
 #        `standdown-winner-dead-node-held-no-worktree` when the worktree is
 #        missing (checked FIRST; its unpushed-work claim comes from measuring
-#        `refs/heads/<node>`, never from the missing directory), otherwise
-#        `standdown-winner-dead-node-held` (in sync).
+#        `refs/heads/<node>`, never from the missing directory);
+#        `standdown-winner-dead-work-unknown` when that arm could not rule out
+#        work at risk -- it shares the `standdown-winner-dead-work-` prefix
+#        with the unpushed tag so one triage grep finds both, which is the
+#        whole point of not folding it into the -no-worktree tag documented as
+#        nothing-at-risk; otherwise `standdown-winner-dead-node-held`
+#        (in sync).
 #
 #   Fail-safe posture: if EITHER underlying liveness call is UNKNOWN, every
 #   marker is treated as `observing` for the pass and nothing is parked or
@@ -863,7 +876,20 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
         fi
         if (( torn_wt )); then
           branch_clause="A directory exists at $wt but git cannot read it as a checkout -- the torn-removal state -- so it was measured as if absent. $branch_clause"
-          rec_wt_clause="A directory exists at $wt but git cannot read it as a checkout (a torn removal). Clear it with 'rm -rf $wt && git -C $repo_root worktree prune' BEFORE acting on the following. $rec_wt_clause"
+          # A tear destroys the .git link while LEAVING THE FILES on disk.
+          # Nothing above can see them: they were never committed, so
+          # refs/heads/<node> says nothing about them, and the directory is
+          # unreadable as a checkout so no status probe reaches them. A
+          # "false" here is therefore an all-clear issued over work that is
+          # still sitting there.
+          if [[ "$unpushed_flag" == "false" ]]; then
+            unpushed_flag="unknown"
+            branch_clause="$branch_clause Whether that directory still holds UNCOMMITTED work is UNKNOWN: a tear leaves the session's files in place while destroying the .git link, so no branch measurement above can see them."
+          fi
+          # SALVAGE BEFORE rm -rf. The previous ordering opened the
+          # recommendation with the one command that destroys the thing
+          # this arm exists to protect.
+          rec_wt_clause="A directory exists at $wt but git cannot read it as a checkout (a torn removal). SALVAGE FIRST: inspect $wt and copy out any uncommitted work, because the next step destroys it permanently. Only then clear it with 'rm -rf $wt && git -C $repo_root worktree prune'. $rec_wt_clause"
         fi
 
         # Every measurement above asks about refs/heads/<node>. Two lanes never
@@ -877,14 +903,39 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
         # may have left it, and claiming otherwise would be a different lie. The
         # verdict degrades to UNKNOWN and names the thing to go look at, which is
         # this arm's stated "unmeasurable reports UNKNOWN, never safe" posture.
-        if [[ "$unpushed_flag" == "false" ]]; then
+        if [[ "$unpushed_flag" != "true" ]]; then
           local shared_dirty="" shared_dirty_rc=0 shared_dirty_count=0
+          local shared_untracked="" shared_untracked_rc=0 shared_untracked_count=0
           shared_dirty=$(git -C "$repo_root" status --porcelain --untracked-files=no 2>/dev/null) || shared_dirty_rc=$?
-          if (( shared_dirty_rc == 0 )) && [[ -n "$shared_dirty" ]]; then
-            shared_dirty_count=$(printf '%s\n' "$shared_dirty" | wc -l | tr -d ' ')
+          # The dominant shape of shared-checkout work is a NEW FILE: a
+          # strategy or align-tactics session writes intentions/<id>.md and
+          # dies before committing it. --untracked-files=no cannot see that,
+          # so the probe read clean and the park issued an all-clear over
+          # precisely this arm's motivating case. worktrees/ is already
+          # gitignored, so -uno was never needed for noise control; scoping
+          # the untracked probe to intentions/ keeps it targeted anyway.
+          shared_untracked=$(git -C "$repo_root" ls-files --others --exclude-standard -- intentions 2>/dev/null) || shared_untracked_rc=$?
+          if (( shared_dirty_rc != 0 || shared_untracked_rc != 0 )); then
+            # Unmeasurable reports UNKNOWN, never safe -- the posture every
+            # other failure path in this arm already honours. Falling through
+            # with the verdict still "false" would issue an all-clear on the
+            # strength of a probe that did not run.
             unpushed_flag="unknown"
-            branch_clause="$branch_clause However, the shared checkout at $repo_root holds $shared_dirty_count uncommitted tracked file(s). Sessions spawned against the shared checkout rather than a per-node worktree (kind == strategy, and the align-tactics rung) leave their work THERE and never create refs/heads/$node, so none of it would appear in any branch measurement above. Whether any of it belongs to this node is UNKNOWN."
-            rec_wt_clause="$rec_wt_clause Before releasing the node, inspect the $shared_dirty_count uncommitted tracked file(s) in the shared checkout with 'git -C $repo_root status --porcelain': a session that ran against the shared checkout leaves its work there, not on a branch."
+            branch_clause="$branch_clause However, the shared checkout at $repo_root could not be inspected (git status exited $shared_dirty_rc, ls-files exited $shared_untracked_rc). Sessions spawned against the shared checkout rather than a per-node worktree (kind == strategy, and the align-tactics rung) leave their work THERE and never create refs/heads/$node, so whether any is at risk is UNKNOWN."
+            rec_wt_clause="$rec_wt_clause Before releasing the node, resolve the repository error and re-run 'git -C $repo_root status --porcelain' and 'git -C $repo_root ls-files --others --exclude-standard -- intentions': until those succeed, nothing rules out work left in the shared checkout."
+          elif [[ -n "$shared_dirty" || -n "$shared_untracked" ]]; then
+            # Explicit `if`, not `[[ ]] && cmd`: under errexit a false test
+            # makes the compound return non-zero and takes the caller down.
+            shared_dirty_count=0
+            if [[ -n "$shared_dirty" ]]; then
+              shared_dirty_count=$(printf '%s\n' "$shared_dirty" | wc -l | tr -d ' ')
+            fi
+            if [[ -n "$shared_untracked" ]]; then
+              shared_untracked_count=$(printf '%s\n' "$shared_untracked" | wc -l | tr -d ' ')
+            fi
+            unpushed_flag="unknown"
+            branch_clause="$branch_clause However, the shared checkout at $repo_root holds $shared_dirty_count uncommitted tracked file(s) and $shared_untracked_count untracked file(s) under intentions/. Sessions spawned against the shared checkout rather than a per-node worktree (kind == strategy, and the align-tactics rung) leave their work THERE and never create refs/heads/$node, so none of it would appear in any branch measurement above. Whether any of it belongs to this node is UNKNOWN."
+            rec_wt_clause="$rec_wt_clause Before releasing the node, inspect the shared checkout: 'git -C $repo_root status --porcelain' for the $shared_dirty_count uncommitted tracked file(s), and 'git -C $repo_root ls-files --others --exclude-standard -- intentions' for the $shared_untracked_count untracked one(s). A session that ran against the shared checkout leaves its work there, not on a branch, and a node body it never committed is untracked."
           fi
         fi
 
@@ -893,6 +944,14 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
         # risk" hides it from the triage grep that looks for the unpushed tag.
         if [[ "$unpushed_flag" == "true" ]]; then
           reason_tag="standdown-winner-dead-work-unpushed"
+        elif [[ "$unpushed_flag" == "unknown" ]]; then
+          # Shares the `standdown-winner-dead-work-` prefix so ONE triage
+          # grep finds both it and -unpushed. Tagging an UNKNOWN as
+          # -node-held-no-worktree filed a park whose own text says commits
+          # may be recoverable from the reflog under the tag the header
+          # ladder documents as "nothing at risk" -- the exact defect the
+          # comment above claims to close, one verdict over.
+          reason_tag="standdown-winner-dead-work-unknown"
         else
           reason_tag="standdown-winner-dead-node-held-no-worktree"
         fi
