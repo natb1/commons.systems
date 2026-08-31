@@ -39,9 +39,12 @@ attributes:
       unmet sustenance captures all motivation"
     - "scarcity capture (Mullainathan & Shafir 2013) → virtue-right-livelihood:
       scarcity taxes the judgment every other virtue runs on"
-    - "motivational crowding (Deci & Ryan, SDT) → the right-livelihood /
-      knowledge-as-gift tension: contingent reward corrodes the intrinsic
-      motive"
+    - "motivational crowding (Deci & Ryan, SDT) → the capture pressure on
+      strategy-financial-sustainability's monetization decisions: contingent
+      reward corrodes the intrinsic motive (re-pointed 2026-08-30 resolution
+      round (decision: deferred, delegation-anthropic-claude, 2026-08-30);
+      formerly pointed at the dissolved right-livelihood / knowledge-as-gift
+      tension edge)"
   texts:
     - Maslow, 'A Theory of Human Motivation' (1943)
     - Mullainathan & Shafir, Scarcity (2013)

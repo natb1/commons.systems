@@ -690,7 +690,19 @@ clarifications:
       strategy-financial-sustainability re-homed now under the adjacent-doctrine
       path (author-ratified): serves gains the livelihood root; its motivation
       profile is genuinely mixed and coherent under the decomposition corollary.
-      This resolves strategy-graph-mounts' sustenance open gap."
+      This resolves strategy-graph-mounts' sustenance open gap. AMENDED
+      2026-08-30 (resolution round, author ruling): the tension_with edge is
+      REMOVED — 'I do not see a tension between roots. valuing sustenance and
+      valuing knowledge as gift are not contradictory. The tension comes from
+      the mount of the platform delegation… This tension caused by delegation is
+      the definition of capture' (author verbatim). The two virtues stand as
+      compatible sibling roots; virtue-knowledge-as-gift remains deferred. The
+      worked ratification example re-derives WITHOUT a tension term: ratified
+      stamp + serves flow to both virtues + the graft edge's capture price — the
+      'conflicts with an implicit value' clause of the author's sentence names
+      capture pressure arriving through the platform mount, not an inter-virtue
+      contradiction. Re-derivation specifics and anchor re-pointing accepted as
+      deferred (decision: deferred, delegation-anthropic-claude, 2026-08-30)."
   - question: How were the migration and sustenance rounds (3267e474, b51df73f)
       reviewed, given the draft-review gate?
     answer: "(Recorded 2026-08-30, post-review fix commit.) GATE: SKIPPED at commit
@@ -712,7 +724,7 @@ clarifications:
       authority."
   - question: Where exactly is a substantiating or contradicting tradition recorded
       (the locus the substantiation doctrine left open)?
-    answer: "Claude-drafted locus rule, (decision: delegated-pending-review,
+    answer: "Claude-drafted locus rule, (decision: deferred,
       delegation-anthropic-claude, 2026-08-30), post-review H2: a SUBSTANTIATING
       tradition is recorded as an attributes.traditions pointer on the
       substantiated node PLUS an adopted entry on the tradition record naming
@@ -722,7 +734,66 @@ clarifications:
       brownfield reflex the post-hoc review caught (the sustenance round applied
       the author's doctrine by prose while attributes.traditions and the record
       entries sat unused). An /exetasis sitting ratifies, amends, or declines
-      this locus rule."
+      this locus rule. SUPERSEDED 2026-08-30 (resolution round, author-ratified
+      in symmetric-edge form): substantiation and contradiction are two typed
+      edges on the substantiated node — attributes.substantiated_by and
+      attributes.contradicted_by — each REQUIRED to be mirrored by a
+      locus-naming entry on the tradition record (adopted ⇔ substantiated_by;
+      diverged/chosen_over ⇔ contradicted_by), the edge carrying topology, the
+      entry carrying the scholarship, prose optional narrative
+      (derive-don't-restate); validate-graph enforces the mirror.
+      attributes.traditions is the legacy spelling of substantiated_by;
+      migration sweep: tactic-substantiation-edge-migration."
+  - question: What did the 2026-08-30 resolution round decide (every open gap and
+      pending item dispositioned at author instruction)?
+    answer: "(Recorded 2026-08-30; the author directed that all gaps receive
+      recommendations and all pending items be resolved unless explicitly
+      deferred in-session.) RATIFIED: (1) DISPOSITION MODEL — /exetasis selects
+      a ranked DISPOSITION, not a node (a node carries many); ranking is a
+      function of node rank, graph position (keystone dispositions prioritized),
+      timestamp, and disposition category, with category order deferred > null >
+      ratified > delegated (null's slot from Claude's recommendation; the rest
+      author verbatim: deferred 'author explicitly said it requires exetasis'
+      outranks ratified 'are you sure?' outranks delegated 'do you still not
+      care?'). /exetasis supersedes ALL other author-owned graph review
+      processes except telemetry monitoring via the WIP dashboard — including
+      the curriculum reading-and-review program, now deprecated, whose outputs
+      the sitting metadata model must capture. (2) STATE VOCABULARY — canonical
+      stamp states are ratified / deferred / delegated; the interim names
+      migrate (delegated-pending-review → deferred; delegated-review-declined →
+      delegated); null stays stamp-absence during the drain; author-ratified
+      stamps may stay two-element. (3) INTERVIEW MINIMUM — every interview
+      question offers at least: the recommendation, accept as deferred for
+      review, accept as delegated (don't care). (4) SUBSTANTIATION LOCUS in
+      symmetric-edge form (see the locus clarification's supersession). (5)
+      MOUNTS — traditions/delegations are references without author
+      dispositions: accurate or objectively invalid, resolved by other
+      processes; /exetasis reviews author dispositions only; kinds inherit rank
+      via keystone position; mount-substance decision stamps and delegation
+      pricing are struck. (6) NO ROOT TENSION — see the amended sibling-pair
+      item; capture definition sharpened on strategy-graph-mounts. (7) SITTING
+      SCOPE — single-disposition review with opportunistic may-batch (a sitting
+      MAY clear hot-context sibling dispositions, never must). (8) /ALIGN
+      ADJACENCY DUTY — every legacy-null disposition a round quotes, amends, or
+      touches an edge incident to MUST be dispositioned in that round; silence
+      is a defect of the round. (9) SENSOR RE-HOMING —
+      strategy-graph-integrity's sensor becomes the graph-digest check tables
+      read by the RSI-family delegated-review batch function (WIP,
+      tactic-rsi-graph-review); NO office-hours interim — the author accepts the
+      signal may lapse/regress until built. DELEGATED (decision: delegated,
+      delegation-anthropic-claude, 2026-08-30): (10) drain mechanics — census
+      definition (author dispositions on virtue/strategy/kind nodes recorded
+      before 2026-08-30 without a stamp; mounts and tactics excluded), the
+      stamp-schema lint as home, mechanical null-forbidding flip at count zero
+      ('a migration detail'). (11) /align-audit retirement — deprecate and
+      REMOVE, no charter fold-in ('just deprecate and remove'); non-legacy
+      residue was interviewed separately per author instruction and resolved
+      under (9). DEFERRED (decision: deferred, delegation-anthropic-claude,
+      2026-08-30): (12) anchor re-pointing — Brand and SDT entries re-point to
+      the capture locus at strategy-financial-sustainability; implemented now,
+      held for review. EXPLICITLY LEFT DEFERRED from earlier in the session (not
+      re-asked): virtue-knowledge-as-gift's substance ('two sibling roots,
+      deferred with review')."
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
