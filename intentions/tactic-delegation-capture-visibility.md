@@ -57,5 +57,5 @@ surfaces the known-deep records (attention-services, anthropic-claude) above
 low/low tools, and that last_assessed ages render. Unit tests for the ranking
 helper:
 ```verify
-npx vitest run --project intentionsutil --root .
+npx vitest run --project packages/intentionsutil --root .
 ```

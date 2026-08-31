@@ -601,11 +601,11 @@ Run from the repo root. `run-typecheck.sh` and the vitest project selector are
 both cwd-sensitive — a foreign cwd makes them pass vacuously.
 
 ```verify
-npx tsx packages/intentionsutil/scripts/migrate-boost-levels.ts --dir intentions --check
+node --import tsx/esm packages/intentionsutil/scripts/migrate-boost-levels.ts --dir intentions --check
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 ```verify

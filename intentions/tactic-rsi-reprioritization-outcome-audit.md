@@ -567,7 +567,7 @@ labeled blocks; with no `priority_log` entries on main it prints the
 `INSUFFICIENT DATA` verdict, which is the correct output, not a failure:
 
 ```verify
-npx tsx packages/intentionsutil/scripts/reprioritization-audit.ts --days 7 --ref HEAD
+node --import tsx/esm packages/intentionsutil/scripts/reprioritization-audit.ts --days 7 --ref HEAD
 ```
 
 The skill wiring must name the script and carry the section heading:

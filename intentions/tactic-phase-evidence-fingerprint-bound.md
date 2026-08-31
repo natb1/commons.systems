@@ -537,7 +537,7 @@ widened `markers` shape (this is the real guard that the schema change did not
 break the live graph):
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts
 ```
 
 Manual / judgment:

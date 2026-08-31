@@ -116,8 +116,8 @@ change must land before any id can be stored.
 ## Verification
 
 ```verify
-npx vitest run --project intentionsutil --root . || exit 1
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+npx vitest run --project packages/intentionsutil --root . || exit 1
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts
 ```
 
 Prose: author a dangling citation locally and confirm validate-graph rejects

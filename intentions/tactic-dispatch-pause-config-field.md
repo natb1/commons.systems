@@ -634,7 +634,7 @@ printf '%s' "$out" | grep -q '"paused": false' || exit 1
 printf '{"paused": true}' > "$d/pause.json"
 out=$(DISPATCH_CONFIG_DIR="$d" .claude/skills/dispatch-propagate/scripts/dispatch-config-load pause)
 printf '%s' "$out" | grep -q '"paused": true' || exit 1
-rm -f "$d/pause.json"
+rm -f "$d/pause.json" || exit 1
 out=$(DISPATCH_CONFIG_DIR="$d" .claude/skills/dispatch-propagate/scripts/dispatch-config-load pause)
 [ "$out" = "no-config" ] || exit 1
 printf 'not json' > "$d/pause.json"

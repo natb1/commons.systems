@@ -148,7 +148,7 @@ or `intentions/README.md`; any GitHub issue or label.
 ## Verification
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts
 ```
 
 Manual: read the new `## Calibration events` section and confirm it covers

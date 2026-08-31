@@ -267,7 +267,7 @@ if grep -n "tactic-align-audit-legacy-review" .claude/skills/align-audit/SKILL.m
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 ```verify

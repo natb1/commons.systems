@@ -144,9 +144,9 @@ pre-cutover state, not a failure.
 ## Verification
 
 ```verify
-npx vitest run --project intentionsutil --root . || exit 1
-npx tsx packages/intentionsutil/scripts/read-sensors.ts || exit 1
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+npx vitest run --project packages/intentionsutil --root . || exit 1
+node --import tsx/esm packages/intentionsutil/scripts/read-sensors.ts || exit 1
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts
 ```
 
 Prose: a second driver run after the commit is idempotent apart from the
