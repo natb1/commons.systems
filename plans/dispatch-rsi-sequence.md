@@ -172,7 +172,7 @@ were consolidated here and the plan now points at this file.
 
 | | |
 |---|---|
-| **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it. **PR18** — the durable-layer write fence, `478cc324` (#3134), Position 1. Bookkeeping landed `84cc158e`: four of its five nodes closed, one parked — see §"Position 1 — PR18". **PR15 (U0/U3/U4)** — the graph-commit simplification half of Position 2, `a4a964b8` (#3136). Bookkeeping landed `1f56e0c2`: all five of its nodes closed — see §"Position 2 — PR15". **PR16 (7 of 12 units)** — the node-mutation half, `96d22cb1` (#3138). Bookkeeping landed `c55710c4`: eight of its twelve nodes closed, four carried forward — see §"Position 2 — PR16". **PR5a (Units 1–6)** — record-time main-qa routing, `77bd7471` (#3140), Position 3. **Bookkeeping landed 2026-08-30**, in two graph landings: `74c281dc` (the Unit 7 migration — 22 marks off 15 source nodes, all 15 node bodies rewritten in a *single* `graph-commit`) and `94427773` (the host node closed). *(An earlier revision of this row also named `b76ce953` as the 15-node landing; that is a misattribution — `b76ce953` is an unrelated align landing over six strategy/tactic nodes, and `74c281dc` is the 15-file commit.)* Three follow-on landings cleared the debt this position carried: `ccb3f915` (11 stale WAIT-cohort parks, one invocation), `e54b64ee` (`tactic-review-stall-conflict-lane` closed as a completion record) and `8ae96615` (17 verification-fence corrections across 12 nodes, one invocation) — see §"Position 3 — PR5a". **Position 4 — Bundle 2, the whole position.** All eight A-bundles merged 2026-08-31, `a-p7-ci-pending-liveness-bound` (#3169, merge `c7a96c24`) last. **Bookkeeping landed `1eecc987`** — the two owed completion records in a single `graph-commit`: `tactic-reconcile-review-stall-base-pin` (#3165, merge `f08dab0a`) and `tactic-autonomous-ci-pending-liveness-bound` (#3169). Graph revalidated at 783 nodes, 0 unresolved prose refs. Two further infra PRs merged in the same window and owe **no** graph write — #3167 (`283dee46`) and #3170 (`e20318cd`); measured 2026-08-31, no node carries either as `execution.pr`. **PR19a — the supersession edge**, `fd5ce337` (#3175), split out of PR19 and shipped ahead of Position 5 to break the PR-level cycle. It landed the `superseded_by` field, an unplanned `supersession_expiry` companion, the `superseded` status terminal on all six kind nodes, and `validateGraph` rules **24** (target exists and shares kind), **25** (no `superseded_by` cycles) and **26** (an in-flight supersession names its expiry event) — 24/25/26, not the 23/24 the plan and the node both predicted, because 23 was already taken by the `attributes`-shadow rule. **Bookkeeping landed `f0603ff7`**, three ids in one `graph-commit`. **This does NOT close `tactic-supersession-edge-and-terminal`**: only Unit 1 of its five shipped, so it stays `phase: implement` and its Units 2–5 are PR19b at Position 6. What the bookkeeping did instead was renumber every rule citation in that node to 24/25/26, mark Unit 1 as a landed record rather than an instruction, correct five anchors that would have caused wrong work (`checkBlockedByCycles` is now `checkEdgeCycles`; `readParked` never existed at any revision; `reconcile-graph.ts`'s "single call site" is two; `kind-tactic.md`'s cited `done`-terminal template does not exist; and `goals.ts`'s `phase !== "done"` clause — Unit 3's highest-risk item — has ALREADY shipped), and drop the two `blocked_by` edges described in the Next row |
+| **Shipped** | **PR1** — graph write-path integrity, `fe0b1c4d` (#3095). Its eight nodes are closed. Every later PR builds on it. **PR18** — the durable-layer write fence, `478cc324` (#3134), Position 1. Bookkeeping landed `84cc158e`: four of its five nodes closed, one parked — see §"Position 1 — PR18". **PR15 (U0/U3/U4)** — the graph-commit simplification half of Position 2, `a4a964b8` (#3136). Bookkeeping landed `1f56e0c2`: all five of its nodes closed — see §"Position 2 — PR15". **PR16 (7 of 12 units)** — the node-mutation half, `96d22cb1` (#3138). Bookkeeping landed `c55710c4`: eight of its twelve nodes closed, four carried forward — see §"Position 2 — PR16". **PR5a (Units 1–6)** — record-time main-qa routing, `77bd7471` (#3140), Position 3. **Bookkeeping landed 2026-08-30**, in two graph landings: `74c281dc` (the Unit 7 migration — 22 marks off 15 source nodes, all 15 node bodies rewritten in a *single* `graph-commit`) and `94427773` (the host node closed). *(An earlier revision of this row also named `b76ce953` as the 15-node landing; that is a misattribution — `b76ce953` is an unrelated align landing over six strategy/tactic nodes, and `74c281dc` is the 15-file commit.)* Three follow-on landings cleared the debt this position carried: `ccb3f915` (11 stale WAIT-cohort parks, one invocation), `e54b64ee` (`tactic-review-stall-conflict-lane` closed as a completion record) and `8ae96615` (17 verification-fence corrections across 12 nodes, one invocation) — see §"Position 3 — PR5a". **Position 4 — Bundle 2, the whole position.** All eight A-bundles merged 2026-08-31, `a-p7-ci-pending-liveness-bound` (#3169, merge `c7a96c24`) last. **Bookkeeping landed `1eecc987`** — the two owed completion records in a single `graph-commit`: `tactic-reconcile-review-stall-base-pin` (#3165, merge `f08dab0a`) and `tactic-autonomous-ci-pending-liveness-bound` (#3169). Graph revalidated at 783 nodes, 0 unresolved prose refs. Two further infra PRs merged in the same window and owe **no** graph write — #3167 (`283dee46`) and #3170 (`e20318cd`); measured 2026-08-31, no node carries either as `execution.pr`. **PR19a — the supersession edge**, `fd5ce337` (#3175), split out of PR19 and shipped ahead of Position 5 to break the PR-level cycle. It landed the `superseded_by` field, its `supersession_expiry` companion (ruled into Unit 1 by §"Position 6 · Bundle 2b" sub-point one — planned, not improvised), the `superseded` status terminal on all six kind nodes, and `validateGraph` rules **24** (target exists and shares kind), **25** (no `superseded_by` cycles) and **26** (an in-flight supersession names its expiry event) — 24/25/26, not the 23/24 the plan and the node both predicted, because 23 was already taken by the `attributes`-shadow rule. **Bookkeeping landed `f0603ff7`**, three ids in one `graph-commit`. **This does NOT close `tactic-supersession-edge-and-terminal`**: only Unit 1 of its five shipped, so it stays `phase: implement` and its Units 2–5 are PR19b at Position 6. What the bookkeeping did instead was renumber every rule citation in that node to 24/25/26, mark Unit 1 as a landed record rather than an instruction, correct five anchors that would have caused wrong work (`checkBlockedByCycles` is now `checkEdgeCycles`; `readParked` never existed at any revision; `reconcile-graph.ts`'s "single call site" is two; `kind-tactic.md`'s cited `done`-terminal template does not exist; and `goals.ts`'s `phase !== "done"` clause — Unit 3's highest-risk item — has ALREADY shipped), and drop the two `blocked_by` edges described in the Next row |
 | **Retired** | **Position 0**, the in-flight overhang. Five clean draft-halves landed (#3099, #3101, #3102, #3104, #3105); seven drafts stay open by ruling, each absorbed by the bundle that owns its surface |
 | **Discharged** | **Every author gate.** All ten prerequisite decisions were ruled at the 2026-08-28 sitting, the last two re-ruled 2026-08-29, and all eleven `office_hours` parks cleared. The two decisions that came due later — the PR15 ref-split revisit and where `tactic-retire-assessor-contract-docs` rides — were **ruled 2026-08-29**, as was the research lane's build-or-retire — **BUILD, folded into `/rsi-audit`** as an opt-in, token-targeted subskill with no schedule, which retired the weekly cron and dissolved two of that node's three owed rulings rather than answering them. The last open ruling — PR14's `tactic-rsi-reprioritization-outcome-audit`, what its observable (a) measures — was **ruled 2026-08-29, disposition (A) ratified as proposed** (baseline = complement cohort; interval = creation → phase-done for both cohorts).
 
@@ -239,7 +239,7 @@ until 2026-08-29; see §"Coverage" in the plan for the reconciliation.
 | **3** | 2a · record-time main-qa routing | PR5a | 1 | Must precede Bundle 2 |
 | ✅ | 2 · tick-path reconcilers and sweeps | PR5 + PR9 U2,U6 + PR2 U6 | 11 | **SHIPPED 2026-08-31** — all eight A-bundles merged, `c7a96c24` (#3169) last. Bookkeeping `3c63fc36` + `1eecc987`; all 11 nodes `done` |
 | **5** | 4 · instrument + finding surface | PR3 + PR4 | 16 | COLD, but unblocks positions 6 and 8 |
-| **6** | 2b · supersession representation | **PR19b** (PR19 **splits** — see §Position 6) | 2 | Real `blocked_by` edge onto PR4's write surface. **PR19a** — the `schema.ts` `superseded_by` edge + `superseded` terminal, 1 node — **SHIPPED 2026-08-31** (`fd5ce337`, #3175) ahead of Position 5, because PR4's central node was `blocked_by` it. That edge, and the one from `tactic-persist-greenfield-drops`, were dropped in `f0603ff7`; the node itself stays `phase: implement` for Units 2–5 |
+| **6** | 2b · supersession representation | **PR19b** (PR19 **splits** — see §Position 6) | 3 | Real `blocked_by` edge onto PR4's write surface — `tactic-persist-greenfield-drops` blocked by `tactic-finding-search-all-producers`, **still live, still pinning this position behind PR4**. **PR19a** — the `schema.ts` `superseded_by` edge + `superseded` terminal — **SHIPPED 2026-08-31** (`fd5ce337`, #3175) ahead of Position 5, because PR4's central node was `blocked_by` it. The two edges dropped in `f0603ff7` are the two pointing AT `tactic-supersession-edge-and-terminal` (from `tactic-finding-search-all-producers` and from `tactic-persist-greenfield-drops`) — not the PR4 pin above. Nodes is **3**, not the 2 this column read until 2026-08-31: the two consumers plus `tactic-supersession-edge-and-terminal` itself, which stays `phase: implement` for its unbuilt Units 2–5 |
 | **7** | 3 · dispatch runtime | PR2 rest + PR6 + PR7 + PR8 U1–2 + PR9 rest | 25 | COLD. Nothing invokes it while paused |
 | **8** | 5 · RSI chain | PR10 + PR11 + PR12 + PR14 | 10 | COLD. Needs PR2 + PR3 + PR4. **PR14's 3 are not all plannable — expect a subset** |
 | **9** | 5b · `/align` charter + adversarial review | PR20 + assessor-doc retirement | 9 | **Must** precede the rename |
@@ -777,9 +777,11 @@ edges are written *by* that write surface.
 > the record of a decision already carried out, not as pending work. Two things
 > came out differently from what it predicted: the rules landed as **24, 25 and
 > 26** rather than 23 and 24 (23 was already taken by the `attributes`-shadow
-> rule), and a **26** was added that nothing here planned — `supersession_expiry`,
-> ruled in during implementation because adding the field later would have been a
-> data migration. Resulting order:
+> rule), and a **third** rule was needed — 26, the in-flight expiry check — where
+> this block predicted two. The `supersession_expiry` FIELD that rule 26 enforces
+> was **not** unplanned: sub-point one below ruled it into Unit 1 explicitly, on
+> exactly the data-migration ground it cites. Only the extra rule number is new.
+> Resulting order:
 >
 > ```
 > PR19a (schema: superseded_by edge + superseded terminal)
@@ -806,7 +808,9 @@ ruled form, not the original wording**:
   normally that in-flight PR's own merge or closure — because the
   interim-live-risk exception is only permitted when an expiry is named.
   **Encode the field in Unit 1 alongside `superseded_by`**: adding it after
-  PR19 lands is a data migration, not an edit.
+  PR19 lands is a data migration, not an edit. **DONE — `supersession_expiry`
+  shipped in PR19a (`fd5ce337`) alongside `superseded_by`, and `validateGraph`
+  rule 26 enforces it. Nothing is owed here.**
 - **Sub-point two — ratified**, with the per-unit drop's carrier stated
   explicitly: the node's own unit list, not the edge and not a park.
 
@@ -1293,11 +1297,14 @@ cannot:
 2. **PR19a before PR4, and PR4 before PR19b** (schema split around position 5).
    **First half DISCHARGED 2026-08-31**: PR19a shipped as `fd5ce337` (#3175).
    The second half — PR4 before PR19b — still binds.
-   Two real `blocked_by` edges point in *opposite* directions across the PR4/PR19
-   boundary: `tactic-persist-greenfield-drops` (PR19) is blocked by
-   `tactic-finding-search-all-producers` (PR4), and that same PR4 node is itself
-   blocked by `tactic-supersession-edge-and-terminal` (PR19). PR19 therefore
-   **splits**: its Unit 1 ships as PR19a ahead of position 5, the consumers as
+   Two real `blocked_by` edges *used to* point in opposite directions across the
+   PR4/PR19 boundary. Only one of them is still live:
+   `tactic-persist-greenfield-drops` (PR19) is blocked by
+   `tactic-finding-search-all-producers` (PR4) — **live on `origin/main`, and
+   what pins PR19b behind PR4**. The reverse edge — that same PR4 node blocked by
+   `tactic-supersession-edge-and-terminal` (PR19) — **was dropped in `f0603ff7`**;
+   the node is `blocked_by: []` today. PR19 therefore
+   **split**: its Unit 1 shipped as PR19a ahead of position 5, the consumers as
    PR19b at position 6. See §"Position 6" for the decision.
 3. **PR5a before Bundle 2** (position 3 before 4).
 4. **PR17 before the resumption** (position 11). Otherwise the resumption
@@ -1669,8 +1676,15 @@ tactic-supersession-edge-and-terminal`, a PR19 node — so as bundled, PR4 and
 PR19 form a **PR-level cycle** and cannot both be atomic. **PR19 splits: Unit 1
 (the `schema.ts` `superseded_by` edge + `superseded` terminal) ships as PR19a
 ahead of Position 5; the two consumer nodes ship as PR19b at Position 6.**
-**PR19a SHIPPED 2026-08-31 as `fd5ce337` (#3175), and both `blocked_by` edges
-named above were dropped in `f0603ff7` — the cycle described here is history.** See
+**PR19a SHIPPED 2026-08-31 as `fd5ce337` (#3175), and the REVERSE edge named
+above — `tactic-finding-search-all-producers` blocked by
+`tactic-supersession-edge-and-terminal` — was dropped in `f0603ff7`, so the
+CYCLE described here is history. The FORWARD edge is untouched and still binds:
+`tactic-persist-greenfield-drops` is `blocked_by
+tactic-finding-search-all-producers` on `origin/main`, its only remaining entry,
+so PR19b stays behind PR4.** (The second edge `f0603ff7` dropped was
+`tactic-persist-greenfield-drops` → `tactic-supersession-edge-and-terminal`,
+which is not one of the two named in this paragraph.) See
 Position 6 for the decision and the rejected single-PR alternative. **PR20** is pinned *ahead* of PR13 because PR13 renames the skill file
 PR20 edits — the one hard ordering constraint whose violation is silent rather
 than a merge conflict. **PR17 is cold**: nothing in it fires while the sentinel
