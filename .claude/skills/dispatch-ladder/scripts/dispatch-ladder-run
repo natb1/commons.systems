@@ -840,16 +840,38 @@ export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_I
 # mid-pass otherwise and leaves the lock held until it goes stale) and removes
 # the liveness sentinel. Installed BEFORE the sentinel write below so a partial
 # sentinel is cleared if that write fails and we abort.
+#
+# AND IT MUST STOP THE RUN, not merely tidy up. A single combined
+# `trap fn EXIT INT TERM` whose handler only cleans up and RETURNS hands control
+# back to the interrupted pass, which then carries on WITH THE SELECTION LOCK
+# ALREADY RELEASED — so a concurrent dispatch tick can claim, merge and absorb
+# the very same node this pass is still working on. That defeats the SIGTERM
+# case named just above rather than serving it. So INT and TERM get their own
+# registrations carrying the conventional status (130 / 128+SIGINT, 143 /
+# 128+SIGTERM), and the handler ends in `exit`.
+#
+# `$?` is captured by hand on the FIRST line, before any command in the body can
+# overwrite it, so the plain EXIT path still reports the run's real halt status
+# (`halt` exits with it just above). It cannot be read from `$?` on the signal
+# path: at handler entry on a signal `$?` is the last COMPLETED command's
+# status, NOT 128+signo — which is why the two statuses are passed as literal
+# arguments instead. `exit` inside an EXIT trap does not re-enter the trap. Same
+# shape as `vi_exit_trap` in
+# ../../dispatch-propagate/scripts/test-dispatch-verify-instrument-invocation.sh.
 SENTINEL=""
 LOCK_HELD=0
 _ladder_cleanup() {
+  local rc=${1:-$?}
   if (( LOCK_HELD )); then
     "$ACQUIRE_LOCK" --release >/dev/null 2>&1 || true
     LOCK_HELD=0
   fi
   [[ -n "${SENTINEL:-}" ]] && rm -f "$SENTINEL"
+  exit "$rc"
 }
-trap '_ladder_cleanup' EXIT INT TERM
+trap '_ladder_cleanup' EXIT
+trap '_ladder_cleanup 130' INT
+trap '_ladder_cleanup 143' TERM
 
 if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
   if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then

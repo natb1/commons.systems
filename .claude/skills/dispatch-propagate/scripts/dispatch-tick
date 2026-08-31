@@ -185,12 +185,33 @@ source "$SCRIPT_DIR/lib.sh"
 # Install the trap BEFORE the workspace creation and the sentinel write below, so
 # it clears a partial workspace or partial sentinel if either setup fails and we
 # abort. A single EXIT trap covers every `exit` below this point — intended.
+#
+# A SIGNAL MUST STOP THE TICK, NOT JUST TIDY UP AFTER IT. A single combined
+# `trap fn EXIT INT TERM` whose handler only cleans up and RETURNS hands control
+# straight back to the interrupted tick, which then carries on running with the
+# headless-liveness sentinel ALREADY DELETED — so a concurrent tick resolves
+# this still-live holder as dead and reclaims the selection lock mid-selection,
+# which is the exact duplicate-spawn defect #1068 closes. So INT and TERM get
+# their own registrations that pass the conventional status (130 / 128+SIGINT,
+# 143 / 128+SIGTERM), and the handler ends in `exit`.
+#
+# `$?` is captured by hand on the FIRST line, before any command in the body can
+# overwrite it, so the plain EXIT path still reports the tick's real status. It
+# cannot be read from `$?` on the signal path: at handler entry on a signal `$?`
+# is the last COMPLETED command's status, NOT 128+signo — which is why the two
+# statuses are passed as literal arguments instead. `exit` inside an EXIT trap
+# does not re-enter the trap. Same shape as `vi_exit_trap` in
+# test-dispatch-verify-instrument-invocation.sh.
 SENTINEL=""
 _dispatch_tick_cleanup() {
+  local rc=${1:-$?}
   [[ -n "${SENTINEL:-}" ]] && rm -f "$SENTINEL"
   [[ -n "${DISPATCH_TICK_WORKSPACE:-}" ]] && rm -rf "$DISPATCH_TICK_WORKSPACE"
+  exit "$rc"
 }
-trap '_dispatch_tick_cleanup' EXIT INT TERM
+trap '_dispatch_tick_cleanup' EXIT
+trap '_dispatch_tick_cleanup 130' INT
+trap '_dispatch_tick_cleanup 143' TERM
 
 # Tick-scoped workspace holding the agents snapshot (#1452). Created
 # unconditionally (both the autonomous and --manual paths run the

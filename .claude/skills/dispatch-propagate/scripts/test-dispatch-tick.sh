@@ -1455,4 +1455,106 @@ tick_teardown
 
 # <<< END MOVED <<<
 
+# --- A signal STOPS the tick (it does not merely tidy up) ---------------------
+# dispatch-tick's cleanup handler removes the headless-liveness sentinel (#1068)
+# and the per-tick snapshot workspace (#1452). Under a single combined
+# `trap _dispatch_tick_cleanup EXIT INT TERM` the handler runs on SIGINT/SIGTERM
+# and then RETURNS — bash hands control straight back to the interrupted tick,
+# which carries on running with its sentinel already deleted. A concurrent tick
+# then resolves this still-live holder as dead and reclaims the selection lock
+# mid-selection: the exact duplicate-spawn defect #1068 closes.
+#
+# The discriminator is deliberately NOT a string match on `trap -p TERM` — that
+# would assert the spelling, not the behavior. Instead the select-tick fake
+# delivers the signal to the tick itself and then returns a perfectly normal
+# `empty` decision. bash runs the pending trap when that command substitution
+# returns, so a handler that terminates never reaches Step 2 at all, while a
+# handler that returns routes `empty` into dispatch-tick-recover and exits 0.
+# Three assertions per signal, each independently load-bearing:
+#   status   — 143 / 130 EXACTLY, never merely non-zero. Measured under the
+#              combined `trap fn EXIT INT TERM`: both signals exit 0, because at
+#              handler entry $? is the last COMPLETED command's status (the
+#              command substitution, 0) and NOT 128+signo.
+#   stopped  — dispatch-tick-recover never ran, i.e. the routing table below the
+#              signal was never reached. This is the half that catches a handler
+#              that got the status right by some other means but still fell
+#              through.
+#   cleaned  — no sentinel is left behind, i.e. the handler still does its
+#              ORIGINAL job. Without it, `trap 'exit 143' TERM` would pass.
+# INT and TERM get one case each on purpose: with only one of them, the other
+# registration could be mis-numbered or deleted and this suite would stay green.
+
+# tick_signal_fake <SIG> — the select-tick fake for the cases below. It waits
+# (bounded) for the harness to record the tick's PID, signals it, then answers
+# `empty` and exits 0 like any other clean selection.
+tick_signal_fake() {
+  local sig="$1"
+  rm -f "$TMPDIR_TEST/tick.pid"
+  cat > "$TMPDIR_TEST/dispatch-select-tick" <<FAKE
+#!/usr/bin/env bash
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$TMPDIR_TEST/tick.pid" ]] && break
+  sleep 0.1
+done
+kill -$sig "\$(cat "$TMPDIR_TEST/tick.pid")"
+printf 'empty\n'
+exit 0
+FAKE
+  chmod +x "$TMPDIR_TEST/dispatch-select-tick"
+}
+
+# tick_run_signalled — run the tick in the background so its PID can be handed
+# to the fake above, then report its exit status in TICK_SIG_RC. `env -u` forces
+# the headless path (the suite itself usually runs inside a Claude session,
+# which exports a real CLAUDE_CODE_SESSION_ID) so a sentinel is genuinely
+# written and the `cleaned` assertion has something to observe.
+#
+# `set -m` around the launch is REQUIRED, not decoration. With job control off
+# (the default for a script), a command started with `&` inherits SIGINT and
+# SIGQUIT as SIG_IGN — and a signal ignored on entry to a shell cannot be
+# trapped or reset. Measured without it: the TERM case passes but the INT case
+# exits 0 with dispatch-tick-recover having run, i.e. the trap never fired at
+# all and the case proves nothing about the INT registration. Job control gives
+# the child its own process group with default signal dispositions.
+TICK_SIG_RC=0
+tick_run_signalled() {
+  local pid
+  set -m
+  env -u CLAUDE_CODE_SESSION_ID -u INVOCATION_ID \
+    "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 &
+  pid=$!
+  set +m
+  printf '%s\n' "$pid" > "$TMPDIR_TEST/tick.pid"
+  TICK_SIG_RC=0
+  wait "$pid" || TICK_SIG_RC=$?
+}
+
+# tick_live_sentinels — how many headless sentinels are left beside the pinned
+# lock file. The cleanup handler must leave none.
+tick_live_sentinels() {
+  local n
+  n=$(find "$TMPDIR_TEST" -maxdepth 1 -name 'dispatch-tick-*.live' | grep -c .) || n=0
+  echo "$n"
+}
+
+echo "Test: a SIGTERM mid-tick stops the tick with status 143, after cleaning up"
+tick_setup
+tick_signal_fake TERM
+tick_run_signalled
+assert_eq "sigterm: the tick exits 143, not 0" "143" "$TICK_SIG_RC"
+assert_eq "sigterm: the tick STOPPED — it never routed the decision into dispatch-tick-recover" \
+  "0" "$([ -e "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+assert_eq "sigterm: the headless sentinel was still removed" "0" "$(tick_live_sentinels)"
+tick_teardown
+
+echo "Test: a SIGINT mid-tick stops the tick with status 130, after cleaning up"
+tick_setup
+tick_signal_fake INT
+tick_run_signalled
+assert_eq "sigint: the tick exits 130, not 0" "130" "$TICK_SIG_RC"
+assert_eq "sigint: the tick STOPPED — it never routed the decision into dispatch-tick-recover" \
+  "0" "$([ -e "$TMPDIR_TEST/logs/recover.log" ] && echo 1 || echo 0)"
+assert_eq "sigint: the headless sentinel was still removed" "0" "$(tick_live_sentinels)"
+tick_teardown
+
 report_results

@@ -1630,4 +1630,98 @@ else
 fi
 make_seq_fake "$LADDER/dispatch-ladder-advance" advance
 
+# --- A signal STOPS the run (it does not merely release the lock) ------------
+# The driver's own cleanup comment names the scenario: "a SIGTERM from
+# `systemctl stop` lands mid-pass otherwise and leaves the lock held". A single
+# combined `trap _ladder_cleanup EXIT INT TERM` DEFEATS that rather than serving
+# it — bash runs the handler, the handler releases the lock and RETURNS, and
+# control goes straight back to the interrupted pass, which carries on merging
+# and absorbing THE SAME NODE with the selection lock no longer held. A
+# concurrent dispatch tick is free to claim it at the same moment. That is a
+# routing race, not a tidy-up nit, which is why the assertions below check where
+# the run got to and not only what status it returned.
+#
+# The signal is delivered from inside the graph-auto-merge fake, which the
+# driver calls in the middle of reconcile_pass with LOCK_HELD=1 — the exact
+# window the comment above is about. bash runs the pending trap when that
+# command substitution returns, so the fake also answers normally (exit 0, no
+# merge): nothing about the sequence itself stops the pass. Three assertions per
+# signal:
+#   status   — 143 / 130 EXACTLY, never merely non-zero. Measured under the
+#              combined `trap fn EXIT INT TERM`: both signals produce exit 10
+#              (the ci-wait budget draining normally), because at handler entry
+#              $? is the last COMPLETED command's status and NOT 128+signo.
+#   stopped  — reconcile-graph-merged was never called. This is the race itself:
+#              under the combined trap the pass walks straight on into the
+#              absorb step having already released the lock.
+#   released — the lock was still released exactly once, i.e. the handler still
+#              does its ORIGINAL job. Without it, `trap 'exit 143' TERM` passes.
+# INT and TERM get one case each on purpose: with only one of them, the other
+# registration could be mis-numbered or deleted and this suite would stay green.
+
+# ladder_signal_merge_fake <SIG> — the graph-auto-merge fake for the two cases
+# below. Waits (bounded) for the harness to record the driver's PID, signals it,
+# then answers `no merge` and exits 0 like any other quiet pass.
+ladder_signal_merge_fake() {
+  local sig="$1"
+  rm -f "$SEQ_DIR/driver.pid"
+  cat >"$DISPATCH/graph-auto-merge" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$SEQ_DIR/merge.count")
+echo \$((n + 1)) >"$SEQ_DIR/merge.count"
+printf '%s\n' "\$*" >>"$SEQ_DIR/merge.argv"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$SEQ_DIR/driver.pid" ]] && break
+  sleep 0.1
+done
+kill -$sig "\$(cat "$SEQ_DIR/driver.pid")"
+exit 0
+STUB
+  chmod +x "$DISPATCH/graph-auto-merge"
+}
+
+# run_ladder_signalled — run the driver in the background so its PID can be
+# handed to the fake above, then report its exit status in RC.
+#
+# `set -m` around the launch is REQUIRED, not decoration. With job control off
+# (the default for a script), a command started with `&` inherits SIGINT and
+# SIGQUIT as SIG_IGN — and a signal ignored on entry to a shell cannot be
+# trapped or reset. Measured without it in the sibling test-dispatch-tick.sh
+# case: the TERM half passes while the INT half runs to a normal completion,
+# i.e. the trap never fires at all and the case proves nothing about the INT
+# registration. Job control gives the child its own process group with default
+# signal dispositions.
+run_ladder_signalled() { # [extra driver args...]
+  local pid
+  RC=0
+  set -m
+  "$RUN" "$NODE" --poll-s 1 --timeout-s 3 --ci-wait-s 1 "$@" >/dev/null 2>&1 &
+  pid=$!
+  set +m
+  printf '%s\n' "$pid" >"$SEQ_DIR/driver.pid"
+  wait "$pid" || RC=$?
+}
+
+echo "Test: a SIGTERM mid-pass stops the run with status 143, after releasing the lock"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+ladder_signal_merge_fake TERM
+run_ladder_signalled
+assert_eq "sigterm: the run exits 143, not the budget's own 10" "143" "$RC"
+assert_eq "sigterm: the pass STOPPED — it never walked on into the absorb step" \
+  "0" "$(calls reconcile)"
+assert_eq "sigterm: the selection lock was still released" "1" "$(lock_modes --release)"
+make_seq_fake "$DISPATCH/graph-auto-merge" merge
+
+echo "Test: a SIGINT mid-pass stops the run with status 130, after releasing the lock"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+ladder_signal_merge_fake INT
+run_ladder_signalled
+assert_eq "sigint: the run exits 130, not the budget's own 10" "130" "$RC"
+assert_eq "sigint: the pass STOPPED — it never walked on into the absorb step" \
+  "0" "$(calls reconcile)"
+assert_eq "sigint: the selection lock was still released" "1" "$(lock_modes --release)"
+make_seq_fake "$DISPATCH/graph-auto-merge" merge
+
 report_results
