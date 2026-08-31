@@ -15,7 +15,10 @@
 #
 #   (1)  slug shape is an addressing guard, not a taxonomy: a malformed slug is
 #        refused with no graph read, an unknown-but-well-shaped one is accepted
-#        (divergence 1 — the key is NOT a closed enum).
+#        (divergence 1 — the key is NOT a closed enum). (1b) the ONE exception:
+#        the doctrine root's own slug is refused on every write mode, because
+#        membership in --list and addressability by --slug are separable and it
+#        is a planning node rather than an entry.
 #   (2)  --list emits open AND retired entries, the similarity judgment's input.
 #   (3)  absent -> mint: exact node JSON (NO ledger_entry class marker,
 #        first_seen, recurrence_count 1, attention null, pace_exempt true),
@@ -59,11 +62,16 @@
 #        carrying a non-empty measured_impact. An open tactic OUTSIDE the id
 #        prefix is a candidate reporting its real recurrence_count — the row the
 #        prefix search missed — the doctrine root tactic-eval-finding-ledger is
-#        no longer excluded from its own list, a retired tactic with no
+#        no longer excluded from its own list (though it is emitted with a null
+#        slug and addressable_by "id" — context, not a write target), a retired
+#        tactic with no
 #        measurements is not a candidate, no row carries `unregistered`, and
 #        every row surfaces `resolved_by` and `addressable_by`. `--like` ranks
 #        the population and `--limit` bounds it, but the measurement carriers
-#        ride a floor past the cut and the elision is disclosed on stderr. This
+#        ride a floor past the cut and the elision is disclosed on stderr; an
+#        explicitly EMPTY --like/--limit is refused at parse time rather than
+#        read as "flag absent", which would have skipped the bound in silence.
+#        This
 #        exercises the REAL default list_entries() path (the node/store.js
 #        one-liner), not the LIST_CMD stub the rest of this suite uses, so it
 #        invokes the real, uncopied SUT directly.
@@ -380,6 +388,29 @@ assert_eq "(1) no classify" "" "$(log_lines classify.log)"
 assert_eq "(1) no graph-commit" "" "$(log_lines graph-commit.log)"
 run_ef -- --slug 'under_score' --statement x --body-file "$BODY" --sensor s
 assert_eq "(1) underscore slug exits 64" "64" "$RC"
+
+# (1b) The doctrine root is a --list MEMBER but never a WRITE TARGET — the two
+# are separable. `--slug ledger` would splice a generated region into the
+# ledger's own planning node (the body /dispatch-ladder reads) and stamp
+# measured_impact onto it, which also permanently exempts a planning node from
+# the owed-prune census. The in-flight guard cannot catch it: between phases
+# `execution` is null. Refused on every write mode, before any graph read.
+run_ef -- --slug ledger --statement x --body-file "$BODY" --sensor s
+assert_eq "(1b) the doctrine-root slug is refused on the mint path" "64" "$RC"
+assert_contains "(1b) naming it as the ledger's own planning node" \
+  "planning node" "$OUT"
+assert_eq "(1b) with no classify" "" "$(log_lines classify.log)"
+assert_eq "(1b) and no graph-commit" "" "$(log_lines graph-commit.log)"
+run_ef -- --slug ledger --resolved-by '#4242'
+assert_eq "(1b) refused on the --resolved-by path too" "64" "$RC"
+assert_eq "(1b) with no graph-commit" "" "$(log_lines graph-commit.log)"
+run_ef -- --slug ledger --retire
+assert_eq "(1b) and on --retire" "64" "$RC"
+assert_eq "(1b) with no graph-commit either" "" "$(log_lines graph-commit.log)"
+# The prefix itself is untouched: only the exact doctrine-root id is refused.
+run_ef STUB_STATE=absent STUB_GC_LAND=1 -- --slug ledger-has-no-retirement-actor \
+  --statement x --body-file "$BODY" --sensor s
+assert_eq "(1b) a neighbouring slug sharing the leading token still writes" "0" "$RC"
 
 # --- (2) --list emits open AND retired entries ------------------------------
 LIST_JSON='[{"id":"tactic-eval-finding-a","state":"open","recurrence_count":3},{"id":"tactic-eval-finding-b","state":"retired","recurrence_count":9}]'
@@ -913,6 +944,13 @@ assert_eq "(15b) a candidate with no measurements reports recurrence_count 0" "0
   "$(jq '[.[] | select(.id == "tactic-eval-finding-ledger")][0].recurrence_count' <<<"$LIST_OUT")"
 assert_eq "(15b) and no stated resolution reports null" "null" \
   "$(jq '[.[] | select(.id == "tactic-eval-finding-ledger")][0].resolved_by' <<<"$LIST_OUT")"
+# Membership and addressability are separable, and the doctrine root is where
+# they come apart: it is listed (the judgment must see it) but carries no slug,
+# so a judgment reading this row has nothing to copy into --slug.
+assert_eq "(15b) the doctrine root carries NO slug, though it sits under the prefix" "null" \
+  "$(jq '[.[] | select(.id == "tactic-eval-finding-ledger")][0].slug' <<<"$LIST_OUT")"
+assert_eq "(15b) so it is addressable by id only — it is context, not a write target" "id" \
+  "$(jq -r '[.[] | select(.id == "tactic-eval-finding-ledger")][0].addressable_by' <<<"$LIST_OUT")"
 
 assert_eq "(15c) an OPEN tactic outside the prefix is a candidate" "1" \
   "$(jq '[.[] | select(.id == "tactic-not-under-the-ledger-prefix")] | length' <<<"$LIST_OUT")"
@@ -963,6 +1001,34 @@ assert_eq "(15f) --limit with nothing to rank by exits 64" "64" "$LIKE_RC"
 LIKE_RC=0
 DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list --like x --limit 0 >/dev/null 2>&1 || LIKE_RC=$?
 assert_eq "(15f) a non-positive --limit exits 64" "64" "$LIKE_RC"
+
+# (15g) An EXPLICITLY PASSED EMPTY value is refused, not read as "flag absent".
+# Every guard downstream tests `-n`, so `--like ""` — the shape a caller writing
+# --like "$STATEMENT" gets when the variable is unset — would otherwise reach
+# the reader as like.length === 0 and print the WHOLE population, with no stderr
+# disclosure and exit 0: the unbounded dump the bound exists to prevent, arrived
+# at silently.
+LIKE_OUT=""
+LIKE_RC=0
+LIKE_OUT=$(DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list --like "" 2>"$LIKE_ERR") || LIKE_RC=$?
+assert_eq "(15g) an empty --like exits 64 instead of dumping the population" "64" "$LIKE_RC"
+assert_eq "(15g) and prints no rows at all" "" "$LIKE_OUT"
+assert_contains "(15g) saying the value must be NON-EMPTY" "NON-EMPTY" "$(cat "$LIKE_ERR")"
+# The sibling misdiagnosis: --limit's refusal used to claim no --like was given.
+LIKE_RC=0
+DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list --like "" --limit 20 >/dev/null 2>"$LIKE_ERR" || LIKE_RC=$?
+assert_eq "(15g) an empty --like beside a --limit exits 64 too" "64" "$LIKE_RC"
+assert_not_contains "(15g) and does NOT misreport it as a missing --like" \
+  "it needs a --like <text> to rank by" "$(cat "$LIKE_ERR")"
+# And an empty --limit is refused rather than accepted-and-ignored by `-n`.
+LIKE_RC=0
+DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list --like x --limit "" >/dev/null 2>&1 || LIKE_RC=$?
+assert_eq "(15g) an empty --limit exits 64" "64" "$LIKE_RC"
+# Outside --list it is refused at parse time rather than accepted and ignored:
+# --list-retirable would otherwise run to completion with the flag swallowed.
+LIKE_RC=0
+DISPATCH_EVAL_FINDING_INTENTIONS_DIR="$LIST_DIR" "$SUT" --list-retirable --limit "" >/dev/null 2>&1 || LIKE_RC=$?
+assert_eq "(15g) an empty --limit outside --list is refused, not silently dropped" "64" "$LIKE_RC"
 
 # --- (16) --resolved-by states a fact, and never counts an occurrence --------
 # The gap this closes: the only update path was the recurrence path, so a

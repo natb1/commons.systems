@@ -210,16 +210,31 @@ never one node per occurrence.
 **First, read the ledger. The similarity judgment is the load-bearing step.**
 
 ```bash
-.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding --list
+.claude/skills/dispatch-propagate/scripts/dispatch-eval-finding \
+  --list --like '<the finding statement you are about to record>'
 ```
+
+**Always pass `--like`.** Membership is the whole open tactic population, in no
+namespace — bare `--list` is the audit view and prints all of it (~490 rows /
+~250 KB), which this step reads at every phase boundary. `--like` ranks that
+population by lexical overlap with the statement in hand and emits the top
+`--limit` rows (default 40) plus every row carrying measurements whatever its
+score, so no durable record is ever elided. What it left out is reported on
+stderr as `population=N emitted=N elided=N score_cut=F`; if the shortlist looks
+too narrow to judge against, widen it with `--limit <n>` rather than dropping
+the bound. An empty `--like ""` is refused, not treated as absent.
 
 It prints open **and retired** entries as JSON (`id`, `slug`, `state`,
 `statement`, `first_seen`, `recurrence_count`, `last_seen`, `in_flight`,
-`resolved_by`). Decide whether the finding in hand **is** one of them:
+`resolved_by`, `addressable_by`, and `score` under `--like`). Decide whether the
+finding in hand **is** one of them:
 
 - It is the same finding → reuse that entry's `slug`. The script increments
   `recurrence_count` — that figure is the whole point of the ledger, and a
-  near-duplicate slug destroys it.
+  near-duplicate slug destroys it. Only a row whose `addressable_by` is `slug`
+  can be reused this way; a row addressed by `id` (including the ledger's own
+  planning node `tactic-eval-finding-ledger`, which carries a null slug) is
+  context for the judgment, not a write target — never invent a slug for it.
 - A retired entry describes it → reuse that slug too. A recurrence after
   retirement is evidence the landed fix did not hold, and the script resumes the
   count rather than restarting at 1.
