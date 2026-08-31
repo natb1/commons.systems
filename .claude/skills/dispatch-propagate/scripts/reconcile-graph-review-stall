@@ -298,6 +298,24 @@ while IFS=$'\t' read -r id pr; do
     *) VERDICT="unknown" ;;   # pending or a call failure — not a regression
   esac
 
+  # Cost guard, NOT the routing rule: reviewStallRoute (interruptRoute at the
+  # fixed phase "review") returns null unless CI is failing or the PR is
+  # CONFLICTING, so skip the node subprocess when neither holds — the
+  # overwhelmingly common case, since a reviewed node waiting on auto-merge
+  # reads green and MERGEABLE on every tick until something regresses. This
+  # condition MUST stay a superset of reviewStallRoute's non-null conditions;
+  # the transitions.test.ts case named for "the shell pre-filter's superset
+  # invariant" pins that. Deliberately NOT narrowed to `ci == failing` even
+  # though the CONFLICTING clause is unreachable on this path today (the
+  # short-circuit above skips CONFLICTING before the CI fetch): that
+  # short-circuit is local and reversible (tactic-review-stall-conflict-lane
+  # proposes un-retiring the conflict arm), while the superset is the
+  # documented, test-pinned property. Verbatim sibling of
+  # graph-select-target's _gate_maybe_interrupt guard — keep the two in step.
+  if [[ "$VERDICT" != "failing" && "$MERGEABLE" != "CONFLICTING" ]]; then
+    continue
+  fi
+
   ROUTE=$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
     const { reviewStallRoute } = await import("./packages/intentionsutil/src/transitions.js");
     const ci = process.argv[1];
