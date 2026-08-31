@@ -871,20 +871,29 @@ assert_eq "graph-select-target --standalone: the claim marker is stamped origin=
   "1" "$(grep -qx 'origin=standalone' "$GSCS_ROOT/reservations/tactic-standalone-fixture" && echo 1 || echo 0)"
 gsc_standalone_teardown
 
-# --- Case 13: an abort AFTER a claim rolls the claim back --------------------
-# Claims are written per-candidate INSIDE the selection loop, but a later
-# candidate can abort the whole run: sensor_gate returns 2 on a dispatch-ci-ready
-# environment failure and the script exits 2 with no stdout. The caller launches
-# nothing, so nothing ever hands those already-written markers to
-# dispatch-graph-execute — without the EXIT trap's rollback they sit in the
-# ledger consuming budget until the standalone TTL expires (and are invisible to
-# the sweep's dead-session rule while the calling session stays alive).
+# --- Case 13: a gh outage degrades to a SKIP, and does not discard the run ---
+# THIS CASE CHANGED MEANING, deliberately, and the reason is worth recording
+# because it is a real consequence of inlining the CI-readiness decision.
 #
-# Fixture: candidate 1 is a plain implement-phase node (claimed), candidate 2 is
-# a qa-phase node WITH a pr, whose gate reaches `dispatch-ci-ready` — absent from
-# this fixture's scripts dir, so it exits 127 and the gate returns 2. `gh` is
-# stubbed to fail so the gate's PR reads stay hermetic and offline.
-echo "Test: graph-select-target --standalone rolls back claims written before a mid-loop abort (sensor_gate exit 2)"
+# It used to assert that a mid-loop `sensor_gate` rc 2 aborted the whole run and
+# that the EXIT trap rolled back the claim candidate 1 had already written. The
+# rc-2 abort had exactly ONE producer in this script: the `qa|review` arm's
+# catch-all over `dispatch-ci-ready`'s exit code, which fired when that
+# subprocess exited outside {0,1} — in this fixture because the script was
+# deliberately left out of the scripts dir, i.e. the case modelled a BROKEN
+# INSTALLATION, not a GitHub outage. With the readiness decision inlined there
+# is no subprocess left to be missing, so that state can no longer occur and no
+# arm produces rc 2. The caller's rc-2 branch and the trap's rollback are kept
+# as the declared contract at that seam (and the trap still runs on every other
+# exit path), but this fixture can no longer construct a producer for it.
+#
+# What the same fixture pins now is the behaviour that DOES occur, and it is the
+# stronger guarantee: with `gh` dead, the un-evaluable qa candidate is SKIPPED as
+# `ci-verdict-unreadable` — the fail-open posture the CI-pending bound requires —
+# while the healthy PR-less candidate is still selected and KEEPS its claim. A
+# GitHub outage must not throw away work the selector could evaluate perfectly
+# well; under the old routing it aborted the tick and rolled that work back.
+echo "Test: graph-select-target --standalone — a gh outage skips the un-evaluable candidate and keeps the healthy selection"
 gsc_standalone_setup
 cat > "$GSCS_ROOT/bin/npx" <<'GSCS13NPX'
 #!/usr/bin/env bash
@@ -902,16 +911,27 @@ gsc13_out=$(PATH="$GSCS_ROOT/bin:$SAVED_PATH" \
   DISPATCH_SELECTION_LOG_DIR="$GSCS_ROOT/seldir" DISPATCH_LOCK_FILE="$GSCS_ROOT/dispatch.lock" \
   CLAUDE_CODE_SESSION_ID="gsc-standalone-13" SEL_MAX_WORKERS=8 SEL_TARGET_N=8 \
   "$GSCS_GST" --standalone --top 2 2>/dev/null) || gsc13_rc=$?
-assert_eq "graph-select-target --standalone: mid-loop abort exits 2" "2" "${gsc13_rc:-0}"
-assert_eq "graph-select-target --standalone: mid-loop abort prints no selection" "" "$gsc13_out"
-assert_eq "graph-select-target --standalone: the pre-abort claim is rolled back" \
-  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: a gh outage is not a run abort (exit 0)" "0" "${gsc13_rc:-0}"
+assert_eq "graph-select-target --standalone: the evaluable candidate is still selected" \
+  "node tactic-standalone-fixture tactic implement" "$gsc13_out"
+# The claim must SURVIVE: the selection was emitted, so it belongs to the caller
+# now. Rolling it back here is the failure the emitted-selection guard prevents.
+assert_eq "graph-select-target --standalone: the emitted candidate keeps its claim" \
+  "1" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-fixture" ] && echo 1 || echo 0)"
+# The un-evaluable candidate is skipped for the RIGHT reason. Asserted on the
+# reason token, not merely on "not selected": an unreadable PR read reaching the
+# CI-pending ladder as a pending observation is the fail-open this whole arm is
+# built to refuse.
+assert_eq "graph-select-target --standalone: the un-evaluable candidate skips as ci-verdict-unreadable" \
+  "1" "$(grep -q 'ci-verdict-unreadable' "$GSCS_ROOT/seldir"/*.jsonl && echo 1 || echo 0)"
+assert_eq "graph-select-target --standalone: the un-evaluable candidate is never claimed" \
+  "0" "$([ -f "$GSCS_ROOT/reservations/tactic-standalone-abort" ] && echo 1 || echo 0)"
 gsc13_lock=$(cat "$GSCS_ROOT/dispatch.lock" 2>/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if [[ -z "$gsc13_lock" ]]; then
-  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (mid-loop abort) releases the lock (file emptied)"
+  PASS=$((PASS + 1)); echo "  PASS: graph-select-target --standalone (gh outage) releases the lock (file emptied)"
 else
-  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (mid-loop abort) releases the lock (file emptied)"
+  FAIL=$((FAIL + 1)); echo "  FAIL: graph-select-target --standalone (gh outage) releases the lock (file emptied)"
   echo "    lock file: '$gsc13_lock'"
 fi
 unset gsc13_rc
@@ -954,10 +974,14 @@ gsc_interrupt_setup() {
   GSCI_SCRIPTS="$GSCI_ROOT/.claude/skills/dispatch-propagate/scripts"
   mkdir -p "$GSCI_SCRIPTS" "$GSCI_ROOT/bin" "$GSCI_ROOT/packages/intentionsutil/scripts"
   # Physical copies (not symlinks): graph-select-target derives REPO_ROOT from
-  # its own on-disk location, and dispatch-ci-ready resolves lib.sh as a sibling.
-  cp "$SCRIPT_DIR"/graph-select-target "$SCRIPT_DIR"/dispatch-ci-ready \
+  # its own on-disk location. dispatch-ci-ready is deliberately NOT copied —
+  # the selector no longer shells out to it, and leaving it out of the fixture
+  # is what makes that structural rather than incidental: a regression that
+  # re-introduces the subprocess fails here with a missing-file error instead
+  # of quietly working.
+  cp "$SCRIPT_DIR"/graph-select-target \
      "$SCRIPT_DIR"/lib.sh "$SCRIPT_DIR"/lib-*.sh "$GSCI_SCRIPTS/"
-  chmod +x "$GSCI_SCRIPTS/graph-select-target" "$GSCI_SCRIPTS/dispatch-ci-ready"
+  chmod +x "$GSCI_SCRIPTS/graph-select-target"
   # Empty-read corroboration stub (#lib-claude-agents EMPTY-READ CORROBORATION),
   # same shape and reason as gsc_standalone_setup's. The fixture's fake `claude`
   # returns `[]`, and since 09e22848 graph-select-target DEFERS (emits nothing)
@@ -1047,6 +1071,10 @@ GSCINPX
   cat > "$GSCI_ROOT/bin/gh" <<'GSCIGH'
 #!/usr/bin/env bash
 _root="$(cd "$(dirname "$0")/.." && pwd)"
+# EVERY invocation is logged, before any dispatch. gh-calls.log is what the
+# REST-accounting cases count: one line per gh process, so `pulls/2999` reads
+# and `pr list` open-PR listings are both countable off the same file.
+printf '%s\n' "$*" >> "$_root/gh-calls.log"
 # `gh pr ready --undo <n>` — the conflict backstop's PR re-draft. Logged so the
 # case can assert the disarm ran; matched before the REST paths below.
 if [[ "$1" == "pr" && "$2" == "ready" ]]; then
@@ -1055,8 +1083,29 @@ if [[ "$1" == "pr" && "$2" == "ready" ]]; then
 fi
 for _a in "$@"; do
   case "$_a" in
-    */pulls/2999) cat "$_root/pr-2999.json"; exit 0 ;;
-    */commits/deadbee/check-runs) cat "$_root/check-runs.json"; exit 0 ;;
+    */pulls/[0-9]*)
+      # `pr-fail` models an unreadable PR: gh_pr_view_rest returns 1.
+      [[ -e "$_root/pr-fail" ]] && exit 1
+      # Served per PR NUMBER, so a case can put a second candidate's PR in
+      # play (pr-3999.json) without the stub hardcoding either number. An
+      # unseeded number is a hard failure, not an empty body.
+      _n="${_a##*/}"
+      [[ -f "$_root/pr-$_n.json" ]] || exit 1
+      cat "$_root/pr-$_n.json"; exit 0 ;;
+    */check-runs)
+      # `check-runs-fail` models the fetch failure dispatch_ci_verdict_rest
+      # returns 1 on — the input to the fail-open guard.
+      [[ -e "$_root/check-runs-fail" ]] && exit 1
+      # Served per HEAD SHA when a per-sha file exists, else from the single
+      # shared page gsci_checks writes (the `deadbee` default every case but
+      # the multi-candidate one uses).
+      _sha="${_a%/check-runs}"; _sha="${_sha##*/}"
+      if [[ -f "$_root/check-runs-$_sha.json" ]]; then
+        cat "$_root/check-runs-$_sha.json"
+      else
+        cat "$_root/check-runs.json"
+      fi
+      exit 0 ;;
   esac
 done
 exit 1
@@ -1120,12 +1169,32 @@ gsci_candidate() {
     > "$GSCI_ROOT/candidates.json"
 }
 
-# gsci_pr <mergeable-json> — rewrite the RAW REST PR object. `false` =>
-# CONFLICTING, `true` => MERGEABLE, `null` => UNKNOWN (lib.sh's projection).
+# gsci_pr <mergeable-json> [<draft-json>] — rewrite the RAW REST PR object.
+# `false` => CONFLICTING, `true` => MERGEABLE, `null` => UNKNOWN (lib.sh's
+# projection). <draft-json> defaults to `true`: every node the router emits at
+# `qa`/`review` carries a DRAFT PR (auto-merge un-drafts only at
+# pending-merge), and the readiness gate short-circuits READY on a non-draft
+# one, so a fixture defaulting to non-draft would make the CI arm untestable.
 gsci_pr() {
-  local m="$1" state="dirty"
+  local m="$1" d="${2:-true}" state="dirty"
   [[ "$m" == "true" ]] && state="clean"
-  printf '%s\n' "{\"number\":2999,\"state\":\"open\",\"merged_at\":null,\"merge_commit_sha\":null,\"mergeable\":$m,\"mergeable_state\":\"$state\",\"title\":\"t\",\"body\":\"\",\"head\":{\"sha\":\"deadbee\",\"ref\":\"tactic-fixture\"},\"labels\":[]}" \
+  printf '%s\n' "{\"number\":2999,\"state\":\"open\",\"merged_at\":null,\"merge_commit_sha\":null,\"mergeable\":$m,\"mergeable_state\":\"$state\",\"draft\":$d,\"title\":\"t\",\"body\":\"\",\"head\":{\"sha\":\"deadbee\",\"ref\":\"tactic-fixture\"},\"labels\":[]}" \
+    > "$GSCI_ROOT/pr-2999.json"
+}
+
+# gsci_pr_closed — rewrite the RAW REST PR object as CLOSED WITHOUT MERGING.
+# The shape GitHub really returns: state closed, merged_at null, `mergeable`
+# null (REST stops computing it once a PR closes) and `draft` still true. Every
+# one of those reads like a healthy draft to a gate that ignores `state`.
+gsci_pr_closed() {
+  printf '%s\n' "{\"number\":2999,\"state\":\"closed\",\"merged_at\":null,\"merge_commit_sha\":null,\"mergeable\":null,\"mergeable_state\":\"unknown\",\"draft\":true,\"title\":\"t\",\"body\":\"\",\"head\":{\"sha\":\"deadbee\",\"ref\":\"tactic-fixture\"},\"labels\":[]}" \
+    > "$GSCI_ROOT/pr-2999.json"
+}
+
+# gsci_pr_merged — the OTHER terminal state, which REST also reports as
+# `state: closed`; only a non-null merged_at separates them.
+gsci_pr_merged() {
+  printf '%s\n' "{\"number\":2999,\"state\":\"closed\",\"merged_at\":\"2026-08-31T00:00:00Z\",\"merge_commit_sha\":\"feedface\",\"mergeable\":null,\"mergeable_state\":\"unknown\",\"draft\":true,\"title\":\"t\",\"body\":\"\",\"head\":{\"sha\":\"deadbee\",\"ref\":\"tactic-fixture\"},\"labels\":[]}" \
     > "$GSCI_ROOT/pr-2999.json"
 }
 
@@ -1146,7 +1215,6 @@ gsci_run() {
     CLAUDE_AGENTS_CMD="$GSCI_ROOT/bin/claude" \
     DISPATCH_RESERVATION_DIR="$GSCI_ROOT/reservations" \
     DISPATCH_SELECTION_LOG_DIR="$GSCI_ROOT/seldir" \
-    DISPATCH_PR_LIST_FILE="$GSCI_ROOT/pr-list.json" \
     "$GSCI_GST" "$@" 2>"$GSCI_ROOT/gsci.err"
 }
 
@@ -1219,14 +1287,16 @@ gsc_interrupt_teardown
 
 # --- Case 5: declining at `qa` routes onward instead of stranding the node ---
 # The qa arm's normal gate runs after the declined interrupt: the merged check
-# passes (mergedAt null), then dispatch-ci-ready short-circuits READY for a
-# CONFLICTING draft even with CI unresolved (dispatch-ci-ready:72-76), so the
-# node is emitted at `qa` and provisioning takes it to the conflict lane.
+# passes (mergedAt null), then the inlined readiness decision short-circuits
+# READY for a CONFLICTING draft even with CI unresolved (the transcription of
+# dispatch-ci-ready:72-76), so the node is emitted at `qa` and provisioning
+# takes it to the conflict lane. The CONFLICTING input comes from the fixture's
+# own PR object (gsci_pr's default `false` mergeable) — it used to be seeded
+# into a separate open-PR list, which is the whole-repo fetch this arm no
+# longer makes.
 echo "Test: graph-select-target — declining the interrupt at qa still emits qa (no stranding)"
 gsc_interrupt_setup
 gsci_candidate qa
-printf '%s\n' '[{"number":2999,"headRefName":"tactic-fixture","isDraft":true,"headRefOid":"deadbee","labels":[],"mergeable":"CONFLICTING"}]' \
-  > "$GSCI_ROOT/pr-list.json"
 gsci5_out=$(gsci_run)
 assert_eq "graph-select-target interrupt: a declined qa candidate is emitted at qa" \
   "node tactic-fixture tactic qa" "$gsci5_out"
@@ -1718,47 +1788,46 @@ rm -rf "$GSCC_ROOT" "$GSCC_BARE" "$GSCC_CACHE"
 #
 # These reuse gsc_interrupt_setup verbatim (its gh stub serves the raw REST PR
 # whose head.sha is `deadbee`, and its packages/intentionsutil/scripts/ now
-# carries a hold-node stub) and only replace dispatch-ci-ready with a
-# fixed-exit stub, so the case controls the one input the ladder keys on
-# without depending on that script's own gate logic.
-
-# gscip_setup <ci-ready-exit> — the interrupt fixture with a MERGEABLE, green
-# PR (so _gate_maybe_interrupt declines and the qa arm's merged check passes)
-# and dispatch-ci-ready pinned to a fixed exit code.
+# carries a hold-node stub) and pin the one input the ladder keys on: the CI
+# verdict.
 #
-# The stub prints the SAME stdout word the real script prints on that exit:
-# `ready` on 0, `waiting` on 1. That is not cosmetic — the exit code alone is
-# ambiguous. dispatch-ci-ready runs `set -euo pipefail`, so it ALSO exits 1 when
-# dispatch_ci_verdict_rest's check-runs/check-suites fetch or its jq projection
-# fails, dying before it prints anything; the selector reads the stdout word to
-# tell a real `pending` from that death. A silent exit-1 stub would therefore
-# model the FAILURE case while the case names claim to model pending — see
-# gscip_setup_silent, which models the failure case deliberately.
+# WHERE THAT PIN IS APPLIED CHANGED, and the change is an improvement rather
+# than a port. The readiness decision used to be a `dispatch-ci-ready`
+# subprocess, so these cases replaced that script with a fixed-exit stub — which
+# short-circuited the very check-runs projection and rollup classifier the
+# outcome depends on, and modelled the fail-open case at a subprocess boundary
+# that no longer exists. The decision is now inlined over the sensors
+# `_read_pr_ci` collects, so the outcome is pinned at its real source: the
+# check-runs REST body, or a check-runs read that fails outright.
+
+# gscip_setup <0|1> — the interrupt fixture with a MERGEABLE, DRAFT PR (so
+# _gate_maybe_interrupt declines and the qa arm's merged check passes) whose CI
+# verdict is pinned to `passing` (0) or `pending` (1).
+#
+# The 0/1 argument keeps dispatch-ci-ready's old ready/waiting vocabulary
+# because that is what the cases below read as intent; only the mechanism moved.
 gscip_setup() {
   gsc_interrupt_setup
   gsci_candidate qa
   gsci_pr true
-  gsci_checks '{"check_runs":[{"status":"completed","conclusion":"success"}]}'
-  printf '%s\n' "#!/usr/bin/env bash" > "$GSCI_SCRIPTS/dispatch-ci-ready"
   case "$1" in
-    0) printf '%s\n' "echo ready" >> "$GSCI_SCRIPTS/dispatch-ci-ready" ;;
-    1) printf '%s\n' "echo waiting" >> "$GSCI_SCRIPTS/dispatch-ci-ready" ;;
+    0) gsci_checks '{"check_runs":[{"status":"completed","conclusion":"success"}]}' ;;
+    # An in-progress row with a null conclusion and NO check_suite.id: the
+    # orphan-detection pass skips it (no suite to interrogate, hence no extra
+    # REST call), and dispatch_classify_rollup resolves the rollup to `pending`.
+    1) gsci_checks '{"check_runs":[{"status":"in_progress","conclusion":null}]}' ;;
   esac
-  printf '%s\n' "exit $1" >> "$GSCI_SCRIPTS/dispatch-ci-ready"
-  chmod +x "$GSCI_SCRIPTS/dispatch-ci-ready"
   GSCIP_SIDECAR="$GSCI_ROOT/.claude/worktrees/tactic-fixture.ci-pending-strikes"
 }
 
-# gscip_setup_silent <ci-ready-exit> — the same fixture, but with a
-# dispatch-ci-ready that prints NOTHING before exiting. This is the shape a
-# `set -e` death produces: the fetch/projection failure aborts the script inside
-# the `VERDICT=$(dispatch_ci_verdict_rest ...)` substitution, upstream of the
-# `echo waiting`.
+# gscip_setup_silent — the same fixture, but with the CI verdict UNREADABLE
+# rather than pending: the check-runs REST read fails outright, which is exactly
+# what makes dispatch_ci_verdict_rest return 1. The PR read still SUCCEEDS, so
+# this isolates the half that matters — a node whose `pulls/{n}` read is fine
+# and whose verdict read is not is the one no PR-level guard catches.
 gscip_setup_silent() {
-  gscip_setup 0
-  printf '%s\n' "#!/usr/bin/env bash" > "$GSCI_SCRIPTS/dispatch-ci-ready"
-  printf '%s\n' "exit $1" >> "$GSCI_SCRIPTS/dispatch-ci-ready"
-  chmod +x "$GSCI_SCRIPTS/dispatch-ci-ready"
+  gscip_setup 1
+  touch "$GSCI_ROOT/check-runs-fail"
 }
 
 # gscip_seed <sha> <count> — pre-seed the sidecar.
@@ -1911,7 +1980,7 @@ gsc_interrupt_teardown
 # exactly as reconcile-graph-review-stall already treats an empty RAW_VERDICT on
 # the SHARED sidecar.
 echo "Test: graph-select-target — an unreadable CI verdict neither counts a strike nor holds"
-gscip_setup_silent 1
+gscip_setup_silent
 gscip_seed deadbee 7
 gscip7_out=$(gsci_run)
 assert_eq "graph-select-target ci-pending: an unreadable verdict selects nothing" \
@@ -1924,6 +1993,12 @@ assert_eq "graph-select-target ci-pending: the skip reason names the unreadable 
   "1" "$(grep -q 'ci-verdict-unreadable' "$GSCI_ROOT/seldir/graph-selection.jsonl" && echo 1 || echo 0)"
 assert_eq "graph-select-target ci-pending: an unreadable verdict is NOT logged as a strike" \
   "0" "$(grep -c 'ci-pending (strike' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+# The discriminator for WHICH read failed. If the `pulls/{n}` read had failed
+# too, `ci-verdict-unreadable` would be reachable through the much coarser
+# _CI_RC guard and this case would no longer pin the verdict-specific fail-open
+# at all — the node it protects is precisely the one whose PR reads fine.
+assert_eq "graph-select-target ci-pending: the PR read itself SUCCEEDED (only the verdict failed)" \
+  "1" "$(grep -c 'pulls/2999' "$GSCI_ROOT/gh-calls.log")"
 gsc_interrupt_teardown
 
 # --- Case 8: an unreadable verdict does not CLEAR a live ladder either -------
@@ -1933,13 +2008,479 @@ gsc_interrupt_teardown
 # below-cap seed so the surviving count is visible rather than consumed by a
 # hold.
 echo "Test: graph-select-target — an unreadable CI verdict does not clear a live ladder"
-gscip_setup_silent 1
+gscip_setup_silent
 gscip_seed deadbee 3
 gsci_run >/dev/null
 assert_eq "graph-select-target ci-pending: a live ladder survives an unreadable verdict intact" \
   "deadbee 3" "$(gscip_sidecar)"
 assert_eq "graph-select-target ci-pending: no hold lands off an unreadable verdict" \
   "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# ============================================================================
+# Test: graph-select-target — the qa|review arm's GitHub read budget
+# ============================================================================
+# The arm used to issue THREE GitHub reads per qa/review candidate per
+# invocation: `pulls/{n}` for the interrupt gate, `pulls/{n}` AGAIN for the
+# mergedAt/head-sha pair, and a `dispatch-ci-ready` subprocess that fetched the
+# ENTIRE open-PR list (`gh pr list --limit 300`) purely to resolve a node id back
+# to the PR `execution.pr` already names. Two of the three were redundant.
+#
+# These cases pin the budget mechanically off the gh stub's argv log, because a
+# regression here is invisible in behaviour — every routing decision stays
+# byte-identical, only the round trips change — and so nothing else would catch
+# it. `grep -c` returning "0" with exit 1 is the file's existing idiom (see the
+# strike-count assertions above).
+
+# --- Case A: exactly one pulls/{n} read, and NO open-PR listing at all -------
+echo "Test: graph-select-target — a qa candidate reads pulls/{n} exactly once and lists no open PRs"
+gscip_setup 1
+gsci_run >/dev/null
+assert_eq "graph-select-target rest-budget: exactly ONE pulls/{n} read per qa candidate" \
+  "1" "$(grep -c 'pulls/2999' "$GSCI_ROOT/gh-calls.log")"
+assert_eq "graph-select-target rest-budget: ZERO whole-repo open-PR listings" \
+  "0" "$(grep -c '^pr list' "$GSCI_ROOT/gh-calls.log")"
+assert_eq "graph-select-target rest-budget: exactly ONE check-runs read per qa candidate" \
+  "1" "$(grep -c 'check-runs' "$GSCI_ROOT/gh-calls.log")"
+# Total gh processes, so a NEW read of any shape shows up here even if it matches
+# none of the patterns above.
+assert_eq "graph-select-target rest-budget: two gh calls total, and no others" \
+  "2" "$(grep -c . "$GSCI_ROOT/gh-calls.log")"
+gsc_interrupt_teardown
+
+# --- Case B: the same budget holds on the SELECTED path ---------------------
+# Case A's candidate skips. The ready path runs strictly more code (the ladder
+# clear, the emission), so it is pinned separately rather than assumed.
+echo "Test: graph-select-target — a SELECTED qa candidate also reads pulls/{n} exactly once"
+gscip_setup 0
+gscipb_out=$(gsci_run)
+assert_eq "graph-select-target rest-budget: the ready candidate is still emitted at qa" \
+  "node tactic-fixture tactic qa" "$gscipb_out"
+assert_eq "graph-select-target rest-budget: ONE pulls/{n} read on the selected path too" \
+  "1" "$(grep -c 'pulls/2999' "$GSCI_ROOT/gh-calls.log")"
+assert_eq "graph-select-target rest-budget: ZERO open-PR listings on the selected path" \
+  "0" "$(grep -c '^pr list' "$GSCI_ROOT/gh-calls.log")"
+gsc_interrupt_teardown
+
+# ============================================================================
+# Test: graph-select-target — route identity across dispatch-ci-ready's outcomes
+# ============================================================================
+# The inlined readiness decision is a transcription of dispatch-ci-ready:58-89,
+# so every one of that script's outcomes must still produce the SAME emitted
+# token. Asserted byte-for-byte on stdout, one case per outcome.
+#
+# The two short-circuits are pinned against a PENDING verdict on purpose. With a
+# passing verdict they would pass vacuously — the fall-through would emit `qa`
+# anyway — so `pending` is what proves the short-circuit itself fired: it is the
+# one verdict that otherwise produces a skip.
+
+# --- Outcome 1: a NON-DRAFT PR is ready even with CI pending ----------------
+echo "Test: graph-select-target — a non-draft PR short-circuits READY even with CI pending"
+gscip_setup 1
+gsci_pr true false
+gscr1_out=$(gsci_run)
+assert_eq "graph-select-target route-identity: non-draft + pending emits the ladder phase" \
+  "node tactic-fixture tactic qa" "$gscr1_out"
+assert_eq "graph-select-target route-identity: non-draft + pending opens NO strike ladder" \
+  "gone" "$(gscip_sidecar)"
+gsc_interrupt_teardown
+
+# --- Outcome 2: a CONFLICTING draft is ready even with CI pending -----------
+# The conflict lane runs regardless of CI, so the node must reach it rather than
+# accrue pending strikes. route.txt is the fixture default (`conflict`), so
+# _gate_maybe_interrupt declines first and the readiness gate is what decides.
+echo "Test: graph-select-target — a CONFLICTING draft short-circuits READY even with CI pending"
+gscip_setup 1
+gsci_pr false
+gscr2_out=$(gsci_run)
+assert_eq "graph-select-target route-identity: CONFLICTING + pending emits the ladder phase" \
+  "node tactic-fixture tactic qa" "$gscr2_out"
+assert_eq "graph-select-target route-identity: CONFLICTING + pending opens NO strike ladder" \
+  "gone" "$(gscip_sidecar)"
+gsc_interrupt_teardown
+
+# --- Outcome 3: a pending verdict on a MERGEABLE draft waits ----------------
+echo "Test: graph-select-target — a pending verdict on a MERGEABLE draft is not ready"
+gscip_setup 1
+gscr3_out=$(gsci_run)
+assert_eq "graph-select-target route-identity: pending emits nothing" "empty" "$gscr3_out"
+assert_eq "graph-select-target route-identity: pending is logged as a strike, not a skip of another kind" \
+  "1" "$(grep -c 'ci-pending (strike 1/8)' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+gsc_interrupt_teardown
+
+# --- Outcome 4: a passing verdict is ready ----------------------------------
+echo "Test: graph-select-target — a passing verdict is ready"
+gscip_setup 0
+gscr4_out=$(gsci_run)
+assert_eq "graph-select-target route-identity: passing emits the ladder phase" \
+  "node tactic-fixture tactic qa" "$gscr4_out"
+gsc_interrupt_teardown
+
+# --- Outcome 5: a FAILING verdict is ready too ------------------------------
+# `failing` is actionable, so dispatch-ci-ready called it ready. Reaching that
+# branch needs the fix interrupt to decline first, which is what route.txt=null
+# arranges (interruptRoute's own no-interrupt answer) — otherwise a red
+# MERGEABLE PR is routed to `fix` upstream and never consults readiness at all.
+echo "Test: graph-select-target — a failing verdict is ready (a concluded verdict is actionable)"
+gscip_setup 0
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+printf 'null' > "$GSCI_ROOT/route.txt"
+gscr5_out=$(gsci_run)
+assert_eq "graph-select-target route-identity: failing emits the ladder phase" \
+  "node tactic-fixture tactic qa" "$gscr5_out"
+assert_eq "graph-select-target route-identity: the declined interrupt saw the failing verdict" \
+  "qa failing MERGEABLE" "$(tail -n 1 "$GSCI_ROOT/node-calls.log")"
+gsc_interrupt_teardown
+
+# ============================================================================
+# Test: graph-select-target — per-candidate PR reads across a multi-candidate run
+# ============================================================================
+# THIS CASE PREVIOUSLY CLAIMED SOMETHING FALSE, and the claim is recorded here
+# rather than quietly dropped. It was headed "the per-candidate CI sensors are
+# never inherited" and said the _CI_* globals "are process-wide and the
+# selection loop reuses them candidate after candidate, so the arm guards on
+# `_CI_PR == $pr` before trusting them." Every clause of that is wrong.
+#
+# Cross-candidate inheritance is STRUCTURALLY IMPOSSIBLE, so no test of it can
+# exist and none is attempted below. The selection loop invokes the gate as
+#
+#     emit_phase=$(sensor_gate "$id" "$phase" "$pr" "$pushed_sha" "$fix_since")
+#
+# — a command substitution, therefore a subshell. Every _CI_* assignment dies
+# with the candidate that made it, and the next candidate's sensor_gate starts
+# from the script-level initialisers. Measured by instrumenting graph-select-
+# target: 62 sensor_gate invocations across this whole suite, all 62 entering
+# with _CI_PR empty and _CI_RC 1; the `_CI_PR != $pr` branch body taken ZERO
+# times; and deleting that branch outright left the suite at 209/209. It was
+# dead code, it has been removed, and an assertion that passes with or without
+# it is worth nothing — so the four assertions kept below are the ones that
+# discriminate something the loop really can get wrong.
+#
+# What they pin is the per-candidate REST accounting and per-candidate routing:
+# exactly one `pulls/{n}` read per DISTINCT PR-carrying candidate (never zero —
+# a hoisted read — and never two — the duplicate fetch this whole change
+# removes), none at all for a null-PR candidate, no whole-repo open-PR listing,
+# and each candidate's verdict fetched at ITS OWN head sha and applied to ITS
+# OWN outcome.
+#
+# The fixture puts a null-PR candidate BETWEEN two PR-carrying ones (the one
+# candidate shape that returns before any fetch) and gives the two PRs OPPOSITE
+# verdicts, so a mis-routed candidate is visible in the output rather than
+# merely suspected: #2999 is pending (skip) and #3999 is passing (selected).
+echo "Test: graph-select-target — each candidate is read once and routed on its own verdict"
+gscip_setup 1
+printf '%s\n' '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"qa","pr":"2999","pace_exempt":false},{"id":"tactic-nopr","kind":"tactic","phase":"qa","pr":null,"pace_exempt":false},{"id":"tactic-second","kind":"tactic","phase":"qa","pr":"3999","pace_exempt":false}],"events":[]}' \
+  > "$GSCI_ROOT/candidates.json"
+# The second PR: same shape, a DIFFERENT number and head sha, and a green rollup
+# served from the per-sha check-runs file the gh stub prefers.
+printf '%s\n' '{"number":3999,"state":"open","merged_at":null,"merge_commit_sha":null,"mergeable":true,"mergeable_state":"clean","draft":true,"title":"t","body":"","head":{"sha":"cafe999","ref":"tactic-second"},"labels":[]}' \
+  > "$GSCI_ROOT/pr-3999.json"
+printf '%s\n' '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
+  > "$GSCI_ROOT/check-runs-cafe999.json"
+gscs_out=$(gsci_run --top 3)
+assert_eq "graph-select-target per-candidate: the third candidate is routed on ITS OWN passing verdict" \
+  "node tactic-second tactic qa" "$gscs_out"
+assert_eq "graph-select-target per-candidate: the null-PR candidate skips as no-pr" \
+  "1" "$(grep -c '"reason":"no-pr"' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+assert_eq "graph-select-target per-candidate: the first candidate still skips on ITS pending verdict" \
+  "1" "$(grep -c 'ci-pending (strike 1/8)' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+# The budget half: one read per DISTINCT candidate, and none at all for the
+# null-PR one. A hoisted, shared or repeated fetch shows up here.
+assert_eq "graph-select-target per-candidate: exactly one pulls/2999 read" \
+  "1" "$(grep -c 'pulls/2999' "$GSCI_ROOT/gh-calls.log")"
+assert_eq "graph-select-target per-candidate: exactly one pulls/3999 read" \
+  "1" "$(grep -c 'pulls/3999' "$GSCI_ROOT/gh-calls.log")"
+# The verdict half of the same accounting: the third candidate's rollup is
+# fetched at ITS OWN head sha, not at the first candidate's `deadbee`.
+assert_eq "graph-select-target per-candidate: the third candidate's rollup is read at its own head sha" \
+  "1" "$(grep -q 'cafe999' "$GSCI_ROOT/gh-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target per-candidate: still ZERO open-PR listings across three candidates" \
+  "0" "$(grep -c '^pr list' "$GSCI_ROOT/gh-calls.log")"
+gsc_interrupt_teardown
+
+# ============================================================================
+# Test: graph-select-target — a CLOSED-unmerged PR is its own outcome
+# ============================================================================
+# The gate reads `mergedAt`, `isDraft`, `mergeable` and the CI verdict, and for
+# a while it read no `state` at all. That left one shape indistinguishable from
+# a live draft awaiting CI: a PR CLOSED WITHOUT MERGING.
+#
+# Every input the gate looked at lines up with "healthy draft, checks not
+# started yet":
+#   - mergedAt  is null  (it was never merged, so the merged branch above is
+#                         correctly NOT taken)
+#   - isDraft   is true  (GitHub keeps `draft` set on a PR closed while draft)
+#   - mergeable is null -> UNKNOWN (REST stops computing it once a PR closes),
+#                         which is exactly the value the CONFLICTING
+#                         short-circuit deliberately falls through
+#   - the rollup is EMPTY (workflows path-filtered off this branch, or the head
+#                         sha simply never ran any), and dispatch_classify_rollup
+#                         maps an empty rollup to `pending` with rc 0 — a real
+#                         verdict, so the unreadable guard does not fire either
+#
+# So the node read as `waiting`, accrued a strike EVERY tick, and after
+# DISPATCH_CI_PENDING_STRIKE_CAP observations was parked to `office_hours` as
+# `ci-pending-stalled` — telling a human to go re-trigger CI on a PR that is
+# closed. That is the misstated-reason failure the whole ci-pending bound exists
+# to avoid, reached by a different road.
+#
+# Seeded one below the cap so a single un-guarded bump lands the hold: the
+# assertions discriminate the guard directly instead of inferring it.
+echo "Test: graph-select-target — a closed-unmerged PR skips as pr-closed-unmerged, not as pending CI"
+gscip_setup 1
+gsci_pr_closed
+gsci_checks '{"check_runs":[]}'
+gscip_seed deadbee 7
+gscipc_out=$(gsci_run)
+assert_eq "graph-select-target closed-pr: a closed-unmerged PR is not selected" \
+  "empty" "$gscipc_out"
+# The load-bearing assertion: the reason NAMES the cause. `ci-pending-cap-held`
+# here would be the defect — a true statement about the counter and a false one
+# about the node.
+assert_eq "graph-select-target closed-pr: the skip reason names the closed PR" \
+  "1" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+assert_eq "graph-select-target closed-pr: it is NOT reported as a pending-CI observation" \
+  "0" "$(grep -c 'ci-pending' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+# Neither counted nor cleared, matching the merged branch directly above it: a
+# terminal PR state is not evidence about CI in either direction.
+assert_eq "graph-select-target closed-pr: the strike ladder is left untouched" \
+  "deadbee 7" "$(gscip_sidecar)"
+assert_eq "graph-select-target closed-pr: NO office_hours hold lands, even at the cap boundary" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- Control: the SAME empty rollup on an OPEN draft still counts a strike ---
+# Without this, the case above would pass just as well if the gate had started
+# treating every empty rollup as a closed PR. The only difference between the
+# two runs is `state`.
+echo "Test: graph-select-target — an OPEN draft with the same empty rollup still counts a ci-pending strike"
+gscip_setup 1
+gsci_checks '{"check_runs":[]}'
+gscip_seed deadbee 3
+gsci_run >/dev/null
+assert_eq "graph-select-target closed-pr control: an OPEN draft still accrues the strike" \
+  "deadbee 4" "$(gscip_sidecar)"
+assert_eq "graph-select-target closed-pr control: the OPEN draft is not reported as closed" \
+  "0" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+gsc_interrupt_teardown
+
+# --- A closed-unmerged PR is not mistaken for a MERGED one ------------------
+# The two terminal states share `state: CLOSED` in REST and are told apart only
+# by `mergedAt`. Routing a closed-unmerged PR as `pr-merged-awaiting-reconcile`
+# would promise a reconcile-to-done that is never coming.
+echo "Test: graph-select-target — a MERGED PR still routes to reconcile, not to the closed-unmerged outcome"
+gscip_setup 1
+gsci_pr_merged
+gscipm_out=$(gsci_run)
+assert_eq "graph-select-target closed-pr: a merged PR is still not selected" \
+  "empty" "$gscipm_out"
+assert_eq "graph-select-target closed-pr: a merged PR still routes to reconcile" \
+  "1" "$(grep -c 'pr-merged-awaiting-reconcile' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+assert_eq "graph-select-target closed-pr: a merged PR is NOT reported as closed-unmerged" \
+  "0" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+gsc_interrupt_teardown
+
+# ============================================================================
+# Test: a closed-unmerged PR must not reach the fix-interrupt WRITE path
+# ============================================================================
+# The `pr-closed-unmerged` skip above lives in the qa|review arm, which runs
+# AFTER _gate_maybe_interrupt — and the `implement` arm has no counterpart to it
+# at all. That ordering is the whole hazard, and it is a WORSE failure than the
+# wrong-reason park the skip was added to prevent, because it is not read-only.
+#
+# A PR closed without merging keeps its last CI verdict and reports `mergeable:
+# null -> UNKNOWN`. So a RED closed PR satisfies the interrupt's cost guard, and
+# interruptRoute(review, failing, UNKNOWN) answers `fix`: execution.fix is
+# written to main and landed, a fix attempt is burned, and /fix-checks is
+# dispatched against a PR nobody can merge.
+#
+# The assertions are therefore on the ABSENCE OF THE WRITE, not on the emitted
+# token: apply-fix-state must never be invoked (apply-fix-calls.log absent), and
+# interruptRoute must never even be consulted (node-calls.log absent — the fake
+# `node` logs every eval, and graph-select-target shells out to `node` on that
+# one path only).
+echo "Test: graph-select-target — a RED closed-unmerged PR at review never enters the fix interrupt"
+gscip_setup 1
+gsci_candidate review
+gsci_pr_closed
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+printf 'fix' > "$GSCI_ROOT/route.txt"
+gscip_seed deadbee 7
+gscipw1_out=$(gsci_run)
+assert_eq "graph-select-target closed-pr write-guard: a red closed PR is not selected" \
+  "empty" "$gscipw1_out"
+assert_eq "graph-select-target closed-pr write-guard: NO execution.fix write is attempted" \
+  "0" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target closed-pr write-guard: interruptRoute is never consulted" \
+  "0" "$([ -f "$GSCI_ROOT/node-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target closed-pr write-guard: the skip reason still names the closed PR" \
+  "1" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+assert_eq "graph-select-target closed-pr write-guard: no attempt is burned on the strike ladder" \
+  "deadbee 7" "$(gscip_sidecar)"
+assert_eq "graph-select-target closed-pr write-guard: nothing is parked or held" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- The same, on the arm with no CI gate of its own ------------------------
+# _gate_maybe_interrupt is the ONLY CI-shaped gate the `implement` arm runs, so
+# a guard placed in the qa|review arm alone would leave this path writing. The
+# node is still emitted at its ladder phase (implement has no CI gate —
+# unchanged behaviour, and out of this change's scope); what must not happen is
+# the interrupt write.
+echo "Test: graph-select-target — a RED closed-unmerged PR at implement never enters the fix interrupt"
+gscip_setup 1
+gsci_candidate implement
+gsci_pr_closed
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+printf 'fix' > "$GSCI_ROOT/route.txt"
+gscipw2_out=$(gsci_run)
+assert_eq "graph-select-target closed-pr write-guard: the implement candidate is emitted at its ladder phase, not at fix" \
+  "node tactic-fixture tactic implement" "$gscipw2_out"
+assert_eq "graph-select-target closed-pr write-guard: no execution.fix write on the implement arm" \
+  "0" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target closed-pr write-guard: interruptRoute is never consulted on the implement arm" \
+  "0" "$([ -f "$GSCI_ROOT/node-calls.log" ] && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Control: the guard must not disable the interrupt lane outright --------
+# The two cases above would pass just as well if the new guard had turned every
+# fix interrupt off. The only difference here is `state`: the SAME red draft PR,
+# OPEN, at the SAME phase, must still write execution.fix and emit `fix`.
+echo "Test: graph-select-target — an OPEN red PR at review still enters the fix interrupt"
+gscip_setup 1
+gsci_candidate review
+gsci_pr true
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+printf 'fix' > "$GSCI_ROOT/route.txt"
+gscipw3_out=$(gsci_run)
+assert_eq "graph-select-target closed-pr write-guard control: an OPEN red PR is emitted at fix" \
+  "node tactic-fixture tactic fix" "$gscipw3_out"
+assert_eq "graph-select-target closed-pr write-guard control: an OPEN red PR DOES write execution.fix" \
+  "1" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target closed-pr write-guard control: interruptRoute saw the review phase and the failing verdict" \
+  "review failing MERGEABLE" "$(tail -n 1 "$GSCI_ROOT/node-calls.log")"
+gsc_interrupt_teardown
+
+# ============================================================================
+# Test: graph-select-target — an UNREAD `state` is not a CLOSED one
+# ============================================================================
+# `_read_pr_ci` REQUIRES a non-empty `state`, beside its `headRefOid`
+# requirement. Without that requirement an empty `_CI_STATE` — an UNREAD state,
+# not a closed one — satisfies the qa|review arm's `[[ "$_CI_STATE" != "OPEN" ]]`
+# and EVERY qa/review candidate retires as `pr-closed-unmerged`: no strike, no
+# hold, no park, the lane silently halted, while the interrupt gate (which
+# spells its own `-n`) keeps working. That asymmetry is what makes the failure
+# hard to see from the outside.
+#
+# The input is a PR body whose `state` is the EMPTY STRING, which is the one
+# shape that survives lib.sh's projection carrying an empty value: `state:
+# (.state | ascii_upcase)` errors on an absent or null key (jq exits 5, so the
+# read fails as `pr-state-unknown` and proves nothing about this guard), but
+# `"" | ascii_upcase` is `""`, and `.state // empty` keeps it — jq's `//`
+# replaces only `false` and `null`. So the fixture reaches the inversion by the
+# same road a future null-safe projection edit would, without stubbing the
+# projection itself.
+echo "Test: graph-select-target — an EMPTY PR state does not retire the candidate as closed"
+gscip_setup 1
+printf '%s\n' '{"number":2999,"state":"","merged_at":null,"merge_commit_sha":null,"mergeable":true,"mergeable_state":"clean","draft":true,"title":"t","body":"","head":{"sha":"deadbee","ref":"tactic-fixture"},"labels":[]}' \
+  > "$GSCI_ROOT/pr-2999.json"
+gscip_seed deadbee 7
+gscipe_out=$(gsci_run)
+assert_eq "graph-select-target empty-state: an unread state selects nothing" \
+  "empty" "$gscipe_out"
+# THE assertion. The inversion being guarded is precisely that an unread state
+# reads as a CLOSED one.
+assert_eq "graph-select-target empty-state: an unread state is NOT retired as pr-closed-unmerged" \
+  "0" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+# What it is instead: an unreadable PR read, which is what _read_pr_ci's rc 1
+# already means to this arm (the `_CI_RC != 0` guard).
+assert_eq "graph-select-target empty-state: the skip names the unreadable read" \
+  "1" "$(grep -c 'ci-verdict-unreadable' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+# Neither counted nor cleared, and nothing held at the cap boundary: a failed
+# read is not evidence either way.
+assert_eq "graph-select-target empty-state: the strike ladder is left untouched" \
+  "deadbee 7" "$(gscip_sidecar)"
+assert_eq "graph-select-target empty-state: nothing is held at the cap boundary" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- Control: an OPEN state on the same fixture still reads normally ---------
+# Without this, the case above would pass just as well if the requirement had
+# made EVERY PR read fail. The only difference between the two runs is `state`.
+echo "Test: graph-select-target — an OPEN state on the same fixture still reads normally (empty-state control)"
+gscip_setup 1
+gscip_seed deadbee 3
+gsci_run >/dev/null
+assert_eq "graph-select-target empty-state control: an OPEN state still accrues its ci-pending strike" \
+  "deadbee 4" "$(gscip_sidecar)"
+assert_eq "graph-select-target empty-state control: an OPEN state is NOT reported as an unreadable read" \
+  "0" "$(grep -c 'ci-verdict-unreadable' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+gsc_interrupt_teardown
+
+# ============================================================================
+# Test: a PR closed AFTER its fix interrupt was entered leaves the fix arm
+# ============================================================================
+# `_gate_fix_active` IS sensor_gate's whole `fix` arm, so
+# `_gate_maybe_interrupt`'s entry-time terminal-state decline never runs for a
+# candidate that already carries the interrupt. A PR closed WITHOUT MERGING
+# after entry still reports `mergedAt` null and KEEPS its last CI verdict, so
+# the `failing` case re-emitted `fix` every tick: /fix-checks dispatched against
+# an unmergeable PR until FIX_ATTEMPT_CAP, then a tracked hold under a reason
+# that misstates the cause.
+#
+# The load-bearing assertion is the ABSENCE OF THE CAP READ, not the emitted
+# token: `apply-fix-state --check-cap` is the first thing the failing case
+# touches, so an absent `apply-fix-calls.log` proves the arm returned ahead of
+# it rather than merely producing a different string.
+#
+# The skip does not strand the node at `fix`: reconcile-graph-merged absorbs a
+# closed-not-merged PR's node to `done`, the same disposal the qa|review arm's
+# `pr-closed-unmerged` skip already relies on.
+echo "Test: graph-select-target — an active fix interrupt on a closed-unmerged PR skips instead of re-dispatching"
+gscip_setup 1
+gsci_candidate fix
+gsci_pr_closed
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+gscipf1_out=$(gsci_run)
+assert_eq "graph-select-target fix-arm closed-pr: a closed-unmerged PR at fix is not selected" \
+  "empty" "$gscipf1_out"
+assert_eq "graph-select-target fix-arm closed-pr: the skip reason names the closed PR" \
+  "1" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+assert_eq "graph-select-target fix-arm closed-pr: the retry cap is never read" \
+  "0" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target fix-arm closed-pr: no fix-attempt-cap hold lands" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- Control: an OPEN red PR at fix still retries -----------------------------
+# Without this the case above would pass just as well if the guard had disabled
+# the fix arm outright. The only difference between the two runs is `state`.
+echo "Test: graph-select-target — an OPEN red PR at fix still re-emits fix (fix-arm control)"
+gscip_setup 1
+gsci_candidate fix
+gsci_pr true
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+gscipf2_out=$(gsci_run)
+assert_eq "graph-select-target fix-arm control: an OPEN red PR is re-emitted at fix" \
+  "node tactic-fixture tactic fix" "$gscipf2_out"
+assert_eq "graph-select-target fix-arm control: an OPEN red PR DOES read the retry cap" \
+  "1" "$(grep -q -- '--check-cap' "$GSCI_ROOT/apply-fix-calls.log" && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- A MERGED PR at fix still routes to reconcile ----------------------------
+# The two terminal states share `state: CLOSED` in REST and are told apart only
+# by `mergedAt`, so the new guard must sit BELOW the merged check, not above it.
+echo "Test: graph-select-target — a MERGED PR at fix still routes to reconcile, not to the closed-unmerged outcome"
+gscip_setup 1
+gsci_candidate fix
+gsci_pr_merged
+gscipf3_out=$(gsci_run)
+assert_eq "graph-select-target fix-arm closed-pr: a merged PR at fix is not selected" \
+  "empty" "$gscipf3_out"
+assert_eq "graph-select-target fix-arm closed-pr: a merged PR at fix still routes to reconcile" \
+  "1" "$(grep -c 'pr-merged-awaiting-reconcile' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+assert_eq "graph-select-target fix-arm closed-pr: a merged PR at fix is NOT reported as closed-unmerged" \
+  "0" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
 gsc_interrupt_teardown
 
 report_results
