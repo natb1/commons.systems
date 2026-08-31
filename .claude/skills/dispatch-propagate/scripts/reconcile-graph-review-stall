@@ -515,12 +515,15 @@ if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]; then
     #
     # It cannot be replaced by the opposite assertion either: the other rc-1
     # shapes (rc 11's committed-but-unpushed write, an argument-validation
-    # refusal raised before any git write) really did land nothing. This line
+    # refusal raised before any git write, and a park whose OWN push failed —
+    # `could not land the parking write ... office_hours set locally but not
+    # pushed to main`, graph-commit:3734, still rc 1, park commit left an
+    # unpushed local orphan) really did land nothing. This line
     # has no way to tell them apart, so it asserts NEITHER outcome and names
     # the two places that do know — graph-commit's own stderr just above, and
     # the graph_rollback_node_writes classification line the EXIT trap prints
     # just below.
-    echo "reconcile-graph-review-stall: graph-commit did not report success for ${RECOVERED_IDS[*]} — what landed is NOT uniformly 'nothing': if it took its park path an office_hours park DID land for the diverged node, with the other ids' fix-interrupt edits riding along as bystanders; read graph-commit's stderr above and the rollback line below for which happened" >&2
+    echo "reconcile-graph-review-stall: graph-commit did not report success for ${RECOVERED_IDS[*]} — what landed is NOT uniformly 'nothing': if it printed a 'verdict: parked' line an office_hours park DID land for the diverged node, with the other ids' fix-interrupt edits riding along as bystanders; if it instead reported 'could not land the parking write', the park path was taken but its push failed, leaving the park commit an unpushed local orphan and no change at all on main; read graph-commit's stderr above and the rollback line below for which happened" >&2
     # The EXIT trap restores every staged write that did NOT land, leaving
     # intentions/ clean for the next graph writer. A landed park MOVED HEAD, and
     # graph_rollback_node_writes classifies that case and deliberately KEEPS it

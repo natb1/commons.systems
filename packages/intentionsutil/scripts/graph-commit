@@ -266,11 +266,24 @@
 #              is the one die() that leaves NO park recorded while the writer's
 #              content is already gone from the worktree — SNAP_DIR is the only
 #              surviving copy.
-#        Caller contract: rc 1 does not mean "nothing landed". When the
-#          invocation mixed --prune ids with other ids, a bystander prune's
-#          deletion may have landed on main together with the park commit. A
-#          caller that retries after rc 1 must NOT replay the same argv
-#          blindly. Per --prune id, re-derive whether the deletion is still
+#        Caller contract: rc 1 does not mean "nothing landed". Two kinds of
+#          bystander can land on main together with the park commit (see
+#          park_and_exit()'s BYSTANDERS block): a --prune id's deletion, and an
+#          ordinary EDIT id whose --base pin was still fresh. A caller that
+#          retries after rc 1 must NOT replay the same argv blindly.
+#          For a bystander EDIT id the cost of replaying is not a no-op, it is
+#          a WRONG PARK: the id's --base pin now names the pre-edit blob while
+#          origin/main carries the edit this invocation just landed, so the pin
+#          reads STALE on the retry — and a stale pin is not a bystander, so
+#          the retry parks a node whose edit was already on main and leaves it
+#          needing an office-hours clear. Per edit id, re-derive whether the
+#          edit is still outstanding by comparing origin/main against the
+#          content the caller meant to land, and DROP any id origin/main
+#          already carries (and its --base pair) from the retry argv. Every
+#          programmatic --base caller in this repo (reconcile-graph-merged,
+#          reconcile-graph-review-stall) is exposed to this; neither retries
+#          today, and neither may start retrying without doing the re-derive.
+#          Per --prune id, re-derive whether the deletion is still
 #          outstanding by asking origin/main directly:
 #            git fetch origin main
 #            git cat-file -e origin/main:intentions/<id>.md
@@ -300,12 +313,13 @@
 #          which is exactly why the `git fetch origin main` step above is
 #          mandatory before any retry, not merely a suggestion.
 #          The stderr lines above distinguish the parked set from the landed
-#          bystander-prune set, and so does the park commit subject; those are
-#          the authoritative record of what happened. No in-repo caller
-#          currently passes --prune programmatically — pruning is agent-driven
-#          via the owed-prune census, not script-driven — so this contract is
-#          documented for the agent reading it before a retry, not enforced by
-#          a caller check.
+#          bystander set(s), and so does the park commit subject (whose three
+#          clauses are `park … ; land … ; prune …`); those are the
+#          authoritative record of what happened. No in-repo caller currently
+#          passes --prune programmatically — pruning is agent-driven via the
+#          owed-prune census, not script-driven — and no caller retries after
+#          rc 1 at all, so this contract is documented for the agent reading it
+#          before a retry, not enforced by a caller check.
 #   2  usage error — reserved for the paths that call `exit 2` directly: an
 #      unknown `-*` option, no node ids given at all, an id rejected by
 #      validate_id_chars (empty, containing a path separator or a comma, or
