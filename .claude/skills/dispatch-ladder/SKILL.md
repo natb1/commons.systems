@@ -271,7 +271,8 @@ Terminal statuses:
 | --- | --- |
 | `complete` | the node reached phase `done`, or was pruned. |
 | `halted` | the driver stopped and wrote why — read `<disposition>`. |
-| `orphaned` | state says running but the unit is not active: the driver was killed without writing a terminal state. Treat as terminal and read the journal. |
+| `signalled` | the driver was stopped from outside by SIGINT/SIGTERM (a `systemctl --user stop dispatch-ladder-<node>`) and wrote a terminal state on its way out. A deliberate stop, not a failure. Two things a `halted` run carries are missing by design, both because they need network reads the stop clock cannot afford: `<terminus>` is null rather than classified, and the phase's `/rsi` evaluation was **not** spawned — the `eval … skipped` line in `events.jsonl` names the call that pays it. Run it before the synthesis. |
+| `orphaned` | state says running but the unit is not active: the driver was killed without writing a terminal state. Now only a SIGKILL, an OOM kill or a crash — an ordinary stop reports `signalled`. Treat as terminal and read the journal. |
 
 **3. Engage the halt, if there is one.** Then run the closing cross-phase
 synthesis, then report.
@@ -307,12 +308,19 @@ disposition; the journal says which script produced it.
 | 14 | `unknown-graph-read` | `origin/main` could not be read; nothing is claimed either way. Re-run once the read works. Then the synthesis, if a phase ran. |
 | 21 | `timeout` | `--max-run-s` exceeded. The ladder is unfinished and nothing was rolled back. Then the synthesis. |
 | 1 | `internal` | the driver's own error — an unmapped exit code, an unwritable state dir. Then the synthesis, if a phase ran. |
+| 130 / 143 | `signalled` | stopped from outside by SIGINT/SIGTERM, the only exit not produced by the driver's own `halt()`. The terminal state was written, so this is **not** `orphaned`. Spawn the owed per-phase evaluation **by hand** — the `eval … skipped` line in `events.jsonl` spells the exact `/rsi` call — then the synthesis. |
 
 **A halted run still owes its review.** Every row above except `usage` /
 `refused` and `claimed` carries the synthesis, and the driver has already
 spawned the per-phase evaluation for the phase it was in. Halting is not an
 exemption: the most defect-rich runs are exactly the ones that halt, and a
 halted run that recorded nothing was the defect the two-tier review closed.
+
+`signalled` is the one row where that spawn did **not** already happen. The
+signal path runs on `TimeoutStopSec`'s clock and skips the daemon round trip
+deliberately, so it records the debt instead of paying it. The debt is still
+owed — run the `/rsi` call the `eval … skipped` event names before the
+synthesis.
 
 **Never push through a halt and never re-spawn blindly.** A halt is a person's
 call; a re-spawn that has not first addressed the cause spends budget on a
@@ -376,8 +384,10 @@ closing half of its mechanism. The per-phase half already ran: see
 `/rsi`, spawned by the driver at every phase boundary and for
 the phase a halted run owes.
 
-Run it **after** the run reaches terminus — complete or halted — never
-interleaved: it evaluates observed results, not predictions. The invoking
+Run it **after** the run reaches terminus — complete, halted or signalled —
+never interleaved: it evaluates observed results, not predictions. On
+`signalled` the per-phase half was skipped rather than spawned, so run that
+first (see the `signalled` row above). The invoking
 session runs it, or a later author-started session polls the same node to
 terminus and runs it there.
 

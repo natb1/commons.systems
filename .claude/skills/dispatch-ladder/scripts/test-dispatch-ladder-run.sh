@@ -1724,6 +1724,129 @@ assert_eq "sigint: the pass STOPPED — it never walked on into the absorb step"
 assert_eq "sigint: the selection lock was still released" "1" "$(lock_modes --release)"
 make_seq_fake "$DISPATCH/graph-auto-merge" merge
 
+# --- ...and a signal exit still owes a TERMINAL STATE -------------------------
+# The three assertions per signal above pin that the run STOPS. They cannot see
+# what it leaves behind, and stopping cleanly is only half the contract.
+#
+# halt() is the one terminal path the ladder's own logic takes, and everything
+# terminal hangs off it: classify_terminus, write_state, spawn_phase_eval. A
+# signal exit reaches none of that. Left alone it stops with state.json still
+# reading `{"status":"running","step":"merge","terminus":null}` — the file it
+# wrote on entering the merge step — and TWO things then go wrong:
+#
+#   * `dispatch-ladder-status` sees status `running` with an inactive unit and
+#     answers `orphaned`, whose documented meaning (dispatch-ladder-status:36)
+#     is "the driver died WITHOUT writing a terminal state". After an ordinary
+#     `systemctl --user stop dispatch-ladder-<node>` that is simply false, so
+#     the reader's vocabulary starts lying about its most routine case.
+#   * the per-phase RSI evaluation halt() would have spawned is never spawned
+#     and never recorded, so the phase produces NO ledger entry at all — the
+#     exact gap the driver header's A HALT OWES THE EVALUATION TOO closes.
+#
+# The repair is local writes ONLY (signal_terminal_write), which is why the
+# terminus stays null here rather than being classified: classify_terminus makes
+# bounded network reads and spawn_phase_eval is a daemon round trip, and the
+# clock on this path is TimeoutStopSec, after which systemd sends SIGKILL and
+# nothing lands at all. So the assertions below pin BOTH halves — the state that
+# is written, and the debt that is recorded rather than paid.
+#
+# The step is asserted as `merge` on purpose: it is set at
+# dispatch-ladder-run's `STEP=merge; write_state` immediately before
+# graph-auto-merge, which is where this fake delivers the signal. A terminal
+# write that reset or blanked it would lose the one field that says WHERE the
+# run was standing when it was stopped.
+echo "Test: a SIGTERM mid-merge writes a terminal 'signalled' state, not one that reads as orphaned"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+ladder_signal_merge_fake TERM
+run_ladder_signalled
+assert_eq "sigterm-state: the run exits 143" "143" "$RC"
+assert_eq "sigterm-state: state.json status is 'signalled', NOT 'running' (which reads as orphaned)" \
+  "signalled" "$(jq -r .status "$STATE_DIR/state.json")"
+assert_eq "sigterm-state: state.json exit_code is 143" \
+  "143" "$(jq -r .exit_code "$STATE_DIR/state.json")"
+assert_eq "sigterm-state: state.json disposition is 'signalled'" \
+  "signalled" "$(jq -r .disposition "$STATE_DIR/state.json")"
+assert_eq "sigterm-state: the step the run was standing on is preserved" \
+  "merge" "$(jq -r .step "$STATE_DIR/state.json")"
+assert_eq "sigterm-state: terminus stays null — classifying it is the network read this path skips" \
+  "null" "$(jq -r '.terminus // "null"' "$STATE_DIR/state.json")"
+assert_eq "sigterm-state: the detail names the signal" "1" \
+  "$(jq -r .detail "$STATE_DIR/state.json" | grep -c 'SIGTERM')"
+assert_eq "sigterm-state: exactly one halt event with disposition 'signalled'" \
+  "1" "$(events_have halt signalled)"
+make_seq_fake "$DISPATCH/graph-auto-merge" merge
+
+echo "Test: a SIGINT mid-merge writes the same terminal state with its own status"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+ladder_signal_merge_fake INT
+run_ladder_signalled
+assert_eq "sigint-state: the run exits 130" "130" "$RC"
+assert_eq "sigint-state: state.json status is 'signalled'" \
+  "signalled" "$(jq -r .status "$STATE_DIR/state.json")"
+assert_eq "sigint-state: state.json exit_code is 130, not 143" \
+  "130" "$(jq -r .exit_code "$STATE_DIR/state.json")"
+assert_eq "sigint-state: the detail names SIGINT, not SIGTERM" "1" \
+  "$(jq -r .detail "$STATE_DIR/state.json" | grep -c 'SIGINT')"
+make_seq_fake "$DISPATCH/graph-auto-merge" merge
+
+# --- the owed evaluation is RECORDED, not silently dropped -------------------
+# The two cases above run the idle path, where no phase ever launches, so no
+# evaluation is owed and none can be missing. This case is the one that can see
+# the second half of the gap: advance LAUNCHES a phase, and the signal lands
+# inside the await that follows it — before the phase boundary where
+# spawn_phase_eval would otherwise have run.
+#
+# The debt is not paid here (the spawn is the daemon round trip this path
+# cannot afford) but it must not vanish either, so it is written to
+# events.jsonl as `eval ... skipped` — reusing the disposition
+# spawn_phase_eval's own "no executable dispatch-spawn-job" arm already uses for
+# "this phase is unevaluated", so the events vocabulary stays closed. The event
+# names the exact `/rsi` call that pays it, which is what makes the record
+# actionable rather than merely honest.
+#
+# Guarded exactly as spawn_phase_eval is: asserting the spawn did NOT happen
+# pins that this path stays local, and asserting the record DID pins that
+# skipping it is not the same as forgetting it.
+ladder_signal_await_fake() {
+  local sig="$1"
+  rm -f "$SEQ_DIR/driver.pid"
+  cat >"$LADDER/dispatch-ladder-await" <<STUB
+#!/usr/bin/env bash
+n=\$(cat "$SEQ_DIR/await.count")
+echo \$((n + 1)) >"$SEQ_DIR/await.count"
+printf '%s\n' "\$*" >>"$SEQ_DIR/await.argv"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$SEQ_DIR/driver.pid" ]] && break
+  sleep 0.1
+done
+kill -$sig "\$(cat "$SEQ_DIR/driver.pid")"
+echo 'advanced tactic-fixture-node implement -> origin/main'
+exit 0
+STUB
+  chmod +x "$LADDER/dispatch-ladder-await"
+}
+
+echo "Test: a SIGTERM after a phase launched RECORDS the owed evaluation instead of dropping it"
+reset_seqs
+set_seq advance '0|launched tactic-fixture-node tactic implement /implement'
+ladder_signal_await_fake TERM
+run_ladder_signalled
+assert_eq "sigterm-owed: the run exits 143" "143" "$RC"
+assert_eq "sigterm-owed: state.json status is 'signalled'" \
+  "signalled" "$(jq -r .status "$STATE_DIR/state.json")"
+assert_eq "sigterm-owed: the phase the run was in is preserved" \
+  "implement" "$(jq -r .phase "$STATE_DIR/state.json")"
+assert_eq "sigterm-owed: the evaluation was NOT spawned — this path makes no daemon round trip" \
+  "0" "$(calls spawnjob)"
+assert_eq "sigterm-owed: exactly one 'eval ... skipped' event records the debt" \
+  "1" "$(events_have eval skipped)"
+assert_eq "sigterm-owed: that event names the /rsi call that pays the debt" "1" \
+  "$(jq -r 'select(.event == "eval" and .disposition == "skipped") | .detail' \
+       "$STATE_DIR/events.jsonl" | grep -c "/rsi $NODE implement --since")"
+make_seq_fake "$LADDER/dispatch-ladder-await" await
+
 # --- a signal DURING the acquire must release the lock the child then took ----
 # The window the two cases above do not reach. `dispatch-acquire-lock --wait`
 # polls for up to DISPATCH_LOCK_WAIT_TIMEOUT (default 300s) in a CHILD process,

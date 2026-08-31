@@ -1560,11 +1560,10 @@ tick_teardown
 # --- ...and it stops by DYING OF the signal, not by `exit 143` ---------------
 # The two cases above cannot see this and neither can any bash: `wait` reports
 # 143 both for `exit 143` and for death by SIGTERM (measured, both forms).
-# systemd does distinguish them — `is_clean_exit` treats death by
-# SIGHUP/SIGINT/SIGTERM/SIGPIPE as a clean stop while a 143/130 exit STATUS is a
-# failure — and BOTH units that run dispatch-tick carry
-# `OnFailure=dispatch-tick-recover.service` with no `SuccessExitStatus=`: the
-# heartbeat service (lib.sh's `desired_service`) and the transient unit
+# systemd does distinguish them — death by SIGHUP/SIGINT/SIGTERM/SIGPIPE is a
+# clean stop while a 143/130 exit STATUS is a failure — and BOTH units that run
+# dispatch-tick carry `OnFailure=dispatch-tick-recover.service`: the heartbeat
+# service (lib.sh's `desired_service`) and the transient unit
 # dispatch-spawn-tick launches. So a tick that exits 143 turns an ordinary
 # `systemctl --user stop dispatch-heartbeat.service` into a failed unit, which
 # arms a backstop reseed that relaunches the chain minutes later, and repeats
@@ -1572,6 +1571,15 @@ tick_teardown
 # two apart, so these two cases run the tick under a five-line python3
 # supervisor. python3 is already an unconditional CI dependency —
 # lint-vendored-skills.sh calls it, and run-lint.sh runs that on every PR.
+#
+# THESE TWO CASES ARE NECESSARY BUT NOT SUFFICIENT, and deliberately so: they
+# assert WIFSIGNALED, which is true whether or not the unit that receives that
+# death treats it as clean. dispatch-heartbeat.service is Type=oneshot, and
+# systemd.service(5) excepts Type=oneshot from the four-signal clean-stop rule,
+# so the unit-level half of this contract is `SuccessExitStatus=SIGTERM SIGINT`
+# in lib.sh's `desired_service`. That half is asserted where the unit text is
+# generated — test-lib-systemd-units.sh, "SuccessExitStatus=SIGTERM SIGINT" —
+# because it is a property of the unit file, not of this script's exit.
 
 # tick_sig_kind <SIG> — run the tick under that supervisor and report how it
 # died in TICK_SIG_KIND: `signaled:<signo>` or `exited:<status>`. The supervisor

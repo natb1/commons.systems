@@ -140,15 +140,27 @@
 # `conflict` are interrupts that recur within one run, and a node+phase name
 # would drop the second visit the same way.
 #
-# A HALT OWES THE EVALUATION TOO. halt() is the ONE terminal path (exits
-# 10/11/12/13/21 all route through it), so the owed spawn lives there and
-# nowhere else. Under the old terminus-only rule a halted run recorded nothing
-# at all, which made the most defect-rich runs exactly the ones that produced no
-# review. The spawn is guarded on a phase having LAUNCHED — a `usage`/`refused`
-# halt that never ran one spawns nothing — and on the phase not already having
-# been evaluated at its own boundary. A spawn failure is a logged warning and
-# never changes the halt's exit code: an evaluation that did not start must not
-# rewrite the disposition the driver is reporting.
+# A HALT OWES THE EVALUATION TOO. halt() is the one terminal path the LADDER
+# takes (exits 10/11/12/13/21 all route through it), so the owed spawn lives
+# there and nowhere else. Under the old terminus-only rule a halted run recorded
+# nothing at all, which made the most defect-rich runs exactly the ones that
+# produced no review. The spawn is guarded on a phase having LAUNCHED — a
+# `usage`/`refused` halt that never ran one spawns nothing — and on the phase
+# not already having been evaluated at its own boundary. A spawn failure is a
+# logged warning and never changes the halt's exit code: an evaluation that did
+# not start must not rewrite the disposition the driver is reporting.
+#
+# THE SIGNAL PATH IS THE ONE OTHER WAY OUT, and it is deliberately not halt().
+# A SIGINT/SIGTERM — `systemctl --user stop dispatch-ladder-<node>` — ends the
+# run from outside the ladder's own logic, on TimeoutStopSec's clock, so it can
+# afford neither classify_terminus' network reads nor the evaluation spawn's
+# daemon round trip. It still owes a TERMINAL STATE, because leaving state.json
+# at `running` is what makes `dispatch-ladder-status` say `orphaned` — "the
+# driver died without writing a terminal state" — about a stop that was clean
+# and deliberate. So signal_terminal_write does the local half only: status
+# `signalled`, a null terminus, and the owed evaluation recorded in
+# events.jsonl as `eval ... skipped` naming the `/rsi` call that pays it. See
+# its own comment at the trap for the full reasoning.
 #
 # Usage: dispatch-ladder-run <node-id>
 #          [--timeout-s <n>] [--max-run-s <n>] [--poll-s <n>] [--ci-wait-s <n>]
@@ -336,6 +348,12 @@
 #                     input here, this list is what a caller sees.
 #   1   internal      this script's own error (an unmapped exit code from a
 #                     driven script, an unwritable state dir).
+#   130 signalled     SIGINT. The one code below that does NOT come from halt();
+#   143 signalled     SIGTERM — `systemctl --user stop dispatch-ladder-<node>`.
+#                     Both write state.json with status `signalled` and a null
+#                     terminus (THE SIGNAL PATH IS THE ONE OTHER WAY OUT,
+#                     above). Conventional 128+signo, so a shell reading `wait`
+#                     and a person reading the journal see the same number.
 #
 # THE EXIT CODE AND THE TERMINUS ARE ORTHOGONAL, deliberately. Every code above
 # says WHY THE DRIVER STOPPED. None of them says WHETHER STOPPING THERE WAS
@@ -374,7 +392,12 @@
 #                 mv), for `dispatch-ladder-status` to read. Its `terminus` field
 #                 carries the classification above, and is null — as `phase`,
 #                 `disposition` and `detail` are — until the run halts, since
-#                 only a halt has a terminus to classify.
+#                 only a halt has a terminus to classify. It STAYS null on the
+#                 `signalled` status too: classifying costs the network reads
+#                 that path cannot afford, and `signalled` is a distinct status
+#                 precisely so a reader can tell that null apart from a halt
+#                 whose classification failed (which renders `unknown`, never
+#                 null).
 #   events.jsonl  append-only. This is the evidence the evaluation needs and
 #                 cannot rediscover later: phase wall-clock against the await
 #                 window, launches that produced no code change, and re-poll
@@ -864,7 +887,10 @@ export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_I
 # Without it the whole body would run a second time on every signal. Every step
 # here is idempotent (`rm -f`, and the LOCK_HELD guard swallows a second
 # `--release`), so the double run was harmless; clearing the trap makes cleanup
-# run exactly once on every path instead of relying on that.
+# run exactly once on every path instead of relying on that. It now clears
+# BEFORE anything else in the body, not after, because the terminal write below
+# is the one step that is NOT idempotent and whose own failure path calls
+# `exit` (write_state does), which would otherwise re-enter this handler.
 #
 # `$?` is captured by hand on the FIRST line, before any command in the body can
 # overwrite it, so the plain EXIT path still reports the run's real halt status
@@ -873,21 +899,75 @@ export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_I
 # status, NOT 128+signo — which is why the two statuses are passed as literal
 # arguments instead. Same shape as `vi_exit_trap` in
 # ../../dispatch-propagate/scripts/test-dispatch-verify-instrument-invocation.sh.
+#
+# THE SIGNAL PATH IS A SECOND TERMINAL PATH, so it owes a terminal state write.
+# halt() is otherwise the ONE terminal path (see A HALT OWES THE EVALUATION TOO
+# in the header) and everything terminal hangs off it. A signal exit that only
+# tidied up and left state.json at `{"status":"running","step":"merge"}` would
+# make `dispatch-ladder-status` report `orphaned` — whose documented meaning is
+# "the driver died WITHOUT writing a terminal state" — so the vocabulary itself
+# would start lying about a stop that was clean and deliberate.
+#
+# BUT IT IS NOT halt(), AND MUST NOT BECOME IT. halt() runs classify_terminus,
+# which makes bounded NETWORK reads (TERMINUS_READ_TIMEOUT_S, 120s per read),
+# and spawn_phase_eval, which is a dispatch-spawn-job round trip through the
+# claude daemon. On the signal path the clock is TimeoutStopSec, after which
+# systemd escalates to SIGKILL and the write never lands at all — so routing
+# through halt() would trade a state.json that lies for one that is often
+# absent. signal_terminal_write is therefore LOCAL WRITES ONLY: two file
+# appends and one atomic rename, no network, no subprocess that can block.
+#
+# What it gives up is recorded rather than hidden. The terminus stays null,
+# because classifying it is exactly the network read being skipped and a
+# guessed terminus would be a claim; `signalled` is a status of its own so no
+# reader mistakes a null terminus there for a halt that failed to classify. The
+# owed per-phase evaluation is logged as an `eval ... skipped` event naming the
+# `/rsi` invocation that pays it — the same disposition the "no executable
+# dispatch-spawn-job" arm of spawn_phase_eval already uses for "this phase is
+# unevaluated", so the events.jsonl vocabulary stays closed.
 SENTINEL=""
 LOCK_HELD=0
+
+# signal_terminal_write <SIG> <rc> — the local-only terminal write described
+# above. Every global it sets is one write_state already renders; STEP and PHASE
+# are deliberately left alone so the record says where the run was standing.
+signal_terminal_write() {
+  local sig="$1" rc="$2"
+  STATUS=signalled
+  DISPOSITION=signalled
+  EXIT_CODE="$rc"
+  DETAIL="stopped by SIG$sig at step '$STEP'; the ladder is unfinished and nothing was rolled back"
+  # write_state exits 1 on a failed render or install. That is right on the
+  # normal path and wrong here: it would replace the signal's own exit status
+  # with 1, telling systemd the unit failed on top of losing the state. A
+  # subshell contains that `exit` so the status survives as a warning.
+  ( write_state ) \
+    || echo "dispatch-ladder-run: WARNING — could not write the terminal state on the SIG$sig path; $STATE_FILE still says 'running', so dispatch-ladder-status will report this run as orphaned" >&2
+  log_event halt "$PHASE" signalled "$DETAIL"
+  # The debt spawn_phase_eval would have paid. Guarded exactly as it is: only a
+  # phase that LAUNCHED is owed one, and only if its boundary spawn has not
+  # already claimed the key.
+  if [[ -n "$EVAL_LAUNCH_PHASE" && -n "$EVAL_LAUNCH_EPOCH" \
+        && "$EVAL_LAUNCH_PHASE@$EVAL_LAUNCH_EPOCH" != "$EVAL_SPAWNED_KEY" ]]; then
+    log_event eval "$EVAL_LAUNCH_PHASE" skipped \
+      "not spawned on the SIG$sig path — the spawn is a daemon round trip and TimeoutStopSec is counting down; this phase is unevaluated, run '/rsi $NODE_ID $EVAL_LAUNCH_PHASE --since $EVAL_LAUNCH_EPOCH' to pay it"
+  fi
+}
+
 _ladder_cleanup() {
-  local rc=${1:-$?}
+  local rc=${1:-$?} sig="${2:-}"
+  trap - EXIT
   if (( LOCK_HELD )); then
     "$ACQUIRE_LOCK" --release >/dev/null 2>&1 || true
     LOCK_HELD=0
   fi
   [[ -n "${SENTINEL:-}" ]] && rm -f "$SENTINEL"
-  trap - EXIT
+  [[ -n "$sig" ]] && signal_terminal_write "$sig" "$rc"
   exit "$rc"
 }
 trap '_ladder_cleanup' EXIT
-trap '_ladder_cleanup 130' INT
-trap '_ladder_cleanup 143' TERM
+trap '_ladder_cleanup 130 INT' INT
+trap '_ladder_cleanup 143 TERM' TERM
 
 if [[ "$CLAUDE_CODE_SESSION_ID" == headless:* ]]; then
   if SENTINEL_LOCK_FILE=$(dispatch_lock_file); then

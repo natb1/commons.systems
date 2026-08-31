@@ -33,8 +33,20 @@
 #   complete   the driver finished the ladder (exit 0).
 #   halted     the driver stopped and wrote why.
 #   running    the driver is alive and working.
+#   signalled  the driver was stopped from OUTSIDE by SIGINT/SIGTERM — a
+#              `systemctl --user stop dispatch-ladder-<node>` — and wrote a
+#              terminal state on its way out (exit 130/143). Terminal, and NOT
+#              a failure: it names a deliberate stop, which is why it is its own
+#              word rather than `halted`. Two things a `halted` run always has
+#              are missing by design, because both cost network reads the
+#              TimeoutStopSec clock cannot afford: <terminus> is null rather
+#              than classified, and the phase's `/rsi` evaluation was not
+#              spawned — the events.jsonl `eval ... skipped` record names the
+#              call that pays it. Read the journal and that record.
 #   orphaned   state.json says running but the unit is not active — the driver
-#              died without writing a terminal state.
+#              died without writing a terminal state. Still means exactly that:
+#              a signal stop writes `signalled` instead, so `orphaned` is now
+#              only ever a SIGKILL, an OOM kill, or a crash.
 # and <terminus> is set only once a run has halted — it classifies whether
 # stopping there was legitimate, a question the exit code never answers on its
 # own (see dispatch-ladder-run's classify_terminus). It is one of:
@@ -51,7 +63,8 @@
 # Absent fields print as `-`.
 #
 # Exit codes:
-#   0   terminal: complete, halted, or orphaned. Nothing more will happen.
+#   0   terminal: complete, halted, signalled, or orphaned. Nothing more will
+#       happen.
 #   20  still running. Call again — the expected answer for a long ladder.
 #   2   usage error.
 #   1   no state file for this node (no ladder has run, or the driver has not
@@ -160,7 +173,12 @@ read_once() {
   terminus=$(jq -r '.terminus // "-"' "$STATE_FILE")
 
   case "$status" in
-    complete|halted)
+    # `signalled` is terminal for the same reason the other two are: the driver
+    # wrote it on its way out and nothing will rewrite it. Keeping it OUT of the
+    # `running` arm is what preserves `orphaned`'s meaning — a signal stop that
+    # fell through to `orphaned` would report "died without writing a terminal
+    # state" about a run that wrote one.
+    complete|halted|signalled)
       VERDICT_RC=0; WAITABLE=0 ;;
     running)
       if unit_is_active; then
