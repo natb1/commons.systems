@@ -919,11 +919,11 @@ _hold_node_ci_pending() {
 # The PR-sensor globals _read_pr_ci owns. Declared here because `set -u` is on
 # and the qa|review arm reads _CI_PR/_CI_RC to decide whether a fetch is needed
 # at all — a read that must not depend on some earlier gate having run first.
-_CI_MERGED=""; _CI_HEAD=""; _CI_VERDICT=""; _CI_MERGEABLE=""; _CI_DRAFT=""
+_CI_MERGED=""; _CI_STATE=""; _CI_HEAD=""; _CI_VERDICT=""; _CI_MERGEABLE=""; _CI_DRAFT=""
 _CI_PR=""; _CI_RC=1; _CI_VERDICT_RC=1
 
 # _read_pr_ci <pr> — one gh_pr_view_rest + one CI verdict, into globals
-# _CI_MERGED / _CI_HEAD / _CI_VERDICT / _CI_MERGEABLE / _CI_DRAFT, plus the
+# _CI_MERGED / _CI_STATE / _CI_HEAD / _CI_VERDICT / _CI_MERGEABLE / _CI_DRAFT, plus the
 # bookkeeping globals _CI_PR / _CI_RC / _CI_VERDICT_RC that say WHICH candidate
 # the sensors describe and how well the read went. rc 1 when the PR is
 # unreadable.
@@ -941,11 +941,15 @@ _CI_PR=""; _CI_RC=1; _CI_VERDICT_RC=1
 # failed once this iteration. _CI_RC carries the success/failure half.
 _read_pr_ci() {
   local pr="$1" pv
-  _CI_MERGED=""; _CI_HEAD=""; _CI_VERDICT=""; _CI_MERGEABLE=""; _CI_DRAFT=""
+  _CI_MERGED=""; _CI_STATE=""; _CI_HEAD=""; _CI_VERDICT=""; _CI_MERGEABLE=""; _CI_DRAFT=""
   _CI_VERDICT_RC=1
   _CI_PR="$pr"; _CI_RC=1
   pv=$(gh_pr_view_rest "$pr" 2>/dev/null) || return 1
   _CI_MERGED=$(jq -r '.mergedAt // empty' <<<"$pv" 2>/dev/null)
+  # OPEN / CLOSED, upcased by the projection. REST has no MERGED state — a
+  # merged PR is `closed` too — so `state` alone never means "unmerged"; it is
+  # only decisive once `mergedAt` has been checked.
+  _CI_STATE=$(jq -r '.state // empty' <<<"$pv" 2>/dev/null)
   _CI_MERGEABLE=$(jq -r '.mergeable // empty' <<<"$pv" 2>/dev/null)
   # `| tostring`, NOT `// empty`: jq's alternative operator treats `false` as
   # absent, so `.isDraft // empty` would map a genuinely non-draft PR — the one
@@ -1405,6 +1409,33 @@ sensor_gate() {
       # to this selector tactic-review-stall-pr-json-duplicate-fetch pins.
       merged_at="$_CI_MERGED"
       if [[ -n "$merged_at" ]]; then echo "pr-merged-awaiting-reconcile"; return 1; fi
+      # The OTHER terminal PR state, and the one every CI-shaped sensor below
+      # mistakes for a healthy draft. A PR CLOSED WITHOUT MERGING reports:
+      # `mergedAt` null (so the merged branch above correctly did not fire),
+      # `isDraft` still true (GitHub keeps `draft` set on a PR closed while
+      # draft), and `mergeable` null -> UNKNOWN (REST stops computing it once a
+      # PR closes) — which is precisely the value the CONFLICTING short-circuit
+      # below deliberately falls through. If that PR's head sha also carries an
+      # empty check rollup (path-filtered workflows, or checks that simply never
+      # ran), `dispatch_classify_rollup` maps it to `pending` with rc 0, so the
+      # unreadable guard does not fire either. The node then reads as `waiting`,
+      # accrues a strike EVERY tick, and at the cap is parked to `office_hours`
+      # as `ci-pending-stalled` — telling a human to go re-trigger CI on a PR
+      # that is closed. A true statement about the counter and a false one about
+      # the node.
+      #
+      # `state` is the one field that separates it, so it is checked HERE rather
+      # than folded into the readiness decision: the readiness decision answers
+      # "has CI concluded", and for a closed PR that question has no meaning to
+      # answer either way.
+      #
+      # Neither counts nor clears the strike ladder, matching the merged branch
+      # directly above: a terminal PR state is not evidence about CI in either
+      # direction. Nothing here reopens the PR or edits the graph — the node is
+      # skipped with an accurate reason and left for a human (or a future
+      # reconciler) to dispose of, which is the same posture
+      # `pr-merged-awaiting-reconcile` takes.
+      if [[ "$_CI_STATE" != "OPEN" ]]; then echo "pr-closed-unmerged"; return 1; fi
       # The head SHA that keys the CI-pending strike ladder below, off the same
       # projection as mergedAt. Guaranteed non-empty here: _read_pr_ci returns 1
       # (hence _CI_RC != 0, handled above) when it cannot read one.
@@ -1434,9 +1465,16 @@ sensor_gate() {
       # ONE DELIBERATE DIVERGENCE, on the first line. dispatch-ci-ready resolves
       # its argument against the OPEN-PR list, so a node whose PR is closed and
       # unmerged matched nothing and came back `ready` — selecting the node on
-      # the strength of a lookup MISS. Resolving through `$pr` instead, such a
-      # PR is now read and gated like any other. The merged case is unaffected:
-      # it returned above on `mergedAt`.
+      # the strength of a lookup MISS. Resolving through `$pr` instead, that PR
+      # is read rather than missed.
+      #
+      # It is NOT, however, "gated like any other" — and an earlier revision of
+      # this note claimed exactly that, which was wrong in a way worth recording.
+      # Every sensor below describes a LIVE PR's CI, and a closed PR answers all
+      # of them like a healthy draft, so routing it through here traded "wrongly
+      # ready" for "wrongly parked under a wrong reason". Both terminal states
+      # are therefore settled ABOVE this block, on `mergedAt` and then on
+      # `state`, and only an OPEN PR reaches the readiness decision at all.
       local ci_ready="ready"
       if [[ "$_CI_DRAFT" != "false" && "$_CI_MERGEABLE" != "CONFLICTING" ]]; then
         # Only here does the CI verdict matter — and so only here can an

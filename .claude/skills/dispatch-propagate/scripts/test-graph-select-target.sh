@@ -1169,6 +1169,22 @@ gsci_pr() {
     > "$GSCI_ROOT/pr-2999.json"
 }
 
+# gsci_pr_closed — rewrite the RAW REST PR object as CLOSED WITHOUT MERGING.
+# The shape GitHub really returns: state closed, merged_at null, `mergeable`
+# null (REST stops computing it once a PR closes) and `draft` still true. Every
+# one of those reads like a healthy draft to a gate that ignores `state`.
+gsci_pr_closed() {
+  printf '%s\n' "{\"number\":2999,\"state\":\"closed\",\"merged_at\":null,\"merge_commit_sha\":null,\"mergeable\":null,\"mergeable_state\":\"unknown\",\"draft\":true,\"title\":\"t\",\"body\":\"\",\"head\":{\"sha\":\"deadbee\",\"ref\":\"tactic-fixture\"},\"labels\":[]}" \
+    > "$GSCI_ROOT/pr-2999.json"
+}
+
+# gsci_pr_merged — the OTHER terminal state, which REST also reports as
+# `state: closed`; only a non-null merged_at separates them.
+gsci_pr_merged() {
+  printf '%s\n' "{\"number\":2999,\"state\":\"closed\",\"merged_at\":\"2026-08-31T00:00:00Z\",\"merge_commit_sha\":\"feedface\",\"mergeable\":null,\"mergeable_state\":\"unknown\",\"draft\":true,\"title\":\"t\",\"body\":\"\",\"head\":{\"sha\":\"deadbee\",\"ref\":\"tactic-fixture\"},\"labels\":[]}" \
+    > "$GSCI_ROOT/pr-2999.json"
+}
+
 # gsci_checks <json> — rewrite the single check-runs page.
 gsci_checks() { printf '%s\n' "$1" > "$GSCI_ROOT/check-runs.json"; }
 
@@ -2137,6 +2153,88 @@ assert_eq "graph-select-target sensor-isolation: exactly one pulls/3999 read" \
   "1" "$(grep -c 'pulls/3999' "$GSCI_ROOT/gh-calls.log")"
 assert_eq "graph-select-target sensor-isolation: still ZERO open-PR listings across three candidates" \
   "0" "$(grep -c '^pr list' "$GSCI_ROOT/gh-calls.log")"
+gsc_interrupt_teardown
+
+# ============================================================================
+# Test: graph-select-target — a CLOSED-unmerged PR is its own outcome
+# ============================================================================
+# The gate reads `mergedAt`, `isDraft`, `mergeable` and the CI verdict, and for
+# a while it read no `state` at all. That left one shape indistinguishable from
+# a live draft awaiting CI: a PR CLOSED WITHOUT MERGING.
+#
+# Every input the gate looked at lines up with "healthy draft, checks not
+# started yet":
+#   - mergedAt  is null  (it was never merged, so the merged branch above is
+#                         correctly NOT taken)
+#   - isDraft   is true  (GitHub keeps `draft` set on a PR closed while draft)
+#   - mergeable is null -> UNKNOWN (REST stops computing it once a PR closes),
+#                         which is exactly the value the CONFLICTING
+#                         short-circuit deliberately falls through
+#   - the rollup is EMPTY (workflows path-filtered off this branch, or the head
+#                         sha simply never ran any), and dispatch_classify_rollup
+#                         maps an empty rollup to `pending` with rc 0 — a real
+#                         verdict, so the unreadable guard does not fire either
+#
+# So the node read as `waiting`, accrued a strike EVERY tick, and after
+# DISPATCH_CI_PENDING_STRIKE_CAP observations was parked to `office_hours` as
+# `ci-pending-stalled` — telling a human to go re-trigger CI on a PR that is
+# closed. That is the misstated-reason failure the whole ci-pending bound exists
+# to avoid, reached by a different road.
+#
+# Seeded one below the cap so a single un-guarded bump lands the hold: the
+# assertions discriminate the guard directly instead of inferring it.
+echo "Test: graph-select-target — a closed-unmerged PR skips as pr-closed-unmerged, not as pending CI"
+gscip_setup 1
+gsci_pr_closed
+gsci_checks '{"check_runs":[]}'
+gscip_seed deadbee 7
+gscipc_out=$(gsci_run)
+assert_eq "graph-select-target closed-pr: a closed-unmerged PR is not selected" \
+  "empty" "$gscipc_out"
+# The load-bearing assertion: the reason NAMES the cause. `ci-pending-cap-held`
+# here would be the defect — a true statement about the counter and a false one
+# about the node.
+assert_eq "graph-select-target closed-pr: the skip reason names the closed PR" \
+  "1" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+assert_eq "graph-select-target closed-pr: it is NOT reported as a pending-CI observation" \
+  "0" "$(grep -c 'ci-pending' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+# Neither counted nor cleared, matching the merged branch directly above it: a
+# terminal PR state is not evidence about CI in either direction.
+assert_eq "graph-select-target closed-pr: the strike ladder is left untouched" \
+  "deadbee 7" "$(gscip_sidecar)"
+assert_eq "graph-select-target closed-pr: NO office_hours hold lands, even at the cap boundary" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- Control: the SAME empty rollup on an OPEN draft still counts a strike ---
+# Without this, the case above would pass just as well if the gate had started
+# treating every empty rollup as a closed PR. The only difference between the
+# two runs is `state`.
+echo "Test: graph-select-target — an OPEN draft with the same empty rollup still counts a ci-pending strike"
+gscip_setup 1
+gsci_checks '{"check_runs":[]}'
+gscip_seed deadbee 3
+gsci_run >/dev/null
+assert_eq "graph-select-target closed-pr control: an OPEN draft still accrues the strike" \
+  "deadbee 4" "$(gscip_sidecar)"
+assert_eq "graph-select-target closed-pr control: the OPEN draft is not reported as closed" \
+  "0" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+gsc_interrupt_teardown
+
+# --- A closed-unmerged PR is not mistaken for a MERGED one ------------------
+# The two terminal states share `state: CLOSED` in REST and are told apart only
+# by `mergedAt`. Routing a closed-unmerged PR as `pr-merged-awaiting-reconcile`
+# would promise a reconcile-to-done that is never coming.
+echo "Test: graph-select-target — a MERGED PR still routes to reconcile, not to the closed-unmerged outcome"
+gscip_setup 1
+gsci_pr_merged
+gscipm_out=$(gsci_run)
+assert_eq "graph-select-target closed-pr: a merged PR is still not selected" \
+  "empty" "$gscipm_out"
+assert_eq "graph-select-target closed-pr: a merged PR still routes to reconcile" \
+  "1" "$(grep -c 'pr-merged-awaiting-reconcile' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+assert_eq "graph-select-target closed-pr: a merged PR is NOT reported as closed-unmerged" \
+  "0" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
 gsc_interrupt_teardown
 
 report_results
