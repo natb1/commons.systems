@@ -152,11 +152,16 @@ override, which costs a permission-classifier round trip on every call and
 spends the signal an override is meant to carry. `node --import tsx/esm` needs
 neither.
 
-**The repo is mixed, and no sweep has been done.** Measured 2026-08-30 under
-`packages/intentionsutil/scripts/`: 40 files carry `node --import tsx/esm`, 32
-still carry `npx tsx`. Under `intentions/` the stale form leads, 107 node bodies
-to 59. Expect to meet `npx tsx` and translate it rather than assuming the file
-is wrong about something else.
+**The repo is mixed, and the sweep is partial.** A sweep has now been done —
+the PR carrying this paragraph is it — so the earlier "no sweep has been done"
+is retired. Re-measured 2026-08-31 on that branch, counting files that contain
+each string (a file may contain both, which is how the superseded reading
+counted too): under `packages/intentionsutil/scripts/`, 60 files carry
+`node --import tsx/esm` and 14 still carry `npx tsx`, superseding 40 and 32.
+Under `intentions/` the two forms are near parity, 91 node bodies carrying the
+working spelling against 95 still on `npx tsx` — the recorded "107 to 59" is
+superseded in both halves. Expect to meet `npx tsx` and translate it rather than
+assuming the file is wrong about something else.
 
 What one PR corrected was four *call sites in tool documentation*, not four
 headers: the `Usage:` headers of `write-node.ts`, `dump-node.ts` and

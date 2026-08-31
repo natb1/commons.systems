@@ -2,7 +2,7 @@
  * Extracts the first N image pages from a Little Nemo CBZ and writes them
  * as base64-encoded JSON for use by the storage seed. Run once to generate:
  *
- *   npx tsx print/seeds/extract-little-nemo.ts ~/Downloads/little-nemo-all-421.cbz print/seeds/little-nemo-pages.json 5
+ *   node --import tsx/esm print/seeds/extract-little-nemo.ts ~/Downloads/little-nemo-all-421.cbz print/seeds/little-nemo-pages.json 5
  *
  * Arguments:
  *   1. Path to source CBZ file

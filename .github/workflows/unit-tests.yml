@@ -202,7 +202,7 @@ jobs:
       # the same disjunct because this step cannot run without them.
       - name: Validate intention graph
         if: steps.changes.outputs.graph == 'true' || github.ref == 'refs/heads/main'
-        run: npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions ${{ github.ref == 'refs/heads/main' && '--strict-sensors' || '' }}
+        run: node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions ${{ github.ref == 'refs/heads/main' && '--strict-sensors' || '' }}
 
   dead-code:
     runs-on: ubuntu-latest

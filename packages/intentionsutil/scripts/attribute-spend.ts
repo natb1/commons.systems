@@ -18,7 +18,7 @@
 // the rule with it.
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/attribute-spend.ts <usage-audit.json>
+//   node --import tsx/esm packages/intentionsutil/scripts/attribute-spend.ts <usage-audit.json>
 //
 // Reads the document at the given path, prints the four-row fold with a TOTAL
 // line, then either the SPEND-DEVIATION FLAG or the line saying it did not fire.

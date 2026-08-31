@@ -88,7 +88,7 @@ fi
 # read error, exit 2 on a usage/malformed-store error) aborts before the
 # per-PR loop with nothing merged.
 CONFLICT_PRS_RC=0
-CONFLICT_PRS=$( (cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/list-conflict-nodes.ts --dir "$REPO_ROOT/intentions") ) || CONFLICT_PRS_RC=$?
+CONFLICT_PRS=$( (cd "$REPO_ROOT" && node --import tsx/esm packages/intentionsutil/scripts/list-conflict-nodes.ts --dir "$REPO_ROOT/intentions") ) || CONFLICT_PRS_RC=$?
 if [[ "$CONFLICT_PRS_RC" -ne 0 ]]; then
   echo "dispatch-auto-merge: error: list-conflict-nodes failed (rc=$CONFLICT_PRS_RC); cannot compute the conflict-interrupt set — merging nothing this pass" >&2
   exit 1

@@ -11,7 +11,7 @@
 // sensor.
 //
 // Run from anywhere (the store dir is resolved relative to this file, not cwd):
-//   npx tsx packages/intentionsutil/scripts/ledger-census.ts
+//   node --import tsx/esm packages/intentionsutil/scripts/ledger-census.ts
 
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
