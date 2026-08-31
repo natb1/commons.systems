@@ -1141,4 +1141,148 @@ assert_eq "uncorroborated-empty: stderr reports the unknown liveness" "yes" \
   "$(sd_contains 'observing tactic-uncorroborated-empty (liveness unknown this pass')"
 sd_teardown
 
+
+# --- Test 15l: a TORN worktree is not a live checkout ------------------------
+
+# Round 5's second finding. `no_wt` came from `[[ -d "$wt" ]]` alone, so a path
+# that exists but is not a readable checkout -- the state a torn sandboxed
+# `git worktree remove` leaves, and the very state this arm exists to survive --
+# skipped the no-worktree arm and fell into rule (h). There both sync predicates
+# fail their `git -C` and return 1, so the park announced "the winner left work
+# UNPUSHED in $wt" with head `<unavailable>` and told the operator to push from
+# a checkout git cannot open.
+echo "Test: a torn worktree is measured as absent, not as stranded work"
+sd_setup
+sd_write_node "tactic-torn-wt" unparked
+sd_commit_nodes
+# A directory, with content, and NO git checkout of its own. Deliberately not
+# `git init`ed: the point is a path git cannot resolve as its own toplevel.
+mkdir -p "$SD_REPO/.claude/worktrees/tactic-torn-wt"
+printf 'left behind by a torn removal\n' > "$SD_REPO/.claude/worktrees/tactic-torn-wt/f.txt"
+sd_add_session "0bb2-2222" "tactic-torn-wt"
+sd_install_claude 0
+standdown_write "tactic-torn-wt" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "torn-wt: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "torn-wt: the reason does NOT claim work is unpushed in the torn path" "no" \
+  "$(case "$(sd_park_reason)" in *'left work UNPUSHED in'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "torn-wt: the reason names the tear" "yes" \
+  "$(case "$(sd_park_reason)" in *'git cannot read it as a checkout'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "torn-wt: the recommendation says to clear the torn path first" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'worktree prune'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+sd_teardown
+
+# --- Test 15m: uncommitted work in the SHARED checkout is not an all-clear ----
+
+# Round 5's first finding. The arm measures refs/heads/<node> and nothing else,
+# but the two lanes it was written for -- kind == strategy, and the
+# align-tactics rung -- run against the SHARED checkout and never create that
+# ref. Their at-risk work is uncommitted there, so the arm answered "nothing to
+# recut ... do NOT create one" for exactly its motivating case. The dirt is not
+# attributed to the node (any session may have left it); the verdict degrades to
+# UNKNOWN and names the thing to look at.
+echo "Test: uncommitted work in the shared checkout degrades the verdict to UNKNOWN"
+sd_setup
+sd_write_node "tactic-shared-dirt" unparked
+sd_commit_nodes
+# No worktree and no branch: every branch predicate in the arm answers "nothing
+# at risk". The only at-risk work is this, in the shared checkout.
+printf '\n' >> "$SD_REPO/intentions/tactic-shared-dirt.md"
+sd_add_session "0bb2-2222" "tactic-shared-dirt"
+sd_install_claude 0
+standdown_write "tactic-shared-dirt" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "shared-dirt: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "shared-dirt: the log reports unknown, not false" '"unknown"' "$(sd_log_unpushed)"
+assert_eq "shared-dirt: the reason names the shared checkout" "yes" \
+  "$(case "$(sd_park_reason)" in *'uncommitted tracked file(s)'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "shared-dirt: the recommendation says to inspect it before releasing" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'status --porcelain'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+sd_teardown
+
+# --- Test 15n: the reason tag follows the VERDICT, not the arm ----------------
+
+# Round 5's fourth finding. `reason_tag` was set unconditionally to the
+# no-worktree tag, including on the branch that had just measured
+# unpushed=true. A park carrying stranded work was therefore filed under the tag
+# the header ladder documents as "nothing at risk", so a triage grep for
+# standdown-winner-dead-work-unpushed missed it entirely.
+echo "Test: a no-worktree park carrying stranded work is filed under the unpushed tag"
+sd_setup
+sd_write_node "tactic-tag-follows-verdict" unparked
+sd_commit_nodes
+sd_write_orphan_branch "tactic-tag-follows-verdict"
+sd_add_session "0bb2-2222" "tactic-tag-follows-verdict"
+sd_install_claude 0
+standdown_write "tactic-tag-follows-verdict" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_run
+assert_eq "tag-follows-verdict: the log reports unpushed work" 'true' "$(sd_log_unpushed)"
+case "$(sd_park_reason)" in
+  standdown-winner-dead-work-unpushed*) sd_reason_tag="yes" ;;
+  *) sd_reason_tag="no" ;;
+esac
+assert_eq "tag-follows-verdict: reason carries the work-unpushed tag" "yes" "$sd_reason_tag"
+case "$(sd_park_reason)" in
+  standdown-winner-dead-node-held-no-worktree*) sd_reason_tag="yes" ;;
+  *) sd_reason_tag="no" ;;
+esac
+assert_eq "tag-follows-verdict: reason does NOT carry the nothing-at-risk tag" "no" "$sd_reason_tag"
+sd_teardown
+
+# --- Test 15o: the broken-ref discriminator survives a translated locale ------
+
+# Round 5's third finding. The absent-vs-broken discriminator is a substring
+# match on git's own warning text, and git LOCALIZES warnings. Under a
+# translated locale the match fails, the broken ref reclassifies as ABSENT, and
+# the arm issues the false all-clear it exists to prevent.
+#
+# The translation is EMULATED by a shim rather than depending on a translated
+# locale being installed on the host -- there is none here, so a test that just
+# set LC_ALL would pass whether or not the pin exists. The shim answers only for
+# this node's ref and execs the real git for everything else; it reports the
+# English warning when it is called under LC_ALL=C and a French one otherwise.
+# So the assertion below fails if and only if the lib stops pinning the locale.
+echo "Test: a broken ref is still discriminated when the ambient locale is translated"
+sd_setup
+sd_write_node "tactic-locale-broken" unparked
+sd_commit_nodes
+sd_write_broken_branch "tactic-locale-broken"
+sd_add_session "0bb2-2222" "tactic-locale-broken"
+sd_install_claude 0
+standdown_write "tactic-locale-broken" declared "0aa1-1111" "0aa1-1111,0bb2-2222"
+sd_real_git=$(command -v git)
+mkdir -p "$SD_DIR/gitshim"
+cat > "$SD_DIR/gitshim/git" <<GITSHIM
+#!/usr/bin/env bash
+for _a in "\$@"; do
+  if [ "\$_a" = "refs/heads/tactic-locale-broken" ]; then
+    if [ "\${LC_ALL:-}" = "C" ]; then
+      echo "warning: ignoring broken ref refs/heads/tactic-locale-broken" >&2
+    else
+      echo "avertissement : reference cassee ignoree refs/heads/tactic-locale-broken" >&2
+    fi
+    exit 1
+  fi
+done
+exec "$sd_real_git" "\$@"
+GITSHIM
+chmod +x "$SD_DIR/gitshim/git"
+sd_saved_path="$PATH"
+PATH="$SD_DIR/gitshim:$PATH"
+# Any value that is not exactly `C` does the job -- the shim keys on that,
+# not on the locale being a real translated one. en_US.utf8 is installed on
+# this host, so bash does not warn the way an absent fr_FR.UTF-8 would.
+export LC_ALL=en_US.utf8
+sd_run
+unset LC_ALL
+PATH="$sd_saved_path"
+assert_eq "locale-broken: park-node invoked exactly once" "1" "$(sd_park_calls)"
+assert_eq "locale-broken: the log reports unknown, not false" '"unknown"' "$(sd_log_unpushed)"
+assert_eq "locale-broken: the reason does NOT claim no branch exists" "no" \
+  "$(case "$(sd_park_reason)" in *'No branch refs/heads/tactic-locale-broken exists'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+assert_eq "locale-broken: the recommendation still points at the reflog" "yes" \
+  "$(case "$(sd_park_recommendation)" in *'logs/refs/heads/tactic-locale-broken'*) printf 'yes' ;; *) printf 'no' ;; esac)"
+sd_teardown
+
+
 report_results

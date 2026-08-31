@@ -696,8 +696,32 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
       # clearing here would erase the only durable record of a stand-down whose
       # holder is still live.
       local wt="$repo_root/.claude/worktrees/$node"
-      local no_wt=0
-      [[ -d "$wt" ]] || no_wt=1
+      local no_wt=0 torn_wt=0
+      # `-d` alone is not "a usable checkout". A TORN removal -- the state a
+      # sandboxed `git worktree remove` leaves behind, and the state this whole
+      # arm exists to survive -- leaves the path PRESENT while git can no longer
+      # read it. Such a path used to skip the no-worktree arm entirely and fall
+      # into rule (h), where both sync predicates fail their `git -C` and return
+      # 1: the park then read "the winner left work UNPUSHED in $wt", printed
+      # `<unavailable>` for the head, and told the operator to push from a
+      # checkout git cannot open. Measure readability; never infer it from the
+      # directory's existence.
+      if [[ -d "$wt" ]]; then
+        # NOT `rev-parse --git-dir`: the worktrees root lives INSIDE the repo
+        # working tree, so from a torn checkout git simply walks UP and answers
+        # with the parent repo's .git -- success, and the tear goes undetected.
+        # Ask instead whether this path is its own toplevel, which is true of a
+        # live worktree and false of both tear shapes (a dangling .git file
+        # errors; a missing one resolves to the parent repo root).
+        local wt_top=""
+        wt_top=$(git -C "$wt" rev-parse --show-toplevel 2>/dev/null) || wt_top=""
+        if [[ -z "$wt_top" ]] || ! [[ "$wt_top" -ef "$wt" ]]; then
+          no_wt=1
+          torn_wt=1
+        fi
+      else
+        no_wt=1
+      fi
 
       # (g) Cap. Excess candidates are deferred to the next pass rather than
       # serializing N graph-commit landing-lock pushes inside this one.
@@ -755,7 +779,13 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
         # commits that are still recoverable from .git/logs/refs/heads/<node>.
         # That is the exact failure class this arm exists to close, and it
         # contradicts the arm's own "unmeasurable reports UNKNOWN" posture.
-        rev_err=$(git -C "$repo_root" rev-parse --verify --quiet "refs/heads/$node" 2>&1 >/dev/null) || rev_rc=$?
+        #
+        # LC_ALL=C is LOad-BEARING, not hygiene. The discriminator below is a
+        # substring match on git's own warning text, and git LOCALIZES warnings.
+        # Under a translated locale the match fails, a broken ref reclassifies as
+        # ABSENT, and the arm issues exactly the false all-clear it was written
+        # to prevent -- silently, on the one input that matters.
+        rev_err=$(LC_ALL=C git -C "$repo_root" rev-parse --verify --quiet "refs/heads/$node" 2>&1 >/dev/null) || rev_rc=$?
         if (( rev_rc == 1 )) && [[ "$rev_err" == *"broken ref"* ]]; then
           unpushed_flag="unknown"
           branch_clause="A ref for refs/heads/$node exists but is BROKEN (git reported: $rev_err), so whether unpushed work survives is UNKNOWN -- do not assume there is none."
@@ -831,10 +861,44 @@ if [[ -z "${_LIB_STANDDOWN_RECHECK_LOADED:-}" ]]; then
             fi
           fi
         fi
-        reason_tag="standdown-winner-dead-node-held-no-worktree"
+        if (( torn_wt )); then
+          branch_clause="A directory exists at $wt but git cannot read it as a checkout -- the torn-removal state -- so it was measured as if absent. $branch_clause"
+          rec_wt_clause="A directory exists at $wt but git cannot read it as a checkout (a torn removal). Clear it with 'rm -rf $wt && git -C $repo_root worktree prune' BEFORE acting on the following. $rec_wt_clause"
+        fi
+
+        # Every measurement above asks about refs/heads/<node>. Two lanes never
+        # create that ref at all: kind == strategy, and the align-tactics rung,
+        # both of which spawn with --cwd pointing at the SHARED checkout rather
+        # than at a per-node worktree. Their at-risk work is UNCOMMITTED there,
+        # which no branch predicate can see -- so a "false" verdict here would be
+        # an all-clear issued over precisely this arm's motivating case.
+        #
+        # Dirt in the shared checkout is NOT attributed to this node: any session
+        # may have left it, and claiming otherwise would be a different lie. The
+        # verdict degrades to UNKNOWN and names the thing to go look at, which is
+        # this arm's stated "unmeasurable reports UNKNOWN, never safe" posture.
+        if [[ "$unpushed_flag" == "false" ]]; then
+          local shared_dirty="" shared_dirty_rc=0 shared_dirty_count=0
+          shared_dirty=$(git -C "$repo_root" status --porcelain --untracked-files=no 2>/dev/null) || shared_dirty_rc=$?
+          if (( shared_dirty_rc == 0 )) && [[ -n "$shared_dirty" ]]; then
+            shared_dirty_count=$(printf '%s\n' "$shared_dirty" | wc -l | tr -d ' ')
+            unpushed_flag="unknown"
+            branch_clause="$branch_clause However, the shared checkout at $repo_root holds $shared_dirty_count uncommitted tracked file(s). Sessions spawned against the shared checkout rather than a per-node worktree (kind == strategy, and the align-tactics rung) leave their work THERE and never create refs/heads/$node, so none of it would appear in any branch measurement above. Whether any of it belongs to this node is UNKNOWN."
+            rec_wt_clause="$rec_wt_clause Before releasing the node, inspect the $shared_dirty_count uncommitted tracked file(s) in the shared checkout with 'git -C $repo_root status --porcelain': a session that ran against the shared checkout leaves its work there, not on a branch."
+          fi
+        fi
+
+        # The tag follows the VERDICT, not the arm. Filing a park that carries
+        # stranded work under the tag the header ladder documents as "nothing at
+        # risk" hides it from the triage grep that looks for the unpushed tag.
+        if [[ "$unpushed_flag" == "true" ]]; then
+          reason_tag="standdown-winner-dead-work-unpushed"
+        else
+          reason_tag="standdown-winner-dead-node-held-no-worktree"
+        fi
         printf -v reason \
-          'standdown-winner-dead-node-held-no-worktree: a session stood down for this node in favour of winner session %s, which is no longer registered with the Claude daemon. No worktree exists at %s. %s The node is still held by session(s) %s waiting on a session that no longer exists, so nothing will advance it without intervention.' \
-          "${m_winner:-(unattributed — observed duplicate, no winner declared)}" "$wt" "$branch_clause" "${survivors:-none}"
+          '%s: a session stood down for this node in favour of winner session %s, which is no longer registered with the Claude daemon. No usable worktree exists at %s. %s The node is still held by session(s) %s waiting on a session that no longer exists, so nothing will advance it without intervention.' \
+          "$reason_tag" "${m_winner:-(unattributed — observed duplicate, no winner declared)}" "$wt" "$branch_clause" "${survivors:-none}"
       elif ! worktree_in_sync "$wt" && ! worktree_merged_in_sync "$wt"; then
         unpushed_flag="true"
         reason_tag="standdown-winner-dead-work-unpushed"
