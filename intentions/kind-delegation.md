@@ -118,5 +118,7 @@ attributes:
       awaiting selection
     refining: under active dialectic
     codified: the author has personally settled this attachment record
+    superseded: the intent moved to another node — abandoned, not completed;
+      superseded_by names the successor
 ---
 # Delegation — an attachment record; where capture is detected and recovery kept real
