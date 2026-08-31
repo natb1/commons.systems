@@ -9,7 +9,8 @@
 # never authors node content itself (except the office_hours parking fallback
 # below, which goes through store.ts's writeNode, not raw text): it stages
 # exactly `intentions/<id>.md` for each id, commits, stamps the commit's SHA
-# with the four required checks via a throwaway `graph/**` scratch branch, and
+# with the four checks this loop waits on via a throwaway `graph/**` scratch
+# branch (three of them required by main's ruleset — see below), and
 # fast-forwards that SHA onto `main` directly (no PR) with a bounded
 # rebase-retry loop.
 #

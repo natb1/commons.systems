@@ -74,9 +74,11 @@ jobs:
   # such a context required is a deadlock, not a safety net: it can never be
   # satisfied, and every graph write in the repo stops. That is why the three
   # contexts currently required by ruleset 12884700 (`acceptance`, `lint`,
-  # `unit-tests`) are required PRECISELY because this workflow stamps those
-  # names, and why `unit-tests.yml`'s `graph-validate` job carries a comment
-  # refusing to be promoted for want of exactly this.
+  # `unit-tests`) can be required at all: this workflow stamps those names.
+  # (`unit-tests.yml`'s `graph-validate` job carried a comment refusing
+  # promotion for want of exactly this; the `graph-validate` job below now
+  # supplies it, so that comment names a DIFFERENT remaining blocker — the
+  # flagless-vs-`--strict-sensors` gap spelled out at that job below.)
   #
   # WHY STUBS ARE CORRECT HERE AND NOT LAZINESS. Every job in this workflow
   # declares `needs: guard`, and `guard` runs
@@ -125,8 +127,10 @@ jobs:
   #
   # A consequence to keep in view: a `guard` failure now knocks out eight
   # dependent contexts rather than four (the 2026-08-14 shape — see
-  # `validate-graph.ts` and `read-sensors.ts`, which is why
-  # `validateRegisteredSensorNames` is non-fatal at this call site).
+  # `validate-graph.ts:217` and `read-sensors.ts:1457`, which is why the
+  # registered-sensor rule — `findUnboundRegisteredSensorNames`, the non-fatal
+  # sibling of `src/sensors.ts`'s `validateRegisteredSensorNames`, which
+  # `validate-graph.ts` does NOT call — only warns at this call site).
   # `graph-commit`'s poll is unaffected in its VERDICT — it filters check runs
   # to the exact names `["acceptance","preview-and-smoke","lint","unit-tests"]`
   # and requires four greens, so extra rows are ignored by construction
@@ -138,12 +142,25 @@ jobs:
   # fleet load the four stubs below can queue ahead of the four required ones.
   # If graph landings start timing out with everything still `pending`, raise
   # `GRAPH_COMMIT_CHECK_TIMEOUT_SECONDS` or drop these jobs — do not read it as
-  # a content failure.
+  # a content failure. Serializing the stubs behind the required four with
+  # `needs:` is NOT the answer: it would guarantee they conclude only AFTER the
+  # fast-forward, which is precisely the thing promotion requires them not to
+  # do (see PROMOTION below).
   #
-  # PROMOTION IS A SEPARATE STEP. Nothing here edits ruleset 12884700. Merging
-  # this only makes the contexts appear; promoting one requires first MEASURING
-  # that it actually lands on the scratch SHA before the fast-forward, on a real
-  # graph-commit landing.
+  # PROMOTION IS A SEPARATE STEP, AND IT IS A TWO-SIDED ONE. Nothing here edits
+  # ruleset 12884700. Merging this only makes the contexts appear; promoting one
+  # requires first MEASURING that it actually lands on the scratch SHA before
+  # the fast-forward, on a real graph-commit landing.
+  #
+  # It also requires editing `graph-commit`'s poll IN THE SAME CHANGE. That jq
+  # program hardcodes `["acceptance","preview-and-smoke","lint","unit-tests"]`
+  # and gates on `ngreen -eq 4` (`graph-commit:1978,2027`), so a context added
+  # to the ruleset but not to that list is never waited on: `await_checks`
+  # returns 0 as soon as ITS four are green and `push <sha>:main` fires with the
+  # newly-required fifth context still `pending`. Branch protection rejects that
+  # push — deterministically, on every landing, for every writer in the repo,
+  # until the list is extended. Promoting a name in the ruleset alone is a graph
+  # write outage, not a half-finished improvement.
 
   hook-tests:
     needs: guard
@@ -200,14 +217,14 @@ jobs:
   # `read-sensors.ts:1457`,
   # `.claude/skills/dispatch-propagate/scripts/detect-changes.sh:83`,
   # `.github/workflows/unit-tests.yml:133`,
-  # `packages/intentionsutil/test/reader-required-dir.test.ts:94` — all of which
-  # a rename would strand. `packages/intentionsutil/SEPARABILITY.md` is NOT on
-  # that list, despite documenting this workflow: measured 2026-08-30,
-  # `grep -ic guard packages/intentionsutil/SEPARABILITY.md` is 0 — it cites
-  # this file by PATH, never by job name, so a rename leaves it correct. No
-  # machine reference to the name exists either (`graph-commit`'s poll excludes
-  # `guard` by name filter), so the rename would have been safe mechanically and
-  # wrong descriptively.
+  # `packages/intentionsutil/test/reader-required-dir.test.ts:94`,
+  # `packages/intentionsutil/SEPARABILITY.md:156` — all of which a rename would
+  # strand. (SEPARABILITY.md cited this workflow by PATH only until it grew a
+  # job-name citation describing this very job; re-measure
+  # `grep -in guard packages/intentionsutil/SEPARABILITY.md` before assuming
+  # otherwise.) No machine reference to the name exists (`graph-commit`'s poll
+  # excludes `guard` by name filter), so the rename would have been safe
+  # mechanically and wrong descriptively.
   graph-validate:
     needs: guard
     runs-on: ubuntu-latest

@@ -135,10 +135,10 @@ unit-tests
 
 - `scripts/graph-commit:16-27` — the header states main's branch-protection
   ruleset requires named status checks green on the exact SHA before a push is
-  accepted, and that the `graph/**` fast path is what stamps them. (That header
-  attributes all four polled names to the ruleset; per the measurement above it
-  requires three of them. The fourth, `preview-and-smoke`, is a self-imposed
-  wait, not a host requirement.)
+  accepted, and that the `graph/**` fast path is what stamps them. It names the
+  same three the measurement above reports, and marks the fourth,
+  `preview-and-smoke`, as this loop's own self-imposed wait rather than a host
+  requirement.
 - `scripts/graph-commit:1977-1987` — polls
   `gh api "repos/{owner}/{repo}/commits/$sha/check-runs"` and selects check runs
   named literally `acceptance` / `preview-and-smoke` / `lint` / `unit-tests`,
