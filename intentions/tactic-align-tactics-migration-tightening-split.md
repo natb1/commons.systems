@@ -21,7 +21,18 @@ rationale: "Filed 2026-08-18 as a residual of PR #3095 (graph write-path
   then never filed. It is worth filing rather than dropping because the
   serialized PR plan violates it in two places right now, and both are currently
   safe only because PR1 fixed the origin/main data test -- which is precisely
-  what the rule says not to rely on."
+  what the rule says not to rely on.
+  AMENDED 2026-08-31: the premise in the sentence above is REFUTED.
+  graph-commit's --base is a per-id opt-in, not a whole-batch mode.
+  check_base_freshness returns early on an empty manifest and otherwise
+  iterates only the manifest's own keys, so a positional id absent from the
+  manifest is simply not CAS-checked; and the ordinary-id guard asks only
+  that intentions/<id>.md exist on disk, never on origin/main. The header
+  documents --prune as mixable with ordinary positional ids. One invocation
+  can therefore carry creates, edits and prunes together. Only the stated
+  REASON was wrong: the decision it explains -- filing PR1's residuals as
+  their own nodes rather than folding them into that batch -- stands on its
+  own merits and is not disturbed by this correction."
 reading: null
 serves:
   - strategy-graph-native-dispatch

@@ -35,7 +35,18 @@ rationale: "Filed 2026-08-18 as a residual of PR #3095 (graph write-path
   still never execute the reduction. The severity is unchanged: roughly a
   hundred remaining node closures in the serialized graph write-path plan verify
   themselves through this script, and the untested branch is specifically the
-  one that stops a false `landed`."
+  one that stops a false `landed`.
+  AMENDED 2026-08-31: the premise in the sentence above is REFUTED.
+  graph-commit's --base is a per-id opt-in, not a whole-batch mode.
+  check_base_freshness returns early on an empty manifest and otherwise
+  iterates only the manifest's own keys, so a positional id absent from the
+  manifest is simply not CAS-checked; and the ordinary-id guard asks only
+  that intentions/<id>.md exist on disk, never on origin/main. The header
+  documents --prune as mixable with ordinary positional ids. One invocation
+  can therefore carry creates, edits and prunes together. Only the stated
+  REASON was wrong: the decision it explains -- filing PR1's residuals as
+  their own nodes rather than folding them into that batch -- stands on its
+  own merits and is not disturbed by this correction."
 reading: null
 serves:
   - strategy-graph-native-dispatch
