@@ -460,17 +460,23 @@ Out of scope: `:188-265` (owned by the three concurrent siblings), the
 **Extend it; do not create a new harness.** This file is NOT autodiscovered by
 CI, so it must be invoked explicitly (see ## Verification).
 
-**Append both cases at the END of the file**, after case 11b (the file currently
-ends around `:1668`), numbering them **Case 12** and **Case 13**. Do not insert
+**Append both cases at the END of the file**, after the `# Case 11b` banner, which is
+the last case in the file. Number them **Case 12** and **Case 13**. Locate the tail by
+that banner, not by a line number: re-measured 2026-08-30 on `origin/main` the file is
+1825 lines with `# Case 11b` at `:1789`, so this plan's earlier "ends around `:1668`"
+pointed into the middle of Case 11. Do not insert
 them into the 10a–10c region: three sibling tactics are mid-implement on this same
 sweep and are likely appending near 10x, and appending at the tail minimizes
 textual conflict.
 
-Reuse the existing helpers unchanged — `new_origin()` (`:114`),
-`build_seed_repo()` (`:124`), `init_and_push()` (`:158`),
-`clone_with_node_modules()` (`:172`), `ok()`/`no()` (`:107-108`),
-`review_stall_gh_stub()` (`:1244`, stubs both REST surfaces: an OPEN/MERGEABLE PR
-and a red check-runs verdict), `review_stall_node()` (`:1289`, seeds
+Reuse the existing helpers unchanged, locating each by name. Every line number this
+plan used to carry for them was stale when re-measured on 2026-08-30, by 6 to 157 lines
+— `review_stall_gh_stub()` alone had moved from the cited `:1244` to `:1401`. The
+helpers: `new_origin()`,
+`build_seed_repo()`, `init_and_push()`,
+`clone_with_node_modules()`, `ok()`/`no()`,
+`review_stall_gh_stub()` (stubs both REST surfaces: an OPEN/MERGEABLE PR
+and a red check-runs verdict), `review_stall_node()` (seeds
 `phase: review` + `markers: [reviewed]` + `execution.pr` + `office_hours: null` —
 exactly the enumeration's candidate shape). `build_seed_repo()` already copies
 `apply-fix-state.ts`, `merge-node.ts`, `graph-commit`, `lib.sh` and
@@ -587,12 +593,13 @@ Out of scope: any edit to cases 1–11b's assertions.
   from the new lib's header rather than re-deriving why the pin must be
   diagnosis-time.
 - `.claude/skills/dispatch-propagate/scripts/test-graph-write-rollback.sh` —
-  `build_seed_repo()` (`:124`), `new_origin()` (`:114`), `init_and_push()`
-  (`:158`), `clone_with_node_modules()` (`:172`), `review_stall_gh_stub()`
-  (`:1244`), `review_stall_node()` (`:1289`), the argv-capturing `graph-commit`
-  stub (`:1330-1335`), case 6's pin assertions (`:728-795`), case 7's
-  concurrent-write wrapper (`:863-979`), `fail_graph_commit()` (`:180`) and
-  `landing_graph_commit()` (`:189`) if a variant needs a real land.
+  `build_seed_repo()`, `new_origin()`, `init_and_push()`,
+  `clone_with_node_modules()`, `review_stall_gh_stub()`,
+  `review_stall_node()`, the argv-capturing `graph-commit`
+  stub, case 6's pin assertions, case 7's
+  concurrent-write wrapper, `fail_graph_commit()` and
+  `landing_graph_commit()` if a variant needs a real land. All cited by name, not by
+  line: re-measured 2026-08-30, every number this list previously carried had drifted.
 - `.claude/skills/dispatch-propagate/scripts/test-lib-frozen-session-park.sh:726-745`
   — the "pins the EXACT blob, not merely a `--base`" assertion shape.
 

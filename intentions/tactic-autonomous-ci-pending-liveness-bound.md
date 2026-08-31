@@ -186,33 +186,50 @@ vocabulary/CLI surface; no producer is wired here (Units 2 and 3 do that).
 
 **Files that change:**
 
-- `packages/intentionsutil/scripts/hold-node-decide.ts`
-  - `HOLD_KINDS` (`:63-67`) — append `"ci-pending-stalled"`.
-  - `KIND_SLUGS` (`:71-75`) — add `"ci-pending-stalled": "ci-stalled"`.
-  - The `HOLD_KINDS` doc comment (`:36-62`) — add a `ci-stalled` bullet in the same
+> **Locate every anchor below by construct, not by line number.** This unit's scope was
+> written before the hold-kind vocabulary was extracted out of `hold-node-decide.ts`, so
+> its original line numbers are pre-extraction — one of them, `:310-315`, is past the end
+> of a file that is now 290 lines. The `## Re-landing brief` below records the move in
+> full. Where a number survives here it was re-measured 2026-08-30 and is given only as a
+> hint.
+
+- `packages/intentionsutil/src/holds.ts` — **the hold-kind vocabulary lives here now**,
+  not in `hold-node-decide.ts`, which only imports and re-exports it. Measured
+  2026-08-30: 132 lines, `HOLD_KINDS` `:36`, `KIND_SLUGS` `:44`,
+  `RESERVED_KIND_SLUGS` `:60`.
+  - `HOLD_KINDS` — append `"ci-pending-stalled"`.
+  - `KIND_SLUGS` — add `"ci-pending-stalled": "ci-stalled"`.
+  - The `HOLD_KINDS` doc comment — add a `ci-stalled` bullet in the same
     style as the existing three, stating: the autonomous tick observed the node's
     draft-PR CI verdict as `pending` on the SAME head SHA for
     `DISPATCH_CI_PENDING_STRIKE_CAP` consecutive observations (checks never started,
     or a run that never concluded). Unlike `worktree-residue` it DOES have a
     plausible self-heal (checks may still start), so it sits behind a strike ladder
     rather than escalating on first occurrence. IMPLEMENTED.
-  - The reserved-slug paragraph for `no-progress` (`:57-61`) — leave the reservation
+  - The reserved-slug paragraph for `no-progress` (`RESERVED_KIND_SLUGS`, also in
+    `holds.ts`) — leave the reservation
     intact and add one sentence recording that `ci-stalled` was minted separately
     rather than claiming it, and why (decision (c) above).
-  - `parseArgs`'s two `--kind` failure strings (`:310-315`) — these already
-    interpolate `HOLD_KINDS.join("|")` for the invalid-value case; the *missing*-value
-    case at `:311` hardcodes the three-kind list and must be updated (prefer
-    interpolating `HOLD_KINDS.join("|")` there too, so it can never drift again).
-  - The usage block in the file header (`:20-23`).
+- `packages/intentionsutil/scripts/hold-node-decide.ts` — no vocabulary here any more;
+  only these two:
+  - `parseArgs`'s two `--kind` failure strings — the invalid-value one already
+    interpolates `HOLD_KINDS.join("|")`; the *missing*-value one hardcodes the
+    three-kind list and must be updated (prefer interpolating `HOLD_KINDS.join("|")`
+    there too, so it can never drift again).
+  - The `Usage:` block in the file header.
 - `packages/intentionsutil/scripts/hold-node`
-  - Header usage line (`:35`) and the `USAGE` string (`:64`) — add the new kind.
+  - The header usage line and the `USAGE` string — add the new kind. (Re-measured
+    2026-08-30: `USAGE` is at `:70`, not the `:64` this plan used to cite.)
     `hold-node` does not itself validate the kind (it forwards to
-    `hold-node-decide.ts`, `:99`), so no validation logic changes.
+    `hold-node-decide.ts`), so no validation logic changes.
 - `packages/intentionsutil/scripts/resolve-hold`
-  - Header usage (`:78-84`) and the `USAGE` string (`:109`) — add the new kind.
-    The `--kind` default stays `provision-conflict` (`:112`). `resolve-hold` derives
-    the hold id through `hold-node-decide.ts`, so no slug map is duplicated there
-    (see its own comment at `:24-25`).
+  - The header usage comment and the `USAGE` string — add the new kind. (Re-measured
+    2026-08-30: `USAGE` is at `:122`, not `:109`.) The `--kind` default stays
+    `provision-conflict`. `resolve-hold` derives the hold id through
+    `hold-node-decide.ts`, so no slug map is duplicated there. Note that
+    `resolve-hold`'s own header comment still cites `KIND_SLUGS` as
+    `hold-node-decide.ts:57-60` — that is the pre-extraction location, and the map is
+    now in `src/holds.ts`. Correcting that comment is out of scope here.
 - `packages/intentionsutil/test/hold-node-decide.test.ts` — add cases mirroring the
   existing `hold_kind` assertions at `:110`, `:153`, `:162`:
   - `holdIdFor("ci-pending-stalled", "tactic-foo")` === `"tactic-hold-ci-stalled-foo"`.
