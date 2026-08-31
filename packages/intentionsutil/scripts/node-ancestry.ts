@@ -45,7 +45,7 @@
 // explicit `--dir`.
 //
 // Usage:
-//   npx tsx packages/intentionsutil/scripts/node-ancestry.ts <node-id> \
+//   node --import tsx/esm packages/intentionsutil/scripts/node-ancestry.ts <node-id> \
 //     [--dir <intentions-dir>] [--out <path>]
 //
 // Without --out, the rendered Markdown is written to stdout; with --out, it is

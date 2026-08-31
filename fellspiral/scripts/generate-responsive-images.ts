@@ -2,7 +2,7 @@
  * Offline script to generate responsive image variants from originals.
  * Output goes to fellspiral/public/ alongside the full-size images.
  *
- * Usage: npx tsx fellspiral/scripts/generate-responsive-images.ts
+ * Usage: node --import tsx/esm fellspiral/scripts/generate-responsive-images.ts
  */
 import sharp from "sharp";
 import path from "node:path";

@@ -3,8 +3,8 @@
 //
 // Run via tsx, e.g.:
 //   FIRESTORE_NAMESPACE=budget/test FIRESTORE_EMULATOR_HOST=localhost:8080 \
-//     npx tsx budget/scripts/migrate-to-journal-entries.ts
-//   FIRESTORE_NAMESPACE=budget/prod npx tsx budget/scripts/migrate-to-journal-entries.ts --prod
+//     node --import tsx/esm budget/scripts/migrate-to-journal-entries.ts
+//   FIRESTORE_NAMESPACE=budget/prod node --import tsx/esm budget/scripts/migrate-to-journal-entries.ts --prod
 //
 // This script imports `accountDocId` from `budget/src/entities/account.ts` —
 // that module imports `firebase/firestore` (the package) but does NOT invoke

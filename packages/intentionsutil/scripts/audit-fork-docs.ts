@@ -14,7 +14,7 @@
 // this census is local-first/no-network, that registry auto-writes `reading`/`gap`,
 // and this sensor's sufficiency half is owner judgment — report-only mirrors the
 // `audit-publishing.ts` precedent. Run from the repo root:
-//   npx tsx packages/intentionsutil/scripts/audit-fork-docs.ts
+//   node --import tsx/esm packages/intentionsutil/scripts/audit-fork-docs.ts
 //
 // Exit 0 when every artifact's README is present and non-empty; exit 1 when any
 // is missing (the missing list is the gap evidence). An unreadable or unparseable

@@ -73,7 +73,7 @@
 #       degrades to journald-only for that pass — but must still report this
 #       graph-write failure in its own output.
 #   64  usage error / unknown kind.
-#   69  environment error (missing node/npx/git/jq/flock, the graph-write mutex
+#   69  environment error (missing node/git/jq/flock, the graph-write mutex
 #       could not be established at all — never downgrade that to an
 #       unserialized write — or refs/remotes/origin/main does not resolve in this
 #       checkout, which makes the pre-write blob capture meaningless; nothing is
@@ -134,8 +134,8 @@
 # must not contain spaces:
 #   DISPATCH_FLEET_ALARM_GRAPH_COMMIT_CMD  default: <repo>/packages/intentionsutil/scripts/graph-commit
 #   DISPATCH_FLEET_ALARM_VERIFY_LANDED_CMD default: <repo>/packages/intentionsutil/scripts/verify-landed
-#   DISPATCH_FLEET_ALARM_WRITE_NODE_CMD    default: npx tsx <repo>/packages/intentionsutil/scripts/write-node.ts --dir <repo>/intentions
-#   DISPATCH_FLEET_ALARM_DUMP_NODE_CMD     default: npx tsx <repo>/packages/intentionsutil/scripts/dump-node.ts --dir <repo>/intentions
+#   DISPATCH_FLEET_ALARM_WRITE_NODE_CMD    default: node --import tsx/esm <repo>/packages/intentionsutil/scripts/write-node.ts --dir <repo>/intentions
+#   DISPATCH_FLEET_ALARM_DUMP_NODE_CMD     default: node --import tsx/esm <repo>/packages/intentionsutil/scripts/dump-node.ts --dir <repo>/intentions
 #   DISPATCH_FLEET_ALARM_CLASSIFY_CMD      default: the node --import tsx/esm readNode one-liner below
 #   DISPATCH_FLEET_ALARM_INTENTIONS_DIR    default: <repo>/intentions
 #   DISPATCH_FLEET_ALARM_RETRIES           default: 3   (graph-commit attempts)
@@ -267,7 +267,7 @@ else
 fi
 
 # --- Environment -------------------------------------------------------------
-for bin in date flock git jq node npx; do
+for bin in date flock git jq node; do
   command -v "$bin" >/dev/null 2>&1 || { log "required command '$bin' not found on PATH"; exit 69; }
 done
 
@@ -313,12 +313,12 @@ fi
 if [[ -n "${DISPATCH_FLEET_ALARM_WRITE_NODE_CMD:-}" ]]; then
   read -r -a WRITE_NODE_CMD <<<"$DISPATCH_FLEET_ALARM_WRITE_NODE_CMD"
 else
-  WRITE_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/write-node.ts" --dir "$REPO_ROOT/intentions")
+  WRITE_NODE_CMD=(node --import tsx/esm "$REPO_ROOT/packages/intentionsutil/scripts/write-node.ts" --dir "$REPO_ROOT/intentions")
 fi
 if [[ -n "${DISPATCH_FLEET_ALARM_DUMP_NODE_CMD:-}" ]]; then
   read -r -a DUMP_NODE_CMD <<<"$DISPATCH_FLEET_ALARM_DUMP_NODE_CMD"
 else
-  DUMP_NODE_CMD=(npx tsx "$REPO_ROOT/packages/intentionsutil/scripts/dump-node.ts" --dir "$REPO_ROOT/intentions")
+  DUMP_NODE_CMD=(node --import tsx/esm "$REPO_ROOT/packages/intentionsutil/scripts/dump-node.ts" --dir "$REPO_ROOT/intentions")
 fi
 if [[ -n "${DISPATCH_FLEET_ALARM_CLASSIFY_CMD:-}" ]]; then
   read -r -a CLASSIFY_CMD <<<"$DISPATCH_FLEET_ALARM_CLASSIFY_CMD"
