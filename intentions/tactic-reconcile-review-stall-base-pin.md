@@ -101,8 +101,20 @@ clarifications:
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: p5-base-pin
+  pr: 3165
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-31T05:53:11Z
+    mergeCommitSha: f08dab0a5471741508cc5189976b3368be9a78af
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -111,6 +123,39 @@ rounds: null
 attributes: {}
 ---
 # reconcile-graph-review-stall must pin the diagnosis-time base blob on its landing graph-commit, so a concurrently landed write is three-way-merged rather than clobbered by a stale in-memory node
+
+## Completion record — shipped 2026-08-31
+
+Landed as PR #3165 (branch `p5-base-pin`), merged
+`f08dab0a5471741508cc5189976b3368be9a78af` at 2026-08-31T05:53:11Z.
+
+**What shipped.** The pin is not open-coded at the call site. `pin_base_blob`
+was extracted into a new shared helper,
+`.claude/skills/dispatch-propagate/scripts/lib-graph-base-pin.sh` (103 lines),
+so the sibling primitives can adopt the same idiom without copying it.
+`reconcile-graph-review-stall` sources it at :124 and captures the
+diagnosis-time blob at :498 —
+`BASE_BLOB[$id]=$(pin_base_blob "$REPO_ROOT" reconcile-graph-review-stall "$id") || continue` —
+then passes each captured blob as a `--base <id>=<sha>` argument on the landing
+`graph-commit`. `reconcile-graph-merged` was migrated onto the same helper in
+the same PR (66 lines changed), and `test-graph-write-rollback.sh` grew 278
+lines of coverage for the new path.
+
+**Measured.** At diagnosis `reconcile-graph-review-stall` carried **zero**
+`--base` occurrences. PR #3165 added **7**. The file carries **10** on
+`origin/main` as of 2026-08-31; the additional 3 came later from #3170's per-id
+park partition, not from this node.
+
+**One consequence this node did not anticipate,** recorded here because it
+changes how a caller must use the mechanism: #3170 later made the park
+partition *per-id*. A caller that lands a multi-id batch while passing no
+`--base` offers no evidence a concurrent writer left any of those ids alone, so
+a divergence on one node parks **all** of them — and a wrongly-parked bystander
+does not self-heal. The pin is therefore not merely an optimisation against
+clobbering; omitting it on a multi-id batch is what converts one node's
+divergence into a whole-batch park. A *stale* pin is a different and safer
+outcome: `graph-commit` refuses with exit 3 before making any local commit.
+
 
 ## Context
 

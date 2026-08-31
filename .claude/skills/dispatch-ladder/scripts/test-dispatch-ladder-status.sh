@@ -139,6 +139,43 @@ run_status
 assert_eq "orphaned: exits 0 (terminal)" "0" "$RC"
 assert_eq "orphaned: the status line names the orphan" "orphaned $NODE await implement - -" "$OUT"
 
+# --- signalled ---------------------------------------------------------------
+# The driver's signal path (dispatch-ladder-run's signal_terminal_write) is a
+# SECOND terminal path that deliberately does not route through halt(): it does
+# the local writes only, because classify_terminus makes network reads and the
+# evaluation spawn is a daemon round trip, neither of which fits inside
+# TimeoutStopSec. The status it writes must be recognized here, and recognized
+# as its OWN thing.
+#
+# Two ways this reader could get it wrong, one case each:
+#   * not recognizing `signalled` at all — it would fall through to the `*)` arm
+#     and be reported as CORRUPTION (exit 1), so an ordinary `systemctl --user
+#     stop` would look like a damaged state file.
+#   * folding it into `running` — the unit is inactive by then, so it would be
+#     relabelled `orphaned`, whose documented meaning is "the driver died
+#     WITHOUT writing a terminal state". That is the vocabulary lying about a
+#     stop that was clean, deliberate, and did write one.
+# The unit is INACTIVE in both cases, which is the realistic shape: systemd has
+# already collected the transient unit by the time anyone reads the state.
+echo "Test: a 'signalled' state is TERMINAL and keeps its own name (not 'orphaned')"
+write_state signalled merge implement signalled ""
+unit_inactive
+run_status
+assert_eq "signalled: exits 0 (terminal)" "0" "$RC"
+assert_eq "signalled: the status line keeps the name and does NOT say orphaned" \
+  "signalled $NODE merge implement signalled -" "$OUT"
+
+echo "Test: a 'signalled' state does not burn the --wait window"
+# WAITABLE must be 0: the driver is gone and nothing will rewrite this file, so
+# polling for the full window would only delay the answer.
+write_state signalled merge implement signalled ""
+unit_inactive
+SECONDS_BEFORE=$SECONDS
+run_status --wait --timeout-s 10 --poll-s 5
+assert_eq "signalled: --wait returns immediately, exit 0" "0" "$RC"
+assert_eq "signalled: --wait did not sleep" "1" \
+  "$([ $(( SECONDS - SECONDS_BEFORE )) -lt 5 ] && echo 1 || echo 0)"
+
 # --- Corruption --------------------------------------------------------------
 echo "Test: an unreadable or unrecognized state file is an error, not a guess"
 printf 'not json at all\n' >"$STATE_FILE"

@@ -249,8 +249,37 @@ if (
     grep -q '^OnFailure=dispatch-tick-recover.service$' "$ehu_svc" \
       && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service has OnFailure=dispatch-tick-recover.service"; } \
       || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service missing OnFailure=dispatch-tick-recover.service"; }
+    # SuccessExitStatus=SIGTERM SIGINT, in the [Service] SECTION specifically.
+    #
+    # dispatch-tick's INT/TERM handler dies OF the signal rather than exiting
+    # 143, on the strength of systemd counting SIGHUP/SIGINT/SIGTERM/SIGPIPE
+    # death as a clean stop. systemd.service(5) excepts Type=oneshot from that
+    # rule — "in addition to the normal successful exit status 0 and, except for
+    # Type=oneshot, the signals SIGHUP, SIGINT, SIGTERM, and SIGPIPE" — and this
+    # unit IS Type=oneshot, so without this directive a `systemctl --user stop
+    # dispatch-heartbeat.service` mid-tick still ends the unit `Failed with
+    # result 'signal'` and fires the OnFailure= asserted just above.
+    #
+    # test-dispatch-tick.sh's sigterm-kind/sigint-kind cases cannot catch this:
+    # they assert WIFSIGNALED, which holds either way. This is the unit-level
+    # half, so it is asserted against the generated unit text.
+    #
+    # SECTION-AWARE on purpose. A bare `grep` would pass on a directive that
+    # landed under [Unit], where systemd would reject it as an unknown key and
+    # the carve-out would silently not apply. awk prints only the lines between
+    # `[Service]` and the next section header.
+    ehu_service_section=$(awk '/^\[/{insec = ($0 == "[Service]")} insec' "$ehu_svc")
+    grep -qx 'SuccessExitStatus=SIGTERM SIGINT' <<<"$ehu_service_section" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service [Service] section has SuccessExitStatus=SIGTERM SIGINT"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service [Service] section missing SuccessExitStatus=SIGTERM SIGINT (a Type=oneshot unit does NOT get systemd's four-signal clean-stop carve-out, so a stop mid-tick would fire OnFailure=)"; }
+    # The precondition that makes the line above load-bearing, asserted in the
+    # same section so the pair moves together: drop Type=oneshot and the
+    # carve-out applies on its own; keep it and SuccessExitStatus= is required.
+    grep -qx 'Type=oneshot' <<<"$ehu_service_section" \
+      && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: service [Service] section has Type=oneshot (the reason SuccessExitStatus= is needed)"; } \
+      || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: service [Service] section missing Type=oneshot"; }
   else
-    TOTAL=$((TOTAL + 4)); FAIL=$((FAIL + 4))
+    TOTAL=$((TOTAL + 6)); FAIL=$((FAIL + 6))
     echo "  FAIL: cold path did not write dispatch-heartbeat.service"
   fi
   if [ -f "$ehu_tmr" ]; then
@@ -281,7 +310,7 @@ if (
     && { TOTAL=$((TOTAL + 1)); PASS=$((PASS + 1)); echo "  PASS: cold path ran restart dispatch-heartbeat.timer"; } \
     || { TOTAL=$((TOTAL + 1)); FAIL=$((FAIL + 1)); echo "  FAIL: cold path did not run restart dispatch-heartbeat.timer"; }
 else
-  TOTAL=$((TOTAL + 12)); FAIL=$((FAIL + 12))
+  TOTAL=$((TOTAL + 14)); FAIL=$((FAIL + 14))
   echo "  FAIL: ensure_heartbeat_units (cold path) returned non-zero"
 fi
 
