@@ -1697,6 +1697,215 @@ else
   printf 'argv: %s\n' "$argv10d"
 fi
 
+# ---------------------------------------------------------------------------
+# Cases 10e-10g: the reviewStallRoute cost guard.
+#
+# The sweep used to spawn `node --import tsx/esm -e` for EVERY candidate, to
+# evaluate a pure two-string boolean of values the shell already held. The guard
+# skips that spawn unless CI is failing or the PR is CONFLICTING -- the superset
+# interruptRoute's doc comment documents and transitions.test.ts:295 pins.
+#
+# The counting `node` shim below is modelled on Case 9c's: resolve the real
+# interpreter BEFORE the shim is on PATH (or the shim execs itself), pass it
+# through an exported variable, and exec it unconditionally at the end, so the
+# sweep still runs the REAL reviewStallRoute against the REAL
+# packages/intentionsutil/src the fixture builders copy in. It logs only when an
+# argument carries the string `reviewStallRoute`, which is what keeps it from
+# counting the sweep's other two node invocations -- the enumeration one-liner
+# (`listNodesStrictCached`) and apply-fix-state.ts. Neither contains it.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Case 10e: the counter is real. Two red MERGEABLE candidates, so the guard
+# lets BOTH through: exactly 2 predicate spawns. This is the anti-vacuity
+# control for 10f/10g -- without it, a shim whose match string went stale would
+# make those two pass for the wrong reason.
+# ---------------------------------------------------------------------------
+T10E="$WORK/t10e-seed"
+build_seed_repo "$T10E"
+cp "$HARNESS_DIR/reconcile-graph-review-stall" "$T10E/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+chmod +x "$T10E/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+review_stall_node "$T10E/intentions/t-rs1.md" t-rs1 201
+review_stall_node "$T10E/intentions/t-rs2.md" t-rs2 202
+new_origin t10e
+init_and_push "$T10E"
+
+C10E="$WORK/t10e-clone"
+clone_with_node_modules "$C10E"
+BIN10E="$WORK/t10e-bin"; FIX10E="$WORK/t10e-fixtures"
+review_stall_gh_stub "$BIN10E" "$FIX10E"
+cat >"$C10E/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t10e-argv.txt"
+exit 0
+SH
+chmod +x "$C10E/packages/intentionsutil/scripts/graph-commit"
+REAL_NODE10E="$(command -v node)"
+cat >"$BIN10E/node" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+saw_predicate=0
+for a in "$@"; do
+  case "$a" in
+    *reviewStallRoute*) saw_predicate=1 ;;
+  esac
+done
+if [[ "$saw_predicate" -eq 1 ]]; then
+  printf '%s\n' spawn >>"$GC_NODE_CALLS"
+fi
+exec "$GC_REAL_NODE" "$@"
+SH
+chmod +x "$BIN10E/node"
+
+out="$(
+  cd "$C10E" || exit 99
+  export PATH="$BIN10E:$PATH" GC_FIXTURE_DIR="$FIX10E"
+  export GC_REAL_NODE="$REAL_NODE10E" GC_NODE_CALLS="$WORK/t10e-node-calls.log"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall 2>&1
+)"; rc=$?
+spawns10e="$(wc -l <"$WORK/t10e-node-calls.log" 2>/dev/null || echo 0)"
+
+if [[ $rc -eq 0 ]] \
+   && [[ "${spawns10e// /}" -eq 2 ]] \
+   && grep -q '^recovered t-rs1 -> fix' <<<"$out" \
+   && grep -q '^recovered t-rs2 -> fix' <<<"$out" \
+   && grep -qE '^\s*since:' "$C10E/intentions/t-rs1.md" \
+   && grep -qE '^\s*since:' "$C10E/intentions/t-rs2.md"; then
+  ok "reconcile-graph-review-stall: the predicate-spawn counter is real — two red MERGEABLE candidates pass the cost guard and spawn reviewStallRoute exactly twice"
+else
+  no "reconcile-graph-review-stall predicate spawn counter (rc=$rc, spawns=$spawns10e)"
+  printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 10f: the guard holds. The same two candidates, but green check-runs, so
+# neither is failing and neither is CONFLICTING: reviewStallRoute would return
+# null for both, and the sweep must reach that conclusion without paying for a
+# single subprocess. Assertion shape mirrors the sibling guard's own pin in
+# test-graph-select-target.sh ("green + MERGEABLE spawns no node subprocess").
+# ---------------------------------------------------------------------------
+T10F="$WORK/t10f-seed"
+build_seed_repo "$T10F"
+cp "$HARNESS_DIR/reconcile-graph-review-stall" "$T10F/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+chmod +x "$T10F/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+review_stall_node "$T10F/intentions/t-rs1.md" t-rs1 201
+review_stall_node "$T10F/intentions/t-rs2.md" t-rs2 202
+new_origin t10f
+init_and_push "$T10F"
+
+C10F="$WORK/t10f-clone"
+clone_with_node_modules "$C10F"
+BIN10F="$WORK/t10f-bin"; FIX10F="$WORK/t10f-fixtures"
+review_stall_gh_stub "$BIN10F" "$FIX10F"
+# Overwrite the fixture the stub already reads — this file's convention for
+# varying stub behavior, rather than a second stub function.
+cat >"$FIX10F/checkruns-red.json" <<'JSON'
+{"check_runs": [
+  {"name": "unit-tests", "status": "completed", "conclusion": "success", "id": 1, "app": {"slug": "github-actions"}}
+]}
+JSON
+cat >"$C10F/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t10f-argv.txt"
+exit 0
+SH
+chmod +x "$C10F/packages/intentionsutil/scripts/graph-commit"
+REAL_NODE10F="$(command -v node)"
+cp "$BIN10E/node" "$BIN10F/node"
+chmod +x "$BIN10F/node"
+
+out="$(
+  cd "$C10F" || exit 99
+  export PATH="$BIN10F:$PATH" GC_FIXTURE_DIR="$FIX10F"
+  export GC_REAL_NODE="$REAL_NODE10F" GC_NODE_CALLS="$WORK/t10f-node-calls.log"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall 2>&1
+)"; rc=$?
+
+if [[ $rc -eq 0 ]] \
+   && [[ "$([ -f "$WORK/t10f-node-calls.log" ] && echo 1 || echo 0)" -eq 0 ]] \
+   && ! grep -q 'recovered' <<<"$out" \
+   && ! grep -qE '^\s*since:' "$C10F/intentions/t-rs1.md" \
+   && ! grep -qE '^\s*since:' "$C10F/intentions/t-rs2.md" \
+   && [[ ! -e "$WORK/t10f-argv.txt" ]]; then
+  ok "reconcile-graph-review-stall: the cost guard holds — a green + MERGEABLE candidate spawns no reviewStallRoute subprocess, and nothing is written or landed"
+else
+  no "reconcile-graph-review-stall cost guard (rc=$rc)"
+  printf '%s\n' "$out"
+fi
+
+# ---------------------------------------------------------------------------
+# Case 10g: the COMPOSITION of the two fixes. A CONFLICTING candidate is skipped
+# by the short-circuit BEFORE the CI fetch, so it reaches neither the check-runs
+# call nor the predicate spawn — the guard's CONFLICTING clause is unreachable
+# on this path and is retained only against tactic-review-stall-conflict-lane,
+# which proposes un-retiring the conflict arm. That retention is pinned by a
+# source-text assertion in the PR's verification, not here; what this case pins
+# is the ordering. It goes red if the short-circuit is ever moved BELOW the
+# guard, because the candidate would then pay the check-runs fetch again.
+# ---------------------------------------------------------------------------
+T10G="$WORK/t10g-seed"
+build_seed_repo "$T10G"
+cp "$HARNESS_DIR/reconcile-graph-review-stall" "$T10G/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+chmod +x "$T10G/.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall"
+review_stall_node "$T10G/intentions/t-rs1.md" t-rs1 201
+new_origin t10g
+init_and_push "$T10G"
+
+C10G="$WORK/t10g-clone"
+clone_with_node_modules "$C10G"
+BIN10G="$WORK/t10g-bin"; FIX10G="$WORK/t10g-fixtures"
+review_stall_gh_stub "$BIN10G" "$FIX10G"
+cat >"$FIX10G/checkruns-red.json" <<'JSON'
+{"check_runs": [
+  {"name": "unit-tests", "status": "completed", "conclusion": "success", "id": 1, "app": {"slug": "github-actions"}}
+]}
+JSON
+cat >"$FIX10G/pr-201.json" <<'JSON'
+{
+  "number": 201,
+  "title": "harness pr",
+  "body": "",
+  "state": "open",
+  "merged_at": null,
+  "merge_commit_sha": null,
+  "mergeable": false,
+  "mergeable_state": "dirty",
+  "head": {"ref": "harness-branch", "sha": "cccc201cccc201"},
+  "labels": []
+}
+JSON
+cat >"$C10G/packages/intentionsutil/scripts/graph-commit" <<SH
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$WORK/t10g-argv.txt"
+exit 0
+SH
+chmod +x "$C10G/packages/intentionsutil/scripts/graph-commit"
+REAL_NODE10G="$(command -v node)"
+cp "$BIN10E/node" "$BIN10G/node"
+chmod +x "$BIN10G/node"
+
+out="$(
+  cd "$C10G" || exit 99
+  export PATH="$BIN10G:$PATH" GC_FIXTURE_DIR="$FIX10G"
+  export GC_REAL_NODE="$REAL_NODE10G" GC_NODE_CALLS="$WORK/t10g-node-calls.log"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall 2>&1
+)"; rc=$?
+calls10g="$(cat "$FIX10G/gh-calls.log" 2>/dev/null || true)"
+
+if [[ $rc -eq 0 ]] \
+   && [[ "$([ -f "$WORK/t10g-node-calls.log" ] && echo 1 || echo 0)" -eq 0 ]] \
+   && grep -q '/pulls/201$' <<<"$calls10g" \
+   && ! grep -q 'check-runs' <<<"$calls10g" \
+   && ! grep -q 'recovered' <<<"$out" \
+   && ! grep -qE '^\s*since:' "$C10G/intentions/t-rs1.md" \
+   && [[ ! -e "$WORK/t10g-argv.txt" ]]; then
+  ok "reconcile-graph-review-stall: a CONFLICTING candidate is skipped before the CI fetch, so the superset guard's CONFLICTING clause is unreachable on this path and is retained only against tactic-review-stall-conflict-lane (0 check-runs calls, 0 predicate spawns)"
+else
+  no "reconcile-graph-review-stall CONFLICTING composition (rc=$rc)"
+  printf '%s\n' "$out"
+  printf 'gh calls:\n%s\n' "$calls10g"
+fi
+
 # ===========================================================================
 # Case 11: graph-select-target's interrupt gates roll their write back when the
 # land fails (tactic-eval-finding-reconcile-base-revert-blocks-main-graph-writes).
