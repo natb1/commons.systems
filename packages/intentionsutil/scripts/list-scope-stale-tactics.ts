@@ -29,9 +29,34 @@
 //
 // Stdout: each stale tactic id on its own line (nothing when none are stale).
 // Exit 0 on success; exit 2 on a usage error or a malformed store.
+//
+// Enumeration is TOLERANT and stays tolerant. A demote is a metadata-only
+// disposition, so one damaged node file must cost that node its sweep, never
+// abort the sweep for every other tactic — `listNodes`, not `listNodesStrict`.
+//
+// This runs once per dispatch tick over the whole store, so the enumeration is
+// read back through `listNodesCached` (../src/store-cache.ts) when
+// DISPATCH_GRAPH_NODE_CACHE names the tick-scoped cache directory: the same node
+// set the tick's earlier sweeps are MEANT to have already YAML-parsed,
+// deserialized from JSON instead.
+//
+// NO WRITER IS WIRED YET, so that read cannot hit: the reconcile band
+// (`graph-auto-merge`, `reconcile-graph-merged`, `reconcile-graph-review-stall`)
+// still imports `listNodesStrict` from ../src/store.js rather than
+// `listNodesStrictCached`, and nothing else publishes an entry. Until they are
+// wired, setting the var makes this sweep SLOWER — a guaranteed-miss
+// `storeFingerprint` on top of the same `listNodes`.
+//
+// That path READS cache entries and never WRITES one, because a
+// tolerant enumeration legitimately omits a corrupt node and publishing that
+// shorter set under the shared content key would later hand a STRICT gate caller
+// a store with a `blocked_by` target missing, which SATISFIES
+// `blockersComplete` (../src/router.ts). The full argument is in
+// store-cache.ts's header. An unset or empty var is byte-for-byte today's
+// `listNodes` call, and the emitted id list is identical either way.
 
 import { pathToFileURL } from "node:url";
-import { listNodes } from "../src/store.js";
+import { listNodesCached } from "../src/store-cache.js";
 import { listScopeStaleTactics } from "../src/scope-sweep.js";
 
 export interface SweepOpts {
@@ -75,7 +100,7 @@ function parseArgs(argv: string[]): SweepOpts {
 
 function main(argv: string[]): void {
   const { dir, stampDir, liveIds } = parseArgs(argv);
-  const nodes = listNodes(dir);
+  const nodes = listNodesCached(dir, process.env.DISPATCH_GRAPH_NODE_CACHE || "");
   for (const id of listScopeStaleTactics(nodes, dir, stampDir, liveIds)) {
     process.stdout.write(`${id}\n`);
   }

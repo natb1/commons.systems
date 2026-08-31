@@ -47,7 +47,8 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listNodesStrict, readNode, readNodeBody, writeNode } from "../src/store.js";
+import { readNode, readNodeBody, writeNode } from "../src/store.js";
+import { listNodesStrictCached } from "../src/store-cache.js";
 import { servingStrategyIds } from "../src/router.js";
 import {
   hasNeedsMainResidue,
@@ -67,6 +68,12 @@ interface Args {
   // side-effect. Optional so in-process callers (tests) may omit it — undefined
   // is treated as false. parseArgs always sets a definite boolean.
   noApply?: boolean;
+  // `DISPATCH_GRAPH_NODE_CACHE` (../src/store-cache.ts) names a storage
+  // LOCATION for a read-only, content-addressed memo of the strict enumeration
+  // below — never a node subset, so it cannot change what this sweep decides —
+  // and it is read at the CLI layer only, so unset/empty (and every in-process
+  // caller that omits it) simply self-enumerates.
+  cacheDir?: string;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -75,6 +82,7 @@ function parseArgs(argv: string[]): Args {
     prStatesFile: "",
     date: new Date().toISOString().slice(0, 10),
     noApply: false,
+    cacheDir: process.env.DISPATCH_GRAPH_NODE_CACHE || "",
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -204,7 +212,7 @@ export function reconcileGraph(args: Args): Plan {
   // Under the tolerant `listNodes` a corrupt node file would silently drop out
   // of `byId`, so its merged PR would never be reconciled and the node would
   // sit at a stale phase forever. A corrupt file must refuse loudly instead.
-  const nodes = listNodesStrict(args.dir);
+  const nodes = listNodesStrictCached(args.dir, args.cacheDir ?? "");
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
   const plan: Plan = { edit: [], deferred: [], reconciled: [] };

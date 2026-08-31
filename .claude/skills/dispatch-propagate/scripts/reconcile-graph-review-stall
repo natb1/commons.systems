@@ -185,11 +185,17 @@ trap 'rc=$?; [[ "$RESTORE_ON_FAILURE" -ne 0 ]] && restore_staged_writes; exit $r
 # below apply unchanged to whatever survives it. The id arrives via process.argv
 # (an empty string means "no filter"), not via the environment, so an ambient
 # variable can never silently narrow an unflagged sweep.
+#
+# `DISPATCH_GRAPH_NODE_CACHE` (packages/intentionsutil/src/store-cache.ts) names
+# a storage LOCATION for a read-only, content-addressed memo of this same strict
+# enumeration — never a node subset, so it cannot change the candidate set — and
+# `--node` still arrives via process.argv, so unset or empty simply
+# self-enumerates, which is the `/dispatch-ladder` single-node path.
 CANDIDATES="$( (cd "$REPO_ROOT" && node --import tsx/esm -e '
-  const { listNodesStrict } = await import("./packages/intentionsutil/src/store.js");
+  const { listNodesStrictCached } = await import("./packages/intentionsutil/src/store-cache.js");
   const { REVIEWED_MARKER } = await import("./packages/intentionsutil/src/transitions.js");
   const { blockersComplete } = await import("./packages/intentionsutil/src/router.js");
-  const nodes = listNodesStrict("./intentions");
+  const nodes = listNodesStrictCached("./intentions", process.env.DISPATCH_GRAPH_NODE_CACHE || "");
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const only = process.argv[1] || "";
   for (const n of nodes) {

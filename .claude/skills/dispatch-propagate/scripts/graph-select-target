@@ -156,6 +156,21 @@
 #                        EXPLICIT-NODE DIVERGENCE note under --standalone.
 #
 # Env:
+#   DISPATCH_GRAPH_NODE_CACHE  Tick-scoped directory (created and trap-removed
+#                        by dispatch-select-tick) holding materialized node
+#                        sets. When set, the origin/main snapshot is memoized at
+#                        $DISPATCH_GRAPH_NODE_CACHE/nodes-tree-<sha>.json, keyed
+#                        on the `origin/main:intentions` TREE SHA, and a hit
+#                        skips `git archive`, `tar` and the YAML parse entirely.
+#                        The var names a STORAGE LOCATION only, never a node
+#                        subset: unset or empty, the selector self-enumerates on
+#                        exactly today's path. The key is the tree object the
+#                        archive would have produced, so an entry is a pure
+#                        function of the tree being selected over; a corrupt or
+#                        unusable entry is deleted and degrades to one fresh
+#                        STRICT enumeration, never to a partial set, the tolerant
+#                        reader, or a silent `empty`. See the block at
+#                        `--- Tree-sha-keyed snapshot cache ---`.
 #   GRAPH_CONFLICT_COMMIT_BUDGET  Max graph-commits the merge-conflict lane may
 #                        land in ONE selection pass (enter/spend/clear/park —
 #                        park-node's own commit counts). Positive integer,
@@ -475,17 +490,127 @@ if ! git -C "$REPO_ROOT" cat-file -e origin/main:intentions 2>/dev/null; then
   exit 0
 fi
 SNAPSHOT_DIR=$(mktemp -d) || { echo "graph-select-target: mktemp failed" >&2; exit 2; }
-if ! git -C "$REPO_ROOT" archive origin/main intentions | tar -x -C "$SNAPSHOT_DIR"; then
-  echo "graph-select-target: failed to snapshot intentions/ from origin/main" >&2
-  exit 2
+
+# --- Tree-sha-keyed snapshot cache (tactic-done-node-retention-scan-cost) ------
+# The snapshot above is a `git archive origin/main intentions | tar -x` into a
+# FRESH mktemp dir every invocation (~75 ms), followed by a full YAML parse of
+# every node (~300 ms on a 717-node store). Both costs scale with how many nodes
+# EXIST rather than with what changed, which is what makes a retained done node
+# expensive: it is re-extracted and re-parsed on every selection forever.
+#
+# DISPATCH_GRAPH_NODE_CACHE names a tick-scoped directory, to be created and
+# trap-removed by dispatch-select-tick exactly as DISPATCH_CI_VERDICT_CACHE is.
+# NOTHING SETS IT YET: dispatch-select-tick creates only
+# DISPATCH_CI_VERDICT_CACHE today, so this whole block is inert until the
+# sibling unit that exports it lands. That is a deliberate dependency rather
+# than an oversight — but read what follows as describing what happens once the
+# var is set, not as a claim that any caller sets it now.
+# It names a STORAGE LOCATION only — never a node subset, never a filter. When
+# the var is unset or empty this block does nothing at all and the path below is
+# byte-identical to what it has always been, which is the /dispatch-ladder and
+# manual-invocation path.
+#
+# THE KEY IS THE TREE SHA, not a directory fingerprint. `store-cache.ts`'s
+# resolved-dir-plus-content key cannot serve this caller: the store lives at a
+# different mktemp path every tick, so that key could never hit. The
+# `origin/main:intentions` tree sha is a STRONGER key anyway — it is the exact
+# tree object `git archive` would have produced, so the entry is a pure function
+# of the tree being selected over. One cheap `rev-parse` buys it.
+#
+# A consequence worth stating so the next reader does not read it as a bypass:
+# because the key names origin/main's tree, a corruption in the WORKING TREE
+# moves neither the key nor the answer. That is correct, not a hole — selection
+# reads origin/main only, and always has. A corrupt node at origin/main does move
+# the tree sha, misses, and is refused loudly by select-targets.ts's strict
+# enumeration exactly as before.
+#
+# A corrupt or unusable entry degrades to a fresh STRICT enumeration — never to a
+# partial set, never to the tolerant reader, never to a silent `empty`. The entry
+# is deleted and the full archive path runs ONCE; there is no retry loop.
+#
+# "Unusable" is decided by an EXIT CODE, not by "the selector exited non-zero".
+# select-targets.ts exits 3 for exactly one reason: the --nodes-json payload
+# could not be read as a node array. Any other non-zero exit is a SELECTOR
+# failure, and answering that by deleting the entry destroys a valid cache, runs
+# the selector twice over identical nodes, republishes the identical array, fails
+# anyway, and prints one operator-visible line blaming the cache for a fault in
+# the router.
+CACHE_DIR="${DISPATCH_GRAPH_NODE_CACHE:-}"
+SNAPSHOT_ENTRY=""
+# Initialized unconditionally: the archive below reads it, and `set -u` is on.
+INTENTIONS_TREE=""
+if [[ -n "$CACHE_DIR" ]]; then
+  # rev-parse only; a failure here just means no key, so today's path runs.
+  INTENTIONS_TREE=$(git -C "$REPO_ROOT" rev-parse origin/main:intentions 2>/dev/null) || INTENTIONS_TREE=""
+  [[ -n "$INTENTIONS_TREE" ]] && SNAPSHOT_ENTRY="$CACHE_DIR/nodes-tree-$INTENTIONS_TREE.json"
 fi
 
 # --- Run the pure selector -----------------------------------------------------
 # select-targets.ts emits {candidates:[...], events:[...]} — eligibility and
 # ordering already applied; only environmental gates remain.
-SELECTION=$(cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/select-targets.ts \
-  --dir "$SNAPSHOT_DIR/intentions") \
-  || { echo "graph-select-target: select-targets.ts failed" >&2; exit 2; }
+SELECTION=""
+SELECTION_DONE=""
+if [[ -n "$SNAPSHOT_ENTRY" && -f "$SNAPSHOT_ENTRY" ]]; then
+  # The hit path: no `git archive`, no `tar`, no YAML parse. SNAPSHOT_DIR is
+  # still created above because it also hosts the conflict-commit-budget counter
+  # (see CONFLICT_BUDGET_FILE below); mktemp is under a millisecond, and the 75 ms
+  # this skips is the archive and the extraction, not the directory.
+  _sel_rc=0
+  SELECTION=$(cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/select-targets.ts \
+    --nodes-json "$SNAPSHOT_ENTRY") || _sel_rc=$?
+  if (( _sel_rc == 0 )); then
+    SELECTION_DONE=1
+  elif (( _sel_rc == 3 )); then
+    # 3 is select-targets.ts's ONLY "this payload is unusable" code. Deleting the
+    # entry is the correct answer to that, and to nothing else.
+    echo "graph-select-target: cache entry $SNAPSHOT_ENTRY unusable, re-snapshotting" >&2
+    rm -f "$SNAPSHOT_ENTRY"
+    SELECTION=""
+  else
+    # A SELECTOR failure. Deleting the entry here would destroy a valid cache,
+    # run the selector a second time over the same nodes, republish the identical
+    # array, fail again anyway — and leave the operator one visible line blaming
+    # the cache for a fault in the router. Keep the entry; report the real cause.
+    echo "graph-select-target: select-targets.ts failed (exit $_sel_rc) reading $SNAPSHOT_ENTRY — this is a SELECTOR failure, not a cache problem; the entry is kept" >&2
+    exit 2
+  fi
+fi
+
+if [[ -z "$SELECTION_DONE" ]]; then
+  # Archive the tree the KEY names, not the ref that key was resolved from.
+  # `origin/main` moves: a sibling worktree's `graph-commit` push+fetch landing
+  # between the `rev-parse` above and this line — routine in this fleet — would
+  # make `--emit-nodes` publish tree B's node array under `nodes-tree-<A>.json`.
+  # A later selection that resolves back to tree A is then served B's nodes: a
+  # silently wrong phase/`blocked_by` view, with no strictness violation to
+  # catch it, breaking the "pure function of the tree being selected over"
+  # invariant stated above. Pinning to the tree sha closes that window.
+  #
+  # `--prefix=intentions/` restores the path component. A tree object carries no
+  # path of its own, so `git archive <tree>` emits its entries at the root while
+  # `git archive origin/main intentions` emits them under `intentions/`. With
+  # the prefix the two extractions are byte-identical (verified with `diff -r`).
+  #
+  # With no cache dir there is no key and nothing to pin, so that path keeps the
+  # original spelling and is unchanged in every respect.
+  ARCHIVE_ARGS=(origin/main intentions)
+  if [[ -n "$INTENTIONS_TREE" ]]; then
+    ARCHIVE_ARGS=(--prefix=intentions/ "$INTENTIONS_TREE")
+  fi
+  if ! git -C "$REPO_ROOT" archive "${ARCHIVE_ARGS[@]}" | tar -x -C "$SNAPSHOT_DIR"; then
+    echo "graph-select-target: failed to snapshot intentions/ from origin/main" >&2
+    exit 2
+  fi
+  if [[ -n "$SNAPSHOT_ENTRY" ]]; then
+    SELECTION=$(cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/select-targets.ts \
+      --dir "$SNAPSHOT_DIR/intentions" --emit-nodes "$SNAPSHOT_ENTRY") \
+      || { echo "graph-select-target: select-targets.ts failed" >&2; exit 2; }
+  else
+    SELECTION=$(cd "$REPO_ROOT" && npx tsx packages/intentionsutil/scripts/select-targets.ts \
+      --dir "$SNAPSHOT_DIR/intentions") \
+      || { echo "graph-select-target: select-targets.ts failed" >&2; exit 2; }
+  fi
+fi
 
 EVENTS_JSON=$(jq -c '.events' <<<"$SELECTION") || EVENTS_JSON="[]"
 for evt in $(jq -r '.events[] | @base64' <<<"$SELECTION"); do
