@@ -2169,30 +2169,45 @@ All anchors *(from node bodies — re-locate)* in
   becomes a cache hit only once P1's on-disk content-addressed `store-cache`
   lands **and** `reconcile-graph.ts` reads through it. That is the win this unit
   buys, not a property it already has. Note also that `reconcile-graph-merged`
-  carries its own independent enumeration at `:176`, so the tick performs
-  **four** `listNodesStrict` scans per pass, not two.*)* The node
+  carries its own independent enumeration at `:176`, so a tick that reaches the
+  apply run performs all **five** of the enumerations above per pass, not two.
+  `graph-auto-merge:264` is one of the five: `dispatch-select-tick:618` invokes
+  it unconditionally on every tick, ahead of `reconcile-graph-merged` (`:647`)
+  and `reconcile-graph-review-stall` (`:663`). The count is five and not a
+  floor-of-five only because `reconcile-graph-merged` early-exits at its
+  `[[ -z "$OPEN_TACTICS" ]] && exit 0` (`:192`) when nothing is absorbable, in
+  which case neither `reconcile-graph.ts` invocation runs and the pass costs
+  three.*)* The node
   explicitly scopes three other call sites **out**, and not as an oversight:
   `select-targets.ts:58` belongs to U17, and
   `dispatch-graph-census:73` / `dispatch-graph-scope-sweep:98` are reached in
   U16, through their underlying `.ts` scripts.
-- **`:186`** — duplicate `gh_pr_view_rest` fetch. Memoize the PR JSON
+- **`:224`** — duplicate `gh_pr_view_rest` fetch. Memoize the PR JSON
   **narrowly, within the review-stall sweep only — never exported tick-wide.**
+  *(Anchor corrected 2026-08-30 — `:186` is a header comment inside the
+  enumeration block above; the `gh_pr_view_rest "$pr"` call is at `:224`.)*
   *(Corrected 2026-08-30.* The former wording offered "memoize per-PR JSON for
   the tick" as an option. `intentions/tactic-review-stall-pr-json-duplicate-fetch.md`
   rejects it by name — *"That option is rejected here … do not take it"*, and
   *"the memo must be narrowly armed … never exported tick-wide"* — because a
   tick-wide memo feeds a cached **pre-merge** body to `graph-select-target`'s
   freshness read and **reintroduces the stale-review-target bug**.*)*
-- **`:214`** (with `.claude/skills/dispatch-propagate/scripts/lib.sh:829-831`) —
+- **`:238`** (the `MERGEABLE=$(jq -r '.mergeable' <<<"$PR_JSON")` read; the CI
+  call it must short-circuit is `dispatch_ci_verdict_rest` at `:252`, defined at
+  `.claude/skills/dispatch-propagate/scripts/lib.sh:840`) —
   read `.mergeable` first so `CONFLICTING` short-circuits without a CI call.
+  *(Anchors corrected 2026-08-30 — this bullet read `:214` with
+  `lib.sh:829-831`; both had drifted.)*
   *(Corrected 2026-08-30.* This bullet used to add "and skip candidates whose
   head sha is unchanged since the last sweep found no regression". That is
   verbatim the node's Fix 2, which
   `intentions/tactic-review-stall-ci-verdict-cache-miss.md` marks *"is
   deliberately SCOPED OUT"*. Keep only the `.mergeable`-first short-circuit.*)*
-- **`:220`** — add the **documented superset cost pre-filter** that already ships
+- **`:258`** — add the **documented superset cost pre-filter** that already ships
   on the sibling callsite, so the `node --import tsx/esm` subprocess is skipped
   on the overwhelmingly common quiet candidate.
+  *(Anchor corrected 2026-08-30 — this bullet read `:220`; the per-candidate
+  `ROUTE=$( … reviewStallRoute … )` spawn is at `:258`.)*
   *(Corrected 2026-08-30.* This bullet used to offer "evaluate the pure
   `reviewStallRoute` predicate inline in bash, or batch all candidates through
   one subprocess". `intentions/tactic-review-stall-predicate-subprocess-spawn.md`
@@ -2972,8 +2987,16 @@ Test 3's prefix glob to `standdown-winner-dead-node-held:*`.
 
 **`dispatch-graph-execute` is not edited.** It
 appears only as the shape being mirrored: the branch's worktree-path derivation
-follows `dispatch-graph-execute`'s `CONFLICT_WT` composition, nothing there
-changes. The cleared-no-worktree branch erases a stand-down while a live session
+follows `dispatch-graph-execute`'s `"$PROJECT_ROOT/.claude/worktrees/$id"`
+composition, nothing there changes. *(Do not grep for `CONFLICT_WT`. The
+in-file comment at `lib-standdown-recheck.sh:665` and this unit's node body
+still name that variable, but `tactic-node-worker-fresh-skill-body`
+(`phase: done`) deleted its
+`CONFLICT_WT="$PROJECT_ROOT/.claude/worktrees/$id"` binding from
+`dispatch-graph-execute`, so no definition survives anywhere in the tree —
+every remaining mention is a historical citation. The nearest live binding of
+the same composition is `RESIDUE_WT` at `dispatch-graph-execute:490`.)*
+The cleared-no-worktree branch erases a stand-down while a live session
 still holds the node name, silently re-creating the deadlock the tactic removes.
 
 > **⛔ The `strategy-*` framing is superseded, and the kind gate must NOT be
