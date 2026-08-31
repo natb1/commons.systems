@@ -990,7 +990,10 @@ _read_pr_ci() {
 #          This covers BOTH the `null` route and the `conflict` route: a
 #          CONFLICTING PR is DECLINED here — no execution.fix write, no
 #          graph-commit, no fix attempt consumed — and reaches the conflict lane
-#          through provision-node-worktree's exit 11 instead.
+#          through provision-node-worktree's exit 11 instead. It also covers a
+#          PR in a TERMINAL state (merged, or closed without merging): an
+#          interrupt is a request to go fix a PR, which is meaningless once the
+#          PR can no longer be merged.
 #   rc 3 — an interrupt was due but could not be acted on (write/commit failed,
 #          an unreadable `.mergeable`, or a failed interruptRoute eval); a short
 #          reason token is printed on stdout and the caller skips the node.
@@ -1005,6 +1008,32 @@ _gate_maybe_interrupt() {
   [[ "$pr" == "null" || -z "$pr" ]] && return 1
   _read_pr_ci "$pr" || return 1               # unreadable PR → do not interrupt
   [[ -n "$_CI_MERGED" ]] && return 1          # merged-awaiting-reconcile → not an interrupt
+  # The OTHER terminal PR state, and it must be declined HERE rather than only
+  # in the qa|review arm's `pr-closed-unmerged` guard, which runs AFTER this
+  # function on both interruptible phases — and which the `implement` arm has no
+  # counterpart to at all.
+  #
+  # A PR closed without merging keeps its last CI verdict and reports
+  # `mergeable: null -> UNKNOWN` (REST stops computing mergeability once a PR
+  # closes). So a RED closed PR satisfies the cost guard below, and
+  # interruptRoute(review, failing, UNKNOWN) answers `fix`: the tick would WRITE
+  # execution.fix to main, land it, burn a fix attempt and dispatch /fix-checks
+  # against a PR nobody can merge. That is strictly worse than the wrong-reason
+  # park the arm's guard was added to prevent, because that failure was at least
+  # read-only. The candidate falls through to its phase's normal gate instead,
+  # where qa|review reports the accurate `pr-closed-unmerged` skip.
+  #
+  # The `-n` half is load-bearing and is NOT redundant with the `_read_pr_ci`
+  # check above: an empty `_CI_STATE` means the projection yielded no `.state`,
+  # which is an UNREAD state, not a closed one. Treating empty as closed would
+  # silently disable the whole interrupt lane the first time lib.sh's projection
+  # changed shape. That branch is unreachable against the CURRENT projection —
+  # `state: (.state | ascii_upcase)` (lib.sh:1368) makes jq exit 5 on a missing
+  # key, and the projection is `|| return 1`, so an absent `.state` surfaces as
+  # `pr-state-unknown` rather than as an empty one — so it is deliberately left
+  # uncovered, for the same reason and on the same terms as the
+  # `mergeable-unreadable` rc-3 branch below (see the suite's fixture header).
+  [[ -n "$_CI_STATE" && "$_CI_STATE" != "OPEN" ]] && return 1
 
   # Cost guard, NOT the routing rule: interruptRoute returns null unless CI is
   # failing or the PR is CONFLICTING, so skip the node subprocess when neither
@@ -1367,22 +1396,34 @@ sensor_gate() {
         3) return 1 ;;
       esac
       if [[ "$pr" == "null" || -z "$pr" ]]; then echo "no-pr"; return 1; fi
-      # ONE `pulls/{n}` read per candidate, reused from here down. Reaching this
-      # line means `$pr` is non-null, and _gate_maybe_interrupt's ONLY return
-      # ahead of its own `_read_pr_ci "$pr"` is the null-PR guard the line above
-      # has just excluded — so the sensors normally already describe THIS
-      # candidate and this block issues no gh call at all.
+      # ONE `pulls/{n}` read per candidate, reused from here down, and this
+      # block issues no gh call of its own. Reaching this line means `$pr` is
+      # non-null, and _gate_maybe_interrupt's ONLY return ahead of its own
+      # `_read_pr_ci "$pr"` is the null-PR guard the `no-pr` line above has just
+      # excluded — so _read_pr_ci has already run for THIS `$pr` and stamped
+      # every _CI_* global off it.
       #
-      # The `_CI_PR != $pr` check is the CORRECTNESS half, not the optimisation:
-      # _gate_maybe_interrupt returns early on a null PR BEFORE _read_pr_ci
-      # stamps the globals, so without it a reordering of this arm could read a
-      # PREVIOUS candidate's _CI_* values. _CI_PR is stamped attempted-for
-      # rather than succeeded-for (see _read_pr_ci), so a PR whose read already
-      # failed this iteration is not re-fetched here either: exactly one fetch
-      # per candidate, never zero and never two.
-      if [[ "$_CI_PR" != "$pr" ]]; then
-        _read_pr_ci "$pr" || true
-      fi
+      # A `[[ "$_CI_PR" != "$pr" ]]` re-fetch guard stood here, documented as
+      # the CORRECTNESS half protecting against inheriting a PREVIOUS
+      # candidate's sensors. It was DEAD CODE on two independent counts and was
+      # removed rather than kept for looking defensive:
+      #
+      #   1. The globals cannot cross candidates at all. The selection loop
+      #      invokes this function as `emit_phase=$(sensor_gate ...)` — a
+      #      COMMAND SUBSTITUTION, hence a subshell — so every _CI_* assignment
+      #      dies with the candidate that made it and the next candidate starts
+      #      from the script-level initialisers. Measured by instrumenting
+      #      sensor_gate's entry across the selector suite: 62 invocations, all
+      #      62 entering with _CI_PR empty and _CI_RC 1.
+      #   2. Even within a single call the condition is never true: the one
+      #      _gate_maybe_interrupt return that skips the stamp is the null-PR
+      #      one, which the `no-pr` line above has already excluded. Measured by
+      #      instrumenting the branch body: taken ZERO times across the suite.
+      #
+      # What actually enforces the invariant is the `_CI_RC != 0` check
+      # immediately below, which is a LIVE check: were this arm ever reordered
+      # ahead of _gate_maybe_interrupt, _CI_RC would still hold its initialiser
+      # 1 and the candidate would be skipped as `ci-verdict-unreadable`.
       if (( _CI_RC != 0 )); then
         # The `pulls/{n}` read itself failed, so nothing below has an input.
         # Skip WITHOUT touching the strike ladder, for the same reason the

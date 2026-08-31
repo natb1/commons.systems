@@ -2114,21 +2114,41 @@ assert_eq "graph-select-target route-identity: the declined interrupt saw the fa
 gsc_interrupt_teardown
 
 # ============================================================================
-# Test: graph-select-target — the per-candidate CI sensors are never inherited
+# Test: graph-select-target — per-candidate PR reads across a multi-candidate run
 # ============================================================================
-# The qa|review arm now reads _CI_* globals that _gate_maybe_interrupt populated
-# rather than re-fetching the PR. Those globals are process-wide and the
+# THIS CASE PREVIOUSLY CLAIMED SOMETHING FALSE, and the claim is recorded here
+# rather than quietly dropped. It was headed "the per-candidate CI sensors are
+# never inherited" and said the _CI_* globals "are process-wide and the
 # selection loop reuses them candidate after candidate, so the arm guards on
-# `_CI_PR == $pr` before trusting them.
+# `_CI_PR == $pr` before trusting them." Every clause of that is wrong.
 #
-# The fixture puts a null-PR candidate BETWEEN two PR-carrying ones, because a
-# null-PR candidate is the one case where _gate_maybe_interrupt returns before
-# stamping the globals — the exact window in which a third candidate could
-# inherit the first's sensors. The two PRs are given OPPOSITE verdicts so an
-# inherited reading is visible in the output rather than merely suspected:
-# #2999 is pending (skip) and #3999 is passing (selected). Reusing #2999's
-# sensors for the third candidate would emit `empty`.
-echo "Test: graph-select-target — a later candidate never inherits an earlier candidate's CI sensors"
+# Cross-candidate inheritance is STRUCTURALLY IMPOSSIBLE, so no test of it can
+# exist and none is attempted below. The selection loop invokes the gate as
+#
+#     emit_phase=$(sensor_gate "$id" "$phase" "$pr" "$pushed_sha" "$fix_since")
+#
+# — a command substitution, therefore a subshell. Every _CI_* assignment dies
+# with the candidate that made it, and the next candidate's sensor_gate starts
+# from the script-level initialisers. Measured by instrumenting graph-select-
+# target: 62 sensor_gate invocations across this whole suite, all 62 entering
+# with _CI_PR empty and _CI_RC 1; the `_CI_PR != $pr` branch body taken ZERO
+# times; and deleting that branch outright left the suite at 209/209. It was
+# dead code, it has been removed, and an assertion that passes with or without
+# it is worth nothing — so the four assertions kept below are the ones that
+# discriminate something the loop really can get wrong.
+#
+# What they pin is the per-candidate REST accounting and per-candidate routing:
+# exactly one `pulls/{n}` read per DISTINCT PR-carrying candidate (never zero —
+# a hoisted read — and never two — the duplicate fetch this whole change
+# removes), none at all for a null-PR candidate, no whole-repo open-PR listing,
+# and each candidate's verdict fetched at ITS OWN head sha and applied to ITS
+# OWN outcome.
+#
+# The fixture puts a null-PR candidate BETWEEN two PR-carrying ones (the one
+# candidate shape that returns before any fetch) and gives the two PRs OPPOSITE
+# verdicts, so a mis-routed candidate is visible in the output rather than
+# merely suspected: #2999 is pending (skip) and #3999 is passing (selected).
+echo "Test: graph-select-target — each candidate is read once and routed on its own verdict"
 gscip_setup 1
 printf '%s\n' '{"candidates":[{"id":"tactic-fixture","kind":"tactic","phase":"qa","pr":"2999","pace_exempt":false},{"id":"tactic-nopr","kind":"tactic","phase":"qa","pr":null,"pace_exempt":false},{"id":"tactic-second","kind":"tactic","phase":"qa","pr":"3999","pace_exempt":false}],"events":[]}' \
   > "$GSCI_ROOT/candidates.json"
@@ -2139,19 +2159,23 @@ printf '%s\n' '{"number":3999,"state":"open","merged_at":null,"merge_commit_sha"
 printf '%s\n' '{"check_runs":[{"status":"completed","conclusion":"success"}]}' \
   > "$GSCI_ROOT/check-runs-cafe999.json"
 gscs_out=$(gsci_run --top 3)
-assert_eq "graph-select-target sensor-isolation: the third candidate is gated on ITS OWN passing verdict" \
+assert_eq "graph-select-target per-candidate: the third candidate is routed on ITS OWN passing verdict" \
   "node tactic-second tactic qa" "$gscs_out"
-assert_eq "graph-select-target sensor-isolation: the null-PR candidate skips as no-pr" \
+assert_eq "graph-select-target per-candidate: the null-PR candidate skips as no-pr" \
   "1" "$(grep -c '"reason":"no-pr"' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
-assert_eq "graph-select-target sensor-isolation: the first candidate still skips on ITS pending verdict" \
+assert_eq "graph-select-target per-candidate: the first candidate still skips on ITS pending verdict" \
   "1" "$(grep -c 'ci-pending (strike 1/8)' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
 # The budget half: one read per DISTINCT candidate, and none at all for the
-# null-PR one. A shared or repeated fetch shows up here.
-assert_eq "graph-select-target sensor-isolation: exactly one pulls/2999 read" \
+# null-PR one. A hoisted, shared or repeated fetch shows up here.
+assert_eq "graph-select-target per-candidate: exactly one pulls/2999 read" \
   "1" "$(grep -c 'pulls/2999' "$GSCI_ROOT/gh-calls.log")"
-assert_eq "graph-select-target sensor-isolation: exactly one pulls/3999 read" \
+assert_eq "graph-select-target per-candidate: exactly one pulls/3999 read" \
   "1" "$(grep -c 'pulls/3999' "$GSCI_ROOT/gh-calls.log")"
-assert_eq "graph-select-target sensor-isolation: still ZERO open-PR listings across three candidates" \
+# The verdict half of the same accounting: the third candidate's rollup is
+# fetched at ITS OWN head sha, not at the first candidate's `deadbee`.
+assert_eq "graph-select-target per-candidate: the third candidate's rollup is read at its own head sha" \
+  "1" "$(grep -q 'cafe999' "$GSCI_ROOT/gh-calls.log" && echo 1 || echo 0)"
+assert_eq "graph-select-target per-candidate: still ZERO open-PR listings across three candidates" \
   "0" "$(grep -c '^pr list' "$GSCI_ROOT/gh-calls.log")"
 gsc_interrupt_teardown
 
@@ -2235,6 +2259,87 @@ assert_eq "graph-select-target closed-pr: a merged PR still routes to reconcile"
   "1" "$(grep -c 'pr-merged-awaiting-reconcile' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
 assert_eq "graph-select-target closed-pr: a merged PR is NOT reported as closed-unmerged" \
   "0" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+gsc_interrupt_teardown
+
+# ============================================================================
+# Test: a closed-unmerged PR must not reach the fix-interrupt WRITE path
+# ============================================================================
+# The `pr-closed-unmerged` skip above lives in the qa|review arm, which runs
+# AFTER _gate_maybe_interrupt — and the `implement` arm has no counterpart to it
+# at all. That ordering is the whole hazard, and it is a WORSE failure than the
+# wrong-reason park the skip was added to prevent, because it is not read-only.
+#
+# A PR closed without merging keeps its last CI verdict and reports `mergeable:
+# null -> UNKNOWN`. So a RED closed PR satisfies the interrupt's cost guard, and
+# interruptRoute(review, failing, UNKNOWN) answers `fix`: execution.fix is
+# written to main and landed, a fix attempt is burned, and /fix-checks is
+# dispatched against a PR nobody can merge.
+#
+# The assertions are therefore on the ABSENCE OF THE WRITE, not on the emitted
+# token: apply-fix-state must never be invoked (apply-fix-calls.log absent), and
+# interruptRoute must never even be consulted (node-calls.log absent — the fake
+# `node` logs every eval, and graph-select-target shells out to `node` on that
+# one path only).
+echo "Test: graph-select-target — a RED closed-unmerged PR at review never enters the fix interrupt"
+gscip_setup 1
+gsci_candidate review
+gsci_pr_closed
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+printf 'fix' > "$GSCI_ROOT/route.txt"
+gscip_seed deadbee 7
+gscipw1_out=$(gsci_run)
+assert_eq "graph-select-target closed-pr write-guard: a red closed PR is not selected" \
+  "empty" "$gscipw1_out"
+assert_eq "graph-select-target closed-pr write-guard: NO execution.fix write is attempted" \
+  "0" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target closed-pr write-guard: interruptRoute is never consulted" \
+  "0" "$([ -f "$GSCI_ROOT/node-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target closed-pr write-guard: the skip reason still names the closed PR" \
+  "1" "$(grep -c 'pr-closed-unmerged' "$GSCI_ROOT/seldir/graph-selection.jsonl")"
+assert_eq "graph-select-target closed-pr write-guard: no attempt is burned on the strike ladder" \
+  "deadbee 7" "$(gscip_sidecar)"
+assert_eq "graph-select-target closed-pr write-guard: nothing is parked or held" \
+  "none" "$(gscip_holds)"
+gsc_interrupt_teardown
+
+# --- The same, on the arm with no CI gate of its own ------------------------
+# _gate_maybe_interrupt is the ONLY CI-shaped gate the `implement` arm runs, so
+# a guard placed in the qa|review arm alone would leave this path writing. The
+# node is still emitted at its ladder phase (implement has no CI gate —
+# unchanged behaviour, and out of this change's scope); what must not happen is
+# the interrupt write.
+echo "Test: graph-select-target — a RED closed-unmerged PR at implement never enters the fix interrupt"
+gscip_setup 1
+gsci_candidate implement
+gsci_pr_closed
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+printf 'fix' > "$GSCI_ROOT/route.txt"
+gscipw2_out=$(gsci_run)
+assert_eq "graph-select-target closed-pr write-guard: the implement candidate is emitted at its ladder phase, not at fix" \
+  "node tactic-fixture tactic implement" "$gscipw2_out"
+assert_eq "graph-select-target closed-pr write-guard: no execution.fix write on the implement arm" \
+  "0" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target closed-pr write-guard: interruptRoute is never consulted on the implement arm" \
+  "0" "$([ -f "$GSCI_ROOT/node-calls.log" ] && echo 1 || echo 0)"
+gsc_interrupt_teardown
+
+# --- Control: the guard must not disable the interrupt lane outright --------
+# The two cases above would pass just as well if the new guard had turned every
+# fix interrupt off. The only difference here is `state`: the SAME red draft PR,
+# OPEN, at the SAME phase, must still write execution.fix and emit `fix`.
+echo "Test: graph-select-target — an OPEN red PR at review still enters the fix interrupt"
+gscip_setup 1
+gsci_candidate review
+gsci_pr true
+gsci_checks '{"check_runs":[{"status":"completed","conclusion":"failure"}]}'
+printf 'fix' > "$GSCI_ROOT/route.txt"
+gscipw3_out=$(gsci_run)
+assert_eq "graph-select-target closed-pr write-guard control: an OPEN red PR is emitted at fix" \
+  "node tactic-fixture tactic fix" "$gscipw3_out"
+assert_eq "graph-select-target closed-pr write-guard control: an OPEN red PR DOES write execution.fix" \
+  "1" "$([ -f "$GSCI_ROOT/apply-fix-calls.log" ] && echo 1 || echo 0)"
+assert_eq "graph-select-target closed-pr write-guard control: interruptRoute saw the review phase and the failing verdict" \
+  "review failing MERGEABLE" "$(tail -n 1 "$GSCI_ROOT/node-calls.log")"
 gsc_interrupt_teardown
 
 report_results
