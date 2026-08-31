@@ -595,15 +595,15 @@ The suite is green at the base commit (209/209 passed, measured this round), so
 any failure after the change is attributable to the change.
 
 ```verify
-cd /home/n8/natb1/commons.systems && bash -n .claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh && bash -n .claude/skills/dispatch-propagate/scripts/test-lib-frozen-session-park.sh
+bash -n .claude/skills/dispatch-propagate/scripts/lib-frozen-session-park.sh && bash -n .claude/skills/dispatch-propagate/scripts/test-lib-frozen-session-park.sh
 ```
 
 ```verify
-cd /home/n8/natb1/commons.systems && bash .claude/skills/dispatch-propagate/scripts/test-lib-frozen-session-park.sh
+bash .claude/skills/dispatch-propagate/scripts/test-lib-frozen-session-park.sh
 ```
 
 ```verify
-cd /home/n8/natb1/commons.systems && .claude/skills/dispatch-propagate/scripts/run-lint.sh --prose
+.claude/skills/dispatch-propagate/scripts/run-lint.sh --prose
 ```
 
 The behavioural gate is test (2e) inside the second block above — it is the only
@@ -650,7 +650,7 @@ generic text is still the live park, together with the commit to restore from.
 Only `UNHEALED` rows are actionable:
 
 ```bash
-cd /home/n8/natb1/commons.systems && git fetch origin main -q
+git fetch origin main -q
 git log --since='-4 days' --format='%H%x09%ct%x09%s' origin/main -- intentions/ \
   | grep '^[0-9a-f]*\t[0-9]*\tgraph: park ' \
   | awk -F'\t' '{n=$3; sub(/^graph: park /,"",n); split(n,a," ");
