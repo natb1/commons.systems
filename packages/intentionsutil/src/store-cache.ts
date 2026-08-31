@@ -78,12 +78,22 @@ import { listNodesStrict } from "./store.js";
  * key cannot miss a change the enumeration would see; the cost is a spurious
  * miss when an unrelated companion file changes, which is the safe direction.
  *
- * A symlink is hashed by what it RESOLVES to, for the same superset reason:
- * `listNodesResilient` calls `readFileSync` on `<id>.md` without inspecting the
- * entry type, so a symlinked node file IS a node to the enumeration. Hashing
- * only the link's own directory entry would let an edit made through it land
- * without moving the key — a stale hit, the one failure this module exists to
- * make impossible.
+ * Anything the `Dirent` does not already report as a plain file or directory is
+ * classified by `statSync`, for the same superset reason: `listNodesResilient`
+ * calls `readFileSync` on `<id>.md` without inspecting the entry type, so any
+ * entry that reads as a file IS a node to the enumeration. Classifying from the
+ * directory entry alone would let an edit land without moving the key — a stale
+ * hit, the one failure this module exists to make impossible. Two entry types
+ * reach that fallback:
+ *
+ *  - A SYMLINK, which must be hashed by what it resolves to.
+ *  - An UNKNOWN entry. `readdirSync(withFileTypes)` reports `UV_DIRENT_UNKNOWN`
+ *    on filesystems that do not populate `d_type` (XFS without `ftype=1`,
+ *    several FUSE and network mounts), and Node performs no `lstat` fallback —
+ *    `isFile`, `isDirectory` and `isSymbolicLink` are then ALL false. Keying off
+ *    `isFile()` alone would silently reduce the fingerprint to a hash of the
+ *    sorted file NAMES on such a mount, so every in-place node edit would be
+ *    served from a stale entry.
  *
  * Each field is framed with a NUL separator and file bytes carry an explicit
  * byte count, so no rename or content shuffle can produce a colliding stream.
@@ -100,8 +110,11 @@ export function storeFingerprint(dir: string): string {
   const hash = createHash("sha256");
   for (const entry of entries) {
     const path = join(dir, entry.name);
-    const isFile = entry.isFile() || (entry.isSymbolicLink() && statSync(path).isFile());
-    const marker = isFile ? "f" : entry.isDirectory() ? "d" : "o";
+    // Trust the dirent only when it commits to a type; otherwise stat, so a
+    // symlink or a `d_type`-less entry cannot be hashed as a nameless husk.
+    const stats = entry.isFile() || entry.isDirectory() ? entry : statSync(path);
+    const isFile = stats.isFile();
+    const marker = isFile ? "f" : stats.isDirectory() ? "d" : "o";
     hash.update(`${entry.name}\0${marker}\0`);
     if (isFile) {
       const bytes = readFileSync(path);

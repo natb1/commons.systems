@@ -351,3 +351,51 @@ describe("storeFingerprint", () => {
     expect(() => storeFingerprint(join(tempDir("intentions-"), "missing"))).toThrow();
   });
 });
+
+describe("storeFingerprint on a filesystem that reports no d_type", () => {
+  afterEach(() => {
+    vi.doUnmock("node:fs");
+    vi.resetModules();
+  });
+
+  /**
+   * `readdirSync(withFileTypes)` yields `UV_DIRENT_UNKNOWN` on filesystems that
+   * do not populate `d_type` (XFS without `ftype=1`, several FUSE and network
+   * mounts), and Node performs no `lstat` fallback — `isFile`, `isDirectory`
+   * and `isSymbolicLink` are then ALL false. `listNodesResilient` reads such an
+   * entry as a node anyway (it `readFileSync`s every `*.md` without inspecting
+   * the type), so a fingerprint that classified from the dirent alone would
+   * reduce to a hash of the sorted file NAMES there and serve every in-place
+   * node edit from a stale entry. This stands in for that filesystem.
+   */
+  it("still covers file content when every dirent reads as UNKNOWN", async () => {
+    const dir = tempDir("intentions-");
+    seedStore(dir);
+
+    vi.resetModules();
+    vi.doMock("node:fs", async () => {
+      const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+      return {
+        ...actual,
+        default: actual,
+        readdirSync(target: string, options?: { withFileTypes?: boolean }) {
+          const entries = actual.readdirSync(target, { withFileTypes: true });
+          if (options?.withFileTypes !== true) return entries.map((entry) => entry.name);
+          return entries.map((entry) => ({
+            name: entry.name,
+            isFile: () => false,
+            isDirectory: () => false,
+            isSymbolicLink: () => false,
+          }));
+        },
+      };
+    });
+    const { storeFingerprint: fingerprint } = await import("../src/store-cache.js");
+
+    const base = fingerprint(dir);
+    const filePath = join(dir, "good-a.md");
+    writeFileSync(filePath, `${readFileSync(filePath, "utf8")}\nAn added body paragraph.\n`);
+
+    expect(fingerprint(dir)).not.toBe(base);
+  });
+});
