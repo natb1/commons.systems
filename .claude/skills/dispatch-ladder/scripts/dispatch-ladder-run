@@ -850,13 +850,28 @@ export CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-headless:${INVOCATION_I
 # registrations carrying the conventional status (130 / 128+SIGINT, 143 /
 # 128+SIGTERM), and the handler ends in `exit`.
 #
+# This driver exits with its status rather than re-raising the signal, and that
+# divergence from dispatch-tick is deliberate: the tick re-raises because both
+# units that run it carry `OnFailure=dispatch-tick-recover.service` and a 143
+# exit status would read as a failure and arm a backstop reseed. This driver's
+# unit deliberately has NO OnFailure (dispatch-ladder-spawn:42-49), so nothing
+# is chained to its exit status, and 143/130 keeps the run's own exit-code space
+# readable to `dispatch-ladder-status` and to a person reading the journal.
+#
+# `trap - EXIT` FIRST, because a signal handler that calls `exit` DOES run the
+# EXIT trap afterwards — `exit` only fails to re-enter the trap it is already
+# inside, which on the signal path is the INT/TERM trap and not this one.
+# Without it the whole body would run a second time on every signal. Every step
+# here is idempotent (`rm -f`, and the LOCK_HELD guard swallows a second
+# `--release`), so the double run was harmless; clearing the trap makes cleanup
+# run exactly once on every path instead of relying on that.
+#
 # `$?` is captured by hand on the FIRST line, before any command in the body can
 # overwrite it, so the plain EXIT path still reports the run's real halt status
 # (`halt` exits with it just above). It cannot be read from `$?` on the signal
 # path: at handler entry on a signal `$?` is the last COMPLETED command's
 # status, NOT 128+signo — which is why the two statuses are passed as literal
-# arguments instead. `exit` inside an EXIT trap does not re-enter the trap. Same
-# shape as `vi_exit_trap` in
+# arguments instead. Same shape as `vi_exit_trap` in
 # ../../dispatch-propagate/scripts/test-dispatch-verify-instrument-invocation.sh.
 SENTINEL=""
 LOCK_HELD=0
@@ -867,6 +882,7 @@ _ladder_cleanup() {
     LOCK_HELD=0
   fi
   [[ -n "${SENTINEL:-}" ]] && rm -f "$SENTINEL"
+  trap - EXIT
   exit "$rc"
 }
 trap '_ladder_cleanup' EXIT

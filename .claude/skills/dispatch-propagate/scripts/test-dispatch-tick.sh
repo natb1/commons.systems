@@ -1557,4 +1557,121 @@ assert_eq "sigint: the tick STOPPED — it never routed the decision into dispat
 assert_eq "sigint: the headless sentinel was still removed" "0" "$(tick_live_sentinels)"
 tick_teardown
 
+# --- ...and it stops by DYING OF the signal, not by `exit 143` ---------------
+# The two cases above cannot see this and neither can any bash: `wait` reports
+# 143 both for `exit 143` and for death by SIGTERM (measured, both forms).
+# systemd does distinguish them — `is_clean_exit` treats death by
+# SIGHUP/SIGINT/SIGTERM/SIGPIPE as a clean stop while a 143/130 exit STATUS is a
+# failure — and BOTH units that run dispatch-tick carry
+# `OnFailure=dispatch-tick-recover.service` with no `SuccessExitStatus=`: the
+# heartbeat service (lib.sh's `desired_service`) and the transient unit
+# dispatch-spawn-tick launches. So a tick that exits 143 turns an ordinary
+# `systemctl --user stop dispatch-heartbeat.service` into a failed unit, which
+# arms a backstop reseed that relaunches the chain minutes later, and repeats
+# escalate to a `dispatch:chain-stalled` issue. Only WIFSIGNALED can tell the
+# two apart, so these two cases run the tick under a five-line python3
+# supervisor. python3 is already an unconditional CI dependency —
+# lint-vendored-skills.sh calls it, and run-lint.sh runs that on every PR.
+
+# tick_sig_kind <SIG> — run the tick under that supervisor and report how it
+# died in TICK_SIG_KIND: `signaled:<signo>` or `exited:<status>`. The supervisor
+# also removes the need for `set -m` here, because the tick is python's child
+# rather than a background job of this shell and so never inherits SIGINT as
+# SIG_IGN.
+TICK_SIG_KIND=""
+tick_sig_kind() {
+  cat > "$TMPDIR_TEST/supervise.py" <<'PY'
+import subprocess, sys
+
+pidfile = sys.argv[1]
+child = subprocess.Popen(sys.argv[2:], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+with open(pidfile, "w") as fh:
+    fh.write("%d\n" % child.pid)
+rc = child.wait()
+if rc < 0:
+    print("signaled:%d" % -rc)
+else:
+    print("exited:%d" % rc)
+PY
+  TICK_SIG_KIND=$(python3 "$TMPDIR_TEST/supervise.py" "$TMPDIR_TEST/tick.pid" \
+    env -u CLAUDE_CODE_SESSION_ID -u INVOCATION_ID "$TMPDIR_TEST/dispatch-tick")
+}
+
+echo "Test: a SIGTERM mid-tick kills the tick BY the signal, so systemd sees a clean stop"
+tick_setup
+tick_signal_fake TERM
+tick_sig_kind
+assert_eq "sigterm-kind: died of SIGTERM, not \`exit 143\` (which would fire OnFailure)" \
+  "signaled:15" "$TICK_SIG_KIND"
+tick_teardown
+
+echo "Test: a SIGINT mid-tick kills the tick BY the signal too"
+tick_setup
+tick_signal_fake INT
+tick_sig_kind
+assert_eq "sigint-kind: died of SIGINT, not \`exit 130\`" "signaled:2" "$TICK_SIG_KIND"
+tick_teardown
+
+# --- a signal during the paused drain must RELEASE the selection lock --------
+# The paused-branch node-lane drain is the one place dispatch-tick holds the
+# selection lock in its own process: it acquires with `dispatch-acquire-lock
+# --wait`, runs graph-auto-merge and reconcile-graph-merged, then releases
+# unconditionally. A signal landing between those two points now aborts the run
+# before the release, so without the handler releasing it the lock is stranded.
+#
+# The session id here is a REAL inherited one, deliberately. On the headless
+# path resolve_holder_state resolves liveness through the PID sentinel, which
+# the handler removes, so the stranded lock self-heals on the next tick's read
+# and the defect is invisible. With a real id — a hand-run `dispatch-tick`, or
+# Ctrl-C during graph-auto-merge — the daemon reports the session LIVE and
+# nothing reclaims the lock until it ages past MAX_HOLD_SECONDS (default 300s).
+#
+# The signal comes from inside the graph-auto-merge fake, which the drain calls
+# in exactly that window, and the fake still returns 0 with no merge, so nothing
+# about the sequence itself stops the drain.
+
+# tick_run_signalled_real <session-id> — as tick_run_signalled, but with a real
+# inherited session id instead of the synthesized headless one. `set -m` is
+# required for the same reason it is there.
+tick_run_signalled_real() {
+  local pid
+  rm -f "$TMPDIR_TEST/tick.pid"
+  set -m
+  CLAUDE_CODE_SESSION_ID="$1" "$TMPDIR_TEST/dispatch-tick" >/dev/null 2>&1 &
+  pid=$!
+  set +m
+  printf '%s\n' "$pid" > "$TMPDIR_TEST/tick.pid"
+  TICK_SIG_RC=0
+  wait "$pid" || TICK_SIG_RC=$?
+}
+
+echo "Test: a SIGTERM during the paused drain releases the selection lock it was holding"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+cat > "$TMPDIR_TEST/graph-auto-merge" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/graph-auto-merge.log"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$TMPDIR_TEST/tick.pid" ]] && break
+  sleep 0.1
+done
+kill -TERM "\$(cat "$TMPDIR_TEST/tick.pid")"
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/graph-auto-merge"
+tick_run_signalled_real "sess-drain-lock"
+assert_eq "drain-lock: the tick exits 143" "143" "$TICK_SIG_RC"
+assert_eq "drain-lock: the drain really was mid-flight (graph-auto-merge ran)" "1" \
+  "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+# The whole finding: acquire, then release — and NOT acquire alone. The
+# exact-sequence form (rather than a count) also pins that no --heartbeat
+# slipped in, i.e. the run stopped where the signal landed rather than
+# continuing into reconcile-graph-merged.
+assert_eq "drain-lock: the selection lock was acquired and then RELEASED on the way out" \
+  "$(printf -- '--wait\n--release')" "$(cat "$TMPDIR_TEST/logs/acquire-lock.log")"
+assert_eq "drain-lock: the drain STOPPED — reconcile-graph-merged never ran" "0" \
+  "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
+tick_teardown
+
 report_results
