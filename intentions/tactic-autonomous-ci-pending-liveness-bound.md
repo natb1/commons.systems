@@ -749,13 +749,22 @@ classified and `:17-25` a non-empty `why`; the entry satisfies both.
 
 ### Unit 3 — the conflict-hold route it reuses no longer exists
 
-In `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall` (now 340 lines)
-the `conflict)` arm at `:297-304` is a documented no-op that `continue`s without staging;
-the rationale is in the header at `:23-29`. The whole hold apparatus is gone — no
-`hold-node` invocation, no `CONFLICT_IDS`, no `TMPDIR_HOLD`, no reason/recommendation file
-writes; the only surviving `hold-node` mention is prose at `:29`. The lock-budget header
-`:71-80` now says **at most one** `graph-commit` per tick, not two, and that call is
-`:321-332`.
+In `.claude/skills/dispatch-propagate/scripts/reconcile-graph-review-stall` the conflict
+route is gone **twice over**. There is no `conflict)` arm left in `case "$ROUTE"` at all —
+the case carries exactly two arms, `fix)` and `*)` — and a CONFLICTING candidate is now
+skipped outright *before* the CI fetch and before the route evaluation, per the header
+(`tactic-graph-router-conflict-routing`: the selector surfaces it as a `pending-merge`
+candidate and the orthogonal `execution.conflict` interrupt handles it, so acting here too
+would double-handle the same PR). No `hold-node` invocation, no `CONFLICT_IDS`, no
+`TMPDIR_HOLD`, no reason/recommendation file writes survive; the only `hold-node` mention
+is prose in the header. The lock-budget header says **AT MOST ONE** `graph-commit` per
+tick, not two.
+
+> An earlier revision of this brief read the script at 340 lines and gave anchors from that
+> revision. Re-measured 2026-08-31 on `origin/main` `4b8ebde3` the script is **510 lines**
+> and every one of those anchors has moved by +50 to +150 lines. The corrected set is in
+> "Remaining Unit 3 anchors" below; re-check them before use, because this file drifts on
+> roughly every dispatch landing.
 
 That invalidates Unit 3's steps 3 and 4: there is no conflict route to share a hold slot
 with and no block to copy. Rewrite them as — the ci-stall hold is the sweep's only hold
@@ -766,24 +775,79 @@ header goes from "at most one graph-commit" to "at most one graph-commit plus at
 `( cd "$NATIVE_ROOT" && packages/intentionsutil/scripts/hold-node … ) >/dev/null 2>&1`,
 `rm -rf`, return rc) — the surviving in-repo example.
 
-Remaining Unit 3 anchors in that script: `REPO_ROOT` `:110`; `CAP`
-(`GRAPH_REVIEW_STALL_CAP`) `:118`; `refresh_lock` `:127-130`; the single `EXIT` trap `:159`;
-`ACTED=0` `:215`; `HEAD_SHA` `:250`; `RAW_VERDICT` `:252` (empty on call failure, as the
-plan assumes); the `passing|failing` fold `:253-256` — **this fold, not the `case "$ROUTE"`
-arm, is Unit 3's landing site; see the ⛔ box in Unit 3 step 2**; the `reviewStallRoute` eval
-`:258-263`; the `case "$ROUTE"` `*)` no-regression arm `:305-307`, which a pending candidate
-**stops reaching** once `tactic-review-stall-predicate-subprocess-spawn` Unit 1's superset
-guard lands above it. `resolve_main_worktree` is defined at
-`.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh:27`, and the two-line
-`NATIVE_ROOT` idiom to copy is `graph-select-target:500-501`, not `:433-434`. The script
-does not source `lib-graph-worktree.sh` today, so step 1 still applies: add the source next
-to `:91` and the `MAIN_ROOT` assignment next to `:110`.
+Remaining Unit 3 anchors in that script, all re-measured 2026-08-31 on `origin/main`
+`4b8ebde3` (510 lines): `REPO_ROOT` `:117`; `UTIL_SCRIPTS` `:118`; the cap
+(`GRAPH_REVIEW_STALL_CAP`) declared `:81`, defaulted `:86`, read `:125-127`; `refresh_lock`
+defined `:131-134` and called at `:239`, `:468`, `:505`; the single `EXIT` trap `:170`;
+`ACTED=0` `:232`; `HEAD_SHA` `:302`; `RAW_VERDICT` `:304` (still empty on call failure, as
+the plan assumes); the `passing|failing` fold `:305-308` — **this fold, not the
+`case "$ROUTE"` arm, is Unit 3's landing site; see the ⛔ box in Unit 3 step 2**; the
+superset pre-filter guard `:324-326` with its rationale at `:310-323`; the
+`reviewStallRoute` eval `:328-336`; the `case "$ROUTE"` at `:338` whose `*)` no-regression
+arm is `:392-394`, which a pending candidate **stops reaching** once
+`tactic-review-stall-predicate-subprocess-spawn` Unit 1's superset guard lands above it.
+`resolve_main_worktree` is defined at
+`.claude/skills/dispatch-propagate/scripts/lib-graph-worktree.sh:27` — the one anchor in
+this brief that did **not** move. The two-line `NATIVE_ROOT` idiom to copy is
+`graph-select-target:625-626` (not `:500-501` and not `:433-434`), and `_hold_node_fix_cap`
+is `graph-select-target:809-842` behind its header comment at `:800-808` (not `:684-717`).
+The script still does not source `lib-graph-worktree.sh` (grep count 0 at `4b8ebde3`), so
+step 1 still applies: add the source next to `:118` and the `MAIN_ROOT` assignment next to
+`:117`.
+
+### Unit 3's early exit must widen, or the whole unit is dead code
+
+Neither the Scope above nor any step of Unit 3 says this, and an implementer who builds
+exactly what the Scope describes ships a unit that can never fire. Recording it here so the
+node is executable from its own text.
+
+Unit 3 accumulates at-cap nodes into a new `CI_STALL_IDS` array inside the per-candidate
+loop (at the `passing|failing` fold, `:305-308`), and lands the hold *after* the loop. But
+the statement immediately following that loop is
+
+```
+[[ "${#RECOVERED_IDS[@]}" -eq 0 ]] && exit 0
+```
+
+at `:398` on `origin/main` `4b8ebde3` (measured 2026-08-31). `RECOVERED_IDS` collects only
+`fix`-routed nodes. A tick whose sole finding is a ci-pending-stalled node therefore leaves
+that loop with `RECOVERED_IDS` empty and `CI_STALL_IDS` non-empty, hits this line, and
+exits 0 — the array is built and then thrown away, every time. The ci-stall route is the
+*only* route that can populate `CI_STALL_IDS` without also populating `RECOVERED_IDS`, so
+this is not an edge case; it is the unit's main path.
+
+Widen the exit to cover both producers:
+
+```
+[[ "${#RECOVERED_IDS[@]}" -eq 0 && "${#CI_STALL_IDS[@]}" -eq 0 ]] && exit 0
+```
+
+This is safe without any further change because the batched `--set-fix` land is already
+guarded independently, by `if [[ "${#RECOVERED_IDS[@]}" -gt 0 ]]` at `:467`. Letting a
+ci-stall-only tick past the early exit therefore cannot produce an empty `graph-commit`; it
+falls through that guard to the hold call Unit 3 adds. Widening the exit and leaving `:467`
+alone is the complete change.
+
+Two related corrections to the doctrine that cites this line:
+
+- The doctrine's citation of the early exit as `:311` is **87 lines stale**, not the 53
+  lines an earlier note recorded — it was `:364` at `2d5faa71` and is `:398` at `4b8ebde3`.
+  Re-derive it rather than trusting any number written here; this file moves constantly.
+- Because CONFLICTING candidates are now short-circuited before the CI fetch (see the
+  subsection above), a conflicting PR never reaches the `passing|failing` fold and so can
+  never enter `CI_STALL_IDS`. That is correct — a conflicting PR is not ci-pending-stalled —
+  but it means Unit 3's "shared hold slot" reasoning is doubly moot: there is no conflict
+  hold to share a slot with, and no conflict candidate to reach the counter.
 
 ### Reuse-section anchors that moved
 
-- Strike-sidecar ladder in `dispatch-graph-execute`: `STRIKE_FILE` `:328`, cleared on
-  success `:256` and `:372`, below-cap bump/print `:399-405`, cap `:165`. The plan's
-  `:289,320-370` and `:230-235` are stale.
-- Sidecar-assertion fixture idiom: `test-dispatch-graph-execute.sh:283-298`, not `:207-290`.
+- Strike-sidecar ladder in `dispatch-graph-execute` (545 lines): `STRIKE_FILE` assigned
+  `:328`, cleared at `:372` and `:433`, below-cap bump/print `:395-405`, cap
+  `CONFLICT_STRIKE_CAP=5` `:165`. The plan's `:289,320-370` and `:230-235` are stale, and so
+  is this brief's earlier "cleared on success `:256`" — re-measured 2026-08-31 on
+  `origin/main` `4b8ebde3`, the two clear sites are `:372` and `:433`.
+- Sidecar-assertion fixture idiom: `test-dispatch-graph-execute.sh:319-324` (499 lines) —
+  the `assert_eq … "gone" "$([ -e … ] && echo present || echo gone)"` pair, with Case 5c at
+  `:325-335` as the second worked example. Not `:283-298` and not `:207-290`.
 - `packages/intentionsutil/test/holds.test.ts` (37 lines) is a new file this plan does not
   know about; the fourth kind must satisfy its assertions at `:9-14`, `:17-25`, `:27-29`.
