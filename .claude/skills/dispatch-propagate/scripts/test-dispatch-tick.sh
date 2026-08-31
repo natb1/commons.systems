@@ -1674,4 +1674,53 @@ assert_eq "drain-lock: the drain STOPPED — reconcile-graph-merged never ran" "
   "$([ -f "$TMPDIR_TEST/logs/reconcile-graph-merged.log" ] && echo 1 || echo 0)"
 tick_teardown
 
+# --- a signal DURING the acquire must release the lock the child then took ----
+# The window the case above does not reach. `dispatch-acquire-lock --wait` polls
+# for up to DISPATCH_LOCK_WAIT_TIMEOUT (default 300s) in a CHILD process, and
+# dispatch-heartbeat.service sets KillMode=process — so a `systemctl --user
+# stop` mid-wait signals only the tick's own shell and the child polls on. bash
+# defers the pending trap until the command substitution returns, by which time
+# the child has ALREADY written our session id into the lock file. A
+# TICK_LOCK_HELD raised only after the acquire is therefore still 0 when the
+# handler runs: it skips the release and the lock is stranded for
+# MAX_HOLD_SECONDS — the exact defect the flag was added to prevent.
+#
+# The fake reproduces that ordering exactly: it signals the tick and THEN
+# answers `acquired`, so the lock is genuinely ours by the time the deferred
+# trap fires. A real inherited session id, for the same reason as the case
+# above — the headless path self-heals through the sentinel and hides this.
+#
+# The exact-sequence assertion is what fails before the fix: `--wait` alone,
+# with no `--release` behind it.
+
+echo "Test: a SIGTERM while the drain's lock acquire is in flight still releases the lock"
+tick_setup
+: > "$TMPDIR_TEST/paused"
+cat > "$TMPDIR_TEST/dispatch-acquire-lock" <<FAKE
+#!/usr/bin/env bash
+echo "\$*" >> "$TMPDIR_TEST/logs/acquire-lock.log"
+if [[ "\$*" == *--release* ]]; then
+  echo released
+  exit 0
+fi
+# The acquire is "in flight": signal the tick, then hand back the lock. bash
+# cannot run the pending trap until this substitution returns, so the handler
+# observes a lock that IS ours.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$TMPDIR_TEST/tick.pid" ]] && break
+  sleep 0.1
+done
+kill -TERM "\$(cat "$TMPDIR_TEST/tick.pid")"
+echo acquired
+exit 0
+FAKE
+chmod +x "$TMPDIR_TEST/dispatch-acquire-lock"
+tick_run_signalled_real "sess-acquire-window"
+assert_eq "acquire-window: the tick exits 143" "143" "$TICK_SIG_RC"
+assert_eq "acquire-window: the signal landed INSIDE the acquire — the drain never started" \
+  "0" "$([ -f "$TMPDIR_TEST/logs/graph-auto-merge.log" ] && echo 1 || echo 0)"
+assert_eq "acquire-window: the lock the child took was RELEASED on the way out" \
+  "$(printf -- '--wait\n--release')" "$(cat "$TMPDIR_TEST/logs/acquire-lock.log")"
+tick_teardown
+
 report_results

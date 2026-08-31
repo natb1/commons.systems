@@ -1182,20 +1182,38 @@ reconcile_pass() {
   # and none of them locks internally. Without it this driver and a dispatch
   # tick can merge and absorb the same node at once.
   STEP=lock; write_state
+  # Claim the hold BEFORE the acquire, not after it. `--wait` polls for up to
+  # DISPATCH_LOCK_WAIT_TIMEOUT (default 300s) in a CHILD process, and
+  # dispatch-ladder-spawn passes --property=KillMode=process — so a
+  # `systemctl --user stop dispatch-ladder-<node>` mid-wait signals only this
+  # driver. bash defers the pending trap until the command substitution
+  # finishes, by which time the child has ALREADY taken the lock; with
+  # LOCK_HELD raised only afterwards the handler sees 0, skips the release, and
+  # (since the handler now exits rather than returning into the pass) the
+  # pass's own release_lock never runs either — stranding the lock until it
+  # ages past MAX_HOLD_SECONDS. Raising it first is safe because `--release` is
+  # a strict self-release (dispatch-acquire-lock's `release)` arm): a silent
+  # `noop`, exit 0, whenever the recorded holder is not our session id.
+  LOCK_HELD=1
   out=$("$ACQUIRE_LOCK" --wait); rc=$?
   case "$rc" in
     0) ;;
+    # Both halt arms deliberately LEAVE the claim standing, so the cleanup
+    # handler still attempts a release on a hard acquire error — where whether
+    # the child got the lock before dying is precisely what we cannot know.
     2) halt 2 usage "dispatch-acquire-lock exited 2 — it could not resolve the lock file or our session id; the environment is misconfigured, not busy" ;;
     *) halt 11 throw "dispatch-acquire-lock hard-errored (rc=$rc); read its stderr in the journal" ;;
   esac
   if [[ "$(head -n1 <<<"$out")" != "acquired" ]]; then
     # `busy` — a dispatch tick is mid-selection. Transient by construction, so
     # this is a soft retry: the outer wait re-polls and the ci-wait budget
-    # bounds it. NOTHING else happens this pass.
+    # bounds it. NOTHING else happens this pass. Drop the claim raised above:
+    # the lock is demonstrably someone else's, so no later exit path should
+    # issue a `--release` for it.
+    LOCK_HELD=0
     log_event lock "$PHASE" busy "another holder has the selection lock; retrying next poll"
     return 0
   fi
-  LOCK_HELD=1
 
   # ---- Sync the main checkout ----------------------------------------------
   # graph-auto-merge and reconcile-graph-merged enumerate their candidate set

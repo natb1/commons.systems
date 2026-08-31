@@ -701,16 +701,30 @@ if [[ -z "$MANUAL" && -e "$DISPATCH_PAUSE_FLAG" ]]; then
     if [[ -z "$DRAIN_TIMEOUT_BIN" ]]; then
       echo "dispatch-tick: WARNING: \`timeout\` not found; refusing to run an unbounded merge/reconcile drain on a Type=oneshot heartbeat; SKIPPING the paused-branch node-lane drain this tick" >&2
     else
+      # Declare the hold to the cleanup handler BEFORE the acquire, not after
+      # it. `--wait` polls for up to DISPATCH_LOCK_WAIT_TIMEOUT (default 300s)
+      # in a CHILD process, and dispatch-heartbeat.service sets
+      # KillMode=process — so a `systemctl --user stop` mid-wait signals only
+      # this shell. bash defers the pending trap until the command substitution
+      # finishes, by which time the child has ALREADY taken the lock and
+      # written our session id into it; a flag raised only afterwards is still
+      # 0 when the handler runs, so the handler skips the release and the lock
+      # is stranded for MAX_HOLD_SECONDS — exactly the defect TICK_LOCK_HELD
+      # exists to prevent. Raising it first is safe because `--release` is a
+      # strict self-release (dispatch-acquire-lock's `release)` arm): a silent
+      # `noop`, exit 0, whenever the recorded holder is not our session id.
+      TICK_LOCK_HELD=1
       DRAIN_LOCK=$("$SCRIPT_DIR/dispatch-acquire-lock" --wait) || DRAIN_LOCK=""
       if [[ "$DRAIN_LOCK" != acquired ]]; then
+        # Not ours after all — drop the claim, so no later exit path issues a
+        # pointless `--release` for a lock we never held.
+        TICK_LOCK_HELD=0
         echo "dispatch-tick: paused-branch node-lane drain SKIPPED; dispatch-acquire-lock reported '${DRAIN_LOCK:-error}' (another tick holds the selection lock); the next tick retries" >&2
       else
-        # Declare the hold to the cleanup handler IMMEDIATELY after the acquire
-        # (see TICK_LOCK_HELD's comment at the trap): everything between here
-        # and the unconditional release below runs with the lock held, and a
-        # SIGINT/SIGTERM landing anywhere in that window must release it on the
-        # way out rather than strand it for MAX_HOLD_SECONDS.
-        TICK_LOCK_HELD=1
+        # Everything between here and the unconditional release below runs with
+        # the lock held, and a SIGINT/SIGTERM landing anywhere in that window
+        # must release it on the way out rather than strand it (see
+        # TICK_LOCK_HELD's comment at the trap).
         # No main-health read here: graph-auto-merge performs that admission
         # gate ITSELF (tactic-graph-auto-merge-main-health-gate), calling
         # `dispatch-graph-main-red-sync --read-only` internally and merging

@@ -1724,4 +1724,60 @@ assert_eq "sigint: the pass STOPPED — it never walked on into the absorb step"
 assert_eq "sigint: the selection lock was still released" "1" "$(lock_modes --release)"
 make_seq_fake "$DISPATCH/graph-auto-merge" merge
 
+# --- a signal DURING the acquire must release the lock the child then took ----
+# The window the two cases above do not reach. `dispatch-acquire-lock --wait`
+# polls for up to DISPATCH_LOCK_WAIT_TIMEOUT (default 300s) in a CHILD process,
+# and dispatch-ladder-spawn passes --property=KillMode=process — so a
+# `systemctl --user stop dispatch-ladder-<node>` mid-wait signals only the
+# driver and the child polls on. bash defers the pending trap until the command
+# substitution returns, by which time the child has ALREADY taken the lock and
+# recorded our session id. With LOCK_HELD raised only after the acquire the
+# handler sees 0 and skips the release; and because the handler now exits
+# rather than returning into the pass, reconcile_pass's own release_lock never
+# runs either. The lock is stranded until it ages past MAX_HOLD_SECONDS —
+# blocking every dispatch tick meanwhile.
+#
+# Before this PR the same window existed but was harmless: the handler returned
+# and the pass reached its own release_lock. The new `exit` removes exactly
+# that recovery, so the window has to be closed at the flag instead.
+#
+# The stub reproduces the ordering: it signals the driver and THEN answers
+# `acquired`, so the lock is genuinely the driver's by the time the deferred
+# trap fires. The release assertion is what fails without the fix.
+
+echo "Test: a SIGTERM while the selection-lock acquire is in flight still releases the lock"
+reset_seqs
+set_seq advance '10|idle tactic-fixture-node not-selectable'
+rm -f "$SEQ_DIR/driver.pid"
+cat >"$DISPATCH/dispatch-acquire-lock" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >>"$SEQ_DIR/lock.argv"
+printf '%s\n' "\${CLAUDE_CODE_SESSION_ID:-<unset>}" >>"$SEQ_DIR/lock.sid"
+case "\${1:-}" in
+  --heartbeat|--release) exit 0 ;;
+esac
+# The acquire is "in flight": signal the driver, then hand back the lock. bash
+# cannot run the pending trap until this substitution returns, so the handler
+# observes a lock that IS ours.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ -s "$SEQ_DIR/driver.pid" ]] && break
+  sleep 0.1
+done
+kill -TERM "\$(cat "$SEQ_DIR/driver.pid")"
+n=\$(cat "$SEQ_DIR/lock.count")
+echo \$((n + 1)) >"$SEQ_DIR/lock.count"
+line=\$(sed -n "\$((n + 1))p" "$SEQ_DIR/lock.script")
+[[ -n "\$line" ]] || line=\$(tail -n1 "$SEQ_DIR/lock.script")
+out="\${line#*|}"
+[[ -n "\$out" ]] && printf '%s\n' "\$out"
+exit "\${line%%|*}"
+STUB
+chmod +x "$DISPATCH/dispatch-acquire-lock"
+run_ladder_signalled
+assert_eq "acquire-window: the run exits 143, not the budget's own 10" "143" "$RC"
+assert_eq "acquire-window: the signal landed INSIDE the acquire — the merge step never ran" \
+  "0" "$(calls merge)"
+assert_eq "acquire-window: the lock the child took was RELEASED on the way out" \
+  "1" "$(lock_modes --release)"
+
 report_results
