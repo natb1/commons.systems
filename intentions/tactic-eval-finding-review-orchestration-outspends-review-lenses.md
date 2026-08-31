@@ -380,6 +380,43 @@ the Step 7 clean path falls from 8 ordered calls to **5**.
 
 ## Unit 1 — Remove the guaranteed sandbox denial in `assert-node-selection`
 
+> **DISCHARGED BY #3172 — verified by measurement 2026-08-31.** PR #3172
+> ("fix: spell live npx tsx invocations as node --import tsx/esm", merged as
+> `44ef8060`) performed the repo-wide `npx tsx` → `node --import tsx/esm` sweep
+> and, in doing so, made this unit's primary change. Do **not** re-plan or
+> re-implement it. The unit is kept here rather than deleted because its
+> rejected-alternative argument, its out-of-scope list, and its verification
+> fence remain the record of why the launcher form is load-bearing.
+>
+> Measured on branch `graph-landings-3` at `44ef8060`:
+>
+> - `git show --stat 44ef8060 -- .../assert-node-selection` → 1 file changed,
+>   1 insertion, 1 deletion. The diff is exactly the planned one-line swap on the
+>   `GATE_FP=$(...)` capture, with the `cd "$REPO_ROOT" &&` prefix, the argument
+>   list, and the surrounding `GATE_RC`/`case` block byte-for-byte unchanged —
+>   i.e. the scope below was implemented as written, by another PR.
+> - `grep -n 'npx tsx' .../assert-node-selection` → **exit 1, no output.**
+> - `grep -n 'node --import tsx/esm' .../assert-node-selection` → **exit 0**,
+>   matching at **`:165`**.
+> - The "Also change" half is discharged too: `.claude/rules/sandbox.md` now
+>   carries an `## npx tsx` section at **`:128`**, stating the general fact this
+>   unit asked it to record.
+>
+> **Anchor drift.** Every `assert-node-selection` line number below moved as the
+> file grew. The launcher line cited as `:118` is now **`:165`**; `GATE_RC=$?` is
+> **`:167`**; the `case` on `0 | 12|13 | *` starts at **`:169`**. The prose below
+> is deliberately left as originally written — it is the dated record of what was
+> measured on 2026-08-19, and rewriting it would falsify that record — so this
+> note carries the current anchors instead.
+>
+> **Residual, deliberately not re-planned.** The scope below also asked for "a
+> short comment above the line recording *why* the launcher form is load-bearing
+> (the EPERM above), so a later edit does not swap it back". #3172 did not add
+> it: the comment at `:162-164` explains only why `set -e` is absent. The
+> rewritten regression guard in this node's Verification section now covers that
+> risk mechanically, so the comment is a nice-to-have and not a blocker for
+> Units 2 and 3, which are untouched by #3172 and remain this node's live work.
+
 The front-door call at `review-fix/SKILL.md:~67` runs
 `dispatch-derive-node-target`, whose Step 5 calls
 `.claude/skills/dispatch-propagate/scripts/assert-node-selection`, which launches
@@ -725,13 +762,32 @@ wiring; Unit 3 extends both).
 
 ### Auto-runnable
 
-Unit 1 — the negated grep **fails today** (`assert-node-selection:118` contains
-`npx tsx`), so it is not a vacuous assertion:
+Unit 1 — **the premise this fence rested on is discharged; the fence below is a
+regression guard, not a red-before-green assertion.** As written on 2026-08-19 it
+was justified by "the negated grep **fails today** (`assert-node-selection:118`
+contains `npx tsx`)". PR #3172 (`44ef8060`) falsified that premise on 2026-08-31
+by performing the `npx tsx` → `node --import tsx/esm` sweep — measured, that grep
+now exits **1 with no output**, and `node --import tsx/esm` matches at **`:165`**
+(the `:118` anchor drifted). The fence was therefore rewritten rather than left
+standing, because a bare negated grep is exactly the shape that passes
+**vacuously** when its target file is renamed or deleted — nothing is present, so
+nothing is forbidden, so it goes green having tested nothing.
+
+The rewrite makes it fail loudly in that case: it asserts the target exists
+first, with its own message; then keeps the negated grep as the
+swap-back guard; then asserts the *positive* launcher form on a single
+unwrapped line, so a line-wrapped or renamed invocation cannot satisfy it by
+absence; then runs the real `test-assert-node-selection.sh` suite (present on
+disk, verified 2026-08-31) with an explicit `|| exit 1` so its failure is not
+swallowed as the block's last command. What it still tests is real: it goes red
+if any later edit swaps the launcher back, deletes or renames the script, or
+breaks the selection gate's contract.
 
 ```verify
-if grep -n 'npx tsx' .claude/skills/dispatch-propagate/scripts/assert-node-selection; then echo "FAIL: the forbidden pattern is still present in .claude/skills/dispatch-propagate/scripts/assert-node-selection"; exit 1; fi
-grep -n 'node --import tsx/esm' .claude/skills/dispatch-propagate/scripts/assert-node-selection || exit 1
-.claude/skills/dispatch-propagate/scripts/test-assert-node-selection.sh
+test -f .claude/skills/dispatch-propagate/scripts/assert-node-selection || { echo "FAIL: verification target is missing: .claude/skills/dispatch-propagate/scripts/assert-node-selection"; exit 1; }
+if grep -n 'npx tsx' .claude/skills/dispatch-propagate/scripts/assert-node-selection; then echo "FAIL: the forbidden npx tsx launcher is present again in .claude/skills/dispatch-propagate/scripts/assert-node-selection"; exit 1; fi
+grep -n 'node --import tsx/esm packages/intentionsutil/scripts/check-node-selection.ts' .claude/skills/dispatch-propagate/scripts/assert-node-selection || { echo "FAIL: the sandbox-safe launcher is absent from .claude/skills/dispatch-propagate/scripts/assert-node-selection"; exit 1; }
+.claude/skills/dispatch-propagate/scripts/test-assert-node-selection.sh || exit 1
 ```
 
 Unit 2:
