@@ -183,6 +183,42 @@ _graph_restore_ids_to_head() {
   return $rc
 }
 
+# _graph_restore_and_claim <repo-root> <label> <id>... — restore this writer's
+# own node files to HEAD and set the sentence the caller must splice into its
+# operator message. Sets _GRAPH_RESTORE_RC (the restore's status) and
+# _GRAPH_RESTORE_CLAIM (the sentence). Sets, rather than prints, so a caller
+# can read the rc — a command substitution would run it in a subshell and lose
+# it, which is the same evidence-discarding this exists to stop.
+#
+# EVERY exit from graph_rollback_node_writes owes this, the refusals included.
+# A refusal is about the DESTRUCTIVE leg — the rewind — and nothing else: the
+# per-id `git checkout --` touches only the ids THIS writer pinned, moves no
+# commit, and cannot reach a peer's work. Skipping it buys the refusal nothing
+# and leaves this writer's node file dirty in the SHARED checkout, which trips
+# graph-commit's assert_clean_outside_ids for EVERY other writer there — the
+# checkout-wide outage this file exists to prevent, inflicted by the guard
+# instead of by the leak.
+#
+# The sentence is rc-conditional because it makes a CLAIM about the shared
+# checkout's cleanliness and may not outrun its evidence. An operator told "not
+# left dirty" by a FAILED restore stops looking, while the next graph-commit
+# from that checkout trips assert_clean_outside_ids for everyone. That is the
+# same false-claim class this guard exists to remove, so the rc decides which
+# half of the claim is printed.
+_GRAPH_RESTORE_RC=0
+_GRAPH_RESTORE_CLAIM=""
+_graph_restore_and_claim() {
+  local repo_root="$1" label="$2"
+  shift 2
+  _GRAPH_RESTORE_RC=0
+  _graph_restore_ids_to_head "$repo_root" "$label" "$@" || _GRAPH_RESTORE_RC=$?
+  if (( _GRAPH_RESTORE_RC == 0 )); then
+    _GRAPH_RESTORE_CLAIM="This writer's own node file(s) WERE restored to HEAD, so the shared checkout is not left dirty for every other graph writer."
+  else
+    _GRAPH_RESTORE_CLAIM="This writer's own node file(s) could NOT be restored to HEAD (the restore exited $_GRAPH_RESTORE_RC), so the shared checkout IS LEFT DIRTY and the next graph-commit from it will trip assert_clean_outside_ids for every other graph writer — restore them by hand FIRST."
+  fi
+}
+
 graph_rollback_node_writes() {
   local repo_root="$1" head_at_arm="$2" label="$3"
   shift 3
@@ -294,21 +330,10 @@ graph_rollback_node_writes() {
       # contemplate that dirty tree denying service to everyone else, and
       # skipping the restore buys the refusal nothing.
       # The message below makes a CLAIM about the shared checkout's cleanliness,
-      # so it may not outrun its evidence: `|| true` here would discard the one
-      # signal that says whether the claim is true, and an operator told "not
-      # left dirty" by a FAILED restore stops looking — while the next
-      # graph-commit from that checkout trips assert_clean_outside_ids for
-      # everyone. That is the same false-claim class this guard exists to
-      # remove, so the rc decides which half of the claim is printed.
-      local restore_rc=0
-      _graph_restore_ids_to_head "$repo_root" "$label" "${ids[@]}" || restore_rc=$?
-      local restore_claim
-      if (( restore_rc == 0 )); then
-        restore_claim="This writer's own node file(s) WERE restored to HEAD, so the shared checkout is not left dirty for every other graph writer."
-      else
-        restore_claim="This writer's own node file(s) could NOT be restored to HEAD (restore exited $restore_rc), so the shared checkout IS LEFT DIRTY and the next graph-commit from it will trip assert_clean_outside_ids for every other graph writer — restore them by hand FIRST."
-      fi
-      echo "$label: HEAD carries ${#unattributed[@]} unpushed commit(s) with NO Graph-Writer attribution (${unattributed[0]}) — this rollback cannot tell its own un-landed write from another process's work, so NOTHING was discarded and the commit(s) are LEFT on HEAD. $restore_claim Inspect the commit(s) by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
+      # and _graph_restore_and_claim is what keeps that claim tied to its
+      # evidence — see its header for why the sentence is rc-conditional.
+      _graph_restore_and_claim "$repo_root" "$label" "${ids[@]}"
+      echo "$label: HEAD carries ${#unattributed[@]} unpushed commit(s) with NO Graph-Writer attribution (${unattributed[0]}) — this rollback cannot tell its own un-landed write from another process's work, so NOTHING was discarded and the commit(s) are LEFT on HEAD. $_GRAPH_RESTORE_CLAIM Inspect the commit(s) by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
       return 1
     fi
     if [[ "${#mine[@]}" -gt 0 ]]; then
@@ -321,7 +346,10 @@ graph_rollback_node_writes() {
       # (a) another writer's content commit. Refuse rather than trade one
       #     writer's leak for another writer's loss.
       if [[ "${#foreign[@]}" -gt 0 ]]; then
-        echo "$label: HEAD carries this writer's un-landed commit(s) (${mine[0]:0:8}) BELOW or beside another writer's commit(s) (${foreign[0]:0:8}, Graph-Writer: $(_graph_commit_writer "$repo_root" "${foreign[0]}")) — rewinding to ${head_at_arm:0:8} would destroy the other writer's work, so the node write(s) were NOT rolled back. Drop this writer's commit(s) by hand before any other graph-commit runs from this checkout" >&2
+        # Restore, THEN refuse — the same ordering the unattributed arm above
+        # obeys, and for the same reason: what is refused here is the REWIND.
+        _graph_restore_and_claim "$repo_root" "$label" "${ids[@]}"
+        echo "$label: HEAD carries this writer's un-landed commit(s) (${mine[0]:0:8}) BELOW or beside another writer's commit(s) (${foreign[0]:0:8}, Graph-Writer: $(_graph_commit_writer "$repo_root" "${foreign[0]}")) — rewinding to ${head_at_arm:0:8} would destroy the other writer's work, so NOTHING was discarded and this writer's commit(s) are LEFT on HEAD. $_GRAPH_RESTORE_CLAIM Drop this writer's commit(s) by hand before any other graph-commit runs from this checkout" >&2
         return 1
       fi
       # (b) a PARK commit. The park test above routes it out of `foreign` on
@@ -333,12 +361,18 @@ graph_rollback_node_writes() {
       #     is the whole reason the park arm exists. Kept commits and
       #     discardable ones cannot share one rewind, so refuse.
       if [[ "${#parks[@]}" -gt 0 ]]; then
-        echo "$label: HEAD carries this writer's un-landed commit(s) (${mine[0]:0:8}) BELOW or beside an unpushed graph-commit park commit (${parks[0]:0:8}) — rewinding to ${head_at_arm:0:8} would erase a park record a human still needs whoever made it, so the node write(s) were NOT rolled back and NOTHING was discarded. Drop this writer's commit(s) by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
+        # Restore, THEN refuse — as in arm (a). Keeping the park is a claim
+        # about the REWIND; it says nothing about this writer's own files.
+        _graph_restore_and_claim "$repo_root" "$label" "${ids[@]}"
+        echo "$label: HEAD carries this writer's un-landed commit(s) (${mine[0]:0:8}) BELOW or beside an unpushed graph-commit park commit (${parks[0]:0:8}) — rewinding to ${head_at_arm:0:8} would erase a park record a human still needs whoever made it, so NOTHING was discarded and this writer's commit(s) are LEFT on HEAD. $_GRAPH_RESTORE_CLAIM Drop this writer's commit(s) by hand before any other graph-commit runs from this checkout: it pushes HEAD, not just the node it names" >&2
         return 1
       fi
-      # Either the stranded commit is dropped (the tree is back at
-      # <head-at-arm>, nothing left to check out) or the refusal was reported —
-      # either way the `checkout --` below must not run and must not be claimed.
+      # The discard leg restores the paths its own rewind touched, so the
+      # terminal `checkout --` below must not run and must not be claimed for
+      # it. The two refusals above are NOT in that position: they restore
+      # first (see _graph_restore_and_claim) and return, because refusing the
+      # rewind is not a reason to leave this writer's own file dirty for every
+      # other writer in the checkout.
       _graph_discard_stranded_commits "$repo_root" "$head_at_arm" "$label" "${mine[@]}"
       return $?
     fi
@@ -352,10 +386,17 @@ graph_rollback_node_writes() {
       echo "$label: graph-commit's park commit ${parks[0]:0:8} is not on the local origin/main ref — treat the park as possibly unpushed; the node files are restored to HEAD, which KEEPS it" >&2
     fi
   fi
-  local rc=0
-  _graph_restore_ids_to_head "$repo_root" "$label" "${ids[@]}" || rc=1
-  echo "$label: rolled the node write(s) back to HEAD ${head_now:0:8}" >&2
-  return $rc
+  # The success line is a CLAIM that the rollback happened, and the one caller
+  # that would carry a non-zero rc onward discards it (`graph-select-target`'s
+  # `|| true`), so this line is the only signal an operator ever sees. It may
+  # not outrun its evidence either.
+  _graph_restore_and_claim "$repo_root" "$label" "${ids[@]}"
+  if (( _GRAPH_RESTORE_RC == 0 )); then
+    echo "$label: rolled the node write(s) back to HEAD ${head_now:0:8}" >&2
+  else
+    echo "$label: could NOT roll the node write(s) back to HEAD ${head_now:0:8}. $_GRAPH_RESTORE_CLAIM" >&2
+  fi
+  return $_GRAPH_RESTORE_RC
 }
 
 # Drop the un-landed commit(s) graph-commit left on HEAD, restoring the checkout

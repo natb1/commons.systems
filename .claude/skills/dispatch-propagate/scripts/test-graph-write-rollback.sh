@@ -2059,6 +2059,123 @@ else
 fi
 
 # ===========================================================================
+# Case 9K: restore BEFORE refusing — for the PARK arm too.
+#
+# Case 9J pins the ordering for the UNATTRIBUTED refusal. The two refusals in
+# the `mine` branch — a foreign commit inside the rewind's range, and an
+# unpushed park inside it — returned ABOVE the per-id restore, leaking exactly
+# the dirty file 9J exists to prevent. What those arms refuse is the REWIND;
+# the per-id `git checkout --` touches only the ids THIS writer pinned and
+# moves no commit, so refusing the rewind is no reason to leave this writer's
+# own file dirty for every other writer in the shared checkout.
+#
+# Case 9h's park shape, plus working-tree residue ABOVE this sweep's own
+# commit: the stub commits the node (attributed, so the ownership test says
+# "mine") and then re-dirties it, standing in for a rebase/retry leg that wrote
+# merged content back before dying. Both refusal arms are the same three lines
+# of shape and share one helper, so pinning the park arm pins the pair.
+# ===========================================================================
+T9K="$WORK/t9k-seed"
+build_seed_repo "$T9K"
+cp "$HARNESS_DIR/reconcile-graph-merged" "$T9K/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+chmod +x "$T9K/.claude/skills/dispatch-propagate/scripts/reconcile-graph-merged"
+reconcile_node "$T9K/intentions/t-strand.md" t-strand 909
+cat >"$T9K/intentions/t-peerpark.md" <<'NODE'
+---
+id: t-peerpark
+kind: tactic
+statement: a node another writer parked to office_hours mid-sweep
+owner: ai
+status: codified
+phase: implement
+serves: []
+execution: null
+---
+# a node another writer parked to office_hours mid-sweep
+NODE
+new_origin t9k
+init_and_push "$T9K"
+
+C9K="$WORK/t9k-clone"
+clone_with_node_modules "$C9K"
+BIN9K="$WORK/t9k-bin"; FIX9K="$WORK/t9k-fixtures"
+reconcile_gh_stub "$BIN9K" "$FIX9K"
+cat >"$C9K/packages/intentionsutil/scripts/graph-commit" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+dir=""; ids=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -C) dir="${2:-}"; shift 2 ;;
+    -m|--base) shift 2 ;;
+    *) ids+=("$1"); shift ;;
+  esac
+done
+cd "$dir" || exit 2
+for id in "${ids[@]}"; do
+  git add -- "intentions/$id.md"
+done
+git commit -qm "graph: reconcile terminal tactics (record completion)
+
+Graph-Writer: ${GRAPH_WRITER:-graph-commit}"
+# A retry leg writing merged content back over the node it just committed and
+# then dying: the commit is this writer's and un-landed, and the FILE is dirty
+# above it. That is the residue the refusal used to leave behind.
+for id in "${ids[@]}"; do
+  printf '%s\n' 'retry-leg residue' >>"intentions/$id.md"
+done
+echo "error: graph-commit: could not land ${ids[*]} — main advanced through every push attempt" >&2
+exit 1
+SH
+chmod +x "$C9K/packages/intentionsutil/scripts/graph-commit"
+REAL_NODE9K="$(command -v node)"
+cat >"$BIN9K/node" <<'SH'
+#!/usr/bin/env bash
+set -uo pipefail
+saw_script=0; saw_noapply=0
+for a in "$@"; do
+  case "$a" in
+    *reconcile-graph.ts) saw_script=1 ;;
+    --no-apply)          saw_noapply=1 ;;
+  esac
+done
+if [[ "$saw_script" -eq 1 && "$saw_noapply" -eq 0 && ! -f "$GC_SENTINEL" ]]; then
+  : >"$GC_SENTINEL"
+  printf '%s\n' 'office_hours: parked by a concurrent graph writer' >>"$GC_CLONE/intentions/t-peerpark.md"
+  git -C "$GC_CLONE" add -- intentions/t-peerpark.md
+  git -C "$GC_CLONE" commit -qm 'graph: park t-peerpark (unresolvable divergence); land t-other
+
+Graph-Writer: graph-commit'
+fi
+exec "$GC_REAL_NODE" "$@"
+SH
+chmod +x "$BIN9K/node"
+
+out="$(
+  cd "$C9K" || exit 99
+  export PATH="$BIN9K:$PATH" GC_FIXTURE_DIR="$FIX9K"
+  export GC_CLONE="$C9K" GC_REAL_NODE="$REAL_NODE9K" GC_SENTINEL="$WORK/t9k-park-landed"
+  export "${RECON_ENV[@]}"
+  bash .claude/skills/dispatch-propagate/scripts/reconcile-graph-merged 2>&1
+)"; rc=$?
+ahead9k="$(git -C "$C9K" rev-list --count origin/main..HEAD)"
+status9k="$(git -C "$C9K" status --porcelain intentions/)"
+park9k="$(git -C "$C9K" show HEAD:intentions/t-peerpark.md)"
+if [[ $rc -ne 0 ]] \
+   && [[ -f "$WORK/t9k-park-landed" ]] \
+   && [[ "$ahead9k" -eq 2 ]] \
+   && grep -q 'would erase a park record a human still needs' <<<"$out" \
+   && grep -q 'WERE restored to HEAD' <<<"$out" \
+   && grep -q 'parked by a concurrent graph writer' <<<"$park9k" \
+   && ! grep -q 'discarded by moving HEAD back to' <<<"$out" \
+   && [[ -z "$status9k" ]]; then
+  ok "graph write rollback park safety: the park refusal restores THIS writer's own dirty node file to HEAD before refusing — the park survives on HEAD, nothing is rewound, and the shared checkout is left clean for every other writer"
+else
+  no "graph write rollback park safety: restore-before-refuse must leave a CLEAN shared checkout (rc=$rc, ahead=$ahead9k, status='$status9k')"
+  printf '%s\n' "$out"
+fi
+
+# ===========================================================================
 # Case 9i: THE ZERO-WRITE CLAIM GUARD SURVIVES PLAN DRIFT.
 #
 # reconcile-graph-merged's empty-plan exit relies on the shared rollback's
