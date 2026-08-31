@@ -104,7 +104,7 @@ themselves.
 ## Verification
 
 ```verify
-npx tsx ops/scripts/audit-own-audience.ts --help
+node --import tsx/esm ops/scripts/audit-own-audience.ts --help
 ```
 
 Prose: also run the repo typecheck entry point over the script if `ops/`

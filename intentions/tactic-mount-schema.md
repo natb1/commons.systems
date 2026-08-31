@@ -185,7 +185,7 @@ Scope:
 
 ```verify
 npm test --prefix packages/intentionsutil || exit 1
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts
 ```
 
 Manual: none — rendering and mounted content land in the sibling tactics.

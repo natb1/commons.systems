@@ -89,7 +89,7 @@ message; well-scoped and mechanical).
 ## Verification
 
 ```verify
-npx vitest run --project ds --root .
+npx vitest run --project packages/ds --root .
 ```
 
 The new test passes on the current tree. To confirm it actually guards:

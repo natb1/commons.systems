@@ -143,8 +143,8 @@ machine-comparable vocabulary declarations).
 ## Verification
 
 ```verify
-npx vitest run --project intentionsutil --root . || exit 1
-npx tsx packages/intentionsutil/scripts/validate-graph.ts
+npx vitest run --project packages/intentionsutil --root . || exit 1
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts
 ```
 
 Prose: mutate one kind declaration locally (remove a declared field) and

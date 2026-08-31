@@ -168,7 +168,7 @@ npx vitest run --project packages/intentionsutil --root .
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/participation-review.ts
+node --import tsx/esm packages/intentionsutil/scripts/participation-review.ts
 ```
 
 The `--project` name is the workspace dir `packages/intentionsutil` — the

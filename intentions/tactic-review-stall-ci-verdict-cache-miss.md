@@ -19,8 +19,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: a-p4-review-stall-per-candidate-cost
+  pr: 3162
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-31T04:53:09Z
+    mergeCommitSha: 05ff7e4bb3aad03be7be643b384a5080d18ad378
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -30,6 +42,35 @@ attributes: {}
 ---
 
 # Skip the redundant per-candidate dispatch_ci_verdict_rest REST fetch in reconcile-graph-review-stall by reading .mergeable first (CONFLICTING short-circuits without a CI call)
+
+## Completion record — shipped 2026-08-31
+
+Units 1 and 2 landed as PR #3162, merge `05ff7e4b`, an ancestor of
+`origin/main`, in one commit shared with the sibling node
+`tactic-review-stall-predicate-subprocess-spawn`.
+
+**Unit 1** — `reconcile-graph-review-stall` now short-circuits a `CONFLICTING`
+candidate. The skip sits **after** the `.mergeable` closed-union validation
+`case` — a projection-change alarm that must keep running for every candidate —
+and **before** the `HEAD_SHA` read, so the candidate pays neither the paginated
+`check-runs` fetch through `dispatch_ci_verdict_rest` nor the `reviewStallRoute`
+subprocess. It is silent on both streams, does not increment `ACTED`, and
+`continue`s rather than `break`s.
+
+The waste it removes was total, not marginal: the sweep computed a route it
+then discarded, because the `conflict` arm has been a deliberate retired no-op
+since `tactic-graph-router-conflict-routing` moved CONFLICTING routing wholly
+to the selector's `pending-merge` candidate path. Neither cost was bounded by
+`GRAPH_REVIEW_STALL_CAP` — `ACTED` increments only in the `fix` arm — so an
+arbitrary number of skipped candidates could each pay in full, on every tick,
+inside the tick's `dispatch.lock` hold.
+
+**Unit 2** — the behavior test that counts REST calls. Case 10d in
+`test-graph-write-rollback.sh` asserts a CONFLICTING candidate pays no
+`check-runs` fetch while a red MERGEABLE candidate behind it is still
+recovered, made countable by one added line in `review_stall_gh_stub` that logs
+each resolved REST path; case 10e is the anti-vacuity control.
+
 
 ## Context
 

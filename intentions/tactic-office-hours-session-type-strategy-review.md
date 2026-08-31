@@ -109,7 +109,7 @@ scope fingerprint while it is parked mid-review. This node therefore
 ## Verification
 
 ```verify
-npx vitest run --project intentionsutil --root .
+npx vitest run --project packages/intentionsutil --root .
 ```
 
 ```verify

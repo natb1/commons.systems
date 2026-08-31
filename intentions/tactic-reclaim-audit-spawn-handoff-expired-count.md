@@ -21,8 +21,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: agent-a67cb7cd9bfa78d2b
+  pr: 3154
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-31T02:04:45Z
+    mergeCommitSha: f8a337cf70ad00d114fb373ebc17c7ff722076a6
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -30,6 +42,32 @@ pace_exempt: false
 rounds: null
 attributes: {}
 ---
+## Completion record — shipped 2026-08-31
+
+Units 1 and 2 landed as PR #3154, merge `f8a337cf`, an ancestor of
+`origin/main`.
+
+**Unit 1** — reason-generic bucketing, not a third literal.
+`dispatch-reclaim-audit`'s RATE source now parses the reason token out of each
+line matching the existing reason-agnostic `ALL_RECLAIM_RE` and buckets it
+as-is, so a reason the ledger adds later is counted without a code change here.
+That was the point: the audit was blind to **two** reason families, not one
+(`spawn-handoff-expired after <N>s with no live worker` and
+`<origin>-ttl-expired after <N>s with no live worker`), both because their
+trailing clause sits inside the same parentheses the old closing-paren anchors
+matched on. A line whose reason will not parse is counted in the total and
+reported as `reclaim_events_reason_unparsed` rather than dropped into no
+bucket.
+
+The JSON contract is additive only — `dead_session_stranded_events`,
+`live_worker_redundant_events` and `dead_session_stranded_distinct_worktrees`
+keep their names, positions and meanings and are now derived from the bucket
+table. Exit codes are untouched, CAUSE still apportions `dead-session-stranded`
+only, and `lib-reservation-ledger.sh` did not change.
+
+**Unit 2** — the regression coverage in `test-reclaim-audit.sh`, including case
+E asserting the new reasons do not leak into the pre-existing buckets.
+
 ## Context
 
 `dispatch-reclaim-audit` is the operator instrument that measures the reservation

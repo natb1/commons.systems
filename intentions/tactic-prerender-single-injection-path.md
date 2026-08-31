@@ -210,7 +210,7 @@ caller across both apps; a missed caller is a prerender break).
 ## Verification
 
 ```verify
-npx vitest run --project blog --root . || exit 1
+npx vitest run --project packages/blog --root . || exit 1
 npx vitest run --project fellspiral --root .
 ```
 

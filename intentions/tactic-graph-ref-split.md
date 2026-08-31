@@ -957,7 +957,7 @@ cd packages/intentionsutil && npx tsc --noEmit && npm test
 ```verify
 # Unit 5 — sensors resolve against the shared graph worktree with no thrown
 # errors (manual: eyeball non-"unknown" output for known tactic ids).
-npx tsx -e "
+node --import tsx/esm -e "
   import { readTacticVelocity } from './packages/intentionsutil/scripts/read-sensors.ts';
   console.log(readTacticVelocity(process.cwd()));
 "
@@ -1030,7 +1030,7 @@ echo OK
 # Unit 5 — deletedNodeIds resolves against the graph worktree and returns a
 # plausible count, not the every-node-deleted result a main-rooted walk gives
 # after the cutover PR.
-npx tsx -e "
+node --import tsx/esm -e "
   import { deletedNodeIds } from './packages/intentionsutil/scripts/lib-deleted-node-ids.js';
   const ids = deletedNodeIds();
   if (ids.length === 0) { console.error('FAIL: empty deleted-id set'); process.exit(1); }

@@ -30,8 +30,20 @@ clarifications: []
 tooling_goals: []
 success_signal: null
 attention: null
-phase: implement
-execution: null
+phase: done
+execution:
+  branch: tactic-review-stall-listnodes-duplicate-scan-p2
+  pr: 3157
+  attempts: {}
+  markers: []
+  strategy_fingerprint: null
+  fix: null
+  conflict: null
+  completion:
+    mergedAt: 2026-08-31T02:50:29Z
+    mergeCommitSha: 478da4e42a8c1e853ed0956722d342c6100b1d0e
+    graphCommitSha: null
+  lane_pass: null
 validates: []
 blocked_by: []
 office_hours: null
@@ -41,6 +53,32 @@ attributes: {}
 ---
 
 # Share one materialized node enumeration across the tick's duplicate `intentions/` scans
+
+## Completion record — shipped 2026-08-31
+
+All five units landed on `origin/main`, across two PRs.
+
+- **Unit 1** — the content-addressed primitive
+  `packages/intentionsutil/src/store-cache.ts` (`storeFingerprint`,
+  `listNodesStrictCached`), its re-export and its 16-case vitest suite — shipped
+  as PR #3152, merge `9211c1f4`.
+- **Units 2-5** — the four tick-band call sites (`graph-auto-merge`,
+  `reconcile-graph-merged`, `reconcile-graph-review-stall`,
+  `reconcile-graph.ts`), the tick-scoped `DISPATCH_GRAPH_NODE_CACHE` directory
+  and extended `EXIT` trap in `dispatch-select-tick`, the real-store coverage in
+  `test-graph-write-rollback.sh` / `test-graph-auto-merge.sh`, and the
+  `dispatch-ladder-run` note recording why this cache needs no `unset`
+  discipline — shipped as PR #3157, merge `478da4e4`.
+
+Both merge commits are ancestors of `origin/main`. `execution` records the
+landing PR #3157; #3152 is named here because the node took two PRs and the
+frontmatter has room for only one.
+
+Three every-tick call sites were deliberately left unwired here
+(`select-targets.ts`, `dispatch-graph-census`, `dispatch-graph-scope-sweep`);
+they are `tactic-done-node-retention-scan-cost`'s scope, and that node reaches
+`phase: done` in this same write.
+
 
 ## Context
 

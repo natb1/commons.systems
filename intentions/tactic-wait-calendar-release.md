@@ -787,7 +787,7 @@ npx vitest run --project packages/intentionsutil --root .
 ```
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 ```verify

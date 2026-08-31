@@ -754,7 +754,7 @@ legacy `boost:`/`override:` forms in all 91 attention-carrying node files still
 parse under the new shape and that rule 20's removal broke no other rule.
 
 ```verify
-npx tsx packages/intentionsutil/scripts/validate-graph.ts intentions
+node --import tsx/esm packages/intentionsutil/scripts/validate-graph.ts intentions
 ```
 
 ```verify
