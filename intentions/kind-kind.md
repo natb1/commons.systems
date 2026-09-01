@@ -355,6 +355,118 @@ clarifications:
       regardless of high-water mark. (6) Ratified texts citing this vocabulary
       pin to its current sense; the deferred base review of this vocabulary
       re-verifies those texts on any amendment.)"
+  - question: Carrier parsimony review — which intent-side carriers survive a
+      parsimony test, and which collapse (2026-09-01)?
+    answer: "(Claude-drafted 2026-09-01 as duty 1 of the layer-boundary
+      delegation carried by tactic-intent-orchestration-layer-schema; held for
+      author review.) Every ruling below is a PROPOSAL and none is executed
+      here — no field is added, removed, renamed or reclassified by this entry.
+      The test applied throughout: a role distinction earns its keep only where
+      a consumer reads it mechanically. OWNER — RETIRE. The 2026-08-31
+      author-ratified ruling on strategy-explicit-intent already recognizes no
+      function for the node-level owner schema: ownership categories live on
+      dispositions, and node-level owner: ai is retained only as a brownfield
+      carrier. Parsimony agrees. The only mechanical readers are
+      confirmPushDowns (packages/intentionsutil/src/sensors.ts:369, which
+      filters owner procedure/ai jointly with status delegated/codified) and the
+      goals render (packages/intentionsutil/src/goals.ts:139,
+      realizationForOwner); both are derivable from a disposition-side ownership
+      stamp. Retirement is a MIGRATION, not a deletion: validateNode requires
+      owner in its strictly-validated core
+      (packages/intentionsutil/src/schema.ts:1189, requireOneOf against OWNERS),
+      so every node file in the store fails validation the moment the field goes
+      away — the four-step contract (record target, read-tolerance window,
+      drain, ratchet) governs. STATUS — does NOT cleanly follow owner; SPLIT it.
+      The provenance half does follow: the same 2026-08-31 ruling names status:
+      delegated a brownfield carrier alongside owner: ai, and for tactics the
+      draft/codified distinction duplicates phase-absence. But status is
+      load-bearing today in a way owner is not, and rule 16 is the least of it.
+      checkStatusVocabulary (schema.ts:1413-1428, dispatched at schema.ts:2058)
+      does read status mechanically against each kind node's
+      attributes.status_vocabulary, which is exactly the earns-its-keep test —
+      but that consumer is self-referential: it validates the field's own
+      vocabulary and nothing else, so it is removable WITH the field and is not
+      by itself a reason to keep it. The load-bearing consumers are the other
+      five: isSuperseded (schema.ts:50) keys the whole supersession lifecycle on
+      the superseded value; rungs.ts:36 selects root virtues on codified;
+      sensors.ts:321 gates derived-gap reporting on codified; coverage.ts:52
+      maps delegated to coverage class A; goals.ts:77 excludes codified nodes.
+      Recommendation: status is not removable as a unit. Retire the
+      ownership/provenance VALUES with owner, and re-express superseded as
+      derived from superseded_by (already stored, already the authority under
+      rules 25-26) rather than as a status value; what survives is a per-kind
+      lifecycle enum read only by rule 16 and the codified filters, which is a
+      candidate for a SECOND parsimony pass rather than this one. RATIONALE —
+      KEEP; do not collapse into serves. The two carriers answer different
+      questions: serves is a typed edge naming which nodes this node expresses,
+      rationale is prose saying why the node exists, including the
+      countervailing reasoning an edge cannot carry. Two mechanical facts make
+      it the strongest carrier in this list. It is scanned for prose refs — the
+      dangling-prose-ref check reads statement, rationale, attention.rationale
+      and every clarifications[].answer (schema.ts:2151-2153) — and it is the
+      field the durable-write fence was corrected to protect: the 2026-08-15
+      correction from a permissive to a negative check was made precisely
+      because the measured permissive fallthrough included rationale
+      (schema.ts:713-731, isDurableWriteRefused). Recommendation: rationale
+      stays, classified intent. CLARIFICATIONS — KEEP the carrier, consolidate
+      the CONTENTS, and the mechanism is not this node's to design. The author
+      flags this field as prime for consolidation. What consolidation means for
+      the carrier is a choice between the incumbent form (an append-only list of
+      dated Q&A pairs where a later entry amends an earlier one in prose and
+      both survive) and a folded restatement (one current-state text, with git
+      history as the archive). The trade is real in both directions: the
+      append-only form is what keeps concurrent writers safe and what preserves
+      the superseded stamp the disposition algebra depends on, while the folded
+      form is what keeps the record readable — this node's own reconciliation
+      vocabulary is now a single answer carrying six dated refinements.
+      Recommendation: retain clarifications as the intent-class carrier and
+      treat folding as the FOLDING operation the reconciliation vocabulary
+      already names, whose mechanism belongs to tactic-consolidation-operation.
+      Do not design the fold here. READING and ROUNDS — RELOCATE; the
+      classification is already done. Unit 1 classified both orchestration in
+      attributes.field_write_class on this node, and the prose tables in the
+      body carry the same, so nothing about the CLASSIFICATION is open. What is
+      open is only the carrier's HOME: both are observed state stored as
+      intent-side node fields, and under the create-only operational-carrier
+      doctrine recorded in this node's body they belong outside the node file as
+      records rather than fields — reading maps to ASSESSMENT in the
+      reconciliation vocabulary above, rounds is claim-window accounting and
+      maps to WORK RECORD. Recommendation: relocate both to operational-layer
+      records; the relocation is a migration with its own frontier entry, not a
+      reclassification. THE SHIMS — attributes.write_class_shims records TWO,
+      not the three an earlier draft projected: attention was resolved to intent
+      (no orchestration writer assigns it) and its STATE_FIELDS membership was
+      recorded as a migration frontier item rather than a shim. (1) status —
+      machine-stamped by the transition writers and a member of STATE_FIELDS
+      (schema.ts:676-685), yet its draft/codified role is provenance on a
+      disposition, an intent-side fact. The ruling the author must make to
+      liquidate it is the status ruling above: retire the ownership values,
+      derive supersession from superseded_by, then rule whether the residual
+      lifecycle enum is intent-class or goes with them. (2) blocked_by —
+      mechanically minted by the hold path and simultaneously the carrier of
+      authored sequencing edges (this bootstrap's critical path is encoded as
+      blocked_by edges on the carrier tactics). The ruling the author must make
+      is whether authored sequencing moves to a distinct intent-class carrier,
+      leaving blocked_by purely orchestration; only that split liquidates the
+      shim, because no single class is honest about a field two classes
+      genuinely write. Until each ruling lands the shim declaration is the
+      correct record — forcing either field into one class would break a live
+      writer or make the fence fail open, which is the failure mode already
+      corrected once here. VOCABULARY RECONCILIATION — one mapping, no third
+      pair. The deferred reconciliation vocabulary recorded above on this node
+      names TARGET STATE and OPERATIONAL STATE for the same distinction the
+      ratified layer-boundary disposition calls intent and orchestration. The
+      mapping is exact: intent = target state, orchestration = operational
+      state. Recommendation: intent/orchestration stays the CODE vocabulary (the
+      identifier is write_class), because that pair is ratified
+      (strategy-explicit-intent, 2026-08-31) while the target/operational pair
+      is deferred, and the authority-primacy ordering recorded above is ratified
+      > deferred/delegated > operational. Should the deferred vocabulary itself
+      be ratified, the rename is a mechanical follow-on rather than a fresh
+      decision. No third pair is minted, and the word layer is not reused for
+      it — layer already means attributes.goal_layer, kind-typed field
+      placement, and graph-commit's Layer 1/2/3 conflict-resolution stages.
+      (decision: deferred — Claude-drafted, held for author review)"
 tooling_goals: []
 success_signal: null
 attention: null
