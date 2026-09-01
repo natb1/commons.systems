@@ -44,7 +44,11 @@ tradition only inside its recorded support scope: tradition references
 encode both where the tradition supports the strategy and where the strategy
 deliberately diverges, and a recorded divergence is an author decision the
 tradition cannot overrule. An unrecorded conflict between tradition and
-strategy is a frontier item — defer to neither silently. (Ratified
+strategy is a frontier item — defer to neither silently. A tradition edge —
+supporting or contradicting — is itself a disposition, carrying the same
+authority categories (ratified / delegated / deferred) and the same overrule
+rules as any other disposition; the tradition as text never overrules
+anything — changes to an edge flow through the disposition algebra. (Ratified
 2026-09-01, `strategy-graph-native-dispatch`.)
 
 ## Adversarial review is part of the work
