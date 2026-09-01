@@ -7050,7 +7050,22 @@ clarifications:
       reading cost is paid per amendment rather than per claim - surface owned
       by tactic-context-materialization; (3) the always-loaded restatement rides
       the greenfield-evaluation rule. (decision: ratified - author-issued
-      2026-09-01; practical bindings delegated)"
+      2026-09-01; practical bindings delegated) CONVERGENCE/DIVERGENCE ENCODING
+      (ratified corollary, author-issued 2026-09-01, same sitting): a tradition
+      reference must encode both where the strategy is SUPPORTED by the
+      tradition and where it deliberately DIVERGES - otherwise
+      tradition-grounded execution becomes overly deferential, importing
+      tradition content the author rejected. Grounding defers to the tradition
+      only inside the recorded support scope; a recorded divergence is an author
+      decision the tradition cannot overrule. An executor meeting an unrecorded
+      conflict between tradition and strategy treats it as a frontier item - it
+      defers to neither silently. Exemplar already in the record: the stigmergy
+      resolution (adopted for backlog signaling, contradicted for concurrency on
+      the CodeCRDT evidence) - the per-resolution practice now requires that
+      divergence half wherever one exists. Delegated: divergence encoding for
+      pre-existing tradition references is completed lazily, at first
+      grounding-assessment creation for the (strategy, tradition) pair, rather
+      than by a bulk retrofit pass."
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic
