@@ -7432,7 +7432,19 @@ clarifications:
       historical or folded by the consolidation operation, and the authority
       grant recorded expired. Temporary bootstrap considerations do not survive
       bootstrap completion — the author's steering-loss ruling of this date, now
-      recorded on-graph. (decision: author-ratified, 2026-09-01))"
+      recorded on-graph. (decision: author-ratified, 2026-09-01)) (AMENDED
+      2026-09-01, projection mark, author-directed: the P0-P4 path prose above
+      is a PROJECTION hand-materialized into prose — a transition-note shim, not
+      intent. Its target form is the blocked_by topology on the carrier tactics
+      plus the P4 resumption-gate criterion; on any conflict between this prose
+      and the graph's edges, the edges win, and the prose regenerates from the
+      graph rather than being hand-reconciled. Its pin is the carrier tactics'
+      blocked_by edges as of this landing; its liquidation rides the terminal
+      liquidation sweep. The PR numbers named in P2 are dated operational
+      references under the PR authority split, not stored expectations about PR
+      content — they too retire with the sweep. Only the authority grant, the P4
+      criterion, and the self-liquidation completion criterion in this
+      clarification are intent proper. (decision: author-directed 2026-09-01))"
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic
