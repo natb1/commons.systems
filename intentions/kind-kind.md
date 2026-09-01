@@ -331,7 +331,23 @@ clarifications:
       frontier item.) (Interim note, 2026-09-01: no stamp-derived queue deriver
       exists yet; the declared deferred-queue shim on
       strategy-graph-native-dispatch documents grep -rn \"decision: deferred\"
-      intentions/ as the interim office-hours surface until the deriver lands.)"
+      intentions/ as the interim office-hours surface until the deriver lands.)
+      (REFINED 2026-09-01, ratified in interview: (1) FRONTIER disambiguation,
+      resolving the collision flagged above — three senses are qualified on
+      every ambiguous use: the RECONCILIATION FRONTIER (this vocabulary's
+      backlog sense, the default in dispatch doctrine), the SOLUTION FRONTIER
+      (strategy-explicit-intent's full-solution-frontier greenfield sense), and
+      the CURRICULUM FRONTIER (the review-curriculum sense). (2) OPERATIONAL
+      STATE carries no intent authority: per the authority-primacy ordering on
+      strategy-explicit-intent, ratified > deferred/delegated > operational; a
+      disposition-vs-operational-text conflict is a stale-projection frontier
+      item, never two authorities. (3) CRITERION gains a class axis: FUNCTIONAL
+      (strategy-specific, explicitly bitten) vs NON-FUNCTIONAL (standing
+      cross-cutting, sanctioned once, implicitly bitten by every claim; the
+      per-strategy effective set is a projection derived on read, never a stored
+      copy). (4) ASSESSMENT pins are scoped and content-addressed: an assessment
+      pins the content hashes of the inputs it actually read, so unrelated
+      changes do not expire it.)"
 tooling_goals: []
 success_signal: null
 attention: null

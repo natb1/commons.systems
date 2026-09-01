@@ -977,6 +977,46 @@ clarifications:
       ONLY THEORY THERE IS - the deep rationale for the record-completeness
       contract and the persistence test. (decision: author-ratified,
       2026-09-01)"
+  - question: What is the authority-primacy ordering across dispositions and
+      operational text (2026-09-01)?
+    answer: "(Ratified 2026-09-01, author-issued during the review/qa reconciliation
+      round on strategy-graph-native-dispatch.) The primacy ordering is:
+      RATIFIED dispositions > DEFERRED/DELEGATED dispositions > OPERATIONAL
+      TEXT. Operational text — anything written to the repo: code, scripts,
+      skill and rule files, config, plans/, incumbent implementations — carries
+      NO intent authority at any rank: it is evidence of past decisions and
+      instrument facts, per the overrule algebra (this node, 2026-08-31) and the
+      projection principle. A conflict between a disposition and operational
+      text is a stale-projection/stale-intent frontier item, never a contest
+      between two authorities. COROLLARY (author-issued, same sitting):
+      INCUMBENT IMPLEMENTATION NEVER CONSTRAINS GREENFIELD DISPOSITION —
+      constraint flows one way, from dispositions down to implementation; a
+      greenfield evaluation that imports a constraint from incumbent operational
+      text has violated the full-solution-frontier rule (the 2026-08-31
+      greenfield-definition clarification on this node). Worked application from
+      the issuing round: the plans/ dispatch-rsi review stopping rules were not
+      adopted as doctrine; the greenfield review doctrine was derived on
+      strategy-graph-native-dispatch and the plans/ measurements entered as
+      evidence only. WELL-RECORDED IS A TOPOLOGICAL PROPERTY (author-refined,
+      same sitting): a disposition is well recorded only when its position in
+      the graph topology ensures it survives the multi-level compaction floors
+      of the materialization strategy — always-loaded rule projections,
+      CLAUDE.local.md, claim-time materialized context, node bodies, with git
+      history as the archive floor. Cross-cutting authority doctrine therefore
+      lands at topologically prominent homes — the kind layer and the owning
+      authority strategy, as this clarification does (strategy-explicit-intent
+      plus the kind-kind vocabulary) — never buried in a leaf clarification of
+      an unrelated node. RELATIVE-IMPORTANCE MANAGEMENT IS CLAUDE'S DUTY, BY
+      DOCTRINE (author-confirmed, same sitting): /align's layer-placement and
+      artifact-owner gates decide the topological home at record time; the
+      consolidation operation restates and promotes as importance shifts;
+      rank/attention governs what materializes into bounded context budgets; the
+      materialization pipeline derives each disposition's floor from topology
+      plus authority rank (ratified cross-cutting doctrine floats to
+      always-loaded floors; delegated leaf detail stays at node depth).
+      Floor-derivation mechanics are delegated to
+      tactic-context-materialization's surface. (decision: author-ratified,
+      2026-09-01)"
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

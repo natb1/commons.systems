@@ -6923,7 +6923,11 @@ clarifications:
       tactic-context-materialization joins the carrier list - it owns the
       assessment-cache surface, the rules-materialization target, and the
       tradition-grounding assessment cache; its liquidation rides the same
-      consolidation-folding condition as the refinement-annotation shim.)"
+      consolidation-folding condition as the refinement-annotation shim.)
+      (REFINED 2026-09-01: the tick's execute -> append -> fold steps are
+      elaborated by the review/qa/merge reconciliation clarification of the same
+      date — the fold precondition, staged assessment ordering, criteria class
+      axis, finding ledger, and merge-boundary rules are recorded there.)"
   - question: What is the brownfield path from the frozen tactic corpus and the
       batch plan to the reconciliation ladder?
     answer: "(Author-ruled 2026-09-01. Supersedes the plans-as-stop-gap-mirror
@@ -7167,6 +7171,155 @@ clarifications:
       folding pass), and the deferred-queue deriver from (1). (decision:
       delegated - executor mechanics under the author's approval of review
       recommendations 1-8, 2026-09-01)"
+  - question: What is the greenfield doctrine for review, qa, main-qa, and merge
+      gating under the reconciliation model (2026-09-01)?
+    answer: "(Ratified 2026-09-01 /align interview — the reframes, the criteria
+      class axis, the staged ordering, the finding ledger, and the
+      merge-boundary rules are author-ratified; mechanics marked delegated are
+      executor articulation from the same sitting, entering the review queues
+      via this stamp.) REVIEW: not a ladder phase but the adversarial production
+      of the CLAIM-EVIDENCE ASSESSMENT {subject: claim diff, verdict, basis pin,
+      date}. Its object is the claim-evidence match — the bitten criteria plus
+      the ratchet surface (ever-passed checks) — which structurally scopes
+      review to the diff. Re-review is pin regeneration on head change, never a
+      counted round. The entry-19/59 severity gate survives as the settle rule
+      in reconciliation vocabulary: blocking = bitten-criterion violation or
+      ever-passed-check regression; ignore is immovable. Entry 51 survives:
+      trust the built-ins' review-and-fix, disposition the residue. FINDING
+      TYPOLOGY AND CHANNEL: a finding outside every sanctioned criterion never
+      blocks and never enters the fix loop — it becomes a
+      reconciliation-frontier entry (an observe-tier check registration where
+      machine-expressible, else a dated prose gap note awaiting author
+      sanction). This supersedes entry 21's deferred-findings channel (draft
+      tactic nodes batched per component), resolving its tension with the
+      no-standing-decomposition ruling. Refuted findings are recorded refuting
+      assessments. Convergence argument: a finding with no criterion behind it
+      has no fixed point (evidence: the PR #3146 sixteen-round thrash
+      measurement — 56 findings, no downward trend). CRITERIA CLASS AXIS
+      (author-required): criteria carry a class — FUNCTIONAL (strategy-specific,
+      explicitly bitten) vs NON-FUNCTIONAL (standing cross-cutting: security,
+      type-safety, test-integrity, style, token-economy — sanctioned once,
+      implicitly bitten by every claim). The review built-ins' implicit
+      standards are TRANSCRIBED into explicit standing non-functional criteria
+      in the check/criteria registry (transcription folds into
+      tactic-migration-frontier-projection's registry surface at finalization;
+      no new carrier). Standing criteria are recorded once and derived onto
+      every touched strategy on read — the per-strategy effective-criteria set
+      is a projection, never a stored copy; a standing-criterion change
+      propagates mechanically (level-triggered) and expires every assessment
+      whose pin includes the standing-criteria fingerprint. Rules-corpus files
+      remain materialized projections of these criteria under the
+      authority-primacy ordering (strategy-explicit-intent, same date). QA AND
+      STAGED ORDERING (author-required): qa is the FUNCTIONAL acceptance
+      assessment — entry 20's independent real-data validation method survives
+      as its production method; review is the NON-FUNCTIONAL + regression
+      assessment. Binding order within a claim window: functional reconciles
+      before non-functional — non-functional assessment production gates on a
+      passing functional assessment, so no cycles are spent polishing
+      non-working code — and both assessments must be pin-valid before fold. The
+      incumbent implement -> qa -> review ladder order is the interim embodiment
+      of this doctrine. MAIN-QA: dissolves into level-triggered reconciliation
+      against main. Machine criteria re-verify continuously via the ratchet;
+      judgment-needing acceptance is an assessment pinned to the main sha;
+      needs-human residue parks to office-hours; verification nodes are not
+      minted — an unverified-on-main criterion is an unsatisfied criterion,
+      visible on the reconciliation frontier until its evidence appends. R1
+      blocker semantics (satisfied at code-on-main) stand, entailed; the rare
+      genuine await-verification dependency is an explicit edge on the
+      criterion's evidence, not a phase dependents queue behind. MERGE GATE: a
+      mechanical fold precondition — gating-tier checks pass, both assessments
+      pin-valid at the current head with no open blocking finding, and no
+      ratchet regression; observe-tier failures never block. Arming auto-merge
+      without a pin-valid assessment is structurally impossible, not
+      procedurally forbidden. FINDING LEDGER (author-required): every finding —
+      fixed, frontier-routed, or refuted — appends to the evidence log as
+      {finding, criterion-or-gap, disposition, claim/PR, date, recurrence key};
+      journal-to-ledger folding aggregates per-criterion recurrence and impact
+      (tactic-consolidation-operation's folding surface); the ledger is the rsi
+      feed and fuels check registration/promotion — a recurring finding class is
+      the signal to mechanize it; entry schema classification rides
+      tactic-intent-orchestration-layer-schema's evidence-append surface.
+      MERGE/PR BOUNDARY (author-required): the bite carved at claim time IS the
+      PR boundary — one claim window, one PR, one fold, diff maps to bitten
+      criteria. (1) NO MID-WINDOW SCOPE EXPANSION: a fold never widens its bite;
+      tangential findings route to the frontier and cannot grow the PR. (2)
+      ANTI-STARVATION IS RANK'S JOB: frontier entries carry recurrence/impact
+      from the ledger and the attention machinery elevates recurring high-impact
+      entries into future bites (recurrence-weighted boost — delegated
+      mechanics); a high-recurrence never-claimed entry is itself a cheap
+      observable signal. Important findings surface by being ranked into the
+      next claim, never by blocking an unrelated one. PIN-THRASH MITIGATIONS
+      (author-required; delegated mechanics): (1) scoped content-addressed pins
+      — an assessment pins the content hashes of the inputs it actually read
+      (its subject slice plus the relevant criteria fingerprints), never the
+      bare head sha, so a fix that does not intersect the slice does not expire
+      it (Bazel/Nix content-addressed incremental-build tradition); (2) the
+      staged order is the between-class damper — the non-functional assessment
+      is not produced until functional passes, so functional fix loops cannot
+      thrash an assessment that does not yet exist; (3) batched regeneration —
+      fix all findings, regenerate once per batch, never per fix; (4)
+      delta-scoped regeneration on pin mismatch (the incumbent instrument's
+      merge-base narrowing is this mechanism, surviving as an instrument fact).
+      TRADITIONS (dual-perspective rule; each reference is a tradition edge with
+      disposition authority, Claude-internal readings recorded 2026-09-01 with
+      the resolutions they informed): Deming point 3 (build quality in; cease
+      dependence on inspection) — SUPPORTS verification moving into
+      criteria/checks; DIVERGED: adversarial prose review is deliberately
+      retained for the judgment share checks cannot express. Toyota jidoka/andon
+      — SUPPORTS the ratchet (a gating check firing is stop-the-line; high-water
+      promotion is autonomation). Modern code review research (Google practice;
+      Bacchelli & Bird) — measured that review's dominant human-team value is
+      knowledge transfer; under the Coase inversion that function dissolves, so
+      review survives the standing-artifact test as VERIFICATION only; DIVERGED
+      from its social optimizations. Fagan inspection / stage-gate — SUPPORTS
+      discrete per-pin assessments with defined settle rules; DIVERGED: the gate
+      is per-claim-window and criteria-derived, not a standing organizational
+      phase. Kubernetes level-triggered reconciliation and continuous delivery
+      (Humble/Farley) — SUPPORT main-qa-as-continuous-verification. Kent Beck's
+      make-it-work/make-it-right/make-it-fast and lean over-processing waste —
+      SUPPORT functional-before-non-functional. Orthogonal Defect Classification
+      and SRE postmortem practice — SUPPORT the recurrence ledger. Trunk-based
+      small batches and single-piece flow — SUPPORT the bite-as-PR-boundary.
+      INDEPENDENCE STEELMAN (resolved): the rival framing — a discrete review
+      phase protects reviewer independence — is answered by the instrument: the
+      assessment producer remains a detached, separately-sessioned adversarial
+      process, never the executor's self-report; what the phase framing uniquely
+      contributed was the recursion pathology. (decision: reframes, class axis,
+      ordering, ledger, and boundary rules author-ratified 2026-09-01; the
+      delegated-marked mechanics are executor articulation under the same
+      sitting)"
+  - question: What bootstrap shims implement the review/qa/main-qa reconciliation
+      doctrine, and what liquidates them (2026-09-01)?
+    answer: "(Recorded 2026-09-01; shim set author-ratified, declared per the shim
+      principle; plans/ dispatch-rsi measurements enter as evidence only under
+      the authority-primacy ordering.) (1) REVIEW SHIM: target =
+      criteria-anchored review assessments with scoped basis pins; interim = the
+      detached dispatch-code-review instrument exactly as measured — detachment,
+      two-phase collect, the worktree flock/node lock, and no-kill-on-overrun
+      are instrument facts, not doctrine. Interim behavior: settle on the
+      entry-19/59 gate; out-of-criteria findings become reconciliation-frontier
+      entries (dated gap notes on the serving strategy, or observe-tier check
+      registrations) — never draft tactic nodes and never extra rounds; a cap of
+      TWO assessment regenerations per claim window (evidence: the PR #3146
+      sixteen-round thrash measurement), post-cap findings routing to the
+      frontier; effort high default (strategy-token-economy's ratified default)
+      with one medium regeneration for docs/plan/test-only diffs. Liquidation:
+      assessment/check machinery live — the cap and the effort tiering liquidate
+      when criteria-anchored checks make convergence structural and effort
+      derives from criterion class. (2) QA SHIM: the incumbent implement -> qa
+      -> review ladder order is retained as the interim embodiment of staged
+      reconciliation; entry-20 full semantics remain the functional assessment's
+      production method. Liquidation: staged assessment production live. (3)
+      MAIN-QA SHIM: no new main-qa verification nodes are minted;
+      shipped-prod-surface residue verifies as dated assessments appended to
+      evidence; needs-main residue becomes frontier entries. Liquidation:
+      level-triggered re-verification live. (4) IMPLICIT-CRITERIA SHIM: until
+      transcription, the review built-ins' internal standards operate as a
+      delegated implicit criteria set (entry 51's trust, refined into a declared
+      shim). Liquidation: transcription into the check/criteria registry done
+      (folds into tactic-migration-frontier-projection at finalization).
+      (decision: delegated - shim mechanics under the author's ratification of
+      the 2026-09-01 review/qa reconciliation round)"
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic
@@ -8348,7 +8501,7 @@ change — still defers. Cost refines ONLY the resolve↔defer boundary: it neve
 a finding out of the ignore category, because fixing a non-finding is waste and a
 defensive fallback violates code-style however cheap. A finding fixed in scope is
 still recorded in the PR review comment, so "fixed cheaply in-PR" drops nothing.
-Implementation retained as draft tactic-review-cheap-fix-disposition.
+Implementation retained as draft tactic-review-cheap-fix-disposition. (REFINED 2026-09-01: entries 19/51/59 survive the reconciliation reframe as the review assessment's settle rule — blocking = bitten-criterion violation or ever-passed-check regression; ignore immovable; entry 51 unchanged. The deferral arm is recomputed: deferral overhead is now a reconciliation-frontier entry, not a draft-tactic body — see the review/qa reconciliation clarification of that date.)
 
 The following review and QA rules are settled and stand on their own:
 
@@ -8367,7 +8520,7 @@ passed, while the independent pass against the real delegation records immediate
 found a capture-term scoring bug (exact-match enum parsing vs the store's actual
 free-text vocabulary). A bootstrap-emulating session owes these full semantics
 before writing the qa → review transition; the write asserts the validation
-happened, not that the checklist re-ran.
+happened, not that the checklist re-ran. (REFINED 2026-09-01: qa is the FUNCTIONAL acceptance assessment under the reconciliation doctrine — this entry's independent real-data validation method survives as its production method; functional reconciles before non-functional, and both assessments are pin-valid before fold.)
 
 Review is the full /review-fix fan-out, and deferred findings land as graph draft
 tactics (Recorded 2026-07-04 interview, entry 21). Review-phase parity binds like qa
@@ -8379,7 +8532,7 @@ findings land as draft tactic nodes batched per component, never gh follow-up is
 and no dispatch:review-followup label, inert until a later `/align-tactics` round
 finalizes them (and that round validates the finding provenance against what
 actually merged). A bootstrap-emulating session owes the full fan-out before writing
-review → done; the write asserts the review ran, not that CI is green.
+review → done; the write asserts the review ran, not that CI is green. (SUPERSEDED IN PART 2026-09-01: the fan-out and the never-skippable rule survive as the non-functional + regression assessment's production method, but the deferred-findings channel is superseded — findings outside every sanctioned criterion become reconciliation-frontier entries (observe-tier check registrations or dated gap notes), never draft tactic nodes; see the review/qa reconciliation clarification of that date.)
 
 ### Execution Substrate
 
