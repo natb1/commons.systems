@@ -30,6 +30,18 @@ stamp, and an override of a delegated disposition becomes deferred (the
 overrule algebra on `strategy-explicit-intent`; the superseded stamp survives
 in the record — clarifications append, never rewrite).
 
+## Authority primacy
+
+The primacy ordering is: ratified dispositions > deferred/delegated
+dispositions > operational text. Operational text — anything written to the
+repo: code, scripts, skill and rule files, config, plans, incumbent
+implementations — carries no intent authority: it is evidence of past
+decisions and instrument facts. A conflict between a disposition and
+operational text is a stale-projection frontier item, never a contest between
+two authorities. Corollary: incumbent implementation never constrains
+greenfield disposition — constraint flows one way, from dispositions down to
+implementation. (Ratified 2026-09-01, `strategy-explicit-intent`.)
+
 ## Evaluate twice: fresh judgment and tradition
 
 Every evaluation runs both lenses: fresh-perspective best judgment, and
