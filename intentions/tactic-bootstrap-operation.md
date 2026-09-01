@@ -80,6 +80,19 @@ clarifications:
       tactic-context-materialization's delegated surface; the landing placement
       was delegated to Claude by the author in the same exchange. (decision:
       author-issued 2026-09-01)"
+  - question: Steering ledger [4] - what did the author direct on landing-location
+      dispositions (2026-09-01)?
+    answer: "(Author-issued 2026-09-01, between the P1 frontier-projection and
+      consolidation rounds, verbatim: \"in the last alignment interview your
+      only question was about graph landing location. graph landing location is
+      not really a disposition, it is effectively always delegated.\")
+      Disposition: landed the same turn as a dated clarification on
+      strategy-explicit-intent plus a review-declined class extension of
+      delegation-anthropic-claude's delegated scope, ratified in a one-round
+      interview. Effect on this operation: bootstrap interviews and validation
+      passes stop spending question rounds on landing location; placement is
+      Claude's structural judgment under the recorded placement rules, author
+      overrule open. (decision: author-issued 2026-09-01)"
 tooling_goals: []
 success_signal: null
 attention: null

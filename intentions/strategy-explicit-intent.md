@@ -1019,6 +1019,22 @@ clarifications:
       2026-09-01) (Amended same day: \"frontier item\" in this clarification is
       the RECONCILIATION-frontier sense, per kind-kind's three-way
       disambiguation ratified the same sitting.)"
+  - question: Is graph landing location an author disposition (2026-09-01)?
+    answer: "(Recorded 2026-09-01 interview; steering context: the prior interview's
+      only question round was spent on landing location.) No. Landing location -
+      which node/carrier a record (clarification, byproduct, doctrine text)
+      lands in - is not a disposition; it is standing-delegated structural
+      judgment, the orchestration-layer placement of intent under the 2026-08-31
+      doctrine/disposition-vs-carrier vocabulary on this node. The delegation is
+      class-level, review-declined flavor: no per-instance stamps, no review
+      items, recorded once on delegation-anthropic-claude's delegated scope
+      (extended this same commit). Interviews must not spend question rounds on
+      landing location - ask about substance (intent, authority, scope); choose
+      placement per the recorded placement rules (artifact-owner convention,
+      layer-placement gate, parsimony). Author overrule stays open as with any
+      delegated act per the 2026-08-31 overrule algebra; a placement the author
+      corrects is an ordinary overrule event, not evidence the class needed
+      per-instance ratification. (decision: author-ratified, 2026-09-01)"
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

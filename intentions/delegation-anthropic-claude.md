@@ -102,6 +102,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds: null
@@ -135,7 +137,12 @@ attributes:
     the class's states are now deferred (author owes review) and delegated
     (author consciously doesn't care); the resolution round dispositioned every
     then-open member — ratified, delegated, or held deferred — as recorded in
-    strategy-explicit-intent's resolution-round ledger."
+    strategy-explicit-intent's resolution-round ledger. Extended 2026-09-01
+    (landing-location round): GRAPH LANDING LOCATION - which node/carrier a
+    record (clarification, byproduct, doctrine text) lands in - is a standing
+    review-declined delegated class: never a per-instance disposition, never
+    itemized here, never an interview question round; author overrule remains
+    open per strategy-explicit-intent's overrule algebra."
   origin: chosen
   divergence:
     level: moderate — raised 2026-08-13 from low-moderate when the delegation
