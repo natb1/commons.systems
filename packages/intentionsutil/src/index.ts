@@ -78,6 +78,17 @@ export {
   criteriaFingerprint,
 } from "./criteria.js";
 export type { Criterion, CriterionClass, CriterionAuthority } from "./criteria.js";
+export {
+  RECONCILIATION_FRONTIER_KINDS,
+  deriveReconciliationFrontier,
+  renderReconciliationFrontier,
+} from "./frontier-reconciliation.js";
+export type {
+  ReconciliationFrontierEntry,
+  ReconciliationFrontierKind,
+  ReconciliationFrontierInput,
+  ReconciliationCheckRun,
+} from "./frontier-reconciliation.js";
 export { lintTacticBodies, loadPlanBodyBaseline } from "./planlint.js";
 export type { PlanBodyMarker, PlanBodyBaselineEntry } from "./planlint.js";
 export {

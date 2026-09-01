@@ -362,6 +362,85 @@ describe("STORED-DEFAULTS table", () => {
   });
 });
 
+describe("RECONCILIATION-FRONTIER table", () => {
+  /** A criterion object as it rides inside `attributes`, straight from YAML. */
+  function criterion(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: "nf-style",
+      statement: "Code exits with a clear error rather than a defensive fallback.",
+      class: "non-functional",
+      authority: "deferred",
+      recorded: "2026-09-01",
+      ...overrides,
+    };
+  }
+
+  /** `closedGraph()` with `standing` recorded on the kind-strategy node. */
+  function withStanding(standing: unknown[]): IntentionNode[] {
+    return closedGraph().map((n) =>
+      n.id === "kind-strategy"
+        ? { ...n, attributes: { ...n.attributes, standing_criteria: standing } }
+        : n,
+    );
+  }
+
+  it("reports none on a graph recording no criteria", () => {
+    expect(
+      section(renderTables(input(closedGraph())), "[RECONCILIATION-FRONTIER]").trimEnd(),
+    ).toBe("[RECONCILIATION-FRONTIER] none (graph-only derivation: the digest runs no checks)");
+  });
+
+  it("lists every criterion in force as unsatisfied, since the digest runs no checks", () => {
+    const out = section(
+      renderTables(input(withStanding([criterion(), criterion({ id: "nf-security" })]))),
+      "[RECONCILIATION-FRONTIER]",
+    );
+    expect(out).toContain("[RECONCILIATION-FRONTIER] 2 items");
+    expect(out).toContain("graph-only derivation: the digest runs no checks");
+    expect(out).toContain("unsatisfied-criterion:nf-security — kind-strategy —");
+    expect(out).toContain("unsatisfied-criterion:nf-style — kind-strategy —");
+  });
+
+  it("omits an assumption-class criterion — a premise is never a work item", () => {
+    const nodes = closedGraph().map((n) =>
+      n.id === "strategy-a"
+        ? {
+            ...n,
+            attributes: {
+              ...n.attributes,
+              criteria: [criterion({ id: "as-market", class: "assumption" })],
+            },
+          }
+        : n,
+    );
+    expect(section(renderTables(input(nodes)), "[RECONCILIATION-FRONTIER]")).toContain("none");
+  });
+
+  it("escapes control characters in a criterion id so it cannot forge a table line", () => {
+    const forged = "nf-\nstyle";
+    const out = section(
+      renderTables(input(withStanding([criterion({ id: forged })]))),
+      "[RECONCILIATION-FRONTIER]",
+    );
+    expect(out).toContain("unsatisfied-criterion:nf-\\x0astyle");
+    // One header line plus exactly one item line — the newline did not split it.
+    expect(out.trimEnd().split("\n")).toHaveLength(2);
+  });
+
+  it("reports a malformed criteria list rather than taking the whole digest down", () => {
+    const out = renderTables(input(withStanding([{ id: "nf-style", smuggled: true }])));
+    expect(out).toContain("[RECONCILIATION-FRONTIER] FAIL");
+    expect(out).toContain("smuggled");
+    // The rest of Section 2 still rendered.
+    expect(out).toContain("[VALIDATE]");
+  });
+
+  it("comes after STORED-DEFAULTS in the fixed table order", () => {
+    const out = renderTables(input(closedGraph()));
+    expect(out.indexOf("[STORED-DEFAULTS]")).toBeLessThan(out.indexOf("[RECONCILIATION-FRONTIER]"));
+  });
+});
+
 describe("output budget", () => {
   it("keeps Section 2 within an order-of-magnitude of 25KB on a large synthetic store", () => {
     const nodes: IntentionNode[] = [
