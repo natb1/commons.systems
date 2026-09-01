@@ -34,6 +34,14 @@ reference to tradition — searching for the relevant software-engineering or
 other tradition, including pre-agent traditions that were shelved only by
 human constraints. Record tradition references with each resolution.
 
+## Ground execution in the tradition, not just the record
+
+When executing under a strategy whose doctrine cites a tradition, ground the
+work against the strategy AND the tradition itself. The tradition reference
+is a pointer into context the recording round deliberately compressed away —
+consult it; never re-derive the design from the summary alone. (Ratified
+2026-09-01, `strategy-graph-native-dispatch`.)
+
 ## Adversarial review is part of the work
 
 Adversarially review your own recorded output — graph writes, designs,
