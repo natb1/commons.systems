@@ -67,3 +67,12 @@ basis pin, date} expiring on pin mismatch, generalizing the reading freshness
 gate into a general judgment cache. Purpose (author directive, 2026-09-01):
 prose re-evaluation is the expensive path - judgment runs only on cache miss;
 everything else reads the memo and verifies the pin.
+
+## Rules materialization target (2026-09-01, author-directed)
+
+The greenfield target extends to `.claude/rules/`: rule files are
+projections of graph doctrine, materialized mechanically from their source
+clarifications with pins, never hand-maintained. The hand-authored
+`.claude/rules/greenfield-evaluation.md` (PR #3185) is the declared interim
+shim - its own header carries the projection notice and liquidation
+condition (rules-materialization live, owned here).
