@@ -398,3 +398,13 @@ running the manual checks — clearing the park:
 All script-verifiable acceptance items (test suite 54/54, typecheck, CLI
 arg/config error paths, delete-outside-managed-dir safety guard) already
 passed autonomously.
+
+## Deliberate stale stamp (2026-09-01)
+
+NOT re-stamped against the 2026-09-01 strategy edits, deliberately. The
+2026-09-01 adversarial review found the earlier same-day mechanical
+re-stamp was the weaker of the two freshness assertions: this node plans
+a strategy-content reader skill, and three large new doctrine
+clarifications plus the errata amendments are plausibly material to what
+it reads. The stamp is left stale so the soft-freeze routes this node
+through an /align-tactics re-plan before any further execution.

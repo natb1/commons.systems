@@ -41,3 +41,11 @@ factor: dispatch (readiness, cost), alarms (blast radius), author review
 tactic-review-debt-reprioritization; the injection composition with
 tactic-context-materialization. Virtues stay incommensurable roots —
 no design may introduce a virtue-to-virtue comparison.
+
+## Re-derivation note (2026-09-01)
+
+Authored before the 2026-09-01 ladder-reconciliation round
+(strategy-scoped reconciliation architecture,
+strategy-graph-native-dispatch). Re-derive this node's premises against
+that architecture at claim time; its scope is not pre-sanctioned under
+the new doctrine.

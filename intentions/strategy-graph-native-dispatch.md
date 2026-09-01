@@ -6557,12 +6557,15 @@ clarifications:
       split re-cuts it. UN-PARK CRITERION, a rule rather than an enumeration:
       every node parked SOLELY on the maintenance-burden band breach is
       un-parked on the drain plan. An enumerated list was declined deliberately
-      — the parking round's own text named eleven nodes while 82 tactics serving
-      this strategy are parked, so any hand-list goes stale immediately. THE
-      PRECEDENT for applying it: tactic-graph-commit-park-content-durability was
-      cleared on this same ruling (f093e607) only once ALL of its blockers were
-      ruled, not on the band alone. A node carrying a second still-open blocker
-      stays parked."
+      (AMENDED 2026-09-01: the drain plan is abandoned; the successor
+      remediation and the claim-time un-park rule are recorded on the
+      maintenance-burden condition, amended the same day.) — the parking round's
+      own text named eleven nodes while 82 tactics serving this strategy are
+      parked, so any hand-list goes stale immediately. THE PRECEDENT for
+      applying it: tactic-graph-commit-park-content-durability was cleared on
+      this same ruling (f093e607) only once ALL of its blockers were ruled, not
+      on the band alone. A node carrying a second still-open blocker stays
+      parked."
   - question: Is `dispatch <node-id>` valid usage, and does it walk the critical
       path to the named node, wait out in-flight CI, launch /fix-checks on red,
       and resolve merge conflicts?
@@ -6755,7 +6758,14 @@ clarifications:
       infrastructure-as-code tradition (declarative desired state plus
       reconciliation) independently converges on it, and a second layer would
       duplicate what sensors and orchestration fields already carry. (decision:
-      author-ratified, 2026-08-31)"
+      author-ratified, 2026-08-31) (REFINED 2026-09-01, adversarial-review
+      errata, author-approved: the strategy-scoped reconciliation architecture's
+      operational layer - append-only evidence log plus claim records - is
+      OBSERVED state under this same intent/orchestration boundary, not the
+      refused second current-state layer. The 2026-08-31 keep refused a
+      hand-maintained duplicate of target state; it stands unreversed. The
+      matching refinement is recorded on strategy-explicit-intent's keeps
+      clarification.)"
   - question: How are brownfield migration paths maintained (projection principle,
       2026-08-31)?
     answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) Ratified:
@@ -6780,7 +6790,10 @@ clarifications:
       stored). Frontier tooling delegated
       (tactic-migration-frontier-projection). The plans/ stop-gap mirror
       (strategy-explicit-intent, 2026-08-31) is a projection the graph should be
-      deriving. (decision: author-ratified, 2026-08-31)"
+      deriving. (SUPERSEDED IN PART 2026-09-01: the stop-gap-mirror arrangement
+      itself is ENDED - plans/ is abandoned by the brownfield-path
+      clarification; the projection principle this sentence illustrates stands.)
+      (decision: author-ratified, 2026-08-31)"
   - question: What is the doctrine of implementation as incremental reconciliation,
       and where is the line between migration and implementation?
     answer: "(Recorded 2026-09-01, /align ladder-reconciliation round.) Ladder
@@ -6896,11 +6909,75 @@ clarifications:
       strategy-scoped reconciliation architecture), then (2) long-horizon
       dispatch with rsi and token efficiency, without regressions in integrity,
       quality, or token efficiency. (decision: author-ratified, 2026-09-01)"
+  - question: Which executor decisions migrated from the plans/ ratification lists
+      when the corpus was abandoned (2026-09-01)?
+    answer: "(Migrated 2026-09-01 under the abandonment errata, per the author
+      formula: plan-side rulings found in a ratification list migrate as
+      DEFERRED; the eight numbered 2026-08-29 author rulings were already
+      node-homed - audited 8 of 8 - and are not re-migrated. PR/position numbers
+      below refer to the abandoned serialized plan; entries that touched nodes
+      or code stand as the record of what was done. From the
+      open-for-ratification list: (A) the three #3140 author-call review
+      findings were triaged as implementation and fixed; the reviewer's first
+      proposed fix was refuted - openBlockers is advisory, never a gate. (B) PR9
+      Unit 8 part 1 contradicted its node; the node's own Not-in-scope section
+      won. (C) tactic-select-tick-main-sync-gated-on-caller-cwd was assigned
+      beside the select-tick work. (D) validateGraph rule numbers 24/25/26
+      allocated; rule 20 permanently burned. (E) /rsi-audit may not write config
+      files - charter bound 8 read as forbidding; the unit needs a different
+      writer. (F) seven vacuous or inverted verify fences were corrected in
+      place, two of them inverted. From the reconciliation-decisions list: (D1)
+      the PR4/PR19 cycle was resolved by splitting PR19 along the schema-unit
+      seam. (D2) batchIds was retired - option 3, delete the unwired affordance
+      rather than build a channel that cannot be made honest. (D3) the
+      skill-rename carrier is tactic-dispatch-skill-rename; three renames only;
+      atomic transition, no aliases; the phantom blocked_by is void. (D4) the
+      empty-named-store test contract stands over the node scope. (D5) the
+      execution.strategy_fingerprint shape stays {hash, sha}. (D6) author Ruling
+      2 governs the LIVE target-workers.json; the template node governs a
+      template. (D7) the review-effort yield lens ships on source-verified
+      figures only. (D8) no author call was needed on the PR5 predicate approach
+      - both nodes state their own. (D9) the word \"ruled\" was struck from the
+      PR14 model tags; the tags survive as recommendations with reasons. (D10)
+      the batch was to mint the Position 13 carrier itself. (decision: deferred
+      - executor decisions held for author review; migrated from
+      plans/dispatch-rsi-author-rulings.md)"
+  - question: Which standing plan-side policies migrated from the abandoned plans/
+      corpus outside the ratification lists (2026-09-01)?
+    answer: "(Migrated 2026-09-01 under the abandonment errata, per the author
+      formula: plan-side rulings NOT in a ratification list migrate as DELEGATED
+      - executor articulations of quoted author guidance, quoted provenance
+      preserved in the abandoned files' git history. RATIFICATION-AS-NOTE
+      (steering S-13/S-15/S-16, author-quoted): an output labelled \"author
+      call\" is triaged first - doctrine ambiguity reaches the author,
+      implementation detail is decided by best judgment and executed. \"File for
+      ratification\" splits into two halves that never travel together: do the
+      thing now on best judgment, and write it down for review after - the list
+      is a record of what was done, never a queue held for approval. BOUNDED
+      TEST-INTEGRITY CARVE-OUT (S-15, author-quoted): when the behavior change
+      IS the PR's scope, the executor may rewrite a test assertion that pins the
+      OLD behavior - the replacement must positively assert the new behavior and
+      be at least as strong; deleting, skipping, or loosening stays forbidden,
+      and the commit must say which assertion changed and why the precondition
+      holds. STOP-CHECK EXTENSION (S-17): the stopping-point check covers rate
+      and quality of progress, not just parallelism. WORKING-TREE DIFF-BASE
+      DEFECT (recorded in the abandoned steering file; surviving home is this
+      entry beside the script's own header): resolve-diff-base resolves a COMMIT
+      base, so every changed-file tier in run-lint and run-unit-tests is vacuous
+      on uncommitted work; the separate fix is unioning the range with git
+      status porcelain output in a local-invocation mode; CI always runs
+      committed trees, so this is a developer-ergonomics gap, not a
+      CI-correctness one. (decision: delegated - migrated from
+      plans/dispatch-rsi-batch-steering.md and kin)"
 tooling_goals:
   - kind: actuator
-    statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic
+    statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic
       nodes with clean-session plans, superseding /file-issue epic structuring
-      and /plan-issue
+      and /plan-issue (TRANSITION NOTE 2026-09-01, author-approved: incumbent
+      contract, retained only for the brownfield viability test - the ratified
+      target architecture replaces standing decomposition with claim-time bites;
+      see the strategy-scoped reconciliation clarification. New standing
+      decomposition is not sanctioned.)"
   - kind: actuator
     statement: graph-native router tick — selects by resolved rank across strategies
       and tactics in owned deterministic code, executes the tick as a thin
@@ -6930,7 +7007,16 @@ success_signal:
     disposition (c) — the ceiling is KEPT as the target and the drain plan is
     the remediation; see the maintenance-burden condition and the 2026-08-28
     clarification. A measured breach against this target does not make the
-    signal falsified while the drain plan is in force.)"
+    signal falsified while the drain plan is in force.) (AMENDED 2026-09-01,
+    adversarial-review errata, author-approved: the drain plan is ABANDONED by
+    the 2026-09-01 brownfield-path clarification. The successor remediation is
+    the BOOTSTRAP OPERATION - incumbent tactic scope completes through the
+    strategy-scoped reconciliation machinery as its viability test. Disposition
+    (c) acceptance stands; a measured breach does not falsify the signal while
+    the bootstrap operation is in force. This legacy compound signal - including
+    its incumbent full-lifecycle wording in the observable - is itself owed
+    migration to criteria per the kind-layer legacy map, executed for this
+    strategy at its first bootstrap claim.)"
   is_proxy: true
 attention:
   boosts:
@@ -7192,7 +7278,14 @@ attributes:
       CRITERION, stated as a rule rather than an enumeration because any
       hand-list goes stale immediately: every node parked SOLELY on the
       maintenance-burden band breach is un-parked on the drain plan. A node
-      carrying a second, still-open blocker is NOT un-parked by this."
+      carrying a second, still-open blocker is NOT un-parked by this. AMENDED
+      2026-09-01 (adversarial-review errata, author-approved): the drain plan is
+      ABANDONED - read every reference to it above as the BOOTSTRAP OPERATION
+      (2026-09-01 brownfield-path clarification). The condition READS AS HOLDING
+      while the bootstrap operation is in force, and the un-park rule becomes:
+      every node parked SOLELY on the maintenance-burden band breach is
+      un-parked when the bootstrap operation claims scope covering it -
+      claim-time un-park, still a rule and never an enumeration."
     - an author-lane post-merge verification node carries, AT BIRTH, everything
       a fresh office-hours sitting needs — office_hours.reason,
       office_hours.recommendation, and the verification item's url_path /

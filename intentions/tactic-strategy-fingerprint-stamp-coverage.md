@@ -65,8 +65,8 @@ execution:
     - planned
   strategy_fingerprint:
     strategy-graph-native-dispatch:
-      hash: 033459bda2f251219b345224c2bf3aa36005e00e3dacf7140d2095b313c1b264
-      sha: 1b787ada81dc185b333108392af40779d3aea496
+      hash: 6c6c81a23c5146c171a1f79a47fc5253319da18d14869a48f6d7ebaf89cfc20c
+      sha: 8a5f721ed9801a204b783d205eb49ab14f97b309
   fix:
     since: 2026-08-03
     attempt: 1
@@ -264,3 +264,14 @@ Manual / observe-in-production checks:
 2. **Post-merge, after the first real transition (`needs-main`).** This is the only check that proves the producer fires in production and cannot be run pre-merge. After any tactic serving any strategy completes a phase through `transition-node` on `origin/main`, re-run the census and confirm that node moved from the `null` bucket to the `keyed` bucket with a `{hash, sha}` entry whose `hash` equals `npx tsx packages/intentionsutil/scripts/strategy-fingerprint.ts <serving-strategy-id>` and whose `sha` is a real `origin/main` commit (`git cat-file -t <sha>` → `commit`, not `blob`).
 3. **Freeze non-regression, by inspection.** Confirm the graph-wide `bareString` count is unchanged by this PR (29 as of the baseline) — the legacy branch of `isFingerprintStale` must keep working untouched. Confirm no `intentions/*.md` file is modified by the PR diff: `git diff --stat origin/main -- intentions/` must be empty. Any stamp appearing on a node file in this PR's diff is the forbidden bulk backfill.
 4. **Judgment call, for review.** Unit 2 stamps *every* serving strategy at transition time, which extends `write-path.md:311-321`'s mint-time rule of stamping only the decomposed strategy. Rationale to confirm at review: recording the current hash is honest (it never fabricates a *stale* stamp), and stamping only one strategy would leave a multi-serves tactic permanently un-freezable against its other parents — the exact inertness this tactic exists to fix. If the author rejects this, the fallback is to stamp only strategies already keyed in the map, which restores zero coverage and would mean parking this tactic rather than shipping a partial fix.
+
+## Re-stamp orthogonality judgment (2026-09-01)
+
+Re-stamped against the 2026-09-01 errata edits to
+strategy-graph-native-dispatch. Judgment, recorded this time (the
+2026-09-01 round's mechanical re-stamp recorded none - an
+adversarial-review finding): this node's plan is stamp-coverage
+machinery - which nodes carry fingerprint stamps and how they are
+verified - and is orthogonal to the doctrine content of the amended
+clarifications. The stamp shape itself is reconfirmed {hash, sha} by
+migrated decision D5.

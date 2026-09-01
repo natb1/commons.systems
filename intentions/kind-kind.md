@@ -280,42 +280,49 @@ clarifications:
       sync. CLASSIFICATION acts remain outside the key exactly as recorded."
   - question: What is the standard reconciliation vocabulary for the kind layer?
     answer: "(Claude-drafted 2026-09-01 under the author's record-at-kind-layer
-      instruction; deferred-stamped for author review - review sitting:
-      tactic-review-reconciliation-vocabulary.) TARGET STATE - what the author
-      intends to be true; intent-layer fields plus registered checks.
-      OPERATIONAL STATE - what is observed to be true (repo at origin/main, PR
-      state, evidence); observed and appended, never authored. DISPOSITION - the
-      atomic unit of intent carrying authority state
-      (ratified/delegated/deferred); unchanged. CRITERION - one acceptance
-      condition within a strategy's target state; the unit of author sanction;
-      prose, plus a bound check when expressible. CHECK - a machine-verifiable
-      encoding of a criterion; tier observe or gating; promoted by ratchet.
-      SIGNAL - any machine-readable indicator derived from operational state
-      that bears on selection (check results, sensors, CI verdicts); the legacy
-      success_signal is a compound criterion to migrate. FRONTIER - the derived
-      set of unsatisfied criteria; the backlog (absorbs the derived gap). CLAIM
-      - an exclusive, time-bounded reservation of a frontier bite; one record
-      file per claim; the irreversibility guard. BITE - the session-sized
-      frontier subset carved at claim time. PROJECTION - any artifact derived
-      from (target, operational) state: plans, migration paths, materialized
-      context, sequence indexes; always pinned, never hand-maintained. PIN - a
-      projection's cache key (input shas, hashes, fingerprints); mismatch means
-      regenerate. EVIDENCE - an appended observed fact with proof (sha, PR
-      number, stamp, date); never edited; folded. FOLDING - compaction of an
-      append-only log into a current-state summary; git history is the archive.
-      ASSESSMENT - a memoized prose evaluation {subject, verdict, basis pin,
-      date}, expiring on pin mismatch; generalizes the reading freshness gate.
-      RATCHET - one-way promotion: observe to gating on high-water mark for
-      checks; observe to enforce after drain for migrations. RECONCILER - the
-      mechanical actor that folds observed state into evidence and derives
-      position; level-triggered. TICK - one reconciliation cycle: select, claim,
-      project, execute, append, fold. WORK RECORD - claim-window state (branch,
-      PR, attempts, fix interrupt); minted, never edited; dies at merge. LEGACY
-      MAP: gap -> frontier; success_signal -> criteria; phase -> derived
-      position (the stored field is a cache during migration); standing tactic
-      -> claim + bite (incumbent nodes remain scope carriers until the viability
-      test completes); reading -> assessment. (decision: deferred -
-      Claude-drafted, held for author review)"
+      instruction; deferred-stamped for author review; per
+      strategy-graph-review-curriculum's 2026-08-30 record-time-enrollment
+      amendment the review queue derives from this deferred stamp itself - no
+      review-item node is minted, and the one minted in error on 2026-09-01 was
+      pruned the same day.) TARGET STATE - what the author intends to be true;
+      intent-layer fields plus registered checks. OPERATIONAL STATE - what is
+      observed to be true (repo at origin/main, PR state, evidence); observed
+      and appended, never authored. DISPOSITION - the atomic unit of intent
+      carrying authority state (ratified/delegated/deferred); unchanged.
+      CRITERION - one acceptance condition within a strategy's target state; the
+      unit of author sanction; prose, plus a bound check when expressible. CHECK
+      - a machine-verifiable encoding of a criterion; tier observe or gating;
+      promoted by ratchet. SIGNAL - any machine-readable indicator derived from
+      operational state that bears on selection (check results, sensors, CI
+      verdicts); the legacy success_signal is a compound criterion to migrate.
+      FRONTIER - the derived set of unsatisfied criteria; the backlog (absorbs
+      the derived gap). CLAIM - an exclusive, time-bounded reservation of a
+      frontier bite; one record file per claim; the irreversibility guard. BITE
+      - the session-sized frontier subset carved at claim time. PROJECTION - any
+      artifact derived from (target, operational) state: plans, migration paths,
+      materialized context, sequence indexes; always pinned, never
+      hand-maintained. PIN - a projection's cache key (input shas, hashes,
+      fingerprints); mismatch means regenerate. EVIDENCE - an appended observed
+      fact with proof (sha, PR number, stamp, date); never edited; folded.
+      FOLDING - compaction of an append-only log into a current-state summary;
+      git history is the archive. ASSESSMENT - a memoized prose evaluation
+      {subject, verdict, basis pin, date}, expiring on pin mismatch; generalizes
+      the reading freshness gate. RATCHET - one-way promotion: observe to gating
+      on high-water mark for checks; observe to enforce after drain for
+      migrations. RECONCILER - the mechanical actor that folds observed state
+      into evidence and derives position; level-triggered. TICK - one
+      reconciliation cycle: select, claim, project, execute, append, fold. WORK
+      RECORD - claim-window state (branch, PR, attempts, fix interrupt); minted,
+      never edited; dies at merge. LEGACY MAP: gap -> frontier; success_signal
+      -> criteria; phase -> derived position (the stored field is a cache during
+      migration); standing tactic -> claim + bite (incumbent nodes remain scope
+      carriers until the viability test completes); reading -> assessment.
+      (decision: deferred - Claude-drafted, held for author review) KNOWN
+      COLLISION (flagged by the 2026-09-01 adversarial review; owed
+      disambiguation at the deferred review): FRONTIER here is the
+      reconciliation-backlog sense; it does not cover the FULL-solution-frontier
+      sense in strategy-explicit-intent's greenfield definition, nor the
+      curriculum-frontier sense on strategy-graph-review-curriculum."
 tooling_goals: []
 success_signal: null
 attention: null

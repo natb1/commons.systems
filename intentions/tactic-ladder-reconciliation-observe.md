@@ -57,3 +57,14 @@ THROUGH this machinery as its viability test). Scope:
    execution-time planning (the round's unmeasured claims); rsi per-phase
    attribution is the instrument. These measurements feed the deferred
    post-viability interview on retiring the tactic layer.
+
+## Reuse (recorded 2026-09-01, adversarial-review errata)
+
+The claim-record design in scope item 1 is not new machinery: the
+reservation ledger under the dispatch-propagate scripts
+(lib-reservation-ledger.sh - a marker-file-per-claim directory with
+write/clear/count/sweep, already shared across concurrent ticks) is the
+existing implementation of the same shape. Decision recorded: EXTEND that
+artifact; never build a parallel implementation. The standing-artifact
+claim on strategy-explicit-intent that "claim records (irreversibility
+guard) survive" refers to this artifact.

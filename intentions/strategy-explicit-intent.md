@@ -831,7 +831,15 @@ clarifications:
       batch execution toward dispatch-ladder takeover with rsi and no
       regressions in integrity, quality, or token efficiency. Out-of-priority
       plan scope may be removed only where a clear, valid brownfield migration
-      path for it exists. (decision: author-ratified, 2026-08-31)"
+      path for it exists. (decision: author-ratified, 2026-08-31) (SUPERSEDED IN
+      PART 2026-09-01, ladder-reconciliation round recorded on
+      strategy-graph-native-dispatch: the plans/ stop-gap-mirror arrangement and
+      the priority-(2) batch-execution path are ENDED - the plans/ corpus and
+      the batch session are abandoned. The successor is the bootstrap operation:
+      greenfield graph implementation, then long-horizon dispatch with rsi and
+      token efficiency, without regressions. The VALID/ITERABLE/ALIGNED
+      greenfield-state doctrine and the brownfield-pathing test in this entry
+      stand.)"
   - question: What does 'greenfield' mean, and from which perspectives must AI
       evaluate it (2026-08-31)?
     answer: "(Recorded 2026-08-31 /align doctrine-alignment round.) FULL-FRONTIER
@@ -939,7 +947,12 @@ clarifications:
       (IaC tradition). (6) The closed rank vocabulary (tier / lineage edge /
       authored boost) - refused weighted-term soup independently. Each keep is a
       disposition and remains frontier-reviewable in future interviews per the
-      full-frontier definition. (decision: author-ratified, 2026-08-31)"
+      full-frontier definition. (decision: author-ratified, 2026-08-31) (REFINED
+      2026-09-01, adversarial-review errata, author-approved: keep (5) stands -
+      the strategy-scoped reconciliation architecture's operational layer is
+      observed evidence under the intent/orchestration boundary, not the refused
+      second hand-maintained current-state layer; matching refinement on
+      strategy-graph-native-dispatch.)"
   - question: What is the graph, under the economics of agent coordination - and
       which standing artifacts may exist?
     answer: "(Recorded 2026-09-01, /align ladder-reconciliation round.) The graph is

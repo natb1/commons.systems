@@ -9,12 +9,14 @@ status: raw
 parent: null
 rationale: "Delegated by the 2026-08-31 /align doctrine-alignment round;
   discharges the author directive to reflect the ad-hoc priorities in the
-  graph's ranking mechanisms so they survive migration from batch execution to
-  the dispatch ladder. Backbone move per the triage charter: 'currently
-  prioritized' is exactly what authored boosts are for — not a new tier (tiers
-  stay scarce and semantic). Measured defect folded in: the boost-preview/write
-  CLI specified by tactic-attention-boost-scripts (phase done) does not exist on
-  disk; boosts are hand-edited frontmatter."
+  graph's ranking mechanisms so they survive into the bootstrap operation (batch
+  execution was abandoned by the 2026-09-01 brownfield-path ruling; boosts are
+  retained control layer under the standing-artifact test). Backbone move per
+  the triage charter: 'currently prioritized' is exactly what authored boosts
+  are for — not a new tier (tiers stay scarce and semantic). Measured defect
+  folded in: the boost-preview/write CLI specified by
+  tactic-attention-boost-scripts (phase done) does not exist on disk; boosts are
+  hand-edited frontmatter."
 reading: null
 serves:
   - strategy-graph-drives-dispatch
