@@ -328,7 +328,10 @@ clarifications:
       basis pins - and liquidation-overdue shims. SHIM - an incumbent-form
       artifact or contract minted or retained post-ratification, declaring its
       target element and liquidation condition; outliving the condition is a
-      frontier item.)"
+      frontier item.) (Interim note, 2026-09-01: no stamp-derived queue deriver
+      exists yet; the declared deferred-queue shim on
+      strategy-graph-native-dispatch documents grep -rn \"decision: deferred\"
+      intentions/ as the interim office-hours surface until the deriver lands.)"
 tooling_goals: []
 success_signal: null
 attention: null

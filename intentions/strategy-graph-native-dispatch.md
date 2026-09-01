@@ -6918,7 +6918,12 @@ clarifications:
       folding and unmatched-evidence detection), and
       tactic-migration-frontier-projection (check-tier registry and high-water
       ratchet). Sequencing is carried by blocked_by edges from the integrator to
-      the three owners. Any other new standing tactic remains unsanctioned.)"
+      the three owners. Any other new standing tactic remains unsanctioned.)
+      (Carrier-list amendment 2026-09-01, author-approved review item 8:
+      tactic-context-materialization joins the carrier list - it owns the
+      assessment-cache surface, the rules-materialization target, and the
+      tradition-grounding assessment cache; its liquidation rides the same
+      consolidation-folding condition as the refinement-annotation shim.)"
   - question: What is the brownfield path from the frozen tactic corpus and the
       batch plan to the reconciliation ladder?
     answer: "(Author-ruled 2026-09-01. Supersedes the plans-as-stop-gap-mirror
@@ -6967,7 +6972,12 @@ clarifications:
       PR14 model tags; the tags survive as recommendations with reasons. (D10)
       the batch was to mint the Position 13 carrier itself. (decision: deferred
       - executor decisions held for author review; migrated from
-      plans/dispatch-rsi-author-rulings.md)"
+      plans/dispatch-rsi-author-rulings.md) (Amendment 2026-09-01,
+      author-approved review item 6: the D5-D10 summaries here are compressed
+      pointers derived from one-line greps of the abandoned files, not full
+      readings - git history of plans/dispatch-rsi-author-rulings.md holds the
+      full text; treat this clarification as routing to that record, not as the
+      record.)"
   - question: Which standing plan-side policies migrated from the abandoned plans/
       corpus outside the ratification lists (2026-09-01)?
     answer: "(Migrated 2026-09-01 under the abandonment errata, per the author
@@ -7131,6 +7141,32 @@ clarifications:
       this repo owns. (decision: the stamps themselves are ratified by
       provenance; the generalization of the derivation binding and this pass's
       execution are delegated, author-directed 2026-09-01)"
+  - question: What interim mechanics and initiation protocol did the 2026-09-01
+      adversarial-review rulings set (items 1-8 approved)?
+    answer: "(Recorded 2026-09-01; the author approved all eight adversarial-review
+      recommendations.) (1) DEFERRED-QUEUE SHIM, declared per the shim
+      principle: the deferred-disposition review queue's target mechanism is a
+      stamp-derived queue; no deriver exists yet; the interim surface is
+      mechanical - grep -rn \"decision: deferred\" intentions/ - the documented
+      office-hours practice until the deriver lands; liquidation condition:
+      deriver live, with deriver ownership assigned to
+      tactic-consolidation-operation at its finalization. (2) BOOTSTRAP
+      INITIATION PROTOCOL: the first act of initiating the bootstrap operation
+      is minting the operation's carrier node, so the band-park un-park rule
+      (\"un-parked when the bootstrap operation claims scope covering it\")
+      references a mechanical object; the operation is deliberately NOT minted
+      before initiation - a pre-minted object dangles if initiation reshapes the
+      operation. (3) INITIATION ORDER, superseding the earlier observe-first
+      recommendation: /align-tactics finalization of the three surface-owner
+      drafts first (tactic-intent-orchestration-layer-schema,
+      tactic-consolidation-operation, tactic-migration-frontier-projection),
+      then their execution claims, the observe integrator last - the blocked_by
+      edges already encode this order. (4) CONSOLIDATION SCOPE FOLDS, to be
+      added to tactic-consolidation-operation at finalization:
+      one-ruling-one-stamp normalization of multi-ruling clarifications (the
+      folding pass), and the deferred-queue deriver from (1). (decision:
+      delegated - executor mechanics under the author's approval of review
+      recommendations 1-8, 2026-09-01)"
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic

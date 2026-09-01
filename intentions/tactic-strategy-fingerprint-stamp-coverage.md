@@ -65,8 +65,8 @@ execution:
     - planned
   strategy_fingerprint:
     strategy-graph-native-dispatch:
-      hash: 60d00668df1b73a4fe40dce877171acaefd5e945dafe5fa976028c6f662c7685
-      sha: 8d7662acff0da503471f6e85f4b87e80d46df072
+      hash: 290b318cef2abe6a3987ea161e3f68639f4cc2a9196bd071671dfb1ff07304d1
+      sha: b8fe053204850ed9bc08aa10ff20497df59e5432
   fix:
     since: 2026-08-03
     attempt: 1
@@ -275,3 +275,5 @@ machinery - which nodes carry fingerprint stamps and how they are
 verified - and is orthogonal to the doctrine content of the amended
 clarifications. The stamp shape itself is reconfirmed {hash, sha} by
 migrated decision D5.
+
+Class policy (2026-09-01, author-approved review item 5): doctrine-content amendments to a serving strategy that leave the tactic set and the stamp machinery unchanged re-stamp under this same orthogonality judgment without per-round notes; a re-stamp records a fresh note only when the amendment touches stamp-coverage machinery itself.
