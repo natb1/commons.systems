@@ -7028,6 +7028,29 @@ clarifications:
       assessments; matching refinement recorded on the kind-layer vocabulary.
       (decision: principle ratified; governs-markers, retroactive declarations,
       and the practice mechanics delegated - author ruling 2026-09-01)"
+  - question: How is execution grounded when the strategy's doctrine is supported by
+      tradition (2026-09-01)?
+    answer: "(Ruled 2026-09-01, author-issued doctrine.) To mitigate context loss
+      between alignment and execution: execution of a strategy whose doctrine is
+      supported by tradition must be grounded against the strategy AND ALSO the
+      tradition - the claim-time projection step reads the strategy's recorded
+      text and consults the cited traditions themselves, not only the
+      clarification's compression of them. Rationale, recorded: a tradition
+      reference is a pointer into external context the recording round
+      deliberately compressed away; under the Naur-inverted practice
+      (strategy-explicit-intent, 2026-09-01) the record is the only internal
+      theory, so the cited tradition is the one place the uncompressed theory
+      survives - an executor grounded only in the compressed record rebuilds a
+      shallow version of the design. Practical bindings, delegated: (1)
+      tradition references must be actionable pointers - a named tradition,
+      text, or concept, the per-resolution recording practice already in force -
+      or they cannot be consulted; (2) claim-time tradition grounding is
+      cacheable as an ASSESSMENT with subject (strategy, tradition), a grounding
+      summary as verdict, and a basis pin, expiring on pin mismatch, so the
+      reading cost is paid per amendment rather than per claim - surface owned
+      by tactic-context-materialization; (3) the always-loaded restatement rides
+      the greenfield-evaluation rule. (decision: ratified - author-issued
+      2026-09-01; practical bindings delegated)"
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic
