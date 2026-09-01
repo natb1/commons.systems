@@ -328,3 +328,114 @@ describe("refusalMessage", () => {
     expect(message).toContain("parked");
   });
 });
+
+describe("fenceVerdict with writerClass (--writer-class)", () => {
+  // `doc()`'s default kind is "strategy" — durable-layer. These tests exercise
+  // the class fence on a non-durable "tactic" instead, so the durable fence
+  // alone would PERMIT and any refusal proves the class fence actually fired.
+  function tacticDoc(partial: Record<string, unknown> = {}): Record<string, unknown> {
+    return doc({ id: "tactic-example", kind: "tactic", ...partial });
+  }
+
+  it("is byte-identical to the flagless verdict when writerClass is omitted", () => {
+    // Every existing flagless expectation in this file must keep holding; this
+    // is the mechanical proof that adding the third parameter changed nothing
+    // for callers that don't pass it. Re-run one representative case from each
+    // `fenceVerdict` test above and diff full objects, not just `.refused`.
+    const base = doc();
+    const candidate = doc({ rationale: "Synthesized substance." });
+    expect(fenceVerdict(base, candidate)).toEqual(fenceVerdict(base, candidate, undefined));
+  });
+
+  it("PERMITS an orchestration writer touching state fields on a tactic (durable fence alone would too)", () => {
+    const base = tacticDoc();
+    const candidate = tacticDoc({ office_hours: null });
+    expect(fenceVerdict(base, candidate, "orchestration").refused).toEqual([]);
+  });
+
+  it("REFUSES an orchestration writer rewriting `statement` on a tactic — the durable fence alone permits this", () => {
+    // The case the flag exists for. `tactic` is not a DURABLE_LAYER_KINDS
+    // member, so refusedDurableFields("tactic", ["statement"]) is empty — the
+    // flagless fence has always permitted this exact write. The class fence
+    // refuses it because `statement` is an intent-class field no orchestration
+    // writer may set, regardless of kind.
+    const base = tacticDoc();
+    const candidate = tacticDoc({ statement: "Rewritten by an orchestration writer." });
+    expect(fenceVerdict(base, candidate).refused).toEqual([]); // sanity: flagless permits this exact write
+    expect(refusedDurableFields("tactic", ["statement"])).toEqual([]); // sanity: durable fence alone permits
+    const verdict = fenceVerdict(base, candidate, "orchestration");
+    expect(verdict.refused).toEqual(["statement"]);
+  });
+
+  it("PERMITS an intent writer rewriting `statement` on a tactic", () => {
+    const base = tacticDoc();
+    const candidate = tacticDoc({ statement: "Rewritten by an intent writer." });
+    expect(fenceVerdict(base, candidate, "intent").refused).toEqual([]);
+  });
+
+  it("UNIONS the class fence with the durable fence rather than replacing it", () => {
+    // A durable "strategy" node: an orchestration writer touching `rationale`
+    // must still refuse (durable fence) even where the class fence has its own
+    // independent opinion (rationale is also intent-class, so the class fence
+    // refuses too) — the write is refused either way, and both fences agree
+    // here, but the durable fence must not go silent just because a writer
+    // class was declared.
+    const base = doc();
+    const candidate = doc({ rationale: "Synthesized." });
+    const flagless = fenceVerdict(base, candidate);
+    const withFlag = fenceVerdict(base, candidate, "orchestration");
+    expect(flagless.refused).toEqual(["rationale"]);
+    expect(withFlag.refused).toEqual(["rationale"]);
+  });
+
+  it("still REFUSES the kind-promotion case with a writerClass passed", () => {
+    const base = tacticDoc();
+    const candidate = doc({
+      id: "tactic-example",
+      kind: "strategy",
+      statement: "Smuggled doctrine.",
+      rationale: "Smuggled rationale.",
+      office_hours: null,
+    });
+    const verdict = fenceVerdict(base, candidate, "orchestration");
+    expect(verdict.refused).toEqual(["kind", "rationale", "statement"]);
+  });
+});
+
+describe("refusalMessage with writerClass", () => {
+  it("is byte-identical to the flagless message when writerClass is omitted", () => {
+    const verdict = fenceVerdict(doc(), doc({ rationale: "Synthesized." }));
+    expect(refusalMessage("strategy-example", verdict)).toBe(
+      refusalMessage("strategy-example", verdict, undefined),
+    );
+  });
+
+  it("names which fence fired for a class-only refusal", () => {
+    const base = doc({ id: "tactic-example", kind: "tactic" });
+    const candidate = doc({ id: "tactic-example", kind: "tactic", statement: "Rewritten." });
+    const verdict = fenceVerdict(base, candidate, "orchestration");
+    const message = refusalMessage("tactic-example", verdict, "orchestration");
+    expect(message).toContain("REFUSED");
+    expect(message).toContain('"orchestration"-writer class fence');
+    expect(message).not.toContain("durable-layer fence"); // tactic is not durable — only the class fence fired
+  });
+
+  it("does not call a non-durable node 'durable-layer' on a class-only refusal", () => {
+    // `tactic` is not in DURABLE_LAYER_KINDS. A message claiming otherwise
+    // would mislead the human resolving the park about which fence and which
+    // doctrine is actually in play.
+    const base = doc({ id: "tactic-example", kind: "tactic" });
+    const candidate = doc({ id: "tactic-example", kind: "tactic", statement: "Rewritten." });
+    const verdict = fenceVerdict(base, candidate, "orchestration");
+    const message = refusalMessage("tactic-example", verdict, "orchestration");
+    expect(message).not.toContain("durable-layer");
+    expect(message).toContain('"tactic-example" is a "tactic" node');
+  });
+
+  it("names both fences when a field is refused by both", () => {
+    const verdict = fenceVerdict(doc(), doc({ rationale: "Synthesized." }));
+    const message = refusalMessage("strategy-example", verdict, "orchestration");
+    expect(message).toContain("durable-layer fence");
+    expect(message).toContain('"orchestration"-writer class fence');
+  });
+});

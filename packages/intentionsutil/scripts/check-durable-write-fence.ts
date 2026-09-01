@@ -12,13 +12,23 @@
 //
 // Usage:
 //   node --import tsx/esm packages/intentionsutil/scripts/check-durable-write-fence.ts \
-//     --base <base.json> --candidate <candidate.json>
+//     --base <base.json> --candidate <candidate.json> [--writer-class <intent|orchestration>]
 //
 // Both files are full-node JSON in the shape `dump-node.ts` writes and
 // `write-node.ts` reads. The gate diffs them itself rather than trusting a
 // caller-declared field list: the writer that composed the candidate is exactly
 // the party whose honesty is in question, so "which fields did you change?" must
 // be answered from the two documents, not from the writer.
+//
+// `--writer-class` is OPTIONAL and additive. When passed, the fence also unions
+// in `refusedCrossClassFields` (schema.ts) — the intent/orchestration boundary —
+// alongside the existing durable-kind union, so a declared orchestration writer
+// touching an intent-only field (e.g. `statement` on a plain `tactic`) refuses
+// even though that field carries no durable-layer doctrine at all. WITHOUT the
+// flag, behavior is byte-identical to before this flag existed: `graph-commit`
+// invokes this tool flagless and depends on that exactly, as does
+// `.claude/skills/dispatch-conflict/SKILL.md` and
+// `intentions/tactic-dispatch-conflict-substance-allowlist`.
 //
 // The check, per changed top-level field, is NEGATIVE (see
 // `isDurableWriteRefused`): durable-layer kind AND field not in `STATE_FIELDS`
@@ -50,13 +60,19 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
   isPlainObject,
+  refusedCrossClassFields,
   refusedDurableFields,
   STATE_FIELDS,
+  type WriteClass,
 } from "../src/schema.js";
 
 const USAGE =
-  "usage: check-durable-write-fence.ts --base <base.json> --candidate <candidate.json>\n" +
+  "usage: check-durable-write-fence.ts --base <base.json> --candidate <candidate.json> " +
+  "[--writer-class <intent|orchestration>]\n" +
   "  Both are full-node JSON (the shape dump-node.ts writes).\n" +
+  "  --writer-class is optional; omitting it preserves the original flagless\n" +
+  "  behavior exactly. When passed, it must be \"intent\" or \"orchestration\"\n" +
+  "  (never \"shared\" — that is a field classification, not a writer).\n" +
   "  Exit 0 = permitted, 1 = usage/read error, 3 = REFUSED.\n";
 
 // --- Core helpers (exported for tests) -------------------------------------
@@ -111,8 +127,24 @@ export interface FenceVerdict {
  * missing `kind` or an id mismatch means the caller handed over the wrong pair,
  * which is a misconfigured invocation, not a permitted write
  * (`.claude/rules/code-style.md`: a clear error, never a fallback).
+ *
+ * `writerClass` is OPTIONAL. Omitted (the original, still-default call shape),
+ * the verdict is exactly what this function has always returned — the union of
+ * `refusedDurableFields` over both the base and candidate kind, nothing else.
+ * Passed, the verdict additionally unions in `refusedCrossClassFields(writerClass,
+ * changed)` — the intent/orchestration class fence — so a declared writer that
+ * touches a field owned by the other class refuses even on a non-durable kind.
+ * The two fences are independent checks at different scopes (see
+ * `refusedFields` in schema.ts); this function unions their verdicts rather
+ * than delegating to `refusedFields` directly because the durable check alone
+ * must be judged under BOTH the base and candidate kind (the promotion case
+ * below), while the class check has no analogous kind parameter to double up.
  */
-export function fenceVerdict(base: unknown, candidate: unknown): FenceVerdict {
+export function fenceVerdict(
+  base: unknown,
+  candidate: unknown,
+  writerClass?: WriteClass,
+): FenceVerdict {
   if (!isPlainObject(base)) {
     throw new Error("base is not a JSON object");
   }
@@ -140,24 +172,74 @@ export function fenceVerdict(base: unknown, candidate: unknown): FenceVerdict {
   const refusedUnion = new Set([
     ...refusedDurableFields(kind, changed),
     ...refusedDurableFields(candidateKind, changed),
+    // Only touched when writerClass is passed — this is what keeps the
+    // flagless call shape byte-identical to before this parameter existed.
+    ...(writerClass === undefined ? [] : refusedCrossClassFields(writerClass, changed)),
   ]);
   // Filter `changed` rather than spreading the set, so `refused` keeps the same
   // sorted order `changedFields` established.
   return { kind, candidateKind, changed, refused: changed.filter((f) => refusedUnion.has(f)) };
 }
 
-/** The refusal text, naming the node, the fields, and what the caller must do. */
-export function refusalMessage(id: unknown, verdict: FenceVerdict): string {
+/**
+ * The refusal text, naming the node, the fields, and what the caller must do.
+ *
+ * `writerClass` is OPTIONAL, matching `fenceVerdict`. Omitted, the message text
+ * is byte-identical to before this parameter existed. Passed, the message also
+ * names which fence(s) fired for each refused field, since with the class fence
+ * active a field can be refused by the durable fence, the class fence, or both,
+ * and a human resolving the park benefits from knowing which.
+ */
+export function refusalMessage(
+  id: unknown,
+  verdict: FenceVerdict,
+  writerClass?: WriteClass,
+): string {
+  // Whether the DURABLE fence contributed to this refusal at all. Without
+  // `writerClass`, `fenceVerdict` never adds the class fence, so a non-empty
+  // `refused` can only ever come from the durable fence and this is always
+  // true — preserving the original "durable-layer" wording byte-for-byte. With
+  // `writerClass`, a refusal can now come purely from the class fence on a
+  // node whose kind is NOT durable-layer at all (e.g. an orchestration writer
+  // touching `statement` on a plain `tactic` — measured live: exit 3, "tactic"
+  // is not in DURABLE_LAYER_KINDS). Calling that "a durable-layer node" would
+  // be false, so the wording branches on whether the durable fence actually
+  // fired for at least one of the refused fields.
+  const durableTriggered = verdict.refused.some(
+    (field) =>
+      refusedDurableFields(verdict.kind, [field]).length > 0 ||
+      refusedDurableFields(verdict.candidateKind, [field]).length > 0,
+  );
   // Name the layer honestly: on a kind-rewriting candidate the refusal may come
   // from the layer the write moves the node TO, not the one it sits in now.
   const layer =
     verdict.kind === verdict.candidateKind
-      ? `a durable-layer "${verdict.kind}" node`
-      : `a "${verdict.kind}" node this write would rewrite as a "${verdict.candidateKind}" ` +
-        `one, and at least one of those two is a durable layer`;
+      ? durableTriggered
+        ? `a durable-layer "${verdict.kind}" node`
+        : `a "${verdict.kind}" node`
+      : durableTriggered
+        ? `a "${verdict.kind}" node this write would rewrite as a "${verdict.candidateKind}" ` +
+          `one, and at least one of those two is a durable layer`
+        : `a "${verdict.kind}" node this write would rewrite as a "${verdict.candidateKind}" one`;
+  const fieldsText =
+    writerClass === undefined
+      ? verdict.refused.join(", ")
+      : verdict.refused
+          .map((field) => {
+            const durable =
+              refusedDurableFields(verdict.kind, [field]).length > 0 ||
+              refusedDurableFields(verdict.candidateKind, [field]).length > 0;
+            const crossClass = refusedCrossClassFields(writerClass, [field]).length > 0;
+            const fences = [
+              durable ? "durable-layer fence" : null,
+              crossClass ? `"${writerClass}"-writer class fence` : null,
+            ].filter((f): f is string => f !== null);
+            return `${field} (${fences.join(" and ")})`;
+          })
+          .join(", ");
   return (
     `check-durable-write-fence: REFUSED — ${JSON.stringify(id)} is ${layer}` +
-    `, and this write changes ${verdict.refused.join(", ")}, ` +
+    `, and this write changes ${fieldsText}, ` +
     `which no unattended writer may set.\n` +
     `  changed fields: ${verdict.changed.join(", ")}\n` +
     `  an unattended writer may set only: ${STATE_FIELDS.join(", ")}\n` +
@@ -176,6 +258,31 @@ function flagValue(args: string[], flag: string): string {
     process.exit(1);
   }
   return value;
+}
+
+/**
+ * Like `flagValue`, but the flag itself is optional — `undefined` when absent
+ * rather than a usage error. Still a usage error if the flag is present with no
+ * value, or with a value not in `WRITE_CLASSES` (`"shared"` included: that is a
+ * field classification, never a writer declaration — `assertWriterClass` in
+ * schema.ts throws on it, which this rejects earlier with a clearer message).
+ */
+function optionalWriterClass(args: string[], flag: string): WriteClass | undefined {
+  const idx = args.indexOf(flag);
+  if (idx === -1) return undefined;
+  const value = args[idx + 1];
+  if (value === undefined || value === "" || value.startsWith("-")) {
+    process.stderr.write(`check-durable-write-fence: ${flag} <intent|orchestration> requires a value\n${USAGE}`);
+    process.exit(1);
+  }
+  if (value === "intent" || value === "orchestration") {
+    return value;
+  }
+  process.stderr.write(
+    `check-durable-write-fence: ${flag} must be one of "intent", "orchestration" ` +
+      `(got ${JSON.stringify(value)}; "shared" is a field classification, not a writer)\n${USAGE}`,
+  );
+  process.exit(1);
 }
 
 /** An error's message, narrowed rather than cast — a thrown non-Error stringifies. */
@@ -207,20 +314,21 @@ function main(argv: string[]): void {
   const args = argv.slice(2);
   const basePath = flagValue(args, "--base");
   const candidatePath = flagValue(args, "--candidate");
+  const writerClass = optionalWriterClass(args, "--writer-class");
 
   const base = readJson(basePath);
   const candidate = readJson(candidatePath);
 
   let verdict: FenceVerdict;
   try {
-    verdict = fenceVerdict(base, candidate);
+    verdict = fenceVerdict(base, candidate, writerClass);
   } catch (err) {
     process.stderr.write(`check-durable-write-fence: ${errorMessage(err)}\n`);
     process.exit(1);
   }
 
   if (verdict.refused.length > 0) {
-    process.stderr.write(refusalMessage(isPlainObject(base) ? base.id : null, verdict));
+    process.stderr.write(refusalMessage(isPlainObject(base) ? base.id : null, verdict, writerClass));
     process.exit(3);
   }
 
