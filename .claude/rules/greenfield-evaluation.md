@@ -24,8 +24,11 @@ Ratified doctrine requires only an author interview to change — `/align` is
 that interview. Never treat "ratified" as immutable: when a better design
 exists, surface it and let the author rule. Delegated and deferred
 dispositions do not even require an interview — AI may overrule them on best
-judgment during execution or rsi, recording the overrule per the overrule
-algebra on `strategy-explicit-intent`.
+judgment during execution or rsi — but every such override enters the author
+review queue: an override of a deferred disposition inherits the deferred
+stamp, and an override of a delegated disposition becomes deferred (the
+overrule algebra on `strategy-explicit-intent`; the superseded stamp survives
+in the record — clarifications append, never rewrite).
 
 ## Evaluate twice: fresh judgment and tradition
 
