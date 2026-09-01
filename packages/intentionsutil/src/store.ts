@@ -178,7 +178,22 @@ export function assertWriteClassBoundary(
   const changed = FIRST_CLASS_FIELD_NAMES.filter(
     (field) => !eq(priorFields[field], candidateFields[field]),
   );
-  const refused = refusedFields(writes, prior.kind, changed);
+  // The durable fence is judged under BOTH the prior kind and the candidate's.
+  // A write that rewrites `kind` moves the node INTO (or out of) the durable
+  // layer, and judging only the prior kind lets a promotion smuggle doctrine
+  // onto a durable-layer node: an `intent`-class writer flipping a `tactic` to
+  // `strategy` while authoring `rationale` passes the cross-class fence (both
+  // fields are intent-class) and passes `refusedDurableFields("tactic", …)`
+  // (a tactic is not durable), landing human-owned doctrine unattended.
+  // `check-durable-write-fence.ts`'s `fenceVerdict` unions the same two kinds
+  // for exactly this reason; this fence must not be the looser of the two.
+  const refusedSet = new Set([
+    ...refusedFields(writes, prior.kind, changed),
+    ...refusedDurableFields(candidate.kind, changed),
+  ]);
+  // Filter `changed` rather than spreading the set, so the refused list keeps
+  // `FIRST_CLASS_FIELD_NAMES` order.
+  const refused = changed.filter((field) => refusedSet.has(field));
   if (refused.length === 0) return;
   const conflicts: FieldConflict[] = refused.map((field) => ({
     field,
@@ -186,12 +201,17 @@ export function assertWriteClassBoundary(
     theirs: candidateFields[field],
   }));
   throw new IntentionSchemaError(
-    writeClassRefusalMessage(candidate.id, prior.kind, writes, changed, conflicts),
+    writeClassRefusalMessage(candidate.id, prior.kind, candidate.kind, writes, changed, conflicts),
   );
 }
 
 /** Why one field is refused: cross-class, durable-kind, or both. */
-function refusalReason(field: string, kind: string, writes: WriteClass): string {
+function refusalReason(
+  field: string,
+  kind: string,
+  candidateKind: string,
+  writes: WriteClass,
+): string {
   const reasons: string[] = [];
   if (refusedCrossClassFields(writes, [field]).length > 0) {
     const cls = fieldWriteClass(field);
@@ -203,6 +223,12 @@ function refusalReason(field: string, kind: string, writes: WriteClass): string 
   }
   if (refusedDurableFields(kind, [field]).length > 0) {
     reasons.push(`not a state field on the durable-layer kind "${kind}"`);
+  } else if (refusedDurableFields(candidateKind, [field]).length > 0) {
+    // Only reachable on a kind-rewriting write: the refusal comes from the
+    // layer the write moves the node TO, not the one it sits in now.
+    reasons.push(
+      `not a state field on the durable-layer kind "${candidateKind}" this write would rewrite the node as`,
+    );
   }
   return reasons.join("; ");
 }
@@ -211,27 +237,35 @@ function refusalReason(field: string, kind: string, writes: WriteClass): string 
  * The refusal text, naming the node, the declared class, each refused field and
  * its class, and what the caller must do. Modeled on `refusalMessage`
  * (`packages/intentionsutil/scripts/check-durable-write-fence.ts`), and it
- * carries the per-field detail as a `FieldConflict[]` JSON line so
- * `graph-commit`'s existing `CONFLICT_FIELDS_JSON` plumbing can consume it
+ * carries the per-field detail as a JSON line in the SAME
+ * `{id, field, ours, theirs}` entry shape `graph-commit`'s existing
+ * `CONFLICT_FIELDS_JSON` accumulator holds (`graph-commit:3011`, and
+ * `graph-commit:3024`'s `jq -r '.[].id'` is why `id` is present on every
+ * entry rather than only in the prose above), so that plumbing can consume it
  * without new diagnostics.
  */
 function writeClassRefusalMessage(
   id: string,
   kind: string,
+  candidateKind: string,
   writes: WriteClass,
   changed: readonly string[],
   conflicts: readonly FieldConflict[],
 ): string {
   const detail = conflicts
-    .map((c) => `    ${c.field} — ${refusalReason(c.field, kind, writes)}`)
+    .map((c) => `    ${c.field} — ${refusalReason(c.field, kind, candidateKind, writes)}`)
     .join("\n");
+  const subject =
+    kind === candidateKind
+      ? `is a "${kind}" node`
+      : `is a "${kind}" node this write would rewrite as a "${candidateKind}" one`;
   return (
-    `writeNode: REFUSED — ${JSON.stringify(id)} is a "${kind}" node and this write ` +
+    `writeNode: REFUSED — ${JSON.stringify(id)} ${subject} and this write ` +
     `declares write class "${writes}", which may not change ` +
     `${conflicts.map((c) => c.field).join(", ")}.\n` +
     `  changed fields: ${changed.join(", ")}\n` +
     `  refused fields:\n${detail}\n` +
-    `  conflict fields (JSON): ${JSON.stringify(conflicts)}\n` +
+    `  conflict fields (JSON): ${JSON.stringify(conflicts.map((c) => ({ id, ...c })))}\n` +
     `  Nothing was written. Do not loosen the declaration: either this writer ` +
     `should not be authoring those fields, or their classification is wrong — ` +
     `and reclassifying a field is an edit to the owning kind node's ` +

@@ -4,9 +4,10 @@
  * These are the `orchestration` write class in file form — observed state,
  * appended and never authored (`tactic-intent-orchestration-layer-schema`).
  * They are NOT nodes: they live under `<store>/operational/`, which
- * `listNodesResilient` (`store.ts:194-196`, shared by `listNodes` at `:232`)
- * never scans, since that scan reads only top-level `*.md` in the store dir. So
- * `validateGraph` cannot mistake one for a node.
+ * `listNodesResilient` (`store.ts`'s `readdirSync(dir).filter(name =>
+ * name.endsWith(".md") …)`, shared by `listNodes`, `listNodesStrict` and hence
+ * `validateGraph`) never scans, since that scan reads only top-level `*.md` in
+ * the store dir. So `validateGraph` cannot mistake one for a node.
  *
  * This module is pure: types, validators, deterministic ids, and path helpers.
  * Every filesystem effect lives in `operational-store.ts`.
@@ -452,8 +453,18 @@ export function evidencePath(dir: string, entry: EvidenceEntry): string {
 
 // --- Claim exclusivity ------------------------------------------------------
 
-/** A claim is live when it has not expired at `now`. */
+/**
+ * A claim is live when it has not expired at `now`.
+ *
+ * `now` is validated for the SAME reason `conflictingClaims` validates it: the
+ * comparison is lexicographic, so a millisecond-precision instant — which is
+ * exactly what `new Date().toISOString()` hands a caller — silently inverts
+ * within one second (`"…:06Z" > "…:06.789Z"` is TRUE because `Z` is 0x5A and
+ * `.` is 0x2E), reading an already-expired claim as live. Throwing beats a
+ * fence that fails open. Use `utcInstant()` to build one.
+ */
 export function isClaimLive(claim: ClaimRecord, now: string = utcInstant()): boolean {
+  requireInstant(now, "now");
   return claim.expires_at > now;
 }
 

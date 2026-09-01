@@ -415,6 +415,20 @@ describe("conflictingClaims", () => {
     );
   });
 
+  it("rejects a millisecond-precision now in isClaimLive, not only in conflictingClaims", () => {
+    // `new Date().toISOString()` is the natural spelling a caller reaches for,
+    // and it inverts the comparison within one second: an entry expiring at
+    // "…:06Z" reads LIVE against a now of "…:06.789Z" because `Z` (0x5A) sorts
+    // after `.` (0x2E). Guarding only `conflictingClaims` left the exported
+    // predicate failing open on exactly that input.
+    const edge = validateClaimRecord(
+      claim({ claim_id: "claim-ms", claimed_at: "2026-09-01T11:00:00Z", expires_at: "2026-09-01T11:00:06Z" }),
+    );
+    expect(() => isClaimLive(edge, "2026-09-01T11:00:06.789Z")).toThrow(/YYYY-MM-DDTHH:MM:SSZ/);
+    // The truncated form is what a caller must build, and it reads correctly.
+    expect(isClaimLive(edge, utcInstant(new Date("2026-09-01T11:00:06.789Z")))).toBe(false);
+  });
+
   it("truncates milliseconds so lexicographic order stays chronological", () => {
     expect(utcInstant(new Date("2026-09-01T11:00:00.456Z"))).toBe(now);
     expect(() => conflictingClaims([validateClaimRecord(claim())])).not.toThrow();

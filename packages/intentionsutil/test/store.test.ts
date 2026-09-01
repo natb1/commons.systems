@@ -661,6 +661,36 @@ describe("write-class boundary", () => {
     expect(() => assertWriteClassBoundary(null, candidate, "orchestration")).not.toThrow();
   });
 
+  it("judges the durable fence under the CANDIDATE kind too — a promotion cannot smuggle doctrine", () => {
+    // `tactic` is not a durable-layer kind and `kind`/`rationale` are both
+    // intent-class, so judging only the prior kind would let an intent-class
+    // writer flip a tactic into a strategy while authoring its rationale —
+    // human-owned doctrine landed unattended on a durable-layer node.
+    // `check-durable-write-fence.ts`'s `fenceVerdict` unions both kinds for the
+    // same reason; this fence must not be the looser of the two.
+    const dir = tempDir();
+    const prior = seedTactic(dir, "promoted");
+    const before = readFileSync(join(dir, "promoted.md"), "utf8");
+
+    expect(() =>
+      writeNode(
+        dir,
+        { ...prior, kind: "strategy", rationale: "Synthesized doctrine." },
+        { writes: "intent" }
+      )
+    ).toThrow(/rationale — not a state field on the durable-layer kind "strategy"/);
+    expect(readFileSync(join(dir, "promoted.md"), "utf8")).toBe(before);
+    // The message names the rewrite rather than calling it a "strategy" node it
+    // is not yet, and the durable half fires for `kind` itself as well.
+    expect(() =>
+      writeNode(
+        dir,
+        { ...prior, kind: "strategy", rationale: "Synthesized doctrine." },
+        { writes: "intent" }
+      )
+    ).toThrow(/is a "tactic" node this write would rewrite as a "strategy" one/);
+  });
+
   it("still enforces the kind-scoped durable fence when a class is declared", () => {
     const dir = tempDir();
     writeNode(dir, {

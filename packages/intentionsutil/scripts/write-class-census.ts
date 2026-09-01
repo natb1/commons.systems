@@ -120,7 +120,16 @@ function listFilesRecursive(dir: string): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir).sort()) {
     const full = join(dir, name);
-    const stat = statSync(full);
+    // `statSync` FOLLOWS symlinks, so a dangling one throws ENOENT here — before
+    // the `readFileSync` try/catch in `censusWriteSites` ever sees it. A
+    // read-only report that promises to always exit 0 must not die on one broken
+    // link in the tree it is scanning.
+    let stat: ReturnType<typeof statSync>;
+    try {
+      stat = statSync(full);
+    } catch {
+      continue; // Unstattable (dangling symlink, vanished mid-scan) — nothing to scan.
+    }
     if (stat.isDirectory()) {
       if (name === "node_modules" || name === "dist" || name === ".git") continue;
       out.push(...listFilesRecursive(full));
@@ -135,22 +144,25 @@ function listFilesRecursive(dir: string): string[] {
  * The balanced-paren text of the call starting at the `(` found at
  * `openParenIndex` in `text`, INCLUDING both parens. Assumes `text[openParenIndex]`
  * is `"("` — the caller guarantees this from the `writeNode(` match.
+ *
+ * `null` when the parens never balance before end of file. That happens when an
+ * unmatched `(` inside a string or bash prose desyncs the depth counter, and it
+ * MUST NOT be reported as "the call text runs to end of file": the caller
+ * searches that text for `writes:`, so any later declared call site in the same
+ * file would mark this one declared and quietly remove it from the migration
+ * frontier — the one direction a census hunting undeclared writers may not fail.
  */
-function extractBalancedCall(text: string, openParenIndex: number): string {
+function extractBalancedCall(text: string, openParenIndex: number): string | null {
   let depth = 0;
-  let i = openParenIndex;
-  for (; i < text.length; i++) {
+  for (let i = openParenIndex; i < text.length; i++) {
     const ch = text[i];
     if (ch === "(") depth++;
     else if (ch === ")") {
       depth--;
-      if (depth === 0) {
-        i++;
-        break;
-      }
+      if (depth === 0) return text.slice(openParenIndex, i + 1);
     }
   }
-  return text.slice(openParenIndex, i);
+  return null;
 }
 
 /** 1-based line number of `index` within `text`. */
@@ -193,6 +205,11 @@ export function findWriteNodeCalls(text: string): Array<{ index: number; declara
     const openParenIndex = matchIndex + "writeNode".length;
     const call = extractBalancedCall(text, openParenIndex);
     let declaration: Declaration = "undeclared";
+    if (call === null) {
+      // Unbalanced — report it on the frontier rather than guessing "declared".
+      results.push({ index: matchIndex, declaration });
+      continue;
+    }
     const writesMatch = call.match(/\bwrites\s*:\s*("([^"]*)"|'([^']*)')/);
     if (writesMatch) {
       const value = writesMatch[2] ?? writesMatch[3];
