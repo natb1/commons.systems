@@ -3417,7 +3417,14 @@ clarifications:
       2026-07-31 entry recording the corrected predicate and the `owner` sort
       mark. The mis-sort measurement above is likewise restated on `owner: ai`
       rather than on birth-office_hours-null, because office_hours is cleared on
-      drain and cannot carry the mark."
+      drain and cannot carry the mark. (SUPERSEDED IN PART 2026-09-01: under the
+      reconciliation round's main-qa shim as amended, NO new tactic-mainqa-*
+      nodes are minted — effective immediately under the frozen-queue ruling (no
+      live consumer exists to strand); the record-time sort doctrine here
+      governs only the already-minted corpus, which the bootstrap critical path
+      transcribes to reconciliation-frontier entries. The
+      machine-verifiable/author-required sort itself survives as the frontier
+      entry's lane attribute.)"
   - question: Condition 20 requires the machine-verifiable/author-required sort to
       be an explicitly recorded state, never inferred from whether office_hours
       is set — but entry 123 encodes it as exactly that inference. Where does
@@ -5421,7 +5428,12 @@ clarifications:
       not as a `blocked_by` edge, so the census scores it a violation. Either
       such waits gain a structural edge or the sensor stays approximate;
       resolving that is in scope for the implementing tactic and must not be
-      closed by loosening the census to accept prose.
+      closed by loosening the census to accept prose. (REFINED 2026-09-01: the
+      spawned-work completion binding survives the reconciliation round
+      unchanged in principle; its main-qa-node object is superseded in part —
+      once the main-qa shim liquidates, the spawned post-merge verification a
+      run binds to is a reconciliation-frontier entry with appended evidence,
+      not a minted node.)
   - question: Where does /align's own charter live after 2026-08-13, and what did
       that re-homing change here?
     answer: "The /align interview's charter — elicitation, capture-completeness, and
@@ -6463,7 +6475,10 @@ clarifications:
       transitional window is long enough to be worth it, is an evidence question
       for the tactic, not doctrine. What IS ruled here is the principle:
       structural handoff, recorded at completion, verified thereafter by the
-      graph rather than by the run.
+      graph rather than by the run. (REFINED 2026-09-01: same
+      supersession-in-part as clarification 232 — the structural-handoff
+      principle survives; the handoff object becomes a reconciliation-frontier
+      entry once the main-qa shim liquidates.)
   - question: Which spawn sites does a run's answerability cover, and what bounds
       the recursion when a spawned node's own /qa-main pass can mint further
       nodes?
@@ -7287,7 +7302,33 @@ clarifications:
       contributed was the recursion pathology. (decision: reframes, class axis,
       ordering, ledger, and boundary rules author-ratified 2026-09-01; the
       delegated-marked mechanics are executor articulation under the same
-      sitting)"
+      sitting) (AMENDED 2026-09-01, adversarial-review fixes, author-approved:
+      (1) CRITERIA ARE DISPOSITIONS — the class axis composes with the authority
+      algebra; sanction IS ratification; a Claude-transcribed or finding-derived
+      criterion enters DEFERRED until ratified (never a separate \"proposed\"
+      state), landing in the existing deferred-review queue; a delegated-scope
+      articulation enters delegated. (2) SANCTION-GATED RATCHET: the
+      observe-to-gating high-water promotion applies ONLY to checks bound to a
+      RATIFIED criterion; checks bound to a deferred criterion stay observe-tier
+      regardless of high-water mark — so a finding outside every sanctioned
+      criterion can never acquire gating force through the ratchet, closing the
+      leak the adversarial review found. (3) The REVIEW sentence \"pin
+      regeneration on head change\" is corrected: regeneration triggers on PIN
+      INVALIDATION under the scoped content-addressed pins of the mitigations —
+      a head change that does not intersect the assessment's subject slice does
+      not expire it. (4) The MAIN-QA and MERGE GATE sections are author-ratified
+      (the 2026-09-01 interview's third question ratified both explicitly); the
+      closing decision line's enumeration is not exhaustive. (5) The tradition
+      edges recorded in the TRADITIONS block are DELEGATED Claude-internal
+      readings: the category-derivation binding does not auto-ratify
+      executor-drafted readings embedded in a ratified clarification — an edge
+      becomes ratified only when the author has reviewed the reading itself. (6)
+      ANTI-STARVATION SANCTION PATH: elevation of a frontier gap note into a
+      bite runs note -> author ratification (office-hours or /align) -> ratified
+      criterion -> bite; elevation never executes unsanctioned scope — a bite
+      may bind only ratified criteria, and an unsanctioned elevation would
+      produce exactly the unmatched-evidence diffs the provenance guarantee
+      forbids.)"
   - question: What bootstrap shims implement the review/qa/main-qa reconciliation
       doctrine, and what liquidates them (2026-09-01)?
     answer: "(Recorded 2026-09-01; shim set author-ratified, declared per the shim
@@ -7319,7 +7360,62 @@ clarifications:
       shim). Liquidation: transcription into the check/criteria registry done
       (folds into tactic-migration-frontier-projection at finalization).
       (decision: delegated - shim mechanics under the author's ratification of
-      the 2026-09-01 review/qa reconciliation round)"
+      the 2026-09-01 review/qa reconciliation round) (AMENDED 2026-09-01,
+      adversarial-review fixes plus the frozen-queue re-evaluation,
+      author-directed: (1) CAP EXHAUSTION: the two-regeneration cap bounds
+      regenerations, never correctness — post-cap frontier routing applies only
+      to NON-BLOCKING findings; an open blocking finding at cap exhaustion parks
+      the claim to office-hours and the fold never proceeds over it. (2) SHIM 3
+      RE-DERIVED under the author's frozen-queue ruling (full bootstrap
+      authority; nothing operates on any queue until bootstrap completes): the
+      no-minting rule stands effective immediately and needs NO interim minting
+      — there is no live consumer to strand; the EXISTING minted tactic-mainqa-*
+      queue is transcribed to reconciliation-frontier entries on the bootstrap
+      critical path; liquidation = frontier deriver live BEFORE any queue
+      consumer unfreezes, so the queue is meaningful when anything reads it
+      again. (3) TRANSCRIBED CRITERIA enter DEFERRED until author ratification
+      (criteria are dispositions); the implicit-criteria shim's liquidation is
+      transcription done AND the transcribed set dispositioned through the
+      deferred queue. (4) SHIM 5, FINDING-LEDGER INTERIM, declared: until the
+      evidence log exists, the PR review comment audit trail (entry 19's
+      incumbent form) is the finding ledger's declared interim carrier;
+      liquidation = evidence log live. (5) Shims 1, 2, and 4 re-checked under
+      the frozen-queue context and stand unchanged — they serve the bootstrap
+      sessions' own claims, not the frozen queues.)"
+  - question: What execution authority and critical path govern the bootstrap
+      operation (2026-09-01, frozen-queue ruling)?
+    answer: "(Author-issued 2026-09-01 during the review/qa reconciliation round;
+      the authority grant is ratified, the path articulation is delegated.)
+      AUTHORITY: the executor holds full bootstrap authority while the queues
+      are frozen — nothing operates on any queue until bootstrap completes.
+      Within it the executor may transcribe legacy graph constructs to
+      greenfield form, and modify or close in-flight PRs. Shim evaluation must
+      use this context: an interim mechanism is owed only where a live consumer
+      exists during bootstrap; frozen surfaces need transcription on the
+      critical path, not interim schedulers. CRITICAL PATH (delegated
+      articulation; refines the recorded initiation order, consistent with its
+      blocked_by encoding): P0 mint the operation carrier (first act, per the
+      initiation protocol). P1 intent-layer integrity: finalize
+      tactic-intent-orchestration-layer-schema (claim-record schema,
+      evidence-append classification — the schema everything downstream writes
+      against), then tactic-migration-frontier-projection (check/criteria
+      registry with the sanction-gated ratchet, basis pins and the stale-intent
+      frontier, shim inventory), then tactic-consolidation-operation (evidence
+      folding, deferred-queue deriver, one-ruling-one-stamp normalization). P2
+      queue transcription: the minted tactic-mainqa-* corpus becomes
+      reconciliation-frontier entries; the frozen tactic corpus completes its
+      scope THROUGH the reconciliation machinery per the viability-test ruling;
+      in-flight PRs #3183/#3185 are merged or closed as materialized projections
+      under bootstrap authority. P3 observe-mode integration
+      (tactic-ladder-reconciliation-observe): derived position beside stored
+      phase, claim records, evidence folding, and the round's owed measurements,
+      as one measured loop. P4 DISPATCH-RESUMPTION GATE: queues unfreeze only
+      when the frontier deriver and claim machinery are live and the transcribed
+      queues validate — a queue means something only when it is derived from
+      graph state, never hand-maintained residue; then priority two,
+      long-horizon dispatch with rsi and token efficiency. (decision: authority
+      ratified author-issued 2026-09-01; path delegated, entering the review
+      queues via this stamp)"
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic
@@ -8501,7 +8597,7 @@ change — still defers. Cost refines ONLY the resolve↔defer boundary: it neve
 a finding out of the ignore category, because fixing a non-finding is waste and a
 defensive fallback violates code-style however cheap. A finding fixed in scope is
 still recorded in the PR review comment, so "fixed cheaply in-PR" drops nothing.
-Implementation retained as draft tactic-review-cheap-fix-disposition. (REFINED 2026-09-01: entries 19/51/59 survive the reconciliation reframe as the review assessment's settle rule — blocking = bitten-criterion violation or ever-passed-check regression; ignore immovable; entry 51 unchanged. The deferral arm is recomputed: deferral overhead is now a reconciliation-frontier entry, not a draft-tactic body — see the review/qa reconciliation clarification of that date.)
+Implementation retained as draft tactic-review-cheap-fix-disposition. (REFINED 2026-09-01: entries 19/51/59 survive the reconciliation reframe as the review assessment's settle rule — blocking = bitten-criterion violation or ever-passed-check regression; ignore immovable; entry 51 unchanged. The deferral arm is recomputed: deferral overhead is now a reconciliation-frontier entry, not a draft-tactic body — see the review/qa reconciliation clarification of that date.) (Amended same day, adversarial-review fix: "survive" is precise for entries 19/51; entry 59's cheap-fix trigger survives with a NARROWED domain — standing non-functional criteria absorb most of the old out-of-contract space, and near-free frontier routing means the trigger rarely fires.)
 
 The following review and QA rules are settled and stand on their own:
 
@@ -8520,7 +8616,7 @@ passed, while the independent pass against the real delegation records immediate
 found a capture-term scoring bug (exact-match enum parsing vs the store's actual
 free-text vocabulary). A bootstrap-emulating session owes these full semantics
 before writing the qa → review transition; the write asserts the validation
-happened, not that the checklist re-ran. (REFINED 2026-09-01: qa is the FUNCTIONAL acceptance assessment under the reconciliation doctrine — this entry's independent real-data validation method survives as its production method; functional reconciles before non-functional, and both assessments are pin-valid before fold.)
+happened, not that the checklist re-ran. (REFINED 2026-09-01: qa is the FUNCTIONAL acceptance assessment under the reconciliation doctrine — this entry's independent real-data validation method survives as its production method; functional reconciles before non-functional, and both assessments are pin-valid before fold.) (Amended same day, adversarial-review fix: the residue axis's needs-main -> follow-up arm is superseded in part — post-merge follow-up becomes a reconciliation-frontier entry under the main-qa shim as amended; the incumbent minting doctrine is annotated on the record-time routing clarification.)
 
 Review is the full /review-fix fan-out, and deferred findings land as graph draft
 tactics (Recorded 2026-07-04 interview, entry 21). Review-phase parity binds like qa

@@ -347,7 +347,14 @@ clarifications:
       per-strategy effective set is a projection derived on read, never a stored
       copy). (4) ASSESSMENT pins are scoped and content-addressed: an assessment
       pins the content hashes of the inputs it actually read, so unrelated
-      changes do not expire it.)"
+      changes do not expire it.) (REFINED 2026-09-01, second sitting, ratified:
+      (5) CRITERIA ARE DISPOSITIONS — the class axis composes with the authority
+      algebra; sanction IS ratification; a Claude-transcribed or finding-derived
+      criterion enters DEFERRED until ratified (no separate proposed state
+      exists), and checks bound to a non-ratified criterion stay observe-tier
+      regardless of high-water mark. (6) Ratified texts citing this vocabulary
+      pin to its current sense; the deferred base review of this vocabulary
+      re-verifies those texts on any amendment.)"
 tooling_goals: []
 success_signal: null
 attention: null

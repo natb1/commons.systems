@@ -1016,7 +1016,9 @@ clarifications:
       always-loaded floors; delegated leaf detail stays at node depth).
       Floor-derivation mechanics are delegated to
       tactic-context-materialization's surface. (decision: author-ratified,
-      2026-09-01)"
+      2026-09-01) (Amended same day: \"frontier item\" in this clarification is
+      the RECONCILIATION-frontier sense, per kind-kind's three-way
+      disambiguation ratified the same sitting.)"
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
