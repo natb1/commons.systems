@@ -8,8 +8,12 @@ import {
   FIRST_CLASS_FIELD_NAMES,
   STATUSES,
   SUPERSEDED_STATUS,
+  fieldWriteClass,
   isRetired,
   isSuperseded,
+  refusedCrossClassFields,
+  refusedDurableFields,
+  refusedFields,
   validateGraph,
   validateGraphProseRefs,
   validateNode,
@@ -2829,6 +2833,293 @@ describe("validateGraph", () => {
       gnode({ id: "tactic-new", kind: "tactic" }),
     ];
     expect(() => validateGraph(missingStatus)).not.toThrow();
+  });
+
+  // --- Rule 27: write-class declaration agrees with the code mirror ---------
+
+  /**
+   * The classification `kind-kind` records, as a fresh object per call so a
+   * test may delete or override one entry without leaking into the next.
+   * Transcribed from `intentions/kind-kind.md`'s
+   * `attributes.field_write_class`, which is the authority; `attributes` is
+   * absent because it is classified per key on the individual kind nodes.
+   */
+  function fullWriteClassMap(): Record<string, string> {
+    return {
+      id: "intent",
+      kind: "intent",
+      statement: "intent",
+      owner: "intent",
+      status: "shared",
+      parent: "intent",
+      serves: "intent",
+      recovers: "intent",
+      rationale: "intent",
+      reading: "orchestration",
+      clarifications: "intent",
+      tooling_goals: "intent",
+      success_signal: "intent",
+      attention: "intent",
+      phase: "orchestration",
+      execution: "orchestration",
+      validates: "intent",
+      blocked_by: "shared",
+      superseded_by: "intent",
+      supersession_expiry: "intent",
+      office_hours: "orchestration",
+      pace_exempt: "orchestration",
+      rounds: "orchestration",
+    };
+  }
+
+  /** A `kind-kind` fixture carrying `declaration` as its write-class map. */
+  function authorityKindNode(declaration: unknown): IntentionNode {
+    return gnode({
+      id: "kind-kind",
+      kind: "kind",
+      status: "codified",
+      attributes: {
+        status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+        field_write_class: declaration,
+      },
+    });
+  }
+
+  it("passes when the authority kind node classifies every first-class field", () => {
+    expect(() => validateGraph([authorityKindNode(fullWriteClassMap())])).not.toThrow();
+  });
+
+  it("is inert when a kind node declares no field_write_class at all", () => {
+    // The mirror's own completeness is a COMPILE-time guarantee; rule 27 only
+    // judges declarations that exist, so a graph predating the classification
+    // (and every fixture in this file) stays valid.
+    expect(() =>
+      validateGraph([gnode({ id: "kind-kind", kind: "kind", status: "codified" })]),
+    ).not.toThrow();
+  });
+
+  it("throws when the authority kind node leaves a first-class field unclassified", () => {
+    const partial = fullWriteClassMap();
+    delete partial.rationale;
+    expect(() => validateGraph([authorityKindNode(partial)])).toThrow(IntentionSchemaError);
+    expect(() => validateGraph([authorityKindNode(partial)])).toThrow(
+      /kind-kind: attributes\.field_write_class has no declaration for first-class field "rationale"/,
+    );
+  });
+
+  it("throws when a declared class contradicts the code mirror", () => {
+    const contradictory = fullWriteClassMap();
+    contradictory.rationale = "orchestration";
+    expect(() => validateGraph([authorityKindNode(contradictory)])).toThrow(
+      /kind-kind: attributes\.field_write_class\["rationale"\] is "orchestration", but the code mirror FIELD_WRITE_CLASS_PROBE says "intent"/,
+    );
+  });
+
+  it("throws when a declaration names a field that is not first-class", () => {
+    const unknownField = fullWriteClassMap();
+    unknownField.gap = "orchestration";
+    expect(() => validateGraph([authorityKindNode(unknownField)])).toThrow(
+      /kind-kind: attributes\.field_write_class declares "gap", which is not a first-class field/,
+    );
+  });
+
+  it("throws when a declared value is not a legal write class", () => {
+    const badValue = fullWriteClassMap();
+    badValue.rationale = "durable";
+    expect(() => validateGraph([authorityKindNode(badValue)])).toThrow(
+      /kind-kind: attributes\.field_write_class\["rationale"\] is "durable", not one of intent, orchestration, shared/,
+    );
+  });
+
+  it("throws when field_write_class is not a map", () => {
+    expect(() => validateGraph([authorityKindNode(["phase: orchestration"])])).toThrow(
+      /kind-kind: attributes\.field_write_class must be a map from field name to write class/,
+    );
+  });
+
+  it("accepts a non-authority kind node's partial map, attributes.<key> entries included", () => {
+    // kind-tactic declares only its kind-scoped fields and its own attribute
+    // keys — exactly what `intentions/kind-tactic.md` records. No coverage
+    // obligation follows it there, and the `attributes.` entries are per-key
+    // declarations the mirror deliberately cannot enumerate.
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-tactic",
+        kind: "kind",
+        status: "codified",
+        attributes: {
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+          field_write_class: {
+            phase: "orchestration",
+            execution: "orchestration",
+            validates: "intent",
+            blocked_by: "shared",
+            attention: "intent",
+            "attributes.measured_impact": "orchestration",
+            "attributes.ledger_entry": "intent",
+          },
+        },
+      }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+
+  it("throws when an attributes.<key> entry shadows a first-class field", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-tactic",
+        kind: "kind",
+        status: "codified",
+        attributes: {
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+          field_write_class: { "attributes.phase": "orchestration" },
+        },
+      }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /kind-tactic: attributes\.field_write_class declares "attributes\.phase", but "phase" is a first-class field/,
+    );
+  });
+
+  it("still contradicts on a non-authority kind node — agreement is not scoped to the authority", () => {
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: {
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+          field_write_class: { recovers: "orchestration", rounds: "orchestration" },
+        },
+      }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /kind-strategy: attributes\.field_write_class\["recovers"\] is "orchestration", but the code mirror FIELD_WRITE_CLASS_PROBE says "intent"/,
+    );
+  });
+
+  it("never judges an ordinary node's attributes — the rule is kind-node scoped", () => {
+    // A tactic carrying a stray `field_write_class` attribute is rule 23's
+    // business (it is not a first-class name, so nothing bans it) — rule 27
+    // reads declarations only off nodes that DEFINE a kind.
+    const nodes = [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-tactic", kind: "kind", status: "codified" }),
+      gnode({
+        id: "tactic-1",
+        kind: "tactic",
+        attributes: { field_write_class: { rationale: "orchestration" } },
+      }),
+    ];
+    expect(() => validateGraph(nodes)).not.toThrow();
+  });
+});
+
+describe("write-class primitives", () => {
+  it("fieldWriteClass returns the recorded class for every first-class field", () => {
+    expect(fieldWriteClass("rationale")).toBe("intent");
+    expect(fieldWriteClass("statement")).toBe("intent");
+    expect(fieldWriteClass("phase")).toBe("orchestration");
+    expect(fieldWriteClass("reading")).toBe("orchestration");
+    expect(fieldWriteClass("status")).toBe("shared");
+    expect(fieldWriteClass("blocked_by")).toBe("shared");
+  });
+
+  it("fieldWriteClass classifies every first-class field name and nothing else", () => {
+    for (const field of FIRST_CLASS_FIELD_NAMES) {
+      expect(fieldWriteClass(field)).not.toBeNull();
+    }
+    expect(fieldWriteClass("gap")).toBeNull();
+    expect(fieldWriteClass("")).toBeNull();
+    // Not a field, and specifically not reachable through the prototype chain.
+    expect(fieldWriteClass("toString")).toBeNull();
+    expect(fieldWriteClass("constructor")).toBeNull();
+  });
+
+  it("refusedCrossClassFields lets an intent writer touch intent and shared fields", () => {
+    expect(refusedCrossClassFields("intent", ["rationale", "statement", "status", "blocked_by"]))
+      .toEqual([]);
+  });
+
+  it("refusedCrossClassFields refuses orchestration fields to an intent writer", () => {
+    expect(
+      refusedCrossClassFields("intent", ["rationale", "phase", "reading", "office_hours"]),
+    ).toEqual(["phase", "reading", "office_hours"]);
+  });
+
+  it("refusedCrossClassFields refuses intent fields to an orchestration writer", () => {
+    expect(
+      refusedCrossClassFields("orchestration", ["phase", "rationale", "statement", "status"]),
+    ).toEqual(["rationale", "statement"]);
+  });
+
+  it("refusedCrossClassFields refuses an unrecognized field name to BOTH classes", () => {
+    // The negative-check discipline `isDurableWriteRefused` established:
+    // unknown refuses, because a write fence that fails open is silent.
+    expect(refusedCrossClassFields("intent", ["gap"])).toEqual(["gap"]);
+    expect(refusedCrossClassFields("orchestration", ["gap"])).toEqual(["gap"]);
+  });
+
+  it("refusedCrossClassFields preserves the order given and returns [] for no changes", () => {
+    expect(refusedCrossClassFields("orchestration", ["statement", "rationale"])).toEqual([
+      "statement",
+      "rationale",
+    ]);
+    expect(refusedCrossClassFields("intent", [])).toEqual([]);
+  });
+
+  it("refusedCrossClassFields throws on a shared WRITER declaration", () => {
+    expect(() => refusedCrossClassFields("shared", ["rationale"])).toThrow(IntentionSchemaError);
+    expect(() => refusedCrossClassFields("shared", ["rationale"])).toThrow(
+      /write class "shared" is a field classification, not a writer declaration/,
+    );
+  });
+
+  it("refusedFields unions the class fence with the kind-scoped durable fence", () => {
+    // On a durable kind, an intent writer is still refused `rationale` — the
+    // class fence permits it, the durable fence does not.
+    expect(refusedDurableFields("strategy", ["rationale"])).toEqual(["rationale"]);
+    expect(refusedCrossClassFields("intent", ["rationale"])).toEqual([]);
+    expect(refusedFields("intent", "strategy", ["rationale"])).toEqual(["rationale"]);
+  });
+
+  it("refusedFields refuses nothing a non-durable kind permits to its own class", () => {
+    expect(refusedFields("intent", "tactic", ["rationale", "statement", "status"])).toEqual([]);
+    expect(refusedFields("orchestration", "tactic", ["phase", "reading", "blocked_by"])).toEqual(
+      [],
+    );
+  });
+
+  it("refusedFields reports each refused field once, in the order given", () => {
+    // On `strategy` (a durable kind) an orchestration writer is refused only
+    // `rationale` — the durable fence's exemption covers `reading` and `phase`,
+    // and the class fence agrees with an orchestration writer on both.
+    expect(
+      refusedFields("orchestration", "strategy", ["reading", "rationale", "phase"]),
+    ).toEqual(["rationale"]);
+    // The same three to an INTENT writer: `rationale` refused by the durable
+    // fence alone, `reading` and `phase` by the class fence alone. Each appears
+    // once even though `rationale` is refused twice over.
+    expect(refusedFields("intent", "strategy", ["reading", "rationale", "phase"])).toEqual([
+      "reading",
+      "rationale",
+      "phase",
+    ]);
+  });
+
+  it("refusedFields throws on a shared WRITER declaration too", () => {
+    expect(() => refusedFields("shared", "tactic", ["rationale"])).toThrow(
+      /write class "shared" is a field classification, not a writer declaration/,
+    );
+  });
+
+  it("refusedFields leaves the durable fence's own signature and behaviour alone", () => {
+    // Unit 3 adds a union; it does not move `refusedDurableFields`.
+    expect(refusedDurableFields("tactic", ["rationale"])).toEqual([]);
+    expect(refusedDurableFields("strategy", ["phase", "rationale"])).toEqual(["rationale"]);
   });
 });
 

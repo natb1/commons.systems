@@ -351,6 +351,100 @@ const FIRST_CLASS_FIELD_PROBE: Record<keyof IntentionNode, true> = {
  */
 export const FIRST_CLASS_FIELD_NAMES: readonly string[] = Object.keys(FIRST_CLASS_FIELD_PROBE);
 
+// --- Write class: intent vs orchestration ----------------------------------
+
+/**
+ * The write class of a carrier of node state.
+ *
+ *  - `intent` — target state: what the author intends to be true.
+ *  - `orchestration` — operational state: what is observed to be true, appended
+ *    rather than authored.
+ *  - `shared` — a declared SHIM, not a third kind of state. Live writers of both
+ *    classes touch the field today, and forcing it into one class would either
+ *    break a live writer or make the fence fail open. Each shim carries a
+ *    liquidation condition on `kind-kind`'s `attributes.write_class_shims`.
+ *    Legal as a FIELD's class; never legal as a WRITER's declaration.
+ *
+ * The word "layer" is deliberately avoided: it already means three unrelated
+ * things here — `attributes.goal_layer`, kind-typed field placement, and
+ * `graph-commit`'s Layer 1/2/3 conflict stages. The doctrine's own words are
+ * intent and orchestration; the code says write class.
+ */
+export type WriteClass = "intent" | "orchestration" | "shared";
+
+/** The three legal `WriteClass` values, for validating declared data. */
+export const WRITE_CLASSES: readonly WriteClass[] = ["intent", "orchestration", "shared"];
+
+/**
+ * Every first-class field's write class, as a compiler-enforced probe.
+ *
+ * The `Record<keyof IntentionNode, WriteClass>` annotation is the same
+ * exhaustiveness idiom as `FIRST_CLASS_FIELD_PROBE` above and
+ * `MERGE_FIELD_COVERAGE_PROBE` (`node-merge.ts`): adding a field to
+ * `IntentionNode` without classifying it is a missing-property error, and
+ * naming a non-field is an excess-property error. There is no silent gap.
+ *
+ * This is a MIRROR, not the authority. The authority is the kind nodes'
+ * `attributes.field_write_class` — `kind-kind` for the fields every node
+ * carries, the owning kind node for its kind-scoped fields and its own
+ * `attributes` keys. The mirror exists so the write-time fast path costs no
+ * store read; `validateGraph`'s rule 27 fails the build when the two disagree.
+ * Transcribe from the kind nodes; never re-decide here.
+ *
+ * `attributes` is the one entry that is a container rather than a carrier: it
+ * is classified per KEY, and those per-key declarations live on the individual
+ * kind nodes (`attributes.measured_impact: orchestration` on `kind-tactic`,
+ * `attributes.conditions: intent` on `kind-strategy`). `shared` is the honest
+ * whole-container answer — both classes write keys inside it — and rule 27
+ * exempts `attributes` from `kind-kind`'s coverage obligation accordingly.
+ */
+const FIELD_WRITE_CLASS_PROBE: Record<keyof IntentionNode, WriteClass> = {
+  id: "intent",
+  kind: "intent",
+  statement: "intent",
+  owner: "intent",
+  status: "shared",
+  parent: "intent",
+  serves: "intent",
+  recovers: "intent",
+  rationale: "intent",
+  reading: "orchestration",
+  clarifications: "intent",
+  tooling_goals: "intent",
+  success_signal: "intent",
+  attention: "intent",
+  phase: "orchestration",
+  execution: "orchestration",
+  validates: "intent",
+  blocked_by: "shared",
+  superseded_by: "intent",
+  supersession_expiry: "intent",
+  office_hours: "orchestration",
+  pace_exempt: "orchestration",
+  rounds: "orchestration",
+  // Per-key, resolved on the kind nodes — see the doc comment above.
+  attributes: "shared",
+};
+
+/**
+ * `FIELD_WRITE_CLASS_PROBE` as a string-keyed lookup. Built from the probe with
+ * `Object.entries` so the mirror stays single-sourced and no `as` cast is
+ * needed to index it with an arbitrary caller-supplied name.
+ */
+const FIELD_WRITE_CLASS: ReadonlyMap<string, WriteClass> = new Map(
+  Object.entries(FIELD_WRITE_CLASS_PROBE),
+);
+
+/**
+ * The write class of `field`, or `null` when `field` is not a first-class field
+ * name. `null` is "unknown", not "permitted" — every caller must treat it as
+ * the refusing case, exactly as `isDurableWriteRefused` treats an unrecognized
+ * field name.
+ */
+export function fieldWriteClass(field: string): WriteClass | null {
+  return FIELD_WRITE_CLASS.get(field) ?? null;
+}
+
 /**
  * Input type for writeNode. Only the required core is mandatory; optional
  * fields may be omitted and validateNode will apply their defaults. This lets
@@ -739,6 +833,78 @@ export function isDurableWriteRefused(kind: string, field: string): boolean {
  */
 export function refusedDurableFields(kind: string, fields: readonly string[]): string[] {
   return fields.filter((field) => isDurableWriteRefused(kind, field));
+}
+
+/**
+ * Guard on a WRITER's declared class. `shared` classifies a FIELD two classes
+ * genuinely write; it is never a class a writer can BE. Accepting it would make
+ * `refusedCrossClassFields` return `[]` for every field — a fence that fails
+ * open, which is the failure mode already corrected once here on 2026-08-15.
+ */
+function assertWriterClass(writer: WriteClass): void {
+  if (writer === "shared") {
+    throw new IntentionSchemaError(
+      'write class "shared" is a field classification, not a writer declaration — declare "intent" or "orchestration"',
+    );
+  }
+}
+
+/**
+ * Whether a writer of class `writer` must REFUSE to set `field`.
+ *
+ * Negative, like `isDurableWriteRefused`: a name that is not a first-class
+ * field is unknown, and unknown refuses. Only two things permit a write — the
+ * field's class equals the writer's, or the field is a declared `shared` shim,
+ * which both classes may touch until its liquidation condition is met.
+ */
+function isCrossClassWriteRefused(writer: WriteClass, field: string): boolean {
+  const cls = fieldWriteClass(field);
+  if (cls === null) return true;
+  return cls !== writer && cls !== "shared";
+}
+
+/**
+ * The subset of `changed` a writer of class `writer` must refuse, in the order
+ * given. Empty means every field is permitted to that writer.
+ *
+ * One implementation rather than the predicate re-spelled per caller, for the
+ * same reason `refusedDurableFields` is: a caller that spells the loop itself
+ * is one `!` away from inverting the fence.
+ *
+ * Throws when `writer` is `shared` — see `assertWriterClass`.
+ */
+export function refusedCrossClassFields(
+  writer: WriteClass,
+  changed: readonly string[],
+): string[] {
+  assertWriterClass(writer);
+  return changed.filter((field) => isCrossClassWriteRefused(writer, field));
+}
+
+/**
+ * THE refusal function: the subset of `changed` that a writer of class `writer`
+ * must refuse on a node of `kind`, in the order given — the union of the
+ * cross-class fence (`refusedCrossClassFields`) and the kind-scoped durable
+ * fence (`refusedDurableFields`).
+ *
+ * The two fences are the same idea at different scopes and neither subsumes the
+ * other: the durable fence protects human-owned doctrine from any unattended
+ * writer regardless of class, the class fence protects intent from
+ * orchestration on every kind. A field refused by either is refused.
+ *
+ * `isDurableWriteRefused` and `refusedDurableFields` keep their existing
+ * signatures and behaviour — `check-durable-write-fence.ts` and
+ * `.claude/skills/dispatch-conflict/SKILL.md` consume them directly.
+ */
+export function refusedFields(
+  writer: WriteClass,
+  kind: string,
+  changed: readonly string[],
+): string[] {
+  const crossRefused = new Set(refusedCrossClassFields(writer, changed));
+  return changed.filter(
+    (field) => crossRefused.has(field) || isDurableWriteRefused(kind, field),
+  );
 }
 
 // --- Dispatch-state structured fields --------------------------------------
@@ -1870,6 +2036,119 @@ function checkSupersessionExpiry(node: IntentionNode, problems: string[]): void 
   }
 }
 
+/** The `attributes.<key>` prefix a per-key attribute declaration carries. */
+const ATTRIBUTE_DECLARATION_PREFIX = "attributes.";
+
+/**
+ * Rule 27: a kind node's `attributes.field_write_class` agrees with the code
+ * mirror `FIELD_WRITE_CLASS_PROBE`.
+ *
+ * The kind nodes are the AUTHORITY for the intent/orchestration classification;
+ * the mirror exists only so the write-time fence costs no store read. This rule
+ * is what keeps the two from drifting, so the authority stays in the graph.
+ *
+ * Scope — kind nodes only. Ordinary nodes carry no declaration, and running the
+ * check per ordinary node would report the same kind-node defect once per
+ * member of that kind. `node.kind === "kind"` is the graph's own self-describing
+ * marker (the same one `kind-<kind>` lookups rely on), not a hardcoded kind
+ * list: which kinds exist, and which of them declare anything, is entirely data.
+ *
+ * Three failures, plus a shape check:
+ *
+ *  (a) SHAPE — `field_write_class`, when present, is a plain object whose every
+ *      value is one of `WRITE_CLASSES`.
+ *  (b) UNKNOWN FIELD — a plain (unprefixed) key that is not a first-class field
+ *      name. `attributes.<key>` keys are EXEMPT: they declare the class of a
+ *      kind-scoped attribute key (`attributes.measured_impact` on kind-tactic),
+ *      which is a real carrier the mirror deliberately cannot enumerate, since
+ *      `attributes` is a per-kind open map. They are still checked for the one
+ *      thing that can go wrong with them — naming a first-class field after the
+ *      prefix (`attributes.phase`), which is rule 23's shadow-ban restated at
+ *      the declaration level: it would claim a class for a key that may not
+ *      exist, and read as if it were classifying the first-class field.
+ *  (c) CONTRADICTION — a plain key whose declared class differs from the
+ *      mirror's. This is the drift the rule exists for, and either side may be
+ *      the wrong one; the message names both values so the reader can rule.
+ *  (d) COVERAGE — the SCHEMA-AUTHORITY kind node must classify every
+ *      first-class field. That node is identified from data, not by id: it is
+ *      the kind node that defines its own kind (`node.id === "kind-" +
+ *      node.kind`), which is the root of the self-describing graph and the
+ *      declared home of the fields every node carries. Every OTHER kind node
+ *      legitimately declares a subset — its kind-scoped fields and its own
+ *      attribute keys — so a partial map there is correct, not missing.
+ *      `attributes` itself is exempt from coverage: it is a container whose
+ *      class is resolved per key on the individual kind nodes.
+ *
+ * Coverage is inert when the node declares no `field_write_class` at all. A
+ * node set that carries no declaration anywhere — a partial test fixture, or a
+ * graph predating the classification — is not making a contradictory claim, and
+ * the mirror's own completeness is already guaranteed at COMPILE time by
+ * `FIELD_WRITE_CLASS_PROBE`'s `Record<keyof IntentionNode, WriteClass>`
+ * annotation. What this rule adds is that a declaration which EXISTS is right,
+ * and that the authority node's declaration is whole. Making the attribute
+ * itself mandatory is a ratchet on the migration frontier, not a rule that can
+ * land before the declaration does.
+ */
+function checkWriteClassDeclaration(
+  node: IntentionNode,
+  byId: Map<string, IntentionNode>,
+  problems: string[],
+): void {
+  if (node.kind !== "kind") return; // only kind nodes carry declarations
+  const declared = node.attributes.field_write_class;
+  if (declared === undefined || declared === null) return;
+  if (!isPlainObject(declared)) {
+    problems.push(
+      `${node.id}: attributes.field_write_class must be a map from field name to write class, got ${Array.isArray(declared) ? "an array" : typeof declared}`,
+    );
+    return;
+  }
+
+  for (const [field, value] of Object.entries(declared)) {
+    if (typeof value !== "string" || !WRITE_CLASSES.some((legal) => legal === value)) {
+      problems.push(
+        `${node.id}: attributes.field_write_class["${field}"] is "${String(value)}", not one of ${WRITE_CLASSES.join(", ")}`,
+      );
+      continue;
+    }
+    if (field.startsWith(ATTRIBUTE_DECLARATION_PREFIX)) {
+      // A per-key attribute declaration. Legal, and outside the mirror's reach;
+      // the only defect it can carry is shadowing a first-class field name.
+      const key = field.slice(ATTRIBUTE_DECLARATION_PREFIX.length);
+      if (FIRST_CLASS_FIELD_NAMES.includes(key)) {
+        problems.push(
+          `${node.id}: attributes.field_write_class declares "${field}", but "${key}" is a first-class field — no attributes key may shadow one (rule 23), so classify it as "${key}"`,
+        );
+      }
+      continue;
+    }
+    const mirrored = fieldWriteClass(field);
+    if (mirrored === null) {
+      problems.push(
+        `${node.id}: attributes.field_write_class declares "${field}", which is not a first-class field — declare a kind-scoped attribute key as "${ATTRIBUTE_DECLARATION_PREFIX}${field}"`,
+      );
+      continue;
+    }
+    if (mirrored !== value) {
+      problems.push(
+        `${node.id}: attributes.field_write_class["${field}"] is "${value}", but the code mirror FIELD_WRITE_CLASS_PROBE says "${mirrored}" — the kind node is the authority; reconcile schema.ts to it`,
+      );
+    }
+  }
+
+  // (d) Coverage, on the schema-authority kind node only.
+  const definer = byId.get(`kind-${node.kind}`);
+  if (definer === undefined || definer.id !== node.id) return;
+  for (const field of FIRST_CLASS_FIELD_NAMES) {
+    if (field === "attributes") continue; // classified per key on each kind node
+    if (!Object.prototype.hasOwnProperty.call(declared, field)) {
+      problems.push(
+        `${node.id}: attributes.field_write_class has no declaration for first-class field "${field}" — the schema-authority kind node must classify every field every node carries`,
+      );
+    }
+  }
+}
+
 /**
  * Referential integrity over a whole node set. Per-node shape is `validateNode`'s
  * job; this checks the edges BETWEEN nodes:
@@ -2014,6 +2293,16 @@ function checkSupersessionExpiry(node: IntentionNode, problems: string[]): void 
  *      and that interim-live-risk exception is only permitted when an expiry is
  *      named, normally the in-flight PR's own merge or closure. Inert when the
  *      node is not superseded, and when a superseded node is not in flight.
+ *  27. A kind node's `attributes.field_write_class` declaration agrees with the
+ *      code mirror `FIELD_WRITE_CLASS_PROBE`. The kind nodes are the authority
+ *      for the intent/orchestration write-class split; the mirror exists so the
+ *      write-time fence costs no store read, and this rule is what stops the
+ *      two drifting apart. It catches an unknown declared field, a declared
+ *      class the mirror contradicts, an `attributes.<key>` entry shadowing a
+ *      first-class field, and — on the schema-authority kind node, the one that
+ *      defines its own kind — a first-class field left unclassified. See
+ *      `checkWriteClassDeclaration` for why coverage is inert when a kind node
+ *      declares nothing at all.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -2074,6 +2363,8 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkRequiredEdgeKinds(node, node.superseded_by, "superseded_by", node.kind, byId, problems);
     // Rule 26: a node superseded while in flight names its expiry event.
     checkSupersessionExpiry(node, problems);
+    // Rule 27: a kind node's write-class declaration agrees with the mirror.
+    checkWriteClassDeclaration(node, byId, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkEdgeCycles(
