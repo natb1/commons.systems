@@ -29,7 +29,6 @@ rationale: >-
   is what makes "engage only at escalation points" real rather than "engage only
   while a terminal happens to be open".
 reading: null
-gap: null
 serves: []
 recovers: []
 clarifications:
@@ -43,7 +42,16 @@ clarifications:
       by path convention (.claude/hooks/approve-workflow-commands.sh), which is
       safe only because of (a): a session that could write that tree could mint
       its own approvals. Neither half is safe without the other; changing either
-      requires re-checking the pair. Recorded 2026-07-07 interview."
+      requires re-checking the pair. Recorded 2026-07-07 interview. AMENDED
+      2026-09-01 (stale mechanism naming): the write-allowlist entry is `.git`
+      since the 2026-07-21 physical de-baring, not \".bare, worktrees\"; and the
+      read-only denyWithinAllow carve-outs are a Claude Code built-in
+      config-protection layer, not entries this repo's settings.json carries.
+      The pairing invariant - sandbox allowlist and approval hook, neither safe
+      without the other - is unchanged. (decision: ratified - provenance-derived
+      2026-09-01: recorded from author interview in the pre-stamp era; see the
+      worktree-doctrine stamping-pass clarification on
+      strategy-graph-native-dispatch, 2026-09-01.)"
   - question: Why do the dispatch lifecycle hooks swallow errors (trap-all, exit 0)
       when the code-style rule says clear errors over defensive fallbacks?
     answer: "A deliberate, reasoned inversion of the repo's own default: a broken
@@ -52,7 +60,10 @@ clarifications:
       degradation recorded via stderr plus durable label/sidecar state. The one
       exception is worktree-create, which is allowed to fail (with
       registered-worktree rollback). The approval hook fails open only to a
-      permission prompt, never to allow. Recorded 2026-07-07 interview."
+      permission prompt, never to allow. Recorded 2026-07-07 interview.
+      (decision: ratified - provenance-derived 2026-09-01: recorded from author
+      interview in the pre-stamp era; see the worktree-doctrine stamping-pass
+      clarification on strategy-graph-native-dispatch, 2026-09-01.)"
   - question: What keeps the chain from suppressing its own failure signals?
     answer: "Test integrity (.claude/rules/test-integrity.md): a failing test is
       never weakened, skipped, or deleted by an autonomous session — fix the
@@ -204,6 +215,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds:

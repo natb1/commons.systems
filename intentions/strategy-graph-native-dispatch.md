@@ -136,14 +136,20 @@ clarifications:
       See the maintenance-burden condition for the armed band."
   - question: Does per-issue worktree isolation carry over — where does a
       graph-native tactic's worker execute?
-    answer: Does per-issue worktree isolation carry over — where does a graph-native
-      tactic's worker execute? — See body §Worktree Claiming & Liveness.
-      Recorded 2026-07-03.
+    answer: "Does per-issue worktree isolation carry over — where does a
+      graph-native tactic's worker execute? — See body §Worktree Claiming &
+      Liveness. Recorded 2026-07-03. (decision: ratified - provenance-derived
+      2026-09-01: recorded from author interview in the pre-stamp era; see the
+      worktree-doctrine stamping-pass clarification on
+      strategy-graph-native-dispatch, 2026-09-01.)"
   - question: Can workers execute nodes concurrently — and what stops two workers
       claiming the same node?
-    answer: Can workers execute nodes concurrently — and what stops two workers
+    answer: "Can workers execute nodes concurrently — and what stops two workers
       claiming the same node? — See body §Worktree Claiming & Liveness for the
-      full mechanism. Recorded 2026-07-03.
+      full mechanism. Recorded 2026-07-03. (decision: ratified -
+      provenance-derived 2026-09-01: recorded from author interview in the
+      pre-stamp era; see the worktree-doctrine stamping-pass clarification on
+      strategy-graph-native-dispatch, 2026-09-01.)"
   - question: Does the graph-native router keep the legacy pace function — and where
       does its priority override live?
     answer: Does the graph-native router keep the legacy pace function — and where
@@ -194,10 +200,13 @@ clarifications:
   - question: The repo was re-anchored — main checked out at the project root with
       Claude Code managing worktrees natively; do the worktree commitments still
       target the legacy .bare + sibling worktrees/ layout?
-    answer: The repo was re-anchored — main checked out at the project root with
+    answer: "The repo was re-anchored — main checked out at the project root with
       Claude Code managing worktrees natively; do the worktree commitments still
       target the legacy .bare + sibling worktrees/ layout? — See body §Worktree
       Claiming & Liveness for the full mechanism. Recorded 2026-07-05.
+      (decision: ratified - provenance-derived 2026-09-01: recorded from author
+      interview in the pre-stamp era; see the worktree-doctrine stamping-pass
+      clarification on strategy-graph-native-dispatch, 2026-09-01.)"
   - question: The first emulated router tick ran as a Workflow-tool script — is the
       Workflow primitive a better tick-execution substrate than the legacy shell
       spawn chain?
@@ -247,10 +256,13 @@ clarifications:
   - question: Two human-invoked align sessions ran concurrently in the shared
       checkout during the 2026-07-06 doctrine round — is the target router safe
       for this concurrency, and what closes the gaps?
-    answer: Two human-invoked align sessions ran concurrently in the shared checkout
-      during the 2026-07-06 doctrine round — is the target router safe for this
-      concurrency, and what closes the gaps? — See body §Worktree Claiming &
-      Liveness for the full mechanism. Recorded 2026-07-06.
+    answer: "Two human-invoked align sessions ran concurrently in the shared
+      checkout during the 2026-07-06 doctrine round — is the target router safe
+      for this concurrency, and what closes the gaps? — See body §Worktree
+      Claiming & Liveness for the full mechanism. Recorded 2026-07-06.
+      (decision: ratified - provenance-derived 2026-09-01: recorded from author
+      interview in the pre-stamp era; see the worktree-doctrine stamping-pass
+      clarification on strategy-graph-native-dispatch, 2026-09-01.)"
   - question: Does the legacy office-hours entry's attach-to-parking-session
       behavior carry over — how does a human engage a parked node?
     answer: Does the legacy office-hours entry's attach-to-parking-session behavior
@@ -638,10 +650,13 @@ clarifications:
   - question: Does dispatch's concurrency dedup key on live sessions or worktree
       existence, and does the office-hours lane share the mechanism
       (office-hours sessions safe for concurrent selection)?
-    answer: Does dispatch's concurrency dedup key on live sessions or worktree
+    answer: "Does dispatch's concurrency dedup key on live sessions or worktree
       existence, and does the office-hours lane share the mechanism
       (office-hours sessions safe for concurrent selection)? — See body
       §Worktree Claiming & Liveness for the full mechanism. Recorded 2026-07-18.
+      (decision: ratified - provenance-derived 2026-09-01: recorded from author
+      interview in the pre-stamp era; see the worktree-doctrine stamping-pass
+      clarification on strategy-graph-native-dispatch, 2026-09-01.)"
   - question: A scope-inert align annotation on an in-flight tactic's body — the
       reconciliation notes amendment-completeness mandates — trips the tactic
       scope-custody gate and demotes the whole ladder. Does materiality-scoping
@@ -7082,6 +7097,40 @@ clarifications:
       lazy retrofit above stamps the category explicitly when it first creates
       the (strategy, tradition) grounding assessment. (decision: ratified -
       author-issued 2026-09-01; category-derivation binding delegated)"
+  - question: Why do the 2026-07 worktree-doctrine clarifications carry
+      provenance-derived ratified stamps (2026-09-01)?
+    answer: "The 2026-09-01 worktree-tooling audit found that every repo-side
+      modification to vanilla worktree operations - the WorktreeCreate and
+      WorktreeRemove hooks, the approval hook's worktree-scoped git -C
+      allowlist, the provision/reap lifecycle scripts, and worktree-as-claim -
+      rests on 2026-07 interview-recorded clarifications that predate the
+      decision-stamp era, so nothing in that corpus carried an explicit
+      authority category. The author directed an explicit stamping pass.
+      Category derives by provenance per the category-derivation binding on the
+      tradition-grounding clarification, generalized here from tradition edges
+      to interview-recorded clarifications: recorded from an author interview
+      means ratified. Stamped this pass: the five 2026-07 worktree
+      clarifications on this strategy (worktree isolation carry-over 07-03,
+      worktree-as-claim concurrency 07-03, native re-anchoring 07-05,
+      concurrent-align safety 07-06, liveness-keyed dedup 07-18) and the two
+      2026-07-07 harness-safety clarifications on strategy-autonomous-execution
+      (one also amended for stale mechanism naming). Two audit findings resolved
+      in the same pass without further writes: (1) the apparent contradiction of
+      tactic-legacy-router-removal being done while the hook's legacy lane
+      persists dissolves - the residual hook-lane scope was split 2026-07-23 to
+      tactic-legacy-office-hours-entry-removal (open, phase implement, its Scope
+      names .claude/hooks/worktree-create.sh), per the 2026-07-27 re-derivation
+      clarification here; (2) two superseded raw nodes were pruned
+      (tactic-sandbox-bare-allowlist-path-mismatch, tactic-retire-bare-layout) -
+      both describe the pre-de-baring layout and the work they track shipped
+      2026-07-21. Also confirmed: the worktree-isolation guard, the
+      compound-command \"too complex to verify\" refusal, and the
+      denyWithinAllow read-only carve-outs are Claude Code built-ins with no
+      repo-side implementation - doctrine citing them as repo settings is stale
+      naming, and documentation in the always-loaded rules is the only actuator
+      this repo owns. (decision: the stamps themselves are ratified by
+      provenance; the generalization of the derivation binding and this pass's
+      execution are delegated, author-directed 2026-09-01)"
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic

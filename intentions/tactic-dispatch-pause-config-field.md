@@ -533,7 +533,7 @@ CI; any change to `run-unit-tests.sh`'s glob behavior.
 - These graph bodies also cite the sentinel and will read as history after this
   lands. Record, do not touch: `tactic-fleet-watchdogs-session-scoped` `:243`,
   `:313`, `:670`, `:682`, `:1030`; `tactic-graph-ref-split` `:185`, `:189-190`;
-  `tactic-dispatch-config-untracked-pace-curve` `:30`; `tactic-retire-bare-layout`
+  `tactic-dispatch-config-untracked-pace-curve` `:30`; tactic-retire-bare-layout (pruned 2026-09-01)
   `:167`; `tactic-sweep-timer-unit-dir-leak` `:131`; `tactic-heartbeat-sweep-before-pause`
   `:65`, `:91`; and `strategy-recursive-self-improvement` `:2374`
   (`attributes.pause.mechanism` / `.sentinel_path`) — a durable-layer strategy
