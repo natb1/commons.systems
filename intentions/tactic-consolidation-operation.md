@@ -71,7 +71,13 @@ clarifications:
       invent a shared mutable ledger file and do not rebuild the store here.
       intentions/operational/**/*.json stays invisible to listNodes'
       top-level-*.md scan (packages/intentionsutil/src/store.ts:187-232), so the
-      layout cannot be mistaken for graph nodes."
+      layout cannot be mistaken for graph nodes. (Landing note, 2026-09-01
+      validation pass: the plan resolves this as a soft dependency — frontmatter
+      carries no blocked_by edge. Unit 6 follows the frontier sibling's fallback
+      contract verbatim, so the fold is buildable whether or not the operational
+      store has landed; a hard edge would contradict this answer's own 'still
+      absent at claim time' arm, which presumes the node is claimable while the
+      store is absent.)"
   - question: Drift review [4] - how does the restatement writer coexist with
       writeNode's body-loss guard (2026-09-01)?
     answer: "(Measured 2026-09-01 during this node's /align-tactics finalize.) The
