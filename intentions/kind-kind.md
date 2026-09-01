@@ -409,6 +409,43 @@ attributes:
       last_completed, last_aligned; semantics on kind-strategy)"
     - "attributes: kind-specific fields, defined by the kind node — the kind
       nodes own the which-kinds-carry-which-fields statement"
+  field_write_class:
+    id: intent
+    kind: intent
+    statement: intent
+    owner: intent
+    status: shared
+    parent: intent
+    serves: intent
+    recovers: intent
+    rationale: intent
+    reading: orchestration
+    clarifications: intent
+    tooling_goals: intent
+    success_signal: intent
+    attention: intent
+    phase: orchestration
+    execution: orchestration
+    validates: intent
+    blocked_by: shared
+    superseded_by: intent
+    supersession_expiry: intent
+    office_hours: orchestration
+    pace_exempt: orchestration
+    rounds: orchestration
+  write_class_shims:
+    - field: status
+      reason: machine-stamped by the transition writers today and a member of
+        STATE_FIELDS, yet its draft/codified role is provenance on a
+        disposition — an intent-side fact
+      liquidation: the author's ruling on the status-retirement proposal
+        recorded as a deferred clarification on this node
+    - field: blocked_by
+      reason: mechanically minted by the hold path, and simultaneously the
+        carrier of authored sequencing edges (the bootstrap critical path is
+        encoded as blocked_by edges on the carrier tactics)
+      liquidation: the author's ruling on whether authored sequencing moves to
+        a distinct intent-class carrier
   entry_point: this node is the entry point of the graph
   status_vocabulary:
     codified: the author has personally settled this kind's semantics
@@ -491,39 +528,76 @@ containing `/` or `\`, and the exact ids `.` and `..`.
 
 ## Fields on every node
 
+Every field below carries a **write class**, the ratified intent/orchestration
+boundary (`strategy-explicit-intent`, 2026-08-31) expressed as data. `intent` is
+target state — what the author intends to be true. `orchestration` is
+operational state — what is observed to be true, appended rather than authored.
+Orchestration writers never rewrite intent fields; intent writers never rewrite
+orchestration fields.
+
+The identifier is `write_class`, never a fourth sense of *layer*: `layer`
+already means `attributes.goal_layer`, kind-typed field placement (rules 9, 10,
+12), and `graph-commit`'s Layer 1/2/3 conflict-resolution stages.
+
+The classification is data, and these kind nodes are its authority.
+`attributes.field_write_class` on this node declares the class of every field
+common to all nodes; the owning kind node declares it for its kind-scoped
+fields and for its own `attributes` keys (`kind-tactic`, `kind-strategy`). The
+tables below are the normative prose home of the same classification, so a
+`Write class` column appears on each.
+
+A third value, `shared`, marks a declared **shim**: a field live writers of both
+classes touch today, recorded with a reason and a liquidation condition in
+`attributes.write_class_shims` rather than forced into a class that would break
+a live path or make the fence fail open. `attributes` is not classified as a
+whole — each declared key carries its own class on the kind node that owns it,
+and an undeclared key is `shared` until it is declared.
+
 ### Required core
 
 Strictly validated; `validateNode` throws if any is missing or ill-typed.
 
-| Name        | Type         | Meaning |
-| ----------- | ------------ | ------- |
-| `id`        | `string`     | Unique node identifier; also the filename. Must be non-empty. |
-| `kind`      | `string`     | Names the `kind-<kind>` node that defines this node's semantics. Must be non-empty; existence of the kind node is a graph-level rule, not a per-node one. |
-| `statement` | `string`     | The intention itself, in one sentence. |
-| `owner`     | `Owner` enum | Who is accountable for the intention. |
-| `status`    | `string`     | Lifecycle/provenance stage. Must be non-empty; the *set* of legal values is per-kind data, not a central enum — see Status below. |
+| Name        | Type         | Write class | Meaning |
+| ----------- | ------------ | ----------- | ------- |
+| `id`        | `string`     | `intent` | Unique node identifier; also the filename. Must be non-empty. |
+| `kind`      | `string`     | `intent` | Names the `kind-<kind>` node that defines this node's semantics. Must be non-empty; existence of the kind node is a graph-level rule, not a per-node one. |
+| `statement` | `string`     | `intent` | The intention itself, in one sentence. |
+| `owner`     | `Owner` enum | `intent` | Who is accountable for the intention. |
+| `status`    | `string`     | `shared` (shim) | Lifecycle/provenance stage. Must be non-empty; the *set* of legal values is per-kind data, not a central enum — see Status below. |
 
 ### Optional common fields
 
 Absent or `null` is tolerated and the listed default applied; when present and
 non-null, the shape is validated strictly.
 
-| Name             | Type                      | Default | Meaning |
-| ---------------- | ------------------------- | ------- | ------- |
-| `parent`         | `string \| null`          | `null`  | Within-layer edge — id of the parent node; `null` for a root. |
-| `serves`         | `string[]`                | `[]`    | Cross-layer edge — ids of the nodes this node expresses. |
-| `rationale`      | `string \| null`          | `null`  | Why this intention exists. |
-| `reading`        | `string \| null`          | `null`  | Current measured value of the `success_signal` observable; `null` until a sensor populates it. |
-| `gap`            | `string \| null`          | `null`  | Shortfall between `reading` and `success_signal.threshold`, mechanically derived by `deriveGap`; `null` when the reading meets the threshold or no signal exists. |
-| `clarifications` | `Clarification[]`         | `[]`    | Dated Q&A pairs resolved during the dialectic. |
-| `tooling_goals`  | `ToolingGoal[]`           | `[]`    | Tooling the node aims to produce or change. |
-| `success_signal` | `SuccessSignal \| null`   | `null`  | A measurable signal the intention is met. |
-| `attention`      | `Attention \| null`       | `null`  | A user-authored attention injection. Goal-layer kinds only. |
-| `office_hours`   | `OfficeHours \| null`     | `null`  | First-class parking record — why the node needs the author and since when. Goal-layer kinds only; the router skips parked subtrees. |
-| `pace_exempt`    | `boolean`                 | `false` | Authored pace-gate bypass: admits one gate-exempt worker past a paced-to-zero budget. Never changes ordering. Goal-layer kinds only. |
-| `superseded_by`  | `string[]`                | `[]`    | Ids of the nodes that supersede this one — stored on the SUPERSEDED node, reverse derived by scan. Legal on EVERY kind; see Supersession below. |
-| `supersession_expiry` | `string \| null`     | `null`  | The event that expires this node's supersession — normally the in-flight PR's own merge or closure. Required by rule 26 when the node is superseded while in flight. |
-| `attributes`     | `Record<string, unknown>` | `{}`    | Kind-specific fields. Validated only as a plain object; the meaning of its entries is defined by the node's kind node. |
+| Name             | Type                      | Default | Write class | Meaning |
+| ---------------- | ------------------------- | ------- | ----------- | ------- |
+| `parent`         | `string \| null`          | `null`  | `intent` | Within-layer edge — id of the parent node; `null` for a root. |
+| `serves`         | `string[]`                | `[]`    | `intent` | Cross-layer edge — ids of the nodes this node expresses. |
+| `rationale`      | `string \| null`          | `null`  | `intent` | Why this intention exists. |
+| `reading`        | `string \| null`          | `null`  | `orchestration` | Current measured value of the `success_signal` observable; `null` until a sensor populates it. |
+| `clarifications` | `Clarification[]`         | `[]`    | `intent` | Dated Q&A pairs resolved during the dialectic. |
+| `tooling_goals`  | `ToolingGoal[]`           | `[]`    | `intent` | Tooling the node aims to produce or change. |
+| `success_signal` | `SuccessSignal \| null`   | `null`  | `intent` | A measurable signal the intention is met. |
+| `attention`      | `Attention \| null`       | `null`  | `intent` | A user-authored attention injection. Goal-layer kinds only. |
+| `office_hours`   | `OfficeHours \| null`     | `null`  | `orchestration` | First-class parking record — why the node needs the author and since when. Goal-layer kinds only; the router skips parked subtrees. |
+| `pace_exempt`    | `boolean`                 | `false` | `orchestration` | Authored pace-gate bypass: admits one gate-exempt worker past a paced-to-zero budget. Never changes ordering. Goal-layer kinds only. |
+| `superseded_by`  | `string[]`                | `[]`    | `intent` | Ids of the nodes that supersede this one — stored on the SUPERSEDED node, reverse derived by scan. Legal on EVERY kind; see Supersession below. |
+| `supersession_expiry` | `string \| null`     | `null`  | `intent` | The event that expires this node's supersession — normally the in-flight PR's own merge or closure. Required by rule 26 when the node is superseded while in flight. |
+| `attributes`     | `Record<string, unknown>` | `{}`    | per-key | Kind-specific fields. Validated only as a plain object; the meaning of its entries is defined by the node's kind node. Not classified as a whole — each declared key carries its own class on the owning kind node; an undeclared key is `shared`. |
+
+`gap` is **not** a field. It is derived on read by `deriveGap`
+(`packages/intentionsutil/src/sensors.ts`) from `reading` against
+`success_signal.threshold`, is not a member of `IntentionNode`, is never stored
+in a node file, and no writer assigns it — so it carries no write class and has
+no row above. A `gap:` key found in frontmatter is residue, not schema.
+
+`attention` is classified `intent`: it is a user-authored injection and no
+orchestration writer assigns it (`grep -rn "\.attention =" packages/intentionsutil
+.claude/skills` finds no assignment — the sole hit is a null comparison in
+`validateNode`). Its membership in `STATE_FIELDS`
+(`packages/intentionsutil/src/schema.ts`) therefore contradicts the
+classification; that contradiction is a migration frontier item, not a shim.
 
 "Goal-layer kinds" are those whose kind node sets `attributes.goal_layer: true`
 — currently kind-strategy and kind-tactic. The eligible layer is data, not a
@@ -537,14 +611,31 @@ These exist on the common node structure — every node file carries them, and
 which kinds may set them to a non-default value. They are defined by the kind
 node that owns them:
 
-| Name         | Type                | Default | Owning kind node |
-| ------------ | ------------------- | ------- | ---------------- |
-| `phase`      | `Phase \| null`     | `null`  | kind-tactic |
-| `execution`  | `Execution \| null` | `null`  | kind-tactic |
-| `validates`  | `string[]`          | `[]`    | kind-tactic |
-| `blocked_by` | `string[]`          | `[]`    | kind-tactic |
-| `recovers`   | `string[]`          | `[]`    | kind-strategy |
-| `rounds`     | `Rounds \| null`    | `null`  | kind-strategy |
+| Name         | Type                | Default | Write class | Owning kind node |
+| ------------ | ------------------- | ------- | ----------- | ---------------- |
+| `phase`      | `Phase \| null`     | `null`  | `orchestration` | kind-tactic |
+| `execution`  | `Execution \| null` | `null`  | `orchestration` | kind-tactic |
+| `validates`  | `string[]`          | `[]`    | `intent` | kind-tactic |
+| `blocked_by` | `string[]`          | `[]`    | `shared` (shim) | kind-tactic |
+| `recovers`   | `string[]`          | `[]`    | `intent` | kind-strategy |
+| `rounds`     | `Rounds \| null`    | `null`  | `orchestration` | kind-strategy |
+
+The owning kind node restates the write class of its kind-scoped fields in its
+own `attributes.field_write_class`, so a writer resolving a field's class from
+the kind node that defines it finds it there; the declarations agree by
+construction.
+
+### Operational-layer carriers outside the node file
+
+Claim records and evidence-log entries are `orchestration`-class carriers, and
+they are **create-only**: one file per record, never rewritten and never deleted
+by a writer. Correction is a new record that supersedes, never an edit. That is
+what makes concurrent appends commutative and conflict-free — disjoint file
+creations git merges in any order, with no shared hot file, no merge driver and
+no ordering dependency. Compaction is a separate, serialized folding operation
+and is not a writer's licence to rewrite a record. They live outside the node
+file and outside `listNodes`' top-level `*.md` scan, so they are not nodes and
+`validateGraph` does not see them.
 
 ## Shared shapes
 

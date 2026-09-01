@@ -105,6 +105,12 @@ attributes:
   edges:
     - "recovers: ids of the delegation records this strategy's work unwinds
       (top-level field, resolved by validateGraph)"
+  field_write_class:
+    recovers: intent
+    rounds: orchestration
+    attention: intent
+    attributes.conditions: intent
+    attributes.traditions: intent
   status_vocabulary:
     raw: not yet dialectically examined
     refining: under active dialectic

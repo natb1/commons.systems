@@ -121,6 +121,14 @@ attributes:
       one node per distinct recurring finding, merged not accumulated, and
       EXEMPT from unreferenced-pruning so a retirement keeps its
       measured_impact; absent or false on every other tactic"
+  field_write_class:
+    phase: orchestration
+    execution: orchestration
+    validates: intent
+    blocked_by: shared
+    attention: intent
+    attributes.measured_impact: orchestration
+    attributes.ledger_entry: intent
   status_vocabulary:
     raw: not yet dialectically examined
     refining: under active dialectic
