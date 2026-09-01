@@ -3,8 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { IntentionNode, IntentionNodeInput } from "../src/schema.js";
+import { IntentionSchemaError } from "../src/errors.js";
 import {
   assertNoBodyLoss,
+  assertWriteClassBoundary,
   listNodes,
   listNodesResilient,
   listNodesStrict,
@@ -537,6 +539,190 @@ describe("assertNoBodyLoss guard", () => {
     const node = existingNode(dir, "Statement.");
     const missing = join(dir, "does-not-exist.md");
     expect(() => assertNoBodyLoss(missing, node, "# anything\n")).not.toThrow();
+  });
+});
+
+describe("write-class boundary", () => {
+  // The fence is DIFF-derived: what the writer declares is only its class, and
+  // which fields it actually touched is measured from the prior on-disk node
+  // against the candidate. These tests drive it through `writeNode` (the seam
+  // every writer reaches disk through) and directly through the exported guard.
+  function seedTactic(dir: string, id = "fenced"): IntentionNode {
+    writeNode(dir, {
+      id,
+      kind: "tactic",
+      statement: "Original statement.",
+      owner: "ai",
+      status: "raw",
+      phase: "implement",
+    });
+    return readNode(dir, id);
+  }
+
+  it("permits a declared orchestration writer changing an orchestration field", () => {
+    const dir = tempDir();
+    const node = seedTactic(dir);
+
+    expect(() =>
+      writeNode(dir, { ...node, phase: "review" }, { writes: "orchestration" })
+    ).not.toThrow();
+    expect(readNode(dir, "fenced").phase).toBe("review");
+  });
+
+  it("refuses a declared orchestration writer changing an intent field, and writes nothing", () => {
+    const dir = tempDir();
+    const node = seedTactic(dir);
+    const before = readFileSync(join(dir, "fenced.md"), "utf8");
+
+    expect(() =>
+      writeNode(dir, { ...node, statement: "Rewritten by a router." }, { writes: "orchestration" })
+    ).toThrow(/statement — an intent-class field, and this writer declared orchestration/);
+    expect(readFileSync(join(dir, "fenced.md"), "utf8")).toBe(before);
+  });
+
+  it("refuses a declared intent writer changing an orchestration field", () => {
+    const dir = tempDir();
+    const node = seedTactic(dir);
+
+    expect(() => writeNode(dir, { ...node, phase: "review" }, { writes: "intent" })).toThrow(
+      /phase — an orchestration-class field, and this writer declared intent/
+    );
+  });
+
+  it("permits a shared field (status, blocked_by) to either class", () => {
+    const dir = tempDir();
+    const node = seedTactic(dir);
+
+    expect(() =>
+      writeNode(dir, { ...node, status: "refining" }, { writes: "orchestration" })
+    ).not.toThrow();
+    expect(() =>
+      writeNode(dir, { ...readNode(dir, "fenced"), blocked_by: ["other"] }, { writes: "intent" })
+    ).not.toThrow();
+    const written = readNode(dir, "fenced");
+    expect(written.status).toBe("refining");
+    expect(written.blocked_by).toEqual(["other"]);
+  });
+
+  it("leaves an undeclared write unfenced (the read-tolerance window)", () => {
+    const dir = tempDir();
+    const node = seedTactic(dir);
+
+    // The same cross-class edit the declared writer above was refused for.
+    expect(() =>
+      writeNode(dir, { ...node, statement: "Rewritten by an undeclared writer." })
+    ).not.toThrow();
+    expect(readNode(dir, "fenced").statement).toBe("Rewritten by an undeclared writer.");
+  });
+
+  it('refuses writes: "shared" — a field classification is not a writer declaration', () => {
+    const dir = tempDir();
+    const node = seedTactic(dir);
+
+    expect(() =>
+      writeNode(dir, { ...node, phase: "review" }, { writes: "shared" })
+    ).toThrow(/"shared" is a field classification, not a writer declaration/);
+    // Also on a creation, where the diff is empty: an illegal declaration must
+    // fail on every write, not only the ones that happen to change a field.
+    expect(() =>
+      writeNode(dir, { ...node, id: "fenced-new" }, { writes: "shared" })
+    ).toThrow(/"shared" is a field classification, not a writer declaration/);
+    expect(existsSync(join(dir, "fenced-new.md"))).toBe(false);
+  });
+
+  it("does not fence a creation — there is no prior state to clobber", () => {
+    const dir = tempDir();
+    const created: IntentionNodeInput = {
+      id: "fenced-created",
+      kind: "tactic",
+      statement: "An orchestration writer minted this node.",
+      owner: "ai",
+      status: "raw",
+    };
+
+    expect(() => writeNode(dir, created, { writes: "orchestration" })).not.toThrow();
+    expect(readNode(dir, "fenced-created").statement).toBe(created.statement);
+  });
+
+  it("exposes assertWriteClassBoundary as a directly callable guard", () => {
+    const dir = tempDir();
+    const prior = seedTactic(dir);
+    const candidate: IntentionNode = { ...prior, rationale: "Authored by a router." };
+
+    expect(() => assertWriteClassBoundary(prior, candidate, "orchestration")).toThrow(
+      IntentionSchemaError
+    );
+    expect(() => assertWriteClassBoundary(prior, candidate, "intent")).not.toThrow();
+    // A YAML key reordering is not a change: `eq` is order-independent for
+    // object keys, so a re-serialized identical node passes under either class.
+    expect(() =>
+      assertWriteClassBoundary(prior, { ...prior }, "orchestration")
+    ).not.toThrow();
+    expect(() => assertWriteClassBoundary(null, candidate, "orchestration")).not.toThrow();
+  });
+
+  it("judges the durable fence under the CANDIDATE kind too — a promotion cannot smuggle doctrine", () => {
+    // `tactic` is not a durable-layer kind and `kind`/`rationale` are both
+    // intent-class, so judging only the prior kind would let an intent-class
+    // writer flip a tactic into a strategy while authoring its rationale —
+    // human-owned doctrine landed unattended on a durable-layer node.
+    // `check-durable-write-fence.ts`'s `fenceVerdict` unions both kinds for the
+    // same reason; this fence must not be the looser of the two.
+    const dir = tempDir();
+    const prior = seedTactic(dir, "promoted");
+    const before = readFileSync(join(dir, "promoted.md"), "utf8");
+
+    expect(() =>
+      writeNode(
+        dir,
+        { ...prior, kind: "strategy", rationale: "Synthesized doctrine." },
+        { writes: "intent" }
+      )
+    ).toThrow(/rationale — not a state field on the durable-layer kind "strategy"/);
+    expect(readFileSync(join(dir, "promoted.md"), "utf8")).toBe(before);
+    // The message names the rewrite rather than calling it a "strategy" node it
+    // is not yet, and the durable half fires for `kind` itself as well.
+    expect(() =>
+      writeNode(
+        dir,
+        { ...prior, kind: "strategy", rationale: "Synthesized doctrine." },
+        { writes: "intent" }
+      )
+    ).toThrow(/is a "tactic" node this write would rewrite as a "strategy" one/);
+  });
+
+  it("still enforces the kind-scoped durable fence when a class is declared", () => {
+    const dir = tempDir();
+    writeNode(dir, {
+      id: "strategy-fenced",
+      kind: "strategy",
+      statement: "A durable-layer statement.",
+      owner: "human",
+      status: "refining",
+    });
+    const strategy = readNode(dir, "strategy-fenced");
+
+    // `office_hours` is orchestration-class AND a state field — permitted.
+    expect(() =>
+      writeNode(
+        dir,
+        {
+          ...strategy,
+          office_hours: {
+            reason: "provision-failed",
+            since: "2026-08-30",
+            recommendation: null,
+            session_type: "other",
+          },
+        },
+        { writes: "orchestration" }
+      )
+    ).not.toThrow();
+    // `pace_exempt` is orchestration-class too, but it is NOT a state field, so
+    // the durable fence refuses it on a durable kind whatever the writer's class.
+    expect(() =>
+      writeNode(dir, { ...readNode(dir, "strategy-fenced"), pace_exempt: true }, { writes: "orchestration" })
+    ).toThrow(/pace_exempt — not a state field on the durable-layer kind "strategy"/);
   });
 });
 

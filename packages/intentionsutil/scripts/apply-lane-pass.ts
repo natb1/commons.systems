@@ -210,7 +210,8 @@ export function applyLanePass(args: Args, now: Date = new Date()): LanePassResul
     sha: args.sha ?? null,
   };
   node.execution = { ...execution, lane_pass: lanePass };
-  writeNode(args.dir, node);
+  // Orchestration-class writer: `execution.lane_pass` only.
+  writeNode(args.dir, node, { writes: "orchestration" });
   return {
     mode: "stamp",
     id: args.id,

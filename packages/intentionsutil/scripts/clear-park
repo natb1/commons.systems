@@ -366,7 +366,8 @@ if (node.office_hours == null) {
   process.exit(3);
 }
 node.office_hours = null;
-writeNode(intentionsDir, node);
+// Orchestration-class writer: clearing `office_hours` is operational state only.
+writeNode(intentionsDir, node, { writes: "orchestration" });
 process.stderr.write(`clear-park: cleared office_hours on ${id}\n`);
 TS
 

@@ -198,7 +198,10 @@ export function applyNodeTransition(args: Args): ApplyResult {
   }
 
   node.execution = execution;
-  writeNode(args.dir, node);
+  // Orchestration-class writer: this transition mutates `phase` and `execution`
+  // only. The declaration makes `writeNode` refuse the write outright if it ever
+  // starts carrying intent-class fields.
+  writeNode(args.dir, node, { writes: "orchestration" });
 
   return {
     phase: node.phase ?? "implement",
