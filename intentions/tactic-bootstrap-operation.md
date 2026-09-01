@@ -52,6 +52,20 @@ clarifications:
       until author ratification. Queues stay frozen until the P4 resumption
       gate; PRs #3183/#3185 are merged or closed as materialized projections
       during P2. (decision: author-issued 2026-09-01)"
+  - question: Steering ledger [2] - what did the author direct on align-tactics
+      response validation (2026-09-01)?
+    answer: "(Author-issued 2026-09-01, verbatim: \"For each of the align-tactics
+      responses - validate yourself. We can't afford an error in these lynchpin
+      tactics.\") Working rule, binding for every P1 align-tactics round: the
+      orchestrating session performs its own validation pass on each
+      Workflow-returned tactic finalization before landing it - checking the
+      returned body against the grounded 2026-09-01 doctrine (reconciliation
+      model, shim declarations, authority primacy, the folds directed for each
+      surface owner), against the plan schema and finalize frontmatter
+      convention, and re-verifying every path:line anchor and cited construct in
+      the returned body against origin/main. Workflow output is a draft subject
+      to main-thread review, never landed on trust. (decision: author-issued
+      2026-09-01)"
 tooling_goals: []
 success_signal: null
 attention: null
