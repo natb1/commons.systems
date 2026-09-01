@@ -1800,7 +1800,9 @@ export function readStoreSensors(
   // WRITE pass: persist every updated node now that all readings are computed.
   if (write) {
     for (const updated of updates) {
-      writeNode(dir, updated);
+      // Orchestration-class writer: a sensor reading is observed state, and the
+      // update above changes `reading` and nothing else.
+      writeNode(dir, updated, { writes: "orchestration" });
       summary.written += 1;
     }
   }

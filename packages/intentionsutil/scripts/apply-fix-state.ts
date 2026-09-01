@@ -263,7 +263,9 @@ function applySet(
   const nextExecution: Execution =
     currentFix === null ? incrementAttempt(execution, FIX_CYCLE_ATTEMPT_KEY) : execution;
   node.execution = { ...nextExecution, fix };
-  writeNode(args.dir, node);
+  // Orchestration-class writer — every write in this script mutates `execution`
+  // only. Same declaration at each of this file's `writeNode` calls.
+  writeNode(args.dir, node, { writes: "orchestration" });
   return { mode: "set", id: args.id, wrote: true, attempt: fix.attempt, since: fix.since };
 }
 
@@ -289,7 +291,7 @@ function applyClear(
   if (reset) node.phase = "review";
   const markers = reset ? execution.markers.filter((m) => m !== REVIEWED_MARKER) : execution.markers;
   node.execution = { ...execution, markers, fix: null };
-  writeNode(args.dir, node);
+  writeNode(args.dir, node, { writes: "orchestration" });
   return { mode: "clear", id: args.id, wrote: true, phase: node.phase ?? "implement", reset };
 }
 
@@ -307,7 +309,7 @@ function applySpend(
   const fix = requireFix(currentFix, args.id, "--spend-attempt");
   const next: FixState = { ...fix, attempt: fix.attempt + 1 };
   node.execution = { ...execution, fix: next };
-  writeNode(args.dir, node);
+  writeNode(args.dir, node, { writes: "orchestration" });
   return { mode: "spend", id: args.id, wrote: true, attempt: next.attempt };
 }
 
@@ -388,7 +390,7 @@ function applyResetCycle(
   _currentFix: FixState | null,
 ): FixStateResult {
   node.execution = { ...execution, attempts: { ...execution.attempts, [FIX_CYCLE_ATTEMPT_KEY]: 0 } };
-  writeNode(args.dir, node);
+  writeNode(args.dir, node, { writes: "orchestration" });
   return { mode: "reset-cycle", id: args.id, wrote: true, cycles: 0 };
 }
 
@@ -406,7 +408,7 @@ function applyResetAttempt(
 ): FixStateResult {
   const fix = requireFix(currentFix, args.id, "--reset-attempt");
   node.execution = { ...execution, fix: { ...fix, attempt: 1 } };
-  writeNode(args.dir, node);
+  writeNode(args.dir, node, { writes: "orchestration" });
   return { mode: "reset-attempt", id: args.id, wrote: true, attempt: 1 };
 }
 
@@ -423,7 +425,7 @@ function applyRecord(
   }
   const sha = args.pushedSha;
   node.execution = { ...execution, fix: { ...fix, pushed_sha: sha } };
-  writeNode(args.dir, node);
+  writeNode(args.dir, node, { writes: "orchestration" });
   return { mode: "record", id: args.id, wrote: true, pushed_sha: sha };
 }
 

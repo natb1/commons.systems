@@ -333,7 +333,9 @@ function applySet(
       ? { since: todayUtc(), attempt, head_sha: args.headSha ?? null }
       : { ...currentConflict, attempt };
   node.execution = { ...execution, attempts: withLifetimeSpend(execution, attempt), conflict };
-  writeNode(args.dir, node);
+  // Orchestration-class writer — every write in this script mutates `execution`
+  // (and, on resolution, `phase`) only. Same declaration at each `writeNode` call.
+  writeNode(args.dir, node, { writes: "orchestration" });
   return {
     mode: "set",
     id: args.id,
@@ -363,7 +365,7 @@ function applySpend(
     attempts: withLifetimeSpend(execution, attempt),
     conflict: next,
   };
-  writeNode(args.dir, node);
+  writeNode(args.dir, node, { writes: "orchestration" });
   return { mode: "spend", id: args.id, wrote: true, attempt: next.attempt };
 }
 
@@ -411,7 +413,7 @@ function applyClearMechanical(
 ): ConflictStateResult {
   requireConflict(currentConflict, args.id, "--clear-conflict-mechanical");
   node.execution = { ...execution, conflict: null };
-  writeNode(args.dir, node);
+  writeNode(args.dir, node, { writes: "orchestration" });
   return {
     mode: "clear",
     id: args.id,
@@ -441,7 +443,7 @@ function applyClearIntention(
   node.phase = "review";
   const markers = execution.markers.filter((m) => m !== REVIEWED_MARKER);
   node.execution = { ...execution, markers, conflict: null };
-  writeNode(args.dir, node);
+  writeNode(args.dir, node, { writes: "orchestration" });
   return { mode: "clear", id: args.id, wrote: true, reset: true, phase: "review" };
 }
 

@@ -363,7 +363,11 @@ if (pr !== "") {
   const execution = node.execution ?? defaultExecution;
   node.execution = { ...execution, pr: Number(pr) };
 }
-writeNode(intentionsDir, node);
+// Orchestration-class writer: this park touches `office_hours` and (only with
+// --pr) `execution.pr`, both operational state. The state-only commit doctrine
+// this declaration mechanizes is documented at
+// .claude/skills/dispatch-propagate/scripts/transition-node:1-38.
+writeNode(intentionsDir, node, { writes: "orchestration" });
 process.stderr.write(`park-node: set office_hours on ${id} (since=${since})\n`);
 TS
 

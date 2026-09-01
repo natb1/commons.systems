@@ -160,7 +160,8 @@ const [storePath, intentionsDir, id] = process.argv.slice(2);
 const { readNode, writeNode } = await import(storePath);
 const node = readNode(intentionsDir, id);
 node.office_hours = null;
-writeNode(intentionsDir, node);
+// Orchestration-class writer: clearing `office_hours` is operational state only.
+writeNode(intentionsDir, node, { writes: "orchestration" });
 process.stderr.write(`resolve-park: cleared office_hours on ${id}\n`);
 TS
 
