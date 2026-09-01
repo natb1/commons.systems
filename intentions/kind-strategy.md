@@ -102,6 +102,49 @@ attributes:
       strategy — set only where a philosophical choice is load-bearing for the
       strategy, not as decoration; the alignment detail lives on the tradition
       record"
+    - "standing_criteria: the non-functional criteria in force for EVERY
+      strategy — each {id, statement, class, authority, recorded}, class always
+      non-functional; this kind node is their one home, and every strategy's
+      effective set is derived on read (effectiveCriteria) rather than copied
+      onto it; shape enforced by validateGraph rule 28"
+  standing_criteria:
+    - id: nf-security
+      statement: No change introduces a security defect — every branch runs the
+        standing security review, and each finding is fixed or explicitly
+        dispositioned rather than suppressed
+      class: non-functional
+      authority: deferred
+      recorded: 2026-09-01
+    - id: nf-type-safety
+      statement: No net-new type-safety escape hatch — @ts-ignore,
+        @ts-expect-error, eslint-disable, any in type position, an as cast, a
+        non-null assertion — rides on an added line without a same-line
+        type-safety-ok marker carrying a real reason
+      class: non-functional
+      authority: deferred
+      recorded: 2026-09-01
+    - id: nf-test-integrity
+      statement: A failing test is fixed in the code or escalated to
+        office-hours — never removed, skipped, commented out, or otherwise
+        weakened to make CI green
+      class: non-functional
+      authority: deferred
+      recorded: 2026-09-01
+    - id: nf-style
+      statement: Code exits with a clear descriptive error rather than a
+        defensive fallback, and prose uses simple direct language in place of
+        corporate jargon
+      class: non-functional
+      authority: deferred
+      recorded: 2026-09-01
+    - id: nf-token-economy
+      statement: The prepaid token allowance converts into tactic closure —
+        spent on closing work rather than on re-measuring what was already
+        measured, re-reading what was already read, or review rounds that add
+        no signal
+      class: non-functional
+      authority: deferred
+      recorded: 2026-09-01
   edges:
     - "recovers: ids of the delegation records this strategy's work unwinds
       (top-level field, resolved by validateGraph)"
@@ -111,6 +154,7 @@ attributes:
     attention: intent
     attributes.conditions: intent
     attributes.traditions: intent
+    attributes.standing_criteria: intent
   status_vocabulary:
     raw: not yet dialectically examined
     refining: under active dialectic

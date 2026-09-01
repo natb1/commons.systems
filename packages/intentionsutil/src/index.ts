@@ -62,6 +62,22 @@ export {
 } from "./transitions.js";
 export type { CiVerdict, TransitionDecision, ScopeStamp, InterruptRoute } from "./transitions.js";
 export { IntentionSchemaError } from "./errors.js";
+export {
+  CRITERION_CLASSES,
+  CRITERION_AUTHORITIES,
+  CRITERION_KEYS,
+  CRITERIA_KEY,
+  STANDING_CRITERIA_KEY,
+  STANDING_CRITERIA_HOME,
+  validateCriterion,
+  validateCriteriaList,
+  validateStandingCriteriaList,
+  parseCriteria,
+  standingCriteria,
+  effectiveCriteria,
+  criteriaFingerprint,
+} from "./criteria.js";
+export type { Criterion, CriterionClass, CriterionAuthority } from "./criteria.js";
 export { lintTacticBodies, loadPlanBodyBaseline } from "./planlint.js";
 export type { PlanBodyMarker, PlanBodyBaselineEntry } from "./planlint.js";
 export {

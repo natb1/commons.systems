@@ -521,6 +521,21 @@ attributes:
       last_completed, last_aligned; semantics on kind-strategy)"
     - "attributes: kind-specific fields, defined by the kind node — the kind
       nodes own the which-kinds-carry-which-fields statement"
+  fields:
+    - "criteria: the node's own criteria — each {id, statement, class,
+      authority, recorded}, where class is functional (does this do what it is
+      meant to do), non-functional (is it done the way work here must be done),
+      or assumption (a world-premise the node rests on — evaluated by
+      assessment, never bitten as a work item; the class attributes.conditions
+      entries migrate into), authority is ratified, delegated or deferred (a
+      Claude-transcribed
+      criterion enters deferred until the author ratifies it), and recorded is
+      the YYYY-MM-DD the text was written down. Valid on any goal-layer node
+      (attributes.goal_layer: true); the non-functional criteria in force for
+      every strategy live once on kind-strategy under
+      attributes.standing_criteria and are unioned in on read by
+      effectiveCriteria, never copied onto a node. Shape enforced by
+      validateGraph rule 28"
   field_write_class:
     id: intent
     kind: intent
@@ -545,6 +560,7 @@ attributes:
     office_hours: orchestration
     pace_exempt: orchestration
     rounds: orchestration
+    attributes.criteria: intent
   write_class_shims:
     - field: status
       reason: machine-stamped by the transition writers today and a member of

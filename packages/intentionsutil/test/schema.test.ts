@@ -3016,6 +3016,132 @@ describe("validateGraph", () => {
     ];
     expect(() => validateGraph(nodes)).not.toThrow();
   });
+
+  // --- Rule 28: criteria / standing_criteria shape -------------------------
+
+  /** A well-formed criterion, overridable field by field. */
+  function criterion(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: "nf-test-integrity",
+      statement: "A failing test is fixed in the code or escalated.",
+      class: "non-functional",
+      authority: "deferred",
+      recorded: "2026-09-01",
+      ...overrides,
+    };
+  }
+
+  /** `kind-strategy` plus a strategy carrying `criteria`, the usual shape. */
+  function criteriaGraph(criteria: unknown, standing?: unknown): IntentionNode[] {
+    return [
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: {
+          status_vocabulary: { raw: "Not yet started.", codified: "Complete." },
+          ...(standing === undefined ? {} : { standing_criteria: standing }),
+        },
+      }),
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "strategy-x", kind: "strategy", attributes: { criteria } }),
+    ];
+  }
+
+  it("accepts well-formed criteria in all three classes", () => {
+    expect(() =>
+      validateGraph(
+        criteriaGraph(
+          [
+            criterion({ id: "f-1", class: "functional" }),
+            criterion({ id: "nf-1", class: "non-functional" }),
+            criterion({ id: "a-1", class: "assumption" }),
+          ],
+          [criterion()],
+        ),
+      ),
+    ).not.toThrow();
+  });
+
+  it("is inert on a node carrying neither key — it cannot retroactively break main", () => {
+    expect(() =>
+      validateGraph([
+        gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+        gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+        gnode({ id: "strategy-x", kind: "strategy" }),
+      ]),
+    ).not.toThrow();
+  });
+
+  it("rejects a criteria value that is not an array", () => {
+    expect(() => validateGraph(criteriaGraph("nf-security"))).toThrow(
+      /strategy-x: attributes\.criteria must be an array of \{id, statement, class, authority, recorded\} criteria, got string/,
+    );
+  });
+
+  it("rejects an unknown key rather than ignoring it", () => {
+    expect(() => validateGraph(criteriaGraph([criterion({ tier: "gating" })]))).toThrow(
+      /strategy-x: attributes\.criteria\[0\]\.tier is not a criterion field/,
+    );
+  });
+
+  it("rejects an empty statement, a bad class, a bad authority and a bad date", () => {
+    expect(() => validateGraph(criteriaGraph([criterion({ statement: " " })]))).toThrow(
+      /attributes\.criteria\[0\]\.statement must be a non-empty string/,
+    );
+    expect(() => validateGraph(criteriaGraph([criterion({ class: "perf" })]))).toThrow(
+      /attributes\.criteria\[0\]\.class must be one of functional, non-functional, assumption/,
+    );
+    expect(() => validateGraph(criteriaGraph([criterion({ authority: "approved" })]))).toThrow(
+      /attributes\.criteria\[0\]\.authority must be one of ratified, delegated, deferred/,
+    );
+    expect(() => validateGraph(criteriaGraph([criterion({ recorded: "2026-9-1" })]))).toThrow(
+      /attributes\.criteria\[0\]\.recorded must be a YYYY-MM-DD date/,
+    );
+  });
+
+  it("rejects a duplicate criterion id within one list", () => {
+    expect(() =>
+      validateGraph(criteriaGraph([criterion(), criterion({ statement: "other" })])),
+    ).toThrow(/attributes\.criteria\[1\]\.id duplicates "nf-test-integrity"/);
+  });
+
+  it("rejects a functional or assumption entry in the standing home", () => {
+    expect(() =>
+      validateGraph(criteriaGraph([], [criterion({ id: "f-1", class: "functional" })])),
+    ).toThrow(
+      /kind-strategy: attributes\.standing_criteria\[0\] \("f-1"\) is class "functional", but the standing set is NON-FUNCTIONAL ONLY/,
+    );
+    expect(() =>
+      validateGraph(criteriaGraph([], [criterion({ id: "a-1", class: "assumption" })])),
+    ).toThrow(
+      /kind-strategy: attributes\.standing_criteria\[0\] \("a-1"\) is class "assumption", but the standing set is NON-FUNCTIONAL ONLY/,
+    );
+  });
+
+  it("rejects a standing set stored anywhere but kind-strategy", () => {
+    const nodes = [
+      gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "strategy-x", kind: "strategy", attributes: { standing_criteria: [criterion()] } }),
+    ];
+    expect(() => validateGraph(nodes)).toThrow(
+      /strategy-x: attributes\.standing_criteria is only meaningful on kind-strategy/,
+    );
+  });
+
+  it("reports every defect in one run rather than stopping at the first", () => {
+    // The report-all style is why the rule restates criteria.ts's shape check
+    // instead of calling its throw-on-first-defect validators.
+    try {
+      validateGraph(criteriaGraph([criterion({ class: "perf", authority: "approved" })]));
+      expect.unreachable("expected validateGraph to throw");
+    } catch (error) {
+      const message = (error as Error).message; // type-safety-ok: catch binds unknown; the assertion below is the narrowing
+      expect(message).toMatch(/\.class must be one of/);
+      expect(message).toMatch(/\.authority must be one of/);
+    }
+  });
 });
 
 describe("write-class primitives", () => {

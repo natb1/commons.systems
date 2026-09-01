@@ -2149,6 +2149,153 @@ function checkWriteClassDeclaration(
   }
 }
 
+/** The closed key set of one criterion object (rule 28). Mirrors `criteria.ts`'s `CRITERION_KEYS`. */
+const CRITERION_KEYS: readonly string[] = ["id", "statement", "class", "authority", "recorded"];
+
+/**
+ * The three criterion classes (rule 28). Mirrors `criteria.ts`'s
+ * `CRITERION_CLASSES`. `assumption` carries a world-premise the strategy rests
+ * on — assessed, never bitten as work — and is the class
+ * `attributes.conditions` entries migrate into.
+ */
+const CRITERION_CLASSES: readonly string[] = ["functional", "non-functional", "assumption"];
+
+/** The three authority stamps (rule 28). Mirrors `criteria.ts`'s `CRITERION_AUTHORITIES`. */
+const CRITERION_AUTHORITIES: readonly string[] = ["ratified", "delegated", "deferred"];
+
+/** The node that homes the standing non-functional set (rule 28). */
+const STANDING_CRITERIA_HOME = "kind-strategy";
+
+/**
+ * Rule 28, part one: the shape of ONE criteria list. Shared by
+ * `attributes.criteria` and `attributes.standing_criteria`, which carry the
+ * same entry shape and differ only in the extra class constraint part two
+ * applies to the standing home.
+ */
+function checkCriteriaList(
+  raw: unknown,
+  at: string,
+  problems: string[],
+): { index: number; id: string; class: unknown }[] {
+  if (!Array.isArray(raw)) {
+    problems.push(
+      `${at} must be an array of {${CRITERION_KEYS.join(", ")}} criteria, got ${raw === null ? "null" : typeof raw}`,
+    );
+    return [];
+  }
+  const entries: { index: number; id: string; class: unknown }[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    const entry: unknown = raw[i];
+    const where = `${at}[${i}]`;
+    if (!isPlainObject(entry)) {
+      problems.push(
+        `${where} must be a {${CRITERION_KEYS.join(", ")}} record, got ${entry === null ? "null" : typeof entry}`,
+      );
+      continue;
+    }
+    for (const key of Object.keys(entry)) {
+      if (!CRITERION_KEYS.includes(key)) {
+        problems.push(
+          `${where}.${key} is not a criterion field — the criterion shape is closed, so no unread field rides along on data that drives a tier decision (allowed: ${CRITERION_KEYS.join(", ")})`,
+        );
+      }
+    }
+    for (const field of ["id", "statement"]) {
+      const value = entry[field];
+      if (typeof value !== "string" || value.trim() === "") {
+        problems.push(`${where}.${field} must be a non-empty string, got ${JSON.stringify(value)}`);
+      }
+    }
+    if (typeof entry.class !== "string" || !CRITERION_CLASSES.includes(entry.class)) {
+      problems.push(
+        `${where}.class must be one of ${CRITERION_CLASSES.join(", ")}, got ${JSON.stringify(entry.class)}`,
+      );
+    }
+    if (typeof entry.authority !== "string" || !CRITERION_AUTHORITIES.includes(entry.authority)) {
+      problems.push(
+        `${where}.authority must be one of ${CRITERION_AUTHORITIES.join(", ")}, got ${JSON.stringify(entry.authority)}`,
+      );
+    }
+    const recorded = entry.recorded;
+    if (typeof recorded !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(recorded)) {
+      problems.push(`${where}.recorded must be a YYYY-MM-DD date, got ${JSON.stringify(recorded)}`);
+    }
+    if (typeof entry.id === "string") {
+      if (seen.has(entry.id)) {
+        problems.push(
+          `${where}.id duplicates "${entry.id}" earlier in ${at} — criterion ids are unique, since a check binds to exactly one criterion`,
+        );
+      }
+      seen.add(entry.id);
+      entries.push({ index: i, id: entry.id, class: entry.class });
+    }
+  }
+  return entries;
+}
+
+/**
+ * Rule 28: `attributes.criteria` and `attributes.standing_criteria` shape.
+ *
+ * Criteria are the INTENT-layer half of the reconciliation frontier: a check is
+ * code, but what the check is checking FOR is authored data. Like rules 19, 21
+ * and 22 this rule is presence-conditional — a node carrying neither key is
+ * untouched, which is what lets it land on a graph where almost nothing carries
+ * criteria yet.
+ *
+ * Two obligations:
+ *
+ *  (a) SHAPE — each entry is a closed `{id, statement, class, authority,
+ *      recorded}` record with a valid class (`functional`, `non-functional`,
+ *      or `assumption`), a valid authority stamp, a `YYYY-MM-DD` date, and an
+ *      id unique within its list. Unknown keys are REPORTED, not ignored: a
+ *      criterion drives a tier decision, so a smuggled field must not ride
+ *      along unread.
+ *  (b) STANDING HOME — every `standing_criteria` entry is `non-functional`.
+ *      The other two classes are strategy-scoped — a `functional` criterion is
+ *      one strategy's success condition and an `assumption` is one strategy's
+ *      world-premise — so either parked here would bind every strategy to a
+ *      claim made about one.
+ *
+ * DELIBERATE DUPLICATION of `criteria.ts`'s validators, which are the runtime
+ * home of the same shape. `criteria.ts` imports `node:crypto` for
+ * `criteriaFingerprint`, and `test/graph.test.ts` asserts that no module
+ * transitively reachable from the browser-safe `graph.ts` barrel — this file
+ * included — imports a `node:` builtin. Importing the validators here would
+ * break that guard, so the shape is restated in the local
+ * report-every-problem style every other rule in this file uses (a thrown
+ * validator would also stop at the first defect instead of listing them all).
+ * `test/criteria.test.ts` pins the two implementations to the same verdicts.
+ */
+function checkCriteriaShape(node: IntentionNode, problems: string[]): void {
+  const own = node.attributes.criteria;
+  if (own !== undefined && own !== null) {
+    checkCriteriaList(own, `${node.id}: attributes.criteria`, problems);
+  }
+  const standing = node.attributes.standing_criteria;
+  if (standing === undefined || standing === null) return;
+  const at = `${node.id}: attributes.standing_criteria`;
+  const entries = checkCriteriaList(standing, at, problems);
+  for (const entry of entries) {
+    // A class that is not a legal value at all is part (a)'s report, not this
+    // one — reporting both would name the same defect twice.
+    if (
+      typeof entry.class === "string" &&
+      CRITERION_CLASSES.includes(entry.class) &&
+      entry.class !== "non-functional"
+    ) {
+      problems.push(
+        `${at}[${entry.index}] ("${entry.id}") is class "${entry.class}", but the standing set is NON-FUNCTIONAL ONLY — a functional or assumption criterion is scoped to one strategy and belongs on it, under attributes.criteria`,
+      );
+    }
+  }
+  if (node.id !== STANDING_CRITERIA_HOME) {
+    problems.push(
+      `${at} is only meaningful on ${STANDING_CRITERIA_HOME}, the one home of the standing set — a second copy elsewhere is read by nothing and drifts silently`,
+    );
+  }
+}
+
 /**
  * Referential integrity over a whole node set. Per-node shape is `validateNode`'s
  * job; this checks the edges BETWEEN nodes:
@@ -2303,6 +2450,26 @@ function checkWriteClassDeclaration(
  *      defines its own kind — a first-class field left unclassified. See
  *      `checkWriteClassDeclaration` for why coverage is inert when a kind node
  *      declares nothing at all.
+ *  28. `attributes.criteria` and `attributes.standing_criteria` are well-shaped
+ *      where present — each entry a closed `{id, statement, class, authority,
+ *      recorded}` record with a valid class and authority stamp, a
+ *      `YYYY-MM-DD` date, and an id unique within its list. Criteria are the
+ *      intent-layer half of the reconciliation frontier (a check is code; what
+ *      it checks FOR is authored data), so a malformed entry would otherwise
+ *      reach every consumer unchallenged, exactly the reasoning behind rules 19
+ *      and 21. The class axis is three-valued — `functional`,
+ *      `non-functional`, `assumption`, the last carrying a world-premise the
+ *      strategy rests on (assessed, never bitten as work). Two extra
+ *      obligations on the standing set: every entry is `non-functional` (a
+ *      functional or assumption criterion is scoped to one strategy, and
+ *      parking one in the standing home would bind every strategy to a claim
+ *      made about one), and the key
+ *      lives only on `kind-strategy`, its one home — a copy anywhere else is
+ *      read by nothing and drifts silently. Presence-conditional like rules 19,
+ *      21 and 22: a node carrying neither key is untouched, which is what lets
+ *      the rule land on a graph where almost nothing carries criteria yet.
+ *      `criteria.ts` is the runtime home of the same shape; see
+ *      `checkCriteriaShape` for why the two are deliberately separate.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -2365,6 +2532,8 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkSupersessionExpiry(node, problems);
     // Rule 27: a kind node's write-class declaration agrees with the mirror.
     checkWriteClassDeclaration(node, byId, problems);
+    // Rule 28: criteria / standing_criteria are well-shaped where present.
+    checkCriteriaShape(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkEdgeCycles(
