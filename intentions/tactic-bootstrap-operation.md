@@ -93,6 +93,28 @@ clarifications:
       passes stop spending question rounds on landing location; placement is
       Claude's structural judgment under the recorded placement rules, author
       overrule open. (decision: author-issued 2026-09-01)"
+  - question: Steering ledger [5] - what did the author direct on conditions,
+      transient constraints, and the rules materialization criterion
+      (2026-09-01)?
+    answer: "(Author-issued 2026-09-01, /align conditions round.) The author
+      directed: adopt the vocabulary extension (kind-kind
+      reconciliation-vocabulary refinement 7: ASSUMPTION-class criteria; legacy
+      map attributes.conditions -> assumption-class criteria;
+      verbatim-transcription-preserves-authority migration rule;
+      attributes.conditions deprecation as a sequenced migration frontier item),
+      ratify the rules materialize-or-refute criterion on
+      strategy-explicit-intent's materialization clarification (standing
+      completeness; per-rule outcomes enter DEFERRED), and ensure both
+      refinements are reconciled as part of the bootstrap execution. Effect on
+      this operation: the frontier-projection execution claim folds the
+      conditions-migration frontier item into its registry scope where the
+      directive places it; the rules-migration surface
+      (tactic-context-materialization) plans against the ratified criterion; the
+      consolidation and P2 transcription phases treat both refinements as
+      in-scope reconciliation inputs. Coordinated live with the executing
+      session (hold accepted 2026-09-01; its branch-only kind-kind and
+      kind-strategy criteria-model edits reconcile over this landing before
+      their PR opens). (decision: author-issued 2026-09-01)"
 tooling_goals: []
 success_signal: null
 attention: null

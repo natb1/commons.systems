@@ -354,15 +354,37 @@ clarifications:
       exists), and checks bound to a non-ratified criterion stay observe-tier
       regardless of high-water mark. (6) Ratified texts citing this vocabulary
       pin to its current sense; the deferred base review of this vocabulary
-      re-verifies those texts on any amendment.)"
+      re-verifies those texts on any amendment.) (REFINED 2026-09-01, /align
+      conditions round, ratified in interview: (7) ASSUMPTION joins the
+      criterion class axis - a world-premise that makes a strategy's target
+      state apt, the role kind-strategy's attributes.conditions carries today
+      (apt at one scale and not another, author availability, an architectural
+      premise holding). An assumption-class criterion is evaluated by ASSESSMENT
+      (dated, expiring - generalizing conditions' standing-review-trigger role
+      and the condition-sweep coverage mode), is never bitten as work, and an
+      observed violation derives a re-derive-this-strategy-from-its-virtues
+      frontier item, never a work item. LEGACY MAP gains: attributes.conditions
+      -> assumption-class criteria. Deprecating attributes.conditions as a
+      bespoke carrier is a sequenced migration frontier item, not executed by
+      this refinement; incumbent carrier of the sweep concern:
+      tactic-condition-review-sweep. MIGRATION AUTHORITY, author-ratified same
+      sitting: verbatim transcription preserves authority - a condition migrated
+      verbatim keeps the ratified standing it had on its codified strategy; any
+      rewording during migration enters DEFERRED. TRANSIENT CONSTRAINTS,
+      examined same sitting: transience is never stored - a standing obligation
+      is a criterion whose activeness is the frontier projection, derived while
+      unsatisfied and gone when satisfied; an operation-scoped one-shot
+      constraint uses the SHIM shape (declared liquidation condition);
+      claim-window state stays in claim records. No stored self-liquidating
+      disposition class exists or is needed.)"
   - question: Carrier parsimony review — which intent-side carriers survive a
       parsimony test, and which collapse (2026-09-01)?
-    answer: "(Claude-drafted 2026-09-01 as duty 1 of the layer-boundary
-      delegation carried by tactic-intent-orchestration-layer-schema; held for
-      author review.) Every ruling below is a PROPOSAL and none is executed
-      here — no field is added, removed, renamed or reclassified by this entry.
-      The test applied throughout: a role distinction earns its keep only where
-      a consumer reads it mechanically. OWNER — RETIRE. The 2026-08-31
+    answer: "(Claude-drafted 2026-09-01 as duty 1 of the layer-boundary delegation
+      carried by tactic-intent-orchestration-layer-schema; held for author
+      review.) Every ruling below is a PROPOSAL and none is executed here — no
+      field is added, removed, renamed or reclassified by this entry. The test
+      applied throughout: a role distinction earns its keep only where a
+      consumer reads it mechanically. OWNER — RETIRE. The 2026-08-31
       author-ratified ruling on strategy-explicit-intent already recognizes no
       function for the node-level owner schema: ownership categories live on
       dispositions, and node-level owner: ai is retained only as a brownfield
@@ -463,10 +485,10 @@ clarifications:
       is deferred, and the authority-primacy ordering recorded above is ratified
       > deferred/delegated > operational. Should the deferred vocabulary itself
       be ratified, the rename is a mechanical follow-on rather than a fresh
-      decision. No third pair is minted, and the word layer is not reused for
-      it — layer already means attributes.goal_layer, kind-typed field
-      placement, and graph-commit's Layer 1/2/3 conflict-resolution stages.
-      (decision: deferred — Claude-drafted, held for author review)"
+      decision. No third pair is minted, and the word layer is not reused for it
+      — layer already means attributes.goal_layer, kind-typed field placement,
+      and graph-commit's Layer 1/2/3 conflict-resolution stages. (decision:
+      deferred — Claude-drafted, held for author review)"
 tooling_goals: []
 success_signal: null
 attention: null
@@ -564,16 +586,16 @@ attributes:
   write_class_shims:
     - field: status
       reason: machine-stamped by the transition writers today and a member of
-        STATE_FIELDS, yet its draft/codified role is provenance on a
-        disposition — an intent-side fact
-      liquidation: the author's ruling on the status-retirement proposal
-        recorded as a deferred clarification on this node
+        STATE_FIELDS, yet its draft/codified role is provenance on a disposition
+        — an intent-side fact
+      liquidation: the author's ruling on the status-retirement proposal recorded as a
+        deferred clarification on this node
     - field: blocked_by
-      reason: mechanically minted by the hold path, and simultaneously the
-        carrier of authored sequencing edges (the bootstrap critical path is
-        encoded as blocked_by edges on the carrier tactics)
-      liquidation: the author's ruling on whether authored sequencing moves to
-        a distinct intent-class carrier
+      reason: mechanically minted by the hold path, and simultaneously the carrier of
+        authored sequencing edges (the bootstrap critical path is encoded as
+        blocked_by edges on the carrier tactics)
+      liquidation: the author's ruling on whether authored sequencing moves to a
+        distinct intent-class carrier
   entry_point: this node is the entry point of the graph
   status_vocabulary:
     codified: the author has personally settled this kind's semantics
