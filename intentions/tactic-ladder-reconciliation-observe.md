@@ -1,9 +1,9 @@
 ---
 id: tactic-ladder-reconciliation-observe
 kind: tactic
-statement: Bootstrap strategy-scoped reconciliation in observe mode - claim
-  records, evidence folding, derived position, check tiers - measured alongside
-  the incumbent ladder
+statement: Integrate strategy-scoped reconciliation in observe mode - wire claim
+  records, evidence folding, derived position and check tiers into one measured
+  loop beside the incumbent ladder
 owner: ai
 status: raw
 parent: null
@@ -25,7 +25,10 @@ attention: null
 phase: null
 execution: null
 validates: []
-blocked_by: []
+blocked_by:
+  - tactic-intent-orchestration-layer-schema
+  - tactic-consolidation-operation
+  - tactic-migration-frontier-projection
 superseded_by: []
 supersession_expiry: null
 office_hours: null
@@ -42,25 +45,30 @@ incumbent ladder - nothing incumbent is drained by this tactic (author
 ruling 2026-09-01: incumbent tactics complete their implementation scope
 THROUGH this machinery as its viability test). Scope:
 
-1. Claim records: one file per claim; claim/release events; the claim
-   registry derived from the files, never a shared hot file.
-2. Evidence append + fold: reconciler folds observed PR/merge state into
-   per-strategy evidence; unmatched-evidence detection (diff satisfying no
-   criterion) as a digest finding.
-3. Derived position computed beside the stored phase; divergence reported as
-   a frontier (self-hosting observe mode); honest unknowns carried.
-4. Check-tier registry + high-water ratchet mechanics (observe tier is a
-   declared tier; promotion is mechanical and one-way).
-5. Concurrency-safe tick per the binding author directives (commutative
-   appends, serialization only at the graph-commit landing lock).
-6. Measurements: token cost of claim-time bite carving and per-phase
+1. Integration: wire the three owned surfaces into one running observe-mode
+   loop. Surface ownership (rescoped 2026-09-01, finding-6 fix): claim
+   records - one file per claim, claim/release events, registry derived from
+   the files, never a shared hot file - and evidence-append classification
+   are owned by tactic-intent-orchestration-layer-schema; evidence folding
+   and unmatched-evidence detection (diff satisfying no criterion, surfaced
+   as a digest finding) by tactic-consolidation-operation; the check-tier
+   registry and high-water ratchet by tactic-migration-frontier-projection.
+   This node builds none of those surfaces - it integrates them; the
+   blocked_by edges carry the sequencing.
+2. Derived position computed beside the stored phase; divergence reported as
+   a frontier (self-hosting observe mode); honest unknowns carried. Owned
+   here.
+3. Concurrency-safe tick per the binding author directives (commutative
+   appends, serialization only at the graph-commit landing lock). Owned here
+   as an integration property of the loop.
+4. Measurements: token cost of claim-time bite carving and per-phase
    execution-time planning (the round's unmeasured claims); rsi per-phase
    attribution is the instrument. These measurements feed the deferred
-   post-viability interview on retiring the tactic layer.
+   post-viability interview on retiring the tactic layer. Owned here.
 
 ## Reuse (recorded 2026-09-01, adversarial-review errata)
 
-The claim-record design in scope item 1 is not new machinery: the
+The claim-record design (owned by tactic-intent-orchestration-layer-schema, integrated here) is not new machinery: the
 reservation ledger under the dispatch-propagate scripts
 (lib-reservation-ledger.sh - a marker-file-per-claim directory with
 write/clear/count/sweep, already shared across concurrent ticks) is the

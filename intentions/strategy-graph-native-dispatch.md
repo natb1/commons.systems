@@ -6892,7 +6892,18 @@ clarifications:
       calculus; double-entry bookkeeping; speculative execution (cheap redo
       sanctions disposable parallel drafts); estimation theory. (decision:
       author-ratified, 2026-09-01; retirement of the tactic layer itself
-      deferred to a post-viability interview)"
+      deferred to a post-viability interview) (CARRIER EXCEPTION, recorded
+      2026-09-01 finding-6 fix, author-approved: incumbent-form tactic nodes may
+      be minted or retained post-ratification only as bootstrap carriers for
+      machinery the target architecture itself needs, each named explicitly
+      here. The current carriers: tactic-ladder-reconciliation-observe
+      (integration and measurement of the observe-mode loop), owning-surface
+      siblings tactic-intent-orchestration-layer-schema (claim-record schema and
+      evidence-append classification), tactic-consolidation-operation (evidence
+      folding and unmatched-evidence detection), and
+      tactic-migration-frontier-projection (check-tier registry and high-water
+      ratchet). Sequencing is carried by blocked_by edges from the integrator to
+      the three owners. Any other new standing tactic remains unsanctioned.)"
   - question: What is the brownfield path from the frozen tactic corpus and the
       batch plan to the reconciliation ladder?
     answer: "(Author-ruled 2026-09-01. Supersedes the plans-as-stop-gap-mirror

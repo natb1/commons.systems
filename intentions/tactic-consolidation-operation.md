@@ -56,3 +56,7 @@ current state at a target-size threshold (trigger family shared with
 materialized-context compaction); git history is the archive. The
 clarifications consolidation and evidence folding are one operation family
 with two carriers.
+
+## Surface ownership (2026-09-01, finding-6 fix)
+
+Under the strategy-scoped reconciliation architecture (strategy-graph-native-dispatch, 2026-09-01, carrier exception), this node owns evidence folding and unmatched-evidence detection. tactic-ladder-reconciliation-observe integrates this surface via a blocked_by edge and does not rebuild it.

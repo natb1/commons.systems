@@ -70,3 +70,7 @@ layer-boundary tooling this tactic builds is what enforces the tick's
 concurrency-safety and shared-state optimization. The PR authority split
 (strategy-graph-native-dispatch, 2026-09-01) bounds what the graph side may
 store: observed evidence and references, never expectations about PR content.
+
+## Surface ownership (2026-09-01, finding-6 fix)
+
+Under the strategy-scoped reconciliation architecture (strategy-graph-native-dispatch, 2026-09-01, carrier exception), this node owns the claim-record schema and evidence-append classification. tactic-ladder-reconciliation-observe integrates this surface via a blocked_by edge and does not rebuild it.

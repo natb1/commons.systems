@@ -62,3 +62,7 @@ rule, not a skipped test. Machine-signal maximization directive (author,
 2026-09-01): apply every tradition to produce machine-verifiable signals; the
 check expressiveness ladder (example -> property-based -> invariant) is this
 tactic's growth axis, jointly with tactic-kind-schema-blocks.
+
+## Surface ownership (2026-09-01, finding-6 fix)
+
+Under the strategy-scoped reconciliation architecture (strategy-graph-native-dispatch, 2026-09-01, carrier exception), this node owns the check-tier registry and high-water ratchet. tactic-ladder-reconciliation-observe integrates this surface via a blocked_by edge and does not rebuild it.
