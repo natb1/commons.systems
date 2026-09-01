@@ -39,7 +39,12 @@ human constraints. Record tradition references with each resolution.
 When executing under a strategy whose doctrine cites a tradition, ground the
 work against the strategy AND the tradition itself. The tradition reference
 is a pointer into context the recording round deliberately compressed away —
-consult it; never re-derive the design from the summary alone. (Ratified
+consult it; never re-derive the design from the summary alone. Defer to the
+tradition only inside its recorded support scope: tradition references
+encode both where the tradition supports the strategy and where the strategy
+deliberately diverges, and a recorded divergence is an author decision the
+tradition cannot overrule. An unrecorded conflict between tradition and
+strategy is a frontier item — defer to neither silently. (Ratified
 2026-09-01, `strategy-graph-native-dispatch`.)
 
 ## Adversarial review is part of the work
