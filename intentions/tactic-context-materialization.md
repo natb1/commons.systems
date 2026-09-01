@@ -59,3 +59,11 @@ attributes: {}
   discipline-dependent — every session in a worktree gets the claimed node's
   related tactics, strategies, and principles without remembering to load
   them.
+
+## Amendment (2026-09-01 ladder-reconciliation round)
+
+Add the ASSESSMENT cache duty: memoized prose evaluations {subject, verdict,
+basis pin, date} expiring on pin mismatch, generalizing the reading freshness
+gate into a general judgment cache. Purpose (author directive, 2026-09-01):
+prose re-evaluation is the expensive path - judgment runs only on cache miss;
+everything else reads the memo and verifies the pin.

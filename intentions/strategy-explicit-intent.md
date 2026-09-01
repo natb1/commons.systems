@@ -940,6 +940,30 @@ clarifications:
       authored boost) - refused weighted-term soup independently. Each keep is a
       disposition and remains frontier-reviewable in future interviews per the
       full-frontier definition. (decision: author-ratified, 2026-08-31)"
+  - question: What is the graph, under the economics of agent coordination - and
+      which standing artifacts may exist?
+    answer: "(Recorded 2026-09-01, /align ladder-reconciliation round.) The graph is
+      the GOVERNANCE/ALIGNMENT LAYER, not a project-management layer. Coase
+      inversion: firm-shaped process (scrum's backlogs, roles, ceremonies) is a
+      solution to HUMAN transaction costs; agent coordination costs collapse
+      toward zero and that layer dissolves - while the governance layer (goal
+      definition, verification, reconciling objectives, capture monitoring) is
+      exactly what survives and appreciates (2025-26 literature: the Coasean
+      singularity and structural-dissolution analyses, including their paradox
+      that new trust/verification costs replace old coordination costs).
+      STANDING-ARTIFACT TEST (ratified): every standing coordination artifact
+      must justify itself as alignment, verification, or irreversibility-guard -
+      never as coordination economy. Applied: rank (allocation of scarce author
+      attention and capacity) survives; claim records (irreversibility guard)
+      survive; the office-hours queue (alignment) survives; the standing tactic
+      shelf (coordination economy) dissolves. NAUR INVERTED (ratified
+      rationale): Naur's Programming as Theory Building held that the theory
+      lives in heads and the record is a lossy shadow, so process traditions
+      organized around protecting heads. Agents invert the premise: the
+      session's head is rebuilt from the record every time, so THE RECORD IS THE
+      ONLY THEORY THERE IS - the deep rationale for the record-completeness
+      contract and the persistence test. (decision: author-ratified,
+      2026-09-01)"
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

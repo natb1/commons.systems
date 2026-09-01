@@ -6781,6 +6781,121 @@ clarifications:
       (tactic-migration-frontier-projection). The plans/ stop-gap mirror
       (strategy-explicit-intent, 2026-08-31) is a projection the graph should be
       deriving. (decision: author-ratified, 2026-08-31)"
+  - question: What is the doctrine of implementation as incremental reconciliation,
+      and where is the line between migration and implementation?
+    answer: "(Recorded 2026-09-01, /align ladder-reconciliation round.) Ladder
+      execution is incremental reconciliation between target state (the intent
+      layer) and operational state (the repo at origin/main, PR state,
+      evidence). Five sub-principles, each author-ratified: (1) UNIFICATION -
+      there is no line in kind between implementation and migration:
+      implementation is reconciliation whose diff creates structure; migration
+      is reconciliation whose diff transforms or removes it (deprecation =
+      migration-to-absence, per the 2026-08-31 projection disposition).
+      Traditions: Terraform plan/apply draws no line between first and later
+      applies; Kubernetes reconciles create and update identically. (2)
+      PLAN-AS-PINNED-PROJECTION and the PERSISTENCE TEST - persist exactly what
+      re-derivation cannot reconstruct (author decisions, sanctioned criteria,
+      hazards known only from experience); everything reconstructible (path:line
+      anchors, step order, reuse pointers, model picks) is projection: derived
+      against a pin {base sha, strategy fingerprints}, regenerated on pin
+      mismatch, never hand-reconciled. Mission-command vocabulary adopted
+      (Auftragstaktik): the record carries commander's intent, end state, and
+      constraints - never the scheme of maneuver. Traditions: Terraform
+      saved-plan staleness; Auftragstaktik/commander's intent; the 2026
+      spec-driven wave's agent-maintained ephemeral .plan.md artifacts (Tessl).
+      (3) DERIVED POSITION - ladder position is derived, level-triggered, from
+      append-only completion evidence carrying proof; the stored phase field is
+      a projection/cache during migration. Position is an estimate and carries
+      honest unknowns (the CiVerdict.unknown precedent). Traditions: Kubernetes
+      status.conditions and level-triggered controllers; event sourcing;
+      estimation theory. (4) LIFECYCLE SEPARATION (the cattle rule) - intent
+      (interview-maintained), projection (regenerated), and evidence
+      (append-only) have distinct lifecycles; no hand-maintained object may
+      carry a projection; work records are minted mechanically and never edited
+      - killed and re-minted on drift. The measured pain of standing tactic
+      nodes (drift, deduplication, constant re-evaluation) is the cost of
+      blending the three lifecycles in one hand-authored object. Traditions:
+      pets-vs-cattle (immutable infrastructure); Kubernetes owned objects -
+      nobody edits a Pod. (5) RATCHET - an acceptance check is born observe-tier
+      (failing means frontier entry, not red CI) and promotes to gating by
+      mechanical high-water mark: once it has ever passed on main, a later
+      failure is a regression and gates. One-way, no ceremony. The observe tier
+      is a declared tier with a promotion rule, not a skipped test - the
+      test-integrity carve-out. Traditions: Nix/Hydra channel advance on green;
+      CI ratcheting; the drain-then-ratchet mechanics of the 2026-08-31
+      projection disposition, mechanized. (decision: author-ratified,
+      2026-09-01)"
+  - question: What is the greenfield target architecture for the dispatch ladder
+      under the reconciliation doctrine?
+    answer: "(Recorded 2026-09-01; author-ratified as target state, recorded while
+      implementation lags, per doctrine.) STRATEGY-SCOPED RECONCILIATION. The
+      strategy node carries target state (statement + criteria prose +
+      registered machine checks) and an operational layer (append-only evidence
+      log + live claim records). The author sanctions CRITERIA, never slices or
+      step lists. There is no standing decomposition into tactics: the backlog
+      is the derived FRONTIER (failing observe-tier checks + prose-gap
+      assessments); decomposition into a session-sized bite happens at claim
+      time - lot-size-one planning (Toyota one-piece flow, viable now that
+      agents rebuild context per session regardless) - and the bite exists only
+      for the claim window. AUTHOR NOTE (2026-09-01): only tactic-shelf
+      decomposition dissolves; strategy topology and the decomposition/mount
+      rules (keystone reorg, mount schema) remain intent structure serving other
+      functions. TICK: select top-ranked (strategy, frontier) -> claim ->
+      project (per-phase, execution-time planning) -> execute -> append evidence
+      -> fold at merge; MAPE-K/blackboard shape. THE PR IS THE CLAIM-WINDOW WORK
+      RECORD, with an authority split: the graph is authoritative for intent and
+      holds only observed, derived evidence about work; the PR is authoritative
+      for operational work state; the graph never stores expectations about PR
+      content. Diff satisfying no criterion is an unmatched-evidence digest
+      finding. CONCURRENCY (author directives, 2026-09-01, binding on the
+      delegated design): ticks must be concurrency-safe and optimize
+      shared-state operations - claim records one-file-per-claim (no shared hot
+      file); evidence appends commutative and mergeable; folding serialized at
+      the graph-commit landing lock (the sanctioned serialization point);
+      orchestration writers never rewrite intent bodies (the layer boundary).
+      MACHINE-SIGNAL MAXIMIZATION and PROSE-COST MITIGATION (author directives,
+      binding): apply every tradition to produce machine-verifiable signals;
+      prose evaluation is the expensive path, mitigated by (a) the check
+      expressiveness ladder (example -> property-based -> invariant), raising
+      the machine share of target state (refinement calculus made affordable by
+      agents), and (b) ASSESSMENTS - memoized prose evaluations {subject,
+      verdict, basis pin, date} expiring on pin mismatch, generalizing the
+      existing reading freshness gate into a general judgment cache.
+      EVIDENCE-LOG COMPACTION: journal-to-ledger folding (double-entry
+      bookkeeping tradition) - the log folds to per-criterion current state at a
+      target-size threshold (trigger family shared with materialized-context
+      compaction); git history is the archive; one operation family with the
+      clarifications consolidation. CONTROL LAYER RETAINED deliberately (the
+      CodeCRDT caveat: observation-driven coordination alone has no convergence
+      guarantee under concurrent stochastic writers): rank, serialized landing,
+      claim records; pace mechanics are a WIP limit - the tick is a pull system
+      (kanban). Tradition references recorded for this architecture:
+      Kubernetes/Terraform/Nix reconciliation; loop engineering (Osmani 2026);
+      spec-driven development and spec-as-source; stigmergy (adopted for backlog
+      signaling, contradicted for concurrency control by CodeCRDT); blackboard
+      systems (Hearsay-II); MAPE-K autonomic computing; Coase inversion
+      (scrum-shaped process is a firm-shaped solution to human transaction
+      costs; the governance layer is what survives); one-piece flow; refinement
+      calculus; double-entry bookkeeping; speculative execution (cheap redo
+      sanctions disposable parallel drafts); estimation theory. (decision:
+      author-ratified, 2026-09-01; retirement of the tactic layer itself
+      deferred to a post-viability interview)"
+  - question: What is the brownfield path from the frozen tactic corpus and the
+      batch plan to the reconciliation ladder?
+    answer: "(Author-ruled 2026-09-01. Supersedes the plans-as-stop-gap-mirror
+      arrangement and, for this migration, the drain-through-the-old-ladder
+      default.) The incumbent tactic nodes are NOT drained through the old
+      ladder: work is frozen in part because of the pain points those very nodes
+      record. Completing the implementation scope of the incumbent tactics USING
+      the greenfield reconciliation approach is the viability test of that
+      approach. The plans/dispatch-rsi-*.md corpus and the batch session
+      operating on it are ABANDONED - the stop-gap-mirror role ends; those files
+      stop being maintained and carry no authority. A new bootstrapping
+      operation replaces batch resumption, bootstrapping through the session
+      priorities in order: (1) greenfield graph implementation (the
+      strategy-scoped reconciliation architecture), then (2) long-horizon
+      dispatch with rsi and token efficiency, without regressions in integrity,
+      quality, or token efficiency. (decision: author-ratified, 2026-09-01)"
 tooling_goals:
   - kind: actuator
     statement: /align-tactics <strategy-id> — break a strategy into PR-sized tactic

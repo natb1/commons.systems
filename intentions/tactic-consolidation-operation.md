@@ -47,3 +47,12 @@ attributes: {}
 - Trigger heuristics live in the digest's parsimony tables (node size /
   clarification count / read-cost signals); the digest tool's charter home is
   tactic-rsi-graph-review — extend its tables there, do not fork the tool.
+
+## Amendment (2026-09-01 ladder-reconciliation round)
+
+Scope extends to the operational layer: evidence-log folding (journal to
+ledger, the double-entry bookkeeping tradition) - fold to per-criterion
+current state at a target-size threshold (trigger family shared with
+materialized-context compaction); git history is the archive. The
+clarifications consolidation and evidence folding are one operation family
+with two carriers.

@@ -50,3 +50,15 @@ attributes: {}
   strategy-token-economy's own sensor path; retired align-init paths; the
   boost CLI absent while its tactic reads done). Natural home: a digest check
   table (charter: tactic-rsi-graph-review).
+
+## Amendment (2026-09-01 ladder-reconciliation round)
+
+The unification ruling (implementation = migration; both are reconciliation)
+widens this tactic's frontier machinery to implementation work: the frontier
+absorbs the derived gap - unsatisfied criteria ARE the backlog. Check tiers
+and the high-water ratchet (observe -> gating once ever-passed-on-main) are
+the mechanized form; the observe tier is a declared tier with a promotion
+rule, not a skipped test. Machine-signal maximization directive (author,
+2026-09-01): apply every tradition to produce machine-verifiable signals; the
+check expressiveness ladder (example -> property-based -> invariant) is this
+tactic's growth axis, jointly with tactic-kind-schema-blocks.

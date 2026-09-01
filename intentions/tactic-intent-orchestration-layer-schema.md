@@ -59,3 +59,14 @@ Two delegated duties, the first bounding the second:
    write path refuses cross-layer rewrites. Classification lands in the kind
    nodes per the schema-as-data disposition (strategy-graph-self-description,
    2026-08-31).
+
+## Amendment (2026-09-01 ladder-reconciliation round)
+
+The classification extends to the operational layer's new carriers: evidence
+log entries and claim records. Binding author directives (2026-09-01): claim
+records are one-file-per-claim (no shared hot file); evidence appends must be
+commutative and mergeable; orchestration writers append only - the
+layer-boundary tooling this tactic builds is what enforces the tick's
+concurrency-safety and shared-state optimization. The PR authority split
+(strategy-graph-native-dispatch, 2026-09-01) bounds what the graph side may
+store: observed evidence and references, never expectations about PR content.

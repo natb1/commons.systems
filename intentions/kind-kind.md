@@ -230,26 +230,25 @@ clarifications:
       BAND DISTRIBUTOR, so it fires on distributor-identity change (a
       re-parenting, or a multi-parent node whose max-scoring parent flips) —
       cases that are already explicit authoring acts — and stays SILENT on the
-      case that actually goes unnoticed, two previously separate bands
-      COLLIDING so nodes calibrated against different neighbour sets suddenly
-      compare directly. A pure rerank invalidates nothing: every descendant has
-      the reranked node in its lineage, so score and band shift by the same
-      amount and within-subtree order is preserved exactly. Second, the live
-      graph is already using an informal levels scale — 91 authored values but
-      only 17 distinct, with six values (20, 50, 12, 10, 3, 85) covering 88%
-      and 20/50 alone covering 64% — so codifying levels formalizes existing
-      practice rather than imposing a new discipline. PER-TIER BOOSTS ARE
-      RETAINED (author-directed): a node still carries a boost per tier, each
-      drawn from the level vocabulary. The per-tier structure exists for
-      COVERAGE — making a node's rank well-defined in a tier it does not itself
-      belong to — which the absolute scale does not supply and does not
-      replace. What the absolute scale removes is the CALIBRATION rationale, and
-      with it validateGraph rule 20, whose stated justification is that 'a boost
-      value is only meaningful within one tier's scale'; that premise is false
-      under a closed level vocabulary, and the rule's single-scalar
-      attention.tier shape is obsoleted by the per-tier map independently.
-      Migration and the level values are owned by
-      tactic-attention-per-tier-boost-migration."
+      case that actually goes unnoticed, two previously separate bands COLLIDING
+      so nodes calibrated against different neighbour sets suddenly compare
+      directly. A pure rerank invalidates nothing: every descendant has the
+      reranked node in its lineage, so score and band shift by the same amount
+      and within-subtree order is preserved exactly. Second, the live graph is
+      already using an informal levels scale — 91 authored values but only 17
+      distinct, with six values (20, 50, 12, 10, 3, 85) covering 88% and 20/50
+      alone covering 64% — so codifying levels formalizes existing practice
+      rather than imposing a new discipline. PER-TIER BOOSTS ARE RETAINED
+      (author-directed): a node still carries a boost per tier, each drawn from
+      the level vocabulary. The per-tier structure exists for COVERAGE — making
+      a node's rank well-defined in a tier it does not itself belong to — which
+      the absolute scale does not supply and does not replace. What the absolute
+      scale removes is the CALIBRATION rationale, and with it validateGraph rule
+      20, whose stated justification is that 'a boost value is only meaningful
+      within one tier's scale'; that premise is false under a closed level
+      vocabulary, and the rule's single-scalar attention.tier shape is obsoleted
+      by the per-tier map independently. Migration and the level values are
+      owned by tactic-attention-per-tier-boost-migration."
   - question: Which order-changing mechanisms sit outside the rank key, and how do
       they compose with it?
     answer: "(Recorded 2026-08-11, third round.) Two, and the second-round record
@@ -279,6 +278,44 @@ clarifications:
       3-tuple or the band never reaches the sort) is resolved by deletion rather
       than by widening: there is no separate Precedence tuple left to keep in
       sync. CLASSIFICATION acts remain outside the key exactly as recorded."
+  - question: What is the standard reconciliation vocabulary for the kind layer?
+    answer: "(Claude-drafted 2026-09-01 under the author's record-at-kind-layer
+      instruction; deferred-stamped for author review - review sitting:
+      tactic-review-reconciliation-vocabulary.) TARGET STATE - what the author
+      intends to be true; intent-layer fields plus registered checks.
+      OPERATIONAL STATE - what is observed to be true (repo at origin/main, PR
+      state, evidence); observed and appended, never authored. DISPOSITION - the
+      atomic unit of intent carrying authority state
+      (ratified/delegated/deferred); unchanged. CRITERION - one acceptance
+      condition within a strategy's target state; the unit of author sanction;
+      prose, plus a bound check when expressible. CHECK - a machine-verifiable
+      encoding of a criterion; tier observe or gating; promoted by ratchet.
+      SIGNAL - any machine-readable indicator derived from operational state
+      that bears on selection (check results, sensors, CI verdicts); the legacy
+      success_signal is a compound criterion to migrate. FRONTIER - the derived
+      set of unsatisfied criteria; the backlog (absorbs the derived gap). CLAIM
+      - an exclusive, time-bounded reservation of a frontier bite; one record
+      file per claim; the irreversibility guard. BITE - the session-sized
+      frontier subset carved at claim time. PROJECTION - any artifact derived
+      from (target, operational) state: plans, migration paths, materialized
+      context, sequence indexes; always pinned, never hand-maintained. PIN - a
+      projection's cache key (input shas, hashes, fingerprints); mismatch means
+      regenerate. EVIDENCE - an appended observed fact with proof (sha, PR
+      number, stamp, date); never edited; folded. FOLDING - compaction of an
+      append-only log into a current-state summary; git history is the archive.
+      ASSESSMENT - a memoized prose evaluation {subject, verdict, basis pin,
+      date}, expiring on pin mismatch; generalizes the reading freshness gate.
+      RATCHET - one-way promotion: observe to gating on high-water mark for
+      checks; observe to enforce after drain for migrations. RECONCILER - the
+      mechanical actor that folds observed state into evidence and derives
+      position; level-triggered. TICK - one reconciliation cycle: select, claim,
+      project, execute, append, fold. WORK RECORD - claim-window state (branch,
+      PR, attempts, fix interrupt); minted, never edited; dies at merge. LEGACY
+      MAP: gap -> frontier; success_signal -> criteria; phase -> derived
+      position (the stored field is a cache during migration); standing tactic
+      -> claim + bite (incumbent nodes remain scope carriers until the viability
+      test completes); reading -> assessment. (decision: deferred -
+      Claude-drafted, held for author review)"
 tooling_goals: []
 success_signal: null
 attention: null
@@ -286,6 +323,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds: null
