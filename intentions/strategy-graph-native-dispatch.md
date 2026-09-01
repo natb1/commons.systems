@@ -7065,7 +7065,23 @@ clarifications:
       divergence half wherever one exists. Delegated: divergence encoding for
       pre-existing tradition references is completed lazily, at first
       grounding-assessment creation for the (strategy, tradition) pair, rather
-      than by a bulk retrofit pass."
+      than by a bulk retrofit pass. TRADITION EDGES ARE DISPOSITIONS (ratified,
+      author-issued 2026-09-01, same sitting): a strategy's tradition edge -
+      supporting or contradicting - is a disposition, carrying the same
+      authority categories (ratified / delegated / deferred) and the same
+      overrule rules as any other disposition. So the corollary's \"the
+      tradition cannot overrule a recorded divergence\" is precise: the
+      tradition AS TEXT never overrules anything - changes to an edge flow
+      through the disposition algebra. A ratified edge changes only via author
+      interview; a delegated edge may be overruled by AI on best judgment with
+      the overrule recorded per the algebra on strategy-explicit-intent; a
+      deferred edge is held on trust pending its review item. Delegated binding:
+      an existing edge's category derives from the provenance of the resolution
+      that recorded it (an edge recorded inside an author-ratified clarification
+      is ratified; one recorded by a delegated executor is delegated), and the
+      lazy retrofit above stamps the category explicitly when it first creates
+      the (strategy, tradition) grounding assessment. (decision: ratified -
+      author-issued 2026-09-01; category-derivation binding delegated)"
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic
