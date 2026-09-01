@@ -7415,7 +7415,24 @@ clarifications:
       graph state, never hand-maintained residue; then priority two,
       long-horizon dispatch with rsi and token efficiency. (decision: authority
       ratified author-issued 2026-09-01; path delegated, entering the review
-      queues via this stamp)"
+      queues via this stamp) (AMENDED 2026-09-01, author-prompted confirmation:
+      SELF-LIQUIDATION IS A COMPLETION CRITERION. All bootstrap-scoped doctrine
+      self-liquidates on bootstrap completion, by construction and by sweep: (a)
+      every declared shim carries a liquidation condition, and the shim
+      inventory (tactic-migration-frontier-projection's surface) mechanically
+      surfaces any shim outliving its condition as a reconciliation-frontier
+      item — self-liquidation is enforced, not narrated; (b) the authority grant
+      in this clarification expires by its own scope terms when the queues
+      unfreeze; (c) the operation carrier and its steering ledger are transient
+      tactics — they complete and prune, their record folding to the git
+      archive; (d) bootstrap completion itself includes a terminal LIQUIDATION
+      SWEEP as a completion criterion: the shim inventory drained (or each
+      survivor explicitly re-owned by a standing strategy through interview),
+      the bootstrap-scoped clarifications on standing strategies marked
+      historical or folded by the consolidation operation, and the authority
+      grant recorded expired. Temporary bootstrap considerations do not survive
+      bootstrap completion — the author's steering-loss ruling of this date, now
+      recorded on-graph. (decision: author-ratified, 2026-09-01))"
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic
