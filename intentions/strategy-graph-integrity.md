@@ -143,6 +143,31 @@ clarifications:
       new charter home). Author amendment, verbatim intent: NO office-hours
       interim — 'the functionality is tracked, but may lapse/regress until RSI
       batch review is built.'"
+  - question: What is the intent-layer reconciliation criterion, and who holds the
+      mechanism (2026-09-01)?
+    answer: "(Ruled 2026-09-01, ladder-reconciliation errata interview.) CRITERION,
+      ratified: an amendment to ratified content derives a STALE-INTENT FRONTIER
+      - every disposition, citation, or authority reference whose recorded basis
+      rests on the amended text - and supersession/refinement annotations are
+      executed from that frontier, never left for ad-hoc review to catch. The
+      intent layer is reconciled by the same doctrine that reconciles work
+      against intent. Evidence basis: the 2026-09-01 adversarial-review errata
+      was this frontier derived by hand - the orphaned drain-plan signal, the
+      unannotated one-layer keep, the revoked plans/ authority, and the
+      unannotated stop-gap supersessions were all its members. MECHANISM AND
+      FIRST CONCRETE INSTANCE, both delegated (author ruling 2026-09-01; no
+      first-instance review required): basis pins on intra-graph citations,
+      generalizing the two ratified pin machines - assessment basis pins and
+      tactic-plan strategy fingerprints - to disposition-to-disposition
+      references; derivation is read-only and folds into
+      tactic-migration-frontier-projection's owned frontier surface, no new
+      carrier, per the carrier exception on strategy-graph-native-dispatch.
+      STAMPED-CHILDREN NOTE: the two children stamped against this strategy
+      (tactic-graph-prose-ref-batch-wiring, tactic-align-audit-skill) are
+      deliberately left stale by this edit - intent-layer citation integrity is
+      plausibly material to both, so the soft-freeze routes each through re-plan
+      rather than a mechanical re-stamp. (decision: criterion ratified;
+      mechanism and first instance delegated - author ruling 2026-09-01)"
 tooling_goals:
   - kind: sensor
     statement: "graph-digest.ts — token-bounded whole-graph digest: per-node summary
@@ -167,6 +192,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds:

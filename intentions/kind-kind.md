@@ -322,7 +322,13 @@ clarifications:
       disambiguation at the deferred review): FRONTIER here is the
       reconciliation-backlog sense; it does not cover the FULL-solution-frontier
       sense in strategy-explicit-intent's greenfield definition, nor the
-      curriculum-frontier sense on strategy-graph-review-curriculum."
+      curriculum-frontier sense on strategy-graph-review-curriculum. (REFINED
+      2026-09-01, author-ruled: FRONTIER also includes STALE-INTENT items -
+      dispositions whose recorded basis rests on since-amended text, derived via
+      basis pins - and liquidation-overdue shims. SHIM - an incumbent-form
+      artifact or contract minted or retained post-ratification, declaring its
+      target element and liquidation condition; outliving the condition is a
+      frontier item.)"
 tooling_goals: []
 success_signal: null
 attention: null

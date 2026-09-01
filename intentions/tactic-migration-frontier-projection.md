@@ -66,3 +66,22 @@ tactic's growth axis, jointly with tactic-kind-schema-blocks.
 ## Surface ownership (2026-09-01, finding-6 fix)
 
 Under the strategy-scoped reconciliation architecture (strategy-graph-native-dispatch, 2026-09-01, carrier exception), this node owns the check-tier registry and high-water ratchet. tactic-ladder-reconciliation-observe integrates this surface via a blocked_by edge and does not rebuild it.
+
+## Surface extension (2026-09-01, author-delegated)
+
+The owned frontier surface extends to the intent layer and the shim
+inventory, delegated with no first-instance review owed:
+
+1. Basis pins on intra-graph citations (generalizing assessment pins and
+   strategy fingerprints to disposition-to-disposition references) and
+   the STALE-INTENT FRONTIER derived from them on any amendment to
+   ratified content (criterion ratified on strategy-graph-integrity,
+   2026-09-01). Derivation is read-only.
+2. Governs-marker derivation: a surface is target-governed once its
+   checks exist in the registry and ratchet; until then incumbent text
+   governs. Hand-written transition notes are the interim form and
+   liquidate here.
+3. The shim inventory: live shims with liquidation conditions
+   (strategy-graph-native-dispatch shim principle, 2026-09-01);
+   liquidation-overdue shims surface as frontier items, and the live-shim
+   count is a cheap machine signal for the observe loop.

@@ -6980,6 +6980,54 @@ clarifications:
       committed trees, so this is a developer-ergonomics gap, not a
       CI-correctness one. (decision: delegated - migrated from
       plans/dispatch-rsi-batch-steering.md and kin)"
+  - question: What is the bootstrap shim principle, and how do shims work in
+      practice (2026-09-01)?
+    answer: "(Ruled 2026-09-01, ladder-reconciliation errata interview.) PRINCIPLE,
+      ratified: any incumbent-form artifact or contract text minted or retained
+      post-ratification declares (i) the target element it bootstraps and (ii)
+      its LIQUIDATION CONDITION - which machinery going live retires it; a shim
+      outliving its condition is a frontier item. This generalizes the carrier
+      exception on the architecture clarification. PRACTICE: shims are DECLARED
+      at alignment time - a round that records target doctrine ahead of
+      implementation reclassifies, in the same round, the incumbent artifacts
+      that keep running as shims (the declaration is cheap prose and is the
+      work) - and PRODUCED at claim time, when an implementing session mints
+      scaffolding the build requires (adapters, caches such as
+      stored-phase-beside-derived-position, carrier nodes); either way the
+      declaration is written when the shim comes into being, never retrofitted
+      by audit. DIFFERENCE FROM MERELY MERGING CODE, recorded because the
+      parsimony is the point: it IS merging code, plus exactly three thin
+      guarantees raw merging lacks - provenance (every merge is a claim bound to
+      a sanctioned criterion; a diff satisfying none is an unmatched-evidence
+      finding), monotonicity (the ratchet forbids regression of ever-passed
+      checks), and mechanical temporariness (liquidation conditions keep
+      scaffolding visible until removed). TRADITION REFERENCES:
+      expand/migrate/contract parallel change (the contract phase is mandatory;
+      skipping it is the named failure); feature-toggle lifecycle discipline
+      (toggles carry owners and expiry, toggle debt is the named pathology,
+      expired-flag CI failure is the ratchet analog); the strangler fig (the
+      half-strangled system living forever is the named failure);
+      branch-by-abstraction (the abstraction layer is declared temporary at
+      introduction); deprecation-as-process with ratcheted prevention of new
+      uses (Software Engineering at Google, deprecation chapter). DELEGATED
+      (author ruling 2026-09-01): governs-marker derivation - a surface is
+      target-governed once its checks exist in the registry and ratchet, until
+      then incumbent text governs, and hand-written transition notes are the
+      interim form - and retroactive shim declarations for the four carriers and
+      the landed transition notes, executed at the observe carrier's claim.
+      REFINEMENT-ANNOTATION SHIM, declared here under this very principle: the
+      hand-appended REFINED/SUPERSEDED-IN-PART parentheticals of the 2026-09-01
+      errata are the incumbent mechanism, NOT a new annotation layer replacing
+      the clarification log's folding - target element: the stale-intent
+      frontier (strategy-graph-integrity, ruled the same day) derives what needs
+      annotating, and consolidation folds annotation chains into current-state
+      summaries with git history as the archive; liquidation condition:
+      tactic-consolidation-operation's folding machinery live. FRONTIER
+      REFINEMENT, matching: the derived frontier includes stale-intent items and
+      liquidation-overdue shims alongside failing observe checks and prose-gap
+      assessments; matching refinement recorded on the kind-layer vocabulary.
+      (decision: principle ratified; governs-markers, retroactive declarations,
+      and the practice mechanics delegated - author ruling 2026-09-01)"
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic
