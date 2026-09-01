@@ -921,7 +921,18 @@ clarifications:
       design, generation tooling, and the rules migration are delegated
       (tactic-context-materialization). (decision: author-ratified, 2026-08-31)
       (floor classification: decision: deferred, delegation-anthropic-claude,
-      2026-08-31)"
+      2026-08-31) (REFINED 2026-09-01 /align conditions round, author-ratified:
+      RULES MATERIALIZE-OR-REFUTE CRITERION - a functional criterion on this
+      materialization doctrine: every .claude/rules doctrine item receives a
+      recorded disposition, materialize or refute; a survivor earns
+      materialization only by surviving an adversarial greenfield evaluation per
+      the incumbent-never-constrains-greenfield corollary (authority-primacy
+      clarification, this node); a refuted item is recorded refuted, never
+      carried forward by default. Completeness is STANDING, not one-shot: a rule
+      file added later derives a new unsatisfied reconciliation-frontier item,
+      so nothing is ever grandfathered. Per-rule outcomes enter DEFERRED until
+      author-ratified (kind-kind vocabulary refinement 5); the rules-migration
+      execution surface remains tactic-context-materialization.)"
   - question: Which incumbent structures did the 2026-08-31 full-frontier evaluation
       deliberately KEEP, and why?
     answer: "(Recorded 2026-08-31 /align doctrine-alignment round - the negative

@@ -15,7 +15,6 @@ rationale: "Retained from the 2026-07-08 graph-function interview: the function
   outward-facing copy stays under strategy-author-approved-copy and coordinates
   with tactic-readme-data-structure-first."
 reading: null
-gap: null
 serves:
   - strategy-explicit-intent
 recovers: []
@@ -29,10 +28,19 @@ execution:
   pr: null
   attempts: {}
   markers: []
-  strategy_fingerprint: a10d001daf8fd0335625aea2c5eb394c1216abdd4d73313c6ba3881e2f69a64b
+  strategy_fingerprint:
+    strategy-explicit-intent:
+      hash: 8b2fd4d29a97bab8f9fa9383e0219c4555ac758f99e14420cfd847a2472aed36
+      sha: 7774333aa9132704024b29be44e1d1613ec21623
+  fix: null
+  conflict: null
+  completion: null
+  lane_pass: null
 validates: []
 blocked_by:
   - tactic-kind-doctrine-approval-gate
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds: null
