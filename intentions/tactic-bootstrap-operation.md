@@ -66,6 +66,20 @@ clarifications:
       the returned body against origin/main. Workflow output is a draft subject
       to main-thread review, never landed on trust. (decision: author-issued
       2026-09-01)"
+  - question: Steering ledger [3] - what doctrine did the author direct recording
+      mid-P1 (2026-09-01)?
+    answer: "(Author-issued 2026-09-01, during the P1 frontier-projection round,
+      verbatim: \"/align record the doctrine that the requirement for execution
+      to ground on tradition is encouraged mechanically [by] the materialization
+      strategy - the graph topology and materialization strategy work in
+      conjunction to ensure tradition is materialized as part of worktree
+      (claude.local.md) memory.\") Disposition: landed the same turn as a dated
+      clarification on strategy-graph-native-dispatch beside the 2026-09-01
+      tradition-grounding clarification, cross-referencing
+      strategy-explicit-intent's materialized-context principle and
+      tactic-context-materialization's delegated surface; the landing placement
+      was delegated to Claude by the author in the same exchange. (decision:
+      author-issued 2026-09-01)"
 tooling_goals: []
 success_signal: null
 attention: null

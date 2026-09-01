@@ -7445,6 +7445,31 @@ clarifications:
       content — they too retire with the sweep. Only the authority grant, the P4
       criterion, and the self-liquidation completion criterion in this
       clarification are intent proper. (decision: author-directed 2026-09-01))"
+  - question: How is the tradition-grounding requirement enforced at execution time
+      (2026-09-01)?
+    answer: "(Author-issued 2026-09-01, recorded mid-bootstrap.) The requirement
+      that execution ground on tradition (this node's 2026-09-01
+      tradition-grounding clarification) is encouraged MECHANICALLY by the
+      materialization strategy, not carried by executor discipline alone: the
+      graph topology and the materialization strategy work in conjunction to
+      ensure tradition is materialized as part of worktree memory (the
+      CLAUDE.local.md projection). Topology places tradition references at
+      topologically prominent ancestors of any executing tactic (the
+      well-recorded-is-a-topological-property doctrine, strategy-explicit-intent
+      2026-09-01), and the materialization pipeline (materialized-context
+      principle, strategy-explicit-intent 2026-08-31; surface delegated to
+      tactic-context-materialization) projects a claimed node's ancestry into
+      the worktree's native context channel - so a claiming session receives the
+      recorded tradition grounding without remembering to load it. Binding
+      consequence for the delegated surface (Claude-articulated implication,
+      recorded under the same delegation): the worktree CLAUDE.local.md
+      projection must carry the ancestry's tradition references - the pointers
+      with their recorded support/divergence scopes, and any cached grounding
+      assessments - making claim-time tradition grounding structural rather than
+      discipline-dependent; the live ancestry-context.md projection
+      (tactic-node-ancestry-context) is the precursor. (decision: author-issued
+      2026-09-01; placement delegated to Claude and landed beside the
+      tradition-grounding clarification same day)"
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic
