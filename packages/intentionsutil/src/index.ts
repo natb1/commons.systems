@@ -155,6 +155,17 @@ export {
 export type { Sensor, Reading, IntentionCandidate } from "./sensors.js";
 export { classifyTactic, strategyBacklogBand } from "./census.js";
 export type { TacticClassification, BacklogBand } from "./census.js";
+export {
+  MOUNT_KINDS,
+  consolidationVerdict,
+  parseStampGrammar,
+  renderStamp,
+} from "./consolidation.js";
+export type {
+  DispositionState,
+  DispositionRecord,
+  DispositionSource,
+} from "./consolidation.js";
 export { classifyTerminus, ladderTerminusCensus, findUnstructuredWaits } from "./terminus.js";
 export type {
   TerminusClassification,
