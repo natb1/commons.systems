@@ -8070,7 +8070,7 @@ attributes:
       statement: "Targeted and untargeted office-hours-graph wrapper dispatch behave
         as they did before the refactor: the liveness (held) dedup still
         suppresses already-claimed nodes, and the not-parked path prints
-        'office-hours: node <id> is not parked on origin/main - nothing to
+        'office-hours: node <id> is not parked on origin/main — nothing to
         launch for it.' and launches nothing. Only observable against the real
         Claude daemon socket and dispatch queue, which an autonomous QA session
         must not touch. Post-merge verification item of PR 2976."
