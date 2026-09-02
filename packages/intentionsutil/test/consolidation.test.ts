@@ -597,7 +597,6 @@ describe("deferredQueue — the deferred-disposition queue deriver", () => {
       });
       const rawGrepCount = grepOutput.split("\n").filter((line) => line.length > 0).length;
 
-      // eslint-disable-next-line no-console
       console.log(
         `shim parity (amended): items=${queue.items.length} ` +
           `defects-mentioning-deferred=${defectsMentioningDeferred} baseline=${baseline} ` +

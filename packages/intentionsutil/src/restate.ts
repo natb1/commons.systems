@@ -150,8 +150,8 @@ export interface RestatementPlan {
 /**
  * Order dispositions for the citation independently of the order the caller
  * happened to collect them in: by node id, then by the numeric ordinal in the
- * `<nodeId>#<ordinal>` key, then by the whole key. Comparing ordinals as numbers
- * rather than as text is what keeps `#10` after `#2`.
+ * `<nodeId>#<ordinal>` key, then by the whole key. Numeric ordinal comparison,
+ * not textual, is what keeps `#10` after `#2`.
  *
  * Caller-order independence is a stronger determinism than the byte-identity
  * contract strictly needs, and it is deliberate: two sessions that gather the

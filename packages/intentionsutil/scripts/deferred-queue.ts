@@ -52,7 +52,7 @@ function requireFlag(args: string[], flag: string): string {
   if (idx === -1 || args[idx + 1] === undefined) {
     throw new Error(`deferred-queue: ${flag} requires a value argument`);
   }
-  return args[idx + 1]!;
+  return args[idx + 1]!; // type-safety-ok: the undefined check above guarantees the element exists
 }
 
 /**
