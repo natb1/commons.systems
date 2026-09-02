@@ -27,6 +27,7 @@ import {
 } from "./frontier-reconciliation.js";
 import { liveShimCount } from "./shims.js";
 import type { GapNoteRecord } from "./gap-notes.js";
+import { consolidationCandidates, multiRulingCandidates, type SizeRecord } from "./consolidation.js";
 
 /**
  * Inputs the CLI gathers for the digest. Kept as plain data so the module
@@ -492,6 +493,87 @@ function tableLiveShims(input: DigestInput): string {
   return `[LIVE-SHIMS] ${count} declared ${noun} across the graph`;
 }
 
+// --- CONSOLIDATION-DEBT and MULTI-RULING (tactic-consolidation-operation
+// Unit 7) --------------------------------------------------------------------
+//
+// Both tables below are TRIGGER signals — parsimony shortlists that flag what
+// is worth a human/AI look for consolidation, never a disposition on their
+// own. Same posture `tableNearDup` states for itself above: "A shortlist for
+// the audit's human disposition, never a disposition itself." Membership on
+// either table means "worth a look", not "defective" — see
+// `consolidation.ts`'s `consolidationCandidates` and `multiRulingCandidates`
+// doc comments for the full statement of that posture.
+
+// Shortlist caps, matching STORED-DEFAULTS' and NEAR-DUP's own shape and
+// reason: the candidate count grows with the store, and Section 2 is a token
+// budget. The header still reports the full candidate count either way.
+const CONSOLIDATION_DEBT_LIMIT = 40;
+const MULTI_RULING_LIMIT = 40;
+
+/**
+ * CONSOLIDATION-DEBT: nodes ranked by read cost — body bytes divided among
+ * clarification units — via `consolidationCandidates` (`consolidation.ts`). A
+ * shortlist for human/AI disposition, never a disposition itself: a large body
+ * may be exactly as long as its subject warrants, and this table has no way to
+ * tell that from the byte count alone.
+ *
+ * Fed from inputs the digest already gathers: `bytes` from `input.bodies`
+ * (the same body every per-node line already reports as `body=<n>b`,
+ * `perNodeLine` above), `units` from `node.clarifications.length` (the same
+ * count that line reports as `clar=<n>@<date>`). No new store read.
+ */
+function tableConsolidationDebt(input: DigestInput): string {
+  const records: SizeRecord[] = input.nodes.map((n) => ({
+    id: n.id,
+    bytes: Buffer.byteLength(input.bodies.get(n.id) ?? "", "utf8"),
+    units: n.clarifications.length,
+    latestDate: null,
+  }));
+  const candidates = consolidationCandidates(records);
+  const totalBytes = candidates.reduce((sum, c) => sum + c.bytes, 0);
+  const shown = candidates.slice(0, CONSOLIDATION_DEBT_LIMIT);
+  const lines = shown.map(
+    (c) => `  ${String(c.bytes).padStart(8)}b  ${c.units} units  ${renderId(c.id)}`,
+  );
+  if (candidates.length > shown.length) {
+    lines.push(`  ... and ${candidates.length - shown.length} more`);
+  }
+  if (candidates.length === 0) return "[CONSOLIDATION-DEBT] none";
+  return `[CONSOLIDATION-DEBT] ${totalBytes} bytes total across ${candidates.length} candidates (top ${shown.length} shown)\n${lines.join("\n")}`;
+}
+
+/**
+ * MULTI-RULING: clarifications carrying several distinct ALL-CAPS ruling
+ * labels under at most one `(decision: ...)` stamp, via `multiRulingCandidates`
+ * (`consolidation.ts`) — the one-stamp-many-rulings mis-attribution that unit
+ * exists to make visible. A shortlist for human/AI disposition, never a
+ * disposition itself: a clarification may legitimately state several ALL-CAPS
+ * terms under one genuinely single ruling, and this table has no way to tell
+ * that from the label count alone.
+ *
+ * Rows are `<label count> <renderId(nodeId)>#<ordinal>` (the ordinal is the
+ * candidate's 1-based position among that node's clarifications — distinct
+ * from `DispositionRecord.key`'s `#`-numbered stamps, which this row never
+ * names), count-then-id sorted, capped at `MULTI_RULING_LIMIT` with an
+ * overflow line, matching every other table's convention.
+ */
+function tableMultiRuling(nodes: IntentionNode[]): string {
+  const candidates = [...multiRulingCandidates(nodes)].sort(
+    (a, b) =>
+      b.labels.length - a.labels.length ||
+      (a.nodeId < b.nodeId ? -1 : a.nodeId > b.nodeId ? 1 : a.index - b.index),
+  );
+  if (candidates.length === 0) return "[MULTI-RULING] none";
+  const shown = candidates.slice(0, MULTI_RULING_LIMIT);
+  const lines = shown.map(
+    (c) => `  ${c.labels.length} ${renderId(c.nodeId)}#${c.index + 1}`,
+  );
+  if (candidates.length > shown.length) {
+    lines.push(`  ... and ${candidates.length - shown.length} more`);
+  }
+  return `[MULTI-RULING] ${candidates.length} candidates (top ${shown.length} shown)\n${lines.join("\n")}`;
+}
+
 // --- Assembly --------------------------------------------------------------
 
 /** Section 2 — the derived check tables, in a fixed order. */
@@ -509,6 +591,8 @@ export function renderTables(input: DigestInput): string {
     tableStoredDefaults(input),
     tableReconciliationFrontier(input),
     tableLiveShims(input),
+    tableConsolidationDebt(input),
+    tableMultiRuling(input.nodes),
   ].join("\n\n") + "\n";
 }
 

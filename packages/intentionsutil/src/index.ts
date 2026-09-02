@@ -155,6 +155,33 @@ export {
 export type { Sensor, Reading, IntentionCandidate } from "./sensors.js";
 export { classifyTactic, strategyBacklogBand } from "./census.js";
 export type { TacticClassification, BacklogBand } from "./census.js";
+export {
+  MOUNT_KINDS,
+  consolidationVerdict,
+  parseStampGrammar,
+  renderStamp,
+  splitMultiRuling,
+  multiRulingCandidates,
+  consolidationCandidates,
+} from "./consolidation.js";
+export type {
+  DispositionState,
+  DispositionRecord,
+  DispositionSource,
+  RulingAuthority,
+  RulingSplit,
+  MultiRulingCandidate,
+  SizeRecord,
+  SizeCandidate,
+  ConsolidationCandidateOptions,
+} from "./consolidation.js";
+// The restatement PLANNER is public, like every other pure surface here. Its
+// sibling `writeRestatedNode` is deliberately absent: it is the one node writer
+// that may replace a body, and keeping it off the barrel — beside `writeNode`,
+// which any caller does reach for — is what stops it being reached for casually.
+// `packages/intentionsutil/test/restate.test.ts` asserts that absence.
+export { CITATION_HEADING, planRestatement } from "./restate.js";
+export type { RestatementInput, RestatementPlan } from "./restate.js";
 export { classifyTerminus, ladderTerminusCensus, findUnstructuredWaits } from "./terminus.js";
 export type {
   TerminusClassification,
