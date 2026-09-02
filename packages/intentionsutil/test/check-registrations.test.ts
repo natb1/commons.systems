@@ -121,7 +121,7 @@ describe.skipIf(!existsSync(repoRoot))("run() against the live repo", () => {
   it("write-class-census derives ok from the report's own undeclared count, not the exit code", () => {
     const registry = buildDefaultCheckRegistry();
     const result = registry.resolve("write-class-census").run(ctx);
-    expect(result.detail).toMatch(/write-class-census: \d+ undeclared writeNode\(\) call site\(s\) remain/);
+    expect(result.detail).toMatch(/write-class-census: \d+ undeclared write-class call site\(s\) remain/);
     // ok reflects whether the frontier is empty, so it must agree with entries.
     expect(result.ok).toBe(result.entries.length === 0);
   });
