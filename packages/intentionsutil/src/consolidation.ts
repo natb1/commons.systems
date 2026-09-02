@@ -121,6 +121,16 @@
  * theoretical — the canonical instance the plan names, the "items 1-8"
  * clarification itself, carries exactly one stamp and that stamp is free prose
  * the interim grammar refuses.
+ *
+ * THE TRIGGER SIGNAL. `consolidationCandidates` (Unit 7) is the read-cost half
+ * of the operation: where `multiRulingCandidates` shortlists a STRUCTURAL
+ * defect (one stamp over many rulings), `consolidationCandidates` shortlists
+ * SIZE — content that costs a lot to read relative to how much of it there is.
+ * It is deliberately generic over `SizeRecord` rather than over `IntentionNode`,
+ * because two unrelated corpora feed it: `digest.ts`'s per-node graph
+ * inputs (`CONSOLIDATION-DEBT`) and `.claude/rules/*.md`'s file corpus
+ * (`consolidate-node.ts --corpus rules`). One ranking implementation serves
+ * both rather than two that could drift on what "worth a look" means.
  */
 import { IntentionSchemaError } from "./errors.js";
 import type { Clarification, IntentionNode } from "./schema.js";
@@ -983,4 +993,106 @@ export function multiRulingCandidates(
   }
 
   return candidates;
+}
+
+// ---------------------------------------------------------------------------
+// Unit 7 — the TRIGGER signal: parsimony ranking by read cost. See the module
+// header's "THE TRIGGER SIGNAL" paragraph for why this is generic rather than
+// `IntentionNode`-shaped.
+// ---------------------------------------------------------------------------
+
+/**
+ * One unit of read-cost input, generic over whatever corpus is feeding it — a
+ * graph node (`id` = node id, `bytes` = body size, `units` = clarification
+ * count) or a `.claude/rules/*.md` file (`id` = file path, `bytes` = file
+ * size, `units` = `## ` heading count). Deliberately narrow: only the four
+ * fields the ranking needs, so a caller building one from its own corpus never
+ * has to fabricate fields that mean nothing there.
+ *
+ *  - `id`         — whatever names the record in its corpus (a node id, a
+ *                    file path). Rendered through `renderId` at every table
+ *                    render boundary in `digest.ts`, per that module's control-
+ *                    character escaping discipline — `consolidationCandidates`
+ *                    itself does not escape, since it is a data function, not
+ *                    a render boundary.
+ *  - `bytes`      — the read cost itself: how much text a reader (human or
+ *                    AI) must take in to use this record's full content.
+ *  - `units`      — how many discrete pieces that content is already divided
+ *                    into (clarifications, headings). Read cost concentrated
+ *                    into few units is a stronger consolidation signal than
+ *                    the same bytes spread over many, but `units` is carried
+ *                    through unranked — see `consolidationCandidates`'s own
+ *                    doc comment for why ranking stays bytes-only.
+ *  - `latestDate` — `YYYY-MM-DD`, or `null` when the corpus carries no date
+ *                    signal (the rules corpus has none).
+ */
+export interface SizeRecord {
+  id: string;
+  bytes: number;
+  units: number;
+  latestDate: string | null;
+}
+
+/**
+ * One `SizeRecord` promoted to the shortlist, field-for-field identical to its
+ * source record. A distinct type from `SizeRecord` (rather than reusing it
+ * verbatim) so a caller cannot pass an un-ranked record where a ranked one is
+ * expected, and distinct from Unit 5's `MultiRulingCandidate` by name so the
+ * two shortlist types are never confused where both are in scope (`digest.ts`
+ * imports both).
+ */
+export interface SizeCandidate {
+  id: string;
+  bytes: number;
+  units: number;
+  latestDate: string | null;
+}
+
+/** Options narrowing `consolidationCandidates`'s shortlist. */
+export interface ConsolidationCandidateOptions {
+  /**
+   * Drop a record below this many bytes from the shortlist entirely, rather
+   * than ranking it at the bottom. Below this size, folding buys negligible
+   * read-cost savings — this is a floor on "worth a look", not a display cap
+   * (that is `CONSOLIDATION_DEBT_LIMIT` / `MULTI_RULING_LIMIT` in `digest.ts`,
+   * a caller-side concern this function does not know about). Default `0`
+   * admits every record that carries at least one byte.
+   */
+  minBytes?: number;
+}
+
+/**
+ * THE TRIGGER SIGNAL. A SHORTLIST FOR HUMAN/AI DISPOSITION, NEVER A
+ * DISPOSITION ITSELF — the same posture `tableNearDup` states for itself
+ * (`packages/intentionsutil/src/digest.ts`, the NEAR-DUP-STATEMENTS comment)
+ * and `multiRulingCandidates` states above. Membership here means "reading
+ * this costs a lot relative to how it is divided", not "this is bloated" —
+ * a large record may be exactly as long as its subject warrants, and this
+ * function has no way to tell that from the read-cost numbers alone.
+ *
+ * Ranks every `records` entry with `bytes >= opts.minBytes` (default 0) by
+ * `bytes` descending, `id` ascending on a tie — bytes-only, deliberately: a
+ * ranking that also weighted `units` would need a units-per-byte trade-off
+ * this unit does not have a measured basis for, so `units` rides along in
+ * each `SizeCandidate` for a reader to judge, rather than being folded into
+ * the sort key silently. Never filters or reorders beyond that — capping the
+ * shown rows and reporting the graph-wide total are caller concerns
+ * (`digest.ts`'s `CONSOLIDATION_DEBT_LIMIT`/`MULTI_RULING_LIMIT`, this CLI's
+ * `--corpus rules` mode), not this function's.
+ *
+ * Deterministic and pure: no fs, no clock, no environment — `records` is the
+ * only input, sorted stably (`bytes` desc then `id` asc), so two calls over
+ * the same `records` produce byte-identical output. This is what lets both
+ * `digest.ts`'s byte-identity contract and `--corpus rules`'s read-only
+ * listing rely on it without re-deriving the tie-break rule themselves.
+ */
+export function consolidationCandidates(
+  records: readonly SizeRecord[],
+  opts: ConsolidationCandidateOptions = {},
+): SizeCandidate[] {
+  const minBytes = opts.minBytes ?? 0;
+  return records
+    .filter((r) => r.bytes >= minBytes)
+    .map((r) => ({ id: r.id, bytes: r.bytes, units: r.units, latestDate: r.latestDate }))
+    .sort((a, b) => b.bytes - a.bytes || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }

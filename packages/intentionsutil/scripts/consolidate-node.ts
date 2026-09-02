@@ -19,6 +19,32 @@
 // default posture for a reviewer: run without it only once the printed plan
 // has been read and accepted.
 //
+// --- `--corpus rules` MODE ---------------------------------------------------
+//
+//   node --import tsx/esm packages/intentionsutil/scripts/consolidate-node.ts \
+//     --corpus rules --rules-dir <abs .claude/rules path>
+//
+// A SECOND, UNRELATED entry point sharing this CLI rather than a second binary
+// — the TRIGGER signal (`tactic-consolidation-operation` Unit 7) applied to
+// `.claude/rules/` source instead of the graph. It feeds
+// `consolidationCandidates` (`../src/consolidation.js`) `SizeRecord`s built
+// from every `.claude/rules/*.md` file: `bytes` the file's own byte length,
+// `units` its `^## ` heading count, `latestDate` always `null` (the rules
+// corpus carries no date signal). Same ranking implementation `digest.ts`'s
+// `[CONSOLIDATION-DEBT]` table calls, over a different corpus — see
+// `consolidation.ts`'s "THE TRIGGER SIGNAL" module-header paragraph for why
+// one function serves both.
+//
+// READ-ONLY. This mode takes `--rules-dir` in place of `--dir`/`--id`/--file`
+// (which it neither requires nor accepts — a mixed invocation naming both is a
+// usage error) and NEVER WRITES ANYTHING: it lists a shortlist, exactly like
+// `deferred-queue.ts`'s report mode. Shipping the signal is this unit's job;
+// consolidating any rules file is a separate, later application claim this
+// mode does not make.
+//
+// `--rules-dir` is REQUIRED and, like `--dir` above, never inferred from this
+// script's own location, for the identical sandbox reason.
+//
 // --- THE `--file` JSON SHAPE -------------------------------------------------
 //
 // The file is a direct serialization of what `RestatementInput`
@@ -141,7 +167,9 @@
 //     throwing (an out-of-range foldedClarifications index, an empty restated
 //     body, a body that already carries a citation heading, a restated body
 //     that grows the node without an `allowGrowth` reason). stderr carries
-//     why. No stdout report is written on this path.
+//     why. No stdout report is written on this path. `--corpus rules` mode
+//     shares this same exit-3 treatment for a missing/unreadable
+//     `--rules-dir` or a `--dir`/`--id`/`--file` supplied alongside `--corpus`.
 //
 //   ANY OTHER exit status — this tool NEVER RAN (module resolution failure,
 //     missing interpreter, a sandbox denial). Nothing here produced it.
@@ -152,11 +180,16 @@
 // its way to a caller.
 
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { readNode, readNodeBody } from "../src/store.js";
-import { parseStampGrammar, type DispositionRecord } from "../src/consolidation.js";
+import {
+  consolidationCandidates,
+  parseStampGrammar,
+  type DispositionRecord,
+  type SizeRecord,
+} from "../src/consolidation.js";
 import { planRestatement, writeRestatedNode } from "../src/restate.js";
 import { isPlainObject, type Clarification } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
@@ -400,8 +433,80 @@ export function runConsolidation(dir: string, id: string, fileRaw: string, dryRu
   return lines.join("\n") + "\n";
 }
 
+// --- `--corpus rules` mode: the TRIGGER signal over `.claude/rules/*.md` ---
+// See the module header's "`--corpus rules` MODE" section for what this is
+// and why it lives in this CLI rather than a second binary.
+
+/** `^## ` heading count — the `units` half of one rules file's `SizeRecord`. */
+function headingCount(text: string): number {
+  return text.split("\n").filter((line) => line.startsWith("## ")).length;
+}
+
+/**
+ * Build one `SizeRecord` per `*.md` file directly inside `rulesDir` (no
+ * recursion — the rules corpus is a flat directory), `bytes` the file's own
+ * byte length and `units` its `^## ` heading count, `latestDate` always
+ * `null` (the rules corpus carries no date signal). Exported so a test can
+ * exercise the record-building step independent of `consolidationCandidates`
+ * itself, matching this file's `resolveDispositions`/`parseRestatementFile`
+ * precedent of exporting each pure step.
+ */
+export function rulesSizeRecords(rulesDir: string): SizeRecord[] {
+  const files = readdirSync(rulesDir).filter((name) => name.endsWith(".md"));
+  return files.map((name) => {
+    const text = readFileSync(join(rulesDir, name), "utf8");
+    return {
+      id: name,
+      bytes: Buffer.byteLength(text, "utf8"),
+      units: headingCount(text),
+      latestDate: null,
+    };
+  });
+}
+
+/**
+ * Render the `--corpus rules` report: the same shortlist shape
+ * `[CONSOLIDATION-DEBT]` prints in `digest.ts`, over the rules corpus instead
+ * of the graph. READ-ONLY — this function only reads `rulesDir` and returns
+ * text; nothing here writes.
+ */
+export function runRulesCorpus(rulesDir: string): string {
+  const records = rulesSizeRecords(rulesDir);
+  const candidates = consolidationCandidates(records);
+  const totalBytes = candidates.reduce((sum, c) => sum + c.bytes, 0);
+  const lines: string[] = [
+    `consolidate-node --corpus rules: ${rulesDir}`,
+    `${totalBytes} bytes total across ${candidates.length} files`,
+    "",
+  ];
+  for (const c of candidates) {
+    lines.push(`  ${String(c.bytes).padStart(8)}b  ${c.units} headings  ${c.id}`);
+  }
+  return lines.join("\n") + "\n";
+}
+
 function main(): void {
   const args = process.argv.slice(2);
+
+  if (args.includes("--corpus")) {
+    const corpus = requireFlag(args, "--corpus");
+    if (corpus !== "rules") {
+      throw new IntentionSchemaError(
+        `consolidate-node: unrecognized --corpus value "${corpus}" — the only supported value is "rules"`,
+      );
+    }
+    if (args.includes("--dir") || args.includes("--id") || args.includes("--file")) {
+      throw new IntentionSchemaError(
+        "consolidate-node: --corpus rules is a read-only listing mode and does not take --dir/--id/--file — use --rules-dir instead",
+      );
+    }
+    const rulesDir = requireFlag(args, "--rules-dir");
+    const report = runRulesCorpus(rulesDir);
+    process.stdout.write(report);
+    process.exitCode = 0;
+    return;
+  }
+
   const dir = requireFlag(args, "--dir");
   const id = requireFlag(args, "--id");
   const filePath = requireFlag(args, "--file");

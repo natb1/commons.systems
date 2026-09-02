@@ -446,6 +446,93 @@ describe("RECONCILIATION-FRONTIER table", () => {
   });
 });
 
+describe("CONSOLIDATION-DEBT table", () => {
+  it("renders the documented header shape and ranks by body bytes descending", () => {
+    const nodes = [
+      anode({ id: "tactic-small", kind: "tactic" }),
+      anode({ id: "tactic-big", kind: "tactic", clarifications: [{ question: "q", answer: "a" }] }),
+    ];
+    const bodies = { "tactic-small": "short", "tactic-big": "x".repeat(500) };
+    const out = section(renderTables(input(nodes, { bodies })), "[CONSOLIDATION-DEBT]");
+    expect(out).toMatch(/^\[CONSOLIDATION-DEBT\] \d+ bytes total across \d+ candidates \(top \d+ shown\)/);
+    const lines = out.trimEnd().split("\n");
+    // Bigger body ranks first.
+    expect(lines[1]).toContain("tactic-big");
+    expect(lines[1]).toContain("1 units");
+    expect(lines.findIndex((l) => l.includes("tactic-small"))).toBeGreaterThan(1);
+  });
+
+  it("shows an overflow line when candidates exceed the limit", () => {
+    const nodes: IntentionNode[] = [];
+    for (let i = 0; i < 45; i++) {
+      nodes.push(anode({ id: `tactic-${String(i).padStart(3, "0")}`, kind: "tactic" }));
+    }
+    const bodies: Record<string, string> = {};
+    for (const n of nodes) bodies[n.id] = "x".repeat(10);
+    const out = section(renderTables(input(nodes, { bodies })), "[CONSOLIDATION-DEBT]");
+    expect(out).toContain("45 candidates");
+    expect(out).toMatch(/\.\.\. and 5 more/);
+  });
+
+  it("escapes a control character in the node id", () => {
+    const forged = "tactic-\nsmuggled";
+    const nodes = [anode({ id: forged, kind: "tactic" })];
+    const out = section(renderTables(input(nodes, { bodies: { [forged]: "hello" } })), "[CONSOLIDATION-DEBT]");
+    expect(out).toContain("tactic-\\x0asmuggled");
+    // One header line plus exactly one row — the newline did not split it.
+    expect(out.trimEnd().split("\n")).toHaveLength(2);
+  });
+});
+
+describe("MULTI-RULING table", () => {
+  const multiRulingAnswer =
+    "FIRST RULING, does a thing. SECOND RULING, does another. (decision: deferred, delegation-anthropic-claude, 2026-08-30)";
+
+  it("renders the documented header shape and lists a multi-ruling candidate", () => {
+    const nodes = [
+      anode({
+        id: "tactic-multi",
+        kind: "tactic",
+        clarifications: [{ question: "q", answer: multiRulingAnswer }],
+      }),
+    ];
+    const out = section(renderTables(input(nodes)), "[MULTI-RULING]");
+    expect(out).toMatch(/^\[MULTI-RULING\] \d+ candidates \(top \d+ shown\)/);
+    expect(out).toContain("tactic-multi#1");
+  });
+
+  it("reports none when no clarification carries multiple ruling labels", () => {
+    const nodes = [anode({ id: "tactic-plain", kind: "tactic" })];
+    expect(renderTables(input(nodes))).toContain("[MULTI-RULING] none");
+  });
+
+  it("shows an overflow line when candidates exceed the limit", () => {
+    const nodes: IntentionNode[] = [];
+    for (let i = 0; i < 45; i++) {
+      nodes.push(
+        anode({
+          id: `tactic-${String(i).padStart(3, "0")}`,
+          kind: "tactic",
+          clarifications: [{ question: "q", answer: multiRulingAnswer }],
+        }),
+      );
+    }
+    const out = section(renderTables(input(nodes)), "[MULTI-RULING]");
+    expect(out).toContain("45 candidates");
+    expect(out).toMatch(/\.\.\. and 5 more/);
+  });
+
+  it("escapes a control character in the node id", () => {
+    const forged = "tactic-\nsmuggled";
+    const nodes = [
+      anode({ id: forged, kind: "tactic", clarifications: [{ question: "q", answer: multiRulingAnswer }] }),
+    ];
+    const out = section(renderTables(input(nodes)), "[MULTI-RULING]");
+    expect(out).toContain("tactic-\\x0asmuggled#1");
+    expect(out.trimEnd().split("\n")).toHaveLength(2);
+  });
+});
+
 describe("output budget", () => {
   it("keeps Section 2 within an order-of-magnitude of 25KB on a large synthetic store", () => {
     const nodes: IntentionNode[] = [

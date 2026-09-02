@@ -12,7 +12,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stringify } from "yaml";
 import { describe, expect, it } from "vitest";
-import { gitBlobSha1, parseRestatementFile, resolveDispositions, runConsolidation } from "../scripts/consolidate-node.js";
+import {
+  gitBlobSha1,
+  parseRestatementFile,
+  resolveDispositions,
+  rulesSizeRecords,
+  runConsolidation,
+  runRulesCorpus,
+} from "../scripts/consolidate-node.js";
 import type { IntentionNode } from "../src/schema.js";
 
 /** Build a full IntentionNode fixture, filling required/default fields. */
@@ -246,6 +253,99 @@ describe("runConsolidation", () => {
     const report = runConsolidation(dir, node.id, fileRaw, true);
     expect(report).toContain("verdict: refused");
     expect(report).toMatch(/authority is unknown/);
+  });
+});
+
+// --- `--corpus rules` mode -------------------------------------------------
+
+/** Write a small rules-shaped fixture directory of `.md` files. */
+function rulesFixtureDir(files: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), "consolidate-node-rules-"));
+  for (const [name, content] of Object.entries(files)) {
+    writeFileSync(join(dir, name), content);
+  }
+  return dir;
+}
+
+describe("rulesSizeRecords", () => {
+  it("builds one SizeRecord per .md file, bytes from the file and units from ## headings", () => {
+    const dir = rulesFixtureDir({
+      "a.md": "# A\n\n## one\n\n## two\ntext\n",
+      "b.md": "# B\nno headings here\n",
+      "not-a-rule.txt": "ignored",
+    });
+    const records = rulesSizeRecords(dir);
+    expect(records).toHaveLength(2);
+    const byId = new Map(records.map((r) => [r.id, r]));
+    expect(byId.get("a.md")?.units).toBe(2);
+    expect(byId.get("b.md")?.units).toBe(0);
+    expect(byId.get("a.md")?.bytes).toBe(Buffer.byteLength("# A\n\n## one\n\n## two\ntext\n", "utf8"));
+    expect(byId.get("a.md")?.latestDate).toBeNull();
+  });
+});
+
+describe("runRulesCorpus", () => {
+  it("is read-only and ranks files by bytes descending", () => {
+    const dir = rulesFixtureDir({
+      "small.md": "short\n",
+      "big.md": "x".repeat(500) + "\n",
+    });
+    const before = { small: readFileSync(join(dir, "small.md"), "utf8"), big: readFileSync(join(dir, "big.md"), "utf8") };
+
+    const report = runRulesCorpus(dir);
+
+    expect(report).toContain("bytes total across 2 files");
+    const lines = report.trimEnd().split("\n");
+    const bigLine = lines.findIndex((l) => l.includes("big.md"));
+    const smallLine = lines.findIndex((l) => l.includes("small.md"));
+    expect(bigLine).toBeGreaterThan(-1);
+    expect(bigLine).toBeLessThan(smallLine);
+
+    // Nothing written.
+    expect(readFileSync(join(dir, "small.md"), "utf8")).toBe(before.small);
+    expect(readFileSync(join(dir, "big.md"), "utf8")).toBe(before.big);
+  });
+
+  it("is deterministic — two calls over the same directory are byte-identical", () => {
+    const dir = rulesFixtureDir({ "a.md": "## h\ntext\n", "b.md": "more text\n" });
+    expect(runRulesCorpus(dir)).toBe(runRulesCorpus(dir));
+  });
+});
+
+describe("consolidate-node CLI --corpus rules", () => {
+  it("exits 0 with the shortlist and requires no --id/--file", () => {
+    const dir = rulesFixtureDir({
+      "sandbox.md": "x".repeat(200) + "\n## heading\n",
+      "small.md": "y\n",
+    });
+
+    const run = runCli(["--corpus", "rules", "--rules-dir", dir]);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain("sandbox.md");
+    expect(run.stdout).toContain("small.md");
+    expect(run.stdout).toContain("bytes total across 2 files");
+  });
+
+  it("exits 3 when --rules-dir is missing", () => {
+    const run = runCli(["--corpus", "rules"]);
+    expect(run.status).toBe(3);
+    expect(run.stdout).toBe("");
+    expect(run.stderr).toContain("--rules-dir requires a value argument");
+  });
+
+  it("exits 3 when --corpus rules is combined with --dir", () => {
+    const dir = rulesFixtureDir({ "a.md": "text\n" });
+    const run = runCli(["--corpus", "rules", "--rules-dir", dir, "--dir", dir]);
+    expect(run.status).toBe(3);
+    expect(run.stdout).toBe("");
+    expect(run.stderr).toContain("does not take --dir/--id/--file");
+  });
+
+  it("exits 3 on an unrecognized --corpus value", () => {
+    const run = runCli(["--corpus", "bogus"]);
+    expect(run.status).toBe(3);
+    expect(run.stderr).toContain('unrecognized --corpus value "bogus"');
   });
 });
 
