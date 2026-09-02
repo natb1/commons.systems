@@ -2149,6 +2149,382 @@ function checkWriteClassDeclaration(
   }
 }
 
+/** The closed key set of one criterion object (rule 28). Mirrors `criteria.ts`'s `CRITERION_KEYS`. */
+const CRITERION_KEYS: readonly string[] = ["id", "statement", "class", "authority", "recorded"];
+
+/**
+ * The three criterion classes (rule 28). Mirrors `criteria.ts`'s
+ * `CRITERION_CLASSES`. `assumption` carries a world-premise the strategy rests
+ * on — assessed, never bitten as work — and is the class
+ * `attributes.conditions` entries migrate into.
+ */
+const CRITERION_CLASSES: readonly string[] = ["functional", "non-functional", "assumption"];
+
+/** The three authority stamps (rule 28). Mirrors `criteria.ts`'s `CRITERION_AUTHORITIES`. */
+const CRITERION_AUTHORITIES: readonly string[] = ["ratified", "delegated", "deferred"];
+
+/** The node that homes the standing non-functional set (rule 28). */
+const STANDING_CRITERIA_HOME = "kind-strategy";
+
+/**
+ * Rule 28, part one: the shape of ONE criteria list. Shared by
+ * `attributes.criteria` and `attributes.standing_criteria`, which carry the
+ * same entry shape and differ only in the extra class constraint part two
+ * applies to the standing home.
+ */
+function checkCriteriaList(
+  raw: unknown,
+  at: string,
+  problems: string[],
+): { index: number; id: string; class: unknown }[] {
+  if (!Array.isArray(raw)) {
+    problems.push(
+      `${at} must be an array of {${CRITERION_KEYS.join(", ")}} criteria, got ${raw === null ? "null" : typeof raw}`,
+    );
+    return [];
+  }
+  const entries: { index: number; id: string; class: unknown }[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    const entry: unknown = raw[i];
+    const where = `${at}[${i}]`;
+    if (!isPlainObject(entry)) {
+      problems.push(
+        `${where} must be a {${CRITERION_KEYS.join(", ")}} record, got ${entry === null ? "null" : typeof entry}`,
+      );
+      continue;
+    }
+    for (const key of Object.keys(entry)) {
+      if (!CRITERION_KEYS.includes(key)) {
+        problems.push(
+          `${where}.${key} is not a criterion field — the criterion shape is closed, so no unread field rides along on data that drives a tier decision (allowed: ${CRITERION_KEYS.join(", ")})`,
+        );
+      }
+    }
+    for (const field of ["id", "statement"]) {
+      const value = entry[field];
+      if (typeof value !== "string" || value.trim() === "") {
+        problems.push(`${where}.${field} must be a non-empty string, got ${JSON.stringify(value)}`);
+      }
+    }
+    if (typeof entry.class !== "string" || !CRITERION_CLASSES.includes(entry.class)) {
+      problems.push(
+        `${where}.class must be one of ${CRITERION_CLASSES.join(", ")}, got ${JSON.stringify(entry.class)}`,
+      );
+    }
+    if (typeof entry.authority !== "string" || !CRITERION_AUTHORITIES.includes(entry.authority)) {
+      problems.push(
+        `${where}.authority must be one of ${CRITERION_AUTHORITIES.join(", ")}, got ${JSON.stringify(entry.authority)}`,
+      );
+    }
+    const recorded = entry.recorded;
+    if (typeof recorded !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(recorded)) {
+      problems.push(`${where}.recorded must be a YYYY-MM-DD date, got ${JSON.stringify(recorded)}`);
+    }
+    if (typeof entry.id === "string") {
+      if (seen.has(entry.id)) {
+        problems.push(
+          `${where}.id duplicates "${entry.id}" earlier in ${at} — criterion ids are unique, since a check binds to exactly one criterion`,
+        );
+      }
+      seen.add(entry.id);
+      entries.push({ index: i, id: entry.id, class: entry.class });
+    }
+  }
+  return entries;
+}
+
+/**
+ * Rule 28: `attributes.criteria` and `attributes.standing_criteria` shape.
+ *
+ * Criteria are the INTENT-layer half of the reconciliation frontier: a check is
+ * code, but what the check is checking FOR is authored data. Like rules 19, 21
+ * and 22 this rule is presence-conditional — a node carrying neither key is
+ * untouched, which is what lets it land on a graph where almost nothing carries
+ * criteria yet.
+ *
+ * Two obligations:
+ *
+ *  (a) SHAPE — each entry is a closed `{id, statement, class, authority,
+ *      recorded}` record with a valid class (`functional`, `non-functional`,
+ *      or `assumption`), a valid authority stamp, a `YYYY-MM-DD` date, and an
+ *      id unique within its list. Unknown keys are REPORTED, not ignored: a
+ *      criterion drives a tier decision, so a smuggled field must not ride
+ *      along unread.
+ *  (b) STANDING HOME — every `standing_criteria` entry is `non-functional`.
+ *      The other two classes are strategy-scoped — a `functional` criterion is
+ *      one strategy's success condition and an `assumption` is one strategy's
+ *      world-premise — so either parked here would bind every strategy to a
+ *      claim made about one.
+ *
+ * DELIBERATE DUPLICATION of `criteria.ts`'s validators, which are the runtime
+ * home of the same shape. `criteria.ts` imports `node:crypto` for
+ * `criteriaFingerprint`, and `test/graph.test.ts` asserts that no module
+ * transitively reachable from the browser-safe `graph.ts` barrel — this file
+ * included — imports a `node:` builtin. Importing the validators here would
+ * break that guard, so the shape is restated in the local
+ * report-every-problem style every other rule in this file uses (a thrown
+ * validator would also stop at the first defect instead of listing them all).
+ * `test/criteria.test.ts` pins the two implementations to the same verdicts.
+ */
+function checkCriteriaShape(node: IntentionNode, problems: string[]): void {
+  const own = node.attributes.criteria;
+  if (own !== undefined && own !== null) {
+    checkCriteriaList(own, `${node.id}: attributes.criteria`, problems);
+  }
+  const standing = node.attributes.standing_criteria;
+  if (standing === undefined || standing === null) return;
+  const at = `${node.id}: attributes.standing_criteria`;
+  const entries = checkCriteriaList(standing, at, problems);
+  for (const entry of entries) {
+    // A class that is not a legal value at all is part (a)'s report, not this
+    // one — reporting both would name the same defect twice.
+    if (
+      typeof entry.class === "string" &&
+      CRITERION_CLASSES.includes(entry.class) &&
+      entry.class !== "non-functional"
+    ) {
+      problems.push(
+        `${at}[${entry.index}] ("${entry.id}") is class "${entry.class}", but the standing set is NON-FUNCTIONAL ONLY — a functional or assumption criterion is scoped to one strategy and belongs on it, under attributes.criteria`,
+      );
+    }
+  }
+  if (node.id !== STANDING_CRITERIA_HOME) {
+    problems.push(
+      `${at} is only meaningful on ${STANDING_CRITERIA_HOME}, the one home of the standing set — a second copy elsewhere is read by nothing and drifts silently`,
+    );
+  }
+}
+
+/** The closed key set of one basis pin (rule 28). Mirrors `basis-pins.ts`'s `BASIS_PIN_KEYS`. */
+const BASIS_PIN_KEYS: readonly string[] = ["cites", "hash", "pinned_at"];
+
+/** The closed selector set of a disposition reference (rule 28). Mirrors `DISPOSITION_SELECTORS`. */
+const DISPOSITION_SELECTORS: readonly string[] = [
+  "clarification",
+  "criterion",
+  "statement",
+  "rationale",
+  "conditions",
+  "node",
+];
+
+/** The two selectors that take a `:<key>`; the other four are bare (rule 28). */
+const KEYED_DISPOSITION_SELECTORS: readonly string[] = ["clarification", "criterion"];
+
+/**
+ * Rule 28, part three: the shape of `attributes.basis_pins`.
+ *
+ * A basis pin records what a cited disposition read like at the read the citing
+ * disposition was decided from, so `deriveStaleIntent` (`basis-pins.ts`) can
+ * report the citation when the cited text is amended. It is the intent-layer
+ * instance of the diagnosis-time compare-and-swap rule
+ * (`.claude/skills/ref-diagnosis-time-cas/SKILL.md`).
+ *
+ * Three obligations, all of them about what the DERIVER could not otherwise
+ * distinguish from a real finding:
+ *
+ *  (a) SHAPE — each entry is a closed `{cites, hash, pinned_at}` record.
+ *      Unknown keys are REPORTED, not ignored, for the same reason part (a)
+ *      reports them on a criterion: a pin decides whether a disposition is
+ *      called stale.
+ *  (b) REFERENCE GRAMMAR — `cites` parses as `<node-id>#<selector>`, split at
+ *      the FIRST `#`, with a known selector, and with a key exactly when the
+ *      selector is `clarification` or `criterion`. A reference that does not
+ *      PARSE is a misconfigured pin — nothing could ever satisfy it — and is
+ *      caught here, whereas a reference that parses but does not RESOLVE is a
+ *      genuine frontier item the deriver reports. Keeping the two apart is the
+ *      point: without this rule a typo'd selector would render forever as a
+ *      dangling-citation finding nobody could reconcile.
+ *  (c) DIGEST AND DATE — `hash` is a lowercase sha256 hex digest and
+ *      `pinned_at` is `YYYY-MM-DD`. A hash of any other shape can never equal
+ *      one the graph produces, so the citation would report stale forever.
+ *      A `cites` duplicated within one list is reported too: two recorded bases
+ *      for one citation contradict each other and neither can be ruled the
+ *      deciding read.
+ *
+ * Presence-conditional like the rest of rule 28, and DELIBERATELY DUPLICATED
+ * from `basis-pins.ts`'s validators for the reason `checkCriteriaShape` records:
+ * that module imports `node:crypto`, and `test/graph.test.ts` bans a `node:`
+ * builtin anywhere reachable from the browser-safe `graph.ts` barrel, which
+ * this file is. `test/basis-pins.test.ts` pins the two to the same verdicts.
+ */
+function checkBasisPinsShape(node: IntentionNode, problems: string[]): void {
+  const raw = node.attributes.basis_pins;
+  if (raw === undefined || raw === null) return;
+  const at = `${node.id}: attributes.basis_pins`;
+  if (!Array.isArray(raw)) {
+    problems.push(
+      `${at} must be an array of {${BASIS_PIN_KEYS.join(", ")}} pins, got ${raw === null ? "null" : typeof raw}`,
+    );
+    return;
+  }
+  const seen = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    const entry: unknown = raw[i];
+    const where = `${at}[${i}]`;
+    if (!isPlainObject(entry)) {
+      problems.push(
+        `${where} must be a {${BASIS_PIN_KEYS.join(", ")}} record, got ${entry === null ? "null" : typeof entry}`,
+      );
+      continue;
+    }
+    for (const key of Object.keys(entry)) {
+      if (!BASIS_PIN_KEYS.includes(key)) {
+        problems.push(
+          `${where}.${key} is not a basis-pin field — the pin shape is closed, so no unread field rides along on data that decides whether a disposition is stale (allowed: ${BASIS_PIN_KEYS.join(", ")})`,
+        );
+      }
+    }
+    const cites = entry.cites;
+    if (typeof cites !== "string" || cites.trim() === "") {
+      problems.push(`${where}.cites must be a non-empty string, got ${JSON.stringify(cites)}`);
+    } else {
+      checkDispositionRef(cites, `${where}.cites`, problems);
+      if (seen.has(cites)) {
+        problems.push(
+          `${where}.cites duplicates "${cites}" earlier in ${at} — two recorded bases for one citation contradict each other, and neither can be ruled the deciding read`,
+        );
+      }
+      seen.add(cites);
+    }
+    const hash = entry.hash;
+    if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash)) {
+      problems.push(
+        `${where}.hash must be a lowercase sha256 hex digest, got ${JSON.stringify(hash)} — a hash the graph could never produce would report its citation stale forever`,
+      );
+    }
+    const pinnedAt = entry.pinned_at;
+    if (typeof pinnedAt !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(pinnedAt)) {
+      problems.push(`${where}.pinned_at must be a YYYY-MM-DD date, got ${JSON.stringify(pinnedAt)}`);
+    }
+  }
+}
+
+/** Rule 28 part (b): the `<node-id>#<selector>` grammar, restated (see `checkBasisPinsShape`). */
+function checkDispositionRef(cites: string, where: string, problems: string[]): void {
+  const at = cites.indexOf("#");
+  if (at <= 0 || at === cites.length - 1) {
+    problems.push(
+      `${where} must be a disposition reference <node-id>#<selector>, split at the first "#", with both halves non-empty, got ${JSON.stringify(cites)} (selectors: ${DISPOSITION_SELECTORS.join(", ")})`,
+    );
+    return;
+  }
+  const rest = cites.slice(at + 1);
+  const colon = rest.indexOf(":");
+  const selector = colon === -1 ? rest : rest.slice(0, colon);
+  const key = colon === -1 ? null : rest.slice(colon + 1);
+  if (!DISPOSITION_SELECTORS.includes(selector)) {
+    problems.push(
+      `${where} names unknown disposition selector "${selector}" — expected one of ${DISPOSITION_SELECTORS.join(", ")}`,
+    );
+    return;
+  }
+  const keyed = KEYED_DISPOSITION_SELECTORS.includes(selector);
+  if (keyed && (key === null || key.trim() === "")) {
+    problems.push(
+      `${where} names selector "${selector}", which requires a key — spell it <node-id>#${selector}:<key>`,
+    );
+  }
+  if (!keyed && key !== null) {
+    problems.push(
+      `${where} names selector "${selector}", which takes no key, but ":${key}" follows it — only ${KEYED_DISPOSITION_SELECTORS.join(" and ")} are keyed`,
+    );
+  }
+}
+
+/** The closed key set of one shim object (rule 28, part four). Mirrors `shims.ts`'s `SHIM_KEYS`. */
+const SHIM_KEYS: readonly string[] = ["id", "target", "liquidation", "liquidated_by", "declared"];
+
+/**
+ * Rule 28, part four: the shape of `attributes.shims`.
+ *
+ * A shim is the retroactive-transcription inventory the shim principle
+ * (2026-09-01) requires: an incumbent-form stand-in for a target-state
+ * surface, recording the target element it stands in for and the condition
+ * under which it is safe to remove. `deriveShimFrontier` (`shims.ts`) reads it
+ * to derive the `overdue-shim` frontier arm, so a malformed entry would
+ * otherwise reach that arm unchallenged — exactly the reasoning parts one and
+ * three of this rule already apply to criteria and basis pins.
+ *
+ * Two obligations:
+ *
+ *  (a) SHAPE — each entry is a closed `{id, target, liquidation,
+ *      liquidated_by, declared}` record: `id`, `target` and `liquidation`
+ *      non-empty strings, `liquidated_by` a non-empty string OR `null`, and
+ *      `declared` a `YYYY-MM-DD` date. Unknown keys are REPORTED, not
+ *      ignored, for the same reason parts one and three report them on a
+ *      criterion or a pin.
+ *  (b) UNIQUE IDS — no `id` repeated within one node's own list: a liquidation
+ *      entry cites "the shim with id X", and two entries under one id make
+ *      that reference ambiguous (same reasoning as the criterion-id
+ *      uniqueness part one already enforces).
+ *
+ * Presence-conditional like the rest of rule 28: a node carrying no `shims`
+ * key is untouched, which is what lets the rule land on a graph where only a
+ * handful of nodes carry a shim inventory yet.
+ *
+ * DELIBERATELY DUPLICATED from `shims.ts`'s validators, for the identical
+ * `node:crypto`-adjacent-barrel reason `checkCriteriaShape` and
+ * `checkBasisPinsShape` record: `shims.ts` is not on the browser-safe
+ * `graph.ts` barrel either (see its own header), and duplicating here keeps
+ * this file free of a value dependency on a module that mirrors it.
+ * `test/shims.test.ts` pins the two implementations to the same verdicts.
+ */
+function checkShimsShape(node: IntentionNode, problems: string[]): void {
+  const raw = node.attributes.shims;
+  if (raw === undefined || raw === null) return;
+  const at = `${node.id}: attributes.shims`;
+  if (!Array.isArray(raw)) {
+    problems.push(
+      `${at} must be an array of {${SHIM_KEYS.join(", ")}} shims, got ${raw === null ? "null" : typeof raw}`,
+    );
+    return;
+  }
+  const seen = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    const entry: unknown = raw[i];
+    const where = `${at}[${i}]`;
+    if (!isPlainObject(entry)) {
+      problems.push(
+        `${where} must be a {${SHIM_KEYS.join(", ")}} record, got ${entry === null ? "null" : typeof entry}`,
+      );
+      continue;
+    }
+    for (const key of Object.keys(entry)) {
+      if (!SHIM_KEYS.includes(key)) {
+        problems.push(
+          `${where}.${key} is not a shim field — the shim shape is closed, so no unread field rides along on data that decides whether an incumbent form is still standing in for a target state (allowed: ${SHIM_KEYS.join(", ")})`,
+        );
+      }
+    }
+    for (const field of ["id", "target", "liquidation"]) {
+      const value = entry[field];
+      if (typeof value !== "string" || value.trim() === "") {
+        problems.push(`${where}.${field} must be a non-empty string, got ${JSON.stringify(value)}`);
+      }
+    }
+    const liquidatedBy = entry.liquidated_by;
+    if (liquidatedBy !== null && (typeof liquidatedBy !== "string" || liquidatedBy.trim() === "")) {
+      problems.push(
+        `${where}.liquidated_by must be a non-empty string or null, got ${JSON.stringify(liquidatedBy)}`,
+      );
+    }
+    const declared = entry.declared;
+    if (typeof declared !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(declared)) {
+      problems.push(`${where}.declared must be a YYYY-MM-DD date, got ${JSON.stringify(declared)}`);
+    }
+    if (typeof entry.id === "string") {
+      if (seen.has(entry.id)) {
+        problems.push(
+          `${where}.id duplicates "${entry.id}" earlier in ${at} — shim ids are unique within one node's inventory, since a liquidation entry cites "the shim with id X"`,
+        );
+      }
+      seen.add(entry.id);
+    }
+  }
+}
+
 /**
  * Referential integrity over a whole node set. Per-node shape is `validateNode`'s
  * job; this checks the edges BETWEEN nodes:
@@ -2303,6 +2679,47 @@ function checkWriteClassDeclaration(
  *      defines its own kind — a first-class field left unclassified. See
  *      `checkWriteClassDeclaration` for why coverage is inert when a kind node
  *      declares nothing at all.
+ *  28. `attributes.criteria` and `attributes.standing_criteria` are well-shaped
+ *      where present — each entry a closed `{id, statement, class, authority,
+ *      recorded}` record with a valid class and authority stamp, a
+ *      `YYYY-MM-DD` date, and an id unique within its list. Criteria are the
+ *      intent-layer half of the reconciliation frontier (a check is code; what
+ *      it checks FOR is authored data), so a malformed entry would otherwise
+ *      reach every consumer unchallenged, exactly the reasoning behind rules 19
+ *      and 21. The class axis is three-valued — `functional`,
+ *      `non-functional`, `assumption`, the last carrying a world-premise the
+ *      strategy rests on (assessed, never bitten as work). Two extra
+ *      obligations on the standing set: every entry is `non-functional` (a
+ *      functional or assumption criterion is scoped to one strategy, and
+ *      parking one in the standing home would bind every strategy to a claim
+ *      made about one), and the key
+ *      lives only on `kind-strategy`, its one home — a copy anywhere else is
+ *      read by nothing and drifts silently. Presence-conditional like rules 19,
+ *      21 and 22: a node carrying neither key is untouched, which is what lets
+ *      the rule land on a graph where almost nothing carries criteria yet.
+ *      `criteria.ts` is the runtime home of the same shape; see
+ *      `checkCriteriaShape` for why the two are deliberately separate.
+ *      PART THREE, same rule and same presence-conditional discipline:
+ *      `attributes.basis_pins` is an array of closed `{cites, hash, pinned_at}`
+ *      records, each `cites` parsing as `<node-id>#<selector>` with a known
+ *      selector (keyed for `clarification` and `criterion`, bare for the other
+ *      four), each `hash` a lowercase sha256 hex digest, each `pinned_at` a
+ *      `YYYY-MM-DD` date, and no `cites` repeated within one list. A pin is the
+ *      intent layer's diagnosis-time compare-and-swap
+ *      (`.claude/skills/ref-diagnosis-time-cas/SKILL.md`), and this part exists
+ *      to keep a MALFORMED pin — which nothing could ever satisfy — out of the
+ *      `stale-intent` frontier arm, where it would be indistinguishable from a
+ *      genuine dangling citation. See `checkBasisPinsShape`.
+ *      PART FOUR, same rule and same presence-conditional discipline:
+ *      `attributes.shims` is an array of closed `{id, target, liquidation,
+ *      liquidated_by, declared}` records — `id`/`target`/`liquidation`
+ *      non-empty strings, `liquidated_by` a non-empty string or `null`,
+ *      `declared` a `YYYY-MM-DD` date, and no `id` repeated within one node's
+ *      list. A shim is the retroactive-transcription inventory the shim
+ *      principle (2026-09-01) requires; this part keeps a MALFORMED shim out
+ *      of `deriveShimFrontier`'s `overdue-shim` arm (`shims.ts`), for the same
+ *      reason part three keeps a malformed pin out of `stale-intent`. See
+ *      `checkShimsShape`.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -2365,6 +2782,12 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkSupersessionExpiry(node, problems);
     // Rule 27: a kind node's write-class declaration agrees with the mirror.
     checkWriteClassDeclaration(node, byId, problems);
+    // Rule 28: criteria / standing_criteria are well-shaped where present.
+    checkCriteriaShape(node, problems);
+    // Rule 28 (part three): basis pins are well-shaped where present.
+    checkBasisPinsShape(node, problems);
+    // Rule 28 (part four): shims are well-shaped where present.
+    checkShimsShape(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkEdgeCycles(

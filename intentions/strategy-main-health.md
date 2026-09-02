@@ -162,6 +162,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds:
@@ -170,6 +172,23 @@ rounds:
   last_aligned: null
 attributes:
   tier: 3
+  criteria:
+    - id: fn-firestore-query-bounds
+      statement: Every Firestore getDocs() call site in the repo is bounded by a
+        limit() clause -- on the query itself or the nearest backward-resolved
+        query assignment -- or carries a same-line/same-query-span
+        query-bounds-ok marker with a non-empty reason
+      class: functional
+      authority: deferred
+      recorded: 2026-09-01
+    - id: fn-playwright-version-sync
+      statement: When PLAYWRIGHT_BROWSERS_PATH is set and
+        node_modules/playwright-core/browsers.json exists, the chromium revision
+        the nix-provided playwright-driver ships matches the revision
+        @playwright/test expects -- no silent drift between the two
+      class: functional
+      authority: deferred
+      recorded: 2026-09-01
 ---
 # origin/main stays green: a continuously releasable trunk, red episodes self-healing through the sensor flow
 

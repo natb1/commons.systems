@@ -101,8 +101,30 @@ fi
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
 
-# Install all dependencies once at the workspace root (skip when only running nix/rules checks)
-if [ ${#APP_DIRS[@]} -gt 0 ]; then
+# Path to the registered-checks runner, computed once. Both the ensure_deps
+# gate below and the registered-checks block further down key off whether this
+# file exists: it always does in this repo, but test-run-lint.sh exercises
+# this exact script against ephemeral fixture repos that carry a package.json
+# and one fixture workspace but none of the intentions toolchain — no
+# packages/intentionsutil at all. This variable is the single source of truth
+# both gates read, so they can never disagree about which repo they're in.
+RC_RUNNER="$REPO_ROOT/packages/intentionsutil/scripts/run-registered-checks.ts"
+
+# Install all dependencies once at the workspace root.
+#
+# Runs when there's an app dir to lint OR the registered-checks runner is
+# present: that runner is invoked as `node --import tsx/esm`, which resolves
+# `tsx` from node_modules, so it needs deps installed first. In THIS repo
+# RC_RUNNER always exists, so this stays effectively unconditional here — the
+# CI lint job runs no `npm ci` of its own, so gating solely on APP_DIRS left a
+# .claude/**- or intentions/**-only PR with no node_modules and the runner
+# died ERR_MODULE_NOT_FOUND. The RC_RUNNER-presence half of the OR only
+# matters in a repo that lacks the intentions toolchain (the test fixtures
+# below) and has no dirty apps either: there `npm ci` would fail anyway (no
+# lockfile) for a runner that isn't even there to need it, so skipping is
+# correct, not a weakening.
+# `ensure_deps` is already a no-op when node_modules exists.
+if [ ${#APP_DIRS[@]} -gt 0 ] || [ -f "$RC_RUNNER" ]; then
   ensure_deps
 fi
 
@@ -233,6 +255,54 @@ if "$REPO_ROOT/.github/scripts/check-type-safety-escapes.sh" --repo-root "$REPO_
 else
   echo "FAIL: type-safety escapes" >&2
   FAILURES+=(type-safety-escapes)
+fi
+
+# Run the tier-aware registered-checks runner — UNCONDITIONALLY, on every PR
+# in THIS repo (tactic-migration-frontier-projection, unit 7), gated only on
+# RC_RUNNER's presence (computed once, above, alongside the ensure_deps gate).
+#
+# NOT gated on changed files, and deliberately so: unlike every check above,
+# this one's pass/fail is not primarily about a diff at all — a check's TIER
+# is derived from the graph's criteria (deriveTier, checks.ts), so a criterion
+# authored or ratified on a strategy node moves a check's tier even when the
+# PR touches no code whatsoever. A changed-files gate keyed on TS/shell diffs
+# would skip exactly the intent-layer edits that move a tier, which is the one
+# case this runner exists to catch.
+#
+# The RC_RUNNER file-presence gate exists only for test-run-lint.sh: it runs
+# this exact script against ephemeral fixture repos with no
+# packages/intentionsutil at all, where the runner simply isn't there to
+# invoke. In this repo RC_RUNNER always exists, so this block always runs here
+# — same posture as the ensure_deps gate above, and not a weakening of this
+# check for any PR that actually lands in this repo.
+#
+# Exits non-zero ONLY when a GATING-tier check failed — every criterion
+# recorded today is authority "deferred" (unit 6's bootstrap census), so every
+# check derives observe by construction and this block cannot fail the build
+# yet. It reports the sanction-gated tier and each check's own verdict either
+# way, exactly as the frontier CLI does for the criteria/observe-failure arms.
+#
+# Invoked by an absolute path under $REPO_ROOT, both for the script and for
+# the intentions dir it is passed, for the identical reason the
+# type-safety-escapes call above states: the copy and the tree that run must
+# be the ones under test, never inferred from $SCRIPTS or cwd.
+#
+# Default (non --strict-registry) posture: an unbound-criterion registry
+# defect is caught and reported as a non-blocking "unresolved" row rather than
+# crashing this gate — the same reasoning validate-graph.ts's own
+# --strict-sensors precedent records for why a registry defect must not deny
+# the write path for every PR (the 2026-08-14 outage). See
+# packages/intentionsutil/src/run-checks.ts's module header.
+if [ -f "$RC_RUNNER" ]; then
+  echo "=== registered-checks runner ==="
+  if node --import tsx/esm "$RC_RUNNER" "$REPO_ROOT/intentions"; then
+    echo "PASS: registered checks (gating-tier)"
+  else
+    echo "FAIL: registered checks (gating-tier)" >&2
+    FAILURES+=(registered-checks)
+  fi
+else
+  echo "SKIP: registered-checks — packages/intentionsutil/scripts/run-registered-checks.ts not present in this repo"
 fi
 
 # The changed-files-scoped checks may all have been skipped; say so. This is no

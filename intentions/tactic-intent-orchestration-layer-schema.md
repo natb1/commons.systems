@@ -115,7 +115,24 @@ supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds: null
-attributes: {}
+attributes:
+  shims:
+    - id: write-class-shims
+      target: the two shared-field write-class shims this schema's own unit 1 produced
+        -- status and blocked_by -- recorded as structured data on kind-kind's
+        attributes.write_class_shims. That array is the declaration of record
+        (field, reason, liquidation per entry); this entry cross-references it
+        rather than duplicating the reasons or liquidation prose here, since
+        kind-kind's field_write_class map is the one home validateGraph rule 27
+        checks the code mirror against
+      liquidation: "each underlying entry liquidates on its own recorded condition
+        (kind-kind.md: attributes.write_class_shims[].liquidation) -- the
+        author's ruling on the status-retirement proposal, and the author's
+        ruling on whether authored sequencing moves to a distinct intent-class
+        carrier for blocked_by; this cross-reference entry liquidates when
+        kind-kind's write_class_shims array is empty"
+      liquidated_by: null
+      declared: 2026-09-01
 ---
 # Classify every node field into the intent or orchestration layer and enforce the boundary in tooling — orchestration writers never rewrite intent fields, intent writers never rewrite orchestration fields
 

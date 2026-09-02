@@ -62,6 +62,69 @@ export {
 } from "./transitions.js";
 export type { CiVerdict, TransitionDecision, ScopeStamp, InterruptRoute } from "./transitions.js";
 export { IntentionSchemaError } from "./errors.js";
+export {
+  CRITERION_CLASSES,
+  CRITERION_AUTHORITIES,
+  CRITERION_KEYS,
+  CRITERIA_KEY,
+  STANDING_CRITERIA_KEY,
+  STANDING_CRITERIA_HOME,
+  validateCriterion,
+  validateCriteriaList,
+  validateStandingCriteriaList,
+  parseCriteria,
+  standingCriteria,
+  effectiveCriteria,
+  criteriaFingerprint,
+} from "./criteria.js";
+export type { Criterion, CriterionClass, CriterionAuthority } from "./criteria.js";
+export {
+  BASIS_PINS_KEY,
+  BASIS_PIN_KEYS,
+  DISPOSITION_SELECTORS,
+  parseDispositionRef,
+  formatDispositionRef,
+  validateBasisPin,
+  validateBasisPinList,
+  parseBasisPins,
+  dispositionHash,
+  deriveStaleIntent,
+} from "./basis-pins.js";
+export type { BasisPin, DispositionRef, DispositionSelector } from "./basis-pins.js";
+export {
+  RECONCILIATION_FRONTIER_KINDS,
+  deriveReconciliationFrontier,
+  renderReconciliationFrontier,
+  criteriaInForce,
+} from "./frontier-reconciliation.js";
+export type {
+  ReconciliationFrontierEntry,
+  ReconciliationFrontierKind,
+  ReconciliationFrontierInput,
+  ReconciliationCheckRun,
+  HomedCriterion,
+} from "./frontier-reconciliation.js";
+export {
+  GAP_NOTE_KEYS,
+  validateGapNoteRecord,
+  gapNotesDir,
+  gapNotePath,
+  gapNoteFileName,
+  gapNoteFileContent,
+  deriveGapNoteFrontier,
+} from "./gap-notes.js";
+export type { GapNoteRecord } from "./gap-notes.js";
+export {
+  SHIM_KEYS,
+  SHIMS_KEY,
+  validateShim,
+  validateShimList,
+  parseShims,
+  liveShimCount,
+  deriveShimFrontier,
+  governs,
+} from "./shims.js";
+export type { ShimDeclaration, GovernanceState } from "./shims.js";
 export { lintTacticBodies, loadPlanBodyBaseline } from "./planlint.js";
 export type { PlanBodyMarker, PlanBodyBaselineEntry } from "./planlint.js";
 export {

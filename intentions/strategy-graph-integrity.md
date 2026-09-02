@@ -212,5 +212,31 @@ attributes:
       strategy-explicit-intent's human-authorship condition)
     - the audit cadence actually recurs — a lapse is the same cadence-lapse
       capture mechanism strategy-explicit-intent names
+  criteria:
+    - id: fn-graph-fast-path-scope
+      statement: Every commit pushed through the graph/** fast path touches only paths
+        under intentions/, verified against the frozen push-event commit list
+        rather than a moving ref, and the check fails closed whenever that proof
+        cannot be established
+      class: functional
+      authority: deferred
+      recorded: 2026-09-01
+    - id: fn-verify-fence-paths
+      statement: Every path-like token named inside a ```verify fence in a live
+        (non-done) intention node's body still exists on disk, so a deletion is
+        caught at the commit that orphans the path rather than later at each
+        downstream node's own verification gate
+      class: functional
+      authority: deferred
+      recorded: 2026-09-01
+    - id: fn-graph-validate
+      statement: Every intention node satisfies validateGraph's frontmatter rules and
+        lintTacticBodies' plan-body shape rules, every prose cross-reference
+        resolves per validateGraphProseRefs, and every recorded
+        success_signal.sensor name resolves in the sensor registry under
+        --strict-sensors
+      class: functional
+      authority: deferred
+      recorded: 2026-09-01
 ---
 # All graph content is internally consistent, closed — justified through virtue roots or across recorded delegation and mount boundaries — and parsimonious; a recurring token-bounded audit enforces it

@@ -115,6 +115,21 @@ clarifications:
       session (hold accepted 2026-09-01; its branch-only kind-kind and
       kind-strategy criteria-model edits reconcile over this landing before
       their PR opens). (decision: author-issued 2026-09-01)"
+  - question: Steering ledger [6] - what did the author direct on delegating
+      PR-debugging activity (2026-09-02)?
+    answer: "(Author-issued 2026-09-02, mid-turn during the PR #3187 CI-red
+      diagnosis, verbatim: \"bootstrap steering: can this sort of activity be
+      handled by a subagent?\" followed by \"A subagent would help keep PR
+      debugging context out of the main thread.\") Disposition: adopted as a
+      standing working rule for this operation - a red CI check's full
+      diagnose-fix-verify loop (log pulls, fixture reading, repair authoring,
+      local re-verification) is implementation-unit work delegated to one
+      subagent at the implement-unit heuristic's model; only the conclusion
+      returns to the main thread, which keeps orchestration, gating, merging,
+      and ledger appends. Rationale recorded: the delegation exists to keep
+      PR-debugging context out of the main thread, not merely to parallelize.
+      Applied immediately to the PR #3187 unit-tests failure. (decision:
+      author-issued 2026-09-02)"
 tooling_goals: []
 success_signal: null
 attention: null
@@ -127,7 +142,15 @@ supersession_expiry: null
 office_hours: null
 pace_exempt: true
 rounds: null
-attributes: {}
+attributes:
+  shims:
+    - id: bootstrap-carrier
+      target: the claim record and work record of the reconciliation model (owned by
+        tactic-intent-orchestration-layer-schema's schema surface)
+      liquidation: bootstrap completion - the P4 gate plus the terminal liquidation
+        sweep discharge it, and the carrier prunes
+      liquidated_by: null
+      declared: 2026-09-01
 ---
 # Execute the bootstrap operation - implement the greenfield graph/reconciliation machinery through the dispatch-resumption gate under the 2026-09-01 frozen-queue authority grant - as the operation carrier with steering ledger, self-liquidating on completion
 ## Context

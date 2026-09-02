@@ -292,6 +292,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds:
@@ -323,5 +325,14 @@ attributes:
       gesture rather than a side effect of republishing — the runtime is
       versioned by the vendor and a silent upgrade changes how a shipped surface
       behaves (Recorded 2026-08-13)
+  criteria:
+    - id: fn-ds-token-drift
+      statement: Net-new app-source CSS/TSX lines outside packages/ds use the
+        design-system token vocabulary rather than re-deriving raw color,
+        spacing, or radius literals the tokens already define, unless the line
+        carries a ds-lint-disable-line escape
+      class: functional
+      authority: deferred
+      recorded: 2026-09-01
 ---
 # Own the web platform substrate — prefer minimal owned implementations over framework dependencies, accepting the correctness burden

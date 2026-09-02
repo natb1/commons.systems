@@ -21,6 +21,12 @@ import { IntentionSchemaError } from "./errors.js";
 import { extractFrontmatter } from "./frontmatter.js";
 import { readingDate } from "./router.js";
 import { buildIdRefMatchers, classifyRef, extractIdRefs } from "./id-refs.js";
+import {
+  deriveReconciliationFrontier,
+  type ReconciliationFrontierEntry,
+} from "./frontier-reconciliation.js";
+import { liveShimCount } from "./shims.js";
+import type { GapNoteRecord } from "./gap-notes.js";
 
 /**
  * Inputs the CLI gathers for the digest. Kept as plain data so the module
@@ -41,6 +47,13 @@ export interface DigestInput {
   bodies: Map<string, string>;
   rawTexts: Map<string, string>;
   deletedIds: string[];
+  /**
+   * Every gap-note record in the store (`intentions/operational/gap-notes/`),
+   * for the `prose-gap` arm of `tableReconciliationFrontier`. Read by the CLI
+   * (`graph-digest.ts`'s `gatherInput`) exactly as `bodies`/`rawTexts` already
+   * are — this module stays fs-free.
+   */
+  gapNotes: GapNoteRecord[];
 }
 
 // Ids come from YAML frontmatter and are only path-safety validated (store.ts
@@ -406,6 +419,79 @@ function tableStoredDefaults(input: DigestInput): string {
   return `[STORED-DEFAULTS] ${total} default-valued keys across ${rows.length} nodes (top ${shown.length} shown)\n${lines.join("\n")}`;
 }
 
+// A shortlist cap, same shape and same reason as STORED-DEFAULTS': the frontier
+// grows with the criteria corpus and with every arm units 4-7 add, and Section 2
+// is a token budget. The header still reports the full count.
+const RECONCILIATION_FRONTIER_LIMIT = 50;
+
+/**
+ * RECONCILIATION-FRONTIER: the derived delta between the graph's recorded
+ * target state and its operational state — the remaining migration, recomputed
+ * on every digest run and stored nowhere
+ * (`frontier-reconciliation.ts`; `tactic-migration-frontier-projection`).
+ *
+ * GRAPH-ONLY DERIVATION. The digest is a pure projection of the node corpus and
+ * runs no checks, so `checkRuns` is `[]` here. That means the observe-failure
+ * arm is empty in this surface by construction and the criteria arm reads every
+ * non-assumption criterion in force as unsatisfied — which is the honest
+ * reading of a store whose registry decides none of them yet. The header says
+ * so on every line-item run rather than letting a reader mistake it for a
+ * check-informed verdict. The `prose-gap` arm is the one exception: `gapNotes`
+ * is real data (read by the CLI from `intentions/operational/gap-notes/`,
+ * exactly as `bodies`/`rawTexts` already are), so that arm renders live entries
+ * here, not an empty-by-construction one.
+ *
+ * A malformed criteria corpus is REPORTED, not thrown, exactly as
+ * `tableValidate` reports an integrity violation: one bad `attributes.criteria`
+ * list must not take the whole digest down, because the digest is the surface
+ * an auditor reads to FIND that kind of defect.
+ */
+function tableReconciliationFrontier(input: DigestInput): string {
+  let entries: ReconciliationFrontierEntry[];
+  try {
+    entries = deriveReconciliationFrontier({
+      nodes: input.nodes,
+      checkRuns: [],
+      gapNotes: input.gapNotes,
+    });
+  } catch (err) {
+    if (err instanceof IntentionSchemaError) {
+      return `[RECONCILIATION-FRONTIER] FAIL\n${err.message}`;
+    }
+    throw err;
+  }
+  const scope = "graph-only derivation: the digest runs no checks";
+  if (entries.length === 0) return `[RECONCILIATION-FRONTIER] none (${scope})`;
+  const shown = entries.slice(0, RECONCILIATION_FRONTIER_LIMIT);
+  // Every rendered field goes through renderId, not just the id column. Ids
+  // reach `subject` (a criterion's home node) and can reach `detail` (an arm
+  // naming the checks that failed), and this table lands in the /align-audit
+  // LLM auditor's first-read context — an un-escaped control character in any
+  // column could forge a table line or an instruction. renderId is a no-op on
+  // ordinary prose, so escaping all three costs nothing.
+  const lines = shown.map(
+    (e) => `  ${renderId(e.id)} — ${renderId(e.subject)} — ${renderId(e.detail)}`,
+  );
+  if (entries.length > shown.length) {
+    lines.push(`  ... and ${entries.length - shown.length} more frontier items`);
+  }
+  return `[RECONCILIATION-FRONTIER] ${entries.length} items (${scope}; top ${shown.length} shown)\n${lines.join("\n")}`;
+}
+
+/**
+ * LIVE-SHIMS: the cheap machine signal `shims.ts`'s header promises the
+ * observe loop — every declared shim across the graph, overdue or not. It
+ * never runs a check (`liveShimCount` doesn't take one), so unlike the
+ * reconciliation-frontier table above this row is not a "graph-only"
+ * approximation of a richer answer — it is the whole answer, on every digest
+ * run.
+ */
+function tableLiveShims(input: DigestInput): string {
+  const count = liveShimCount(input.nodes);
+  const noun = count === 1 ? "shim" : "shims";
+  return `[LIVE-SHIMS] ${count} declared ${noun} across the graph`;
+}
+
 // --- Assembly --------------------------------------------------------------
 
 /** Section 2 — the derived check tables, in a fixed order. */
@@ -421,6 +507,8 @@ export function renderTables(input: DigestInput): string {
     tableNearDup(input.nodes),
     tableDanglingRefs(input),
     tableStoredDefaults(input),
+    tableReconciliationFrontier(input),
+    tableLiveShims(input),
   ].join("\n\n") + "\n";
 }
 

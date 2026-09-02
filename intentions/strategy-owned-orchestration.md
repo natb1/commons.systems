@@ -29,7 +29,6 @@ rationale: >-
   is the product, the harness its reference consumer. Deprioritizing its
   usability as "polish" misses that it also serves distribution.
 reading: null
-gap: null
 serves:
   - virtue-progressive-detachment
   - virtue-alignment-of-attachments
@@ -115,6 +114,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds:
@@ -128,5 +129,13 @@ attributes:
       (the base case of the recovery recursion)
     - agentic construction remains the highest-impact path to recovering
       software autonomy
+  criteria:
+    - id: fn-vendored-skill-integrity
+      statement: Every vendored skill directory's committed content matches the sha256
+        digests recorded in its own .upstream.json, carries every required
+        marker key, and lists no unlisted file
+      class: functional
+      authority: deferred
+      recorded: 2026-09-01
 ---
 # Owned orchestration, not a platform runtime
