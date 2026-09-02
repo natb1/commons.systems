@@ -62,8 +62,44 @@
  * testing the node's kind against the exported `MOUNT_KINDS`. Unit 2's
  * `deferredQueue` is that consumer: mount-kind records go to its `defects`,
  * never to its `items`.
+ *
+ * `deferredQueue` LIQUIDATES THE DEFERRED-QUEUE SHIM. The 2026-09-01 finalize
+ * round on `strategy-graph-native-dispatch` (ruling (1), the "interim mechanics
+ * and initiation protocol" clarification) recorded that the deferred-disposition
+ * review queue's target mechanism is a stamp-derived queue, that no deriver
+ * existed yet, and that the interim surface — `grep -rn "decision: deferred"
+ * intentions/`, the documented office-hours practice — is retired once the
+ * deriver lands, with deriver ownership assigned to
+ * `tactic-consolidation-operation` at its finalization. `deferredQueue`, below,
+ * is that deriver: once it is in place, the `grep -rn "decision: deferred"
+ * intentions/` practice is retired, and a caller reads this function's output
+ * (or the `deferred-queue.ts` CLI wrapping it) instead of re-running the grep.
+ *
+ * TOLERANT DERIVATION, STRICT PARSER. `parseStampGrammar` above refuses rather
+ * than skips — correct for a single stamp whose authority is genuinely unknown.
+ * But the live corpus carries stamps the grammar CANNOT parse at all — measured
+ * 2026-09-02, e.g. `(decision: author-issued 2026-09-01)` (wrong arity),
+ * `(decision: deferred — Claude-drafted, held for author review)` (prose, not
+ * the tag grammar), `(decision: delegated, ...)` (an elided placeholder), and
+ * `(decision: <state>, <delegatee>, YYYY-MM-DD)` (grammar-spec prose quoting its
+ * own tag shape) — across
+ * strategy-graph-native-dispatch/kind-kind/tactic-node-review-skill/
+ * tactic-rsi-graph-review/tactic-intent-orchestration-layer-schema/
+ * tactic-bootstrap-operation. If `deferredQueue` let one such stamp abort the
+ * whole node's parse, it would lose every WELL-FORMED stamp sharing that node's
+ * text too — measured concretely on strategy-graph-native-dispatch, whose body
+ * carries well-formed `author-ratified` stamps a few thousand characters away
+ * from a malformed `author-directed` one. That would push the deriver's count
+ * BELOW the raw-grep shim it exists to replace, failing the very parity property
+ * this unit ships a test for. So `deferredQueue` catches at PER-STAMP
+ * granularity, not per-node: it tries the whole text first (the fast path,
+ * which preserves `parseStampGrammar`'s own ordinal numbering unchanged), and
+ * only on a throw isolates each individual `(decision: ...)` occurrence and
+ * re-parses it alone, routing a stamp that still fails to `defects` while
+ * keeping every stamp that parses. See `parseTolerant`'s doc comment.
  */
 import { IntentionSchemaError } from "./errors.js";
+import type { IntentionNode } from "./schema.js";
 
 /**
  * The three disposition states, normalized. This is the vocabulary the overrule
@@ -438,4 +474,175 @@ export function renderStamp(
     );
   }
   return `(decision: ${spelling}, ${delegatee}, ${date})`;
+}
+
+// ---------------------------------------------------------------------------
+// Unit 2 — the deferred-disposition queue deriver (liquidates shim (1)).
+// See the module header's "deferredQueue LIQUIDATES THE DEFERRED-QUEUE SHIM"
+// and "TOLERANT DERIVATION, STRICT PARSER" paragraphs for why this exists and
+// why it cannot simply call `source.dispositions` once per node.
+// ---------------------------------------------------------------------------
+
+/**
+ * A bare `(decision: ...)` parenthetical, used ONLY to find where to cut `text`
+ * into per-stamp segments when a whole-text parse throws (`parseTolerant`
+ * below). This is deliberately looser than any grammar `source` actually
+ * enforces — it exists to locate candidate spans, not to validate them, so it
+ * works the same whether `source` is `parseStampGrammar` or a future
+ * `review.ts` adapter with a different internal grammar.
+ */
+const STAMP_SPAN_PATTERN = /\(decision:[^)]*\)/g;
+
+/**
+ * Parse `text` for disposition stamps, catching a grammar failure at the
+ * FINEST granularity that still keeps every well-formed stamp in `text` —
+ * per-stamp, not per-node, per-body, or per-clarification. See the module
+ * header for why per-node-or-coarser catching would push `deferredQueue`'s
+ * item count below the raw-grep shim it replaces.
+ *
+ * The common case (every stamp in `text` well-formed) costs exactly one call
+ * to `source.dispositions` and returns its records verbatim, `key` ordinals
+ * included unchanged — this is the path every existing `parseStampGrammar`
+ * test already covers.
+ *
+ * On a throw, every `(decision: ...)` span in `text` is located (via the
+ * looser `STAMP_SPAN_PATTERN`, not the grammar itself) and `text` is cut at
+ * the midpoints between consecutive spans, so each segment is guaranteed to
+ * contain at most one candidate stamp in full (a segment boundary never lands
+ * inside a span, only strictly between two). Each segment is then parsed on
+ * its own: a segment that parses contributes its record(s) (re-keyed below,
+ * since each segment call restarts `parseStampGrammar`'s own ordinal at 1);
+ * a segment that still throws contributes its error message to `errors` and
+ * loses nothing else.
+ *
+ * If `text` throws but contains no `(decision:` span at all, the failure is
+ * not a stamp-isolation problem (e.g. an empty `nodeId`/`kind`, which never
+ * happens here since both come from an already-validated `IntentionNode`) —
+ * the original error is surfaced directly rather than silently swallowed by
+ * an empty segment loop.
+ */
+function parseTolerant(
+  source: DispositionSource,
+  nodeId: string,
+  kind: string,
+  text: string,
+): { records: DispositionRecord[]; errors: string[] } {
+  try {
+    return { records: source.dispositions(nodeId, kind, text), errors: [] };
+  } catch (wholeErr) {
+    const wholeMessage = wholeErr instanceof Error ? wholeErr.message : String(wholeErr);
+
+    const pattern = new RegExp(STAMP_SPAN_PATTERN.source, "g");
+    const spans: { start: number; end: number }[] = [];
+    let match = pattern.exec(text);
+    while (match !== null) {
+      spans.push({ start: match.index, end: match.index + match[0].length });
+      match = pattern.exec(text);
+    }
+
+    if (spans.length === 0) {
+      return { records: [], errors: [wholeMessage] };
+    }
+
+    const records: DispositionRecord[] = [];
+    const errors: string[] = [];
+    for (let i = 0; i < spans.length; i++) {
+      const current = spans[i];
+      const prevEnd = i === 0 ? 0 : spans[i - 1].end;
+      const nextStart = i === spans.length - 1 ? text.length : spans[i + 1].start;
+      const segStart = i === 0 ? 0 : Math.floor((prevEnd + current.start) / 2);
+      const segEnd = i === spans.length - 1 ? text.length : Math.floor((current.end + nextStart) / 2);
+      const segment = text.slice(segStart, segEnd);
+      try {
+        records.push(...source.dispositions(nodeId, kind, segment));
+      } catch (segErr) {
+        errors.push(segErr instanceof Error ? segErr.message : String(segErr));
+      }
+    }
+
+    // Re-key in document order over the stamps that actually parsed, so a
+    // malformed neighbour skipped above never leaves a gap or a duplicate
+    // ordinal in the surviving records' `key` — each segment call restarted
+    // `parseStampGrammar`'s own ordinal at 1, so the raw keys collide.
+    const reKeyed = records.map((r, idx) => ({ ...r, key: `${nodeId}#${idx + 1}` }));
+    return { records: reKeyed, errors };
+  }
+}
+
+/**
+ * The deferred-disposition review queue, derived from the store rather than
+ * grepped from it — the liquidation of shim (1); see the module header.
+ *
+ *  - `items`   — every disposition whose normalized state is `deferred`,
+ *                found on a non-`MOUNT_KINDS` node, from either a
+ *                clarification answer or the node body.
+ *  - `defects` — a mount-kind disposition (never a queue member — mount points
+ *                are never doctrine) and every stamp `parseTolerant` could not
+ *                parse even in isolation, each as a human-readable string
+ *                carrying the node id and, where available, the parser's own
+ *                excerpted detail.
+ */
+export interface DeferredQueue {
+  items: DispositionRecord[];
+  defects: string[];
+}
+
+/**
+ * Derive the deferred-disposition queue over the whole store.
+ *
+ * `bodyById` mirrors `DigestInput.bodies` (`digest.ts`): node id → raw markdown
+ * body, from `readNodeBody`. A node absent from `bodyById` is treated as having
+ * an empty body rather than throwing — a caller that has not yet read a body
+ * for some subset of nodes still gets a queue over what it has, per the
+ * tolerant-derivation posture the module header states.
+ *
+ * Deterministic: nodes are visited in id-sorted order and stamps within a node
+ * emit in document order, so two runs over the same `nodes`/`bodyById`/`source`
+ * produce byte-identical `items`/`defects` arrays — the same determinism
+ * contract `digest.ts:13-15` states. No wall-clock, no environment data.
+ *
+ * A node's clarification answers and its body are concatenated into one
+ * per-node text (clarifications first, in `clarifications[]` order, then the
+ * body, each joined by a blank line) before parsing, so a single stamp
+ * ordinal sequence covers the whole node and `key`s stay unique per node
+ * rather than colliding across two independently-numbered sources. The one
+ * cost is that `parseStampGrammar`'s bounded excerpt can, for a stamp within
+ * ~70 characters of the clarification/body join point, include a few
+ * characters of the other source's text — informational only, since neither
+ * `state`, `delegatee`, `date`, nor `key` reads from the excerpt.
+ */
+export function deferredQueue(
+  nodes: readonly IntentionNode[],
+  bodyById: ReadonlyMap<string, string>,
+  source: DispositionSource,
+): DeferredQueue {
+  const items: DispositionRecord[] = [];
+  const defects: string[] = [];
+
+  const sortedNodes = [...nodes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  for (const node of sortedNodes) {
+    const isMount = MOUNT_KINDS.some((k) => k === node.kind);
+    const body = bodyById.get(node.id) ?? "";
+    const corpus = [...node.clarifications.map((c) => c.answer), body].join("\n\n");
+
+    const { records, errors } = parseTolerant(source, node.id, node.kind, corpus);
+    for (const message of errors) {
+      defects.push(`${node.id} (kind ${node.kind}): ${message}`);
+    }
+    for (const record of records) {
+      if (isMount) {
+        defects.push(
+          `${node.id} (kind ${node.kind}): disposition ${record.key} found on a MOUNT_KINDS node — ` +
+            `mount points are never doctrine, not a queue member — ${record.excerpt}`,
+        );
+        continue;
+      }
+      if (record.state === "deferred") {
+        items.push(record);
+      }
+    }
+  }
+
+  return { items, defects };
 }
