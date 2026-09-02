@@ -166,6 +166,13 @@ export type {
   DispositionRecord,
   DispositionSource,
 } from "./consolidation.js";
+// The restatement PLANNER is public, like every other pure surface here. Its
+// sibling `writeRestatedNode` is deliberately absent: it is the one node writer
+// that may replace a body, and keeping it off the barrel — beside `writeNode`,
+// which any caller does reach for — is what stops it being reached for casually.
+// `packages/intentionsutil/test/restate.test.ts` asserts that absence.
+export { CITATION_HEADING, planRestatement } from "./restate.js";
+export type { RestatementInput, RestatementPlan } from "./restate.js";
 export { classifyTerminus, ladderTerminusCensus, findUnstructuredWaits } from "./terminus.js";
 export type {
   TerminusClassification,

@@ -282,8 +282,13 @@ function writeClassRefusalMessage(
  * `> "$f.tmp" && mv "$f.tmp" "$f"` convention already used in bash at
  * dispatch-fleet-alarm's splice_body/refresh_stamp_write and in TypeScript at
  * office-hours-snapshot/src/persist.ts.
+ *
+ * Exported for `restate.ts`'s `writeRestatedNode`, the one sanctioned
+ * body-rewriting node writer, which publishes through this same discipline
+ * rather than spelling temp-file-then-rename a second time. It is NOT on the
+ * package barrel: this is an internal publication primitive, not a public API.
  */
-function writeFileAtomic(finalPath: string, content: string): void {
+export function writeFileAtomic(finalPath: string, content: string): void {
   const dir = dirname(finalPath);
   const tmp = join(
     dir,
