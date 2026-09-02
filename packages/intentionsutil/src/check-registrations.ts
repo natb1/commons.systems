@@ -259,7 +259,7 @@ function parseUndeclaredSites(output: string): FrontierEntrySeed[] {
   for (const rawLine of after) {
     const line = rawLine.trim();
     if (line.length === 0 || line === "(none)") break;
-    seeds.push({ subject: line, detail: "undeclared writeNode() call site (write-class-census)" });
+    seeds.push({ subject: line, detail: "undeclared write-class call site (write-class-census)" });
   }
   return seeds;
 }
@@ -293,7 +293,7 @@ const writeClassCensus: CheckDeclaration = {
     const entries = parseUndeclaredSites(output);
     return {
       ok: undeclaredCount === 0,
-      detail: `write-class-census: ${undeclaredCount} undeclared writeNode() call site(s) remain`,
+      detail: `write-class-census: ${undeclaredCount} undeclared write-class call site(s) remain`,
       entries,
     };
   },
