@@ -254,6 +254,38 @@ describe("runConsolidation", () => {
     expect(report).toContain("verdict: refused");
     expect(report).toMatch(/authority is unknown/);
   });
+
+  // The dry-run is the operator's stopping point, so every guard the write
+  // runs must run here too. A preview that reported "permitted" and then threw
+  // only on the second, non-dry-run invocation would move the refusal past the
+  // review it exists to inform.
+  it("dry-run refuses a growing restatement, exactly as the write would", () => {
+    const dir = fixtureDir();
+    const node = anode({
+      id: "tactic-grows",
+      kind: "tactic",
+      clarifications: [{ question: "q1", answer: DEFERRED_STAMP }],
+    });
+    const path = seed(dir, node, "# Statement\n\ntiny.\n");
+    const before = readFileSync(path, "utf8");
+
+    const fileRaw = JSON.stringify({
+      dispositionKeys: ["tactic-grows#1"],
+      foldedClarifications: [1],
+      // Longer than the body it replaces, with no allowGrowth reason.
+      restatedBody: `# Statement\n\n${"verbose replacement prose. ".repeat(20)}\n`,
+      restatedClarifications: [],
+      foldDate: "2026-09-02",
+      foldDelegatee: "delegation-anthropic-claude",
+      allowGrowth: null,
+    });
+
+    expect(() => runConsolidation(dir, node.id, fileRaw, true)).toThrow(/strictly smaller/);
+    // And the same input on the write path refuses identically, having written
+    // nothing — the two paths agree.
+    expect(() => runConsolidation(dir, node.id, fileRaw, false)).toThrow(/strictly smaller/);
+    expect(readFileSync(path, "utf8")).toBe(before);
+  });
 });
 
 // --- `--corpus rules` mode -------------------------------------------------
@@ -391,6 +423,43 @@ describe("consolidate-node CLI", () => {
     expect(run.status).toBe(0);
     expect(run.stdout).toContain("verdict: permitted");
     expect(run.stdout).toContain("mode: dry-run");
+  });
+
+  // The destructive mode is the FALLBACK for an unparsed flag, so an
+  // unrecognized argument must be refused rather than ignored: a misspelled
+  // `--dry-run` would otherwise silently rewrite the node body the operator
+  // asked only to preview.
+  it("exits 3 on a misspelled --dry-run rather than silently writing the node", () => {
+    const dir = fixtureDir();
+    const node = anode({
+      id: "tactic-cli-typo",
+      kind: "tactic",
+      clarifications: [{ question: "q1", answer: DEFERRED_STAMP }],
+    });
+    const path = seed(dir, node);
+    const before = readFileSync(path, "utf8");
+
+    const filePath = join(dir, "restatement.json");
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        dispositionKeys: ["tactic-cli-typo#1"],
+        foldedClarifications: [1],
+        restatedBody: "# Statement\n\nConsolidated summary.\n",
+        restatedClarifications: [],
+        foldDate: "2026-09-02",
+        foldDelegatee: "delegation-anthropic-claude",
+        allowGrowth: null,
+      }),
+    );
+
+    const run = runCli(["--dir", dir, "--id", node.id, "--file", filePath, "--dryrun"]);
+
+    expect(run.status).toBe(3);
+    expect(run.stdout).toBe("");
+    expect(run.stderr).toContain('unrecognized argument "--dryrun"');
+    // The whole point: the node file is untouched.
+    expect(readFileSync(path, "utf8")).toBe(before);
   });
 
   it("exits 3 with a usage error and no report when --dir is missing", () => {

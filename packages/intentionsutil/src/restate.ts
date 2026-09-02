@@ -313,6 +313,44 @@ export interface WriteRestatedNodeOptions {
 }
 
 /**
+ * THE SIZE GUARD, factored out of `writeRestatedNode` so a CALLER'S PREVIEW can
+ * run the identical check the write will run.
+ *
+ * The body must be STRICTLY smaller than the body it replaces, or `allowGrowth`
+ * must carry a non-empty reason that also appears in the body's citation. Equal
+ * size counts as growth: a "consolidation" that saves nothing is either a
+ * mistake or a deliberate restructure, and either way it owes an explanation.
+ * The guard measures the WHOLE body, the citation included, because that is
+ * what every future reader pays.
+ *
+ * Exported (module-locally — not on the package barrel, see the module header)
+ * because `consolidate-node.ts`'s `--dry-run` is the operator's stopping point:
+ * a preview that reports "permitted" and then fails on the real run has moved
+ * the refusal past the review it exists to inform.
+ */
+export function assertRestatementSize(
+  id: string,
+  priorBody: string,
+  body: string,
+  allowGrowth?: string | null,
+): void {
+  const priorBytes = byteLength(priorBody);
+  const restatedBytes = byteLength(body);
+  if (restatedBytes < priorBytes) return;
+  const reason = allowGrowth ?? null;
+  if (reason === null || reason.trim() === "") {
+    throw new IntentionSchemaError(
+      `Refusing to restate "${id}": the restated body is ${restatedBytes} bytes against the prior ${priorBytes} — a consolidation must be strictly smaller. Pass an explicit allowGrowth reason, recorded in the citation, if this restructure genuinely grows the node.`,
+    );
+  }
+  if (!body.includes(reason.trim())) {
+    throw new IntentionSchemaError(
+      `Refusing to restate "${id}": the allowGrowth reason "${reason.trim()}" does not appear in the restated body's citation. A growth reason that is not recorded on the node is a reason no future reader can find.`,
+    );
+  }
+}
+
+/**
  * THE ONLY SANCTIONED BODY-REWRITING NODE WRITER. Serializes `node` and `body`
  * to `<dir>/<id>.md`, mirroring `writeNode`'s serialization exactly (see the
  * module header for why this is a sibling of `writeNode` and not a flag on it).
@@ -364,21 +402,7 @@ export function writeRestatedNode(
     );
   }
 
-  const priorBytes = byteLength(priorBody);
-  const restatedBytes = byteLength(body);
-  if (restatedBytes >= priorBytes) {
-    const reason = opts?.allowGrowth ?? null;
-    if (reason === null || reason.trim() === "") {
-      throw new IntentionSchemaError(
-        `Refusing to restate "${validated.id}": the restated body is ${restatedBytes} bytes against the prior ${priorBytes} — a consolidation must be strictly smaller. Pass an explicit allowGrowth reason, recorded in the citation, if this restructure genuinely grows the node.`,
-      );
-    }
-    if (!body.includes(reason.trim())) {
-      throw new IntentionSchemaError(
-        `Refusing to restate "${validated.id}": the allowGrowth reason "${reason.trim()}" does not appear in the restated body's citation. A growth reason that is not recorded on the node is a reason no future reader can find.`,
-      );
-    }
-  }
+  assertRestatementSize(validated.id, priorBody, body, opts?.allowGrowth);
 
   // Mirror store.ts writeNode's exact serialization, following the precedent at
   // packages/intentionsutil/scripts/merge-node.ts:114-120: validate (defaults +

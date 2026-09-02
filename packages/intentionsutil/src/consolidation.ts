@@ -1055,8 +1055,14 @@ export interface ConsolidationCandidateOptions {
    * than ranking it at the bottom. Below this size, folding buys negligible
    * read-cost savings — this is a floor on "worth a look", not a display cap
    * (that is `CONSOLIDATION_DEBT_LIMIT` / `MULTI_RULING_LIMIT` in `digest.ts`,
-   * a caller-side concern this function does not know about). Default `0`
-   * admits every record that carries at least one byte.
+   * a caller-side concern this function does not know about).
+   *
+   * The comparison is `bytes >= minBytes`, so the default `0` admits EVERY
+   * record — a zero-byte one included. That is deliberate (a floor is the
+   * caller's judgment, not this function's), but it means a caller that
+   * defaults it is not shortlisting: with no floor the "candidate" count is the
+   * corpus size and the reported total is the corpus's whole byte count. Pass a
+   * floor if the header line is meant to read as debt rather than as inventory.
    */
   minBytes?: number;
 }

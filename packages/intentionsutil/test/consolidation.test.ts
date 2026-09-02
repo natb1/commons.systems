@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -596,10 +596,16 @@ describe("deferredQueue — the deferred-disposition queue deriver", () => {
       // Historical context only, no longer the assertion basis — the raw
       // grep is the baseline the finding above falsified. Kept in the log
       // line so a reader can see both numbers without re-running either.
-      const grepOutput = execFileSync("grep", ["-rho", "decision: deferred", intentionsDir], {
+      //
+      // `spawnSync`, not `execFileSync`: grep exits 1 when it matches NOTHING,
+      // and `execFileSync` THROWS on a non-zero exit. A store that has drained
+      // its deferred stamps — the outcome this whole operation exists to
+      // produce — would then fail this test on a diagnostic-only value no
+      // assertion below reads. Zero matches is a legitimate reading of zero.
+      const grep = spawnSync("grep", ["-rho", "decision: deferred", intentionsDir], {
         encoding: "utf8",
       });
-      const rawGrepCount = grepOutput.split("\n").filter((line) => line.length > 0).length;
+      const rawGrepCount = (grep.stdout ?? "").split("\n").filter((line) => line.length > 0).length;
 
       console.log(
         `shim parity (amended): items=${queue.items.length} ` +

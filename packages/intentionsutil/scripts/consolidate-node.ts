@@ -16,8 +16,16 @@
 // worktrees").
 //
 // `--dry-run` prints the plan and the citation and writes nothing. This is the
-// default posture for a reviewer: run without it only once the printed plan
-// has been read and accepted.
+// posture for a reviewer: run without it only once the printed plan has been
+// read and accepted. It runs EVERY guard the write runs (the authority gate,
+// and `assertRestatementSize`), so a dry-run that reports `verdict: permitted`
+// is a dry-run whose non-dry-run twin will write — a preview that refused only
+// on the second invocation would have moved the refusal past the review it
+// exists to inform.
+//
+// `--dry-run` is a boolean flag whose ABSENCE selects the write path, so an
+// unrecognized argument is REFUSED (exit 3) rather than ignored: a misspelled
+// `--dryrun` must not silently rewrite the node body. See `assertKnownArgs`.
 //
 // --- `--corpus rules` MODE ---------------------------------------------------
 //
@@ -190,7 +198,7 @@ import {
   type DispositionRecord,
   type SizeRecord,
 } from "../src/consolidation.js";
-import { planRestatement, writeRestatedNode } from "../src/restate.js";
+import { assertRestatementSize, planRestatement, writeRestatedNode } from "../src/restate.js";
 import { isPlainObject, type Clarification } from "../src/schema.js";
 import { IntentionSchemaError } from "../src/errors.js";
 
@@ -202,6 +210,39 @@ function requireFlag(args: string[], flag: string): string {
     throw new Error(`consolidate-node: ${flag} requires a value argument`);
   }
   return value;
+}
+
+/** Flags that consume the following argv element as their value. */
+const VALUE_FLAGS = new Set(["--dir", "--id", "--file", "--corpus", "--rules-dir"]);
+
+/** Flags that stand alone. */
+const BOOLEAN_FLAGS = new Set(["--dry-run"]);
+
+/**
+ * Refuse an unrecognized or misspelled argument rather than silently ignoring
+ * it — the same posture `graph-digest.ts` takes for `--tables-only`.
+ *
+ * This is not cosmetic here, it is the difference between a preview and a
+ * rewrite. `--dry-run` is a BOOLEAN flag whose ABSENCE selects the write path,
+ * so a typo (`--dryrun`, `--dry_run`, `-dry-run`) would silently replace the
+ * node's body when the operator asked only to look at the plan. A CLI whose
+ * destructive mode is the fallback for an unparsed flag has no stopping point,
+ * and the whole consolidation operation is authority-gated on that stopping
+ * point existing (see "THE LANDING DISCIPLINE" above).
+ */
+function assertKnownArgs(args: string[]): void {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+    if (VALUE_FLAGS.has(arg)) {
+      i += 1;
+      continue;
+    }
+    if (BOOLEAN_FLAGS.has(arg)) continue;
+    throw new IntentionSchemaError(
+      `consolidate-node: unrecognized argument "${arg}" — accepted flags are ` +
+        `--dir, --id, --file, --dry-run, --corpus, --rules-dir`,
+    );
+  }
 }
 
 /** What `parseRestatementFile` produces: the caller-supplied half of `RestatementInput`. */
@@ -402,6 +443,12 @@ export function runConsolidation(dir: string, id: string, fileRaw: string, dryRu
   lines.push("verdict: permitted");
   lines.push(`result-state: ${plan.resultState}`);
 
+  // The size guard runs on BOTH paths, not only on the write. A --dry-run is
+  // the operator's stopping point; reporting "permitted" here and then failing
+  // exit 3 on the real run would move the refusal past the review it exists to
+  // inform. Same call `writeRestatedNode` makes, over the same two bodies.
+  assertRestatementSize(node.id, body, plan.restatedBody, input.allowGrowth);
+
   if (dryRun) {
     lines.push("mode: dry-run (nothing written)");
     lines.push("");
@@ -487,6 +534,7 @@ export function runRulesCorpus(rulesDir: string): string {
 
 function main(): void {
   const args = process.argv.slice(2);
+  assertKnownArgs(args);
 
   if (args.includes("--corpus")) {
     const corpus = requireFlag(args, "--corpus");
