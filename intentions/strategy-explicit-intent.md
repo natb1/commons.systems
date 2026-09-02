@@ -1046,6 +1046,18 @@ clarifications:
       delegated act per the 2026-08-31 overrule algebra; a placement the author
       corrects is an ordinary overrule event, not evidence the class needed
       per-instance ratification. (decision: author-ratified, 2026-09-01)"
+  - question: What does an /align invocation owe the author on alignment-doctrine
+      currency (2026-09-02)?
+    answer: "(Author-ratified 2026-09-02, bootstrap /align amendment round.) A bare
+      prompt to 'shim the alignment doctrine' - during bootstrap or after - is
+      sufficient: the session itself reconciles the align skill's operative
+      doctrine to the graph at origin/main before the dialectic proper,
+      enumerating and overriding stale skill prose; the enumeration is the
+      session's job, never the author's. Declared during bootstrap as the
+      carrier's align-greenfield shim; the usage pattern persists post-bootstrap
+      whenever alignment doctrine changes - skill prose is a materialized
+      projection, and a prompted /align session must run on current doctrine
+      even when the projection lags. (decision: author-ratified, 2026-09-02)"
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a

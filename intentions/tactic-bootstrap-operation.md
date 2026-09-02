@@ -178,18 +178,26 @@ clarifications:
       interview on Fable."
   - question: Steering ledger [9] - what did the author direct on greenfield
       alignment shims (2026-09-02)?
-    answer: '(Author-issued 2026-09-02 to the /align amendment fork session, relayed
-      same-hour, appended same-turn. Verbatim: "Bootstrap shims must include
+    answer: "(Author-issued 2026-09-02 to the /align amendment fork session, relayed
+      same-hour, appended same-turn. Verbatim: \"Bootstrap shims must include
       /align shims during bootstrapping so that this kind of alignment session
       is as close to greenfield as possible. Reconciliation of greenfield
       alignment is a named top priority for the bootstrap operation. Address
       this point first so that the rest of the alignment session proceeds using
-      greenfield alignment doctrine.") Disposition: the fork session runs its
+      greenfield alignment doctrine.\") Disposition: the fork session runs its
       amendment round under greenfield alignment doctrine first; the resulting
       /align-shim declarations and rulings land through that round, routed to
       this carrier for ledger continuity. Reconciliation of greenfield alignment
       is recorded here as a named top bootstrap priority. (decision:
-      author-issued 2026-09-02)'
+      author-issued 2026-09-02) (AMENDED 2026-09-02, amendment-round ruling 1,
+      author-delegated mechanism/landing with author-ratified usage: resolution
+      - the align-greenfield shim is declared on this node's attributes.shims
+      with its interim overrides and graph-wins rule; reconciliation of
+      greenfield alignment stands recorded as a named top bootstrap priority;
+      the amendment round's interview ran under the shim from its declaration;
+      the persistent usage doctrine landed as a ratified clarification on
+      strategy-explicit-intent the same round. (decision: delegated,
+      delegation-anthropic-claude, 2026-09-02))"
   - question: Steering ledger [10] - what did the author direct on draining the
       tactic corpus (2026-09-02)?
     answer: "(Author-issued 2026-09-02 to the /align amendment fork session, relayed
@@ -277,6 +285,20 @@ attributes:
         interim = hand-provisioned worktree claims with Step-0 gate-bypass notes
         in round reports
       liquidation: claim-record machinery live plus the P4 resumption gate
+      liquidated_by: null
+      declared: 2026-09-02
+    - id: align-greenfield
+      target: "the alignment surface reprojected from graph doctrine; interim =
+        bootstrap-era /align sessions run against doctrine at origin/main
+        directly, with two named overrides (record assumption-class criteria
+        instead of attributes.conditions per ledger [5]; land verification
+        intent as criteria rather than minting new compound success_signal
+        objects per the kind-layer legacy map) and a residual graph-wins rule -
+        any further skill-prose/doctrine conflict: the graph wins, the conflict
+        is recorded as a frontier entry"
+      liquidation: the align skill marked and maintained as a materialized projection
+        with no known doctrine conflicts (PR 3185's rule file is the marking
+        precedent), at latest the terminal liquidation sweep
       liquidated_by: null
       declared: 2026-09-02
 ---
