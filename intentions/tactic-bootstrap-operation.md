@@ -197,7 +197,10 @@ clarifications:
       the amendment round's interview ran under the shim from its declaration;
       the persistent usage doctrine landed as a ratified clarification on
       strategy-explicit-intent the same round. (decision: delegated,
-      delegation-anthropic-claude, 2026-09-02))"
+      delegation-anthropic-claude, 2026-09-02)) (Cross-ref 2026-09-02: ledger
+      [13] inverts the shim-usage default - the align-greenfield shim's interim
+      applies by default, without a prompt; a prompt is required only to bypass
+      it.)"
   - question: Steering ledger [10] - what did the author direct on draining the
       tactic corpus (2026-09-02)?
     answer: "(Author-issued 2026-09-02 to the /align amendment fork session, relayed
@@ -213,7 +216,22 @@ clarifications:
       required for the drain; no drain shim survives bootstrap completion. The
       transcription-class model governing the drain is the subject of ledger
       [12] and its interview - the drain design waits on that ruling. (decision:
-      author-issued 2026-09-02)"
+      author-issued 2026-09-02) (AMENDED 2026-09-02, amendment-round ruling 2,
+      author-ratified: resolution - the full drain completes BEFORE the P4
+      resumption gate as part of its 'transcribed queues validate' criterion,
+      not as a separate later phase; at queue-unfreeze zero legacy tactic nodes
+      remain, only the self-liquidating bootstrap carriers. Bucket D's scripted
+      prune counts as its transcription - a completed record transcribes to
+      nothing, the git archive keeps it - guarded by lifting any standing
+      guidance found in a done body into criteria before pruning. Author
+      refinement, verbatim: \"Shims are permitted to outlive the drain when
+      pragmatic, but reconciliation-native graph structure, dispatch and
+      office-hour operations must be reconciled by the bootstrap (that is what
+      is being 'bootstrapped').\" Read as: the completion-criterion survivor
+      clause (a shim re-owned by interview) stays available on pragmatic
+      grounds, but no pragmatic survivorship extends to graph structure,
+      dispatch operations, or office-hours operations - those reconcile fully
+      within bootstrap. (decision: author-ratified, 2026-09-02))"
   - question: Steering ledger [11] - what did the author direct on strategy topology
       (2026-09-02)?
     answer: "(Author-issued 2026-09-02 to the /align amendment fork session, relayed
@@ -247,6 +265,17 @@ clarifications:
       drain; a re-transcription of those records may fall out. The ledger [10]
       drain design waits on the resulting class-model ruling. (decision:
       author-issued 2026-09-02)"
+  - question: Steering ledger [13] - what did the author direct on alignment shim
+      usage (2026-09-02)?
+    answer: "(Author-issued 2026-09-02 to the /align amendment fork session, relayed
+      same-hour, appended same-turn. Verbatim: \"revision to alignment shim
+      usage doctrine: the alignment skill must use any alignment shims by
+      default, and only bypass shims if prompted.\") Disposition: inverts the
+      default of the doctrine-currency ruling landed at 0d859a74 - shims are
+      opt-out by prompt, not opt-in; applied the same turn to the
+      strategy-explicit-intent clarification (AMENDED note appended, never
+      rewritten) and to the align-greenfield shim's reading (its interim now
+      applies without a prompt). (decision: author-issued 2026-09-02)"
 tooling_goals: []
 success_signal: null
 attention: null

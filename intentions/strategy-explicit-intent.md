@@ -1057,7 +1057,18 @@ clarifications:
       carrier's align-greenfield shim; the usage pattern persists post-bootstrap
       whenever alignment doctrine changes - skill prose is a materialized
       projection, and a prompted /align session must run on current doctrine
-      even when the projection lags. (decision: author-ratified, 2026-09-02)"
+      even when the projection lags. (decision: author-ratified, 2026-09-02)
+      (AMENDED 2026-09-02, author-directed, same round: the default inverts. The
+      align skill USES every declared alignment shim by default - a session
+      reconciles itself to doctrine at origin/main and applies the declared
+      shims without being prompted; a prompt is required only to BYPASS a shim.
+      The earlier reading that 'a bare prompt to shim suffices' is superseded in
+      its default: prompting is the opt-out, not the opt-in. Verbatim directive:
+      'the alignment skill must use any alignment shims by default, and only
+      bypass shims if prompted.' Liquidation consequence for the
+      align-greenfield shim: the reprojected skill text must itself instruct a
+      session to load and apply the graph's declared alignment shims at Step 0
+      by default. (decision: author-ratified, 2026-09-02))"
 tooling_goals: []
 success_signal:
   observable: decisions trace to the graph — dialectic outputs cite node ids, a
