@@ -14,15 +14,18 @@
 // Defaults to `intentions` (relative to cwd) when no directory is given.
 // `--json` emits the entry array as one JSON document for tooling.
 //
-// NO CHECKS RUN HERE. `checkRuns: []` is passed explicitly, and the empty list
-// is the truth today: the check registry is empty by construction and units 6-7
-// register the concrete checks and wire the runner. So this CLI reports the
-// graph-only frontier — every non-assumption criterion in force, none of which
-// any registered check decides yet. When the runner lands, it passes its runs
-// through this same input and the observe-failure arm fills in with no change
-// to the render.
+// NO CHECKS RUN HERE. `checkRuns: []` is passed explicitly — this CLI reports
+// the graph-only reading of the criterion/observe-failure arms; the tier-aware
+// runner (`run-registered-checks.ts`, unit 7) is the one that runs checks and
+// feeds their results through the same `deriveReconciliationFrontier` input.
+//
+// GAP NOTES ARE READ HERE, from `intentions/operational/gap-notes/` — the fs
+// half of the `prose-gap` arm. `deriveReconciliationFrontier` itself stays
+// pure; this CLI is the "CLI/digest layer" its header describes as owning the
+// read.
 
 import { listNodes } from "../src/store.js";
+import { readGapNotes } from "../src/gap-note-store.js";
 import {
   deriveReconciliationFrontier,
   renderReconciliationFrontier,
@@ -44,7 +47,8 @@ function parseArgs(argv: string[]): { dir: string; json: boolean } {
 function main(): void {
   const { dir, json } = parseArgs(process.argv.slice(2));
   const nodes = listNodes(dir);
-  const entries = deriveReconciliationFrontier({ nodes, checkRuns: [] });
+  const gapNotes = readGapNotes(dir);
+  const entries = deriveReconciliationFrontier({ nodes, checkRuns: [], gapNotes });
   process.stdout.write(
     json ? JSON.stringify(entries) + "\n" : renderReconciliationFrontier(entries),
   );

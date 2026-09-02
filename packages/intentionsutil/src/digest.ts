@@ -26,6 +26,7 @@ import {
   type ReconciliationFrontierEntry,
 } from "./frontier-reconciliation.js";
 import { liveShimCount } from "./shims.js";
+import type { GapNoteRecord } from "./gap-notes.js";
 
 /**
  * Inputs the CLI gathers for the digest. Kept as plain data so the module
@@ -46,6 +47,13 @@ export interface DigestInput {
   bodies: Map<string, string>;
   rawTexts: Map<string, string>;
   deletedIds: string[];
+  /**
+   * Every gap-note record in the store (`intentions/operational/gap-notes/`),
+   * for the `prose-gap` arm of `tableReconciliationFrontier`. Read by the CLI
+   * (`graph-digest.ts`'s `gatherInput`) exactly as `bodies`/`rawTexts` already
+   * are — this module stays fs-free.
+   */
+  gapNotes: GapNoteRecord[];
 }
 
 // Ids come from YAML frontmatter and are only path-safety validated (store.ts
@@ -428,7 +436,10 @@ const RECONCILIATION_FRONTIER_LIMIT = 50;
  * non-assumption criterion in force as unsatisfied — which is the honest
  * reading of a store whose registry decides none of them yet. The header says
  * so on every line-item run rather than letting a reader mistake it for a
- * check-informed verdict.
+ * check-informed verdict. The `prose-gap` arm is the one exception: `gapNotes`
+ * is real data (read by the CLI from `intentions/operational/gap-notes/`,
+ * exactly as `bodies`/`rawTexts` already are), so that arm renders live entries
+ * here, not an empty-by-construction one.
  *
  * A malformed criteria corpus is REPORTED, not thrown, exactly as
  * `tableValidate` reports an integrity violation: one bad `attributes.criteria`
@@ -438,7 +449,11 @@ const RECONCILIATION_FRONTIER_LIMIT = 50;
 function tableReconciliationFrontier(input: DigestInput): string {
   let entries: ReconciliationFrontierEntry[];
   try {
-    entries = deriveReconciliationFrontier({ nodes: input.nodes, checkRuns: [] });
+    entries = deriveReconciliationFrontier({
+      nodes: input.nodes,
+      checkRuns: [],
+      gapNotes: input.gapNotes,
+    });
   } catch (err) {
     if (err instanceof IntentionSchemaError) {
       return `[RECONCILIATION-FRONTIER] FAIL\n${err.message}`;

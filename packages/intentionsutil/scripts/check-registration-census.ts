@@ -57,7 +57,11 @@
 import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { registeredCheckNames, buildDefaultCheckRegistry } from "../src/check-registrations.js";
+import {
+  registeredCheckNames,
+  buildDefaultCheckRegistry,
+  NON_DEDICATED_BINDINGS,
+} from "../src/check-registrations.js";
 import { parseCriteria, standingCriteria } from "../src/criteria.js";
 import { listNodesStrict } from "../src/store.js";
 
@@ -133,6 +137,17 @@ function render(): string {
     unresolvedBindings.length === 0
       ? "  (none)"
       : unresolvedBindings.map(({ id, criterion }) => `  ${id} -> ${criterion}`).join("\n"),
+  );
+  lines.push("");
+  lines.push("-- Part 3: checks bound to a closest-fit criterion, not a dedicated one --");
+  lines.push("(unit 7's dangling-tooling-path / stale-skill-reference: honest gap, not a defect)");
+  lines.push(`non-dedicated bindings: ${NON_DEDICATED_BINDINGS.length}`);
+  lines.push(
+    NON_DEDICATED_BINDINGS.length === 0
+      ? "  (none)"
+      : NON_DEDICATED_BINDINGS.map(({ id, boundTo, owed }) => `  ${id} -> ${boundTo} (owed: ${owed})`).join(
+          "\n",
+        ),
   );
   lines.push("");
   lines.push("=== end ===");

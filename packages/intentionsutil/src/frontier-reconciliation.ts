@@ -14,23 +14,28 @@
  * calls in, exactly as `grounding-gap.ts` does for `grounding.ts`. That is
  * what lets this module sit on the browser-safe barrel beside `criteria.ts`.
  *
- * ARMS. Five kinds are DECLARED here and three are LANDED:
+ * ARMS. All five declared kinds are now LANDED:
  *
  *  - `unsatisfied-criterion` — landed (unit 3).
  *  - `observe-failure`       — landed (unit 3).
  *  - `stale-intent`          — landed (unit 4, derived by `basis-pins.ts`).
  *  - `overdue-shim`          — landed (unit 5, derived by `shims.ts`).
- *  - `prose-gap`             — unit 7.
+ *  - `prose-gap`             — landed (unit 7, derived by `gap-notes.ts`).
  *
- * The unlanded arms are declared in the kind union NOW, deliberately, so they
- * append through this same entry type: the renderer, the CLI and the digest
- * table need no change when they land. An arm is added by extending
+ * Every kind was declared in the union ahead of landing, deliberately, so each
+ * appends through this same entry type: the renderer, the CLI and the digest
+ * table needed no change when one landed. An arm is added by extending
  * `deriveReconciliationFrontier`'s concatenation and nothing else — which is
  * exactly what units 4 and 5 did, and neither changed anything else in this
  * file: no new `ReconciliationFrontierInput` field for either — `nodes`
  * already carries everything the pins are read from, and `overdue-shim` reads
  * `nodes` for the shim inventory and the already-present `checkRuns` for the
- * gating/satisfaction lookup.
+ * gating/satisfaction lookup. Unit 7's `prose-gap` arm is the one exception:
+ * its data (gap-note records) lives on disk under
+ * `intentions/operational/gap-notes/`, outside the node graph, so it DOES add
+ * one field — `gapNotes` — read by the CLI/digest layer and threaded through
+ * exactly as `checkRuns` already is. This module stays fs-free regardless: it
+ * receives the records as data, never reads the store itself.
  *
  * NAMING, DELIBERATELY NON-COLLIDING. `frontier` already carries three senses
  * in this repo — the goal-layer active frontier (`activeFrontier`,
@@ -65,8 +70,10 @@ import {
 } from "./criteria.js";
 import { deriveStaleIntent } from "./basis-pins.js";
 import { deriveShimFrontier } from "./shims.js";
+import { deriveGapNoteFrontier } from "./gap-notes.js";
 import type { CheckDeclaration, CheckResult, CheckTier } from "./checks.js";
 import type { IntentionNode } from "./schema.js";
+import type { GapNoteRecord } from "./gap-notes.js";
 
 /**
  * The kinds of frontier item, in the fixed order the renderer emits them.
@@ -147,10 +154,17 @@ export interface ReconciliationFrontierInput {
   nodes: readonly IntentionNode[];
   /** The checks the runner executed, with their derived tiers. May be empty. */
   checkRuns: readonly ReconciliationCheckRun[];
+  /**
+   * Every gap-note record in the store (`intentions/operational/gap-notes/`).
+   * REQUIRED, never optional — same argument as `checkRuns`: an optional field
+   * would let "I forgot to read the gap-note store" and "there are no gap
+   * notes" render identically. A caller with none reads passes `[]`.
+   */
+  gapNotes: readonly GapNoteRecord[];
 }
 
 /** A criterion in force, with the node that AUTHORS it (not every node it binds). */
-interface HomedCriterion {
+export interface HomedCriterion {
   criterion: Criterion;
   home: string;
 }
@@ -179,8 +193,12 @@ interface HomedCriterion {
  * regardless of input order. (Two carriers authoring one id with different
  * text is a graph defect owned by `validateGraph`, not something this
  * projection adjudicates.)
+ *
+ * EXPORTED so `run-checks.ts`'s runner can build the same `criteriaById` map
+ * `deriveTier` needs, off the same union rule, rather than re-deriving it —
+ * one home for "which criteria are in force across the whole graph."
  */
-function criteriaInForce(nodes: readonly IntentionNode[]): Map<string, HomedCriterion> {
+export function criteriaInForce(nodes: readonly IntentionNode[]): Map<string, HomedCriterion> {
   const inForce = new Map<string, HomedCriterion>();
   for (const criterion of standingCriteria(nodes)) {
     inForce.set(criterion.id, { criterion, home: STANDING_CRITERIA_HOME });
@@ -339,7 +357,7 @@ export function deriveReconciliationFrontier(
     ...deriveObserveFailures(inForce, input.checkRuns),
     ...deriveStaleIntent(input.nodes),
     ...deriveShimFrontier(input.nodes, input.checkRuns),
-    // Unit 7 appends `prose-gap`.
+    ...deriveGapNoteFrontier(input.gapNotes),
   ];
   return entries.sort(
     (a, b) =>

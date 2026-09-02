@@ -95,13 +95,25 @@ export {
   RECONCILIATION_FRONTIER_KINDS,
   deriveReconciliationFrontier,
   renderReconciliationFrontier,
+  criteriaInForce,
 } from "./frontier-reconciliation.js";
 export type {
   ReconciliationFrontierEntry,
   ReconciliationFrontierKind,
   ReconciliationFrontierInput,
   ReconciliationCheckRun,
+  HomedCriterion,
 } from "./frontier-reconciliation.js";
+export {
+  GAP_NOTE_KEYS,
+  validateGapNoteRecord,
+  gapNotesDir,
+  gapNotePath,
+  gapNoteFileName,
+  gapNoteFileContent,
+  deriveGapNoteFrontier,
+} from "./gap-notes.js";
+export type { GapNoteRecord } from "./gap-notes.js";
 export {
   SHIM_KEYS,
   SHIMS_KEY,

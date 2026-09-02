@@ -2,7 +2,11 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { buildDefaultCheckRegistry, registeredCheckNames } from "../src/check-registrations.js";
+import {
+  buildDefaultCheckRegistry,
+  registeredCheckNames,
+  NON_DEDICATED_BINDINGS,
+} from "../src/check-registrations.js";
 import { parseCriteria, standingCriteria } from "../src/criteria.js";
 import { listNodesStrict } from "../src/store.js";
 import type { CheckContext } from "../src/checks.js";
@@ -18,7 +22,7 @@ describe("buildDefaultCheckRegistry", () => {
     // CheckRegistry.register throws on a duplicate id (checks.ts), so simply
     // building the registry without throwing already proves uniqueness.
     const registry = buildDefaultCheckRegistry();
-    expect(registry.names().size).toBe(11);
+    expect(registry.names().size).toBe(13);
   });
 
   it("registeredCheckNames() mirrors buildDefaultCheckRegistry().names()", () => {
@@ -37,6 +41,28 @@ describe("buildDefaultCheckRegistry", () => {
     expect(registry.resolve("write-class-census").criterion).toBe(
       "fn-intent-orchestration-layer-boundary",
     );
+  });
+
+  // Unit 7: neither new check has a DEDICATED recorded criterion (measured:
+  // fn-verify-fence-paths' statement is scoped to ```verify fences, so it does
+  // not honestly cover a wholesale prose scan) — both bind to the closest
+  // existing one, fn-graph-validate, and NON_DEDICATED_BINDINGS documents the
+  // gap rather than hiding it.
+  it("binds the two unit-7 path checks to the closest existing criterion, documented as non-dedicated", () => {
+    const registry = buildDefaultCheckRegistry();
+    expect(registry.resolve("dangling-tooling-path").criterion).toBe("fn-graph-validate");
+    expect(registry.resolve("stale-skill-reference").criterion).toBe("fn-graph-validate");
+  });
+
+  it("NON_DEDICATED_BINDINGS documents exactly the two unit-7 path checks", () => {
+    expect(NON_DEDICATED_BINDINGS.map((b) => b.id).sort()).toEqual([
+      "dangling-tooling-path",
+      "stale-skill-reference",
+    ]);
+    for (const binding of NON_DEDICATED_BINDINGS) {
+      expect(binding.boundTo).toBe("fn-graph-validate");
+      expect(binding.owed.length).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -97,6 +123,33 @@ describe.skipIf(!existsSync(repoRoot))("run() against the live repo", () => {
     const result = registry.resolve("write-class-census").run(ctx);
     expect(result.detail).toMatch(/write-class-census: \d+ undeclared writeNode\(\) call site\(s\) remain/);
     // ok reflects whether the frontier is empty, so it must agree with entries.
+    expect(result.ok).toBe(result.entries.length === 0);
+  });
+}, 30_000);
+
+// The two unit-7 path checks need real node bodies to scan (unlike the
+// smoke tests above, which pass `nodes: []`), so they get their own live-repo
+// context built from the real store.
+describe.skipIf(!existsSync(repoRoot))("dangling-tooling-path / stale-skill-reference against the live repo", () => {
+  const liveCtx: CheckContext = {
+    repoRoot,
+    storeDir: intentionsDir,
+    nodes: existsSync(intentionsDir) ? listNodesStrict(intentionsDir) : [],
+  };
+
+  it("dangling-tooling-path reports a well-shaped CheckResult, ok iff no entries", () => {
+    const registry = buildDefaultCheckRegistry();
+    const result = registry.resolve("dangling-tooling-path").run(liveCtx);
+    expect(typeof result.ok).toBe("boolean");
+    expect(result.detail).toMatch(/dangling-tooling-path: \d+ orphaned tooling-path reference\(s\) remain/);
+    expect(result.ok).toBe(result.entries.length === 0);
+  });
+
+  it("stale-skill-reference reports a well-shaped CheckResult, ok iff no entries", () => {
+    const registry = buildDefaultCheckRegistry();
+    const result = registry.resolve("stale-skill-reference").run(liveCtx);
+    expect(typeof result.ok).toBe("boolean");
+    expect(result.detail).toMatch(/stale-skill-reference: \d+ reference\(s\) to a retired skill remain/);
     expect(result.ok).toBe(result.entries.length === 0);
   });
 }, 30_000);

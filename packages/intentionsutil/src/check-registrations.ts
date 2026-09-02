@@ -49,8 +49,12 @@
  * is deferred, that failure can never gate anything.
  */
 import { execFileSync } from "node:child_process";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join, relative } from "node:path";
 import { CheckRegistry, type CheckContext, type CheckDeclaration, type CheckResult, type FrontierEntrySeed } from "./checks.js";
+import { readNodeBody } from "./store.js";
+import { danglingToolingPaths, type ScannedFile as ToolingScannedFile } from "./dangling-tooling-path.js";
+import { staleSkillReferences, type ScannedFile as SkillScannedFile } from "./stale-skill-reference.js";
 
 // --- Shelling out ------------------------------------------------------------
 
@@ -295,6 +299,210 @@ const writeClassCensus: CheckDeclaration = {
   },
 };
 
+// --- The dangling-tooling-path / stale-skill-reference scan universe --------
+//
+// Both checks scan the SAME two sources: `.claude/**` prose and every
+// non-`done` intention node body. `done` nodes are historical archives that
+// may legitimately name gone paths (lint-verify-fence-paths.sh's own
+// exclusion, reused here for the identical reason).
+
+const CLAUDE_SCAN_EXCLUDE = new Set([
+  "worktrees", // sibling/nested worktree checkouts — not prose, potentially huge
+  "node_modules",
+  ".git",
+  ".cc-writes", // ephemeral session write-staging, not source-controlled prose
+]);
+
+/** Every readable file under `.claude/`, keyed by its path relative to `repoRoot`. */
+function walkClaudeFiles(repoRoot: string): Map<string, string> {
+  const root = join(repoRoot, ".claude");
+  const out = new Map<string, string>();
+  function walk(dir: string): void {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (CLAUDE_SCAN_EXCLUDE.has(entry.name)) continue;
+      const abs = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(abs);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      try {
+        out.set(relative(repoRoot, abs), readFileSync(abs, "utf8"));
+      } catch {
+        // Unreadable (binary, permissions) — not a prose file, skip it.
+      }
+    }
+  }
+  if (existsSync(root)) walk(root);
+  return out;
+}
+
+/** Every non-`done` node's body, keyed by its node file's repo-relative path. */
+function nonDoneNodeBodies(ctx: CheckContext): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const node of ctx.nodes) {
+    if (node.phase === "done") continue;
+    out.set(`intentions/${node.id}.md`, readNodeBody(ctx.storeDir, node.id));
+  }
+  return out;
+}
+
+function scanUniverse(ctx: CheckContext): Map<string, string> {
+  return new Map([...walkClaudeFiles(ctx.repoRoot), ...nonDoneNodeBodies(ctx)]);
+}
+
+/**
+ * Every path that ever existed in `repoRoot`'s HEAD history, ancestor
+ * directories included — the exact bulk single-`git log` snapshot
+ * `lint-verify-fence-paths.sh`'s "History snapshot" section builds, so a
+ * directory-shaped candidate (no extension) still matches if some file once
+ * lived beneath it. ONE call per check run, never one `git log` per candidate
+ * token — a per-token fork is pathological for a path with no history (see
+ * that script's comment).
+ */
+function computeEverExisted(repoRoot: string): Set<string> {
+  const { ok, output } = runShell(
+    "git",
+    ["-c", "core.quotePath=false", "log", "--no-renames", "--diff-filter=AD", "--name-only", "--pretty=format:", "HEAD"],
+    repoRoot,
+  );
+  const ever = new Set<string>();
+  if (!ok) return ever; // no history readable — treat as "nothing ever existed" rather than throw
+  for (const rawLine of output.split("\n")) {
+    const p = rawLine.trim();
+    if (p.length === 0) continue;
+    ever.add(p);
+    let cur = p;
+    while (cur.includes("/")) {
+      cur = cur.slice(0, cur.lastIndexOf("/"));
+      ever.add(cur);
+    }
+  }
+  return ever;
+}
+
+/** Skill directory names currently on disk under `.claude/skills/`. */
+function currentSkillNames(repoRoot: string): Set<string> {
+  const dir = join(repoRoot, ".claude/skills");
+  if (!existsSync(dir)) return new Set();
+  return new Set(
+    readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name),
+  );
+}
+
+const SKILL_MD_ADDED = /^\.claude\/skills\/([^/]+)\/SKILL\.md$/;
+
+/** Every skill directory name that has EVER had a `SKILL.md` added, per HEAD's own history. */
+function historicalSkillNames(repoRoot: string): Set<string> {
+  const { ok, output } = runShell(
+    "git",
+    ["log", "--diff-filter=A", "--name-only", "--pretty=format:", "HEAD", "--", ".claude/skills/*/SKILL.md"],
+    repoRoot,
+  );
+  const names = new Set<string>();
+  if (!ok) return names;
+  for (const rawLine of output.split("\n")) {
+    const m = rawLine.trim().match(SKILL_MD_ADDED);
+    if (m) names.add(m[1]);
+  }
+  return names;
+}
+
+/**
+ * Historical names minus current directories — the skills this repo once had
+ * and no longer does — FURTHER NARROWED to hyphenated (multi-word) names.
+ *
+ * MEASURED, NOT ASSUMED (2026-09-01): the unnarrowed set includes bare
+ * single-word retired names like `dispatch`, `ready` and `worktree` — genuine
+ * former `.claude/skills/` directory names — but a `/dispatch` or `/worktree`
+ * substring is indistinguishable from ordinary prose ("cd /worktree", "the
+ * /worktree directory") without deep context, and scanning the corpus found
+ * exactly that: dozens of plain-prose hits with no skill-citation intent
+ * ("/worktree" appeared 32 times, none of them a citation). Every hyphenated
+ * retired name checked (`align-strategy`, `dispatch-token-audit`,
+ * `plan-implement`, `fix-conflicts`, ...), by contrast, matched only genuine
+ * citations — backtick-wrapped or named directly as the command. This repo's
+ * skill-naming convention is essentially always a multi-word slug, so
+ * requiring a hyphen removes the ambiguous single-word class entirely rather
+ * than attempting a stopword list, at the cost of never flagging a retired
+ * skill that happened to have a bare single-word name (there is no such name
+ * among today's live skills either — a future one-word retirement would need
+ * its own follow-up, not a blind spot this check hides).
+ */
+function retiredSkillNames(repoRoot: string): Set<string> {
+  const current = currentSkillNames(repoRoot);
+  const retired = new Set<string>();
+  for (const name of historicalSkillNames(repoRoot)) {
+    if (!current.has(name) && name.includes("-")) retired.add(name);
+  }
+  return retired;
+}
+
+/**
+ * NEITHER new check's migration target has a DEDICATED recorded criterion
+ * among the 14 in force (measured 2026-09-01): `fn-verify-fence-paths` is the
+ * closest-NAMED sibling but its statement is scoped to "inside a ```verify
+ * fence" specifically, which does not honestly cover a wholesale `.claude/**`
+ * prose + node-body scan. `fn-graph-validate` is the closest actual fit — the
+ * general graph/prose-integrity umbrella ("every prose cross-reference
+ * resolves") — so both checks bind there rather than to a fabricated rival
+ * criterion. Recorded here, read by `check-registration-census.ts`'s Part 3,
+ * as a documented, honest gap: a dedicated criterion (e.g.
+ * `fn-tooling-path-integrity`) is OWED, not invented by this registration.
+ */
+export const NON_DEDICATED_BINDINGS: readonly { id: string; boundTo: string; owed: string }[] = [
+  {
+    id: "dangling-tooling-path",
+    boundTo: "fn-graph-validate",
+    owed: "a dedicated criterion for 'prose names only tooling paths that exist'",
+  },
+  {
+    id: "stale-skill-reference",
+    boundTo: "fn-graph-validate",
+    owed: "a dedicated criterion for 'prose cites only skills that exist'",
+  },
+];
+
+const danglingToolingPathCheck: CheckDeclaration = {
+  id: "dangling-tooling-path",
+  criterion: "fn-graph-validate", // closest existing, not dedicated — see NON_DEDICATED_BINDINGS above
+  describe:
+    "Every tooling-root path token named in .claude/** prose or a non-done node body still exists on disk (git-history orphans only; forward references to a not-yet-created path are not flagged)",
+  run(ctx: CheckContext): CheckResult {
+    const universe = scanUniverse(ctx);
+    const files: ToolingScannedFile[] = [...universe].map(([path, content]) => ({ path, content }));
+    const ever = computeEverExisted(ctx.repoRoot);
+    const seeds = danglingToolingPaths({
+      files,
+      exists: (relPath) => existsSync(join(ctx.repoRoot, relPath)),
+      everExisted: (relPath) => ever.has(relPath),
+    });
+    return {
+      ok: seeds.length === 0,
+      detail: `dangling-tooling-path: ${seeds.length} orphaned tooling-path reference(s) remain`,
+      entries: seeds,
+    };
+  },
+};
+
+const staleSkillReferenceCheck: CheckDeclaration = {
+  id: "stale-skill-reference",
+  criterion: "fn-graph-validate", // closest existing, not dedicated — see NON_DEDICATED_BINDINGS above
+  describe:
+    "Every /skill-name citation in .claude/** prose or a non-done node body resolves to an existing .claude/skills/<name>/",
+  run(ctx: CheckContext): CheckResult {
+    const universe = scanUniverse(ctx);
+    const files: SkillScannedFile[] = [...universe].map(([path, content]) => ({ path, content }));
+    const retired = retiredSkillNames(ctx.repoRoot);
+    const seeds = staleSkillReferences(files, retired);
+    return {
+      ok: seeds.length === 0,
+      detail: `stale-skill-reference: ${seeds.length} reference(s) to a retired skill remain`,
+      entries: seeds,
+    };
+  },
+};
+
 // --- The registry -------------------------------------------------------------
 
 /**
@@ -315,6 +523,8 @@ export function buildDefaultCheckRegistry(): CheckRegistry {
   registry.register(lintVerifyFencePaths);
   registry.register(validateGraphCheck);
   registry.register(writeClassCensus);
+  registry.register(danglingToolingPathCheck);
+  registry.register(staleSkillReferenceCheck);
   return registry;
 }
 

@@ -235,6 +235,42 @@ else
   FAILURES+=(type-safety-escapes)
 fi
 
+# Run the tier-aware registered-checks runner — UNCONDITIONALLY, on every PR
+# (tactic-migration-frontier-projection, unit 7).
+#
+# NOT gated on changed files, and deliberately so: unlike every check above,
+# this one's pass/fail is not primarily about a diff at all — a check's TIER
+# is derived from the graph's criteria (deriveTier, checks.ts), so a criterion
+# authored or ratified on a strategy node moves a check's tier even when the
+# PR touches no code whatsoever. A changed-files gate keyed on TS/shell diffs
+# would skip exactly the intent-layer edits that move a tier, which is the one
+# case this runner exists to catch.
+#
+# Exits non-zero ONLY when a GATING-tier check failed — every criterion
+# recorded today is authority "deferred" (unit 6's bootstrap census), so every
+# check derives observe by construction and this block cannot fail the build
+# yet. It reports the sanction-gated tier and each check's own verdict either
+# way, exactly as the frontier CLI does for the criteria/observe-failure arms.
+#
+# Invoked by an absolute path under $REPO_ROOT, both for the script and for
+# the intentions dir it is passed, for the identical reason the
+# type-safety-escapes call above states: the copy and the tree that run must
+# be the ones under test, never inferred from $SCRIPTS or cwd.
+#
+# Default (non --strict-registry) posture: an unbound-criterion registry
+# defect is caught and reported as a non-blocking "unresolved" row rather than
+# crashing this gate — the same reasoning validate-graph.ts's own
+# --strict-sensors precedent records for why a registry defect must not deny
+# the write path for every PR (the 2026-08-14 outage). See
+# packages/intentionsutil/src/run-checks.ts's module header.
+echo "=== registered-checks runner ==="
+if node --import tsx/esm "$REPO_ROOT/packages/intentionsutil/scripts/run-registered-checks.ts" "$REPO_ROOT/intentions"; then
+  echo "PASS: registered checks (gating-tier)"
+else
+  echo "FAIL: registered checks (gating-tier)" >&2
+  FAILURES+=(registered-checks)
+fi
+
 # The changed-files-scoped checks may all have been skipped; say so. This is no
 # longer an early exit — the unconditional check above always runs, so its
 # result must still reach the FAILURES tally below.

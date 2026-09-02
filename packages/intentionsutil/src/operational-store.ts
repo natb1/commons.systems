@@ -41,9 +41,13 @@ import {
  * Both are errors, and a clear error beats a silent fallback
  * (`.claude/rules/code-style.md`).
  *
+ * Exported so a sibling create-only store (e.g. `gap-note-store.ts`'s
+ * gap-note records) can reuse the identical wx idiom rather than
+ * reimplementing it — same layout rule, same primitive.
+ *
  * @returns the path written or already holding this content.
  */
-function createOnly(filePath: string, content: string, what: string): string {
+export function createOnly(filePath: string, content: string, what: string): string {
   mkdirSync(dirname(filePath), { recursive: true });
   try {
     writeFileSync(filePath, content, { flag: "wx" });

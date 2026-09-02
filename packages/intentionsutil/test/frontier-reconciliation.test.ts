@@ -10,6 +10,7 @@ import {
 import { dispositionHash } from "../src/basis-pins.js";
 import type { CheckResult, CheckTier } from "../src/checks.js";
 import type { IntentionNode } from "../src/schema.js";
+import type { GapNoteRecord } from "../src/gap-notes.js";
 
 const DATE = "2026-09-01";
 
@@ -101,7 +102,7 @@ describe("deriveReconciliationFrontier — the unsatisfied-criterion arm", () =>
       standingHome([criterion({ id: "nf-security" }), criterion({ id: "nf-style" })]),
       node({ id: "strategy-a", kind: "strategy" }),
     ];
-    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [] });
+    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [], gapNotes: [] });
     expect(ids(entries)).toEqual([
       "unsatisfied-criterion:nf-security",
       "unsatisfied-criterion:nf-style",
@@ -126,7 +127,7 @@ describe("deriveReconciliationFrontier — the unsatisfied-criterion arm", () =>
         },
       }),
     ];
-    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [] });
+    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [], gapNotes: [] });
     expect(ids(entries)).toEqual(["unsatisfied-criterion:fn-a"]);
     expect(entries[0].subject).toBe("strategy-a");
     expect(entries[0].authority).toBe("ratified");
@@ -141,7 +142,7 @@ describe("deriveReconciliationFrontier — the unsatisfied-criterion arm", () =>
         attributes: { criteria: [criterion({ id: "fn-tactic", class: "functional" })] },
       }),
     ];
-    expect(ids(deriveReconciliationFrontier({ nodes, checkRuns: [] }))).toEqual([
+    expect(ids(deriveReconciliationFrontier({ nodes, checkRuns: [], gapNotes: [] }))).toEqual([
       "unsatisfied-criterion:fn-tactic",
     ]);
   });
@@ -151,6 +152,7 @@ describe("deriveReconciliationFrontier — the unsatisfied-criterion arm", () =>
     const entries = deriveReconciliationFrontier({
       nodes,
       checkRuns: [run({ id: "check-style", criterion: "nf-style" })],
+      gapNotes: [],
     });
     expect(entries).toEqual([]);
   });
@@ -163,6 +165,7 @@ describe("deriveReconciliationFrontier — the unsatisfied-criterion arm", () =>
         run({ id: "check-b", criterion: "nf-style", result: { ok: false, detail: "red" } }),
         run({ id: "check-a", criterion: "nf-style", result: { ok: false, detail: "red" } }),
       ],
+      gapNotes: [],
     });
     expect(ids(entries)).toContain("unsatisfied-criterion:nf-style");
     const unsatisfied = entries.find((e) => e.kind === "unsatisfied-criterion");
@@ -179,6 +182,7 @@ describe("deriveReconciliationFrontier — the unsatisfied-criterion arm", () =>
         run({ id: "check-a", criterion: "nf-style" }),
         run({ id: "check-b", criterion: "nf-style", result: { ok: false, detail: "red" } }),
       ],
+      gapNotes: [],
     });
     expect(ids(entries)).toContain("unsatisfied-criterion:nf-style");
   });
@@ -197,6 +201,7 @@ describe("deriveReconciliationFrontier — the unsatisfied-criterion arm", () =>
     const entries = deriveReconciliationFrontier({
       nodes,
       checkRuns: [run({ id: "check-a", criterion: "fn-a", tier: "gating" })],
+      gapNotes: [],
     });
     expect(entries).toEqual([]);
   });
@@ -219,7 +224,7 @@ describe("deriveReconciliationFrontier — the unsatisfied-criterion arm", () =>
         },
       }),
     ];
-    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [] });
+    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [], gapNotes: [] });
     expect(ids(entries)).toEqual([
       "unsatisfied-criterion:fn-a",
       "unsatisfied-criterion:nf-style",
@@ -250,13 +255,14 @@ describe("deriveReconciliationFrontier — the unsatisfied-criterion arm", () =>
           result: { ok: false, detail: "premise violated" },
         }),
       ],
+      gapNotes: [],
     });
     expect(entries.filter((e) => e.kind === "unsatisfied-criterion")).toEqual([]);
   });
 
   it("refuses a truncated node list rather than reporting a smaller frontier", () => {
     expect(() =>
-      deriveReconciliationFrontier({ nodes: [node({ id: "strategy-a", kind: "strategy" })], checkRuns: [] }),
+      deriveReconciliationFrontier({ nodes: [node({ id: "strategy-a", kind: "strategy" })], checkRuns: [], gapNotes: [] }),
     ).toThrow(IntentionSchemaError);
   });
 });
@@ -280,6 +286,7 @@ describe("deriveReconciliationFrontier — the observe-failure arm", () => {
           },
         }),
       ],
+      gapNotes: [],
     });
     const observe = entries.filter((e) => e.kind === "observe-failure");
     expect(ids(observe)).toEqual([
@@ -299,6 +306,7 @@ describe("deriveReconciliationFrontier — the observe-failure arm", () => {
       checkRuns: [
         run({ id: "check-style", criterion: "nf-style", result: { ok: false, detail: "red, unitemized" } }),
       ],
+      gapNotes: [],
     });
     const observe = entries.filter((e) => e.kind === "observe-failure");
     expect(ids(observe)).toEqual(["observe-failure:check-style"]);
@@ -318,6 +326,7 @@ describe("deriveReconciliationFrontier — the observe-failure arm", () => {
           result: { ok: true, detail: "1 known remainder", entries: [{ subject: "src/a.ts", detail: "legacy" }] },
         }),
       ],
+      gapNotes: [],
     });
     expect(ids(entries)).toContain("observe-failure:check-style:src/a.ts");
     // The criterion itself is satisfied — its bound check reported ok.
@@ -330,7 +339,7 @@ describe("deriveReconciliationFrontier — the observe-failure arm", () => {
       deriveReconciliationFrontier({
         nodes,
         checkRuns: [run({ id: "check-style", criterion: "nf-style" })],
-      }),
+       gapNotes: [] }),
     ).toEqual([]);
   });
 
@@ -346,6 +355,7 @@ describe("deriveReconciliationFrontier — the observe-failure arm", () => {
           result: { ok: false, detail: "red", entries: [{ subject: "src/a.ts", detail: "x" }] },
         }),
       ],
+      gapNotes: [],
     });
     expect(entries.filter((e) => e.kind === "observe-failure")).toEqual([]);
     // The criterion arm still reports it — the criterion is decided, and no.
@@ -357,6 +367,7 @@ describe("deriveReconciliationFrontier — the observe-failure arm", () => {
     const entries = deriveReconciliationFrontier({
       nodes,
       checkRuns: [run({ id: "check-x", criterion: "ghost", result: { ok: false, detail: "red" } })],
+      gapNotes: [],
     });
     expect(entries[0].criterion).toBe("ghost");
     expect(entries[0].authority).toBeNull();
@@ -386,6 +397,7 @@ describe("deriveReconciliationFrontier — the stale-intent arm (unit 4)", () =>
     const entries = deriveReconciliationFrontier({
       nodes: [standingHome(), cited, fresh],
       checkRuns: [],
+      gapNotes: [],
     });
     expect(entries.filter((e) => e.kind === "stale-intent")).toEqual([]);
   });
@@ -395,6 +407,7 @@ describe("deriveReconciliationFrontier — the stale-intent arm (unit 4)", () =>
     const entries = deriveReconciliationFrontier({
       nodes: [standingHome(), cited, stale],
       checkRuns: [],
+      gapNotes: [],
     });
     const staleEntries = entries.filter((e) => e.kind === "stale-intent");
     expect(staleEntries).toHaveLength(1);
@@ -411,10 +424,10 @@ describe("deriveReconciliationFrontier — the stale-intent arm (unit 4)", () =>
       cited,
       citing("a1b2c3d4".repeat(8)),
     ];
-    const forward = deriveReconciliationFrontier({ nodes, checkRuns: [] });
+    const forward = deriveReconciliationFrontier({ nodes, checkRuns: [], gapNotes: [] });
     expect(ids(forward)).toEqual([...ids(forward)].sort());
     expect(forward.map((e) => e.kind)).toContain("stale-intent");
-    expect(deriveReconciliationFrontier({ nodes: [...nodes].reverse(), checkRuns: [] })).toEqual(
+    expect(deriveReconciliationFrontier({ nodes: [...nodes].reverse(), checkRuns: [], gapNotes: [] })).toEqual(
       forward,
     );
   });
@@ -424,7 +437,7 @@ describe("deriveReconciliationFrontier — the stale-intent arm (unit 4)", () =>
       deriveReconciliationFrontier({
         nodes: [standingHome(), node({ id: "strategy-a", kind: "strategy", attributes: { basis_pins: [{}] } })],
         checkRuns: [],
-      }),
+       gapNotes: [] }),
     ).toThrow(IntentionSchemaError);
   });
 });
@@ -446,7 +459,7 @@ describe("deriveReconciliationFrontier — the overdue-shim arm (unit 5)", () =>
       standingHome(),
       node({ id: "strategy-a", kind: "strategy", attributes: { shims: [shim()] } }),
     ];
-    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [] });
+    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [], gapNotes: [] });
     expect(entries.filter((e) => e.kind === "overdue-shim")).toEqual([]);
   });
 
@@ -462,7 +475,7 @@ describe("deriveReconciliationFrontier — the overdue-shim arm (unit 5)", () =>
     const checkRuns = [
       run({ id: "validate-graph", criterion: "fn-graph-validate", tier: "gating", result: { ok: true } }),
     ];
-    const entries = deriveReconciliationFrontier({ nodes, checkRuns });
+    const entries = deriveReconciliationFrontier({ nodes, checkRuns , gapNotes: [] });
     const shimEntries = entries.filter((e) => e.kind === "overdue-shim");
     expect(shimEntries).toHaveLength(1);
     expect(shimEntries[0].subject).toBe("strategy-a");
@@ -485,10 +498,10 @@ describe("deriveReconciliationFrontier — the overdue-shim arm (unit 5)", () =>
         attributes: { shims: [shim({ id: "x", liquidated_by: "validate-graph" })] },
       }),
     ];
-    const forward = deriveReconciliationFrontier({ nodes, checkRuns });
+    const forward = deriveReconciliationFrontier({ nodes, checkRuns , gapNotes: [] });
     expect(ids(forward)).toEqual([...ids(forward)].sort());
     expect(forward.map((e) => e.kind)).toContain("overdue-shim");
-    expect(deriveReconciliationFrontier({ nodes: [...nodes].reverse(), checkRuns })).toEqual(forward);
+    expect(deriveReconciliationFrontier({ nodes: [...nodes].reverse(), checkRuns , gapNotes: [] })).toEqual(forward);
   });
 
   it("refuses a malformed shims list rather than reporting a smaller frontier", () => {
@@ -496,8 +509,60 @@ describe("deriveReconciliationFrontier — the overdue-shim arm (unit 5)", () =>
       deriveReconciliationFrontier({
         nodes: [standingHome(), node({ id: "strategy-a", kind: "strategy", attributes: { shims: [{}] } })],
         checkRuns: [],
-      }),
+       gapNotes: [] }),
     ).toThrow(IntentionSchemaError);
+  });
+});
+
+describe("deriveReconciliationFrontier — the prose-gap arm (unit 7)", () => {
+  function gapNote(partial: Partial<GapNoteRecord> = {}): GapNoteRecord {
+    return {
+      subject: partial.subject ?? "some-subject",
+      detail: partial.detail ?? "some detail",
+      recorded_at: partial.recorded_at ?? DATE,
+      disposed_by: partial.disposed_by ?? null,
+    };
+  }
+
+  it("emits one prose-gap entry per open (disposed_by: null) gap-note record", () => {
+    const nodes = [standingHome()];
+    const entries = deriveReconciliationFrontier({
+      nodes,
+      checkRuns: [],
+      gapNotes: [gapNote({ subject: "tactic-attention-boost-scripts" })],
+    });
+    const gaps = entries.filter((e) => e.kind === "prose-gap");
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].subject).toBe("tactic-attention-boost-scripts");
+    expect(gaps[0].criterion).toBeNull();
+    expect(gaps[0].authority).toBeNull();
+  });
+
+  it("a DISPOSED gap-note record (non-null disposed_by) yields no entry", () => {
+    const nodes = [standingHome()];
+    const entries = deriveReconciliationFrontier({
+      nodes,
+      checkRuns: [],
+      gapNotes: [gapNote({ disposed_by: "some-fold" })],
+    });
+    expect(entries.filter((e) => e.kind === "prose-gap")).toEqual([]);
+  });
+
+  it("an empty gapNotes list yields no prose-gap entries — the honest empty reading", () => {
+    const nodes = [standingHome()];
+    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [], gapNotes: [] });
+    expect(entries.filter((e) => e.kind === "prose-gap")).toEqual([]);
+  });
+
+  it("coexists with the other arms — a prose-gap entry does not displace an unsatisfied criterion", () => {
+    const nodes = [standingHome([criterion({ id: "nf-style" })])];
+    const entries = deriveReconciliationFrontier({
+      nodes,
+      checkRuns: [],
+      gapNotes: [gapNote({ subject: "some-gap" })],
+    });
+    expect(entries.some((e) => e.kind === "unsatisfied-criterion")).toBe(true);
+    expect(entries.some((e) => e.kind === "prose-gap")).toBe(true);
   });
 });
 
@@ -519,22 +584,23 @@ describe("deriveReconciliationFrontier — ordering and totality", () => {
   ];
 
   it("returns entries in id order", () => {
-    const entries = deriveReconciliationFrontier({ nodes, checkRuns });
+    const entries = deriveReconciliationFrontier({ nodes, checkRuns , gapNotes: [] });
     expect(ids(entries)).toEqual([...ids(entries)].sort());
   });
 
   it("is independent of node and check-run order", () => {
-    const forward = deriveReconciliationFrontier({ nodes, checkRuns });
+    const forward = deriveReconciliationFrontier({ nodes, checkRuns , gapNotes: [] });
     const reversed = deriveReconciliationFrontier({
       nodes: [...nodes].reverse(),
       checkRuns: [...checkRuns].reverse(),
+      gapNotes: [],
     });
     expect(reversed).toEqual(forward);
   });
 
   it("is stable across repeated derivations — a projection, not a store", () => {
-    expect(deriveReconciliationFrontier({ nodes, checkRuns })).toEqual(
-      deriveReconciliationFrontier({ nodes, checkRuns }),
+    expect(deriveReconciliationFrontier({ nodes, checkRuns , gapNotes: [] })).toEqual(
+      deriveReconciliationFrontier({ nodes, checkRuns , gapNotes: [] }),
     );
   });
 
@@ -552,7 +618,7 @@ describe("deriveReconciliationFrontier — ordering and totality", () => {
         },
       }),
     ];
-    const entries = deriveReconciliationFrontier({ nodes, checkRuns: colliding });
+    const entries = deriveReconciliationFrontier({ nodes, checkRuns: colliding , gapNotes: [] });
     const observe = entries.filter((e) => e.kind === "observe-failure");
     expect(observe.map((e) => e.detail)).toEqual(["first", "second"]);
   });
@@ -569,13 +635,13 @@ describe("renderReconciliationFrontier", () => {
 
   it("renders an empty real derivation as that same single line", () => {
     const nodes = [standingHome(), node({ id: "strategy-a", kind: "strategy" })];
-    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [] });
+    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [], gapNotes: [] });
     expect(renderReconciliationFrontier(entries)).toBe("_No reconciliation frontier items._\n");
   });
 
   it("emits a section only for kinds that have entries", () => {
     const nodes = [standingHome([criterion({ id: "nf-style" })])];
-    const out = renderReconciliationFrontier(deriveReconciliationFrontier({ nodes, checkRuns: [] }));
+    const out = renderReconciliationFrontier(deriveReconciliationFrontier({ nodes, checkRuns: [], gapNotes: [] }));
     expect(out).toContain("**Reconciliation frontier — 1 item.**");
     expect(out).toContain("## unsatisfied-criterion (1)");
     for (const kind of RECONCILIATION_FRONTIER_KINDS) {
@@ -635,7 +701,7 @@ describe("renderReconciliationFrontier", () => {
 
   it("uses the plural noun for a multi-item frontier", () => {
     const nodes = [standingHome([criterion({ id: "nf-style" }), criterion({ id: "nf-security" })])];
-    const out = renderReconciliationFrontier(deriveReconciliationFrontier({ nodes, checkRuns: [] }));
+    const out = renderReconciliationFrontier(deriveReconciliationFrontier({ nodes, checkRuns: [], gapNotes: [] }));
     expect(out).toContain("**Reconciliation frontier — 2 items.**");
   });
 });

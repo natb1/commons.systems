@@ -46,7 +46,12 @@ function rawText(node: IntentionNode): string {
 /** Assemble a DigestInput from nodes + a body map; rawTexts default to serialized nodes. */
 function input(
   nodes: IntentionNode[],
-  opts: { bodies?: Record<string, string>; deletedIds?: string[]; rawTexts?: Record<string, string> } = {},
+  opts: {
+    bodies?: Record<string, string>;
+    deletedIds?: string[];
+    rawTexts?: Record<string, string>;
+    gapNotes?: DigestInput["gapNotes"];
+  } = {},
 ): DigestInput {
   const bodies = new Map<string, string>();
   const rawTexts = new Map<string, string>();
@@ -54,7 +59,7 @@ function input(
     bodies.set(n.id, opts.bodies?.[n.id] ?? "");
     rawTexts.set(n.id, opts.rawTexts?.[n.id] ?? rawText(n));
   }
-  return { nodes, bodies, rawTexts, deletedIds: opts.deletedIds ?? [] };
+  return { nodes, bodies, rawTexts, deletedIds: opts.deletedIds ?? [], gapNotes: opts.gapNotes ?? [] };
 }
 
 /** The standard kind nodes a valid graph needs (kind-kind is self-referential). */

@@ -24,6 +24,7 @@ import { listNodes } from "../src/store.js";
 import { extractBody } from "../src/frontmatter.js";
 import { renderDigest, renderTables, type DigestInput } from "../src/digest.js";
 import { deletedNodeIds } from "./lib-deleted-node-ids.js";
+import { readGapNotes } from "../src/gap-note-store.js";
 
 // --- Paths -----------------------------------------------------------------
 // The script lives at `packages/intentionsutil/scripts/graph-digest.ts`, so the
@@ -48,7 +49,7 @@ function gatherInput(): DigestInput {
     rawTexts.set(node.id, raw);
     bodies.set(node.id, extractBody(raw, node.id));
   }
-  return { nodes, bodies, rawTexts, deletedIds: deletedNodeIds() };
+  return { nodes, bodies, rawTexts, deletedIds: deletedNodeIds(), gapNotes: readGapNotes(intentionsDir) };
 }
 
 function main(): void {
