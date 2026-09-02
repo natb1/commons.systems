@@ -8043,6 +8043,130 @@ attributes:
         clarification's dissolution map
       liquidated_by: null
       declared: 2026-09-02
+  criteria:
+    - id: fn-mainqa-conflict-outranks-ci-precedence-1
+      statement: "A CONFLICTING and red PR on live main draws zero fix-interrupt
+        writes while the conflict lane still picks it up, the end-to-end
+        behavior the hermetic fixtures only simulate. Observed by confirming no
+        'graph: enter fix-interrupt on <id>' commit for the episode, a
+        'declining the fix interrupt' line in the tick journal or selector
+        stderr, execution.fix still null, and the node reaching
+        /dispatch-conflict Lane 3. Post-merge verification item of PR 3019."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-decision-log-append-noncompact-1
+      statement: The silent-drop-on-invalid-input tradeoff in decision_log_append
+        proves acceptable in production as documented, or is filed as follow-up
+        residue for a non-fatal observability escape hatch. Observed by
+        reviewing $HOME/.local/share/commons-dispatch/routing-decisions.jsonl
+        and any dispatch-fleet-watch alarms for evidence that a caller's
+        malformed payload vanished with no signal. Post-merge verification item
+        of PR 3061.
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-office-hours-select-fresh-main-1
+      statement: "Targeted and untargeted office-hours-graph wrapper dispatch behave
+        as they did before the refactor: the liveness (held) dedup still
+        suppresses already-claimed nodes, and the not-parked path prints
+        'office-hours: node <id> is not parked on origin/main — nothing to
+        launch for it.' and launches nothing. Only observable against the real
+        Claude daemon socket and dispatch queue, which an autonomous QA session
+        must not touch. Post-merge verification item of PR 2976."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-office-hours-select-fresh-main-2
+      statement: A genuinely stale PR-branch worktree resolves through
+        office-hours-select.ts to the current origin/main park state in both
+        directions - a park cleared on main while the worktree still shows it
+        parked, and a park landed on main the worktree has not pulled - and a
+        clone with no origin remote hits the documented --ref escape-hatch
+        failure mode rather than a silent empty-store degrade. Post-merge
+        verification item of PR 2976.
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-pace-exempt-ceiling-fanout-1
+      statement: "No dispatch tick admits a worker beyond max_concurrent_workers:
+        pace-exempt bursts fill available headroom in a single decision rather
+        than trickling one per tick, at-cap-ceiling-full appears when the fleet
+        is genuinely saturated, and at-cap-ceiling-unreadable never fires in
+        normal operation. Observed over several days of routing-decisions.jsonl
+        records with site == select-tick, confirming no
+        pace-exempt-bypass-at-cap grant exceeds max_concurrent_workers minus
+        effective_live at decision time. Post-merge verification item of PR
+        3034."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-pause-disables-merge-lane-1
+      statement: "With the standing pause sentinel present, one heartbeat tick's
+        journal block shows the paused no-scheduling line coexisting with merge:
+        and reconcile-graph: lines, and a reviewed green node-lane PR merges
+        with no operator action and is absorbed to done or main-qa. Observed
+        with journalctl --user -t dispatch-tick --since -2h grepped for 'paused
+        (sentinel present', 'merge: ' and 'reconcile-graph: ' in the same tick
+        block. Post-merge verification item of PR 3068."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-review-fix-residue-death-coverage-1
+      statement: "A genuine review-fix Lane-A residue-disposition subagent death in
+        production surfaces every untriaged finding as a Deferred-bucket
+        PR-comment entry with a filed follow-up, rather than dropping it
+        silently. Observed on the next such event by checking that run's PR
+        comment for a Deferred entry per untriaged finding, a partial-coverage
+        line naming the residue-disposition cause, and follow-ups filed with the
+        expected Backlink: and blocker linkage. Post-merge verification item of
+        PR 3022."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-strategy-fingerprint-stamp-coverage-1
+      statement: At least one previously-nullStamp tactic reads keyed after the first
+        post-merge forward transition-node run on origin/main, carrying a {hash,
+        sha} entry whose hash matches strategy-fingerprint.ts output for its
+        serving strategy and whose sha resolves to a real commit. Observed with
+        strategy-stamp-census.ts against a freshly-fetched origin/main plus git
+        cat-file -t <sha> returning commit rather than blob. Post-merge
+        verification item of PR 3023.
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-terminal-disposition-sweep-park-1
+      statement: Zero UNHEALED rows come out of the state-aware office-hours-park
+        detect script over a full day of merged production tick traffic, meaning
+        no new office-hours park clobbers occur. Observed with that node's own
+        git-log/awk UNHEALED detect script re-windowed to since-merge.
+        Post-merge verification item of PR 3042.
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-terminal-disposition-sweep-park-2
+      statement: stale-diagnosis refusals are rare but present in production logs, and
+        each is followed by a clean resolution on a later tick - correctly
+        parked, or correctly skipped as already-parked - never a permanent
+        stall. Observed with journalctl -u dispatch-tick --since <merge-time>
+        grepped for stale-diagnosis, confirming for each hit that the node's
+        specific park text survived and a later tick converged. Post-merge
+        verification item of PR 3042.
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-terminal-disposition-sweep-park-3
+      statement: "The --base pin is not so strict that it silently disables both
+        sweeps: uncontended sweep parks still land normally, parked_count totals
+        match the nodes actually reaching office-hours, and escalation markers
+        are deleted only on confirmed-landed parks. Observed with journalctl -u
+        dispatch-tick --since <merge-time> grepped for 'lib-frozen-session-park:
+        parked ', confirming a nonzero count and that each sweep-complete
+        summary's parked_count matches its parked lines. Post-merge verification
+        item of PR 3042."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family
