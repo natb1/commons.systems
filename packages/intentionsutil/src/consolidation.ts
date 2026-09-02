@@ -97,9 +97,33 @@
  * only on a throw isolates each individual `(decision: ...)` occurrence and
  * re-parses it alone, routing a stamp that still fails to `defects` while
  * keeping every stamp that parses. See `parseTolerant`'s doc comment.
+ *
+ * ONE RULING, ONE STAMP. `multiRulingCandidates` and `splitMultiRuling` are the
+ * folding-pass half of ruling (4) of the 2026-09-01 adversarial-review set
+ * (`strategy-graph-native-dispatch`, the "interim mechanics and initiation
+ * protocol" clarification: "CONSOLIDATION SCOPE FOLDS ... one-ruling-one-stamp
+ * normalization of multi-ruling clarifications (the folding pass)"). The defect
+ * they address, measured over the store 2026-09-01: only 4 clarifications carry
+ * two or more `(decision:` stamps, but 130 carry two or more distinct ALL-CAPS
+ * ruling labels under at most one. One stamp is silently claiming authority over
+ * rulings it was never issued for, and under the overrule algebra above that
+ * mis-attribution decides whether AI may revise the text at all.
+ *
+ * DETECT TOLERANTLY, SPLIT STRICTLY. The two functions sit on opposite sides of
+ * the same seam `parseTolerant` straddles, for the same reason.
+ * `splitMultiRuling` works on ONE clarification a caller has chosen to
+ * normalize, so it calls `parseStampGrammar` directly and lets a malformed stamp
+ * throw — a stamp whose authority cannot be read is exactly the case where
+ * proceeding would guess. `multiRulingCandidates` sweeps every node, so a single
+ * malformed stamp must not hide the store-wide shortlist: it catches per
+ * clarification and still emits the candidate, carrying the parser's message in
+ * `splitError` with `splits` empty. That tolerance is load-bearing rather than
+ * theoretical — the canonical instance the plan names, the "items 1-8"
+ * clarification itself, carries exactly one stamp and that stamp is free prose
+ * the interim grammar refuses.
  */
 import { IntentionSchemaError } from "./errors.js";
-import type { IntentionNode } from "./schema.js";
+import type { Clarification, IntentionNode } from "./schema.js";
 
 /**
  * The three disposition states, normalized. This is the vocabulary the overrule
@@ -645,4 +669,318 @@ export function deferredQueue(
   }
 
   return { items, defects };
+}
+
+// ---------------------------------------------------------------------------
+// Unit 5 — one-ruling-one-stamp normalization. See the module header's
+// "ONE RULING, ONE STAMP" and "DETECT TOLERANTLY, SPLIT STRICTLY" paragraphs.
+// ---------------------------------------------------------------------------
+
+/**
+ * An ALL-CAPS ruling label opening a segment of a multi-ruling clarification
+ * answer — `DEFERRED-QUEUE SHIM,` or `BOOTSTRAP INITIATION PROTOCOL:`.
+ *
+ * The shape is the house style for enumerated rulings inside one answer: a
+ * capitalized run, optionally several space-separated words, closed by a comma
+ * or a colon. Hyphens are admitted inside a word because the live corpus writes
+ * `DEFERRED-QUEUE` and `MAIN-QA`. The trailing `[,:]` lookahead is what keeps
+ * ordinary emphatic prose (`NOT`, `THIS DOES NOT DELETE`) out: a label
+ * introduces a clause, so it is punctuated.
+ *
+ * This regex is a HEURISTIC, quoted verbatim from the Unit 5 scope so it can be
+ * argued with rather than reverse-engineered. It is not doctrine and it is not
+ * a grammar the store is validated against.
+ */
+const RULING_LABEL_PATTERN = /\b[A-Z][A-Z-]{3,}(?:[ ][A-Z][A-Z-]{2,}){0,5}\b(?=[,:])/g;
+
+/** A clarification is a candidate at or above this many DISTINCT labels. */
+const MULTI_RULING_MIN_LABELS = 2;
+
+/**
+ * ...and at or below this many stamps. A clarification already carrying one
+ * stamp per ruling is not the defect; the defect is many rulings under one.
+ */
+const MULTI_RULING_MAX_STAMPS = 1;
+
+/**
+ * The authority covering one ruling segment. `"unknown"` is a REFUSAL — the
+ * segment's authority could not be established, so it is routed to the author
+ * queue — never a default, and never a fourth disposition state. It is
+ * deliberately outside `DispositionState` so it cannot be handed to
+ * `consolidationVerdict` by accident.
+ */
+export type RulingAuthority = DispositionState | "unknown";
+
+/**
+ * One ruling segment of a clarification answer.
+ *
+ *  - `ordinal`   — 1-based, in document order within the answer.
+ *  - `label`     — the ALL-CAPS label that opens the segment.
+ *  - `start`     — index of the label's first character in the answer.
+ *  - `end`       — index one past the segment's last character: the next
+ *                  label's `start`, or the answer's length for the last
+ *                  segment. Segments therefore tile the answer from the first
+ *                  label onward, with no gaps and no overlap.
+ *  - `text`      — `answer.slice(start, end)`, the span itself.
+ *  - `authority` — the state covering the segment, or `"unknown"`.
+ *  - `stamp`     — the record `authority` came from, or `null` when
+ *                  `"unknown"`. A stamp INHERITED from the clarification is
+ *                  reported here too; `reason` says which case it was.
+ *  - `reason`    — why `authority` is what it is, in words a reader can check
+ *                  against the answer without re-deriving the rule.
+ */
+export interface RulingSplit {
+  ordinal: number;
+  label: string;
+  start: number;
+  end: number;
+  text: string;
+  authority: RulingAuthority;
+  stamp: DispositionRecord | null;
+  reason: string;
+}
+
+/** Every `RULING_LABEL_PATTERN` match in `text`, with its offset, in document order. */
+function matchRulingLabels(text: string): { label: string; start: number }[] {
+  const pattern = new RegExp(RULING_LABEL_PATTERN.source, "g");
+  const found: { label: string; start: number }[] = [];
+  let match = pattern.exec(text);
+  while (match !== null) {
+    found.push({ label: match[0], start: match.index });
+    match = pattern.exec(text);
+  }
+  return found;
+}
+
+/**
+ * The offsets of every `(decision: ...)` span in `text`, in document order.
+ *
+ * `STAMP_SPAN_PATTERN` and `parseStampGrammar`'s own `STAMP_PATTERN` match the
+ * identical span shape, differing only in whether the inner element list is
+ * captured, so the i-th span here is the i-th record the parser returns. That
+ * pairing is how a positionless `DispositionRecord` is placed inside a segment,
+ * and `splitMultiRuling` asserts the two counts agree rather than assuming it.
+ */
+function stampSpans(text: string): { start: number; end: number }[] {
+  const pattern = new RegExp(STAMP_SPAN_PATTERN.source, "g");
+  const spans: { start: number; end: number }[] = [];
+  let match = pattern.exec(text);
+  while (match !== null) {
+    spans.push({ start: match.index, end: match.index + match[0].length });
+    match = pattern.exec(text);
+  }
+  return spans;
+}
+
+/**
+ * THE NORMALIZER. Split one clarification answer into its per-ruling segments,
+ * each carrying the label, the text span, and the stamp that currently covers
+ * it.
+ *
+ * It never guesses a NEW authority state. The four cases, exhaustive:
+ *
+ *   1. the segment carries exactly one stamp   → that stamp's state;
+ *   2. the segment carries no stamp, and the clarification carries exactly one
+ *      → inherit it (the mis-attribution this unit exists to make visible: one
+ *      stamp covering rulings it was never issued for);
+ *   3. the segment carries no stamp, and the clarification carries none or more
+ *      than one → `"unknown"`;
+ *   4. the segment carries more than one stamp → `"unknown"`, because combining
+ *      several states into one is a DISPOSITION (that is
+ *      `consolidationVerdict`'s job, on a caller's explicit request), not a
+ *      split.
+ *
+ * Cases 3 and 4 are refusals routed to the author queue, per the provenance
+ * discipline `consolidationVerdict`'s empty case already states.
+ *
+ * The signature takes `nodeId` and `kind` alongside the clarification — the
+ * plan writes it `splitMultiRuling(clarification)`, but `parseStampGrammar`
+ * requires both to name a node in its errors, and inventing placeholders here
+ * would put an unfindable node id in a grammar failure.
+ *
+ * STRICT, by the module header's "DETECT TOLERANTLY, SPLIT STRICTLY": a
+ * malformed stamp on the one clarification under normalization throws
+ * `IntentionSchemaError` rather than being routed around. Callers sweeping the
+ * store want `multiRulingCandidates`, which catches this per clarification.
+ *
+ * Returns `[]` for an answer carrying no label at all. Text preceding the first
+ * label belongs to no segment — this splits rulings, it does not partition the
+ * answer, and a caller writing a restatement must carry that preamble itself.
+ * Splitting is not restricted to multi-ruling answers; a one-label answer
+ * yields one segment.
+ */
+export function splitMultiRuling(
+  nodeId: string,
+  kind: string,
+  clarification: Clarification,
+): RulingSplit[] {
+  const answer = clarification.answer;
+  const labels = matchRulingLabels(answer);
+  if (labels.length === 0) return [];
+
+  const stamps = parseStampGrammar(nodeId, kind, answer);
+  const spans = stampSpans(answer);
+  if (spans.length !== stamps.length) {
+    throw new IntentionSchemaError(
+      `splitMultiRuling: ${nodeId} (kind ${kind}) — the stamp grammar read ${stamps.length} stamps ` +
+        `where the span finder located ${spans.length}; both walk the same "(decision: ...)" shape ` +
+        `and must agree for a stamp to be placed within a segment`,
+    );
+  }
+
+  const splits: RulingSplit[] = [];
+  for (let i = 0; i < labels.length; i++) {
+    const start = labels[i].start;
+    const end = i === labels.length - 1 ? answer.length : labels[i + 1].start;
+
+    const own: DispositionRecord[] = [];
+    for (let s = 0; s < spans.length; s++) {
+      if (spans[s].start >= start && spans[s].start < end) own.push(stamps[s]);
+    }
+
+    let authority: RulingAuthority;
+    let stamp: DispositionRecord | null;
+    let reason: string;
+
+    if (own.length === 1) {
+      authority = own[0].state;
+      stamp = own[0];
+      reason = `case 1: the segment carries its own stamp ${own[0].key}`;
+    } else if (own.length > 1) {
+      authority = "unknown";
+      stamp = null;
+      reason =
+        `case 4: the segment carries ${own.length} stamps (${own.map((r) => r.key).join(", ")}) — ` +
+        `combining their states is a disposition, not a split; routed to the author queue`;
+    } else if (stamps.length === 1) {
+      authority = stamps[0].state;
+      stamp = stamps[0];
+      reason =
+        `case 2: the segment carries no stamp of its own and inherits the clarification's single ` +
+        `stamp ${stamps[0].key} — the one-stamp-many-rulings mis-attribution itself`;
+    } else {
+      authority = "unknown";
+      stamp = null;
+      reason =
+        stamps.length === 0
+          ? "case 3: the segment carries no stamp and the clarification carries none to inherit — authority is unknown, treated as binding"
+          : `case 3: the segment carries no stamp and the clarification carries ${stamps.length}, so there is no single stamp to inherit — authority is unknown, treated as binding`;
+    }
+
+    splits.push({
+      ordinal: i + 1,
+      label: labels[i].label,
+      start,
+      end,
+      text: answer.slice(start, end),
+      authority,
+      stamp,
+      reason,
+    });
+  }
+
+  return splits;
+}
+
+/**
+ * One clarification the detector shortlists.
+ *
+ *  - `nodeId` / `kind` — the node it was found on.
+ *  - `index`      — 0-based position in that node's `clarifications`.
+ *  - `key`        — `<nodeId>?<ordinal>`, ordinal 1-based over the node's
+ *                   clarifications. Distinct from `DispositionRecord.key`'s
+ *                   `#` separator, which numbers stamps rather than
+ *                   clarifications, so the two can never be confused when both
+ *                   land in one report.
+ *  - `question`   — the clarification's question, verbatim.
+ *  - `labels`     — the DISTINCT labels, first-occurrence order.
+ *  - `stampCount` — `(decision: ...)` spans in the answer, counted by shape
+ *                   rather than by the grammar, so a malformed stamp still
+ *                   counts as a stamp. This is the count the heuristic tests.
+ *  - `splits`     — `splitMultiRuling`'s output, or `[]` when it threw.
+ *  - `splitError` — the parser's message when it threw, else `null`.
+ *  - `excerpt`    — a bounded, flattened window of the answer, so a reader can
+ *                   triage the shortlist without opening the node.
+ */
+export interface MultiRulingCandidate {
+  nodeId: string;
+  kind: string;
+  index: number;
+  key: string;
+  question: string;
+  labels: string[];
+  stampCount: number;
+  splits: RulingSplit[];
+  splitError: string | null;
+  excerpt: string;
+}
+
+/**
+ * THE DETECTOR. A SHORTLIST FOR HUMAN DISPOSITION, NEVER A DISPOSITION ITSELF —
+ * the same posture `tableNearDup` states for itself
+ * (`packages/intentionsutil/src/digest.ts`, the NEAR-DUP-STATEMENTS comment).
+ * Membership here means "worth a look", not "defective": a clarification may
+ * legitimately state several ALL-CAPS terms under one genuinely single ruling,
+ * and this function has no way to tell that from the real thing.
+ *
+ * The heuristic, stated so it can be argued with rather than inferred from the
+ * code: a clarification answer is a candidate when it contains at least
+ * `MULTI_RULING_MIN_LABELS` DISTINCT `RULING_LABEL_PATTERN` labels and at most
+ * `MULTI_RULING_MAX_STAMPS` `(decision: ...)` spans. Both halves matter — many
+ * labels with one stamp per ruling is the normalized shape this unit is aiming
+ * AT, not the defect.
+ *
+ * TOLERANT, per the module header: `splitMultiRuling` is attempted per
+ * candidate and its `IntentionSchemaError` is caught, so one malformed stamp
+ * cannot hide the rest of the store's shortlist. The candidate is still
+ * emitted, with the message in `splitError` and `splits` empty.
+ *
+ * Deterministic: nodes are visited in id-sorted order and clarifications in
+ * declaration order, so two sweeps over the same `nodes` produce identical
+ * output. No wall-clock, no fs, no environment data.
+ */
+export function multiRulingCandidates(
+  nodes: readonly IntentionNode[],
+): MultiRulingCandidate[] {
+  const candidates: MultiRulingCandidate[] = [];
+  const sortedNodes = [...nodes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  for (const node of sortedNodes) {
+    for (let i = 0; i < node.clarifications.length; i++) {
+      const clarification = node.clarifications[i];
+      const answer = clarification.answer;
+
+      const distinct: string[] = [];
+      for (const { label } of matchRulingLabels(answer)) {
+        if (!distinct.includes(label)) distinct.push(label);
+      }
+      if (distinct.length < MULTI_RULING_MIN_LABELS) continue;
+
+      const stampCount = stampSpans(answer).length;
+      if (stampCount > MULTI_RULING_MAX_STAMPS) continue;
+
+      let splits: RulingSplit[] = [];
+      let splitError: string | null = null;
+      try {
+        splits = splitMultiRuling(node.id, node.kind, clarification);
+      } catch (err) {
+        splitError = err instanceof Error ? err.message : String(err);
+      }
+
+      candidates.push({
+        nodeId: node.id,
+        kind: node.kind,
+        index: i,
+        key: `${node.id}?${i + 1}`,
+        question: clarification.question,
+        labels: distinct,
+        stampCount,
+        splits,
+        splitError,
+        excerpt: flattenExcerpt(answer).slice(0, EXCERPT_MAX),
+      });
+    }
+  }
+
+  return candidates;
 }

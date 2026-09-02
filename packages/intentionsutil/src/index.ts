@@ -160,11 +160,16 @@ export {
   consolidationVerdict,
   parseStampGrammar,
   renderStamp,
+  splitMultiRuling,
+  multiRulingCandidates,
 } from "./consolidation.js";
 export type {
   DispositionState,
   DispositionRecord,
   DispositionSource,
+  RulingAuthority,
+  RulingSplit,
+  MultiRulingCandidate,
 } from "./consolidation.js";
 // The restatement PLANNER is public, like every other pure surface here. Its
 // sibling `writeRestatedNode` is deliberately absent: it is the one node writer

@@ -6,14 +6,18 @@ import {
   MOUNT_KINDS,
   consolidationVerdict,
   deferredQueue,
+  multiRulingCandidates,
   parseStampGrammar,
   renderStamp,
+  splitMultiRuling,
 } from "../src/consolidation.js";
 import type {
   DeferredQueue,
   DispositionRecord,
   DispositionSource,
   DispositionState,
+  MultiRulingCandidate,
+  RulingSplit,
 } from "../src/consolidation.js";
 import { IntentionSchemaError } from "../src/errors.js";
 import type { IntentionNode } from "../src/schema.js";
@@ -612,6 +616,321 @@ describe("deferredQueue — the deferred-disposition queue deriver", () => {
       // silently drops real stamps still fails loudly even in the (unlikely)
       // event `baseline` itself regressed in lockstep.
       expect(queue.items.length).toBeGreaterThanOrEqual(10);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Unit 5 — one-ruling-one-stamp normalization.
+// ---------------------------------------------------------------------------
+
+/** A clarification fixture, so the tests read as answers rather than objects. */
+function aclar(question: string, answer: string): { question: string; answer: string } {
+  return { question, answer };
+}
+
+/** `label=authority` per segment, the shape most assertions below compare. */
+function shape(splits: readonly RulingSplit[]): string[] {
+  return splits.map((s) => `${s.label}=${s.authority}`);
+}
+
+const DEFERRED_STAMP = "(decision: deferred, delegation-anthropic-claude, 2026-08-30)";
+const RATIFIED_STAMP = "(decision: author-ratified, 2026-08-31)";
+const DELEGATED_STAMP = "(decision: delegated, delegation-anthropic-claude, 2026-09-01)";
+
+describe("splitMultiRuling — the normalizer, one segment per ruling", () => {
+  it("gives each segment its OWN stamp when the answer is already normalized (case 1)", () => {
+    const clar = aclar(
+      "q",
+      `DEFERRED-QUEUE SHIM, the interim surface is a grep ${DEFERRED_STAMP}. ` +
+        `BOOTSTRAP INITIATION PROTOCOL: mint the carrier first ${RATIFIED_STAMP}.`,
+    );
+
+    const splits = splitMultiRuling("strategy-x", "strategy", clar);
+
+    expect(shape(splits)).toEqual([
+      "DEFERRED-QUEUE SHIM=deferred",
+      "BOOTSTRAP INITIATION PROTOCOL=ratified",
+    ]);
+    expect(splits.map((s) => s.ordinal)).toEqual([1, 2]);
+    expect(splits.every((s) => s.reason.startsWith("case 1"))).toBe(true);
+    expect(splits[0]?.stamp?.key).toBe("strategy-x#1");
+    expect(splits[1]?.stamp?.key).toBe("strategy-x#2");
+  });
+
+  it(
+    "makes an unstamped segment INHERIT the clarification's single stamp (case 2) — " +
+      "the one-stamp-many-rulings mis-attribution, made visible rather than invented",
+    () => {
+      const clar = aclar(
+        "q",
+        "DEFERRED-QUEUE SHIM, the interim surface is a grep. " +
+          `BOOTSTRAP INITIATION PROTOCOL: mint the carrier first ${DELEGATED_STAMP}.`,
+      );
+
+      const splits = splitMultiRuling("strategy-x", "strategy", clar);
+
+      // Both segments read `delegated`, but only the second one was ever
+      // stamped: the first inherits, and its `reason` says so. That is the
+      // defect this unit exists to surface, not a defect in the split.
+      expect(shape(splits)).toEqual([
+        "DEFERRED-QUEUE SHIM=delegated",
+        "BOOTSTRAP INITIATION PROTOCOL=delegated",
+      ]);
+      expect(splits[0]?.reason).toContain("case 2");
+      expect(splits[0]?.reason).toContain("inherits");
+      expect(splits[1]?.reason).toContain("case 1");
+      // The inherited stamp is reported, not nulled — a reader must be able to
+      // see WHICH stamp was stretched over the segment.
+      expect(splits[0]?.stamp?.key).toBe("strategy-x#1");
+      expect(splits[1]?.stamp?.key).toBe("strategy-x#1");
+    },
+  );
+
+  it("refuses with authority \"unknown\" when the clarification carries NO stamp (case 3)", () => {
+    const clar = aclar(
+      "q",
+      "DEFERRED-QUEUE SHIM, the interim surface is a grep. " +
+        "BOOTSTRAP INITIATION PROTOCOL: mint the carrier first.",
+    );
+
+    const splits = splitMultiRuling("strategy-x", "strategy", clar);
+
+    expect(shape(splits)).toEqual([
+      "DEFERRED-QUEUE SHIM=unknown",
+      "BOOTSTRAP INITIATION PROTOCOL=unknown",
+    ]);
+    // A refusal, not a default: no stamp is invented and none is attached.
+    expect(splits.every((s) => s.stamp === null)).toBe(true);
+    expect(splits[0]?.reason).toContain("treated as binding");
+  });
+
+  it(
+    "refuses an unstamped segment when the clarification carries MORE THAN ONE stamp " +
+      "(case 3), and refuses a segment carrying more than one (case 4)",
+    () => {
+      const clar = aclar(
+        "q",
+        "ALPHA RULING, unstamped prose. " +
+          `BETA RULING: ${DEFERRED_STAMP} and also ${DELEGATED_STAMP}.`,
+      );
+
+      const splits = splitMultiRuling("strategy-x", "strategy", clar);
+
+      expect(shape(splits)).toEqual(["ALPHA RULING=unknown", "BETA RULING=unknown"]);
+      // Segment 1: nothing of its own and no SINGLE stamp to inherit from.
+      expect(splits[0]?.reason).toContain("case 3");
+      expect(splits[0]?.reason).toContain("carries 2");
+      // Segment 2: two stamps of its own. Combining `deferred` and `delegated`
+      // into one state is `consolidationVerdict`'s job on a caller's explicit
+      // request, never a side effect of splitting.
+      expect(splits[1]?.reason).toContain("case 4");
+      expect(splits[1]?.reason).toContain("strategy-x#1, strategy-x#2");
+      expect(splits.every((s) => s.stamp === null)).toBe(true);
+    },
+  );
+
+  it("returns an empty list for an answer carrying no ruling label", () => {
+    expect(
+      splitMultiRuling("strategy-x", "strategy", aclar("q", `Ordinary prose. ${DEFERRED_STAMP}`)),
+    ).toEqual([]);
+  });
+
+  it("opens a new segment for a REPEATED label, splitting by occurrence not by name", () => {
+    const clar = aclar("q", "ALPHA RULING, first. ALPHA RULING, again.");
+    const splits = splitMultiRuling("strategy-x", "strategy", clar);
+    expect(splits).toHaveLength(2);
+    expect(splits.map((s) => s.label)).toEqual(["ALPHA RULING", "ALPHA RULING"]);
+  });
+
+  it("tiles the answer from the first label onward, leaving the preamble to no segment", () => {
+    const answer = "(Recorded 2026-09-01.) ALPHA RULING, first. BETA RULING: second.";
+    const splits = splitMultiRuling("strategy-x", "strategy", aclar("q", answer));
+
+    expect(splits).toHaveLength(2);
+    // The preamble is outside every segment — this splits rulings, it does not
+    // partition the answer, and a restatement must carry the preamble itself.
+    expect(splits[0]?.start).toBeGreaterThan(0);
+    expect(answer.slice(0, splits[0]?.start ?? 0)).toContain("Recorded");
+    // No gaps, no overlap, and the last segment runs to the end.
+    expect(splits[0]?.end).toBe(splits[1]?.start);
+    expect(splits[1]?.end).toBe(answer.length);
+    for (const s of splits) {
+      expect(s.text).toBe(answer.slice(s.start, s.end));
+      expect(s.text.startsWith(s.label)).toBe(true);
+    }
+  });
+
+  it("is STRICT: a malformed stamp on the clarification under normalization throws", () => {
+    const clar = aclar(
+      "q",
+      "ALPHA RULING, first. BETA RULING: second (decision: author-issued 2026-09-01).",
+    );
+    expect(() => splitMultiRuling("strategy-x", "strategy", clar)).toThrow(IntentionSchemaError);
+    expect(() => splitMultiRuling("strategy-x", "strategy", clar)).toThrow(
+      /expected 2 or 3 comma-separated elements/,
+    );
+  });
+});
+
+describe("multiRulingCandidates — the detector, a shortlist and not a disposition", () => {
+  const candidateAnswer =
+    "DEFERRED-QUEUE SHIM, the interim surface is a grep. " +
+    `BOOTSTRAP INITIATION PROTOCOL: mint the carrier first ${DELEGATED_STAMP}.`;
+
+  it("shortlists a clarification with two distinct labels under one stamp", () => {
+    const node = anode({
+      id: "strategy-x",
+      kind: "strategy",
+      clarifications: [aclar("What did the round rule?", candidateAnswer)],
+    });
+
+    const found = multiRulingCandidates([node]);
+
+    expect(found).toHaveLength(1);
+    const candidate: MultiRulingCandidate | undefined = found[0];
+    expect(candidate?.nodeId).toBe("strategy-x");
+    expect(candidate?.kind).toBe("strategy");
+    expect(candidate?.index).toBe(0);
+    // `?` numbers clarifications, where DispositionRecord's `#` numbers stamps,
+    // so the two key spaces cannot be confused in one report.
+    expect(candidate?.key).toBe("strategy-x?1");
+    expect(candidate?.labels).toEqual(["DEFERRED-QUEUE SHIM", "BOOTSTRAP INITIATION PROTOCOL"]);
+    expect(candidate?.stampCount).toBe(1);
+    expect(candidate?.splitError).toBeNull();
+    expect(shape(candidate?.splits ?? [])).toEqual([
+      "DEFERRED-QUEUE SHIM=delegated",
+      "BOOTSTRAP INITIATION PROTOCOL=delegated",
+    ]);
+  });
+
+  it("excludes the ALREADY-NORMALIZED shape: one stamp per ruling is what this aims AT", () => {
+    const node = anode({
+      id: "strategy-x",
+      kind: "strategy",
+      clarifications: [
+        aclar(
+          "q",
+          `DEFERRED-QUEUE SHIM, a grep ${DEFERRED_STAMP}. ` +
+            `BOOTSTRAP INITIATION PROTOCOL: mint first ${RATIFIED_STAMP}.`,
+        ),
+      ],
+    });
+
+    expect(multiRulingCandidates([node])).toEqual([]);
+  });
+
+  it("excludes an answer whose labels are not DISTINCT, and one with no label at all", () => {
+    const repeated = anode({
+      id: "strategy-repeat",
+      kind: "strategy",
+      clarifications: [aclar("q", "ALPHA RULING, first. ALPHA RULING, again.")],
+    });
+    const bare = anode({
+      id: "strategy-bare",
+      kind: "strategy",
+      clarifications: [aclar("q", `Ordinary prose with a stamp ${DEFERRED_STAMP}.`)],
+    });
+
+    expect(multiRulingCandidates([repeated, bare])).toEqual([]);
+  });
+
+  it(
+    "is TOLERANT: a malformed stamp yields a candidate carrying the parser's message, " +
+      "and does not hide another node's candidate",
+    () => {
+      const malformed = anode({
+        id: "strategy-malformed",
+        kind: "strategy",
+        clarifications: [
+          aclar(
+            "q",
+            "ALPHA RULING, first. BETA RULING: second (decision: author-issued 2026-09-01).",
+          ),
+        ],
+      });
+      const clean = anode({
+        id: "strategy-x",
+        kind: "strategy",
+        clarifications: [aclar("q", candidateAnswer)],
+      });
+
+      const found = multiRulingCandidates([malformed, clean]);
+
+      expect(found.map((c) => c.nodeId)).toEqual(["strategy-malformed", "strategy-x"]);
+      // The malformed one is still shortlisted — the detector's job is to find
+      // it, and a stamp the grammar refuses is if anything MORE interesting.
+      expect(found[0]?.splits).toEqual([]);
+      expect(found[0]?.splitError).toContain("expected 2 or 3 comma-separated elements");
+      // ...and it did not abort the sweep before the clean node was reached.
+      expect(found[1]?.splitError).toBeNull();
+      expect(found[1]?.splits).toHaveLength(2);
+    },
+  );
+
+  it("sorts by node id and keeps clarification declaration order (determinism)", () => {
+    const nodeB = anode({
+      id: "tactic-b",
+      kind: "tactic",
+      clarifications: [
+        aclar("q1", candidateAnswer),
+        aclar("q2", "GAMMA RULING, one. DELTA RULING: two."),
+      ],
+    });
+    const nodeA = anode({
+      id: "tactic-a",
+      kind: "tactic",
+      clarifications: [aclar("q1", candidateAnswer)],
+    });
+
+    // Deliberately passed out of id order — the detector must sort.
+    const first = multiRulingCandidates([nodeB, nodeA]);
+    const second = multiRulingCandidates([nodeB, nodeA]);
+
+    expect(first.map((c) => c.key)).toEqual(["tactic-a?1", "tactic-b?1", "tactic-b?2"]);
+    expect(second).toEqual(first);
+  });
+
+  it(
+    "live store: the shortlist is non-empty and contains strategy-graph-native-dispatch's " +
+      "\"items 1-8\" clarification, the canonical four-rulings-one-stamp instance",
+    () => {
+      // repo root: packages/intentionsutil/test/ -> up three.
+      const repoRoot = join(fileURLToPath(import.meta.url), "..", "..", "..", "..");
+      const intentionsDir = join(repoRoot, "intentions");
+
+      const nodes = listNodes(intentionsDir);
+      const found = multiRulingCandidates(nodes);
+      const clarificationCount = nodes.reduce((n, node) => n + node.clarifications.length, 0);
+
+      console.log(
+        `multi-ruling shortlist: candidates=${found.length} of ` +
+          `${clarificationCount} clarifications across ${nodes.length} nodes ` +
+          `(${found.filter((c) => c.splitError !== null).length} carry a stamp the strict ` +
+          `grammar refuses); plan measured 130 of 1021 on 2026-09-01`,
+      );
+
+      // Deliberately NOT `toBe(130)`: the shortlist is a measurement of a store
+      // that moves, and pinning it would make every unrelated /align round red.
+      expect(found.length).toBeGreaterThan(0);
+
+      const canonical = found.filter(
+        (c) => c.nodeId === "strategy-graph-native-dispatch" && c.question.includes("items 1-8"),
+      );
+      expect(canonical).toHaveLength(1);
+      expect(canonical[0]?.stampCount).toBe(1);
+      expect(canonical[0]?.labels).toEqual([
+        "DEFERRED-QUEUE SHIM",
+        "BOOTSTRAP INITIATION PROTOCOL",
+        "INITIATION ORDER",
+        "CONSOLIDATION SCOPE FOLDS",
+      ]);
+      // Four rulings under ONE stamp — and that stamp is free prose the interim
+      // grammar refuses, which is why the detector's tolerance is load-bearing
+      // rather than theoretical: a per-node abort would drop the very instance
+      // the plan names.
+      expect(canonical[0]?.splitError).toContain("Unrecognized disposition state");
+      expect(canonical[0]?.splits).toEqual([]);
     },
   );
 });
