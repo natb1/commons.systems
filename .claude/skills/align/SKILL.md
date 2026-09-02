@@ -250,7 +250,7 @@ before the dialectic proper begins.
   never session memory; the author articulates their own account before
   Claude's account appears; compulsion is argument only — press until resolved,
   never impose. Three exits stay open to the author at all times: amend the
-  record (the dialectic wins), defer (held on trust with a review item — see
+  record (the dialectic wins), defer (held on trust under a deferred decision stamp — see
   "Deferral mechanics" below), or claim authority over Claude's account or a
   referenced tradition (an intentional divergence, recorded). Claude never
   blocks and never withholds recording.
@@ -278,13 +278,29 @@ Every `AskUserQuestion` round in this step — the step-2.1 intent confirmation,
 the step-2.9 design-canvas question, and any other — carries three things (the
 standing feedback loop of both types, not a type-a convenience):
 
-1. a **recommendation** — your best answer, listed first;
+1. a **recommendation** — your best answer, listed first — carrying **in the
+   same option** the authority under which it is accepted: **ratified**,
+   **delegated**, or **deferred** (the authority-in-option rule,
+   `strategy-discovered-requirements` 2026-08-31 clarification, superseding
+   the earlier separate accept-as-deferral option);
 2. an honest **boldness assessment** on that recommendation — how much of it
    rests on the graph and this session's context versus Claude-internal
    knowledge the author has not verified;
-3. an explicit **accept-as-deferral** option alongside plain acceptance, so the
-   author can hold the recommendation on trust rather than endorse it (see
-   "Deferral mechanics" below).
+3. **other options presenting alternatives with their trade-offs** — never
+   authority re-spellings of option 1. The author accepts a disposition at a
+   *different* authority via the free-text "Other" reply, which every
+   question already carries.
+
+Propose the authority by these ratified rules (same clarification): **ratify**
+for authority and vocabulary boundaries, charters and principles that bind
+future judgment, amendments touching ratified content, and transcriptions of
+the author's stated position; **delegate** for implementation detail under a
+ratified principle — mechanically validatable, cheaply reversible, reviewable
+through the normal queues; **defer** for Claude-authored substance the author
+has not examined and cannot cheaply examine in-interview, and for the first
+concrete instance of a newly delegated pattern; escalate one level toward
+ratify when being wrong is expensive, irreversible, or capture-shaped. An
+accepted deferral still follows "Deferral mechanics" below.
 
 **Deliver a question's motivating context — including each recommendation's
 boldness — where the author will actually read it:** inside the
@@ -297,36 +313,27 @@ never reference material the author has not seen.
 
 ### Deferral mechanics
 
-This subsection is the home for the born-parked review-item typology (Step 5's
-Mode A curriculum enrollment points here for it). A deferral is always
-defer-until-later-review — a conscious, temporary choice to hold a
-recommendation on trust, never a quiet drop. When the author accepts one:
+(Amended 2026-09-01 under `strategy-graph-review-curriculum`'s 2026-08-30
+record-time-enrollment amendment: record-time enrollment mints **nothing** —
+/align records decision stamps, and the review queue derives from them. The
+former born-parked review-item typology this section carried is retired; the
+2026-09-01 errata round pruned the one item minted under it.)
+
+A deferral is always defer-until-later-review — a conscious, temporary choice
+to hold a recommendation on trust, never a quiet drop. When the author accepts
+one:
 
 - **Record it.** Land a dated clarification on the affected node naming exactly
-  what is held on trust (the ordinary step-2.8 clarification mechanics).
+  what is held on trust, stamped `(decision: deferred — ...)` (the ordinary
+  step-2.8 clarification mechanics). The deferred stamp **is** the enrollment:
+  the review queue is derived from deferred/delegated stamps per the curriculum
+  amendment, so no review-item node, reading-chunk node, or side list is
+  created. When a grounding text exists, name it inside the stamped
+  clarification so the derived queue can route the sitting to it.
 - **Extend delegated scope when it defers to Claude's articulation.** When the
   held content is Claude-drafted reasoning, the same round extends
   `delegation-philosophical-articulation`'s delegated scope — reconcile that
   node in this round's commit.
-- **Create exactly one review item, born-parked, in the same `graph-commit`.**
-  Every deferral — philosophical or not, text-grounded or not — produces one
-  review item; none gets lighter treatment for lacking a text. The typology:
-  - a **reading chunk** (a `tactic-reading-chunk-*` node, `parent:
-    tactic-tradition-reading-program`, `validates: [<grounding strategy>]`)
-    when a grounding text exists — the expected case;
-  - an **office-hours review sitting** (a review-item node) when the author
-    deferred to something text-less, such as Claude's logical analysis of
-    internal consistency.
-
-  **Born-parked field mechanics:** author the review item with the same
-  `write-node.ts --file` recipe as a step-4 draft tactic, but omit `phase` and
-  set `office_hours: {reason, since}` at creation (get `since` via `date -u
-  +%Y-%m-%d`) — the parked state the router never selects for a phase worker.
-  Name the enrolled node's id in the review item's `statement` or body: the
-  coverage sensor (`tactic-review-curriculum-coverage-sensor`) derives frontier
-  linkage by matching that id, so an item that only alludes to the node is
-  invisible to it. Bundle it into the same `graph-commit` as the record it
-  enrolls, exactly like a draft tactic.
 
 ### Dialectic steps
 
@@ -352,8 +359,8 @@ recommendation on trust, never a quiet drop. When the author accepts one:
    `attributes.conditions`; and the tradition records those virtues cite.
    Surface every contradiction between the drafted `statement`/`rationale`
    and that doctrine as an interview question, following the "Question
-   mechanics" subsection above (recommendation + boldness +
-   accept-as-deferral, context delivered inside the `AskUserQuestion` tool).
+   mechanics" subsection above (recommendation with authority-in-option +
+   boldness, context delivered inside the `AskUserQuestion` tool).
    Each resolution lands as a dated `clarifications` entry in the step-2.8
    provenance convention. On the **edit** path (step 1.2 classified the
    target as an edit of an existing strategy), run the gate against the
@@ -371,8 +378,8 @@ recommendation on trust, never a quiet drop. When the author accepts one:
    tradition records the `serves` virtues cite (their `adopted` /
    `diverged` / `chosen_over` entries) or a named candidate tradition you
    can defend. Put that rival framing to the author via `AskUserQuestion`,
-   following the "Question mechanics" subsection above (recommendation +
-   boldness + accept-as-deferral, context delivered inside the tool). Record
+   following the "Question mechanics" subsection above (recommendation with
+   authority-in-option + boldness, context delivered inside the tool). Record
    the resolution as a dated `clarifications` entry in the adopt/diverge
    shape — either the strategy adopts the rival framing, or it diverges
    from it with the reason stated — carrying a dated provenance clause per
@@ -742,21 +749,14 @@ enrolls when it lands, and enrollment happens here, not in a later pass.
 Which mode a node enrolls in is derivable from its own record —
 held-on-trust/delegated content is mode A, author-owned content is mode B.
 
-- **Mode A — content held on trust.** When this round records a deferral or
-  a delegated/held-on-trust recording, land its born-parked re-validation
-  review item in the **same `graph-commit`** as the record it enrolls (bundle
-  it exactly like a draft tactic, step 5's bundling rule). That review item is
-  the node's curriculum-frontier entry, so its `statement` or body must
-  **name the enrolled node's id**: the coverage sensor
-  (`tactic-review-curriculum-coverage-sensor`) derives frontier linkage
-  mechanically by matching that id, so a review item that only alludes to the
-  node is invisible to it. Author the review item with the same
-  `write-node.ts --file` recipe as the step 4 draft-tactic byproduct. The
-  deferral typology — which held-on-trust content becomes a reading chunk
-  versus an office-hours sitting, and the born-parked field mechanics — is
-  owned by `tactic-align-interview-type-doctrine` on this same skill surface;
-  point there for it, do not restate it here. This clause carries only the
-  frontier-entry framing, the same-commit rule, and the id-naming requirement.
+- **Mode A — content held on trust.** Enrollment is the decision stamp
+  itself: a deferral or delegated recording lands as a dated clarification
+  stamped `(decision: deferred — ...)` / `(decision: delegated — ...)` on the
+  node, in the same `graph-commit` as the record it covers, and the review
+  queue is derived from those stamps (`strategy-graph-review-curriculum`,
+  AMENDED 2026-08-30: record-time enrollment mints nothing). No born-parked
+  review item, reading-chunk node, or roster entry is created; the stamp
+  lives on the enrolled node, so the linkage is intrinsic.
 - **Mode B — author-owned content.** Enrollment is implicit: being recorded
   in the graph *is* enrollment, and the curriculum frontier's recursive scope
   expansion is the recurrence mechanism that reaches the node — no action is
