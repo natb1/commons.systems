@@ -77,7 +77,7 @@ function runShell(cmd: string, args: readonly string[], cwd: string): ShellRunRe
     });
     return { ok: true, output };
   } catch (err) {
-    const e = err as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+    const e = err as NodeJS.ErrnoException & { stdout?: string; stderr?: string }; // type-safety-ok: execFileSync throws an untyped error carrying stdout/stderr at the child-process boundary
     const combined = `${e.stdout ?? ""}${e.stderr ?? ""}`.trim();
     return { ok: false, output: combined.length > 0 ? combined : (e.message ?? String(err)) };
   }

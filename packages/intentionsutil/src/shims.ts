@@ -16,7 +16,7 @@
  * refinement-annotation and P0-P4 transition-note shims (`strategy-graph-native-dispatch`),
  * the carrier shim (`tactic-bootstrap-operation`) and the write-class-shims
  * cross-reference (`tactic-intent-orchestration-layer-schema`) already exist
- * as PROSE on their declaring nodes today. This module and the data edits that
+ * in PROSE form on their declaring nodes today. This module and the data edits that
  * land beside it are RETROACTIVE TRANSCRIPTION — the target element and
  * liquidation condition are copied verbatim from that prose, never
  * paraphrased, and no shim is liquidated by this transcription (liquidating is
@@ -36,7 +36,7 @@
  * DEPENDENCY DISCIPLINE, same shape as `criteria.ts`'s and `basis-pins.ts`'s:
  * `IntentionNode` and `ReconciliationFrontierEntry` / `ReconciliationCheckRun`
  * are imported TYPE-ONLY. `frontier-reconciliation.ts` imports
- * `deriveShimFrontier` and `liveShimCount` as VALUES to wire the arm in, so a
+ * `deriveShimFrontier` and `liveShimCount` by VALUE to wire the arm in, so a
  * value import the other way would close a runtime cycle; a type-only import
  * is erased at compile time and carries no such risk. `schema.ts`'s rule 28
  * (part four) duplicates this module's shape rule locally rather than
