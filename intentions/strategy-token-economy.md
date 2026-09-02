@@ -1618,5 +1618,120 @@ attributes:
       exception is the review BASE, which fails closed to the full merge-base
       diff — there the cheap outcome is the narrow review, so the safe failure
       is the expensive one (Recorded 2026-08-13)
+  criteria:
+    - id: fn-mainqa-outcome-envelope-node-lane-parity-1
+      statement: A real node-lane /qa-fix or /review-fix session emits an outcome
+        envelope carrying issue null and node_id set to the node's slug, and
+        aggregate-usage.sh surfaces it on .sessions[].outcome.node_id. Observed
+        by grepping that session's transcript for a dispatch:outcome:v1 block
+        and matching the aggregator's node_id for that session id. Post-merge
+        verification item of PR 3030.
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-review-api-cost-lens-merge-1
+      statement: "Post-merge monitoring shows the api-cost lens firing materially more
+        often than the pre-merge baseline of 5 of 18 comparable runs, at an
+        acceptable draw, with no recurring 'classify: COST CLAMP' log line.
+        Observed by grepping accumulated run logs for find:api-cost and
+        comparing realized fire rate and draw against that baseline. Post-merge
+        verification item of PR 3031."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-review-cross-lane-dedup-1
+      statement: "The first live /review-fix run after merge shows end-to-end
+        cross-lane absorption on real data: xlane-dedup-labelled partition
+        agents appear (or zero contested locations, also valid), the absorption
+        summary log line is present, the residue count drops by exactly the
+        absorbed count, and the posted PR comment shows the absorbed root once
+        under the Lane-B source with both lanes listed in sources. Post-merge
+        verification item of PR 3028."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-review-domain-lens-consolidation-1
+      statement: "On a live run the merged single-agent domain sweep returns findings
+        whose attribution is indistinguishable from the prior three-agent
+        arrangement: every finding carries a Source of exactly secrets, auth, or
+        data-exposure, never a combined name, and validates against the
+        unchanged enum. Observed in that run's log by confirming 'finders: wave
+        2 = launching 5 finder(s)' and a single find:domain-sweep agent where
+        three ran before; an empty domain-sweep result on a diff with an obvious
+        secret is the failure signature. Post-merge verification item of PR
+        3024."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-review-domain-lens-consolidation-2
+      statement: The domain-lens fold delivers a material measured cost reduction
+        while per-lens confirmed-finding yield holds at or above the baseline of
+        2 confirmed findings across secrets, auth and data-exposure over 18 runs
+        ($41.55, 2026-07-27 to 2026-07-31). Observed over a post-merge audit
+        window by comparing the combined find:domain-sweep draw and the combined
+        confirmed findings joined by Source against that baseline; a combined
+        confirmed count below 2 calls for prompt strengthening, never a
+        model-tier change without a measured A/B. Post-merge verification item
+        of PR 3024.
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-review-skill-body-decomposition-1
+      statement: "Parent-session context reduction materializes on live runs:
+        parent-worker peak context drops materially below the 184,468-token
+        baseline and the majority of post-merge /review-fix runs fall under
+        150k, with no offsetting blow-up in any subagent. Observed with
+        aggregate-usage.sh --days 7 over worker sessions carrying a review-fix
+        phase, reading avg_peak and the over_150k count. Post-merge verification
+        item of PR 3025."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-review-skill-body-decomposition-2
+      statement: "A /review-fix session interrupted mid-run - after the Workflow
+        returns but before Step 6 completes - resumes cleanly through the new
+        subagent boundaries: exactly one marker PR comment, exactly one set of
+        follow-up nodes, and graph-commit landing once. Observed on the next
+        such interruption by confirming a single dispatch:review-fix PR comment
+        and a single set of follow-up draft tactic nodes, with no duplicates
+        from a resumed Step 5 or 6 subagent fork. Post-merge verification item
+        of PR 3025."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-review-skill-body-decomposition-3
+      statement: "The extracted dispatch-review-codeql and dispatch-review-npm-audit
+        scripts surface exactly the findings the old inline blocks would have on
+        a comparable diff: same alerts, same severity mapping, same
+        introduced_by_diff classification, same omission of pre-existing
+        moderate and low advisories. Requires live CodeQL alerts and a real
+        dependency-changing diff on an app_or_rules surface, compared by hand
+        since no automated pre/post harness exists. Post-merge verification item
+        of PR 3025."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-review-verify-per-file-batching-1
+      statement: "The verify-phase subagent count per review-fix run drops toward the
+        distinct brief-by-file group count, confirming the batching produced the
+        intended cost reduction rather than only restructuring prompts. Observed
+        by running /dispatch-token-audit over the post-merge window and reading
+        the new verify: and residue: log lines against the pre-change baseline
+        of 131 subagents across 41 distinct (run, file) groups over 18 runs.
+        Post-merge verification item of PR 3027."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
+    - id: fn-mainqa-review-verify-per-file-batching-2
+      statement: Refutation rate stays near the measured 69% baseline (91 refuted, 37
+        upheld), every Required finding carries its required vote count with a
+        floor of 1 and never 0 in real runs, and batched judgments show no
+        anchoring drift where one strong finding pulls the verdicts of its
+        file-mates. Observed by comparing the skeptic refutation rate against
+        that baseline and inspecting verify_report blocks in future PR comments
+        for unverified verdict entries. Post-merge verification item of PR 3027.
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
 ---
 # The prepaid token allowance converts fully into tactic closure — utilization near 100%, closure velocity at or above arrival

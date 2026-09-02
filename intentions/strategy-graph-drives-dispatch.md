@@ -674,5 +674,16 @@ attributes:
     - Consumers that COUNT nodes by tier (reporting, queue summaries, incident
       counts) read ownTier, not resolved tier. Resolved tier is an ordering axis
       only, since it now propagates along blocked_by.
+  criteria:
+    - id: fn-mainqa-attention-namespaced-rank-1
+      statement: "The two legacy boost:/override: compat parse branches in schema.ts
+        are deleted once node files are rewritten onto the canonical boosts:
+        form, which the sibling tactic-attention-per-tier-boost-migration owns.
+        Post-merge verification item of PR 3075, not assertable at that PR's
+        merge time because it deliberately kept both branches alive for the 91
+        nodes still on the legacy form."
+      class: functional
+      authority: deferred
+      recorded: 2026-09-02
 ---
 # Close the loop — intent enters execution from the graph, and execution reports back as readings
