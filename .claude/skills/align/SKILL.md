@@ -359,8 +359,8 @@ one:
    `attributes.conditions`; and the tradition records those virtues cite.
    Surface every contradiction between the drafted `statement`/`rationale`
    and that doctrine as an interview question, following the "Question
-   mechanics" subsection above (recommendation + boldness +
-   accept-as-deferral, context delivered inside the `AskUserQuestion` tool).
+   mechanics" subsection above (recommendation with authority-in-option +
+   boldness, context delivered inside the `AskUserQuestion` tool).
    Each resolution lands as a dated `clarifications` entry in the step-2.8
    provenance convention. On the **edit** path (step 1.2 classified the
    target as an edit of an existing strategy), run the gate against the
@@ -378,8 +378,8 @@ one:
    tradition records the `serves` virtues cite (their `adopted` /
    `diverged` / `chosen_over` entries) or a named candidate tradition you
    can defend. Put that rival framing to the author via `AskUserQuestion`,
-   following the "Question mechanics" subsection above (recommendation +
-   boldness + accept-as-deferral, context delivered inside the tool). Record
+   following the "Question mechanics" subsection above (recommendation with
+   authority-in-option + boldness, context delivered inside the tool). Record
    the resolution as a dated `clarifications` entry in the adopt/diverge
    shape — either the strategy adopts the rival framing, or it diverges
    from it with the reason stated — carrying a dated provenance clause per
