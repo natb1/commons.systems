@@ -429,6 +429,78 @@ describe("deriveReconciliationFrontier — the stale-intent arm (unit 4)", () =>
   });
 });
 
+describe("deriveReconciliationFrontier — the overdue-shim arm (unit 5)", () => {
+  function shim(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: "finding-ledger",
+      target: "a structured finding-ledger record",
+      liquidation: "the finding-ledger deriver goes live",
+      liquidated_by: null,
+      declared: DATE,
+      ...overrides,
+    };
+  }
+
+  it("contributes nothing when every shim is live (liquidated_by: null) — the honest bootstrap reading", () => {
+    const nodes = [
+      standingHome(),
+      node({ id: "strategy-a", kind: "strategy", attributes: { shims: [shim()] } }),
+    ];
+    const entries = deriveReconciliationFrontier({ nodes, checkRuns: [] });
+    expect(entries.filter((e) => e.kind === "overdue-shim")).toEqual([]);
+  });
+
+  it("appends an overdue-shim entry through the same entry type and render path", () => {
+    const nodes = [
+      standingHome(),
+      node({
+        id: "strategy-a",
+        kind: "strategy",
+        attributes: { shims: [shim({ id: "x", liquidated_by: "validate-graph" })] },
+      }),
+    ];
+    const checkRuns = [
+      run({ id: "validate-graph", criterion: "fn-graph-validate", tier: "gating", result: { ok: true } }),
+    ];
+    const entries = deriveReconciliationFrontier({ nodes, checkRuns });
+    const shimEntries = entries.filter((e) => e.kind === "overdue-shim");
+    expect(shimEntries).toHaveLength(1);
+    expect(shimEntries[0].subject).toBe("strategy-a");
+    expect(shimEntries[0].id).toBe("overdue-shim:strategy-a:x");
+    // The renderer needed no change to carry the new arm.
+    const out = renderReconciliationFrontier(entries);
+    expect(out).toContain("## overdue-shim (1)");
+    expect(out).toContain("- **overdue-shim:strategy-a:x**");
+  });
+
+  it("sorts the new arm in with the others, and stays stable under a node permutation", () => {
+    const checkRuns = [
+      run({ id: "validate-graph", criterion: "fn-graph-validate", tier: "gating", result: { ok: true } }),
+    ];
+    const nodes = [
+      standingHome([criterion({ id: "nf-style" })]),
+      node({
+        id: "strategy-a",
+        kind: "strategy",
+        attributes: { shims: [shim({ id: "x", liquidated_by: "validate-graph" })] },
+      }),
+    ];
+    const forward = deriveReconciliationFrontier({ nodes, checkRuns });
+    expect(ids(forward)).toEqual([...ids(forward)].sort());
+    expect(forward.map((e) => e.kind)).toContain("overdue-shim");
+    expect(deriveReconciliationFrontier({ nodes: [...nodes].reverse(), checkRuns })).toEqual(forward);
+  });
+
+  it("refuses a malformed shims list rather than reporting a smaller frontier", () => {
+    expect(() =>
+      deriveReconciliationFrontier({
+        nodes: [standingHome(), node({ id: "strategy-a", kind: "strategy", attributes: { shims: [{}] } })],
+        checkRuns: [],
+      }),
+    ).toThrow(IntentionSchemaError);
+  });
+});
+
 describe("deriveReconciliationFrontier — ordering and totality", () => {
   const nodes = [
     standingHome([criterion({ id: "nf-style" }), criterion({ id: "nf-security" })]),

@@ -550,11 +550,10 @@ attributes:
       or assumption (a world-premise the node rests on — evaluated by
       assessment, never bitten as a work item; the class attributes.conditions
       entries migrate into), authority is ratified, delegated or deferred (a
-      Claude-transcribed
-      criterion enters deferred until the author ratifies it), and recorded is
-      the YYYY-MM-DD the text was written down. Valid on any goal-layer node
-      (attributes.goal_layer: true); the non-functional criteria in force for
-      every strategy live once on kind-strategy under
+      Claude-transcribed criterion enters deferred until the author ratifies
+      it), and recorded is the YYYY-MM-DD the text was written down. Valid on
+      any goal-layer node (attributes.goal_layer: true); the non-functional
+      criteria in force for every strategy live once on kind-strategy under
       attributes.standing_criteria and are unioned in on read by
       effectiveCriteria, never copied onto a node. Shape enforced by
       validateGraph rule 28"
@@ -578,6 +577,20 @@ attributes:
       refreshes a pin — pinning at authoring time is the align family's, since
       only the actor that made the deciding read knows what it decided from.
       Shape enforced by validateGraph rule 28"
+    - "shims: an incumbent-form stand-in for a target-state surface this
+      migration has not yet reached, declared per the shim principle
+      (2026-09-01) — each {id, target, liquidation, liquidated_by, declared}.
+      target is the target-state element the shim stands in for; liquidation is
+      the prose condition under which it is safe to remove, verbatim;
+      liquidated_by is a check id or criterion id when that condition is
+      genuinely machine-expressible today, else null; declared is the YYYY-MM-DD
+      the shim was recorded. A shim whose liquidated_by resolves to a check that
+      is gating and passing, or to a satisfied criterion, while still declared,
+      is an overdue-shim item on the reconciliation frontier
+      (deriveShimFrontier, packages/intentionsutil/src/shims.ts); a null
+      liquidated_by is live, never overdue, and still counts toward the
+      live-shim count. Valid on any node. Shape enforced by validateGraph rule
+      28"
   field_write_class:
     id: intent
     kind: intent
@@ -604,6 +617,7 @@ attributes:
     rounds: orchestration
     attributes.criteria: intent
     attributes.basis_pins: intent
+    attributes.shims: intent
   write_class_shims:
     - field: status
       reason: machine-stamped by the transition writers today and a member of

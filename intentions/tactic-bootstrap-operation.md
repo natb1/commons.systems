@@ -127,7 +127,15 @@ supersession_expiry: null
 office_hours: null
 pace_exempt: true
 rounds: null
-attributes: {}
+attributes:
+  shims:
+    - id: bootstrap-carrier
+      target: the claim record and work record of the reconciliation model (owned by
+        tactic-intent-orchestration-layer-schema's schema surface)
+      liquidation: bootstrap completion - the P4 gate plus the terminal liquidation
+        sweep discharge it, and the carrier prunes
+      liquidated_by: null
+      declared: 2026-09-01
 ---
 # Execute the bootstrap operation - implement the greenfield graph/reconciliation machinery through the dispatch-resumption gate under the 2026-09-01 frozen-queue authority grant - as the operation carrier with steering ledger, self-liquidating on completion
 ## Context

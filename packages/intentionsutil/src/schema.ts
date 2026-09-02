@@ -2433,6 +2433,98 @@ function checkDispositionRef(cites: string, where: string, problems: string[]): 
   }
 }
 
+/** The closed key set of one shim object (rule 28, part four). Mirrors `shims.ts`'s `SHIM_KEYS`. */
+const SHIM_KEYS: readonly string[] = ["id", "target", "liquidation", "liquidated_by", "declared"];
+
+/**
+ * Rule 28, part four: the shape of `attributes.shims`.
+ *
+ * A shim is the retroactive-transcription inventory the shim principle
+ * (2026-09-01) requires: an incumbent-form stand-in for a target-state
+ * surface, recording the target element it stands in for and the condition
+ * under which it is safe to remove. `deriveShimFrontier` (`shims.ts`) reads it
+ * to derive the `overdue-shim` frontier arm, so a malformed entry would
+ * otherwise reach that arm unchallenged — exactly the reasoning parts one and
+ * three of this rule already apply to criteria and basis pins.
+ *
+ * Two obligations:
+ *
+ *  (a) SHAPE — each entry is a closed `{id, target, liquidation,
+ *      liquidated_by, declared}` record: `id`, `target` and `liquidation`
+ *      non-empty strings, `liquidated_by` a non-empty string OR `null`, and
+ *      `declared` a `YYYY-MM-DD` date. Unknown keys are REPORTED, not
+ *      ignored, for the same reason parts one and three report them on a
+ *      criterion or a pin.
+ *  (b) UNIQUE IDS — no `id` repeated within one node's own list: a liquidation
+ *      entry cites "the shim with id X", and two entries under one id make
+ *      that reference ambiguous (same reasoning as the criterion-id
+ *      uniqueness part one already enforces).
+ *
+ * Presence-conditional like the rest of rule 28: a node carrying no `shims`
+ * key is untouched, which is what lets the rule land on a graph where only a
+ * handful of nodes carry a shim inventory yet.
+ *
+ * DELIBERATELY DUPLICATED from `shims.ts`'s validators, for the identical
+ * `node:crypto`-adjacent-barrel reason `checkCriteriaShape` and
+ * `checkBasisPinsShape` record: `shims.ts` is not on the browser-safe
+ * `graph.ts` barrel either (see its own header), and duplicating here keeps
+ * this file free of a value dependency on a module that mirrors it.
+ * `test/shims.test.ts` pins the two implementations to the same verdicts.
+ */
+function checkShimsShape(node: IntentionNode, problems: string[]): void {
+  const raw = node.attributes.shims;
+  if (raw === undefined || raw === null) return;
+  const at = `${node.id}: attributes.shims`;
+  if (!Array.isArray(raw)) {
+    problems.push(
+      `${at} must be an array of {${SHIM_KEYS.join(", ")}} shims, got ${raw === null ? "null" : typeof raw}`,
+    );
+    return;
+  }
+  const seen = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    const entry: unknown = raw[i];
+    const where = `${at}[${i}]`;
+    if (!isPlainObject(entry)) {
+      problems.push(
+        `${where} must be a {${SHIM_KEYS.join(", ")}} record, got ${entry === null ? "null" : typeof entry}`,
+      );
+      continue;
+    }
+    for (const key of Object.keys(entry)) {
+      if (!SHIM_KEYS.includes(key)) {
+        problems.push(
+          `${where}.${key} is not a shim field — the shim shape is closed, so no unread field rides along on data that decides whether an incumbent form is still standing in for a target state (allowed: ${SHIM_KEYS.join(", ")})`,
+        );
+      }
+    }
+    for (const field of ["id", "target", "liquidation"]) {
+      const value = entry[field];
+      if (typeof value !== "string" || value.trim() === "") {
+        problems.push(`${where}.${field} must be a non-empty string, got ${JSON.stringify(value)}`);
+      }
+    }
+    const liquidatedBy = entry.liquidated_by;
+    if (liquidatedBy !== null && (typeof liquidatedBy !== "string" || liquidatedBy.trim() === "")) {
+      problems.push(
+        `${where}.liquidated_by must be a non-empty string or null, got ${JSON.stringify(liquidatedBy)}`,
+      );
+    }
+    const declared = entry.declared;
+    if (typeof declared !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(declared)) {
+      problems.push(`${where}.declared must be a YYYY-MM-DD date, got ${JSON.stringify(declared)}`);
+    }
+    if (typeof entry.id === "string") {
+      if (seen.has(entry.id)) {
+        problems.push(
+          `${where}.id duplicates "${entry.id}" earlier in ${at} — shim ids are unique within one node's inventory, since a liquidation entry cites "the shim with id X"`,
+        );
+      }
+      seen.add(entry.id);
+    }
+  }
+}
+
 /**
  * Referential integrity over a whole node set. Per-node shape is `validateNode`'s
  * job; this checks the edges BETWEEN nodes:
@@ -2618,6 +2710,16 @@ function checkDispositionRef(cites: string, where: string, problems: string[]): 
  *      to keep a MALFORMED pin — which nothing could ever satisfy — out of the
  *      `stale-intent` frontier arm, where it would be indistinguishable from a
  *      genuine dangling citation. See `checkBasisPinsShape`.
+ *      PART FOUR, same rule and same presence-conditional discipline:
+ *      `attributes.shims` is an array of closed `{id, target, liquidation,
+ *      liquidated_by, declared}` records — `id`/`target`/`liquidation`
+ *      non-empty strings, `liquidated_by` a non-empty string or `null`,
+ *      `declared` a `YYYY-MM-DD` date, and no `id` repeated within one node's
+ *      list. A shim is the retroactive-transcription inventory the shim
+ *      principle (2026-09-01) requires; this part keeps a MALFORMED shim out
+ *      of `deriveShimFrontier`'s `overdue-shim` arm (`shims.ts`), for the same
+ *      reason part three keeps a malformed pin out of `stale-intent`. See
+ *      `checkShimsShape`.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -2684,6 +2786,8 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkCriteriaShape(node, problems);
     // Rule 28 (part three): basis pins are well-shaped where present.
     checkBasisPinsShape(node, problems);
+    // Rule 28 (part four): shims are well-shaped where present.
+    checkShimsShape(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkEdgeCycles(

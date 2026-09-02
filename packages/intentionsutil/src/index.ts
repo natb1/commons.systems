@@ -102,6 +102,17 @@ export type {
   ReconciliationFrontierInput,
   ReconciliationCheckRun,
 } from "./frontier-reconciliation.js";
+export {
+  SHIM_KEYS,
+  SHIMS_KEY,
+  validateShim,
+  validateShimList,
+  parseShims,
+  liveShimCount,
+  deriveShimFrontier,
+  governs,
+} from "./shims.js";
+export type { ShimDeclaration, GovernanceState } from "./shims.js";
 export { lintTacticBodies, loadPlanBodyBaseline } from "./planlint.js";
 export type { PlanBodyMarker, PlanBodyBaselineEntry } from "./planlint.js";
 export {

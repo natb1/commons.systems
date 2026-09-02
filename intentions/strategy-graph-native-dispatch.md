@@ -7889,6 +7889,68 @@ attributes:
       (Recorded 2026-08-29 as author Ruling 5; see
       plans/dispatch-rsi-author-rulings.md, which is the index and audit trail
       and never the authority.)"
+  shims:
+    - id: review
+      target: criteria-anchored review assessments with scoped basis pins; interim =
+        the detached dispatch-code-review instrument exactly as measured —
+        detachment, two-phase collect, the worktree flock/node lock, and
+        no-kill-on-overrun are instrument facts, not doctrine
+      liquidation: assessment/check machinery live — the cap and the effort tiering
+        liquidate when criteria-anchored checks make convergence structural and
+        effort derives from criterion class
+      liquidated_by: null
+      declared: 2026-09-01
+    - id: qa
+      target: the incumbent implement -> qa -> review ladder order is retained as the
+        interim embodiment of staged reconciliation; entry-20 full semantics
+        remain the functional assessment's production method
+      liquidation: staged assessment production live
+      liquidated_by: null
+      declared: 2026-09-01
+    - id: main-qa
+      target: no new main-qa verification nodes are minted; shipped-prod-surface
+        residue verifies as dated assessments appended to evidence; needs-main
+        residue becomes frontier entries
+      liquidation: level-triggered re-verification live
+      liquidated_by: null
+      declared: 2026-09-01
+    - id: implicit-criteria
+      target: until transcription, the review built-ins' internal standards operate as
+        a delegated implicit criteria set (entry 51's trust, refined into a
+        declared shim)
+      liquidation: transcription into the check/criteria registry done AND the
+        transcribed set dispositioned through the deferred queue (folds into
+        tactic-migration-frontier-projection at finalization)
+      liquidated_by: null
+      declared: 2026-09-01
+    - id: finding-ledger
+      target: until the evidence log exists, the PR review comment audit trail (entry
+        19's incumbent form) is the finding ledger's declared interim carrier
+      liquidation: evidence log live
+      liquidated_by: null
+      declared: 2026-09-01
+    - id: refinement-annotation
+      target: the hand-appended REFINED/SUPERSEDED-IN-PART parentheticals of the
+        2026-09-01 errata are the incumbent mechanism, not a new annotation
+        layer replacing the clarification log's folding — the stale-intent
+        frontier (strategy-graph-integrity, ruled the same day) derives what
+        needs annotating, and consolidation folds annotation chains into
+        current-state summaries with git history as the archive
+      liquidation: tactic-consolidation-operation's folding machinery live
+      liquidated_by: null
+      declared: 2026-09-01
+    - id: transition-note
+      target: the P0-P4 execution-authority critical-path prose is a projection
+        hand-materialized into prose, not intent; its target form is the
+        blocked_by topology on the carrier tactics plus the P4 resumption-gate
+        criterion — on any conflict between this prose and the graph's edges,
+        the edges win, and the prose regenerates from the graph rather than
+        being hand-reconciled. Its pin is the carrier tactics' blocked_by edges
+        as of this landing
+      liquidation: rides the terminal liquidation sweep (bootstrap completion's
+        completion criterion)
+      liquidated_by: null
+      declared: 2026-09-01
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family

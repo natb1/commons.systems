@@ -25,6 +25,7 @@ import {
   deriveReconciliationFrontier,
   type ReconciliationFrontierEntry,
 } from "./frontier-reconciliation.js";
+import { liveShimCount } from "./shims.js";
 
 /**
  * Inputs the CLI gathers for the digest. Kept as plain data so the module
@@ -462,6 +463,20 @@ function tableReconciliationFrontier(input: DigestInput): string {
   return `[RECONCILIATION-FRONTIER] ${entries.length} items (${scope}; top ${shown.length} shown)\n${lines.join("\n")}`;
 }
 
+/**
+ * LIVE-SHIMS: the cheap machine signal `shims.ts`'s header promises the
+ * observe loop — every declared shim across the graph, overdue or not. It
+ * never runs a check (`liveShimCount` doesn't take one), so unlike the
+ * reconciliation-frontier table above this row is not a "graph-only"
+ * approximation of a richer answer — it is the whole answer, on every digest
+ * run.
+ */
+function tableLiveShims(input: DigestInput): string {
+  const count = liveShimCount(input.nodes);
+  const noun = count === 1 ? "shim" : "shims";
+  return `[LIVE-SHIMS] ${count} declared ${noun} across the graph`;
+}
+
 // --- Assembly --------------------------------------------------------------
 
 /** Section 2 — the derived check tables, in a fixed order. */
@@ -478,6 +493,7 @@ export function renderTables(input: DigestInput): string {
     tableDanglingRefs(input),
     tableStoredDefaults(input),
     tableReconciliationFrontier(input),
+    tableLiveShims(input),
   ].join("\n\n") + "\n";
 }
 

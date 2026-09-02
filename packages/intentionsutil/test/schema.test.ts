@@ -3242,6 +3242,85 @@ describe("validateGraph", () => {
       validateGraph(pinGraph([basisPin(), basisPin({ hash: "f".repeat(64) })])),
     ).toThrow(/attributes\.basis_pins\[1\]\.cites duplicates/);
   });
+
+  // --- Rule 28 part four: shims shape ---------------------------------------
+
+  /** `kind-strategy`/`kind-kind` plus a strategy carrying `shims`. */
+  function shimGraph(shims: unknown): IntentionNode[] {
+    return [
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "kind-strategy", kind: "kind", status: "codified" }),
+      gnode({ id: "strategy-x", kind: "strategy", attributes: { shims } }),
+    ];
+  }
+
+  /** A well-formed shim, overridable field by field — mirrors `shims.ts`'s `ShimDeclaration`. */
+  function shimEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id: "finding-ledger",
+      target: "a structured finding-ledger record",
+      liquidation: "the finding-ledger deriver goes live",
+      liquidated_by: null,
+      declared: "2026-09-01",
+      ...overrides,
+    };
+  }
+
+  it("accepts a well-formed shims list, including a non-null liquidated_by", () => {
+    expect(() =>
+      validateGraph(
+        shimGraph([shimEntry(), shimEntry({ id: "review", liquidated_by: "validate-graph" })]),
+      ),
+    ).not.toThrow();
+  });
+
+  it("is inert on a node carrying no shims key", () => {
+    expect(() => validateGraph(shimGraph(null))).not.toThrow();
+  });
+
+  it("rejects a shims value that is not an array, and a non-record entry", () => {
+    expect(() => validateGraph(shimGraph("finding-ledger"))).toThrow(
+      /strategy-x: attributes\.shims must be an array of \{id, target, liquidation, liquidated_by, declared\} shims, got string/,
+    );
+    expect(() => validateGraph(shimGraph(["finding-ledger"]))).toThrow(
+      /attributes\.shims\[0\] must be a \{id, target, liquidation, liquidated_by, declared\} record, got string/,
+    );
+  });
+
+  it("rejects an unknown key rather than ignoring it", () => {
+    expect(() => validateGraph(shimGraph([shimEntry({ waived: true })]))).toThrow(
+      /attributes\.shims\[0\]\.waived is not a shim field/,
+    );
+  });
+
+  for (const field of ["id", "target", "liquidation"]) {
+    it(`rejects an empty ${field}`, () => {
+      expect(() => validateGraph(shimGraph([shimEntry({ [field]: "" })]))).toThrow(
+        new RegExp(`attributes\\.shims\\[0\\]\\.${field} must be a non-empty string`),
+      );
+    });
+  }
+
+  it("rejects a liquidated_by that is neither a non-empty string nor null", () => {
+    expect(() => validateGraph(shimGraph([shimEntry({ liquidated_by: 42 })]))).toThrow(
+      /attributes\.shims\[0\]\.liquidated_by must be a non-empty string or null/,
+    );
+    expect(() => validateGraph(shimGraph([shimEntry({ liquidated_by: "" })]))).toThrow(
+      /attributes\.shims\[0\]\.liquidated_by must be a non-empty string or null/,
+    );
+  });
+
+  it("rejects a malformed declared date", () => {
+    expect(() => validateGraph(shimGraph([shimEntry({ declared: "2026-9-1" })]))).toThrow(
+      /attributes\.shims\[0\]\.declared must be a YYYY-MM-DD date/,
+    );
+  });
+
+  it("rejects a duplicate shim id within one node's list", () => {
+    expect(() =>
+      validateGraph(shimGraph([shimEntry({ id: "x" }), shimEntry({ id: "x" })])),
+    ).toThrow(/attributes\.shims\[1\]\.id duplicates "x"/);
+  });
 });
 
 describe("write-class primitives", () => {
