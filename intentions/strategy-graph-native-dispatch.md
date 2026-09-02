@@ -7470,6 +7470,53 @@ clarifications:
       (tactic-node-ancestry-context) is the precursor. (decision: author-issued
       2026-09-01; placement delegated to Claude and landed beside the
       tradition-grounding clarification same day)"
+  - question: Greenfield disposition - how do the legacy intervention lanes map to
+      the reconciliation model, and what binds a bite's context (2026-09-02)?
+    answer: "(Recorded 2026-09-02 /align variance-doctrine round; author-directed
+      greenfield evaluation - not a 1-for-1 migration, incumbents not sacred.)
+      There is no intervention category in the target model: the legacy lanes
+      exist only because legacy dispatch was edge-triggered - a signal fires, a
+      reactive script catches it. Under level-triggered derivation every such
+      trigger is a VARIANCE - a divergence between derived and target state,
+      derived at read time as a reconciliation frontier entry, distinguished by
+      class, never by mechanism. Doctrine: (1) a variance carries scope (the
+      claim/node it attaches to) and blocking semantics - a gating variance
+      (merge conflict, broken check, red main) halts its claim's further
+      reconciliation; adopted from level-triggered control (Kubernetes
+      conditions/controllers) and TPS jidoka/andon (stop the line, never pass a
+      defect downstream); author-stated rationale 2026-09-02: prevent cascading
+      failures and catch debt early, and isolate the intervention's context for
+      token efficiency. (2) Resolution is ranked, dispatched, context-isolated
+      bites - no standing intervention workers; a gating variance on an active
+      claim outranks through the existing blocked_by attention inversion. (3)
+      Each variance/bite class in the vocabulary is initialized WITH a dedicated
+      resolution skill (author-directed 2026-09-02): the skill is the class's
+      context binder - it front-loads exactly that class's procedure and
+      bound-context recipe - and its telemetry unit, per-skill token attribution
+      giving RSI cost-per-class; minting a type without its skill is a registry
+      gap, the same census discipline as unregistered checks; mechanical parts
+      stay in scripts the skill calls (mechanical-floor doctrine). This is the
+      same principle as the incumbent ladder's one-skill-per-phase (author
+      analogy 2026-09-02): the key generalizes from ladder phase to variance
+      class, and the legacy per-lane skills re-key at liquidation rather than
+      being discarded. (4) Recurring variance classes feed the RSI finding
+      ledger and become criteria or tooling work. Dissolution map: fix-checks ->
+      gating-variance bite (claim-scoped check run bound to a standing
+      criterion); dispatch-conflict -> gating-variance bite (merge-tree
+      variance); dispatch-diagnose-main -> repo-scoped gating variance under
+      strategy-main-health's criteria; dispatch-invalid-state -> dissolves
+      entirely into a stale-claim variance read from claim/release records
+      (design-derived from the unbuilt claim-record surface, falsifiable at the
+      P3 observe integration - flagged as design-derived, not measured);
+      qa/main-qa/review residue handling -> already declared interim by this
+      node's qa/main-qa/review shims; office-hours parks -> the
+      deferred-decision queue (tactic-consolidation-operation's surface);
+      flake-classifier lanes -> recurring-variance RSI findings. Per-PR
+      check/merge signals need no per-PR criteria: the criterion is standing,
+      the check RUN is claim-scoped operational state, and the variance is
+      derived - the build item is claim-scoped run ingestion plus gating
+      semantics in the deriver, recorded in-scope on
+      tactic-ladder-reconciliation-observe the same day."
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic
@@ -7951,6 +7998,18 @@ attributes:
         completion criterion)
       liquidated_by: null
       declared: 2026-09-01
+    - id: intervention-lanes
+      target: variance-classed reconciliation frontier entries with blocking semantics
+        and ranked, context-bound bite resolution through per-class dedicated
+        skills; interim = the dormant edge-triggered intervention lanes exactly
+        as measured - fix-checks, dispatch-conflict, dispatch-invalid-state,
+        dispatch-diagnose-main, and the flake-classifier lanes
+      liquidation: variance derivation and bite resolution proving out through the P3
+        observe integration and the P4 resumption gate; each lane retires as its
+        variance class proves out, per the 2026-09-02 greenfield-disposition
+        clarification's dissolution map
+      liquidated_by: null
+      declared: 2026-09-02
 ---
 
 # Dispatch runs on the graph — orchestration state lives in intention nodes, worked through the align skill family

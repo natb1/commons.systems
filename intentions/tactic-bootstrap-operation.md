@@ -130,6 +130,40 @@ clarifications:
       PR-debugging context out of the main thread, not merely to parallelize.
       Applied immediately to the PR #3187 unit-tests failure. (decision:
       author-issued 2026-09-02)"
+  - question: Steering ledger [7] - what did the author direct on
+      orchestration-protocol shims, the variance doctrine, and bite-type skills
+      (2026-09-02)?
+    answer: "(Author-issued 2026-09-02, /align variance-doctrine round.) Directives,
+      verbatim: (a) on declaring the steering [1]/[6] protocol in the shim
+      registry: \"One protocol shim, and evaluate whether other bootstrap
+      orchestration protocols are better recorded as shims.\" (b) on the legacy
+      intervention lanes: \"Evaluate all legacy interventions from a greenfield
+      perspective. Do not migrate 1-for-1. Remember greenfield evaluation rules:
+      nothing is sacred, esp. the incumbent implementation. Ratified doctrine
+      only needs an interview to overrule, other dispositions don't even require
+      that. Consider from the perspective of best greenfield judgement and also
+      reference to tradition. Some legacy interventions may be resolved
+      naturally by the new reconciliation model and other greenfield design such
+      as ranking design, bite design, or rsi design. At a basic level, some
+      variances (like merge conflicts or broken checks) must be resolved before
+      progressing reconciliation a) to prevent cascading failures, or collecting
+      debt that can be caught early b) to isolate the context of these
+      interventions for token efficiency.\" (c) on bite classes: \"each byte
+      'type' (vocabulary?) is initialized with a dedicated skill for the purpose
+      of context management and token usage telemetry\", with the follow-on
+      analogy \"this is analogous to each phase of the dispatch ladder getting a
+      skill\" (read as bite type; adopted). Disposition: sweep result -
+      manual-orchestration and manual-claim declared as shims on this node; the
+      review-protocol terms (caps, effort tiering,
+      functional-before-non-functional, no mid-window scope expansion) remain
+      the review shim's own terms; the deferred-until-ratified authority rule is
+      target doctrine, not a shim; the queue freeze, P1-P4 ordering, and
+      same-turn ledger appends ride the bootstrap-carrier shim. The variance
+      doctrine, the intervention-lanes shim, the bite-type skill doctrine, and
+      the observe-node scope extension landed the same day
+      (strategy-graph-native-dispatch greenfield-disposition clarification;
+      tactic-ladder-reconciliation-observe scope clarification). (decision:
+      author-issued 2026-09-02)"
 tooling_goals: []
 success_signal: null
 attention: null
@@ -151,6 +185,25 @@ attributes:
         sweep discharge it, and the carrier prunes
       liquidated_by: null
       declared: 2026-09-01
+    - id: manual-orchestration
+      target: router-dispatched, context-bound skill resolution of reconciliation
+        frontier entries; interim = the standing main-thread orchestration of
+        steering ledger [1]/[6] - implementation delegated to model-tiered
+        subagents while the main thread only orchestrates, gates, merges, and
+        appends the ledger
+      liquidation: the P4 resumption gate discharges - a red check or any other
+        variance becomes a frontier entry resolved by dispatched sessions, and
+        no standing main thread remains
+      liquidated_by: null
+      declared: 2026-09-02
+    - id: manual-claim
+      target: claim records plus the mechanical selection-validity gate
+        (tactic-intent-orchestration-layer-schema's claim-record surface);
+        interim = hand-provisioned worktree claims with Step-0 gate-bypass notes
+        in round reports
+      liquidation: claim-record machinery live plus the P4 resumption gate
+      liquidated_by: null
+      declared: 2026-09-02
 ---
 # Execute the bootstrap operation - implement the greenfield graph/reconciliation machinery through the dispatch-resumption gate under the 2026-09-01 frozen-queue authority grant - as the operation carrier with steering ledger, self-liquidating on completion
 ## Context

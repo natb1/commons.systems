@@ -18,7 +18,23 @@ serves:
   - strategy-graph-native-dispatch
   - strategy-graph-integrity
 recovers: []
-clarifications: []
+clarifications:
+  - question: Scope clarification - are claim-scoped run ingestion and gating
+      semantics in the observe integration's scope (2026-09-02)?
+    answer: "(Recorded 2026-09-02 /align variance-doctrine round.) Yes, in scope:
+      ingestion of claim-scoped operational signals - per-claim CI check results
+      and merge-tree state - into the check-run state the frontier deriver
+      reads, and gating semantics in the deriver: a gating variance (broken
+      check, merge conflict, red main) halts its claim's derived progression
+      rather than merely reporting it. Grounds: the same day's
+      greenfield-disposition clarification on strategy-graph-native-dispatch
+      (interventions are variances; blocking semantics adopted from
+      level-triggered control and jidoka; rationale - prevent cascading
+      failures, catch debt early, isolate context for token efficiency). No
+      per-PR criteria are minted: the criterion is standing, the run is
+      operational state, the variance is derived. The legacy edge-triggered
+      lanes this integration eventually replaces are declared as the
+      intervention-lanes shim on strategy-graph-native-dispatch."
 tooling_goals: []
 success_signal: null
 attention: null
