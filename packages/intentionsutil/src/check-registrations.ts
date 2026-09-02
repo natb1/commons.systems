@@ -74,6 +74,11 @@ function runShell(cmd: string, args: readonly string[], cwd: string): ShellRunRe
       cwd,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
+      // execFileSync's default is 1 MB, and the history snapshots below already
+      // measure ~230 KB. Overrunning the default surfaces as an ENOBUFS throw
+      // that reads exactly like a non-zero exit, which is the silent-truncation
+      // shape the callers must never see.
+      maxBuffer: 64 * 1024 * 1024,
     });
     return { ok: true, output };
   } catch (err) {
@@ -367,7 +372,18 @@ function computeEverExisted(repoRoot: string): Set<string> {
     repoRoot,
   );
   const ever = new Set<string>();
-  if (!ok) return ever; // no history readable — treat as "nothing ever existed" rather than throw
+  // A failed `git log` is NOT "nothing ever existed": an empty snapshot makes
+  // `everExisted` false for every candidate, so every genuine orphan is
+  // reclassified as a forward reference and the check reports a clean pass it
+  // never verified. Fail loudly instead (`.claude/rules/code-style.md`); the
+  // runner catches a throwing `run()` and reports it as an ordinary failing
+  // check rather than crashing the sweep.
+  if (!ok) {
+    throw new Error(
+      `dangling-tooling-path: could not read the git history snapshot in ${repoRoot} — ` +
+        `an empty snapshot would silently pass this check. git said: ${lastLines(output, 4)}`,
+    );
+  }
   for (const rawLine of output.split("\n")) {
     const p = rawLine.trim();
     if (p.length === 0) continue;
@@ -400,7 +416,16 @@ function historicalSkillNames(repoRoot: string): Set<string> {
     repoRoot,
   );
   const names = new Set<string>();
-  if (!ok) return names;
+  // Same reasoning as `computeEverExisted`: an empty retired-name set makes
+  // `staleSkillReferences` return zero seeds, so the check reads green without
+  // having scanned anything. A failed history read is a failed check, not a
+  // clean one.
+  if (!ok) {
+    throw new Error(
+      `stale-skill-reference: could not read the skill history in ${repoRoot} — ` +
+        `an empty retired-skill set would silently pass this check. git said: ${lastLines(output, 4)}`,
+    );
+  }
   for (const rawLine of output.split("\n")) {
     const m = rawLine.trim().match(SKILL_MD_ADDED);
     if (m) names.add(m[1]);

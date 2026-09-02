@@ -280,7 +280,11 @@ describe("deriveShimFrontier", () => {
       kind: "overdue-shim",
       id: "overdue-shim:strategy-a:x",
       subject: "strategy-a",
-      criterion: "validate-graph",
+      // `liquidated_by` named the CHECK "validate-graph"; the entry's
+      // `criterion` field carries that check's own criterion binding, never
+      // the check id — a check id there would render as `[criterion
+      // validate-graph]` and name something that is not a criterion.
+      criterion: "fn-graph-validate",
       authority: "ratified",
     });
     expect(entries[0].detail).toContain("hand-written transition notes");

@@ -279,7 +279,12 @@ export function deriveShimFrontier(
         detail:
           `shim "${shim.id}" (target: ${shim.target}) is overdue — liquidated_by ` +
           `"${shim.liquidated_by}" is now satisfied; liquidation condition: ${shim.liquidation}`,
-        criterion: shim.liquidated_by,
+        // `liquidated_by` may name EITHER a check id or a criterion id (see
+        // `isShimOverdue`). The entry's `criterion` field means a criterion id,
+        // so when a CHECK resolved the shim the criterion is that check's own
+        // binding — never the check id itself, which would render as
+        // `[criterion <check-id>]` and name something that is not a criterion.
+        criterion: boundRun !== undefined ? boundRun.check.criterion : shim.liquidated_by,
         // `ratified` is guaranteed rather than looked up when the resolution
         // was a gating-and-passing CHECK: `deriveTier` cannot produce `gating`
         // unless the bound criterion's authority is `ratified` (see

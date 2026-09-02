@@ -101,10 +101,15 @@ fi
 APP_DIRS=("${!DIRTY_APPS[@]}")
 FAILURES=()
 
-# Install all dependencies once at the workspace root (skip when only running nix/rules checks)
-if [ ${#APP_DIRS[@]} -gt 0 ]; then
-  ensure_deps
-fi
+# Install all dependencies once at the workspace root.
+#
+# UNCONDITIONAL, not gated on APP_DIRS: the registered-checks runner below is
+# invoked as `node --import tsx/esm`, which resolves `tsx` from node_modules,
+# and that block is deliberately unconditional. The CI lint job runs no
+# `npm ci` of its own, so a gate here left a .claude/**- or intentions/**-only
+# PR with no node_modules and the runner died ERR_MODULE_NOT_FOUND.
+# `ensure_deps` is already a no-op when node_modules exists.
+ensure_deps
 
 # Run eslint on detected app dirs
 for dir in "${APP_DIRS[@]}"; do

@@ -149,6 +149,15 @@ export function gapNoteFileContent(record: GapNoteRecord): string {
  * registered check against a recorded criterion, so both fields are `null`
  * rather than invented (`ReconciliationFrontierEntry`'s own doc note on why
  * those two fields are nullable by design).
+ *
+ * THE ID CARRIES A CONTENT DISCRIMINATOR because `subject` alone is NOT unique:
+ * the store is content-addressed over the whole record, so two open notes on
+ * one subject (a node with two distinct absent-deliverable gaps, say) coexist
+ * legitimately and would otherwise emit two entries under one id — breaking the
+ * "stable, unique-in-practice sort key" `ReconciliationFrontierEntry` promises
+ * and making an entry uncitable. `contentHash12` is the same digest the record's
+ * own filename carries, so the id is stable across runs and traceable to the
+ * file it came from.
  */
 export function deriveGapNoteFrontier(
   records: readonly GapNoteRecord[],
@@ -157,7 +166,7 @@ export function deriveGapNoteFrontier(
     .filter((record) => record.disposed_by === null)
     .map((record) => ({
       kind: "prose-gap" as const,
-      id: `prose-gap:${record.subject}`,
+      id: `prose-gap:${record.subject}:${contentHash12(record)}`,
       subject: record.subject,
       detail: record.detail,
       criterion: null,

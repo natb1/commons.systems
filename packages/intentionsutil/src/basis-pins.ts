@@ -96,7 +96,6 @@
  */
 import { createHash } from "node:crypto";
 import {
-  CRITERIA_KEY,
   STANDING_CRITERIA_KEY,
   parseCriteria,
   validateStandingCriteriaList,
@@ -402,7 +401,18 @@ function dispositionSubstance(node: IntentionNode, ref: DispositionRef): unknown
           question: c.question,
           answer: c.answer,
         })),
-        criteria: node.attributes[CRITERIA_KEY] ?? null,
+        // Rebuilt in CRITERION_KEYS order, exactly as the `criterion:` branch
+        // above does, so a key reordering in the source YAML does not move
+        // this hash either. Passing the RAW `attributes.criteria` here would
+        // make the two selectors disagree about the same content and report a
+        // no-op reorder as stale intent.
+        criteria: parseCriteria(node).map((c) => ({
+          id: c.id,
+          statement: c.statement,
+          class: c.class,
+          authority: c.authority,
+          recorded: c.recorded,
+        })),
         conditions: node.attributes.conditions ?? null,
         serves: [...node.serves].sort(),
         success_signal: node.success_signal,

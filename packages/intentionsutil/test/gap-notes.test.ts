@@ -124,4 +124,27 @@ describe("deriveGapNoteFrontier", () => {
   it("an empty record list yields an empty frontier", () => {
     expect(deriveGapNoteFrontier([])).toEqual([]);
   });
+
+  it("gives two open notes on the SAME subject distinct ids", () => {
+    // The store is content-addressed over the whole record, so two open notes
+    // on one subject coexist legitimately. Keying the entry id on `subject`
+    // alone would emit two entries under one id, breaking the uniqueness
+    // ReconciliationFrontierEntry promises and making either one uncitable.
+    const entries = deriveGapNoteFrontier([
+      record({ subject: "tactic-x", detail: "deliverable A is absent" }),
+      record({ subject: "tactic-x", detail: "deliverable B is absent" }),
+    ]);
+    expect(entries).toHaveLength(2);
+    expect(new Set(entries.map((e) => e.id)).size).toBe(2);
+    expect(entries.every((e) => e.id.startsWith("prose-gap:tactic-x:"))).toBe(true);
+  });
+
+  it("keys the entry id on the same content hash the record's own filename carries", () => {
+    const r = record({ subject: "tactic-x" });
+    const [entry] = deriveGapNoteFrontier([r]);
+    // `<YYYYMMDD>-<hash12>.json` — the id's discriminator is that same hash12,
+    // so an entry is traceable to the file it came from.
+    const hash12 = gapNoteFileName(r).replace(/^\d{8}-/, "").replace(/\.json$/, "");
+    expect(entry.id).toBe(`prose-gap:tactic-x:${hash12}`);
+  });
 });
