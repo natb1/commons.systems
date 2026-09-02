@@ -176,6 +176,69 @@ clarifications:
       Sonnet-orchestrator-plus-Opus-subagent split is untouched. The directing
       turn arrived while the receiving session was itself running the /align
       interview on Fable."
+  - question: Steering ledger [9] - what did the author direct on greenfield
+      alignment shims (2026-09-02)?
+    answer: '(Author-issued 2026-09-02 to the /align amendment fork session, relayed
+      same-hour, appended same-turn. Verbatim: "Bootstrap shims must include
+      /align shims during bootstrapping so that this kind of alignment session
+      is as close to greenfield as possible. Reconciliation of greenfield
+      alignment is a named top priority for the bootstrap operation. Address
+      this point first so that the rest of the alignment session proceeds using
+      greenfield alignment doctrine.") Disposition: the fork session runs its
+      amendment round under greenfield alignment doctrine first; the resulting
+      /align-shim declarations and rulings land through that round, routed to
+      this carrier for ledger continuity. Reconciliation of greenfield alignment
+      is recorded here as a named top bootstrap priority. (decision:
+      author-issued 2026-09-02)'
+  - question: Steering ledger [10] - what did the author direct on draining the
+      tactic corpus (2026-09-02)?
+    answer: "(Author-issued 2026-09-02 to the /align amendment fork session, relayed
+      same-hour, appended same-turn. Verbatim: \"I want all tactic nodes drained
+      during bootstrap execution. A shim for draining deprecated tactic nodes is
+      too much to carry past bootstrap. This also serves as validation for the
+      new reconciliation model. The tactics don't need to be executed, but they
+      must be transcribed to the new model.\") Disposition: extends the P2
+      transcription duty from the mainqa queue to the ENTIRE tactic corpus - the
+      census buckets A (in-flight, 132), B (parked, 178), C (drafts, 146,
+      previously undisposed), and D (done-residue, 201) all drain by
+      transcription within bootstrap; execution of transcribed scope is not
+      required for the drain; no drain shim survives bootstrap completion. The
+      transcription-class model governing the drain is the subject of ledger
+      [12] and its interview - the drain design waits on that ruling. (decision:
+      author-issued 2026-09-02)"
+  - question: Steering ledger [11] - what did the author direct on strategy topology
+      (2026-09-02)?
+    answer: "(Author-issued 2026-09-02 to the /align amendment fork session, relayed
+      same-hour, appended same-turn. Verbatim: \"I want strategy node topology
+      to reflect greenfield decomposition doctrine so that post-bootstrap
+      operations with materialized context have a solid foundation to work
+      from.\") Disposition: a strategy-topology reconciliation enters the
+      bootstrap scope - the strategy layer's parent/serves decomposition is
+      evaluated against greenfield decomposition doctrine and reconciled before
+      the P4 resumption gate, so materialized context post-bootstrap projects
+      from a sound topology. Sequencing and design enter through the fork
+      round's rulings. (decision: author-issued 2026-09-02)"
+  - question: Steering ledger [12] - what did the author direct on
+      transient-disposition classes (2026-09-02)?
+    answer: "(Author-issued 2026-09-02 to the /align amendment fork session, relayed
+      same-hour, appended same-turn. Verbatim: \"An additional class(es) of
+      transient disposition is fine, but there must not be a 'catch all prose'
+      transient disposition. Evaluate using greenfield-evaluation criteria
+      (nothing is sacred, interview to override doctrine, evaluate from the
+      perspective of greenfield judgement and also reference to tradition). Use
+      the existing corpus of transient disposition (tactics) to form the model.
+      What falls out as 'prone to decay and therefore no longer recorded at all'
+      vs. 'recorded as transient guidance but would be better described as
+      persistent criteria' vs. 'shim'. Consider what kind of output an /align
+      session might produce which doesn't fit any of those categories.\")
+      Disposition: the transcription-class model is formed in the fork session's
+      interview from the existing tactic corpus under greenfield-evaluation
+      criteria; no catch-all-prose class is permitted. Standing effect on prior
+      work: PR 3190's gap-note lane for the 12 author-required mainqa records is
+      under review by this interview and is NOT settled precedent for the corpus
+      drain; a re-transcription of those records may fall out. The ledger [10]
+      drain design waits on the resulting class-model ruling. (decision:
+      author-issued 2026-09-02)"
 tooling_goals: []
 success_signal: null
 attention: null
