@@ -1502,6 +1502,20 @@ clarifications:
       classifier (dispatch-blast-radius) rather than inside the pre-pass, so
       tactic-review-delta-base-and-blast-radius is complete and safe on its own.
       Only the SHIPPING SEQUENCE was overridden, not the decoupling."
+  - question: What is the /align interview session's default model after the
+      2026-09-02 author directive?
+    answer: "(decision: ratified, 2026-09-02) Fable by default, not Opus. Author
+      directive (2026-09-02, verbatim): 'new doctrine: the align skill runs with
+      fable by default, not opus.' This amends the align-family posture recorded
+      in clarifications 6, 7 and 10 for the /align interview session
+      specifically: the interview's whole-session default is now the Fable tier
+      (Claude Fable 5), superseding whole-session Opus. Unchanged:
+      /align-tactics' clarification-10 split (Sonnet orchestrator, Opus for the
+      decompose judgment and plan authoring) and clarification 7's enforcement
+      posture — SKILL.md frontmatter remains intended-not-guaranteed on the
+      user-invocable path, with the token audit's by-node/by-phase attribution
+      reading the realized model after the fact. The /align SKILL.md text update
+      is retained as draft tactic tactic-align-skill-fable-default."
 tooling_goals:
   - kind: sensor
     statement: token-audit aggregate with node-id attribution — weekly allowance
@@ -1537,6 +1551,8 @@ phase: null
 execution: null
 validates: []
 blocked_by: []
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds:

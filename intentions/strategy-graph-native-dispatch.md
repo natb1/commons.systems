@@ -2933,7 +2933,15 @@ clarifications:
       (dispatch-mark-deviation runs dispatch-apply-office-hours in-session
       FIRST, keeping the marker only as a Stop-hook fallback, per #2541), with
       .claude/skills/dispatch-conflict/SKILL.md:948-965 as the worked node-lane
-      call shape for an in-session park-node invocation."
+      call shape for an in-session park-node invocation. Amended 2026-09-02
+      (stop-hook disposition round): the mechanism description above is
+      superseded — c06c7295 (2026-07-31) deleted this hook's park branch
+      outright (measured 0/5 successes there vs 4/4 for in-session park-node the
+      same day), so dispatch-stop.sh no longer parks at all and the :56-98
+      anchor is stale; the in-session-park-first shape this ruling recommended
+      is the implemented reality (dispatch-tick's frozen-session sweep is the
+      replacement backstop). Flagged as a ratification-review candidate: the
+      descriptive half documents deleted code, the normative half is realized."
   - question: Who owns reconciling the four-member 'held vs being worked' family's
       shared family-scope predicate work (claude_agents_count_busy_workers's
       busy-only filter vs worktree_has_live_session), now that
@@ -7517,6 +7525,31 @@ clarifications:
       derived - the build item is claim-scoped run ingestion plus gating
       semantics in the deriver, recorded in-scope on
       tactic-ladder-reconciliation-observe the same day."
+  - question: Were the observed Stop-hook failures a live defect at 2026-09-02, and
+      what resolved them?
+    answer: "(decision: deferred, delegation-anthropic-claude, 2026-09-02) Resolved
+      before the observation was diagnosed — legacy-migration residue, already
+      fixed. The dispatch-stop.sh escalation-park backstop carried from the
+      legacy issue lane ran park-node from the wrong worktree (0/5 successes on
+      2026-07-31) and was deleted in c06c7295 that same day, replaced by
+      dispatch-tick's sweep; the fix is on origin/main and present in all 143
+      live worktrees checked. Telemetry over 1,404 transcripts spanning 14 days
+      (read 2026-09-02) shows zero stop_hook_summary errors and zero
+      prevented-continuation events. Executor-diagnosed via a read-only
+      transcript and hook audit; recorded on delegated authority, so this
+      confirmation sits deferred pending author review."
+  - question: If Stop-hook failures are still observed after c06c7295, what is the
+      leading explanation?
+    answer: "(decision: deferred, delegation-anthropic-claude, 2026-09-02) A
+      designed hold, not a hook error. With hook telemetry clean (see the
+      c06c7295 resolution clarification recorded the same day), the leading
+      explanation for a residual observation is a node worker held by
+      dispatch-self-close's terminal-disposition gate — a session ending without
+      a recorded terminal disposition is held rather than reaped, which presents
+      externally as a stop that failed. Diagnosis of any future observation
+      should first distinguish a designed hold (disposition owed, by design)
+      from a hook execution error (telemetry-visible) before touching hook code.
+      Executor-derived; deferred pending author review."
 tooling_goals:
   - kind: actuator
     statement: "/align-tactics <strategy-id> — break a strategy into PR-sized tactic

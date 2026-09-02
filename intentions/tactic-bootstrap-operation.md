@@ -164,6 +164,18 @@ clarifications:
       (strategy-graph-native-dispatch greenfield-disposition clarification;
       tactic-ladder-reconciliation-observe scope clarification). (decision:
       author-issued 2026-09-02)"
+  - question: Steering ledger [8] - what did the author direct on the align skill's
+      default model (2026-09-02)?
+    answer: "(Recorded 2026-09-02, same-turn append.) Verbatim: 'new doctrine: the
+      align skill runs with fable by default, not opus.' Disposition: recorded
+      as ratified doctrine on strategy-token-economy (amending the 2026-07-16
+      clarification-10 posture that kept the /align interview whole-session
+      Opus); the /align SKILL.md model-paragraph text change is retained as
+      draft tactic tactic-align-skill-fable-default. Scope read literally:
+      /align, the interview skill — /align-tactics'
+      Sonnet-orchestrator-plus-Opus-subagent split is untouched. The directing
+      turn arrived while the receiving session was itself running the /align
+      interview on Fable."
 tooling_goals: []
 success_signal: null
 attention: null
