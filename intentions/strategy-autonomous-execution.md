@@ -240,5 +240,14 @@ attributes:
       the main branch — never a feature branch — so dispatch's ff-only main-sync
       and the worktree-create hook's project-root resolution both hold (currency
       not required; a separate freshness requirement governs pre-task sync)
+  criteria:
+    - id: fn-dispatch-shell-prose-rules
+      statement: Net-new dispatch-chain shell script lines never pipe a captured JSON
+        variable through echo into jq, and never call a raw gh issue/pr
+        porcelain subcommand where lib.sh's REST helpers are the sanctioned
+        path, absent a same-preceding-line lint-allow marker
+      class: functional
+      authority: deferred
+      recorded: 2026-09-01
 ---
 # Run tactical execution through an owned autonomous dispatch chain

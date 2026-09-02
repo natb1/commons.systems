@@ -1090,5 +1090,14 @@ attributes:
       a lapse lets recorded doctrine calcify into dogma unchallenged, the same
       cadence-lapse capture mechanism the grounding strategies and the
       delegatee-education condition above already name
+  criteria:
+    - id: fn-intent-orchestration-layer-boundary
+      statement: Intent fields and orchestration fields (phase, execution,
+        office_hours and kin) are distinct layers with distinct write authority
+        -- an orchestration writer never rewrites an intent field, and an intent
+        writer never rewrites an orchestration field
+      class: functional
+      authority: deferred
+      recorded: 2026-09-01
 ---
 # Govern by an explicit, self-describing intention graph
