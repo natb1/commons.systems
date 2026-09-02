@@ -79,6 +79,19 @@ export {
 } from "./criteria.js";
 export type { Criterion, CriterionClass, CriterionAuthority } from "./criteria.js";
 export {
+  BASIS_PINS_KEY,
+  BASIS_PIN_KEYS,
+  DISPOSITION_SELECTORS,
+  parseDispositionRef,
+  formatDispositionRef,
+  validateBasisPin,
+  validateBasisPinList,
+  parseBasisPins,
+  dispositionHash,
+  deriveStaleIntent,
+} from "./basis-pins.js";
+export type { BasisPin, DispositionRef, DispositionSelector } from "./basis-pins.js";
+export {
   RECONCILIATION_FRONTIER_KINDS,
   deriveReconciliationFrontier,
   renderReconciliationFrontier,

@@ -7,6 +7,7 @@ import {
   type ReconciliationCheckRun,
   type ReconciliationFrontierEntry,
 } from "../src/frontier-reconciliation.js";
+import { dispositionHash } from "../src/basis-pins.js";
 import type { CheckResult, CheckTier } from "../src/checks.js";
 import type { IntentionNode } from "../src/schema.js";
 
@@ -359,6 +360,72 @@ describe("deriveReconciliationFrontier — the observe-failure arm", () => {
     });
     expect(entries[0].criterion).toBe("ghost");
     expect(entries[0].authority).toBeNull();
+  });
+});
+
+describe("deriveReconciliationFrontier — the stale-intent arm (unit 4)", () => {
+  const QUESTION = "What is the intent-layer reconciliation criterion?";
+  const cited = node({
+    id: "strategy-graph-integrity",
+    kind: "strategy",
+    clarifications: [{ question: QUESTION, answer: "An amendment derives a frontier. 2026-09-01." }],
+  });
+  const REF = `strategy-graph-integrity#clarification:${QUESTION}`;
+
+  /** The citing node, carrying one pin against `hash`. */
+  function citing(hash: string): IntentionNode {
+    return node({
+      id: "strategy-explicit-intent",
+      kind: "strategy",
+      attributes: { basis_pins: [{ cites: REF, hash, pinned_at: DATE }] },
+    });
+  }
+
+  it("contributes nothing when every pin still matches — an empty pin corpus is an empty arm", () => {
+    const fresh = citing(dispositionHash(cited, REF));
+    const entries = deriveReconciliationFrontier({
+      nodes: [standingHome(), cited, fresh],
+      checkRuns: [],
+    });
+    expect(entries.filter((e) => e.kind === "stale-intent")).toEqual([]);
+  });
+
+  it("appends a stale-intent entry through the same entry type and render path", () => {
+    const stale = citing("a1b2c3d4".repeat(8));
+    const entries = deriveReconciliationFrontier({
+      nodes: [standingHome(), cited, stale],
+      checkRuns: [],
+    });
+    const staleEntries = entries.filter((e) => e.kind === "stale-intent");
+    expect(staleEntries).toHaveLength(1);
+    expect(staleEntries[0].subject).toBe("strategy-explicit-intent");
+    // The renderer needed no change to carry the new arm.
+    const out = renderReconciliationFrontier(entries);
+    expect(out).toContain("## stale-intent (1)");
+    expect(out).toContain(`- **stale-intent:strategy-explicit-intent:${REF}**`);
+  });
+
+  it("sorts the new arm in with the others, and stays stable under a node permutation", () => {
+    const nodes = [
+      standingHome([criterion({ id: "nf-style" })]),
+      cited,
+      citing("a1b2c3d4".repeat(8)),
+    ];
+    const forward = deriveReconciliationFrontier({ nodes, checkRuns: [] });
+    expect(ids(forward)).toEqual([...ids(forward)].sort());
+    expect(forward.map((e) => e.kind)).toContain("stale-intent");
+    expect(deriveReconciliationFrontier({ nodes: [...nodes].reverse(), checkRuns: [] })).toEqual(
+      forward,
+    );
+  });
+
+  it("refuses a malformed pin list rather than reporting a smaller frontier", () => {
+    expect(() =>
+      deriveReconciliationFrontier({
+        nodes: [standingHome(), node({ id: "strategy-a", kind: "strategy", attributes: { basis_pins: [{}] } })],
+        checkRuns: [],
+      }),
+    ).toThrow(IntentionSchemaError);
   });
 });
 

@@ -3142,6 +3142,106 @@ describe("validateGraph", () => {
       expect(message).toMatch(/\.authority must be one of/);
     }
   });
+
+  // --- Rule 28 part three: basis_pins shape --------------------------------
+
+  const PIN_HASH = "a1b2c3d4".repeat(8);
+
+  /** `kind-strategy` plus a strategy carrying `basis_pins`. */
+  function pinGraph(pins: unknown): IntentionNode[] {
+    return [
+      gnode({
+        id: "kind-strategy",
+        kind: "kind",
+        status: "codified",
+        attributes: { status_vocabulary: { raw: "Not yet started.", codified: "Complete." } },
+      }),
+      gnode({ id: "kind-kind", kind: "kind", status: "codified" }),
+      gnode({ id: "strategy-x", kind: "strategy", attributes: { basis_pins: pins } }),
+    ];
+  }
+
+  /** A well-formed pin, overridable field by field. */
+  function basisPin(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      cites: "strategy-graph-integrity#clarification:What is the criterion?",
+      hash: PIN_HASH,
+      pinned_at: "2026-09-01",
+      ...overrides,
+    };
+  }
+
+  it("accepts a well-formed pin under every disposition selector", () => {
+    expect(() =>
+      validateGraph(
+        pinGraph([
+          basisPin(),
+          basisPin({ cites: "strategy-a#criterion:fn-1" }),
+          basisPin({ cites: "strategy-a#statement" }),
+          basisPin({ cites: "strategy-a#rationale" }),
+          basisPin({ cites: "strategy-a#conditions" }),
+          basisPin({ cites: "strategy-a#node" }),
+        ]),
+      ),
+    ).not.toThrow();
+  });
+
+  it("is inert on a node carrying no pins", () => {
+    expect(() => validateGraph(pinGraph(null))).not.toThrow();
+  });
+
+  it("rejects a basis_pins value that is not an array, and a non-record entry", () => {
+    expect(() => validateGraph(pinGraph("strategy-a#statement"))).toThrow(
+      /strategy-x: attributes\.basis_pins must be an array of \{cites, hash, pinned_at\} pins, got string/,
+    );
+    expect(() => validateGraph(pinGraph(["strategy-a#statement"]))).toThrow(
+      /attributes\.basis_pins\[0\] must be a \{cites, hash, pinned_at\} record, got string/,
+    );
+  });
+
+  it("rejects an unknown key rather than ignoring it", () => {
+    expect(() => validateGraph(pinGraph([basisPin({ waived: true })]))).toThrow(
+      /attributes\.basis_pins\[0\]\.waived is not a basis-pin field/,
+    );
+  });
+
+  it("rejects a reference that does not parse as <node-id>#<selector>", () => {
+    // A MALFORMED reference is caught here so it never reaches the stale-intent
+    // arm, where it would be indistinguishable from a genuine dangling citation.
+    expect(() => validateGraph(pinGraph([basisPin({ cites: "strategy-a" })]))).toThrow(
+      /must be a disposition reference <node-id>#<selector>/,
+    );
+    expect(() => validateGraph(pinGraph([basisPin({ cites: "#statement" })]))).toThrow(
+      /must be a disposition reference <node-id>#<selector>/,
+    );
+    expect(() => validateGraph(pinGraph([basisPin({ cites: "strategy-a#body" })]))).toThrow(
+      /names unknown disposition selector "body"/,
+    );
+    expect(() => validateGraph(pinGraph([basisPin({ cites: "strategy-a#criterion:" })]))).toThrow(
+      /names selector "criterion", which requires a key/,
+    );
+    expect(() => validateGraph(pinGraph([basisPin({ cites: "strategy-a#node:x" })]))).toThrow(
+      /names selector "node", which takes no key/,
+    );
+  });
+
+  it("rejects a hash that is not a lowercase sha256 hex digest, and a malformed date", () => {
+    expect(() => validateGraph(pinGraph([basisPin({ hash: PIN_HASH.toUpperCase() })]))).toThrow(
+      /attributes\.basis_pins\[0\]\.hash must be a lowercase sha256 hex digest/,
+    );
+    expect(() => validateGraph(pinGraph([basisPin({ hash: "abc" })]))).toThrow(
+      /\.hash must be a lowercase sha256 hex digest/,
+    );
+    expect(() => validateGraph(pinGraph([basisPin({ pinned_at: "2026-9-1" })]))).toThrow(
+      /attributes\.basis_pins\[0\]\.pinned_at must be a YYYY-MM-DD date/,
+    );
+  });
+
+  it("rejects two pins on the same citation", () => {
+    expect(() =>
+      validateGraph(pinGraph([basisPin(), basisPin({ hash: "f".repeat(64) })])),
+    ).toThrow(/attributes\.basis_pins\[1\]\.cites duplicates/);
+  });
 });
 
 describe("write-class primitives", () => {

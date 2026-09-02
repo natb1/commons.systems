@@ -14,18 +14,21 @@
  * calls in, exactly as `grounding-gap.ts` does for `grounding.ts`. That is
  * what lets this module sit on the browser-safe barrel beside `criteria.ts`.
  *
- * ARMS. Five kinds are DECLARED here and two are LANDED here:
+ * ARMS. Five kinds are DECLARED here and three are LANDED:
  *
- *  - `unsatisfied-criterion` — landed (this unit).
- *  - `observe-failure`       — landed (this unit).
- *  - `stale-intent`          — unit 4 (`basis-pins.ts`).
+ *  - `unsatisfied-criterion` — landed (unit 3).
+ *  - `observe-failure`       — landed (unit 3).
+ *  - `stale-intent`          — landed (unit 4, derived by `basis-pins.ts`).
  *  - `overdue-shim`          — unit 5 (`shims.ts`).
  *  - `prose-gap`             — unit 7.
  *
- * The three unlanded arms are declared in the kind union NOW, deliberately, so
- * they append through this same entry type: the renderer, the CLI and the
- * digest table need no change when they land. An arm is added by extending
- * `deriveReconciliationFrontier`'s concatenation and nothing else.
+ * The unlanded arms are declared in the kind union NOW, deliberately, so they
+ * append through this same entry type: the renderer, the CLI and the digest
+ * table need no change when they land. An arm is added by extending
+ * `deriveReconciliationFrontier`'s concatenation and nothing else — which is
+ * exactly what unit 4 did, and it changed nothing else in this file: no new
+ * `ReconciliationFrontierInput` field either, since `nodes` already carries
+ * everything the pins are read from.
  *
  * NAMING, DELIBERATELY NON-COLLIDING. `frontier` already carries three senses
  * in this repo — the goal-layer active frontier (`activeFrontier`,
@@ -58,6 +61,7 @@ import {
   type Criterion,
   type CriterionAuthority,
 } from "./criteria.js";
+import { deriveStaleIntent } from "./basis-pins.js";
 import type { CheckDeclaration, CheckResult, CheckTier } from "./checks.js";
 import type { IntentionNode } from "./schema.js";
 
@@ -312,10 +316,13 @@ function deriveObserveFailures(
  * downstream — renderer, CLI, digest table — changes.
  *
  * @throws IntentionSchemaError when the node list is truncated (no
- *   `kind-strategy`), when a criteria list is malformed, or when a carrier
- *   shadows a standing criterion id. All three are misconfiguration, and a
- *   silently smaller frontier is the one output this surface must never
- *   produce (`.claude/rules/code-style.md`).
+ *   `kind-strategy`), when a criteria list is malformed, when a carrier shadows
+ *   a standing criterion id, or when a `attributes.basis_pins` list is
+ *   malformed. All four are misconfiguration, and a silently smaller frontier
+ *   is the one output this surface must never produce
+ *   (`.claude/rules/code-style.md`). A pin whose citation merely fails to
+ *   RESOLVE is not in that set — that is a real frontier item, and
+ *   `deriveStaleIntent` reports it as one.
  */
 export function deriveReconciliationFrontier(
   input: ReconciliationFrontierInput,
@@ -324,7 +331,8 @@ export function deriveReconciliationFrontier(
   const entries = [
     ...deriveUnsatisfiedCriteria(inForce, input.checkRuns),
     ...deriveObserveFailures(inForce, input.checkRuns),
-    // Unit 4 appends `stale-intent`, unit 5 `overdue-shim`, unit 7 `prose-gap`.
+    ...deriveStaleIntent(input.nodes),
+    // Unit 5 appends `overdue-shim`, unit 7 `prose-gap`.
   ];
   return entries.sort(
     (a, b) =>

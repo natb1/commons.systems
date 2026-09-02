@@ -2296,6 +2296,143 @@ function checkCriteriaShape(node: IntentionNode, problems: string[]): void {
   }
 }
 
+/** The closed key set of one basis pin (rule 28). Mirrors `basis-pins.ts`'s `BASIS_PIN_KEYS`. */
+const BASIS_PIN_KEYS: readonly string[] = ["cites", "hash", "pinned_at"];
+
+/** The closed selector set of a disposition reference (rule 28). Mirrors `DISPOSITION_SELECTORS`. */
+const DISPOSITION_SELECTORS: readonly string[] = [
+  "clarification",
+  "criterion",
+  "statement",
+  "rationale",
+  "conditions",
+  "node",
+];
+
+/** The two selectors that take a `:<key>`; the other four are bare (rule 28). */
+const KEYED_DISPOSITION_SELECTORS: readonly string[] = ["clarification", "criterion"];
+
+/**
+ * Rule 28, part three: the shape of `attributes.basis_pins`.
+ *
+ * A basis pin records what a cited disposition read like at the read the citing
+ * disposition was decided from, so `deriveStaleIntent` (`basis-pins.ts`) can
+ * report the citation when the cited text is amended. It is the intent-layer
+ * instance of the diagnosis-time compare-and-swap rule
+ * (`.claude/skills/ref-diagnosis-time-cas/SKILL.md`).
+ *
+ * Three obligations, all of them about what the DERIVER could not otherwise
+ * distinguish from a real finding:
+ *
+ *  (a) SHAPE — each entry is a closed `{cites, hash, pinned_at}` record.
+ *      Unknown keys are REPORTED, not ignored, for the same reason part (a)
+ *      reports them on a criterion: a pin decides whether a disposition is
+ *      called stale.
+ *  (b) REFERENCE GRAMMAR — `cites` parses as `<node-id>#<selector>`, split at
+ *      the FIRST `#`, with a known selector, and with a key exactly when the
+ *      selector is `clarification` or `criterion`. A reference that does not
+ *      PARSE is a misconfigured pin — nothing could ever satisfy it — and is
+ *      caught here, whereas a reference that parses but does not RESOLVE is a
+ *      genuine frontier item the deriver reports. Keeping the two apart is the
+ *      point: without this rule a typo'd selector would render forever as a
+ *      dangling-citation finding nobody could reconcile.
+ *  (c) DIGEST AND DATE — `hash` is a lowercase sha256 hex digest and
+ *      `pinned_at` is `YYYY-MM-DD`. A hash of any other shape can never equal
+ *      one the graph produces, so the citation would report stale forever.
+ *      A `cites` duplicated within one list is reported too: two recorded bases
+ *      for one citation contradict each other and neither can be ruled the
+ *      deciding read.
+ *
+ * Presence-conditional like the rest of rule 28, and DELIBERATELY DUPLICATED
+ * from `basis-pins.ts`'s validators for the reason `checkCriteriaShape` records:
+ * that module imports `node:crypto`, and `test/graph.test.ts` bans a `node:`
+ * builtin anywhere reachable from the browser-safe `graph.ts` barrel, which
+ * this file is. `test/basis-pins.test.ts` pins the two to the same verdicts.
+ */
+function checkBasisPinsShape(node: IntentionNode, problems: string[]): void {
+  const raw = node.attributes.basis_pins;
+  if (raw === undefined || raw === null) return;
+  const at = `${node.id}: attributes.basis_pins`;
+  if (!Array.isArray(raw)) {
+    problems.push(
+      `${at} must be an array of {${BASIS_PIN_KEYS.join(", ")}} pins, got ${raw === null ? "null" : typeof raw}`,
+    );
+    return;
+  }
+  const seen = new Set<string>();
+  for (let i = 0; i < raw.length; i++) {
+    const entry: unknown = raw[i];
+    const where = `${at}[${i}]`;
+    if (!isPlainObject(entry)) {
+      problems.push(
+        `${where} must be a {${BASIS_PIN_KEYS.join(", ")}} record, got ${entry === null ? "null" : typeof entry}`,
+      );
+      continue;
+    }
+    for (const key of Object.keys(entry)) {
+      if (!BASIS_PIN_KEYS.includes(key)) {
+        problems.push(
+          `${where}.${key} is not a basis-pin field — the pin shape is closed, so no unread field rides along on data that decides whether a disposition is stale (allowed: ${BASIS_PIN_KEYS.join(", ")})`,
+        );
+      }
+    }
+    const cites = entry.cites;
+    if (typeof cites !== "string" || cites.trim() === "") {
+      problems.push(`${where}.cites must be a non-empty string, got ${JSON.stringify(cites)}`);
+    } else {
+      checkDispositionRef(cites, `${where}.cites`, problems);
+      if (seen.has(cites)) {
+        problems.push(
+          `${where}.cites duplicates "${cites}" earlier in ${at} — two recorded bases for one citation contradict each other, and neither can be ruled the deciding read`,
+        );
+      }
+      seen.add(cites);
+    }
+    const hash = entry.hash;
+    if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash)) {
+      problems.push(
+        `${where}.hash must be a lowercase sha256 hex digest, got ${JSON.stringify(hash)} — a hash the graph could never produce would report its citation stale forever`,
+      );
+    }
+    const pinnedAt = entry.pinned_at;
+    if (typeof pinnedAt !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(pinnedAt)) {
+      problems.push(`${where}.pinned_at must be a YYYY-MM-DD date, got ${JSON.stringify(pinnedAt)}`);
+    }
+  }
+}
+
+/** Rule 28 part (b): the `<node-id>#<selector>` grammar, restated (see `checkBasisPinsShape`). */
+function checkDispositionRef(cites: string, where: string, problems: string[]): void {
+  const at = cites.indexOf("#");
+  if (at <= 0 || at === cites.length - 1) {
+    problems.push(
+      `${where} must be a disposition reference <node-id>#<selector>, split at the first "#", with both halves non-empty, got ${JSON.stringify(cites)} (selectors: ${DISPOSITION_SELECTORS.join(", ")})`,
+    );
+    return;
+  }
+  const rest = cites.slice(at + 1);
+  const colon = rest.indexOf(":");
+  const selector = colon === -1 ? rest : rest.slice(0, colon);
+  const key = colon === -1 ? null : rest.slice(colon + 1);
+  if (!DISPOSITION_SELECTORS.includes(selector)) {
+    problems.push(
+      `${where} names unknown disposition selector "${selector}" — expected one of ${DISPOSITION_SELECTORS.join(", ")}`,
+    );
+    return;
+  }
+  const keyed = KEYED_DISPOSITION_SELECTORS.includes(selector);
+  if (keyed && (key === null || key.trim() === "")) {
+    problems.push(
+      `${where} names selector "${selector}", which requires a key — spell it <node-id>#${selector}:<key>`,
+    );
+  }
+  if (!keyed && key !== null) {
+    problems.push(
+      `${where} names selector "${selector}", which takes no key, but ":${key}" follows it — only ${KEYED_DISPOSITION_SELECTORS.join(" and ")} are keyed`,
+    );
+  }
+}
+
 /**
  * Referential integrity over a whole node set. Per-node shape is `validateNode`'s
  * job; this checks the edges BETWEEN nodes:
@@ -2470,6 +2607,17 @@ function checkCriteriaShape(node: IntentionNode, problems: string[]): void {
  *      the rule land on a graph where almost nothing carries criteria yet.
  *      `criteria.ts` is the runtime home of the same shape; see
  *      `checkCriteriaShape` for why the two are deliberately separate.
+ *      PART THREE, same rule and same presence-conditional discipline:
+ *      `attributes.basis_pins` is an array of closed `{cites, hash, pinned_at}`
+ *      records, each `cites` parsing as `<node-id>#<selector>` with a known
+ *      selector (keyed for `clarification` and `criterion`, bare for the other
+ *      four), each `hash` a lowercase sha256 hex digest, each `pinned_at` a
+ *      `YYYY-MM-DD` date, and no `cites` repeated within one list. A pin is the
+ *      intent layer's diagnosis-time compare-and-swap
+ *      (`.claude/skills/ref-diagnosis-time-cas/SKILL.md`), and this part exists
+ *      to keep a MALFORMED pin — which nothing could ever satisfy — out of the
+ *      `stale-intent` frontier arm, where it would be indistinguishable from a
+ *      genuine dangling citation. See `checkBasisPinsShape`.
  *
  * Rules 6-9 only judge edges whose target already resolves (rules 2-4 above
  * report the dangling case); this avoids double-reporting the same broken
@@ -2534,6 +2682,8 @@ export function validateGraph(nodes: IntentionNode[]): void {
     checkWriteClassDeclaration(node, byId, problems);
     // Rule 28: criteria / standing_criteria are well-shaped where present.
     checkCriteriaShape(node, problems);
+    // Rule 28 (part three): basis pins are well-shaped where present.
+    checkBasisPinsShape(node, problems);
   }
   // Rule 15: reject cycles in the blocked_by graph.
   checkEdgeCycles(
