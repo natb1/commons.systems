@@ -1,6 +1,6 @@
 ---
 name: reconcile
-description: Reconcile materialized implementation to the disposition graph, one bite at a time in rank order. Bootstrap shim declared on work-loop; the graph wins on conflict. The session runs on opus, its units on sonnet.
+description: Reconcile materialized implementation to the disposition graph, one bite per invocation from the answered frontier in rank order, from disposition to implementation only. Bootstrap shim declared on work-loop; the graph wins on conflict. The session runs on opus, its units on sonnet.
 model: opus
 effort: high
 disable-model-invocation: true
@@ -10,20 +10,20 @@ disable-model-invocation: true
 > **Shim notice (2026-09-03).** Hand-written from the nodes `work-loop`,
 > `materialization`, `review`, `validation-order`, `delegation`,
 > `session-context`, `projection`, `transience`, `evaluation`, and
-> `authority` of `commons.systems/disposition-graph`, all stamped deferred,
-> and from the author's disposition of 2026-09-03 quoted on `work-loop`.
+> `authority` of `commons.systems/disposition-graph`, all unanswered, and
+> from the author's dispositions of 2026-09-03 quoted on `work-loop`.
 > This text has no authority of its own. Where it conflicts with the graph
 > at `origin/disposition`, the graph wins and the conflict is recorded as an
-> un-aligned disposition (§4). Declared as a shim on `work-loop`;
-> liquidation: the reconciliation orchestrator and the bite skills are
-> materialized from ratified nodes, and every landing made under this shim
-> has passed the validation it skipped.
+> un-aligned disposition (§4). Declared as a shim on `work-loop`, whose
+> liquidation condition is the exit list (§5).
 
-`/reconcile` runs the reconciliation loop on the implementation ref
-(`greenfield` during bootstrap): derive the frontier, take the
-highest-ranked bite whose materialization diverges from its node, delegate
-it as a unit, verify, land, repeat until the frontier holds nothing this
-session can take. It never interviews the author and never records a
+`/reconcile` runs one iteration of reconciliation on the implementation
+ref (`greenfield` during bootstrap): derive the frontier, take the
+highest-ranked answered node whose materialization diverges from its
+answer, delegate the bite as a unit, verify, land, report, and stop. The
+next invocation derives the frontier again. Bites run from disposition to
+implementation only: an artifact no node justifies is not a bite under
+this shim (§5). It never interviews the author and never records a
 standing answer. A divergence that needs the author becomes an un-aligned
 disposition for the alignment skill; un-aligned dispositions are never
 this skill's bites.
@@ -32,7 +32,7 @@ this skill's bites.
 
 Run the session on `opus`: `claude --model opus`, then `/reconcile`. The
 `model` field above sets the model for the turn that invokes the skill and
-the loop runs inside that turn, but the flag is the sure way. Units run on
+the bite runs inside that turn, but the flag is the sure way. Units run on
 `sonnet` unless the brief names design or judgment, then `opus`; lookups
 on `haiku` (`delegation`). Sonnet can run this skill itself once every
 frontier node carries an executable check and each kind of bite has a
@@ -45,7 +45,7 @@ judgment.
 1. `git fetch origin greenfield disposition`. This checkout must be at
    `origin/greenfield` with a clean tree, and `disposition/`, the nested
    worktree of the `disposition` ref, at `origin/disposition` and clean.
-   Stale or dirty stops the loop: say so and stop.
+   Stale or dirty stops the iteration: say so and stop.
 2. `node packages/disposition/validate.mjs disposition`.
 3. `node packages/disposition/project.mjs disposition --rules .claude/rules`.
    If a rule file changed, commit it before anything else
@@ -59,7 +59,11 @@ judgment.
 
 `node packages/disposition/project.mjs disposition --frontier -` lists
 every node in rank order with its stamp, instrument, shims, and stage.
-Read it top down and take the first node where one of these holds:
+Only an answered node, one with a ratified or delegated stamp, can be
+bitten: an unanswered node carries a draft, not an answer, and a bite
+never pre-empts the author. If no node is answered, report
+`no answered node: nothing to bite` and stop. Otherwise read the answered
+nodes top down and take the first where one of these holds:
 
 - a shim whose liquidation condition is met while its artifact still
   exists: liquidate it, delete or replace the artifact and remove the
@@ -67,16 +71,15 @@ Read it top down and take the first node where one of these holds:
 - an instrument whose ref says it is not yet materialized, or whose check
   fails when run: materialize it or fix what it checks;
 - an answer that names an artifact, the browser, a rule, a skill, a page,
-  whose current state does not match the answer: reconcile the artifact;
-- an artifact on this ref that no node justifies (`work-loop`, the second
-  direction): propose pruning it as an un-aligned disposition, or delete
-  it outright when it is the scaffolding of a finished operation and no
-  node cites it as evidence.
+  whose current state does not match the answer: reconcile the artifact.
 
-Skip a node whose divergence is the subject of an open dialogue (a node
-with `stage`, or an un-aligned disposition under it that names the same
-artifact): a bite never pre-empts the author. Skip what only the author
-can decide. If nothing remains, report the frontier as read and stop.
+An artifact on this ref that no node justifies is not a bite: that is the
+second direction of reconciliation (`work-loop`), an exit criterion (§5),
+and the drain of the legacy tactic nodes goes with it. Skip an answered
+node whose divergence is the subject of an open dialogue, an un-aligned
+disposition under it that names the same artifact. Skip what only the
+author can decide. If no answered node diverges, report the frontier as
+read and stop.
 
 ## 2. Bite
 
@@ -114,7 +117,9 @@ can decide. If nothing remains, report the frontier as read and stop.
   published by https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678
   with the `db` capability. A page is read in full by a unit before it is
   published when this thread did not write it.
-- Then §0 again: the frontier re-derives after every landing.
+- Then report the bite in a few lines, the node, the divergence, the
+  commit, and what the projector shows, and stop: the frontier re-derives
+  at the next invocation.
 
 ## 4. Writing the graph
 
@@ -124,13 +129,15 @@ commit of that one file, pushed at once.
 - **An un-aligned disposition**, when a node's answer is silent or
   contradictory about the artifact it justifies, or a bite would need a
   decision only the author can make. Write
-  `disposition/disposition-graph/<slug>.md`: `question`, `stage: ruling`,
-  `under` the node it refines, and a `## Proposal` carrying the evidence,
-  the divergence, and the recommendation with its authority class,
-  boldness, and persistence class (`growth`, `transience`). No `## Answer`
-  and no stamp. Validate; from `disposition/`, `git commit -- disposition-graph/<slug>.md`
-  and `git push origin disposition`; on rejection fetch, rebase, push. The
-  alignment skill takes it from there.
+  `disposition/disposition-graph/<slug>.md`: `question`, `stage: review`,
+  `recommendation` with its authority class and boldness, `under` the node
+  it refines, and a `## Proposal` carrying the evidence, the divergence,
+  and the recommendation with its persistence class (`growth`,
+  `transience`, `dialogue`). No `## Answer` and no stamp. Validate; from
+  `disposition/`, `git commit -- disposition-graph/<slug>.md` and
+  `git push origin disposition`; on rejection fetch, rebase, push. The
+  batch review reads it with the frontier, and the alignment skill takes
+  it from there.
 - **A shim declaration whose condition this session has met**: remove the
   entry from the node's `shims` list, nothing else in the node; validate,
   commit that file alone, push.
@@ -153,6 +160,15 @@ grep it for a usage-limit notice first; never commit while a run is in
 flight); functional validation against each node's criteria;
 non-functional validation; then the swap of `greenfield` with `main`
 (`materialization`'s shim) and validation in use.
+
+Two more clauses of the condition are the author's words of 2026-09-03
+after compaction, quoted on `work-loop`: the second direction of
+reconciliation, every artifact on this ref that no node justifies
+supported by a disposition or pruned, and the drain of every legacy tactic
+node, transcribed to this graph or pruned, are required for exit and not
+for the transition, and neither is shimmed or materialized before the
+disposition that states it, `work-loop`'s draft with `materialization`'s,
+is answered.
 
 ## Mechanics
 
@@ -182,7 +198,8 @@ non-functional validation; then the swap of `greenfield` with `main`
   `session-context`) as
   `{"worktree":{"baseRef":"head"},"permissions":{"allow":["Artifact","Bash(cat:*)","Bash(ls:*)","Bash(grep:*)","Bash(head:*)","Bash(tail:*)","Bash(sed:*)","Bash(wc:*)","Bash(find:*)","Bash(echo:*)","Bash(mkdir:*)","Bash(tee:*)","Bash(node:*)","Bash(git status:*)","Bash(git log:*)","Bash(git diff:*)","Bash(git show:*)","Bash(git fetch:*)","Bash(git add:*)","Bash(git commit:*)","Bash(git push:*)","Bash(git worktree list:*)"]}}`;
   then start `claude --model opus` at the root and invoke `/reconcile`,
-  and `claude --model fable` for `/align`. The legacy memory index loads
+  which reports nothing to bite until a node is answered, and
+  `claude --model fable` for `/align`. The legacy memory index loads
   into both as noise; its one pointer says where the record is.
 - **Bash guard** in an isolated session: it refuses `git -C`, loops,
   redirections, and heredocs that mention git; use an absolute `cd` per
@@ -191,7 +208,8 @@ non-functional validation; then the swap of `greenfield` with `main`
   is refused by zsh.
 - **Scratch.** `$CLAUDE_JOB_DIR/tmp` in a background job, `tmp/` here.
   Nothing essential lives in scratch, memory, or this session: the state
-  is the frontier and the git log. After compaction, run §0 and §1 again.
+  is the frontier and the git log. After compaction, run §0 and finish the
+  bite in hand or report it abandoned.
 - **Dependencies.** `packages/disposition` imports `yaml` from an ancestor
   `node_modules` (`materialization`'s shim).
 - **Publishing.** The Artifact tool; republish by URL; a transient
