@@ -185,20 +185,31 @@
       darwinModules      = { default = ./nix/darwin/default.nix; };
       nixosModules       = { default = ./nix/nixos/configuration.nix; };
 
-      # Shared integrated home-manager wiring for the two host configs.
-      # darwinConfigurations.default and nixosConfigurations.nixos embed the same
-      # six settings (nixpkgs.overlays, nixpkgs.config.allowUnfreePredicate,
-      # home-manager.useGlobalPkgs/useUserPackages/extraSpecialArgs, and the
-      # users.n8 imports + forced username/homeDirectory). Only hostPlatform and
-      # homeDirectory differ and are parameters; platform-specific extras (darwin's
-      # wezterm disable, nixos's backupFileExtension) are layered as small sibling
-      # modules at each call site via the module system's native merge.
+      # Shared integrated home-manager wiring for the two host constructors.
+      # mkDarwinConfiguration and mkNixosConfiguration both embed the same nixpkgs
+      # overlay/allowUnfree lines, the home-manager useGlobalPkgs/useUserPackages
+      # toggles, extraSpecialArgs, and the framework home module + git identity.
+      # Only hostPlatform and the account name differ and are parameters;
+      # platform-specific extras (darwin's wezterm disable + users.users home;
+      # nixos's backupFileExtension, ssh keys, dispatch samples) are layered as
+      # small sibling modules at each call site via the module system's merge.
       #
       # hostPlatform in-module is the current idiom (the legacy `system` arg to
       # darwinSystem/nixosSystem is discouraged). The overlay/allowUnfree lines
       # make the reused nix/home/default.nix (which pulls the unfree
       # pkgs.claude-code from the claude-code-nix overlay) build.
-      mkIntegratedHmConfig = { hostPlatform, homeDirectory }: {
+      #
+      # home.username / home.homeDirectory are deliberately NOT set here.
+      # home-manager's nixos/common.nix derives both from
+      # config.users.users.<name> (.name / .home). The nixos host supplies that
+      # via configuration.nix's users.users.<hostUser> (home = "/home/<hostUser>");
+      # the darwin host supplies users.users.<username>.home in its own block
+      # (see mkDarwinConfiguration). Defining the account's home on the darwin
+      # side at its source is what lets the earlier forced home.homeDirectory
+      # override (a lib.mkForce) go away (epic 2446 criterion 4) — the derivation
+      # used to yield null on darwin because no users.users.<name> was defined
+      # there.
+      mkIntegratedHmConfig = { hostPlatform, username, gitName, gitEmail }: {
         nixpkgs.hostPlatform = hostPlatform;
 
         nixpkgs.overlays = [ claudeOverlay ];
@@ -207,24 +218,35 @@
         home-manager.useGlobalPkgs = true;
         home-manager.useUserPackages = true;
         home-manager.extraSpecialArgs = { inherit inputs; };
-        home-manager.users.n8 = { lib, ... }: {
+        home-manager.users.${username} = {
           imports = [ homeManagerModules.default ];
 
-          # The framework's nix/home/default.nix no longer assigns
-          # username/homeDirectory — it leaves them unset so each instance sets
-          # its own. lib.mkForce is load-bearing here: it overrides home-manager's
-          # nixos/common.nix, which derives homeDirectory from
-          # config.users.users.n8.home at priority 100. On darwin,
-          # nix/darwin/default.nix defines no users.users.n8, so that derivation
-          # yields null; mkForce (priority 50) ensures our values win. Do not drop
-          # mkForce as redundant — darwin CI fails without it (see the flake log,
-          # "restore lib.mkForce ... to override ... null derivation").
-          home.username = lib.mkForce "n8";
-          home.homeDirectory = lib.mkForce homeDirectory;
+          # The framework's nix/home/git.nix asserts loudly if git is enabled
+          # without an identity; every instance supplies its own here. This is
+          # common to both hosts, so it lives in the shared wiring rather than
+          # each platform block.
+          programs.git.settings.user.name = gitName;
+          programs.git.settings.user.email = gitEmail;
         };
       };
 
-      darwinConfigurations.default = darwin.lib.darwinSystem {
+      # Parameterized host-config constructors. An external instance flake (see
+      # examples/office-hours-nate) calls these with its own real values; the
+      # in-repo darwinConfigurations.default / nixosConfigurations.nixos below
+      # call them with a clearly-labeled placeholder attrset, so commons.systems
+      # carries ZERO personal data yet CI still builds both host outputs.
+      #
+      # instanceValues fields:
+      #   username             home-manager + darwin account name
+      #   homeDirectory        absolute home dir (darwin only; nixos derives
+      #                        /home/<hostUser> from configuration.nix)
+      #   gitName / gitEmail   git identity (both platforms)
+      #   hostUser             nixos system user (wsl.defaultUser,
+      #                        users.users.<name>, office-hours producer user)
+      #   sshAuthorizedKeys    nixos authorized_keys list ([ ] = none)
+      #   dispatchUsageSamples nixos capacity-sampler config
+      #                        ({ enable; groupId? } — groupId required iff enable)
+      mkDarwinConfiguration = instanceValues: darwin.lib.darwinSystem {
         specialArgs = { inherit inputs; };
         modules = [
           darwinModules.default
@@ -232,31 +254,32 @@
           # The Mac is Apple Silicon.
           (mkIntegratedHmConfig {
             hostPlatform = "aarch64-darwin";
-            homeDirectory = "/Users/n8";
+            inherit (instanceValues) username gitName gitEmail;
           })
           {
+            # Define the account's home directory on the darwin side so
+            # home-manager's nixos/common.nix derives home.homeDirectory from
+            # config.users.users.<name>.home (which is null on darwin otherwise,
+            # since nix-darwin defines no users.users.<name>). This replaces the
+            # former workaround that forced `home.homeDirectory` with a
+            # lib.mkForce override (epic 2446 criterion 4): with the derivation
+            # resolving to the real value at priority 100, no forced override is
+            # needed.
+            users.users.${instanceValues.username}.home =
+              instanceValues.homeDirectory;
+
             # Out-of-scope constraint: do NOT enable programs.wezterm on Darwin.
             # nix/home/wezterm.nix unconditionally sets enable = true; override it
             # here. (wezterm-windows.nix is already gated on isLinux, so it is a
-            # no-op on Darwin and needs no change.) This touches no shared file, so
-            # the NixOS/WSL host config stays byte-identical.
-            #
-            # The framework (nix/home/default.nix, nix/home/git.nix) no longer
-            # assigns git identity — it leaves it unset so each instance supplies
-            # its own. This office-hours-nate instance sets the git identity here.
-            # mkIntegratedHmConfig already imports homeManagerModules.default and
-            # forces username/homeDirectory; this sibling users.n8 block merges in
-            # the identity and wezterm override via the module system.
-            home-manager.users.n8 = { lib, ... }: {
-              programs.git.settings.user.name = "Nathan Buesgens";
-              programs.git.settings.user.email = "nathan@natb1.com";
+            # no-op on Darwin and needs no change.)
+            home-manager.users.${instanceValues.username} = { lib, ... }: {
               programs.wezterm.enable = lib.mkForce false;
             };
           }
         ];
       };
 
-      nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
+      mkNixosConfiguration = instanceValues: nixpkgs.lib.nixosSystem {
         specialArgs = { inherit inputs; };
         modules = [
           nixos-wsl.nixosModules.default
@@ -266,14 +289,17 @@
           home-manager.nixosModules.home-manager
           (mkIntegratedHmConfig {
             hostPlatform = "x86_64-linux";
-            homeDirectory = "/home/n8";
+            # On nixos the home-manager account IS the system host user, so the
+            # home.homeDirectory derivation reads users.users.<hostUser>.home
+            # (set to /home/<hostUser> by nix/nixos/configuration.nix).
+            username = instanceValues.hostUser;
+            inherit (instanceValues) gitName gitEmail;
           })
           {
             # The NixOS host user (wsl.defaultUser, users.users.<name>, and the
             # office-hours producer user) — the framework's nix/nixos modules read
-            # this instead of hardcoding a name. This office-hours-nate instance
-            # supplies it here.
-            instance.hostUser = "n8";
+            # this instead of hardcoding a name.
+            instance.hostUser = instanceValues.hostUser;
 
             # backupFileExtension makes the clobber-abort impossible: when a switch
             # meets an unmanaged file it wants to own, it backs it up (.backup)
@@ -281,20 +307,9 @@
             # NixOS/nix-darwin module, not standalone home-manager.
             home-manager.backupFileExtension = "backup";
 
-            # The framework (nix/home/git.nix) no longer assigns a git identity —
-            # it asserts loudly if git is enabled without one. This instance
-            # supplies its identity here. mkIntegratedHmConfig already imports
-            # homeManagerModules.default and forces username/homeDirectory; this
-            # sibling users.n8 block merges the identity in via the module system.
-            home-manager.users.n8 = {
-              programs.git.settings.user.name = "Nathan Buesgens";
-              programs.git.settings.user.email = "nathan@natb1.com";
-              services.sshAuthorizedKeys.keys = [
-                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBzEPhvoentKLmUnWPI0mfPHEFNP2bj0ekvC3N5LcI58 n8@nixos"
-                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM7rlIYWYTjLuwkOyKsO4PxewINlxA8HezSW+GTpE9os n8@Nathans-MacBook-Air.local"
-              ];
-              services.dispatchUsageSamples.enable = true;
-              services.dispatchUsageSamples.groupId = "commons-systems";
+            home-manager.users.${instanceValues.hostUser} = {
+              services.sshAuthorizedKeys.keys = instanceValues.sshAuthorizedKeys;
+              services.dispatchUsageSamples = instanceValues.dispatchUsageSamples;
             };
 
             # Contrast with darwin: do NOT disable programs.wezterm here. Linux/WSL
@@ -303,9 +318,30 @@
           }
         ];
       };
+
+      # Placeholder instance values — ZERO personal data. CI's darwin-build and
+      # nixos-build (.github/workflows/unit-tests.yml) build both host outputs
+      # from these so the framework keeps compiling without carrying anyone's
+      # identity. The author's real values live in the private office-hours-nate
+      # instance flake, which calls the constructors above with them.
+      placeholderInstance = {
+        username = "operator";
+        gitName = "Example Operator";
+        gitEmail = "operator@example.org";
+        hostUser = "operator";
+        sshAuthorizedKeys = [ ];
+        dispatchUsageSamples = { enable = false; };
+      };
+
+      darwinConfigurations.default = mkDarwinConfiguration (placeholderInstance // {
+        homeDirectory = "/Users/operator";
+      });
+
+      nixosConfigurations.nixos = mkNixosConfiguration placeholderInstance;
     in
     systemOutputs // {
-      inherit darwinConfigurations nixosConfigurations homeManagerModules darwinModules nixosModules mkPkgs;
+      inherit darwinConfigurations nixosConfigurations homeManagerModules
+        darwinModules nixosModules mkPkgs mkDarwinConfiguration mkNixosConfiguration;
       overlays = {
         # The only overlay homeManagerModules.default requires: pins
         # pkgs.claude-code to the sadjow fork. A consumer wanting just the

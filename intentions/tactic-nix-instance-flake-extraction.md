@@ -230,6 +230,25 @@ work. Author a main-qa tactic for that cutover at completion (the pattern of
 `tactic-mainqa-instance-flake-personalization`) — the machine switch is not
 autonomously verifiable.
 
+## needs-main residue
+
+QA (2026-07-28, PR #2848) found one item that is not autonomously verifiable
+pre-merge and is deferred to the post-merge main-qa cutover already planned
+for this tactic:
+
+- **id:** 13
+- **title:** Owner cutover: real values committed and both machines switched
+- **url_path:** current
+- **expected_outcome:** Owner commits real username/homeDirectory/git
+  identity/ssh keys/dispatch settings into the private office-hours-nate
+  instance flake using this PR's Unit-3 template, and both machines (darwin
+  + nixos) switch cleanly.
+- **finding:** Requires the owner's private repo and physical hardware
+  access — not autonomously verifiable in this session. Already covered by
+  this tactic's own `## Verification` § "Manual (owner, after merge)" and
+  `## Completion` clause below (the main-qa cutover tactic); no new tracking
+  needed.
+
 ## Completion
 
 Merged to main with CI green and the main-qa cutover tactic authored →
