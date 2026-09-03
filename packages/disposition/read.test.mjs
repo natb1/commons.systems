@@ -230,6 +230,40 @@ describe('parseNode', () => {
     const text = '---\nquestion: Q?\nstage: periagogic\norder:\n  - a\n---\n\n## Disposition\n\nOpen.\n';
     assert.throws(() => parseNode(text, loc), /'order' requires an '## Answer' section/);
   });
+
+  // ---- '## Draft': dialogue.md's "the validator parses it and checks only
+  // that it answers the same question" -- no field rule, shape rule,
+  // vocabulary, or section-requirement rule applies inside the fence. ----
+
+  test('a ## Draft with an unknown frontmatter key parses without error -- only structure and the question are checked', () => {
+    const text = [
+      '---',
+      'question: What?',
+      'stage: periagogic',
+      '---',
+      '',
+      '## Disposition',
+      '',
+      'Open.',
+      '',
+      '## Draft',
+      '',
+      '```markdown',
+      '---',
+      'question: What?',
+      'bogus: true',
+      '---',
+      '',
+      '## Answer',
+      '',
+      'x',
+      '```',
+      '',
+    ].join('\n');
+    const node = parseNode(text, loc);
+    assert.ok(node.draft, 'the draft parses despite its unrecognized frontmatter key');
+    assert.equal(node.draft.question, 'What?');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -414,6 +448,23 @@ describe('readGraph: invalid fixtures', () => {
       const lines = err.message.split('\n');
       assert.ok(lines.some((l) => l.includes("'source' is required")));
       assert.ok(lines.some((l) => l.includes("'relation' is required")));
+      return true;
+    });
+  });
+
+  test('invalid-draft-parse-error fails structurally (no frontmatter delimiter), not on any field rule', async () => {
+    await assert.rejects(readGraph(path.join(FIXTURES, 'invalid-draft-parse-error')), (err) => {
+      assert.match(err.message, /file must begin with a '---' frontmatter delimiter/);
+      assert.doesNotMatch(err.message, /authority\.date|unknown frontmatter key|'form' must be one of|unanswered and must carry stage/);
+      return true;
+    });
+  });
+
+  test('invalid-draft-wrong-question fails on the question mismatch alone -- the draft is otherwise old-doctrine-valid', async () => {
+    await assert.rejects(readGraph(path.join(FIXTURES, 'invalid-draft-wrong-question')), (err) => {
+      const lines = err.message.split('\n');
+      assert.equal(lines.length, 1, 'no other field on this well-formed draft is checked, so this is the only problem');
+      assert.match(lines[0], /'## Draft' answers a different question$/);
       return true;
     });
   });
@@ -620,6 +671,39 @@ describe('readGraph: valid-order fixture', () => {
     assert.ok(byId('leaf-a').rank > byId('leaf-b').rank, 'leaf-a (step 1) outranks leaf-b (step 2)');
     assert.ok(byId('hub').rank > byId('leaf-a').rank, "hub outranks leaf-a but is leaf-a's ancestor");
     assert.equal(byId('solo-child').rank, byId('leaf-a').rank, "leaf-a's lone child ties its rank exactly");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readGraph: valid-draft-old-doctrine fixture
+// ---------------------------------------------------------------------------
+
+describe('readGraph: valid-draft-old-doctrine fixture', () => {
+  // dialogue.md: "A draft may be invalid under the doctrine of the day, as
+  // when it presumes a ruling not yet given; the validator parses it and
+  // checks only that it answers the same question." This draft carries a
+  // form outside FORMS, an authority.date that is still the sitting's
+  // placeholder text, and a tier outside its vocabulary -- none of it is a
+  // validation problem.
+  test('a draft with an out-of-vocabulary form, a placeholder authority date, and an out-of-vocabulary tier still validates', async () => {
+    const result = await validate(path.join(FIXTURES, 'valid-draft-old-doctrine'));
+    assert.equal(result.ok, true);
+    assert.equal(result.message, 'ok: 1 nodes');
+  });
+
+  test("the draft's frontmatter is returned exactly as written, not normalized or rejected", async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-draft-old-doctrine'));
+    const node = graph.nodes.find((n) => n.id === 'example.test/main/ruling-node');
+    assert.ok(node, 'expected the fixture node to parse');
+    assert.equal(node.draft.question, node.question, "the draft still answers the node's own question");
+    assert.equal(node.draft.frontmatter.form, 'disposition', "'form' outside FORMS is passed through, not rejected");
+    assert.deepEqual(node.draft.frontmatter.authority, {
+      class: 'ratified',
+      by: 'Fixture Author',
+      date: '<the date of the ruling>',
+    }, 'an authority.date that fails isValidDate is passed through unvalidated, not rejected or normalized to null');
+    assert.equal(node.draft.frontmatter.tier, 'cosmic', "'tier' outside its vocabulary is passed through, not rejected");
+    assert.equal(node.reviewStale, false, "the fixture's review.of is kept in step with the draft hash");
   });
 });
 

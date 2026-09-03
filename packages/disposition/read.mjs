@@ -211,85 +211,20 @@ function extractDraftFence(sectionText, problems) {
 }
 
 /**
- * Parse a `## Draft` fence's content with this same file's node parser --
- * frontmatter and sections, the full single-file rules `parseNode` applies
- * to any node file -- and reduce the result to the shape the dialogue node
- * defines: `{raw, question, frontmatter, sections}`. Applies exactly one
- * rule beyond parsing: the draft must answer the same question as the node
- * it drafts.
- *
- * @param {string} fenceText
- * @param {string} question - the enclosing node's own (already-validated) question.
- * @param {{id: string, graph: string, slug: string, path: string}} ctx - the
- *   enclosing node's own location, for attributing a nested parse error.
- * @param {string[]} problems
- * @returns {{raw: string, question: string, frontmatter: object, sections: object}|null}
- */
-function parseDraftFence(fenceText, question, ctx, problems) {
-  let parsed;
-  try {
-    parsed = parseNode(fenceText, {
-      id: `${ctx.id}#draft`,
-      graph: ctx.graph,
-      slug: `${ctx.slug}#draft`,
-      path: `${ctx.path} (## Draft)`,
-    });
-  } catch (err) {
-    problems.push(`'## Draft' does not parse as a node: ${err.message}`);
-    return null;
-  }
-  if (parsed.question !== question) {
-    problems.push("'## Draft' answers a different question");
-  }
-  return {
-    raw: fenceText,
-    question: parsed.question,
-    frontmatter: {
-      form: parsed.form,
-      authority: parsed.authority,
-      under: parsed.under,
-      tier: parsed.tier,
-      boost: parsed.boost,
-      cites: parsed.cites,
-      instrument: parsed.instrument,
-      after: parsed.after,
-      source: parsed.source,
-      relation: parsed.relation,
-      defines: parsed.defines,
-      shims: parsed.shims,
-      stage: parsed.stage,
-      order: parsed.order,
-      recommendation: parsed.recommendation,
-      review: parsed.review,
-    },
-    sections: {
-      Disposition: parsed.disposition,
-      Answer: parsed.answer,
-      Rationale: parsed.rationale,
-      Proposal: parsed.proposal,
-    },
-  };
-}
-
-/**
- * Parse and validate a single node file's text (frontmatter + body).
- * Does not resolve `under`/`after`/`cites[].id` against a manifest or
- * against sibling nodes, and does not compute `children`/`rank`/`ceiling`/
- * `status`/`hash` -- those need the whole graph and the raw file bytes, and
- * are added by `readGraph`.
+ * Recover a node file's frontmatter and body text from its raw bytes: the
+ * structural parse shared by a top-level node file (`parseNode`) and a
+ * `## Draft` fence's nested one (`parseDraftFence`). Throws immediately
+ * (one message, as befits a file with nothing left worth checking) when
+ * the frontmatter cannot be recovered at all: no opening or closing `---`
+ * delimiter, invalid YAML, or a frontmatter that is not a mapping. Every
+ * other rule -- the frontmatter's known keys, each field's own shape and
+ * vocabulary, the body's sections -- is the caller's job.
  *
  * @param {string} text - the file's decoded text.
- * @param {{id: string, graph: string, slug: string, path: string}} loc
- * @returns {object} a partial node (all deliverable-1 fields except
- *   `children`, `rank`, `ceiling`, `status`, `hash`), plus the dialogue
- *   fields this unit adds: `recommendation`, `review`, `reviewStale`,
- *   `draft`, `draftHash`.
- * @throws {Error} listing every problem found in this file, one per line,
- *   each prefixed with `loc.path`.
+ * @param {string} relPath - for the thrown message's prefix.
+ * @returns {{fm: object, fmText: string, bodyText: string}}
  */
-export function parseNode(text, { id, graph, slug, path: relPath }) {
-  const problems = [];
-
+function parseFrontmatter(text, relPath) {
   const normalized = text.replace(/\r\n/g, '\n');
   const lines = normalized.split('\n');
   if (lines[0].trim() !== '---') {
@@ -318,6 +253,103 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   if (!isPlainObject(fm)) {
     throw fail(relPath, ['frontmatter must be a YAML mapping']);
   }
+  return { fm, fmText, bodyText };
+}
+
+/**
+ * Parse a `## Draft` fence's content only structurally, per dialogue.md's
+ * Answer: "A draft may be invalid under the doctrine of the day, as when
+ * it presumes a ruling not yet given; the validator parses it and checks
+ * only that it answers the same question." The fence must parse as a node
+ * at all -- a frontmatter block that recovers as a YAML mapping
+ * (`parseFrontmatter`), and a body whose sections are the reader's known
+ * sections in the reader's order (`parseBody`), the same two structural
+ * parses a top-level node file gets -- and its `question` must equal the
+ * one it drafts (one combined check: absent, wrong-typed, and merely
+ * different all fail it the same way, with the same message). No other
+ * field rule, shape rule, vocabulary, or section-requirement rule applies:
+ * a draft may carry a form outside today's vocabulary, an authority whose
+ * date is still a placeholder, a tier or any other field with a value the
+ * vocabulary of the day does not name, or an unknown frontmatter key
+ * entirely -- none of it is checked here, and each field is returned as
+ * written, not normalized.
+ *
+ * @param {string} fenceText
+ * @param {string} question - the enclosing node's own (already-validated) question.
+ * @param {{id: string, graph: string, slug: string, path: string}} ctx - the
+ *   enclosing node's own location, for attributing a nested parse error.
+ * @param {string[]} problems
+ * @returns {{raw: string, question: string|null, frontmatter: object, sections: object}|null}
+ */
+function parseDraftFence(fenceText, question, ctx, problems) {
+  const draftPath = `${ctx.path} (## Draft)`;
+  let fm;
+  let bodyText;
+  try {
+    ({ fm, bodyText } = parseFrontmatter(fenceText, draftPath));
+  } catch (err) {
+    problems.push(`'## Draft' does not parse as a node: ${err.message}`);
+    return null;
+  }
+  const bodyProblems = [];
+  const sections = parseBody(bodyText, bodyProblems);
+  if (bodyProblems.length > 0) {
+    problems.push(`'## Draft' does not parse as a node: ${fail(draftPath, bodyProblems).message}`);
+    return null;
+  }
+  if (fm.question !== question) {
+    problems.push("'## Draft' answers a different question");
+  }
+  const get = (key, absentValue) => (isAbsent(fm[key]) ? absentValue : fm[key]);
+  return {
+    raw: fenceText,
+    question: get('question', null),
+    frontmatter: {
+      form: get('form', null),
+      authority: get('authority', null),
+      under: get('under', []),
+      tier: get('tier', null),
+      boost: get('boost', null),
+      cites: get('cites', []),
+      instrument: get('instrument', null),
+      after: get('after', []),
+      source: get('source', null),
+      relation: get('relation', null),
+      defines: get('defines', null),
+      shims: get('shims', []),
+      stage: get('stage', null),
+      order: get('order', []),
+      recommendation: get('recommendation', null),
+      review: get('review', null),
+    },
+    sections: {
+      Disposition: sections.Disposition,
+      Answer: sections.Answer,
+      Rationale: sections.Rationale,
+      Proposal: sections.Proposal,
+    },
+  };
+}
+
+/**
+ * Parse and validate a single node file's text (frontmatter + body).
+ * Does not resolve `under`/`after`/`cites[].id` against a manifest or
+ * against sibling nodes, and does not compute `children`/`rank`/`ceiling`/
+ * `status`/`hash` -- those need the whole graph and the raw file bytes, and
+ * are added by `readGraph`.
+ *
+ * @param {string} text - the file's decoded text.
+ * @param {{id: string, graph: string, slug: string, path: string}} loc
+ * @returns {object} a partial node (all deliverable-1 fields except
+ *   `children`, `rank`, `ceiling`, `status`, `hash`), plus the dialogue
+ *   fields this unit adds: `recommendation`, `review`, `reviewStale`,
+ *   `draft`, `draftHash`.
+ * @throws {Error} listing every problem found in this file, one per line,
+ *   each prefixed with `loc.path`.
+ */
+export function parseNode(text, { id, graph, slug, path: relPath }) {
+  const problems = [];
+  const { fm, fmText, bodyText } = parseFrontmatter(text, relPath);
 
   for (const key of Object.keys(fm)) {
     if (!FRONTMATTER_KEYS.has(key)) {
@@ -631,13 +663,14 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     problems.push("stage ruling requires a 'review' with verdict forward");
   }
 
-  // '## Draft': one fenced ```markdown block, parsed with this same
-  // function (frontmatter and sections; no further rule beyond parsing
-  // except that it answers the same question) and exposed reduced to
-  // {raw, question, frontmatter, sections}. `draftFenceText` (the fence's
-  // exact content, or null with no '## Draft') feeds the draft hash below
-  // regardless of whether the draft is otherwise valid -- that value is
-  // only ever read once this function has returned without throwing.
+  // '## Draft': one fenced ```markdown block, parsed only structurally by
+  // parseDraftFence (frontmatter and sections; no field rule beyond
+  // parsing except that it answers the same question) and exposed reduced
+  // to {raw, question, frontmatter, sections}. `draftFenceText` (the
+  // fence's exact content, or null with no '## Draft') feeds the draft
+  // hash below regardless of whether the draft is otherwise valid -- that
+  // value is only ever read once this function has returned without
+  // throwing.
   let draft = null;
   let draftFenceText = null;
   if (hasDraftSection) {

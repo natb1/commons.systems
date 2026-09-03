@@ -353,21 +353,47 @@ export function renderFrontier(graph) {
 }
 
 /* ------------------------------------------------------------------ *
- * the alignment page: every node carrying a `stage` -- an un-aligned
- * disposition, or an answered node whose sitting is open -- rendered as one
- * flat, at-rest page the author rules on. Unlike the browser, every item is
- * rendered to HTML here, in Node, at build time: there is no per-node route
- * to click through, so the file itself already holds everything a reader
- * (or a test) will ever see. alignment-template.html's own <script> is
+ * the alignment page: every node carrying a `stage` -- an unanswered
+ * node, or an answered node whose ratification is under review -- rendered
+ * as one flat, at-rest page the author rules on, in the order the
+ * unanswered node fixes: graph by graph in the manifest's order, by rank
+ * within a graph, so the purpose node comes first. Unlike the browser,
+ * every item is rendered to HTML here, in Node, at build time: there is no
+ * per-node route to click through, so the file itself already holds
+ * everything a reader (or a test) will ever see, the edit between the node
+ * and its draft included. alignment-template.html's own <script> is
  * untouched by this function; it only carries what has to run in a
- * browser -- the theme toggle, reading and writing the author's responses,
- * and the "copy all" digest.
+ * browser -- the theme toggle, staging the author's responses, submitting
+ * them, and the "copy all" digest.
  * ------------------------------------------------------------------ */
 
 const ALIGNMENT_MARKER = "<!--DG:ITEMS-->";
 const ALIGNMENT_STAGES = ["ruling", "review", "maieutic", "periagogic"];
-const ALIGNMENT_STAGE_LABEL = { ruling: "Ruling", review: "Review", maieutic: "Maieutic", periagogic: "Periagogic" };
-const RATIFY_OPTIONS = ["Ratify as shown", "Ratify with edits", "Defer", "Overrule"];
+
+// The three responses the unanswered node opens on any subset of the
+// items: the value stored on the response document, the button's label,
+// and the label the textarea takes once that response is chosen.
+const RESPONSE_CHOICES = [
+  { value: "confirm", label: "Confirm", note: "A note (optional)" },
+  { value: "edit", label: "Confirm with edits", note: "Your edits" },
+  { value: "deny", label: "Deny with feedback", note: "Your feedback" },
+];
+
+// What each stage owes the author, said once beneath the item's account.
+// A ruling-stage item's caption is the edit's own, right under the diff.
+const STAGE_HINT = {
+  review: "In review. A confirmation given now is held until the review forwards the draft.",
+  periagogic: "The dialogue owes your account of the ground first; your words here are recorded verbatim.",
+  maieutic: "The answer is not yet drafted; confirming takes the proposal's recommendation.",
+  ruling: null,
+};
+
+const WORDS_PLACEHOLDER = "Your words: your account of the ground, or your intention";
+
+const NO_ANSWER_LINE = "No answer yet: this node is the author's disposition awaiting its answer.";
+const EDIT_CAPTION = "Confirm ratifies the draft as the node. The node as it stands is what remains if you deny.";
+const LEDE =
+  "Every node is unanswered until the author confirms it, here or in prose. Listed by rank, the purpose node first. Respond to any subset and submit; the alignment session reads the responses back.";
 
 function alignEsc(s) {
   return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&quot;"));
@@ -402,7 +428,7 @@ const ALIGN_RE_RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 /**
  * Port of the browser template's `mdBlocks`, adapted to keep a fenced
  * block's info string as `lang` so `renderProposal` can single out a
- * fenced ```markdown block -- a draft quoted from the sitting -- for its
+ * fenced ```markdown block -- a draft quoted into the account -- for its
  * own label; no other caller reads `lang`.
  *
  * @param {string} src
@@ -470,9 +496,9 @@ function alignHtml(src) {
 }
 
 /**
- * `## Proposal`, with a fenced ```markdown block -- a draft quoted from the
- * sitting -- called out in its own labelled block so it is never mistaken
- * for "The node as it stands".
+ * `## Proposal`, with a fenced ```markdown block -- a draft quoted into
+ * the account -- called out in its own labelled block so it is never
+ * mistaken for "The node as it stands" or for the node's own `## Draft`.
  *
  * @param {string} src
  * @returns {string}
@@ -480,7 +506,7 @@ function alignHtml(src) {
 function renderProposal(src) {
   return alignBlocks(src).map((b) => {
     if (b.type === "code" && b.lang === "markdown") {
-      return `<div class="draft"><p class="blk-label">Drafted at the sitting; the node above is current</p>${b.html}</div>`;
+      return `<div class="quoted"><p class="blk-label">Quoted in the account; the sections above are the node</p>${b.html}</div>`;
     }
     return b.html;
   }).join("");
@@ -495,81 +521,350 @@ function alignSection(label, bodyHtml, cls) {
   return `<section${cls ? ` class="${cls}"` : ""}><p class="lbl">${alignEsc(label)}</p><div class="mdbody">${bodyHtml}</div></section>`;
 }
 
-// For a ruling-stage item that already has an answer, the ratify options act
-// on the AI's account (the proposal above), not on the node as it currently
-// stands -- this caption says so, right above the controls it describes.
-const RULING_WITH_ANSWER_CAPTION =
-  "The options rule on the AI's account above; 'as shown' means the draft in it. The node as it stands is what remains if you overrule.";
+/* ------------------------------- the edit: node against its draft ---- */
 
-/** The response controls for one item, by stage (contract section 2). */
-function alignControls(n, hasAnswer) {
+// Every frontmatter key the reader carries except `question` (the
+// validator already holds the draft to the node's own question) and the
+// three dialogue keys, which are the dialogue's state and not the edit.
+const EDIT_FM_KEYS = [
+  "form", "authority", "under", "tier", "boost", "cites", "instrument",
+  "after", "source", "relation", "defines", "shims", "order",
+];
+
+// Key-sorted JSON, for comparison only: two values are the same field
+// value when their canonical forms match, whatever order YAML gave the
+// keys. `authority` is compared as a whole, as one value, because that is
+// what a stamp is.
+function stableJson(v) {
+  if (v === null || v === undefined) return "null";
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(",")}]`;
+  if (typeof v === "object") {
+    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stableJson(v[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v);
+}
+
+// YAML flow style, the compact one-line rendering of a frontmatter value:
+// `rule`, `[a, b]`, `{class: ratified, by: claude, date: 2026-09-03}`, and
+// `none` for an absent or empty one.
+function flowYaml(v) {
+  if (v === null || v === undefined) return "none";
+  if (Array.isArray(v)) return v.length === 0 ? "none" : `[${v.map(flowYaml).join(", ")}]`;
+  if (typeof v === "object") {
+    const keys = Object.keys(v).filter((k) => v[k] !== null && v[k] !== undefined);
+    if (keys.length === 0) return "none";
+    return `{${keys.map((k) => `${k}: ${flowYaml(v[k])}`).join(", ")}}`;
+  }
+  return String(v);
+}
+
+/**
+ * The frontmatter half of the edit: one entry per field whose value
+ * differs between the node as it stands and its draft, in the reader's own
+ * key order. `stage`, `recommendation` and `review` are ignored -- they
+ * are the dialogue's own state, removed at the recording, and never part
+ * of what the author rules on.
+ *
+ * @param {object} node - a node as `read.mjs` returns it.
+ * @param {{frontmatter: object}} draft - `node.draft`.
+ * @returns {{field: string, before: string, after: string}[]}
+ */
+export function frontmatterEdits(node, draft) {
+  const out = [];
+  const fm = (draft && draft.frontmatter) || {};
+  for (const key of EDIT_FM_KEYS) {
+    const before = node[key] === undefined ? null : node[key];
+    const after = fm[key] === undefined ? null : fm[key];
+    if (stableJson(before) === stableJson(after)) continue;
+    out.push({ field: key, before: flowYaml(before), after: flowYaml(after) });
+  }
+  return out;
+}
+
+const DIFF_TOKEN_CAP = 4000;
+
+// A token is one run of non-whitespace plus the whitespace that followed
+// it, normalized to a paragraph break or a single space, so the rendered
+// diff keeps the text's paragraphs (the page sets `white-space: pre-wrap`
+// on it) and reflows to the measure like every other body of prose on the
+// page, whether or not the node's own file hard-wraps its lines. Only `t`
+// is ever compared.
+function diffTokens(text) {
+  const out = [];
+  const re = /(\S+)(\s*)/g;
+  let m;
+  const src = String(text == null ? "" : text);
+  while ((m = re.exec(src)) !== null) {
+    const ws = m[2] === "" ? "" : /\n[^\S\n]*\n/.test(m[2]) ? "\n\n" : " ";
+    out.push({ t: m[1], ws });
+  }
+  return out;
+}
+
+// Longest common subsequence over two token lists, walked back into a flat
+// op list. The table is filled from the end so the walk forward can be
+// greedy, which keeps a run of insertions together rather than
+// interleaving it with the deletions it replaces.
+function lcsOps(a, b) {
+  const n = a.length;
+  const m = b.length;
+  const w = m + 1;
+  const dp = new Uint32Array((n + 1) * w);
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      dp[i * w + j] = a[i].t === b[j].t
+        ? dp[(i + 1) * w + (j + 1)] + 1
+        : Math.max(dp[(i + 1) * w + j], dp[i * w + (j + 1)]);
+    }
+  }
+  const ops = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i].t === b[j].t) { ops.push({ op: "same", tok: b[j] }); i += 1; j += 1; }
+    else if (dp[(i + 1) * w + j] >= dp[i * w + (j + 1)]) { ops.push({ op: "del", tok: a[i] }); i += 1; }
+    else { ops.push({ op: "ins", tok: b[j] }); j += 1; }
+  }
+  while (i < n) { ops.push({ op: "del", tok: a[i] }); i += 1; }
+  while (j < m) { ops.push({ op: "ins", tok: b[j] }); j += 1; }
+  return ops;
+}
+
+/**
+ * A word-level diff of two section texts as a flat op list: `same` tokens
+ * from the new text, `del` tokens from the old, `ins` tokens from the new.
+ * The shared head and tail are matched off first, so the quadratic table
+ * only ever covers what actually moved.
+ *
+ * Returns `null` -- the caller's cue to print the "too long to diff"
+ * fallback -- when either side is longer than `cap` tokens, the one bound
+ * on a table that is otherwise the product of the two lengths.
+ *
+ * @param {string|null} before
+ * @param {string|null} after
+ * @param {number} [cap]
+ * @returns {{op: "same"|"del"|"ins", tok: {t: string, ws: string}}[]|null}
+ */
+export function wordDiff(before, after, cap = DIFF_TOKEN_CAP) {
+  const a = diffTokens(before);
+  const b = diffTokens(after);
+  if (a.length > cap || b.length > cap) return null;
+  let head = 0;
+  while (head < a.length && head < b.length && a[head].t === b[head].t) head += 1;
+  let tail = 0;
+  while (
+    tail < a.length - head
+    && tail < b.length - head
+    && a[a.length - 1 - tail].t === b[b.length - 1 - tail].t
+  ) tail += 1;
+  const ops = b.slice(0, head).map((tok) => ({ op: "same", tok }));
+  ops.push(...lcsOps(a.slice(head, a.length - tail), b.slice(head, b.length - tail)));
+  ops.push(...b.slice(b.length - tail).map((tok) => ({ op: "same", tok })));
+  return ops;
+}
+
+// Consecutive ops of one kind become one <ins>/<del>; the run's own
+// trailing whitespace is emitted outside the tag, so a struck-through or
+// underlined run never swallows the space or newline after it.
+function diffHtml(ops) {
+  let html = "";
+  let i = 0;
+  while (i < ops.length) {
+    const kind = ops[i].op;
+    const run = [];
+    while (i < ops.length && ops[i].op === kind) { run.push(ops[i].tok); i += 1; }
+    const inner = run.map((tok, k) => alignEsc(tok.t) + (k < run.length - 1 ? tok.ws : "")).join("");
+    const trailing = run[run.length - 1].ws;
+    if (kind === "same") html += inner + trailing;
+    else if (kind === "ins") html += `<ins>${inner}</ins>${trailing}`;
+    else html += `<del>${inner}</del>${trailing}`;
+  }
+  return html;
+}
+
+function renderSectionDiff(label, before, after) {
+  if (!(before || "").trim() && !(after || "").trim()) return "";
+  const ops = wordDiff(before, after);
+  const body = ops === null
+    ? '<p class="none">Too long to diff: read the draft above against the node as it stands.</p>'
+    : `<div class="diff">${diffHtml(ops)}</div>`;
+  return `<p class="difflbl">${alignEsc(label)}</p>${body}`;
+}
+
+/**
+ * "The draft" and "The edit": the draft's own answer and rationale
+ * rendered as prose, then what changes -- the frontmatter field by field,
+ * the answer and the rationale word by word -- and the caption saying what
+ * a confirmation does to it.
+ */
+function renderDraft(n) {
+  const d = n.draft;
+  const body = alignHtml(d.sections.Answer) + alignHtml(d.sections.Rationale);
+  const fm = frontmatterEdits(n, d);
+  const fmHtml = fm.length === 0
+    ? '<p class="none">No frontmatter field changes.</p>'
+    : `<ul class="fmdiff">${fm.map((e) => `<li><code>${alignEsc(e.field)}</code>: <span class="was">${alignEsc(e.before)}</span> <span class="arrow">&rarr;</span> <span class="now">${alignEsc(e.after)}</span></li>`).join("")}</ul>`;
+  const diffs = renderSectionDiff("Answer", n.answer, d.sections.Answer)
+    + renderSectionDiff("Rationale", n.rationale, d.sections.Rationale);
+  return `<section class="draftsec"><p class="lbl">The draft</p><div class="mdbody">${body}</div>`
+    + `<p class="lbl edit-lbl">The edit</p><div class="edit">${fmHtml}${diffs}</div>`
+    + `<p class="caption">${alignEsc(EDIT_CAPTION)}</p></section>`;
+}
+
+/* ------------------------- the recommendation and the review --------- */
+
+// The shims a confirmation would leave standing: the draft's when the node
+// has one that declares any, the node's own otherwise.
+function persistenceShims(n) {
+  const draftShims = n.draft && n.draft.frontmatter ? n.draft.frontmatter.shims : null;
+  if (Array.isArray(draftShims) && draftShims.length > 0) return draftShims;
+  return Array.isArray(n.shims) ? n.shims : [];
+}
+
+function renderRecommendation(n) {
+  if (!n.recommendation) {
+    return '<section class="rec"><p class="lbl">The recommendation</p><p class="none">No recommendation yet.</p></section>';
+  }
+  const pills = `<span class="pill rec-class-${alignEsc(n.recommendation.class)}">class: ${alignEsc(n.recommendation.class)}</span>`
+    + `<span class="pill rec-bold-${alignEsc(n.recommendation.boldness)}">boldness: ${alignEsc(n.recommendation.boldness)}</span>`;
+  const shims = persistenceShims(n);
+  const persistence = shims.length === 0
+    ? '<p class="persist">Persistence: standing.</p>'
+    : `<p class="persist">Persistence: standing, with ${shims.length} shim${shims.length === 1 ? "" : "s"}:</p>`
+      + `<ul class="shims">${shims.map((s) => `<li>${alignInline(s.artifact)}</li>`).join("")}</ul>`;
+  return `<section class="rec"><p class="lbl">The recommendation</p><p class="pills">${pills}</p>${persistence}</section>`;
+}
+
+function renderReview(n) {
+  if (!n.review) {
+    return '<section class="rev"><p class="lbl">The review</p><p class="none">Not yet reviewed.</p></section>';
+  }
+  const verdict = n.review.verdict === "forward" ? "forwarded" : "kicked back";
+  let pills = `<span class="pill rev-${alignEsc(n.review.verdict)}">${alignEsc(verdict)}</span>`
+    + `<span class="pill rev-strength">counter-argument: ${alignEsc(n.review.strength)}</span>`
+    + `<span class="pill rev-date">${alignEsc(n.review.date)}</span>`;
+  if (n.reviewStale) pills += '<span class="pill rev-stale">draft changed since the review</span>';
+  return `<section class="rev"><p class="lbl">The review</p><p class="pills">${pills}</p></section>`;
+}
+
+/* ------------------------------------------- the response controls --- */
+
+function renderResponse(n) {
   const doc = alignDocId(n.id);
-  if (n.stage === "review") {
-    return '<div class="controls" data-role="none"><p class="controls-note">In clean-context review; nothing to answer yet.</p></div>';
-  }
-  if (n.stage === "ruling") {
-    const caption = hasAnswer ? `<p class="controls-note">${RULING_WITH_ANSWER_CAPTION}</p>` : "";
-    const radios = RATIFY_OPTIONS.map(
-      (label) => `<label class="opt"><input type="radio" name="opt:${alignEsc(doc)}" value="${alignEsc(label)}" data-option> ${alignEsc(label)}</label>`
-    ).join("");
-    return `${caption}<fieldset class="controls" data-role="ruling"><legend class="note-lbl">Your response</legend>${radios}<label class="note-lbl">Note<textarea class="note" data-field="note" rows="2"></textarea></label></fieldset>`;
-  }
-  // maieutic and periagogic: the dialogue is drawn out in the author's own words.
-  return '<div class="controls" data-role="words"><label class="note-lbl">Your words<textarea class="note" data-field="note" rows="3"></textarea></label></div>';
+  const hint = STAGE_HINT[n.stage];
+  const placeholder = n.stage === "periagogic" || n.stage === "maieutic" ? WORDS_PLACEHOLDER : "";
+  const opts = RESPONSE_CHOICES.map((c) => (
+    `<label class="segopt"><input type="radio" name="opt:${alignEsc(doc)}" value="${alignEsc(c.value)}" data-option data-note-label="${alignEsc(c.note)}"><span>${alignEsc(c.label)}</span></label>`
+  )).join("");
+  return '<div class="response">'
+    + (hint ? `<p class="hint">${alignEsc(hint)}</p>` : "")
+    + '<fieldset class="controls" data-controls>'
+    + '<legend class="lbl">Your response</legend>'
+    + `<div class="seg">${opts}</div>`
+    + `<label class="note-lbl" data-note-lbl for="note-${alignEsc(doc)}">A note, edits, or feedback</label>`
+    + `<textarea class="note" id="note-${alignEsc(doc)}" data-field="text" rows="3"${placeholder ? ` placeholder="${alignEsc(placeholder)}"` : ""}></textarea>`
+    + "</fieldset>"
+    + '<p class="state" data-state hidden></p>'
+    + "</div>";
 }
 
 function renderAlignmentItem(n) {
   const hasAnswer = typeof n.answer === "string" && n.answer.length > 0;
   const under = n.under || [];
   const doc = alignDocId(n.id);
+  const stamp = n.authority
+    ? `${n.authority.class} · ${n.authority.by} · ${n.authority.date}`
+    : "no stamp";
+  const rank = typeof n.rank === "number" ? n.rank.toFixed(4) : "—";
 
   let html = `<article class="item" id="item-${alignEsc(doc)}" data-item data-id="${alignEsc(n.id)}" data-doc="${alignEsc(doc)}" data-stage="${alignEsc(n.stage)}">`;
   html += `<h2 class="iq">${alignEsc(n.question || n.id)}</h2>`;
   html += `<p class="idv mono">${alignEsc(n.id)}</p>`;
-  html += `<p class="eyebrow"><span class="pill stage-${alignEsc(n.stage)}">${alignEsc(ALIGNMENT_STAGE_LABEL[n.stage] || n.stage)}</span><span class="parents">under ${alignEsc(under.length ? under.join(", ") : "none")}</span></p>`;
+  html += '<p class="eyebrow">'
+    + `<span class="pill stage-${alignEsc(n.stage)}">${alignEsc(n.stage)}</span>`
+    + `<span class="meta mono num">rank ${alignEsc(rank)}</span>`
+    + `<span class="meta mono">${alignEsc(stamp)}</span>`
+    + `<span class="meta mono parents">${under.length ? `under ${alignEsc(under.join(", "))}` : "a root"}</span>`
+    + "</p>";
 
   if (n.disposition) html += alignSection("The author's words", alignHtml(n.disposition), "disposition");
-  if (hasAnswer) {
-    const body = alignHtml(n.answer) + (n.rationale ? alignHtml(n.rationale) : "");
-    html += alignSection("The node as it stands", body, "stands");
-  }
+  const stands = hasAnswer
+    ? alignHtml(n.answer) + (n.rationale ? alignHtml(n.rationale) : "")
+    : `<p class="none">${alignEsc(NO_ANSWER_LINE)}</p>`;
+  html += alignSection("The node as it stands", stands, "stands");
+  if (n.draft) html += renderDraft(n);
+  html += renderRecommendation(n);
+  html += renderReview(n);
   if (n.proposal) html += alignSection("The AI's account", renderProposal(n.proposal), "account");
-
-  html += alignControls(n, hasAnswer);
+  html += renderResponse(n);
   html += "</article>";
   return html;
 }
 
 /**
- * Group every node carrying a `stage` into the four movements, in the fixed
- * order `ruling`, `review`, `maieutic`, `periagogic`; within a group, rank
- * order (descending, ties by id).
+ * Every node carrying a `stage`, in the order the unanswered node fixes:
+ * one section per graph in the manifest's own order (`disposition-graph`,
+ * then `public`), and within a graph by rank descending, ties by id -- the
+ * author's order, taken without touching a rank, which puts the purpose
+ * node first. A graph a node names but the manifest does not declare is
+ * appended after the declared ones rather than dropped, so no open
+ * dialogue can go missing from the page.
  *
- * @param {object[]} nodes
- * @returns {{stage: string, label: string, items: object[]}[]}
+ * Every declared graph is returned, empty or not; the page renders only
+ * the ones with items.
+ *
+ * @param {{graphs?: object, nodes?: object[]}} graph
+ * @returns {{graph: string, label: string, about: string|null, items: object[]}[]}
  */
-export function groupAlignmentItems(nodes) {
-  return ALIGNMENT_STAGES.map((stage) => ({
-    stage,
-    label: ALIGNMENT_STAGE_LABEL[stage],
-    items: nodes
-      .filter((n) => n.stage === stage)
-      .sort((a, b) => (b.rank !== a.rank ? b.rank - a.rank : (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))),
-  }));
+export function orderAlignmentItems(graph) {
+  const items = (graph.nodes || []).filter((n) => n.stage);
+  const declared = graph.graphs && typeof graph.graphs === "object" ? Object.keys(graph.graphs) : [];
+  const names = [...declared];
+  for (const n of items) if (!names.includes(n.graph)) names.push(n.graph);
+  return names.map((name) => {
+    const entry = (graph.graphs && graph.graphs[name]) || {};
+    return {
+      graph: name,
+      label: name,
+      about: typeof entry.about === "string" ? entry.about : null,
+      items: items
+        .filter((n) => n.graph === name)
+        .sort((a, b) => (b.rank !== a.rank ? b.rank - a.rank : (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))),
+    };
+  });
 }
 
 function alignmentPageHtml(graph, groups) {
-  const total = groups.reduce((sum, g) => sum + g.items.length, 0);
-  const countsHtml = groups.map((g) => `<div><dt>${alignEsc(g.label)}</dt><dd class="num">${g.items.length}</dd></div>`).join("");
+  const all = groups.reduce((acc, g) => acc.concat(g.items), []);
+  const total = all.length;
   const present = groups.filter((g) => g.items.length > 0);
+
+  const countsHtml = ALIGNMENT_STAGES.map((stage) => (
+    `<div><dt>${alignEsc(stage)}</dt><dd class="num">${all.filter((n) => n.stage === stage).length}</dd></div>`
+  )).join("") + `<div><dt>items</dt><dd class="num">${total}</dd></div>`;
+
   const railHtml = present.map((g) => {
-    const rows = g.items.map((n) => `<li><a href="#item-${alignEsc(alignDocId(n.id))}">${alignEsc(n.question || n.id)}</a></li>`).join("");
+    const rows = g.items.map((n) => {
+      const doc = alignDocId(n.id);
+      return `<li><a href="#item-${alignEsc(doc)}" data-rail data-doc="${alignEsc(doc)}">`
+        + `<span class="dot stage-${alignEsc(n.stage)}" aria-hidden="true"></span>`
+        + `<span class="rq">${alignEsc(n.question || n.id)}</span>`
+        + '<span class="mark" data-mark></span></a></li>';
+    }).join("");
     return `<section class="grp"><p class="grp-h">${alignEsc(g.label)} (${g.items.length})</p><ul class="tree">${rows}</ul></section>`;
   }).join("");
-  const itemsHtml = present.map((g) => {
-    return `<section class="stagegrp" id="stage-${alignEsc(g.stage)}"><h2 class="stageh">${alignEsc(g.label)}</h2>${g.items.map(renderAlignmentItem).join("")}</section>`;
-  }).join("");
-  const emptyHtml = total === 0 ? '<p class="empty">Nothing is open. Every disposition has survived the dialogue.</p>' : "";
+
+  const itemsHtml = present.map((g) => (
+    `<section class="graphgrp" id="graph-${alignEsc(g.graph)}">`
+    + `<h2 class="graphh">${alignEsc(g.label)}</h2>`
+    + (g.about ? `<p class="graphsub">${alignInline(g.about)}</p>` : "")
+    + g.items.map(renderAlignmentItem).join("")
+    + "</section>"
+  )).join("");
+
+  const emptyHtml = total === 0
+    ? '<p class="empty">Nothing is unanswered. Every disposition has been confirmed by the author.</p>'
+    : "";
   const refline = alignEsc([graph.module, graph.ref].filter(Boolean).join(" · "));
 
   return `<header class="mast">
@@ -586,36 +881,43 @@ function alignmentPageHtml(graph, groups) {
   </div>
 </header>
 <div class="shell">
-  <nav class="nav" id="nav" aria-label="Open items">
-    <dl class="counts">${countsHtml}</dl>
+  <nav class="nav" id="nav" aria-label="The items, in page order">
     <div id="tree">${railHtml}</div>
   </nav>
   <main id="main">
-    <p class="lede">Every item is an open dialogue with the author, recorded as a node that carries its stage. Rulings and words written here are read back by the alignment session.</p>
+    <div class="pagehead">
+      <dl class="counts">${countsHtml}</dl>
+      <p class="lede">${alignEsc(LEDE)}</p>
+    </div>
     <p class="notice" id="notice" hidden></p>
     ${itemsHtml}
     ${emptyHtml}
   </main>
 </div>
-<footer class="foot"><span>${alignEsc(graph.module || "")}</span><span>${total} open item${total === 1 ? "" : "s"}</span></footer>`;
+<footer class="foot" id="foot">
+  <div class="foot-in">
+    <span class="foot-count" id="staged-count">0 responses staged</span>
+    <span class="foot-note" id="foot-note"></span>
+    <button type="button" class="sbtn" id="btn-submit" disabled>Submit 0 responses</button>
+  </div>
+</footer>`;
 }
 
 /**
  * Render every node carrying a `stage` into
  * `packages/disposition/alignment-template.html`: the open dialogue the
- * author rules on, one flat page, grouped by stage in the fixed order
- * ruling/review/maieutic/periagogic and ranked within each group. See the
- * section comment above for why this renders to HTML in Node rather than
- * inlining JSON for a client-side router, unlike `build()`.
+ * author rules on, one flat page, graph by graph in the manifest's order
+ * and by rank within a graph. See the section comment above for why this
+ * renders to HTML in Node rather than inlining JSON for a client-side
+ * router, unlike `build()`.
  *
  * @param {string} template
- * @param {{module?: string, ref?: string|null, nodes: object[]}} graph
+ * @param {{module?: string, ref?: string|null, graphs?: object, nodes: object[]}} graph
  * @returns {string}
  */
 export function buildAlignment(template, graph) {
   if (!template.includes(ALIGNMENT_MARKER)) throw new Error(`template has no ${ALIGNMENT_MARKER} marker`);
-  const nodes = (graph.nodes || []).filter((n) => n.stage);
-  const groups = groupAlignmentItems(nodes);
+  const groups = orderAlignmentItems(graph);
   const block = alignmentPageHtml(graph, groups);
   return template.replace(ALIGNMENT_MARKER, () => block);
 }

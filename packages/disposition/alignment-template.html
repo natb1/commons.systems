@@ -20,12 +20,24 @@
     --delegated-soft: #DEE3EC;
     --deferred-soft: #F3E6CC;
     --proposal-soft: #F1D9D4;
+    --stage-ruling: #A4493B;
+    --stage-ruling-soft: #F1D9D4;
+    --stage-review: #5C6C86;
+    --stage-review-soft: #DEE3EC;
+    --stage-maieutic: #B8801E;
+    --stage-maieutic-soft: #F3E6CC;
+    --stage-periagogic: #1E7A70;
+    --stage-periagogic-soft: #D7ECE8;
+    --ins: #145C54;
+    --ins-soft: #CDEADF;
+    --del: #8E3E32;
+    --del-soft: #F4DBD6;
     --code-bg: #E9EDF2;
     --shadow: 0 1px 0 rgba(26,34,45,.06), 0 8px 24px -12px rgba(26,34,45,.25);
     --serif: "Newsreader", "Iowan Old Style", Georgia, serif;
     --sans: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
     --mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
-    --measure: 66ch;
+    --measure: 65ch;
     --mast-h: 60px;
     color-scheme: light;
   }
@@ -49,6 +61,18 @@
       --delegated-soft: #263145;
       --deferred-soft: #3D3018;
       --proposal-soft: #40231F;
+      --stage-ruling: #D4776A;
+      --stage-ruling-soft: #40231F;
+      --stage-review: #8FA0BA;
+      --stage-review-soft: #263145;
+      --stage-maieutic: #D9A24A;
+      --stage-maieutic-soft: #3D3018;
+      --stage-periagogic: #4FB3A8;
+      --stage-periagogic-soft: #1B3B39;
+      --ins: #7CD0C6;
+      --ins-soft: #17403C;
+      --del: #E29184;
+      --del-soft: #46241F;
       --code-bg: #1A2230;
       --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
       color-scheme: dark;
@@ -73,6 +97,18 @@
     --delegated-soft: #263145;
     --deferred-soft: #3D3018;
     --proposal-soft: #40231F;
+    --stage-ruling: #D4776A;
+    --stage-ruling-soft: #40231F;
+    --stage-review: #8FA0BA;
+    --stage-review-soft: #263145;
+    --stage-maieutic: #D9A24A;
+    --stage-maieutic-soft: #3D3018;
+    --stage-periagogic: #4FB3A8;
+    --stage-periagogic-soft: #1B3B39;
+    --ins: #7CD0C6;
+    --ins-soft: #17403C;
+    --del: #E29184;
+    --del-soft: #46241F;
     --code-bg: #1A2230;
     --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
     color-scheme: dark;
@@ -95,7 +131,6 @@
   }
   .mono { font-family: var(--mono); }
   .num { font-variant-numeric: tabular-nums; }
-  .sronly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .skip { position: absolute; left: -9999px; top: 0; z-index: 50; }
   .skip:focus { left: 8px; top: 8px; background: var(--paper-2); border: 1px solid var(--line); padding: 8px 12px; border-radius: 4px; }
 
@@ -114,55 +149,76 @@
   .tbtn:hover { background: var(--paper-2); color: var(--ink); }
 
   /* ---------- shell ---------- */
-  .shell { max-width: 1200px; margin: 0 auto; padding: 0 22px 80px; display: grid; grid-template-columns: 1fr; align-items: start; gap: 0 44px; }
+  .shell { max-width: 1200px; margin: 0 auto; padding: 0 22px 64px; display: grid; grid-template-columns: 1fr; align-items: start; gap: 0 44px; }
   main { min-width: 0; padding: 28px 0 0; }
   @media (min-width: 940px) {
     .shell { grid-template-columns: minmax(230px, 292px) minmax(0, 1fr); }
     .nav {
       display: block; position: sticky; top: var(--mast-h);
-      max-height: calc(100vh - var(--mast-h)); overflow-y: auto; overscroll-behavior: contain;
+      max-height: calc(100vh - var(--mast-h) - 56px); overflow-y: auto; overscroll-behavior: contain;
       padding: 24px 6px 40px 0;
     }
   }
   .nav { padding: 18px 0 22px; border-bottom: 1px solid var(--line); }
   @media (min-width: 940px) { .nav { border-bottom: 0; } }
 
-  /* ---------- counts ---------- */
-  .counts { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 0 0 18px; padding: 0 0 16px; border-bottom: 1px solid var(--line); }
+  /* ---------- page head ---------- */
+  .pagehead { margin: 0 0 30px; }
+  .counts { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 0 0 18px; padding: 0 0 16px; border-bottom: 1px solid var(--line); }
   .counts > div { min-width: 0; }
   .counts dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 2px; }
-  .counts dd { margin: 0; font-size: 15px; }
+  .counts dd { margin: 0; font-size: 17px; }
+  .lede { font-family: var(--serif); font-size: 19px; line-height: 1.45; color: var(--ink-2); max-width: 38em; margin: 0; text-wrap: pretty; }
 
-  /* ---------- nav tree ---------- */
+  /* ---------- nav rail ---------- */
   .grp { margin: 0 0 20px; }
   .grp-h { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
   .tree { list-style: none; margin: 0; padding: 0; }
-  .tree li { margin: 0 0 2px; }
-  .tree a { display: block; padding: 4px 6px; margin-left: -6px; border-radius: 3px; color: var(--ink-2); text-decoration: none; font-size: 13.5px; line-height: 1.35; }
+  .tree li { margin: 0 0 1px; }
+  .tree a {
+    display: grid; grid-template-columns: 10px minmax(0, 1fr) 14px; align-items: baseline; gap: 8px;
+    padding: 4px 6px; margin-left: -6px; border-radius: 3px;
+    color: var(--ink-2); text-decoration: none; font-size: 13.5px; line-height: 1.35;
+  }
   .tree a:hover { background: var(--paper-2); color: var(--ink); }
+  .dot { width: 8px; height: 8px; border-radius: 999px; display: block; transform: translateY(-1px); }
+  .dot.stage-ruling { background: var(--stage-ruling); }
+  .dot.stage-review { background: var(--stage-review); }
+  .dot.stage-maieutic { background: var(--stage-maieutic); }
+  .dot.stage-periagogic { background: var(--stage-periagogic); }
+  .rq { overflow-wrap: anywhere; }
+  .mark { font-size: 12px; color: var(--accent-ink); text-align: right; }
 
   /* ---------- pills ---------- */
-  .pill { display: inline-block; font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; line-height: 1.5; vertical-align: middle; white-space: nowrap; margin-right: 10px; }
-  .pill.stage-ruling { background: var(--proposal-soft); color: var(--proposal); }
-  .pill.stage-review { background: var(--delegated-soft); color: var(--delegated); }
-  .pill.stage-maieutic { background: var(--deferred-soft); color: var(--deferred); }
-  .pill.stage-periagogic { background: var(--ratified-soft); color: var(--ratified); }
+  .pill { display: inline-block; font-family: var(--mono); font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; line-height: 1.5; vertical-align: middle; margin: 0 10px 4px 0; }
+  .pill.stage-ruling { background: var(--stage-ruling-soft); color: var(--stage-ruling); }
+  .pill.stage-review { background: var(--stage-review-soft); color: var(--stage-review); }
+  .pill.stage-maieutic { background: var(--stage-maieutic-soft); color: var(--stage-maieutic); }
+  .pill.stage-periagogic { background: var(--stage-periagogic-soft); color: var(--stage-periagogic); }
+  .pill.rec-class-ratified { background: var(--ratified-soft); color: var(--ratified); }
+  .pill.rec-class-delegated { background: var(--delegated-soft); color: var(--delegated); }
+  .pill.rec-bold-low, .pill.rec-bold-moderate, .pill.rec-bold-high { background: var(--paper-3); color: var(--ink-2); }
+  .pill.rec-bold-high { background: var(--deferred-soft); color: var(--deferred); }
+  .pill.rev-forward { background: var(--ratified-soft); color: var(--ratified); }
+  .pill.rev-kickback { background: var(--proposal-soft); color: var(--proposal); }
+  .pill.rev-strength, .pill.rev-date { background: var(--paper-3); color: var(--ink-2); }
+  .pill.rev-stale { background: var(--deferred-soft); color: var(--deferred); }
+  .pills { margin: 0 0 8px; }
 
-  /* ---------- lede / notice ---------- */
-  .lede { font-family: var(--serif); font-size: 19px; line-height: 1.4; color: var(--ink-2); max-width: 34em; margin: 0 0 26px; text-wrap: balance; }
   .notice { font-size: 13.5px; color: var(--proposal); background: var(--proposal-soft); border-radius: 4px; padding: 8px 12px; margin: 0 0 18px; }
   .empty { color: var(--ink-3); font-size: 15px; }
 
-  /* ---------- stage groups ---------- */
-  .stagegrp { margin: 0 0 42px; }
-  .stageh { font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 16px; padding: 10px 0 0; border-top: 1px solid var(--line); }
-  .stagegrp:first-child .stageh { border-top: 0; padding-top: 0; }
+  /* ---------- graph sections ---------- */
+  .graphgrp { margin: 0 0 44px; }
+  .graphh { font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 4px; padding: 10px 0 0; border-top: 1px solid var(--line); }
+  .graphgrp:first-of-type .graphh { border-top: 0; padding-top: 0; }
+  .graphsub { font-family: var(--serif); font-size: 15px; color: var(--ink-3); margin: 0 0 18px; max-width: var(--measure); }
 
   /* ---------- items ---------- */
-  .item { padding: 22px 0; border-top: 1px solid var(--line); scroll-margin-top: calc(var(--mast-h) + 12px); }
-  .stagegrp .item:first-of-type { border-top: 0; padding-top: 0; }
+  .item { padding: 26px 0; border-top: 1px solid var(--line); scroll-margin-top: calc(var(--mast-h) + 12px); }
   .item .eyebrow { margin: 0 0 16px; }
-  .item .parents { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; color: var(--ink-3); }
+  .item .meta { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; color: var(--ink-3); margin-right: 14px; white-space: nowrap; }
+  .item .parents { white-space: normal; overflow-wrap: anywhere; }
   .iq { font-family: var(--serif); font-weight: 500; font-size: clamp(20px, 2.4vw, 25px); line-height: 1.25; letter-spacing: -.008em; margin: 0 0 6px; text-wrap: balance; }
   .idv { font-size: 12px; color: var(--ink-3); margin: 0 0 14px; overflow-wrap: anywhere; }
 
@@ -182,30 +238,69 @@
   code { font-family: var(--mono); font-size: .86em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
   pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.5; background: var(--code-bg); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; overflow-x: auto; margin: 0 0 12px; max-width: 100%; }
   pre code { background: none; padding: 0; font-size: inherit; }
+  .none { color: var(--ink-3); font-style: italic; margin: 0; }
 
   .disposition { border-left: 2px solid var(--accent); padding-left: 14px; }
   .stands { border-left: 2px solid var(--line); padding-left: 14px; }
-  .draft { margin: 10px 0; padding: 10px 12px; background: var(--paper-2); border: 1px dashed var(--ink-3); border-radius: 4px; }
-  .draft .blk-label { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 8px; }
-  .draft pre { margin: 0; }
-  .account { padding: 14px 16px; background: var(--proposal-soft); border: 1px dashed var(--proposal); border-radius: 4px; }
-  .account .lbl { color: var(--proposal); }
+  .quoted { margin: 10px 0; padding: 10px 12px; background: var(--paper-2); border: 1px dashed var(--ink-3); border-radius: 4px; }
+  .quoted .blk-label { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 8px; }
+  .quoted pre { margin: 0; }
+  .account { padding: 14px 16px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; }
 
-  /* ---------- controls ---------- */
-  .controls { margin: 18px 0 0; max-width: var(--measure); padding: 14px 16px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; }
-  .controls .opt { display: block; font-size: 14.5px; margin: 0 0 8px; cursor: pointer; }
-  .controls .opt:last-of-type { margin-bottom: 12px; }
-  .controls input[type="radio"] { margin-right: 8px; }
+  /* ---------- the draft and the edit ---------- */
+  .draftsec { border-left: 2px solid var(--accent); padding-left: 14px; }
+  .edit-lbl { margin-top: 18px; }
+  .edit { background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; overflow-x: auto; }
+  .fmdiff { list-style: none; margin: 0 0 12px; padding: 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; }
+  .fmdiff li { margin: 0 0 4px; overflow-wrap: anywhere; }
+  .fmdiff .was { background: var(--del-soft); color: var(--del); padding: 0 4px; border-radius: 3px; }
+  .fmdiff .now { background: var(--ins-soft); color: var(--ins); padding: 0 4px; border-radius: 3px; }
+  .fmdiff .arrow { color: var(--ink-3); }
+  .difflbl { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin: 12px 0 6px; }
+  .edit > .difflbl:first-child, .edit > .fmdiff:first-child { margin-top: 0; }
+  .diff { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15.5px; line-height: 1.6; margin: 0 0 4px; }
+  ins { background: var(--ins-soft); color: var(--ins); text-decoration: none; border-radius: 2px; padding: 0 1px; box-shadow: inset 0 -1px 0 var(--ins); }
+  del { background: var(--del-soft); color: var(--del); text-decoration: line-through; border-radius: 2px; padding: 0 1px; }
+  .caption { font-size: 14px; color: var(--ink-3); font-style: italic; margin: 12px 0 0; }
+
+  .persist { font-size: 14.5px; color: var(--ink-2); margin: 0; }
+  .shims { margin: 6px 0 0; padding-left: 20px; font-size: 14px; color: var(--ink-2); }
+  .shims li { margin: 0 0 4px; }
+
+  /* ---------- response ---------- */
+  .response { margin: 20px 0 0; max-width: var(--measure); }
+  .hint { font-size: 14px; color: var(--ink-2); background: var(--paper-2); border-left: 2px solid var(--ink-3); border-radius: 0 4px 4px 0; padding: 8px 12px; margin: 0 0 12px; }
+  .controls { margin: 0; padding: 14px 16px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; }
+  .controls[disabled] { opacity: .68; }
+  .seg { display: flex; flex-wrap: wrap; gap: 0; margin: 4px 0 14px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--paper); width: fit-content; max-width: 100%; }
+  .segopt { position: relative; display: block; }
+  .segopt input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+  .segopt span { display: block; padding: 7px 14px; font-size: 14px; color: var(--ink-2); cursor: pointer; border-right: 1px solid var(--line); white-space: nowrap; }
+  .segopt:last-child span { border-right: 0; }
+  .segopt input:checked + span { background: var(--accent); color: #fff; font-weight: 500; }
+  :root[data-theme="dark"] .segopt input:checked + span { color: #0F1720; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .segopt input:checked + span { color: #0F1720; } }
+  .segopt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
   .note-lbl { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
   .note {
     display: block; width: 100%; font: inherit; font-size: 14.5px; font-family: var(--sans);
     background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: 4px;
     padding: 8px 10px; resize: vertical;
   }
-  .controls-note { margin: 0; font-size: 14px; color: var(--ink-3); font-style: italic; }
+  .state { font-size: 13px; color: var(--ink-3); margin: 8px 0 0; }
+  .state .linkish { font: inherit; background: none; border: 0; padding: 0; color: var(--accent-ink); text-decoration: underline; cursor: pointer; }
 
-  /* ---------- footer ---------- */
-  .foot { max-width: 1200px; margin: 0 auto; padding: 20px 22px 40px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 11px; letter-spacing: .06em; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 6px 20px; }
+  /* ---------- sticky footer ---------- */
+  .foot { position: sticky; bottom: 0; z-index: 28; background: var(--paper); border-top: 1px solid var(--line); box-shadow: 0 -6px 18px -14px rgba(0,0,0,.5); }
+  .foot-in { max-width: 1200px; margin: 0 auto; padding: 12px 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+  .foot-count { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; color: var(--ink-2); }
+  .foot-note { font-size: 13px; color: var(--ink-3); flex: 1 1 auto; min-width: 0; }
+  .sbtn {
+    font: inherit; font-size: 14px; font-family: var(--sans); font-weight: 500;
+    background: var(--accent); color: #fff; border: 1px solid var(--accent);
+    border-radius: 4px; padding: 8px 16px; cursor: pointer; white-space: nowrap;
+  }
+  .sbtn[disabled] { background: none; color: var(--ink-3); border-color: var(--line); cursor: default; }
 
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
@@ -219,7 +314,9 @@
 <script>
 "use strict";
 
-var AL = { theme: "auto", db: null };
+var AL = { theme: "auto", db: null, staged: {}, submitted: {}, changing: {}, total: 0, rail: {} };
+
+/* ------------------------------------------------------------- theme */
 
 function alApplyTheme(mode) {
   AL.theme = mode;
@@ -230,121 +327,212 @@ function alApplyTheme(mode) {
   try { window.localStorage.setItem("alignment-theme", mode); } catch (e) { /* storage unavailable */ }
 }
 
-function alShowNotice(text) {
-  var n = document.getElementById("notice");
-  if (!n) return;
-  n.textContent = text;
-  n.hidden = false;
-}
-
-function alItemEls() {
-  return Array.prototype.slice.call(document.querySelectorAll("[data-item]"));
-}
+/* ------------------------------------------------------- the record */
 
 function alModule() {
   var el = document.getElementById("module-name");
   return (el && el.textContent) || "alignment";
 }
 
-function alLocalKey() {
-  return "alignment-responses:" + alModule();
-}
+function alStagedKey() { return "alignment-staged:" + alModule(); }
+function alLocalKey() { return "alignment-responses:" + alModule(); }
 
-function alReadLocal() {
+function alReadJson(key) {
   try {
-    var raw = window.localStorage.getItem(alLocalKey());
-    return raw ? JSON.parse(raw) : {};
+    var raw = window.localStorage.getItem(key);
+    var v = raw ? JSON.parse(raw) : null;
+    return v && typeof v === "object" ? v : {};
   } catch (e) {
     return {};
   }
 }
 
-function alWriteLocal(all) {
-  try { window.localStorage.setItem(alLocalKey(), JSON.stringify(all)); } catch (e) { /* storage unavailable */ }
+function alWriteJson(key, value) {
+  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage unavailable */ }
 }
 
-function alCssEscape(s) {
-  return String(s).replace(/["\\]/g, "\\$&");
+function alItemEls() {
+  return Array.prototype.slice.call(document.querySelectorAll("[data-item]"));
 }
+
+function alNotice(text) {
+  var n = document.getElementById("notice");
+  if (!n) return;
+  n.textContent = text || "";
+  n.hidden = !text;
+}
+
+function alFootNote(text) {
+  var n = document.getElementById("foot-note");
+  if (n) n.textContent = text || "";
+}
+
+/* ------------------------------------------------ reading the controls */
 
 function alReadControl(el) {
-  var option = null;
   var radio = el.querySelector('input[type="radio"]:checked');
-  if (radio) option = radio.value;
-  var noteEl = el.querySelector('[data-field="note"]');
-  var note = noteEl ? noteEl.value : "";
-  return { option: option, note: note || "" };
+  var noteEl = el.querySelector('[data-field="text"]');
+  return { ruling: radio ? radio.value : null, text: noteEl ? noteEl.value : "" };
 }
 
 function alApplyControl(el, data) {
   if (!data) return;
-  if (data.option) {
-    var sel = 'input[type="radio"][value="' + alCssEscape(data.option) + '"]';
-    var radio = el.querySelector(sel);
+  if (data.ruling) {
+    var radio = el.querySelector('input[type="radio"][value="' + String(data.ruling).replace(/["\\]/g, "\\$&") + '"]');
     if (radio) radio.checked = true;
   }
-  var noteEl = el.querySelector('[data-field="note"]');
-  if (noteEl && typeof data.note === "string") noteEl.value = data.note;
+  var noteEl = el.querySelector('[data-field="text"]');
+  if (noteEl && typeof data.text === "string") noteEl.value = data.text;
 }
 
-async function alRestoreAll() {
-  var byDoc = {};
+// The textarea takes the label of whichever response is chosen -- a note,
+// edits, or feedback -- so the author is never asked for one and writing
+// another.
+function alSyncNoteLabel(el) {
+  var lbl = el.querySelector("[data-note-lbl]");
+  if (!lbl) return;
+  var radio = el.querySelector('input[type="radio"]:checked');
+  lbl.textContent = radio
+    ? (radio.getAttribute("data-note-label") || "A note, edits, or feedback")
+    : "A note, edits, or feedback";
+}
+
+function alHasResponse(r) {
+  return !!(r && (r.ruling || (typeof r.text === "string" && r.text.trim())));
+}
+
+function alWhen(iso) {
+  try { return new Date(iso).toLocaleString(); } catch (e) { return String(iso || ""); }
+}
+
+/* ---------------------------------------------------------- rendering */
+
+function alRenderItem(el) {
+  var doc = el.getAttribute("data-doc");
+  var staged = AL.staged[doc];
+  var submitted = AL.submitted[doc];
+  var state = el.querySelector("[data-state]");
+  var controls = el.querySelector("[data-controls]");
+  var mark = AL.rail[doc];
+
+  // A submitted response is locked until the author asks to change it, and
+  // stays open from then on -- clearing the box mid-edit must not lock it
+  // again under the author's hands.
+  if (controls) controls.disabled = !staged && !AL.changing[doc] && alHasResponse(submitted);
+  if (mark) mark.textContent = staged ? "\u25CF" : alHasResponse(submitted) ? "\u2713" : "";
+
+  if (!state) return;
+  if (staged) {
+    state.textContent = "Staged, not yet submitted.";
+    state.hidden = false;
+  } else if (alHasResponse(submitted)) {
+    state.textContent = "Submitted " + alWhen(submitted.updated) + " ";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "linkish";
+    btn.setAttribute("data-change", "");
+    btn.textContent = "change";
+    state.appendChild(btn);
+    state.hidden = false;
+  } else {
+    state.textContent = "";
+    state.hidden = true;
+  }
+}
+
+function alRender() {
+  var n = Object.keys(AL.staged).length;
+  var count = document.getElementById("staged-count");
+  if (count) count.textContent = n + " response" + (n === 1 ? "" : "s") + " staged";
+  var btn = document.getElementById("btn-submit");
+  if (btn) {
+    btn.textContent = "Submit " + n + " response" + (n === 1 ? "" : "s");
+    btn.disabled = n === 0;
+  }
+  alItemEls().forEach(alRenderItem);
+}
+
+/* ------------------------------------------------------------ staging */
+
+function alStage(el) {
+  var doc = el.getAttribute("data-doc");
+  var reading = alReadControl(el);
+  alSyncNoteLabel(el);
+  if (!alHasResponse(reading)) delete AL.staged[doc];
+  else AL.staged[doc] = {
+    node: el.getAttribute("data-id"),
+    stage: el.getAttribute("data-stage"),
+    ruling: reading.ruling,
+    text: reading.text,
+    updated: new Date().toISOString()
+  };
+  alWriteJson(alStagedKey(), AL.staged);
+  alRender();
+}
+
+/* --------------------------------------------------------- submitting */
+
+async function alSubmit() {
+  var docs = Object.keys(AL.staged);
+  if (docs.length === 0) return;
+  var btn = document.getElementById("btn-submit");
+  if (btn) btn.disabled = true;
+  alNotice("");
+
+  var failure = null;
+  for (var i = 0; i < docs.length; i++) {
+    var doc = docs[i];
+    var data = AL.staged[doc];
+    try {
+      if (AL.db) await AL.db.doc("responses/" + doc).set(data);
+      AL.submitted[doc] = data;
+      delete AL.staged[doc];
+      delete AL.changing[doc];
+    } catch (e) {
+      failure = e;
+      break;
+    }
+  }
+
+  alWriteJson(alStagedKey(), AL.staged);
+  if (!AL.db) alWriteJson(alLocalKey(), AL.submitted);
+
   if (AL.db) {
     try {
       var snap = await AL.db.collection("responses").get();
-      snap.docs.forEach(function (d) { byDoc[d.id] = d.data(); });
-    } catch (e) {
-      byDoc = alReadLocal();
-    }
-  } else {
-    byDoc = alReadLocal();
+      await AL.db.doc("meta/status").set({
+        answered: snap.docs.length,
+        total: AL.total,
+        at: new Date().toISOString()
+      });
+    } catch (e) { /* the status document is best-effort */ }
   }
-  alItemEls().forEach(function (el) {
-    var doc = el.getAttribute("data-doc");
-    if (byDoc[doc]) alApplyControl(el, byDoc[doc]);
-  });
+
+  if (failure) alFootNote(failure && failure.message ? failure.message : "The record refused the write.");
+  else if (AL.db) alFootNote("");
+  alRender();
 }
 
-async function alUpdateStatus() {
-  if (!AL.db) return;
-  var all = alReadLocal();
-  var items = alItemEls();
-  var answered = 0;
-  items.forEach(function (el) {
-    var r = all[el.getAttribute("data-doc")];
-    if (r && (r.option || (r.note && r.note.trim()))) answered++;
-  });
-  try {
-    await AL.db.doc("meta/status").set({ answered: answered, total: items.length, at: new Date().toISOString() });
-  } catch (e) { /* status is best-effort */ }
-}
-
-function alOnItemChange(el) {
-  var doc = el.getAttribute("data-doc");
-  var nodeId = el.getAttribute("data-id");
-  var stage = el.getAttribute("data-stage");
-  var reading = alReadControl(el);
-  var data = { node: nodeId, stage: stage, option: reading.option, note: reading.note, updated: new Date().toISOString() };
-
-  var all = alReadLocal();
-  all[doc] = data;
-  alWriteLocal(all);
-
-  if (AL.db) {
-    AL.db.doc("responses/" + doc).set(data).then(alUpdateStatus, function (e) {
-      alShowNotice("Saved locally only: " + (e && e.message ? e.message : "the record is unavailable") + ".");
-    });
-  }
-}
+/* ------------------------------------------------------------- digest */
 
 function alCopyAll() {
-  var lines = alItemEls().map(function (el) {
-    var reading = alReadControl(el);
-    var id = el.getAttribute("data-id");
-    var stage = el.getAttribute("data-stage");
-    return id + " [" + stage + "] option=" + (reading.option || "-") + " note=" + JSON.stringify(reading.note || "");
+  var lines = [];
+  alItemEls().forEach(function (el) {
+    var doc = el.getAttribute("data-doc");
+    var staged = AL.staged[doc];
+    var r = staged || AL.submitted[doc];
+    if (!alHasResponse(r)) return;
+    lines.push(
+      el.getAttribute("data-id")
+      + " [" + el.getAttribute("data-stage") + "] "
+      + (r.ruling || "no ruling")
+      + (staged ? " (staged)" : " (submitted)")
+    );
+    var text = (r.text || "").trim();
+    if (text) lines.push(text);
+    lines.push("");
   });
-  var text = lines.join("\n");
+  var text = lines.length ? lines.join("\n") : "No responses yet.";
   var btn = document.getElementById("btn-copy");
   var done = function () {
     if (!btn) return;
@@ -353,11 +541,13 @@ function alCopyAll() {
     window.setTimeout(function () { btn.textContent = old; }, 1400);
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(done, function () { alShowNotice("Could not reach the clipboard."); });
+    navigator.clipboard.writeText(text).then(done, function () { alNotice("Could not reach the clipboard."); });
   } else {
-    alShowNotice("Clipboard is unavailable in this view.");
+    alNotice("The clipboard is unavailable in this view.");
   }
 }
+
+/* --------------------------------------------------------------- boot */
 
 async function alBoot() {
   try {
@@ -366,18 +556,55 @@ async function alBoot() {
   } catch (e) { /* storage unavailable */ }
   alApplyTheme(AL.theme);
 
+  Array.prototype.slice.call(document.querySelectorAll("[data-rail]")).forEach(function (a) {
+    AL.rail[a.getAttribute("data-doc")] = a.querySelector("[data-mark]");
+  });
+
+  var items = alItemEls();
+  AL.total = items.length;
+  AL.staged = alReadJson(alStagedKey());
+
   try {
     AL.db = (window.claude && typeof window.claude.use === "function") ? await window.claude.use("db") : null;
   } catch (e) {
     AL.db = null;
   }
 
-  await alRestoreAll();
+  if (AL.db) {
+    try {
+      var snap = await AL.db.collection("responses").get();
+      snap.docs.forEach(function (d) { AL.submitted[d.id] = d.data(); });
+    } catch (e) {
+      AL.submitted = alReadJson(alLocalKey());
+      alFootNote("The shared record could not be read; showing what this browser holds.");
+    }
+  } else {
+    AL.submitted = alReadJson(alLocalKey());
+    alFootNote("No shared record in this view: responses are kept in this browser only.");
+  }
 
-  alItemEls().forEach(function (el) {
-    el.addEventListener("change", function () { alOnItemChange(el); });
-    el.addEventListener("input", function () { alOnItemChange(el); });
+  items.forEach(function (el) {
+    var doc = el.getAttribute("data-doc");
+    // A staged response is the later of the two, and stands whole: it is
+    // what the author has written since the last submission.
+    alApplyControl(el, AL.staged[doc] || AL.submitted[doc]);
+    alSyncNoteLabel(el);
+    el.addEventListener("change", function () { alStage(el); });
+    el.addEventListener("input", function () { alStage(el); });
+    el.addEventListener("click", function (ev) {
+      var t = ev.target;
+      if (!t || !t.hasAttribute || !t.hasAttribute("data-change")) return;
+      AL.changing[doc] = true;
+      var controls = el.querySelector("[data-controls]");
+      if (controls) controls.disabled = false;
+      alStage(el);
+      var note = el.querySelector('[data-field="text"]');
+      if (note) note.focus();
+    });
   });
+
+  var submitBtn = document.getElementById("btn-submit");
+  if (submitBtn) submitBtn.addEventListener("click", alSubmit);
 
   var themeBtn = document.getElementById("btn-theme");
   if (themeBtn) themeBtn.addEventListener("click", function () {
@@ -386,6 +613,8 @@ async function alBoot() {
 
   var copyBtn = document.getElementById("btn-copy");
   if (copyBtn) copyBtn.addEventListener("click", alCopyAll);
+
+  alRender();
 }
 
 if (typeof document !== "undefined") alBoot();
