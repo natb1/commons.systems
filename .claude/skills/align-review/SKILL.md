@@ -35,11 +35,14 @@ skill decides and answers for the record (`recording`).
 
 ## 1. Scope
 
-- Ids given: each must carry `stage: review`, or `stage: ruling` when the
-  invoker names an amendment to review (then the invoker also names the
-  amended text). Any other node stops the run: say which and stop.
+- From a sitting: the ids of every node the dialogue discussed, drafted,
+  amended, or left as it stands. Ids given: each must carry
+  `stage: review`, or `stage: ruling` when the invoker names an amendment
+  to review (then the invoker also names the amended text). Any other
+  node stops the run: say which and stop.
 - No ids: `node packages/disposition/project.mjs disposition --frontier -`,
-  every node whose stage is `review`, in the frontier's order.
+  every node whose stage is `review`, a ratified node under review
+  included, in the frontier's order.
 
 ## 2. One brief per node
 
@@ -48,13 +51,17 @@ this file, filling `{{id}}`, `{{path}}` (the node file), `{{ancestry}}`
 (the file written by
 `node packages/disposition/project.mjs disposition --ancestry <id> --local tmp/review/<slug>.ancestry.md`),
 `{{amendment}}` (the amended text to judge, or "the whole node"),
-`{{siblings}}` (the other node files in this run's scope, the sitting's
-other drafts, or "none"), and `{{out}}` (`tmp/review/<slug>.json`). The
-brief carries the judging criteria from `recording` and nothing of the
-session: no drafts of the reply, no account of the sitting, no verdict
-hoped for. What is isolated is the session's framing, never the record:
-the reviewer reads the sitting's other drafts as part of the record the
-node joins. `tmp/` is gitignored scratch.
+`{{siblings}}` (the round's other drafts, derived and never chosen: every
+other node at `stage: review`, and every node file the graph worktree
+holds changed against `origin/disposition`; "none" when there are none),
+and `{{out}}` (`tmp/review/<slug>.json`). `brief.mjs` beside this file
+derives the set and writes the ancestry and the brief. The brief carries
+the judging criteria from `recording` and nothing of the session: no
+drafts of the reply, no account of the sitting, no verdict hoped for.
+What is isolated is the session's framing, never the record: the
+reviewer reads the round's other drafts as part of the record the node
+joins, and the ids it was given are recorded in the node's `review`
+state at the apply step. `tmp/` is gitignored scratch.
 
 ## 3. One subagent per node
 
@@ -81,9 +88,10 @@ a second failure is reported and its node stays at `review`.
    `### Clean-context review, <date>` to `## Proposal` with the verdict,
    the findings, the counter-argument with its strength, the facts check,
    and the reply; on `forward` sets `stage: ruling` and writes `review`
-   with `verdict`, `strength`, `date`, and `of`, the node's draft hash;
-   on `kickback` sets the stage the reviewer named and writes `review`
-   with the kickback verdict; an override wins on the stage. An
+   with `verdict`, `strength`, `date`, `of`, the node's draft hash, and
+   `siblings`, the ids the brief gave the reviewer; on `kickback` sets
+   the stage the reviewer named and writes the same `review` with the
+   kickback verdict; an override wins on the stage. An
    amendment entry (`scope: amendment`) appends
    `### Clean-context review of the amendment, <date>` and changes no
    stage. Nothing else in a node is touched.
