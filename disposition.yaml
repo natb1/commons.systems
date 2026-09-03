@@ -1,0 +1,11 @@
+# Manifest of the `disposition` ref: which graphs it carries and where they are going.
+# A node's full id is <module>/<graph>/<slug>; the file is <graph>/<slug>.md.
+module: commons.systems
+ref: disposition
+graphs:
+  disposition-graph:
+    about: the disposition of this project
+  public:
+    about: the public part of the author's personal disposition, hosted here during bootstrap
+    target: natb1.com/public
+    liquidation: a repository answers at natb1.com with a `disposition` ref; public/ moves there and ids rewrite by prefix (ledger L03)
