@@ -1,6 +1,6 @@
 ---
 question: How is materialized implementation reviewed before it lands?
-stage: review
+stage: ruling
 form: rule
 authority:
   class: deferred
@@ -38,3 +38,18 @@ For the author at ratification: whether the review cap and effort tiers stay sta
 Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
 
 Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Answer, last sentence: 'A graph landing is reviewed by the interview that produced it, not by this instrument.' Recording, in this same batch, adds a reader who did not produce it and makes it mandatory before every confirmation, and growth lists 'the review' as a movement of the sitting. As written the sentence tells an executor that graph landings get no independent reader. Suggested edit: name the clean-context review as the graph landing's independent reader.
+- Answer: the operating numbers — 'at most twice per landing', 'a defect class repaired twice is cut rather than repaired a third time', 'high for code on a write path, one medium assessment for a diff of documents' — are transcribed from legacy measurements cited in the Rationale. Legacy says legacy is evidence and 'never authority' and evaluation says 'no doctrine is implied by what exists'. The Rationale frames them correctly as measurement; the answer states them as doctrine with no criterion that would re-measure them here.
+- Frontmatter carries both an instrument whose note says 'not yet materialized; the shim below stands in for it' and the shim itself. Transience's second author ruling asks that there be no redundancy between shims and other records; the note duplicates the shim's own account. Suggested edit: let the shim carry it.
+- Proposal: 'For the author at ratification: whether the review cap and effort tiers stay stated here or derive from the class of the contract ... and whether the interview suffices as the review of a graph landing once landings arrive from many sessions.' Two open questions carried as prose in a node at stage review; transience makes an open question a node with a stage. Suggested edit: mint them, or fold them into the ruling's options so the author can answer them.
+
+On the three facts: Generic template, and it omits the shim entirely — this node declares the detached code-review instrument on main, and growth's presentation rule requires each shim with its liquidation condition. Boldness is high, not 'as the rationale shows': every number and every gate in the answer is the AI's transcription from the legacy record, which the author has not ruled on in this graph, and the author's only quoted words here concern when review is owed during bootstrap.
+
+Strongest counter-argument (moderate): The whole answer is a defence against one measured pathology — review loops that never converge — and every mechanism in it trades correctness for termination. Stated as doctrine that means a landing with a real blocking defect at the cap 'parks the landing for the author, over which nothing lands', converting a review failure into a full stop of the work queue; and 'Review never settles on zero findings' makes a clean diff evidence of a bad review rather than of good code. The cheaper answer the node never considers is to shrink the contract so a review can finish: its own evidence says one change thrashed because 'its diff grew between rounds', which is a scope defect, not a review defect, and delegation already requires one deliverable per unit.

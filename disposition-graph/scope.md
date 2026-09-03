@@ -1,6 +1,6 @@
 ---
 question: What does this repository cover, and in what order?
-stage: review
+stage: ruling
 form: rule
 authority:
   class: deferred
@@ -61,3 +61,19 @@ The author's ruling of 2026-09-03, quoted under Disposition, is recorded as this
 Open for the author's ruling on this node: the answer as it stands, and the mechanism recommended in the rationale against the three alternatives it names. Traditions consulted for the mechanism and owed as readings under the stub-traditions ruling: the single-source principle of software engineering, and the lint tradition of checking invariants that span records.
 
 Facts: authority deferred, the order ratified in the author's words; boldness moderate, the section rationale and the mechanism are the AI's; persistence standing.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Answer, end of paragraph 4: 'the two hypotheses under purpose are within scope as hypotheses, with their criteria not yet validated.' This stores the validation state of two child nodes in a third node's answer, which transience forbids in this same batch — 'Transience is never stored; it is projected' — and which was found on purpose's draft at this sitting and accepted for removal there ('the state of the two child criteria leaves the answer'). It survives here. Suggested edit: strike 'with their criteria not yet validated'.
+- Answer, opening: 'The purpose and six sections after it' followed by a numbered list of six items whose first item is Purpose. The count is right only if the reader treats scope and self-documentation, merged into item 2, as two sections. Suggested edit: number seven, or say the second entry holds two equals.
+- Answer, item 2: 'self documentation (via the graph browser)' in the author's order is mapped to commons.systems/disposition-graph/projection, and the 'order' field materializes that mapping into a validator rule. The Proposal discloses the mapping as the AI's, but the self-documentation node (stage maieutic) still asks whether it is a node of its own under purpose; if it becomes one, the order field must be rewritten before it can land. Suggested edit: say in the answer that the mapping stands until self-documentation is ruled.
+- Rationale, last paragraph: 'the validator refuses a graph whose derived ranks do not realize it ... the validator has held the ranks to it since 2026-09-03.' Verified true against packages/disposition/read.mjs, which enforces both the step rule and the first-step rule. This is one of the few instrument claims in the batch that holds today; it is worth saying so explicitly, since three others in this batch do not.
+- Proposal: 'Traditions consulted for the mechanism and owed as readings under the stub-traditions ruling: the single-source principle of software engineering, and the lint tradition of checking invariants that span records.' A prose tradition list, which readings' recommended answer forbids, and stub-traditions (stage maieutic) has not ruled.
+
+On the three facts: 'Authority deferred, the order ratified in the author's words; boldness moderate, the section rationale and the mechanism are the AI's; persistence standing' is well formed and among the best in the batch: it states one class and splits what is the author's from what is the AI's. Two additions are owed. It should say that the order field is already enforced, so this ruling changes what can land rather than describing an intention; and it should name the substitution of the projection node for 'self documentation (via the graph browser)' as the one place the AI changed an item in the author's own list.
+
+Strongest counter-argument (moderate): The node fixes the shape of the record before the record knows what it contains. Its own answer says 'What it leaves out is open', and coverage (stage periagogic) names four recorded functions outside the purpose as worded, while materialization's greenfield shim makes bootstrap exit prune whatever no disposition supports. A six-section table of contents, now enforced by the validator through the order field, is a strong commitment that the record has exactly these parts. If the coverage ruling brings in the consumer apps, the public site or the author's host configuration, either a seventh section appears and every boost named here is reset, or those functions live in the record with no section — which is precisely the drift the order field was added to prevent.

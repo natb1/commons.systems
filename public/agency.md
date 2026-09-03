@@ -1,6 +1,6 @@
 ---
 question: Who is the origin of what is done in my name?
-stage: review
+stage: periagogic
 form: arche
 authority:
   class: deferred
@@ -41,3 +41,19 @@ Stub note: drafted by the AI under the bootstrap grant from the author's rulings
 Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
 
 Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: kickback to the periagogic stage.
+
+Findings:
+
+- Node, whole: there is no '## Disposition' section and no author words are quoted anywhere. The Rationale's stub note says the answer was 'drafted by the AI under the bootstrap grant from the author's rulings of 2026-09-02 and the author's own legacy text', but no ruling is quoted with a date. Authority: 'a ratified stamp whose ruling is not in the record is invalid', and the quotes sitting's recorded resolution is that 'no ratified stamp lands without the quoted ruling in the node'. The Facts line nevertheless offers 'ratified if the author confirms', which would produce an invalid stamp on the root of the whole record.
+- Answer: 'I am. Delegation and atrophy are expected...' is written in the author's first person, on the archē of the entire graph, by the AI. Node: an archē is 'a first principle held, never derived'; growth: 'The periagogic stage is never skipped, and its object is the ground of the question'. The author's own account of this question has never been elicited in this dialogue; the node went straight to a draft. This is why the verdict is a kickback rather than a finding: unlike the twelve other nodes here that lack a quoted ruling, this one is the archē, and authority's bootstrap-grant shim names its ratification as the shim's own liquidation, so a bare confirmation here ends the grant on a stamp the record calls invalid. Suggested: move the node to periagogic and take the author's words in answer to 'Who is the origin of what is done in my name?'; the alignment page already renders the free-text control for that stage.
+- Frontmatter instrument: 'kind: assessment / ref: re-grasp on event, never on a calendar / note: the triggers are recorded under the instruments node'. Instruments defines an assessment as 'a dated human judgment'; this ref names a trigger, carries no date and records no judgment, so the archē is unguarded in fact while the record shows it instrumented. The identical defect was found and accepted on the knowledge-store draft at this sitting.
+- Rationale, stub note: 'Deferred until the author ratifies it. Pending readings to add under this node: Sen on capability, Hirschman on exit and voice, Korsgaard on authorship.' That is dialogue state and owed work sitting in the Rationale; transience puts the first in the Proposal and derives the second onto the frontier, and it will be stale the moment the author rules.
+- Rationale carries prose tradition references (Aristotle Politics I.4, 'Korsgaard, Self-Constitution, on when an action is one's own'), which readings' recommended answer forbids: 'the rationale of a node never repeats its readings.' Two of the three named already have reading nodes; Korsgaard has none.
+
+On the three facts: The Facts line is the generic reclassification template and fails growth's presentation rule and dialogue's 'recommendation' requirement in both fields: 'ratified if the author confirms, or delegated where the author's words delegate it' states no class, and 'boldness as the rationale shows' states no value where dialogue requires low, moderate or high from the review stage on. For an AI-drafted archē in the author's voice with no quoted ruling the honest facts are boldness high, class not ratifiable until the author's own account is in the record, persistence standing — and they should name authority's bootstrap-grant shim, whose liquidation condition is this node's ratification.
+
+Strongest counter-argument (moderate): The answer makes a claim the record cannot check. 'Capacity, not exercise' means the archē is satisfied by a capacity that is never used, and its only instrument is a re-grasp on events, so no observable state of the world contradicts it: an author who had in fact been captured would read the same answer and find nothing failing. Pettit is adopted as support, but Pettit's test is structural — does another hold arbitrary power over you — and the record records no structural test of its own. So the graph's first principle is the one node that nothing can falsify, which is defensible for an archē and dangerous for the node that every prune, every prioritisation and every ratification below it appeals to.
