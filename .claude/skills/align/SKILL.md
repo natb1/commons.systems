@@ -46,16 +46,30 @@ skill only when the session starts in the checkout that carries it.
    this check; a stale or dirty tree stops the round.
 2. Reconcile this text to the graph: read the nodes it projects at their
    current text; where a node differs from this file, follow the node and
-   record the difference as an un-aligned disposition on it. Apply every
-   shim declared on the nodes (the `shims` field: this file, the
-   reconciliation skill, `CLAUDE.md`, the harness settings, the review
-   instrument on `review`, the rule projections under `.claude/rules/`,
-   the published browser, the alignment page) without being asked; bypass
-   one only when prompted to.
+   record the difference as an un-aligned disposition on it. Declared
+   shims (the `shims` field) come in two kinds and are not applied alike.
+   A stopgap shim names an artifact standing in for a projection the
+   record does not yet make: this file, the reconciliation skill,
+   `CLAUDE.md`, the harness settings, the review instrument on `review`,
+   the rule projections under `.claude/rules/`, the published browser,
+   the alignment page, and the `greenfield` ref. Apply those without being
+   asked; bypass one only when prompted to. A permission shim names an
+   authority the record otherwise withholds, and bootstrap authority on
+   the `authority` node is one: it does nothing until the author grants it
+   in their own words for a named reconciliation, and applying it by
+   default would be the capture it guards against. Never assume it, never
+   carry it over from an earlier grant in the same session, and never read
+   a grant for one reconciliation as a grant for the next. That the two
+   kinds read the same rule oppositely is recorded as a proposal on
+   `authority` and is not settled.
 3. Sessions divide by ref (`work-loop`): this skill writes the
    `disposition` ref and publishes pages, and never commits to the
    implementation ref; rules and the other projections are the
-   reconciliation skill's. The worktree is the claim. Landing location is
+   reconciliation skill's. The one exception is bootstrap authority: on an
+   explicit grant this skill may reconcile an unanswered node and land the
+   implementation that follows from it, and until bootstrap exit that is
+   the only way this skill writes the implementation ref. The worktree
+   is the claim. Landing location is
    never a question for the author: place the node under the question it
    refines, and leave the author's overrule open.
 4. Read the open dialogue before opening a new one:
@@ -349,6 +363,18 @@ request: a graph landing is reviewed by the clean-context review and by the
 interview that produced it (`review`). This skill never commits to the
 implementation ref; materialized implementation is the reconciliation
 skill's.
+
+Under an explicit bootstrap-authority grant it may, and then the landing
+carries its own account: the author's words that granted it, quoted and
+dated on the node they bear on, before the implementation is written; the
+answer it writes stamped deferred and never ratified, since the dialectic
+has not run; the node left at the review stage with the clean-context
+review owed, which is where an overrule enters the author's review; and
+the commit on the implementation ref naming the grant and the graph commit
+it reconciles to. Landing the implementation without the graph landed
+first inverts that account and is the deviation to watch. The grant
+expires at bootstrap exit, after which this paragraph is dead text and
+goes with the shim.
 
 ## 7. Self-review
 
