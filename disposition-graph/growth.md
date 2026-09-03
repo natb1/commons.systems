@@ -21,7 +21,7 @@ shims:
     for: the projection of this node and its siblings as the alignment skill
     liquidation: the projector materializes the skill from ratified nodes and the hand-written file is deleted
     declared: 2026-09-02
-  - artifact: the review page of a sitting, hand-built from the sitting's record under `bootstrap/review/` on the implementation ref and published as a private page
+  - artifact: the review page of a sitting, hand-built from the sitting's record under `bootstrap/review/` on the implementation ref and published as a private page; the sitting on purpose of 2026-09-03 is at https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678
     for: the projection of a sitting's recommendations for the author's ruling, each with its context, authority class, boldness, and persistence class, the rulings read back by the session
     liquidation: the implementation projects the review page from the record of a sitting and reads the rulings from it, and the hand-built page and its builder are deleted
     declared: 2026-09-03
