@@ -676,7 +676,7 @@ describe("apply.mjs: batch shape", () => {
       );
     });
 
-    test("a frontier finding with no 'stages' entry for a named id (and no override) is refused", async () => {
+    test("a frontier finding with no 'stages' entry for a named id (and no override) is allowed: the subsection lands, the stage is left untouched", async () => {
       const rootDir = await freshFrontierFixture("chk-stages-");
       const reviewDir = path.join(rootDir, "_review");
 
@@ -686,10 +686,46 @@ describe("apply.mjs: batch shape", () => {
         nodes: fullNodeEntries(),
         frontier: [{ kind: "vocabulary", nodes: [MAIEUTIC_NODE], finding: "x", proposal: "y", stages: {} }],
       };
-      await assert.rejects(
-        () => applyReviews({ rootDir, reviewDir, batch, replies: {} }),
-        new RegExp(`'stages' for ${escapeRe(MAIEUTIC_NODE)} must be 'periagogic' or 'maieutic'`),
-      );
+      const result = await applyReviews({ rootDir, reviewDir, batch, replies: {} });
+      assert.equal(result.validation.ok, true, result.validation.message);
+      assert.ok(result.report.includes(`${MAIEUTIC_NODE}: Frontier finding, maieutic → maieutic`));
+
+      const after = await readFile(nodePath(rootDir, "maieutic-node"), "utf8");
+      assert.equal(fieldValue(after, "stage"), "maieutic", "no 'stages' entry for this id: the finding does not move its stage");
+      assert.ok(after.includes("### Frontier finding, 2026-09-03") && after.includes("Kind: vocabulary."), "the finding's subsection is still appended");
+    });
+
+    test("a finding naming two nodes but giving 'stages' for only one: the unstaged node keeps its stage and still gets the subsection; the staged node moves", async () => {
+      const rootDir = await freshFrontierFixture("chk-stages-partial-");
+      const reviewDir = path.join(rootDir, "_review");
+
+      const batch = {
+        date: BATCH_DATE,
+        read: fullReadIds(),
+        nodes: fullNodeEntries(),
+        frontier: [{
+          kind: "placement",
+          nodes: [MAIEUTIC_NODE, PERIAGOGIC_NODE],
+          finding: "periagogic-node's ground needs redrawing; maieutic-node is cited for comparison only.",
+          proposal: "Redraft periagogic-node's account; nothing is proposed for maieutic-node itself.",
+          stages: { [PERIAGOGIC_NODE]: "maieutic" },
+        }],
+      };
+      const result = await applyReviews({ rootDir, reviewDir, batch, replies: {} });
+      assert.equal(result.validation.ok, true, result.validation.message);
+      assert.ok(result.report.includes(`${MAIEUTIC_NODE}: Frontier finding, maieutic → maieutic`), "unstaged: reported as unchanged");
+      assert.ok(result.report.includes(`${PERIAGOGIC_NODE}: Frontier finding, periagogic → maieutic`), "staged: reported as moved");
+
+      const maieuticAfter = await readFile(nodePath(rootDir, "maieutic-node"), "utf8");
+      const periagogicAfter = await readFile(nodePath(rootDir, "periagogic-node"), "utf8");
+
+      assert.equal(fieldValue(maieuticAfter, "stage"), "maieutic", "unstaged in this finding: stage left untouched");
+      assert.ok(maieuticAfter.includes("### Frontier finding, 2026-09-03"), "unstaged node still gets the subsection");
+      assert.ok(maieuticAfter.includes(`Also named: ${PERIAGOGIC_NODE}.`));
+
+      assert.equal(fieldValue(periagogicAfter, "stage"), "maieutic", "the staged id still moves per its 'stages' entry");
+      assert.ok(periagogicAfter.includes("### Frontier finding, 2026-09-03"));
+      assert.ok(periagogicAfter.includes(`Also named: ${MAIEUTIC_NODE}.`));
     });
 
     test("an override excuses a finding's missing 'stages' entry for that id", async () => {

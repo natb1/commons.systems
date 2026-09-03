@@ -36,7 +36,7 @@ Across the frontier, every node with a stage, the periagogic and maieutic includ
 13. Placement and order: `under` and `order` agree with the answers' dependencies; a draft that presupposes another node's answer is under it or after it; no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so. Recommend the order in which the author should rule.
 14. Coverage: every disposition the author has given in the record (each `## Disposition` quotation, and the rulings quoted in rationales) is answered by exactly one node: none unanswered, none answered twice.
 
-Verdict per draft: `forward` to the author's ruling, or `kickback` to the periagogic or maieutic stage with findings. Kick back only when the draft cannot be put to the author as it stands: a ruling paraphrased against its sense, a contradiction with an ancestor, or an answer that says nothing the author could rule on. Findings a session can fix by amendment go with a forward. A frontier finding names every node it concerns and recommends, for each, the earliest stage the finding touches: periagogic when the ground or the author's words are in question, maieutic when the answer must be redrafted; give the edit, merge, or split you propose. The review proposes; it never merges or splits.
+Verdict per draft: `forward` to the author's ruling, or `kickback` to the periagogic or maieutic stage with findings. Kick back only when the draft cannot be put to the author as it stands: a ruling paraphrased against its sense, a contradiction with an ancestor, or an answer that says nothing the author could rule on. Findings a session can fix by amendment go with a forward. A frontier finding names every node it concerns and recommends, for each node named whose text must change, the earliest stage the finding touches: periagogic when the ground or the author's words are in question, maieutic when the answer must be redrafted; give the edit, merge, or split you propose. A node named only as context -- named because the finding concerns it, but whose own text needs no change -- receives the finding too and keeps its stage: omit it from `stages` rather than guessing one for it. The review proposes; it never merges or splits.
 
 ## Output
 
@@ -64,7 +64,7 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
       "nodes": ["<node id>", "..."],
       "finding": "<the finding, quoting the sentences concerned>",
       "proposal": "<the edit, merge, split, or fold you propose, naming the survivor and what moves where that applies>",
-      "stages": { "<node id>": "periagogic" | "maieutic" }
+      "stages": { "<node id whose text must change>": "periagogic" | "maieutic" }
     }
   ],
   "ruling_order": ["<node ids in the order you recommend the author rule, dependencies first>"]

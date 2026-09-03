@@ -243,11 +243,14 @@ function renderReviewBlock({ verdict, strength, date, of }) {
 }
 
 /**
- * Update `stage:` and, unless `reviewLines` is null, the `review:` block.
- * `reviewLines` is null for a node touched only by a frontier finding (no
- * verdict of its own to record): its stage moves, but whatever `review:`
+ * Update `stage:`, unless `stage` is null, and the `review:` block, unless
+ * `reviewLines` is null. `reviewLines` is null for a node touched only by a
+ * frontier finding (no verdict of its own to record): whatever `review:`
  * block it already carries -- from an earlier round, or none at all -- is
- * left exactly as it stands.
+ * left exactly as it stands. `stage` is null for a node no entry names a
+ * stage for (a frontier finding that omits it from `stages`, with no
+ * verdict and no override either): the top-level `stage:` line, if any, is
+ * left exactly as it stands, and none is required to exist.
  */
 function upsertDialogueFields(rawText, { stage, reviewLines }) {
   const lines = rawText.split("\n");
@@ -264,8 +267,10 @@ function upsertDialogueFields(rawText, { stage, reviewLines }) {
   const bodyLines = lines.slice(fmEnd + 1);
 
   const stageIdx = fmLines.findIndex((l) => /^stage:/.test(l));
-  if (stageIdx === -1) throw new Error("no top-level 'stage:' line found to update");
-  fmLines[stageIdx] = `stage: ${stage}`;
+  if (stage !== null) {
+    if (stageIdx === -1) throw new Error("no top-level 'stage:' line found to update");
+    fmLines[stageIdx] = `stage: ${stage}`;
+  }
 
   if (reviewLines !== null) {
     const existingReview = findFrontmatterBlock(fmLines, "review");
@@ -481,6 +486,7 @@ function validateBatch(batch, graph, { replies, overrides }) {
     for (const id of nodeIds || []) {
       if (Object.prototype.hasOwnProperty.call(overrides, id)) continue;
       const s = f.stages ? f.stages[id] : undefined;
+      if (s === undefined) continue; // omitted: the finding still applies to this node, its stage just isn't moved by it
       if (s !== "periagogic" && s !== "maieutic") {
         problems.push(`${label}: 'stages' for ${id} must be 'periagogic' or 'maieutic', found '${JSON.stringify(s)}'`);
       }
@@ -525,10 +531,12 @@ function collectTouched(batch) {
 /**
  * Plan one touched node's edit: the final stage (an override, else the
  * earliest stage among every entry naming it -- periagogic < maieutic <
- * review < ruling), every subsection to append in input order (the node's
- * own verdict first, if it has one, then each frontier finding in the
- * order `frontier` lists it), and the `review:` block, written only when
- * the node has a verdict of its own.
+ * review < ruling -- ignoring a frontier finding that names this node but
+ * assigns it no stage; if no entry assigns it one at all, its stage is left
+ * exactly as it stands), every subsection to append in input order (the
+ * node's own verdict first, if it has one, then each frontier finding in
+ * the order `frontier` lists it), and the `review:` block, written only
+ * when the node has a verdict of its own.
  */
 async function planTouchedNode(id, t, ctx) {
   let graphName, slug, file;
@@ -548,12 +556,20 @@ async function planTouchedNode(id, t, ctx) {
 
   const candidates = [];
   if (t.nodeEntry) candidates.push(t.nodeEntry.verdict === "forward" ? "ruling" : t.nodeEntry.kickback_stage);
-  for (const f of t.findings) candidates.push(f.stage);
+  for (const f of t.findings) {
+    if (f.stage !== undefined) candidates.push(f.stage);
+  }
 
   const hasOverride = Object.prototype.hasOwnProperty.call(ctx.overrides, id);
+  // No candidate at all means nothing named for this node assigns it a
+  // stage (only frontier findings that omitted it from their `stages`):
+  // its stage is left exactly as it stands, not forced to any value.
+  const stageTouched = hasOverride || candidates.length > 0;
   const finalStage = hasOverride
     ? ctx.overrides[id]
-    : candidates.reduce((best, s) => (stageRank(s) < stageRank(best) ? s : best));
+    : candidates.length > 0
+      ? candidates.reduce((best, s) => (stageRank(s) < stageRank(best) ? s : best))
+      : currentStage;
 
   const subsections = [];
   const labels = [];
@@ -594,7 +610,7 @@ async function planTouchedNode(id, t, ctx) {
   let text = rawTextBefore;
   for (const s of subsections) text = appendToProposal(text, s);
   try {
-    text = upsertDialogueFields(text, { stage: finalStage, reviewLines });
+    text = upsertDialogueFields(text, { stage: stageTouched ? finalStage : null, reviewLines });
   } catch (err) {
     return { id, problems: [`${id}: ${err.message}`] };
   }
