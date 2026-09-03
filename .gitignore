@@ -1,5 +1,37 @@
+# Nested worktree of the `disposition` ref, and generated or scratch output.
 /disposition/
 /dist/
 /tmp/
 node_modules/
-/bootstrap/review/*.html
+
+# Harness state that lives in the checkout but is never part of the record.
+.claude/worktrees/
+.claude/settings.local.json
+CLAUDE.local.md
+.env
+.env.*
+.direnv/
+
+# Sandbox bind-mount artifacts the harness drops into every checkout
+# (character devices over host config; not stageable, listed to keep
+# `git status` clean). Carried over from the incumbent's list on `main`.
+/.bash_profile
+/.bashrc
+/.profile
+/.zprofile
+/.zshrc
+/.gitconfig
+/.ripgreprc
+/.gitmodules
+/.mcp.json
+/.claude/agents
+/.claude/commands
+/.claude/launch.json
+/.claude/routines
+/.claude/scheduled_tasks.json
+/.claude/scheduled_tasks.lock
+/.claude/loop.md
+/.claude/output-styles
+/.claude/.cc-writes
+/.idea
+/.vscode

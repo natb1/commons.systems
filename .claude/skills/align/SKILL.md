@@ -4,18 +4,18 @@ description: Record or revise one node of the disposition graph by interview wit
 ---
 # Align
 
-> **Shim notice (2026-09-02).** Hand-materialized from the nodes
-> `growth`, `authority`, `node`, `under`, `projection`, `persistence`,
-> `readings`, `review`, `evaluation`, `attention`, and `transience` of
+> **Shim notice (2026-09-02, revised 2026-09-03).** Hand-materialized from
+> the nodes `growth`, `recording`, `authority`, `node`, `under`,
+> `projection`, `persistence`, `readings`, `review`, `evaluation`,
+> `attention`, `delegation`, and `transience` of
 > `commons.systems/disposition-graph`, all stamped deferred, and from the
-> author's rulings. This text has no authority of its own. Where it
-> conflicts with the graph at `origin/disposition`, the graph wins and the
-> conflict is recorded as a proposal on the node it conflicts with. It is
-> declared as a shim on `growth`.
-> Liquidation: the projector materializes this skill from ratified nodes and
-> this file is deleted. The principles adopted from the incumbent `/align` on
-> `main` are named in `bootstrap/align-survey.md` section B; none of its
-> mechanics are adopted.
+> author's rulings quoted on them. This text has no authority of its own.
+> Where it conflicts with the graph at `origin/disposition`, the graph wins
+> and the conflict is recorded as an un-aligned disposition on the node it
+> conflicts with. It is declared as a shim on `growth`. Liquidation: the
+> projector materializes this skill from ratified nodes and this file is
+> deleted. The principles adopted from the incumbent `/align` on `main` are
+> named on `growth`; none of its mechanics are adopted.
 
 Two usages, each a sitting in two stages. `/align <disposition>`, the
 disposition in the author's words, records or revises the node that answers
@@ -24,9 +24,9 @@ implementation their criteria point to, read before anything is changed.
 `/align <node id>` runs the sitting on an existing node, to ratify it or to
 review its ratification; its periagogic object is the node's page and the
 readings under it. A node is one question and its standing answer; a round
-is one node. In the bootstrap
-session the loop is run by reading this file; in a session rooted at the
-`greenfield` worktree it is the skill.
+is one node. A disposition the author states while a sitting is in hand is
+queued (§1, the queue) and the sitting continues. The harness finds this
+skill only when the session starts in the checkout that carries it.
 
 ## 0. Currency and claim
 
@@ -35,14 +35,24 @@ session the loop is run by reading this file; in a session rooted at the
    this check; a stale or dirty tree stops the round.
 2. Reconcile this text to the graph: read the nodes it projects at their
    current text; where a node differs from this file, follow the node and
-   record the difference as a proposal on that node. Apply every shim
-   declared on the nodes (the `shims` field: this file, `CLAUDE.md`, the
-   review instrument on `review`, the rule projections under
-   `.claude/rules/`, the published browser, the sitting's review page)
-   without being asked; bypass one only when prompted to.
-3. The worktree is the claim; during bootstrap there is one writer. Landing
-   location is never a question for the author: place the node under the
-   question it refines, and leave the author's overrule open.
+   record the difference as an un-aligned disposition on it. Apply every
+   shim declared on the nodes (the `shims` field: this file, the
+   reconciliation skill, `CLAUDE.md`, the harness settings, the review
+   instrument on `review`, the rule projections under `.claude/rules/`,
+   the published browser, the alignment page) without being asked; bypass
+   one only when prompted to.
+3. Sessions divide by ref (`work-loop`): this skill writes the
+   `disposition` ref and publishes pages, and never commits to the
+   implementation ref; rules and the other projections are the
+   reconciliation skill's. The worktree is the claim. Landing location is
+   never a question for the author: place the node under the question it
+   refines, and leave the author's overrule open.
+4. Read the open dialogue before opening a new one:
+   `node packages/disposition/project.mjs disposition --frontier -` lists
+   every node with a `stage`, and the alignment page's responses are read
+   with the Artifact tool (`read_db`, collection `responses`; a document's
+   id is the node id with each `/` replaced by `:`). Resume each sitting at
+   its stage.
 
 ## 1. Frame
 
@@ -66,18 +76,40 @@ session the loop is run by reading this file; in a session rooted at the
      the record the node joins; then the recommendation, carrying its
      authority class, its boldness, its persistence class, and the
      alternatives, with the three exits open.
-  4. Ruling. The recommendations are put on the sitting's review page,
-     one item per node, each carrying the node's question, the author's
-     words it rests on with their dates, the node as it would stand, whole,
-     with the change marked against the current text, the three facts, the
-     alternatives rejected and why, and the rulings open: ratify as shown,
-     ratify with edits, defer, overrule. The author rules there or in prose;
-     the session reads the responses back and writes the stamp and the
-     ruling (step 5). The follow-up readings, vocabulary, and key concepts
-     the sitting surfaced enter the frontier as open questions.
+  4. Review (`recording`). Before the author sees the recommendation, a
+     subagent with no context but the record reads it adversarially (§5)
+     and either forwards it, with its strongest counter-argument when it
+     found one and the session's reply, or kicks it back to stage 2 or 3
+     with findings.
+  5. Ruling. The recommendations are put on the alignment page, one item
+     per node, each carrying the node's question, the author's words it
+     rests on with their dates, the node as it would stand, the three
+     facts, the alternatives rejected and why, the review's
+     counter-argument and the reply when there is one, and the responses
+     open: ratify as shown, ratify with edits, defer, overrule, or prose.
+     The author rules there or in prose.
+  6. Recording. The response is classified and, where it is not a
+     confirmation, kicked back (§5); a confirmed disposition is stamped
+     and landed. The follow-up readings, vocabulary, and key concepts the
+     sitting surfaced are named in the rationale and derive onto the
+     frontier from there.
   The named deviation is putting the AI's account before the author's; when
   it happens, hold the account back and restart the stage. A ratified node
   under review keeps its stamp until the author rules.
+- **The queue.** A disposition the author states during a sitting, or a
+  node id they name, is supported usage. Record it at once as an
+  un-aligned disposition and land it (§6), then continue the sitting in
+  hand: a node under the node the disposition would refine, with
+  `question`, `stage: periagogic`, a `## Disposition` section holding the
+  author's words verbatim and dated, and a `## Proposal` section naming
+  what the sitting would amend and its periagogic object; no `## Answer`,
+  no stamp. For a node the author names, set `stage` on that node and add
+  the `## Disposition` of their words. `stage` names the next movement
+  owed, `periagogic`, `maieutic`, `review`, or `ruling`; advance it as the
+  movements complete and remove it at the recording. The queue is the set
+  of nodes with a stage, in rank order; the author's choice of what comes
+  next is a boost (`attention`). Nothing about the queue lives in this
+  session, in memory, or in scratch (`transience`).
 - A question or a requirement: search the graph for a node with the same
   question. A keyword search only shortlists; only reading a node disposes of
   it. Same question, same node, and the round is an edit. A requirement that
@@ -94,7 +126,8 @@ session the loop is run by reading this file; in a session rooted at the
   author, unrecorded; the AI draws it out with visible, refusable drafts
   (Theaetetus 148e to 151d). Run the periagogic conduct first when the
   ground of the question is recorded and not yet the author's own, and take
-  the ground, not the decision surface, as its object.
+  the ground, not the decision surface, as its object. The periagogic stage
+  is never skipped.
 
 ## 2. Interview
 
@@ -105,14 +138,15 @@ session the loop is run by reading this file; in a session rooted at the
   carries the authority class under which it would be accepted (ratified,
   delegated, deferred), a boldness assessment (how much rests on the graph
   and the author's words against the AI's own knowledge), its persistence
-  class (standing, shim with its liquidation condition, proposal, open
-  question, evidence, or not recorded; a transient disposition is a
-  contradiction in terms, see `transience`), and genuine alternatives,
-  never the first option re-spelled under another class. What the author
-  directs to be recorded is reported with the same three facts. Escalate one class toward ratified when being wrong
-  is expensive, irreversible, or capture-shaped. Deliver a question's
-  context where the author will read it, the page or the prose turn, never
-  the AI's own preamble.
+  class (standing, shim with its liquidation condition, proposal,
+  un-aligned disposition, evidence, or not recorded; a transient
+  disposition is a contradiction in terms, see `transience`), and genuine
+  alternatives, never the first option re-spelled under another class.
+  What the author directs to be recorded is reported with the same three
+  facts. Escalate one class toward ratified when being wrong is expensive,
+  irreversible, or capture-shaped. Deliver a question's context where the
+  author will read it, the alignment page or the prose turn, never the
+  AI's own preamble.
 - Three exits stay open to the author at all times: amend the record, defer
   (the answer stays deferred, and the deferred stamp is the review queue; a
   deferred reading is a reading node), or claim authority over the AI's
@@ -130,6 +164,13 @@ session the loop is run by reading this file; in a session rooted at the
 
 ## 3. Record
 
+- The author's words go into the node in the same turn they are given:
+  verbatim and dated in `## Disposition` while the dialogue is open, quoted
+  into the rationale at the recording, when `## Disposition` and `stage`
+  are removed. The AI's account goes into `## Proposal`: evidence,
+  findings, the recommendation with its three facts, the alternatives, the
+  review's counter-argument and the reply, and the responses open. A
+  `## Proposal` on an answered node is the pending findings of its sitting.
 - Write the node: question, form, `under`, the answer, the rationale with
   rejected alternatives and the author's steers, a proposal for anything out
   of scope, `defines` for the terms it defines, an instrument where one
@@ -139,63 +180,96 @@ session the loop is run by reading this file; in a session rooted at the
 - Nothing is recorded that was not presented with its authority class,
   boldness, and persistence class, except at the author's direction, and
   then the report states them.
-- Stamp `deferred`, `by: claude`, dated, within the AI's scope; never
-  `ratified`. An edit reconciles the whole node, not one sentence.
+- Stamp `deferred`, `by: claude`, dated, within the AI's scope; `ratified`
+  only at a recording (§5). An edit reconciles the whole node, not one
+  sentence.
 - Every node the round touched or cited has its stamp checked; a node with
-  none is an unanswered question or a proposal, never an answer.
-- During bootstrap, append the author's doctrine to `LEDGER.md`, a shim
-  declared on `authority`, in their words, in the same turn it is given.
+  none is an un-aligned disposition or a proposal, never an answer.
 
 ## 4. Project
 
 Run `node packages/disposition/validate.mjs disposition`, then
 `node packages/disposition/project.mjs disposition --out dist/browser/index.html`,
-then publish the page to the address in the shim declared on `projection`.
-The page at the node's id is what the author reads; the file is not. When a
-sitting reaches its ruling, build its review page with
-`node bootstrap/review/build.mjs` and publish it with the `db` capability;
-read the responses with the artifact tool's `read_db` action on the
-`responses` collection.
+and publish the page to the address in the shim declared on `projection`.
+The page at the node's id is what the author reads; the file is not. Then
+`node packages/disposition/project.mjs disposition --alignment dist/alignment/index.html`
+and publish it, with the `db` capability, to the address in the shim
+declared on `growth`; the author rules on it, and the responses are read
+back as in §0. When a global-tier node changed, say so in the report: the
+rule projections are regenerated by the next reconciliation run, not here.
 
-## 5. Ratify or steer
+## 5. Review, ruling, and recording
 
 - Ratification is the outcome of the dialectic, never a command. Before
-  asking for it, the session has stated the conduct, put the
-  author's own account before the AI's, surfaced the three classes of
-  finding, evaluated twice, tested the draft against the record it joins,
-  and mapped every decision of the round to a field. The recommendation to
+  asking for it, the session has stated the conduct, put the author's own
+  account before the AI's, surfaced the three classes of finding,
+  evaluated twice, tested the draft against the record it joins, and
+  mapped every decision of the round to a field. The recommendation to
   ratify carries its boldness assessment and the alternatives, and the
   three exits stay open.
-- When the author rules to ratify, the session writes the stamp
-  `ratified`, `by: <the author's name>`, dated, quotes the ruling with its
-  date in the node's rationale, validates, and lands. A ratified stamp
-  whose ruling is not in the record is invalid (`authority`).
+- **Review in clean context**, before the author sees a recommendation.
+  Set `stage: review` on each recommended disposition of the round and
+  delegate the batch to one subagent (opus, high effort) whose brief
+  carries nothing but: each node as it would be committed, its ancestry to
+  the ceiling, the global-tier nodes, the nodes it cites, the author's
+  words, and what the review judges: whether the answer says what the
+  author said and quotes every ruling it rests on; whether it contradicts
+  the record it joins, or a tradition it cites, without recording the
+  divergence; whether its stamp, boldness, and persistence class are the
+  ones to be presented; whether an executor reading it would take a wrong
+  action; and what the strongest argument against it is. The subagent
+  reports, per disposition, forward or kick back with findings and the
+  movement they name, plus the counter-argument when it found one worth
+  the author's time; it writes nothing. Apply each verdict on its own: a
+  kickback sets `stage` and appends the findings to `## Proposal`; a
+  forward sets `stage: ruling` and puts the item on the page with the
+  counter-argument and the session's reply, or with the note that the
+  review found no strong counter-argument. A disposition still in review
+  never holds one that was forwarded.
+- **Classify the response** (`recording`). Confirmation as shown, or the
+  recommended option taken: record. Otherwise decide where the dialogue
+  resumes and set `stage` to it: `periagogic` when the response shows the
+  author has lost hold of the record's ground (asking for what the record
+  forbids for a reason they have not engaged, contradicting an ancestor
+  they have not cited); `maieutic` when the response is ambiguous while
+  the AI's understanding of the ground is complete; `ruling` in the common
+  case, the draft refined with the author's edits and put back for
+  confirmation (a refined draft that changes substance goes through the
+  review again). A deferral leaves the answer deferred and closes the
+  sitting; an overrule is drafted as what the author said stands, reviewed,
+  and put back for confirmation.
+- **Record.** Write the stamp (`ratified`, `by: <the author's name>`,
+  dated, with the ruling quoted and dated in the rationale; a ratified
+  stamp whose ruling is not in the record is invalid; or `deferred` when
+  the author deferred), remove `stage` and `## Disposition`, validate, and
+  land.
 - Steer: amend the node; the steer enters the rationale as a rejected
-  alternative or an amendment; project again. A steer that states doctrine
-  goes on the ledger.
+  alternative or an amendment; project again.
 - The author's choice of the next node is a boost (`attention`).
 
 ## 6. Land
 
 From `disposition/`: validate, `git commit`, `git push origin disposition`.
 If the push is rejected, fetch, rebase, validate, and push again. No pull
-request: a graph landing is reviewed by the interview that produced it
-(`review`). Materialized implementation lands on `greenfield` after tests;
-the review instrument's assessment is owed once the disposition it
-materializes is ratified, and for everything before exit (`review`).
+request: a graph landing is reviewed by the clean-context review and by the
+interview that produced it (`review`). This skill never commits to the
+implementation ref; materialized implementation is the reconciliation
+skill's.
 
-## 7. Self-review and ledger
+## 7. Self-review
 
-Before the round closes, review the recorded output adversarially, record
-the result in the round log in `CLAUDE.md`, and close the ledger entries the
-round disposed of.
+Before the round closes, review the recorded output adversarially
+(`evaluation`) and report the map of decisions to fields. The state of the
+work is the nodes and the git log: there is no ledger and no round log,
+and nothing essential is kept in memory, scratch, or this session. After
+compaction, run §0.
 
 ## Model and delegation
 
 The interview is not delegable and runs on the main thread; the author's
-default model for the alignment skill is fable. Everything mechanical
-(validation, projection, publication, surveys, tooling) and every
-investigation whose context is verbose (debugging, driving a browser,
-reading logs or transcripts) is a subagent unit under `delegation` and the
-token-efficiency rule in `CLAUDE.md`; the main thread reads the conclusion,
-never the context.
+default model for the alignment skill is fable (`claude --model fable`).
+Everything mechanical (validation, projection, publication, surveys,
+tooling) and every investigation whose context is verbose (debugging,
+driving a browser, reading logs or transcripts, reading a page in full
+before publishing it) is a subagent unit under `delegation`; the main
+thread reads the conclusion, never the context.
