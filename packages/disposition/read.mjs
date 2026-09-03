@@ -21,13 +21,14 @@ import {
   deriveDescendants,
   deriveDraftHash,
   deriveRank,
+  deriveStandingHash,
   deriveStatus,
 } from './derive.mjs';
 
 const FRONTMATTER_KEYS = new Set([
   'question', 'form', 'authority', 'under', 'tier', 'boost', 'cites',
   'instrument', 'after', 'source', 'relation', 'defines', 'shims', 'stage',
-  'order', 'recommendation', 'review', 'depends',
+  'order', 'alternatives', 'recommendation', 'review', 'depends',
 ]);
 const FORMS = new Set(['target', 'rule', 'assumption', 'arche', 'reading']);
 const AUTHORITY_CLASSES = new Set(['ratified', 'delegated', 'deferred']);
@@ -40,8 +41,16 @@ const REVIEW_VERDICTS = new Set(['forward', 'kickback']);
 const REVIEW_STRENGTHS = new Set(['strong', 'moderate', 'weak', 'none']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HASH_RE = /^[0-9a-f]{40}$/;
+// a graph commit, written short or long, as `recommendation.at` records it.
+const COMMIT_RE = /^[0-9a-f]{7,40}$/;
 const SHIM_KEYS = new Set(['artifact', 'liquidation', 'declared', 'for']);
-const SECTION_ORDER = ['Disposition', 'Answer', 'Rationale', 'Draft', 'Proposal'];
+const SECTION_ORDER = ['Disposition', 'Answer', 'Rationale', 'Alternatives', 'Recommendation', 'Account'];
+const ALTERNATIVE_SOURCES = new Set(['author', 'ai', 'review', 'proposal']);
+const ALTERNATIVE_KEYS = new Set(['name', 'source', 'ref', 'prune']);
+const ALTERNATIVE_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
+const RECOMMENDATION_KEYS = ['adopts', 'class', 'boldness', 'amends', 'at'];
+// `standing` names the node as it stands, so no alternative may take it.
+const STANDING = 'standing';
 
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -60,13 +69,16 @@ function isValidDate(s) {
 
 /**
  * Split a body into its `## Disposition` / `## Answer` / `## Rationale` /
- * `## Draft` / `## Proposal` sections. `###`+ headings are content, not
- * section boundaries. Pushes one message per problem (without file-path
- * prefix) onto `problems`.
+ * `## Alternatives` / `## Recommendation` / `## Account` sections. `###`+
+ * headings are content, not section boundaries -- including the
+ * `### <name>` subsections of `## Alternatives`, which a second pass
+ * (`parseAlternativesSection`) splits out of that one section's text.
+ * Pushes one message per problem (without file-path prefix) onto
+ * `problems`.
  *
  * @param {string} bodyText
  * @param {string[]} problems
- * @returns {{Disposition: string|null, Answer: string|null, Rationale: string|null, Draft: string|null, Proposal: string|null}}
+ * @returns {{Disposition: string|null, Answer: string|null, Rationale: string|null, Alternatives: string|null, Recommendation: string|null, Account: string|null}}
  */
 function parseBody(bodyText, problems) {
   const lines = bodyText.split('\n');
@@ -97,7 +109,9 @@ function parseBody(bodyText, problems) {
     problems.push(`body has text before the first '##' heading: ${snippet}`);
   }
 
-  const sections = { Disposition: null, Answer: null, Rationale: null, Draft: null, Proposal: null };
+  const sections = {
+    Disposition: null, Answer: null, Rationale: null, Alternatives: null, Recommendation: null, Account: null,
+  };
   let lastOrder = -1;
   boundaries.forEach((boundary, idx) => {
     const end = idx + 1 < boundaries.length ? boundaries[idx + 1].index : lines.length;
@@ -130,6 +144,121 @@ function readIdList(fm, key, problems) {
     return [];
   }
   return list;
+}
+
+/**
+ * Parse and validate the `alternatives` frontmatter field: the answers on
+ * the table beside the one the node stands on, each
+ * `{name, source, ref?, prune?}`. `prune: true` marks the alternative that
+ * deletes the node outright (whatever its text says having moved
+ * elsewhere), which is why a recommendation adopting one quotes no fence:
+ * a deleted node has no text.
+ *
+ * One combined message covers every shape problem (a non-list, a
+ * non-mapping entry, an unknown key, a name that is not a slug, a source
+ * outside the vocabulary, a `proposal` with no `ref`, a non-boolean
+ * `prune`), in the style `recommendation` and `review` already use; a
+ * duplicated name and the reserved name `standing` each get their own
+ * message, since both are about the list as a whole rather than one
+ * entry's shape.
+ *
+ * @param {*} raw - fm.alternatives, or undefined/null when absent.
+ * @param {string[]} problems
+ * @returns {{entries: Array<{name: string, source: string, ref: string|null, prune: boolean}>, shapeOk: boolean}}
+ */
+function readAlternatives(raw, problems) {
+  if (isAbsent(raw)) return { entries: [], shapeOk: true };
+  const entryOk = (entry) => isPlainObject(entry)
+    && Object.keys(entry).every((k) => ALTERNATIVE_KEYS.has(k))
+    && typeof entry.name === 'string' && ALTERNATIVE_NAME_RE.test(entry.name)
+    && typeof entry.source === 'string' && ALTERNATIVE_SOURCES.has(entry.source)
+    && (isAbsent(entry.ref)
+      ? entry.source !== 'proposal'
+      : typeof entry.ref === 'string' && entry.ref.trim().length > 0)
+    && (isAbsent(entry.prune) || typeof entry.prune === 'boolean');
+  if (!Array.isArray(raw) || !raw.every(entryOk)) {
+    problems.push(
+      "'alternatives' must be a list of {name: <lowercase slug>, "
+      + `source: ${[...ALTERNATIVE_SOURCES].join('|')}, `
+      + 'ref: <non-empty string, required when source is proposal>, '
+      + 'prune: <optional boolean>}',
+    );
+    return { entries: [], shapeOk: false };
+  }
+  const entries = raw.map((entry) => ({
+    name: entry.name,
+    source: entry.source,
+    ref: isAbsent(entry.ref) ? null : entry.ref,
+    prune: entry.prune === true,
+  }));
+  let ok = true;
+  const seen = new Set();
+  for (const entry of entries) {
+    if (entry.name === STANDING) {
+      problems.push(`'alternatives' names an alternative '${STANDING}', which is reserved for the node as it stands`);
+      ok = false;
+    }
+    if (seen.has(entry.name)) {
+      problems.push(`'alternatives' names ${entry.name} twice`);
+      ok = false;
+    }
+    seen.add(entry.name);
+  }
+  return { entries, shapeOk: ok };
+}
+
+/**
+ * Split a `## Alternatives` section into its `### <name>` subsections, one
+ * per entry of the `alternatives` list and in the list's order. Text before
+ * the first `### ` heading is a problem: everything in this section belongs
+ * to one alternative. When `names` is given, the headings must equal it
+ * exactly, in order, and the first position where they differ is named in
+ * one message.
+ *
+ * @param {string} sectionText - `sections.Alternatives`, trimmed by parseBody.
+ * @param {string[]|null} names - the listed names, or null to skip the match
+ *   check (the list itself was malformed or empty, already reported).
+ * @param {string[]} problems
+ * @returns {Record<string, string>} each heading's name to its trimmed prose.
+ */
+function parseAlternativesSection(sectionText, names, problems) {
+  const lines = sectionText.split('\n');
+  const headingRe = /^### (.+)$/;
+  const boundaries = [];
+  lines.forEach((line, index) => {
+    const m = line.match(headingRe);
+    if (m) boundaries.push({ name: m[1].trim(), index });
+  });
+
+  const firstIndex = boundaries.length > 0 ? boundaries[0].index : lines.length;
+  const prefix = lines.slice(0, firstIndex).join('\n');
+  if (prefix.trim().length > 0) {
+    const snippet = JSON.stringify(prefix.trim().slice(0, 60));
+    problems.push(`'## Alternatives' has text before the first '### ' heading: ${snippet}`);
+  }
+
+  /** @type {Record<string, string>} */
+  const text = {};
+  boundaries.forEach((boundary, idx) => {
+    const end = idx + 1 < boundaries.length ? boundaries[idx + 1].index : lines.length;
+    text[boundary.name] = lines.slice(boundary.index + 1, end).join('\n').trim();
+  });
+
+  if (names !== null) {
+    const found = boundaries.map((b) => b.name);
+    const span = Math.max(found.length, names.length);
+    for (let i = 0; i < span; i += 1) {
+      if (found[i] !== names[i]) {
+        const want = names[i] === undefined ? 'nothing' : `'### ${names[i]}'`;
+        const got = found[i] === undefined ? 'nothing' : `'### ${found[i]}'`;
+        problems.push(
+          `'## Alternatives' subsections must match the 'alternatives' list in order: expected ${want} at position ${i + 1}, found ${got}`,
+        );
+        break;
+      }
+    }
+  }
+  return text;
 }
 
 /**
@@ -175,20 +304,21 @@ function fail(relPath, problemList) {
 }
 
 /**
- * Extract the exact content of a `## Draft` section's one fenced markdown
- * block: a line that, trimmed, is exactly `` ```markdown `` opens it, a
- * line that trimmed is exactly `` ``` `` closes it, and nothing but blank
- * lines may sit outside the fence. Pushes the one shape-error message and
- * returns null on anything else -- more than one fence, text beside it,
+ * Extract the exact content of a `## Recommendation` section's one fenced
+ * markdown block: a line that, trimmed, is exactly `` ```markdown `` opens
+ * it, a line that trimmed is exactly `` ``` `` closes it, and nothing but
+ * blank lines may sit outside the fence. Pushes the one shape-error message
+ * and returns null on anything else -- more than one fence, text beside it,
  * or no fence at all.
  *
- * @param {string} sectionText - `sections.Draft`, already trimmed by `parseBody`.
+ * @param {string} sectionText - `sections.Recommendation`, already trimmed
+ *   by `parseBody`.
  * @param {string[]} problems
  * @returns {string|null} the fence's inner lines, joined by '\n'.
  */
 function extractDraftFence(sectionText, problems) {
   const fail1 = () => {
-    problems.push("'## Draft' must hold exactly one fenced markdown block");
+    problems.push("'## Recommendation' must hold exactly one fenced markdown block");
     return null;
   };
   const lines = sectionText.split('\n');
@@ -213,7 +343,7 @@ function extractDraftFence(sectionText, problems) {
 /**
  * Recover a node file's frontmatter and body text from its raw bytes: the
  * structural parse shared by a top-level node file (`parseNode`) and a
- * `## Draft` fence's nested one (`parseDraftFence`). Throws immediately
+ * `## Recommendation` fence's nested one (`parseDraftFence`). Throws immediately
  * (one message, as befits a file with nothing left worth checking) when
  * the frontmatter cannot be recovered at all: no opening or closing `---`
  * delimiter, invalid YAML, or a frontmatter that is not a mapping. Every
@@ -257,7 +387,7 @@ function parseFrontmatter(text, relPath) {
 }
 
 /**
- * Parse a `## Draft` fence's content only structurally, per dialogue.md's
+ * Parse a `## Recommendation` fence's content only structurally, per dialogue.md's
  * Answer: "A draft may be invalid under the doctrine of the day, as when
  * it presumes a ruling not yet given; the validator parses it and checks
  * only that it answers the same question." The fence must parse as a node
@@ -282,23 +412,23 @@ function parseFrontmatter(text, relPath) {
  * @returns {{raw: string, question: string|null, frontmatter: object, sections: object}|null}
  */
 function parseDraftFence(fenceText, question, ctx, problems) {
-  const draftPath = `${ctx.path} (## Draft)`;
+  const draftPath = `${ctx.path} (## Recommendation)`;
   let fm;
   let bodyText;
   try {
     ({ fm, bodyText } = parseFrontmatter(fenceText, draftPath));
   } catch (err) {
-    problems.push(`'## Draft' does not parse as a node: ${err.message}`);
+    problems.push(`'## Recommendation' does not parse as a node: ${err.message}`);
     return null;
   }
   const bodyProblems = [];
   const sections = parseBody(bodyText, bodyProblems);
   if (bodyProblems.length > 0) {
-    problems.push(`'## Draft' does not parse as a node: ${fail(draftPath, bodyProblems).message}`);
+    problems.push(`'## Recommendation' does not parse as a node: ${fail(draftPath, bodyProblems).message}`);
     return null;
   }
   if (fm.question !== question) {
-    problems.push("'## Draft' answers a different question");
+    problems.push("'## Recommendation' answers a different question");
   }
   const get = (key, absentValue) => (isAbsent(fm[key]) ? absentValue : fm[key]);
   return {
@@ -319,6 +449,7 @@ function parseDraftFence(fenceText, question, ctx, problems) {
       shims: get('shims', []),
       stage: get('stage', null),
       order: get('order', []),
+      alternatives: get('alternatives', []),
       recommendation: get('recommendation', null),
       review: get('review', null),
     },
@@ -326,7 +457,9 @@ function parseDraftFence(fenceText, question, ctx, problems) {
       Disposition: sections.Disposition,
       Answer: sections.Answer,
       Rationale: sections.Rationale,
-      Proposal: sections.Proposal,
+      Alternatives: sections.Alternatives,
+      Recommendation: sections.Recommendation,
+      Account: sections.Account,
     },
   };
 }
@@ -342,8 +475,9 @@ function parseDraftFence(fenceText, question, ctx, problems) {
  * @param {{id: string, graph: string, slug: string, path: string}} loc
  * @returns {object} a partial node (all deliverable-1 fields except
  *   `children`, `rank`, `ceiling`, `status`, `hash`), plus the dialogue
- *   fields this unit adds: `recommendation`, `review`, `reviewStale`,
- *   `draft`, `draftHash`.
+ *   fields: `alternatives`, `alternativesText`, `recommendation`,
+ *   `recommendationStale`, `review`, `reviewStale`, `draft`,
+ *   `standingHash`, `draftHash`, and `account`.
  * @throws {Error} listing every problem found in this file, one per line,
  *   each prefixed with `loc.path`.
  */
@@ -427,21 +561,37 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     }
   }
 
+  // alternatives: the answers on the table beside the standing one. Its
+  // own shape only; whether the '## Alternatives' subsections match it is
+  // checked below, once the body is parsed.
+  const { entries: alternatives, shapeOk: alternativesShapeOk } = readAlternatives(fm.alternatives, problems);
+
   // recommendation: the facts a recommendation must state, required from the
   // review stage on (checked below, once stage is known). One combined
   // message for any shape problem -- missing field, bad value, or an extra
   // key -- there is no per-field message for this one, unlike authority.
+  // Whether `adopts` resolves (to the standing answer or to a listed
+  // alternative) is checked below, once the body and the list are known.
   let recommendation = null;
   if (!isAbsent(fm.recommendation)) {
     const r = fm.recommendation;
     const ok = isPlainObject(r)
-      && Object.keys(r).length === 2
+      && Object.keys(r).length === RECOMMENDATION_KEYS.length
+      && RECOMMENDATION_KEYS.every((k) => Object.prototype.hasOwnProperty.call(r, k))
+      && typeof r.adopts === 'string' && r.adopts.trim().length > 0
       && RECOMMENDATION_CLASSES.has(r.class)
-      && BOLDNESS_VALUES.has(r.boldness);
+      && BOLDNESS_VALUES.has(r.boldness)
+      && typeof r.amends === 'string' && HASH_RE.test(r.amends)
+      && typeof r.at === 'string' && COMMIT_RE.test(r.at);
     if (!ok) {
-      problems.push("'recommendation' must be {class: ratified|delegated, boldness: low|moderate|high}");
+      problems.push(
+        "'recommendation' must be {adopts: standing|<alternative name>, class: ratified|delegated, "
+        + 'boldness: low|moderate|high, amends: <sha1>, at: <7-40 hex commit>}',
+      );
     } else {
-      recommendation = { class: r.class, boldness: r.boldness };
+      recommendation = {
+        adopts: r.adopts, class: r.class, boldness: r.boldness, amends: r.amends, at: r.at,
+      };
     }
   }
 
@@ -620,7 +770,22 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   const sections = parseBody(bodyText, problems);
   const hasAnswer = sections.Answer !== null;
   const hasDisposition = sections.Disposition !== null;
-  const hasDraftSection = sections.Draft !== null;
+  const hasDraftSection = sections.Recommendation !== null;
+  const hasAlternativesSection = sections.Alternatives !== null;
+
+  // '## Alternatives' stands with the frontmatter list, one '### <name>'
+  // subsection per entry, in the list's order: present exactly when the
+  // list is non-empty, and naming exactly what the list names.
+  if (alternatives.length > 0 && !hasAlternativesSection) {
+    problems.push("'alternatives' is non-empty and requires a '## Alternatives' section");
+  }
+  if (hasAlternativesSection && alternatives.length === 0) {
+    problems.push("'## Alternatives' requires a non-empty 'alternatives' list");
+  }
+  const matchNames = alternativesShapeOk && alternatives.length > 0 ? alternatives.map((a) => a.name) : null;
+  const alternativesText = hasAlternativesSection
+    ? parseAlternativesSection(sections.Alternatives, matchNames, problems)
+    : {};
 
   if (hasAnswer && form === null) {
     problems.push("'form' is required when the body has an '## Answer' section");
@@ -634,14 +799,20 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   if (order.length > 0 && !hasAnswer) {
     problems.push("'order' requires an '## Answer' section");
   }
-  if (stage !== null && !hasDisposition && !hasAnswer && sections.Proposal === null) {
-    problems.push("stage requires a '## Disposition', '## Proposal', or '## Answer' section");
+  if (stage !== null && !hasDisposition && !hasAnswer && sections.Account === null) {
+    problems.push("stage requires a '## Disposition', '## Account', or '## Answer' section");
   }
   if (hasDisposition && stage === null) {
     problems.push("'## Disposition' requires 'stage'");
   }
-  if ((recommendation !== null || review !== null || hasDraftSection) && stage === null) {
-    problems.push("'recommendation', 'review', and '## Draft' are parts of the dialogue and require stage");
+  const carriesDialogue = !isAbsent(fm.alternatives) || !isAbsent(fm.recommendation)
+    || !isAbsent(fm.review) || !isAbsent(fm.depends)
+    || hasAlternativesSection || hasDraftSection || sections.Account !== null;
+  if (carriesDialogue && stage === null) {
+    problems.push(
+      "'alternatives', 'recommendation', 'review', 'depends', '## Alternatives', '## Recommendation', "
+      + "and '## Account' are parts of the dialogue and require stage",
+    );
   }
 
   // status: answered when the stamp is ratified or delegated, unanswered
@@ -659,23 +830,59 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     problems.push("stage ruling requires a 'review' with verdict forward");
   }
 
-  // '## Draft': one fenced ```markdown block, parsed only structurally by
-  // parseDraftFence (frontmatter and sections; no field rule beyond
-  // parsing except that it answers the same question) and exposed reduced
-  // to {raw, question, frontmatter, sections}. `draftFenceText` (the
-  // fence's exact content, or null with no '## Draft') feeds the draft
-  // hash below regardless of whether the draft is otherwise valid -- that
-  // value is only ever read once this function has returned without
-  // throwing.
+  // `recommendation.adopts` resolves either to the node as it stands --
+  // which takes an '## Answer' to stand on, and leaves nothing to quote --
+  // or to one listed alternative, whose whole proposed node the
+  // '## Recommendation' fence holds. The exception is a prune alternative,
+  // which deletes the node: there is no proposed text, so no fence either.
+  if (recommendation !== null) {
+    const adopted = alternatives.find((a) => a.name === recommendation.adopts);
+    if (recommendation.adopts === STANDING) {
+      if (!hasAnswer) {
+        problems.push(`'recommendation.adopts' is '${STANDING}', which requires an '## Answer' section`);
+      }
+      if (hasDraftSection) {
+        problems.push(`'recommendation.adopts' is '${STANDING}', so the node carries no '## Recommendation' section`);
+      }
+    } else if (adopted === undefined) {
+      problems.push(
+        `'recommendation.adopts' names '${recommendation.adopts}', which is neither '${STANDING}' nor a listed alternative`,
+      );
+    } else if (adopted.prune) {
+      if (hasDraftSection) {
+        problems.push(
+          `'recommendation.adopts' names the prune alternative '${adopted.name}', so the node carries no '## Recommendation' section`,
+        );
+      }
+    } else if (!hasDraftSection) {
+      problems.push(
+        `'recommendation.adopts' names the alternative '${adopted.name}', which requires a '## Recommendation' section`,
+      );
+    }
+  }
+
+  // '## Recommendation': one fenced ```markdown block, parsed only
+  // structurally by parseDraftFence (frontmatter and sections; no field
+  // rule beyond parsing except that it answers the same question) and
+  // exposed reduced to {raw, question, frontmatter, sections} as `draft`.
+  // `draftFenceText` (the fence's exact content, or null with no
+  // '## Recommendation') feeds the draft hash below regardless of whether
+  // the draft is otherwise valid -- that value is only ever read once this
+  // function has returned without throwing.
   let draft = null;
   let draftFenceText = null;
   if (hasDraftSection) {
-    draftFenceText = extractDraftFence(sections.Draft, problems);
+    draftFenceText = extractDraftFence(sections.Recommendation, problems);
     if (draftFenceText !== null) {
       draft = parseDraftFence(draftFenceText, question, { id, graph, slug, path: relPath }, problems);
     }
   }
 
+  const standingHash = deriveStandingHash({
+    fmText,
+    answer: sections.Answer,
+    rationale: sections.Rationale,
+  });
   const draftHash = deriveDraftHash({
     fmText,
     draftFence: draftFenceText,
@@ -683,6 +890,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     rationale: sections.Rationale,
   });
   const reviewStale = review !== null && review.of !== draftHash;
+  const recommendationStale = recommendation !== null && recommendation.amends !== standingHash;
 
   if (problems.length > 0) {
     throw fail(relPath, problems);
@@ -710,14 +918,18 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     shims,
     stage,
     order,
+    alternatives,
+    alternativesText,
     recommendation,
+    recommendationStale,
     review,
     reviewStale,
     draft,
+    standingHash,
     draftHash,
     answer: sections.Answer,
     rationale: sections.Rationale,
-    proposal: sections.Proposal,
+    account: sections.Account,
     disposition: sections.Disposition,
   };
 }

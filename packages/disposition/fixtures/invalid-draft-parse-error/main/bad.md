@@ -7,7 +7,7 @@ stage: periagogic
 
 Still open.
 
-## Draft
+## Recommendation
 
 ```markdown
 not a valid node file at all

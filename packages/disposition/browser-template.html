@@ -218,6 +218,17 @@
   .propblock { padding: 16px 18px; background: var(--proposal-soft); border: 1px dashed var(--proposal); border-radius: 4px; max-width: var(--measure); }
   .propblock .blk-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--proposal); margin: 0 0 10px; }
   .propblock .mdbody { font-size: 16px; }
+  .alts { margin: 0 0 24px; padding: 14px 18px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; max-width: var(--measure); }
+  .alts > .blk-label { font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 10px; }
+  .altlist { list-style: none; margin: 0; padding: 0; }
+  .altlist > li { margin: 0 0 14px; padding-left: 14px; border-left: 2px solid var(--line); }
+  .altlist > li:last-child { margin-bottom: 0; }
+  .altname { margin: 0 0 6px; font-size: 14px; }
+  .altname .mono { font-family: var(--mono); font-size: 12.5px; color: var(--ink); margin-right: 10px; overflow-wrap: anywhere; }
+  .altmeta { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; color: var(--ink-3); overflow-wrap: anywhere; }
+  .alts .mdbody { font-size: 15px; }
+  .altnote { font-size: 13.5px; line-height: 1.45; color: var(--ink-3); margin: 12px 0 0; }
+  .pill.prune { background: var(--proposal-soft); color: var(--proposal); }
   .instr { padding: 2px 0 2px 16px; border-left: 2px solid var(--accent); max-width: var(--measure); }
   .instr .kind { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-ink); margin: 0 0 5px; }
   .instr .ref { font-family: var(--mono); font-size: 14px; color: var(--ink); margin: 0 0 6px; overflow-wrap: anywhere; }
@@ -613,21 +624,55 @@ function stampPill(n, small) {
   return pill("unstamped", small);
 }
 
-/* The one thing every unanswered node adds beside its stamp: which stage of
-   the dialogue it is at. Reuses the same `.pill` look (the "deferred" color,
-   since a deferred stamp is itself always unanswered) rather than a bespoke
-   color, so it already carries both themes. */
+/* What a node in the dialogue adds beside its stamp: which stage it is at.
+   An unanswered node says so and names the stage; an answered node -- one
+   whose standing answer holds while a dialogue runs on it anyway -- names
+   the stage alone, since "unanswered" would misdescribe it. Reuses the same
+   `.pill` look (the "deferred" color, since a deferred stamp is itself
+   always unanswered) rather than a bespoke color, so it already carries
+   both themes. */
 function unansweredPill(n, small) {
-  if (n.status !== "unanswered") return "";
-  var label = "unanswered" + (n.stage ? " · " + n.stage : "");
+  var label;
+  if (n.status === "unanswered") label = "unanswered" + (n.stage ? " · " + n.stage : "");
+  else if (n.stage) label = "in dialogue · " + n.stage;
+  else return "";
   return '<span class="pill unans' + (small ? " sm" : "") + '">' + esc(label) + "</span>";
 }
 
-/* The browser never renders a draft's content (that is the alignment page's
-   job); a node that carries one just says so, once, beside its stamp. */
+/* The browser never renders a recommended text (that is the alignment
+   page's job); a node that carries one just says so, once, beside its
+   stamp. */
 function draftNoteHtml(n) {
   if (!n.draft) return "";
-  return '<p class="draftnote">' + "A draft awaits the author's ruling on the alignment page." + "</p>";
+  return '<p class="draftnote">' + "A recommendation awaits the author's ruling on the alignment page." + "</p>";
+}
+
+/* The answers on the table beside the one the node stands on, listed under
+   the stamp with the one line that says what they do and do not do: the
+   standing answer keeps its authority until the author confirms one of
+   them. Each carries its name, where it came from (`source`, and the `ref`
+   that dates it or names the instrument that raised it), whether it would
+   prune the node rather than rewrite it, and its prose from the node's
+   `## Alternatives` section. Nothing is rendered for a node with none. */
+function alternativesHtml(n) {
+  var alts = n.alternatives || [];
+  if (!alts.length) return "";
+  var text = n.alternativesText || {};
+  var items = alts.map(function (a) {
+    var meta = [a.source];
+    if (a.ref) meta.push(a.ref);
+    return "<li>" +
+      '<p class="altname"><span class="mono">' + esc(a.name) + "</span>" +
+      (a.prune ? '<span class="pill sm prune">prune</span>' : "") +
+      '<span class="altmeta">' + esc(meta.join(" · ")) + "</span></p>" +
+      (text[a.name] ? '<div class="mdbody">' + mdHtml(text[a.name]) + "</div>" : "") +
+      "</li>";
+  }).join("");
+  return '<div class="alts"><p class="blk-label">Pending alternatives</p>' +
+    '<ul class="altlist">' + items + "</ul>" +
+    '<p class="altnote">' +
+    "The standing answer keeps its authority until the author confirms one of these." +
+    "</p></div>";
 }
 
 /* ------------------------------------------------------------------ *
@@ -830,7 +875,8 @@ function nodeHeader(n) {
   return '<p class="eyebrow">' + eyebrow.join(" &nbsp; ") + "</p>" +
     "<h1 tabindex=\"-1\" id=\"nodetitle\">" + esc(n.question || n.id) + "</h1>" +
     '<dl class="facts">' + items.join("") + "</dl>" +
-    draftNoteHtml(n);
+    draftNoteHtml(n) +
+    alternativesHtml(n);
 }
 
 /* A reading's own page has to carry the citation it is a reading of. */
@@ -857,11 +903,11 @@ function rationaleSection(n) {
   return '<section><h2 class="sect">Rationale</h2><div class="mdbody">' + groupRejected(mdBlocks(n.rationale)) + "</div></section>";
 }
 
-function proposalSection(n) {
-  if (!n.proposal) return "";
-  return '<section><h2 class="sect">Proposal</h2><div class="propblock">' +
-    '<p class="blk-label">proposal, no authority</p>' +
-    '<div class="mdbody">' + mdHtml(n.proposal) + "</div></div></section>";
+function accountSection(n) {
+  if (!n.account) return "";
+  return '<section><h2 class="sect">Account</h2><div class="propblock">' +
+    '<p class="blk-label">the AI\'s account</p>' +
+    '<div class="mdbody">' + mdHtml(n.account) + "</div></div></section>";
 }
 
 function instrumentSection(n) {
@@ -935,7 +981,7 @@ function renderNode(n) {
     readsSection(n) +
     answerSection(n) +
     rationaleSection(n) +
-    proposalSection(n) +
+    accountSection(n) +
     instrumentSection(n) +
     traditionsSection(kids) +
     refinementsSection(kids) +

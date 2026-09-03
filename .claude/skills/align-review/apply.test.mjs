@@ -4,8 +4,9 @@
 // the live disposition/ graph (see SKILL.md: "Never edit disposition/"):
 // packages/disposition/fixtures/valid-dialogue/ for the old per-node shape
 // (kept so --fields-only, and JSON files shaped the old way, still work),
-// and fixtures/frontier/ beside this file for the whole-frontier batch
-// shape frontier-consistency.md and dialogue.md describe.
+// and fixtures/frontier/ beside this file for the batch shape
+// clean-context-review.md and frontier-consistency.md describe -- the nodes
+// at `stage: review`, judged against the full graph.
 
 import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -23,9 +24,8 @@ const FIXTURE_SRC = path.join(REPO_ROOT, "packages/disposition/fixtures/valid-di
 const FRONTIER_FIXTURE_SRC = path.join(HERE, "fixtures/frontier");
 const APPLY_MJS = path.join(HERE, "apply.mjs");
 
-// Named by the brief: "test against copies under
-// /home/n8/.claude/jobs/3dcce675/tmp/apply-check/".
-const TMP_BASE = "/home/n8/.claude/jobs/3dcce675/tmp/apply-check";
+// Named by the brief: test against copies under this job's scratch dir.
+const TMP_BASE = "/home/n8/.claude/jobs/55639327/tmp/align-review/apply-check";
 
 const tmpDirs = [];
 after(async () => {
@@ -53,7 +53,7 @@ async function freshFixtureScratch(prefix) {
   return dir;
 }
 
-/** A fresh copy of the whole-frontier batch fixture graph. */
+/** A fresh copy of the batch fixture graph. */
 async function freshFrontierFixture(prefix) {
   await mkdir(TMP_BASE, { recursive: true });
   const dir = await mkdtemp(path.join(TMP_BASE, prefix));
@@ -87,7 +87,7 @@ function fieldValue(text, key) {
 }
 
 describe("apply.mjs: forward", () => {
-  test("appends the subsection, sets stage ruling, writes the review block, keeps other lines byte for byte", async () => {
+  test("appends the subsection to '## Account', sets stage ruling, writes the review block, keeps other lines byte for byte", async () => {
     const rootDir = await freshFixture("fwd-");
     const reviewDir = path.join(rootDir, "_review");
     const file = await reviewNodePath(rootDir);
@@ -119,14 +119,13 @@ describe("apply.mjs: forward", () => {
 
     // Frontmatter: stage flips, recommendation untouched, review block new.
     assert.equal(fieldValue(afterText, "stage"), "ruling");
-    assert.ok(afterText.includes("recommendation:\n  class: delegated\n  boldness: high\n"), "recommendation kept byte for byte");
+    assert.ok(afterText.includes("recommendation:\n  adopts: standing\n  class: delegated\n  boldness: high\n"), "recommendation kept byte for byte");
     const block = reviewBlockOf(afterText);
     assert.ok(block, "review block present");
     assert.equal(fieldValue(block, "verdict"), "forward");
     assert.equal(fieldValue(block, "strength"), "moderate");
     assert.equal(fieldValue(block, "date"), DATE);
     assert.equal(fieldValue(block, "of"), wantHash);
-    assert.ok(!block.includes("siblings"), "the review block is verdict/strength/date/of only");
 
     // Untouched lines: question and the Disposition paragraph survive verbatim.
     assert.ok(afterText.includes("question: Should boldness gate which drafts need a second reviewer?\n"));
@@ -136,7 +135,7 @@ describe("apply.mjs: forward", () => {
     const expectedSubsection = [
       "### Clean-context review, 2026-09-03",
       "",
-      "Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.",
+      "Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.",
       "",
       "Findings:",
       "",
@@ -150,8 +149,9 @@ describe("apply.mjs: forward", () => {
       "",
     ].join("\n");
     assert.ok(afterText.endsWith(expectedSubsection), `unexpected tail:\n${afterText.slice(-400)}`);
-    // The pre-existing Proposal placeholder text is kept, ahead of the new subsection.
-    assert.ok(afterText.includes("Under clean-context review; no ruling yet, so no `review` data.\n\n### Clean-context review"));
+    // The pre-existing Account text is kept, ahead of the new subsection.
+    assert.ok(afterText.includes("'## Recommendation' fence.\n\n### Clean-context review"));
+    assert.ok(!afterText.includes("## Proposal"), "the section is named '## Account' now");
   });
 });
 
@@ -189,12 +189,12 @@ describe("apply.mjs: kickback", () => {
 });
 
 describe("apply.mjs: override", () => {
-  test("wins over the verdict's stage; the appended prose still narrates the reviewer's own verdict; creates '## Proposal' when absent", async () => {
+  test("wins over the verdict's stage; the appended prose still narrates the reviewer's own verdict; creates '## Account' when absent", async () => {
     const rootDir = await freshFixture("ovr-");
     const reviewDir = path.join(rootDir, "_review");
     const file = await answeredWithStagePath(rootDir);
     const before = await readFile(file, "utf8");
-    assert.ok(!before.includes("## Proposal"), "fixture precondition: no Proposal section yet");
+    assert.ok(!before.includes("## Account"), "fixture precondition: no Account section yet");
 
     const entry = {
       id: ANSWERED_WITH_STAGE,
@@ -220,7 +220,7 @@ describe("apply.mjs: override", () => {
     const afterText = await readFile(file, "utf8");
     assert.equal(fieldValue(afterText, "stage"), "periagogic", "override wins over kickback_stage");
     assert.ok(afterText.includes("Verdict: kicked back to the maieutic stage."), "prose still reports the reviewer's own verdict");
-    assert.ok(afterText.includes("\n## Proposal\n\n### Clean-context review"), "Proposal section created at the end");
+    assert.ok(afterText.includes("\n## Account\n\n### Clean-context review"), "Account section created at the end");
     // authority stamp untouched
     assert.ok(afterText.includes("authority:\n  class: ratified\n  by: Fixture Author\n  date: 2026-09-03\n"));
   });
@@ -254,7 +254,7 @@ describe("apply.mjs: override", () => {
 
     const afterText = await readFile(file, "utf8");
     const draftFenceAfter = afterText.match(/```markdown\n([\s\S]*?)\n```/)[1];
-    assert.equal(draftFenceAfter, draftFenceBefore, "the '## Draft' fence is never touched");
+    assert.equal(draftFenceAfter, draftFenceBefore, "the '## Recommendation' fence is never touched");
 
     const block = reviewBlockOf(afterText);
     assert.equal(fieldValue(block, "verdict"), "forward");
@@ -262,7 +262,7 @@ describe("apply.mjs: override", () => {
     assert.deepEqual(Object.keys(YAMLish(block)), ["verdict", "strength", "date", "of"], "review block is exactly these four keys");
 
     // draft hash is independent of stage/recommendation/review and of the
-    // Proposal text, so it must be unchanged by this edit.
+    // account text, so it must be unchanged by this edit.
     const oldHash = fieldValue(reviewBlockOf(before), "of");
     assert.equal(fieldValue(block, "of"), oldHash);
   });
@@ -310,7 +310,7 @@ describe("apply.mjs: amendment", () => {
     const fmAfter = afterText.slice(0, afterText.indexOf("\n## "));
     assert.equal(fmAfter, fmBefore, "frontmatter, including the existing review: block, is untouched by an amendment entry");
 
-    assert.ok(afterText.includes("Ratify the draft above.\n\n### Clean-context review of the amendment, 2026-09-03"));
+    assert.ok(afterText.includes("Ratify the alternative above.\n\n### Clean-context review of the amendment, 2026-09-03"));
     assert.ok(
       afterText.includes(
         "Read in clean context by a subagent given the node, its ancestry, the author's words, and the amendment named in the brief, and nothing of the sitting. Verdict: forward to the author's ruling.",
@@ -322,7 +322,7 @@ describe("apply.mjs: amendment", () => {
 });
 
 describe("apply.mjs: --fields-only", () => {
-  test("writes only the review block and the stage, leaving an already-hand-applied Proposal untouched, and computes the same hash the real reader would", async () => {
+  test("writes only the review block and the stage, leaving an already-hand-applied Account untouched, and computes the same hash the real reader would", async () => {
     const rootDir = await freshFixture("fields-");
     const reviewDir = path.join(rootDir, "_review");
     const file = await reviewNodePath(rootDir);
@@ -335,30 +335,25 @@ describe("apply.mjs: --fields-only", () => {
 
     // Simulate a node hand-advanced to `stage: ruling` with its review
     // applied by hand before apply.mjs existed: a '### Clean-context
-    // review' subsection in the Proposal, but no `review:` frontmatter --
-    // exactly today's live-graph shape (see brief-apply-script.md's note).
+    // review' subsection in the Account, but no `review:` frontmatter.
     // This file, read by itself, no longer validates (dialogue.md's "stage
     // ruling requires a 'review' with verdict forward"), which is the
     // point of the test.
-    const seeded = original
-      .replace("stage: review", "stage: ruling")
-      .replace(
-        "## Proposal\n\nUnder clean-context review; no ruling yet, so no `review` data.",
-        [
-          "## Proposal",
-          "",
-          "### Clean-context review, 2026-09-01",
-          "",
-          "Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.",
-          "",
-          "Findings:",
-          "",
-          "- Applied by hand before apply.mjs existed.",
-          "",
-          "Strongest counter-argument (weak): None worth the author's time.",
-        ].join("\n"),
-      );
-    assert.notEqual(seeded, original, "fixture edit precondition: both replacements matched");
+    const seeded = `${original.slice(0, original.indexOf("## Account")).replace("stage: review", "stage: ruling")}${[
+      "## Account",
+      "",
+      "### Clean-context review, 2026-09-01",
+      "",
+      "Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.",
+      "",
+      "Findings:",
+      "",
+      "- Applied by hand before apply.mjs existed.",
+      "",
+      "Strongest counter-argument (weak): None worth the author's time.",
+      "",
+    ].join("\n")}`;
+    assert.ok(seeded.includes("stage: ruling"), "fixture edit precondition: the stage replacement matched");
     await writeFile(file, seeded);
     assert.throws(() => parseNode(seeded, { id: REVIEW_NODE, graph: "main", slug: "review-node", path: file }), /stage ruling requires a 'review' with verdict forward/, "precondition: the seeded file does not validate standalone");
 
@@ -376,9 +371,9 @@ describe("apply.mjs: --fields-only", () => {
     assert.equal(result.validation.ok, true, "the one field-completed node now validates on its own");
 
     const afterText = await readFile(file, "utf8");
-    const proposalAfter = afterText.slice(afterText.indexOf("## Proposal"));
-    const proposalBefore = seeded.slice(seeded.indexOf("## Proposal"));
-    assert.equal(proposalAfter, proposalBefore, "the Proposal (already hand-applied) is never touched under --fields-only");
+    const accountAfter = afterText.slice(afterText.indexOf("## Account"));
+    const accountBefore = seeded.slice(seeded.indexOf("## Account"));
+    assert.equal(accountAfter, accountBefore, "the Account (already hand-applied) is never touched under --fields-only");
 
     assert.equal(fieldValue(afterText, "stage"), "ruling");
     const block = reviewBlockOf(afterText);
@@ -491,8 +486,9 @@ describe("apply.mjs: CLI (old shape -- a JSON list file, so batch-detection fall
 });
 
 // --------------------------------------------------------------------------
-// apply.mjs: the whole-frontier batch shape (frontier-consistency.md,
-// dialogue.md, SKILL.md §4)
+// apply.mjs: the batch shape (clean-context-review.md, frontier-consistency.md,
+// SKILL.md §4): the nodes at `stage: review` receive verdicts; a finding may
+// name any node in the graph, and may propose an alternative on one.
 // --------------------------------------------------------------------------
 
 const MAIEUTIC_NODE = "align-review.test/main/maieutic-node";
@@ -500,6 +496,7 @@ const PERIAGOGIC_NODE = "align-review.test/main/periagogic-node";
 const REVIEW_A = "align-review.test/main/review-a";
 const REVIEW_B = "align-review.test/main/review-b";
 const RULING_A = "align-review.test/main/ruling-a";
+const ANSWERED_NODE = "align-review.test/main/answered-ratified";
 const BATCH_DATE = "2026-09-03";
 
 function nodePath(rootDir, slug) {
@@ -507,18 +504,18 @@ function nodePath(rootDir, slug) {
 }
 
 function fullReadIds() {
-  return [MAIEUTIC_NODE, PERIAGOGIC_NODE, REVIEW_A, REVIEW_B, RULING_A];
+  return [MAIEUTIC_NODE, PERIAGOGIC_NODE, REVIEW_A, REVIEW_B, RULING_A, ANSWERED_NODE];
 }
+/** The batch: the nodes at `stage: review`, and no other. */
 function fullNodeEntries() {
   return [
     { id: REVIEW_A, verdict: "forward", findings: [], counter_argument: null, strength: "none", facts_check: null },
     { id: REVIEW_B, verdict: "forward", findings: [], counter_argument: null, strength: "none", facts_check: null },
-    { id: RULING_A, verdict: "forward", findings: [], counter_argument: null, strength: "none", facts_check: null },
   ];
 }
 
 describe("apply.mjs: batch shape", () => {
-  test("verdicts, a frontier finding across two differently-staged nodes, the earliest-stage rule against a forward, and an override -- end to end", async () => {
+  test("verdicts on the batch, a finding across two non-batch nodes, a finding on a ruling-stage node, the earliest-stage rule against a forward, and an override -- end to end", async () => {
     const rootDir = await freshFrontierFixture("batch-e2e-");
     const reviewDir = path.join(rootDir, "_review");
 
@@ -529,9 +526,8 @@ describe("apply.mjs: batch shape", () => {
     const periagogicFile = nodePath(rootDir, "periagogic-node");
 
     const reviewABefore = await readFile(reviewAFile, "utf8");
-    const rulingABefore = await readFile(rulingAFile, "utf8");
     const wantHashReviewA = parseNode(reviewABefore, { id: REVIEW_A, graph: "main", slug: "review-a", path: reviewAFile }).draftHash;
-    const wantHashRulingA = parseNode(rulingABefore, { id: RULING_A, graph: "main", slug: "ruling-a", path: rulingAFile }).draftHash;
+    const rulingABefore = await readFile(rulingAFile, "utf8");
 
     const batch = {
       date: BATCH_DATE,
@@ -539,7 +535,6 @@ describe("apply.mjs: batch shape", () => {
       nodes: [
         { id: REVIEW_A, verdict: "forward", findings: ["Answer: sound as drafted."], counter_argument: "Could be read more narrowly.", strength: "moderate", facts_check: "Boldness moderate looks right." },
         { id: REVIEW_B, verdict: "kickback", kickback_stage: "maieutic", findings: ["Answer: ambiguous about the second case."], counter_argument: null, strength: "none", facts_check: null },
-        { id: RULING_A, verdict: "forward", findings: ["Rationale: still sound on a second look."], counter_argument: "The earlier round's record is thin.", strength: "weak", facts_check: null },
       ],
       frontier: [
         {
@@ -556,11 +551,18 @@ describe("apply.mjs: batch shape", () => {
           proposal: "Split review-a into two nodes once the ground settles.",
           stages: { [REVIEW_A]: "maieutic" },
         },
+        {
+          kind: "cross-reference",
+          nodes: [RULING_A],
+          finding: "ruling-a's account cites a reading that no longer says what is attributed to it.",
+          proposal: "Redraft the account's citation.",
+          stages: { [RULING_A]: "maieutic" },
+        },
       ],
-      ruling_order: [RULING_A],
+      ruling_order: [REVIEW_A],
     };
 
-    // review-b's lock: created before the run, must be gone after.
+    // a lock created before the run must be gone after it.
     await mkdir(reviewDir, { recursive: true });
     await writeFile(path.join(reviewDir, "frontier.lock"), '{"pid": 1}\n');
 
@@ -574,7 +576,7 @@ describe("apply.mjs: batch shape", () => {
 
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.equal(await readFile(path.join(reviewDir, "frontier.lock"), "utf8").catch(() => null), null, "the lock is removed after a successful write");
-    assert.equal(result.report.at(-1), RULING_A, "ruling_order is printed as the report's last line(s)");
+    assert.equal(result.report.at(-1), REVIEW_A, "ruling_order is printed as the report's last line(s)");
 
     // review-a: forwarded by its own verdict (-> ruling) but the
     // decomposition finding also names it at maieutic; maieutic is
@@ -598,18 +600,14 @@ describe("apply.mjs: batch shape", () => {
     assert.ok(reviewBAfter.includes("Verdict: kicked back to the maieutic stage."), "prose still reports the reviewer's own kickback_stage");
     assert.ok(!reviewBAfter.includes("Frontier finding"), "no finding named review-b");
 
-    // ruling-a: re-forwarded; stage stays ruling; the earlier round's
-    // subsection survives as dialogue history, the new one is appended
-    // after it, and the review: block is replaced wholesale (new date).
+    // ruling-a: outside the batch, so no verdict and no new review: block --
+    // the finding alone moves it, and its earlier round's subsection stays.
     const rulingAAfter = await readFile(rulingAFile, "utf8");
-    assert.equal(fieldValue(rulingAAfter, "stage"), "ruling");
+    assert.equal(fieldValue(rulingAAfter, "stage"), "maieutic", "a finding kicks back a node outside the batch");
     assert.ok(rulingAAfter.includes("### Clean-context review, 2026-08-01"), "the earlier round's subsection is kept");
-    assert.ok(rulingAAfter.includes("### Clean-context review, 2026-09-03"), "this round's subsection is appended");
-    const rulingAProposal = rulingAAfter.slice(rulingAAfter.indexOf("## Proposal"));
-    assert.ok(rulingAProposal.indexOf("2026-08-01") < rulingAProposal.indexOf("2026-09-03"), "the earlier subsection precedes the new one in the Proposal");
-    const rulingABlock = reviewBlockOf(rulingAAfter);
-    assert.equal(fieldValue(rulingABlock, "date"), BATCH_DATE, "the review: block itself is replaced, not merged");
-    assert.equal(fieldValue(rulingABlock, "of"), wantHashRulingA);
+    assert.ok(!rulingAAfter.includes("### Clean-context review, 2026-09-03"), "no verdict is recorded on a node outside the batch");
+    assert.ok(rulingAAfter.includes("### Frontier finding, 2026-09-03") && rulingAAfter.includes("Kind: cross-reference."));
+    assert.equal(reviewBlockOf(rulingAAfter), reviewBlockOf(rulingABefore), "the review: block of a node with no verdict is left as it stands");
 
     // maieutic-node and periagogic-node: findings-only, no verdict of
     // their own -- no Clean-context review subsection, no review: block,
@@ -625,6 +623,9 @@ describe("apply.mjs: batch shape", () => {
     assert.ok(periagogicAfter.includes("### Frontier finding, 2026-09-03") && periagogicAfter.includes("Kind: placement."));
     assert.ok(maieuticAfter.includes(`Also named: ${PERIAGOGIC_NODE}.`));
     assert.ok(periagogicAfter.includes(`Also named: ${MAIEUTIC_NODE}.`));
+    // the account section is named '## Account' now, and is created where absent.
+    assert.ok(maieuticAfter.includes("\n## Account\n\n### Frontier finding"));
+    assert.ok(!maieuticAfter.includes("## Proposal"));
   });
 
   test("--dry prints the plan (subsections and stage before/after) and writes nothing", async () => {
@@ -641,25 +642,7 @@ describe("apply.mjs: batch shape", () => {
     await assert.rejects(readFile(path.join(reviewDir, "frontier.lock")), { code: "ENOENT" }, "no lock under --dry");
   });
 
-  describe("checks (collected before anything is written)", () => {
-    test("a staged node missing from 'read' is refused", async () => {
-      const rootDir = await freshFrontierFixture("chk-read-");
-      const reviewDir = path.join(rootDir, "_review");
-      const before = await readFile(nodePath(rootDir, "review-a"), "utf8");
-
-      const batch = {
-        date: BATCH_DATE,
-        read: fullReadIds().filter((id) => id !== MAIEUTIC_NODE),
-        nodes: fullNodeEntries(),
-        frontier: [],
-      };
-      await assert.rejects(
-        () => applyReviews({ rootDir, reviewDir, batch, replies: {} }),
-        new RegExp(`'read' is missing ${escapeRe(MAIEUTIC_NODE)}`),
-      );
-      assert.equal(await readFile(nodePath(rootDir, "review-a"), "utf8"), before, "nothing written on refusal");
-    });
-
+  describe("the batch is the review stage, and only that", () => {
     test("a review-stage node missing its 'nodes' entry is refused", async () => {
       const rootDir = await freshFrontierFixture("chk-entry-");
       const reviewDir = path.join(rootDir, "_review");
@@ -672,8 +655,50 @@ describe("apply.mjs: batch shape", () => {
       };
       await assert.rejects(
         () => applyReviews({ rootDir, reviewDir, batch, replies: {} }),
-        new RegExp(`'nodes' is missing an entry for ${escapeRe(REVIEW_A)}`),
+        new RegExp(`'nodes' is missing an entry for ${escapeRe(REVIEW_A)} \\(stage review\\)`),
       );
+    });
+
+    test("a verdict on a node outside the batch is refused: only the batch receives verdicts", async () => {
+      const rootDir = await freshFrontierFixture("chk-nonbatch-");
+      const reviewDir = path.join(rootDir, "_review");
+      const before = await readFile(nodePath(rootDir, "ruling-a"), "utf8");
+
+      const batch = {
+        date: BATCH_DATE,
+        read: fullReadIds(),
+        nodes: [...fullNodeEntries(), { id: RULING_A, verdict: "forward", findings: [], counter_argument: null, strength: "none", facts_check: null }],
+        frontier: [],
+      };
+      await assert.rejects(
+        () => applyReviews({ rootDir, reviewDir, batch, replies: {} }),
+        new RegExp(`'nodes' names ${escapeRe(RULING_A)}, which is not in the batch \\(stage ruling\\); only the batch receives verdicts`),
+      );
+      assert.equal(await readFile(nodePath(rootDir, "ruling-a"), "utf8"), before, "nothing written on refusal");
+    });
+
+    test("a batch node missing from 'read' is refused; a periagogic node absent from 'read' is not", async () => {
+      const rootDir = await freshFrontierFixture("chk-read-");
+      const reviewDir = path.join(rootDir, "_review");
+
+      await assert.rejects(
+        () => applyReviews({
+          rootDir,
+          reviewDir,
+          batch: { date: BATCH_DATE, read: fullReadIds().filter((id) => id !== REVIEW_A), nodes: fullNodeEntries(), frontier: [] },
+          replies: {},
+        }),
+        new RegExp(`'read' is missing ${escapeRe(REVIEW_A)}, which is in the batch \\(stage review\\)`),
+      );
+
+      const ok = await applyReviews({
+        rootDir,
+        reviewDir,
+        batch: { date: BATCH_DATE, read: [REVIEW_A, REVIEW_B], nodes: fullNodeEntries(), frontier: [] },
+        replies: {},
+        dry: true,
+      });
+      assert.equal(ok.plans.length, 2);
     });
 
     test("a frontier finding with no 'stages' entry for a named id (and no override) is allowed: the subsection lands, the stage is left untouched", async () => {
@@ -738,7 +763,7 @@ describe("apply.mjs: batch shape", () => {
         nodes: fullNodeEntries(),
         frontier: [{ kind: "vocabulary", nodes: [MAIEUTIC_NODE], finding: "x", proposal: "y", stages: {} }],
       };
-      const result = await applyReviews({ rootDir, reviewDir, batch, replies: {}, overrides: { [MAIEUTIC_NODE]: "periagogic" } });
+      await applyReviews({ rootDir, reviewDir, batch, replies: {}, overrides: { [MAIEUTIC_NODE]: "periagogic" } });
       assert.equal(fieldValue(await readFile(nodePath(rootDir, "maieutic-node"), "utf8"), "stage"), "periagogic");
     });
 
@@ -753,6 +778,224 @@ describe("apply.mjs: batch shape", () => {
         () => applyReviews({ rootDir, reviewDir, batch, replies: {} }),
         new RegExp(`${escapeRe(REVIEW_A)}: strength 'strong' requires a reply`),
       );
+    });
+  });
+
+  describe("a finding may name a node outside the batch", () => {
+    test("an answered node with no stage is given one and opened, when the finding names its stage", async () => {
+      const rootDir = await freshFrontierFixture("nonbatch-answered-");
+      const reviewDir = path.join(rootDir, "_review");
+      const file = nodePath(rootDir, "answered-ratified");
+      const before = await readFile(file, "utf8");
+      assert.ok(!before.includes("stage:"), "fixture precondition: settled doctrine, no dialogue open");
+
+      const batch = {
+        date: BATCH_DATE,
+        read: fullReadIds(),
+        nodes: fullNodeEntries(),
+        frontier: [{
+          kind: "contradiction",
+          nodes: [ANSWERED_NODE, REVIEW_A],
+          finding: "The answered node and review-a's answer disagree on the same matter.",
+          proposal: "Reopen the answered node's ground.",
+          stages: { [ANSWERED_NODE]: "periagogic" },
+        }],
+      };
+      const result = await applyReviews({ rootDir, reviewDir, batch, replies: {} });
+      assert.equal(result.validation.ok, true, result.validation.message);
+      assert.ok(result.report.includes(`${ANSWERED_NODE}: Frontier finding, no stage → periagogic`));
+
+      const after = await readFile(file, "utf8");
+      assert.equal(fieldValue(after, "stage"), "periagogic", "the stage line is inserted, opening the dialogue");
+      assert.ok(after.includes("authority:\n  class: ratified\n  by: Fixture Author\n  date: 2026-08-01\n"), "the stamp is untouched");
+      assert.ok(after.includes("\n## Account\n\n### Frontier finding, 2026-09-03"));
+    });
+
+    test("a stage-less node named with no stage at all is refused, naming what is missing", async () => {
+      const rootDir = await freshFrontierFixture("nonbatch-nostage-");
+      const reviewDir = path.join(rootDir, "_review");
+      const before = await readFile(nodePath(rootDir, "answered-ratified"), "utf8");
+
+      const batch = {
+        date: BATCH_DATE,
+        read: fullReadIds(),
+        nodes: fullNodeEntries(),
+        frontier: [{
+          kind: "coverage",
+          nodes: [ANSWERED_NODE],
+          finding: "The answered node is cited for context only.",
+          proposal: "Nothing.",
+          stages: {},
+        }],
+      };
+      await assert.rejects(
+        () => applyReviews({ rootDir, reviewDir, batch, replies: {} }),
+        /carries no stage, and nothing in this batch names one for it/,
+      );
+      assert.equal(await readFile(nodePath(rootDir, "answered-ratified"), "utf8"), before, "nothing written on refusal");
+    });
+  });
+
+  describe("a merge finding is recorded as a pending alternative", () => {
+    test("on a node that already has an '## Alternatives' section: the entry is appended, in order, with source review and the review's date", async () => {
+      const rootDir = await freshFrontierFixture("merge-append-");
+      const reviewDir = path.join(rootDir, "_review");
+      const file = nodePath(rootDir, "review-b");
+
+      const batch = {
+        date: BATCH_DATE,
+        read: fullReadIds(),
+        nodes: fullNodeEntries(),
+        frontier: [{
+          kind: "merge",
+          nodes: [REVIEW_B, MAIEUTIC_NODE],
+          finding: "maieutic-node is a new answer to review-b's question, not a new question.",
+          proposal: "Fold maieutic-node into review-b as an alternative; review-b survives.",
+          stages: { [REVIEW_B]: "maieutic" },
+          alternatives: [{
+            node: REVIEW_B,
+            name: "folded-from-maieutic",
+            text: "Answer B as maieutic-node would: the same question, answered from the other end.",
+          }],
+        }],
+      };
+      const result = await applyReviews({ rootDir, reviewDir, batch, replies: {} });
+      assert.equal(result.validation.ok, true, result.validation.message);
+      assert.ok(result.report.some((l) => l.includes("alternative 'folded-from-maieutic'")), `report does not name the alternative: ${result.report.join(" | ")}`);
+
+      const after = await readFile(file, "utf8");
+      const parsed = parseNode(after, { id: REVIEW_B, graph: "main", slug: "review-b", path: file });
+      assert.deepEqual(parsed.alternatives.map((a) => [a.name, a.source, a.ref]), [
+        ["narrower", "ai", null],
+        ["folded-from-maieutic", "review", "2026-09-03"],
+      ], "the review's alternative is appended after the node's own");
+      assert.equal(parsed.alternativesText["folded-from-maieutic"], "Answer B as maieutic-node would: the same question, answered from the other end.");
+      assert.ok(after.includes("### narrower\n"), "the node's own alternative survives");
+      assert.ok(after.indexOf("### narrower") < after.indexOf("### folded-from-maieutic"), "the subsections follow the list's order");
+      assert.ok(after.includes("Recorded as a pending alternative on this node: `folded-from-maieutic` (source review, 2026-09-03)."));
+      // and on the other node the finding names, the pointer to where it went
+      const other = await readFile(nodePath(rootDir, "maieutic-node"), "utf8");
+      assert.ok(other.includes(`Recorded as a pending alternative on ${REVIEW_B}: \`folded-from-maieutic\``));
+    });
+
+    test("on a node with no '## Alternatives' section: the list and the section are created, the section before '## Account'", async () => {
+      const rootDir = await freshFrontierFixture("merge-create-");
+      const reviewDir = path.join(rootDir, "_review");
+      const file = nodePath(rootDir, "review-a");
+
+      const batch = {
+        date: BATCH_DATE,
+        read: fullReadIds(),
+        nodes: fullNodeEntries(),
+        frontier: [{
+          kind: "merge",
+          nodes: [REVIEW_A],
+          finding: "The author's words on review-a are a new answer to review-a's own question.",
+          proposal: "Record them as an alternative on review-a.",
+          stages: { [REVIEW_A]: "maieutic" },
+          alternatives: [{ node: REVIEW_A, name: "the-authors-own", text: "Answer A as the author's words already answer it." }],
+        }],
+      };
+      const result = await applyReviews({ rootDir, reviewDir, batch, replies: {} });
+      assert.equal(result.validation.ok, true, result.validation.message);
+
+      const after = await readFile(file, "utf8");
+      const parsed = parseNode(after, { id: REVIEW_A, graph: "main", slug: "review-a", path: file });
+      assert.deepEqual(parsed.alternatives.map((a) => a.name), ["the-authors-own"]);
+      assert.equal(parsed.alternativesText["the-authors-own"], "Answer A as the author's words already answer it.");
+      assert.ok(after.indexOf("\n## Alternatives\n") < after.indexOf("\n## Account\n"), "'## Alternatives' is inserted before '## Account'");
+      assert.ok(after.includes("alternatives:\n  - name: the-authors-own\n    source: review\n    ref: \"2026-09-03\"\n"));
+    });
+
+    test("a name already listed on the node is skipped with a note; the finding is still recorded", async () => {
+      const rootDir = await freshFrontierFixture("merge-dup-");
+      const reviewDir = path.join(rootDir, "_review");
+      const file = nodePath(rootDir, "review-b");
+
+      const batch = {
+        date: BATCH_DATE,
+        read: fullReadIds(),
+        nodes: fullNodeEntries(),
+        frontier: [{
+          kind: "merge",
+          nodes: [REVIEW_B],
+          finding: "The same narrowing is on the table twice.",
+          proposal: "Record it as an alternative on review-b.",
+          stages: {},
+          alternatives: [{ node: REVIEW_B, name: "narrower", text: "A second wording of the alternative already listed." }],
+        }],
+      };
+      const result = await applyReviews({ rootDir, reviewDir, batch, replies: {} });
+      assert.equal(result.validation.ok, true, result.validation.message);
+      assert.ok(
+        result.report.includes(`${REVIEW_B}: alternative 'narrower' is already listed on this node; skipped (the finding is still recorded)`),
+        `report does not carry the skip note: ${result.report.join(" | ")}`,
+      );
+
+      const after = await readFile(file, "utf8");
+      const parsed = parseNode(after, { id: REVIEW_B, graph: "main", slug: "review-b", path: file });
+      assert.deepEqual(parsed.alternatives.map((a) => a.name), ["narrower"], "the list is not doubled");
+      assert.equal((after.match(/### narrower/g) || []).length, 1, "the subsection is not doubled");
+      assert.ok(after.includes("### Frontier finding, 2026-09-03"), "the finding is still recorded");
+    });
+
+    test("a merge finding with no alternative, an alternative on an unnamed node, and a reserved name are each refused", async () => {
+      const rootDir = await freshFrontierFixture("merge-refuse-");
+      const reviewDir = path.join(rootDir, "_review");
+      const before = await readFile(nodePath(rootDir, "review-b"), "utf8");
+      const base = { date: BATCH_DATE, read: fullReadIds(), nodes: fullNodeEntries() };
+
+      await assert.rejects(
+        () => applyReviews({
+          rootDir,
+          reviewDir,
+          batch: { ...base, frontier: [{ kind: "merge", nodes: [REVIEW_B], finding: "x", proposal: "y", stages: {} }] },
+          replies: {},
+        }),
+        /a 'merge' finding must propose at least one alternative/,
+      );
+
+      await assert.rejects(
+        () => applyReviews({
+          rootDir,
+          reviewDir,
+          batch: {
+            ...base,
+            frontier: [{
+              kind: "redundancy",
+              nodes: [REVIEW_B],
+              finding: "x",
+              proposal: "y",
+              stages: {},
+              alternatives: [{ node: REVIEW_A, name: "elsewhere", text: "z" }],
+            }],
+          },
+          replies: {},
+        }),
+        new RegExp(`proposes an alternative on ${escapeRe(REVIEW_A)}, which this finding does not name in 'nodes'`),
+      );
+
+      await assert.rejects(
+        () => applyReviews({
+          rootDir,
+          reviewDir,
+          batch: {
+            ...base,
+            frontier: [{
+              kind: "merge",
+              nodes: [REVIEW_B],
+              finding: "x",
+              proposal: "y",
+              stages: {},
+              alternatives: [{ node: REVIEW_B, name: "standing", text: "z" }],
+            }],
+          },
+          replies: {},
+        }),
+        /'name' must be a lowercase slug and never 'standing'/,
+      );
+
+      assert.equal(await readFile(nodePath(rootDir, "review-b"), "utf8"), before, "nothing written on any refusal");
     });
   });
 

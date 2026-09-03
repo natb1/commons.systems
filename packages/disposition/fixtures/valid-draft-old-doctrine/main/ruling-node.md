@@ -6,9 +6,16 @@ authority:
   by: claude
   date: 2026-09-03
 stage: ruling
+alternatives:
+  - name: presume-freely
+    source: ai
+    ref: 2026-09-03
 recommendation:
+  adopts: presume-freely
   class: ratified
   boldness: moderate
+  amends: 7a2ed804a439f12f0cf6c9a512b7cc18f65e35aa
+  at: a1b2c3d
 review:
   verdict: forward
   strength: strong
@@ -28,7 +35,15 @@ Not yet: this is the node as it stands, unratified.
 
 Reasoned from the fixture's own small record.
 
-## Draft
+## Alternatives
+
+### presume-freely
+
+Let the fence carry whatever vocabulary the ruling it presumes would
+introduce; the validator checks only that it parses and answers the same
+question.
+
+## Recommendation
 
 ```markdown
 ---
@@ -49,6 +64,6 @@ still a placeholder, and a tier the vocabulary does not name are all
 carried through unchecked.
 ```
 
-## Proposal
+## Account
 
-Ratify the draft above.
+Ratify the alternative above.

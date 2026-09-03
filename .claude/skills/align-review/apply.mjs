@@ -4,21 +4,28 @@
 // Applies clean-context review verdicts (see brief.md, SKILL.md §4, and the
 // disposition-graph nodes clean-context-review/recording/dialogue/
 // frontier-consistency) to node files: appends the reviewer's account to
-// '## Proposal' and writes the dialogue frontmatter (`stage`, `review`) the
-// verdict and the frontier's findings imply. The reviewer only recommends;
-// this script is the mechanical half of "the session decides and answers
-// for the record" -- replies and overrides are supplied by the caller,
-// never invented here.
+// '## Account', records a proposed merge or split as a pending alternative on
+// the node it would change, and writes the dialogue frontmatter (`stage`,
+// `review`, `alternatives`) the verdict and the findings imply. The reviewer
+// only recommends; this script is the mechanical half of "the session decides
+// and answers for the record" -- replies and overrides are supplied by the
+// caller, never invented here.
 //
 // Usage:
 //   node apply.mjs <json file> --replies <file> \
 //     [--overrides <file>] [--date YYYY-MM-DD] [--dry] [--fields-only]
 //
-// The one <json file> is normally the whole-frontier batch
-// frontier-consistency.md and dialogue.md describe:
+// The one <json file> is normally the batch frontier-consistency.md and
+// clean-context-review.md describe -- the nodes at `stage: review`, judged
+// against the full graph:
 //   { date, read: [id], nodes: [entry], frontier: [finding], ruling_order: [id] }
-// detected by the presence of a `nodes` array. Absent that, the file (or
-// files) are read the old way -- one entry or a JSON list of entries, each
+// detected by the presence of a `nodes` array. A `frontier` finding may name
+// any node in the graph, in the batch or outside it, and may propose
+// alternatives:
+//   { kind, nodes: [id], finding, proposal, stages: {id: stage},
+//     alternatives: [{node, name, text}] }
+// Absent a `nodes` array, the file (or files) are read the old way -- one
+// entry or a JSON list of entries, each
 //   {id, scope?, verdict, kickback_stage?, findings[], counter_argument,
 //    strength, facts_check}
 // `scope` defaults to "node"; the other shape is "amendment" -- so that
@@ -38,7 +45,17 @@ const STAGE_ORDER = ["periagogic", "maieutic", "review", "ruling"];
 const FRONTIER_KINDS = new Set([
   "contradiction", "supersession", "redundancy", "decomposition",
   "vocabulary", "cross-reference", "placement", "coverage",
+  // added 2026-09-03 with the fifteenth validation and the staleness the
+  // recommendation's `amends` pin makes visible (frontier-consistency).
+  "merge", "stale-recommendation",
 ]);
+// the reader's own rule for an alternative's name (read.mjs
+// ALTERNATIVE_NAME_RE), checked here so a bad name is refused before any
+// file is touched rather than caught by the post-write parse.
+const ALTERNATIVE_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
+// the sections a node file may carry, in order: an inserted '## Alternatives'
+// goes before the first of the sections that follow it.
+const SECTIONS_AFTER_ALTERNATIVES = ["Recommendation", "Account"];
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -146,29 +163,46 @@ function hasReviewSubsection(text) {
   return text.includes("### Clean-context review");
 }
 
-// --------------------------------------------------------------- draft hash
+// ------------------------------------------------------------ file surgery
 //
-// `--fields-only` targets nodes the live graph already carries at `stage:
-// ruling` without ever having had a `review` field written (the two 2026-
-// 09-03 batches, applied by hand before this script existed) -- so
-// `parseNode` on the untouched file throws (dialogue.md/clean-context-
-// review.md's own rule: "stage ruling requires a 'review' with verdict
-// forward"), before ever returning the `draftHash` this script needs to
-// write. `read.mjs` is off limits to edit here (another unit is changing
-// its draft validation concurrently), so this mirrors just the two
-// mechanical, non-validating slices `deriveDraftHash` needs -- the
-// frontmatter's raw text and, when present, the exact '## Draft' fence
-// content -- using the same fence-aware boundary rule `parseBody` and
-// `extractDraftFence` use, but collecting no problems and never recursing
-// into the fence's own content. `deriveDraftHash` itself (imported, not
-// duplicated) does the actual hashing and dialogue-key stripping.
-function splitSectionsLoose(bodyText) {
-  const lines = bodyText.split("\n");
+// Every edit here is made on the raw text -- the frontmatter's own lines, the
+// body's own `## ` blocks -- rather than by YAML.parse + re-serialize, so
+// every line this run does not mean to change (key order, quoting style, the
+// '## Recommendation' fence) survives byte for byte. The fence is why the
+// block splitting below is fence-aware: a recommended node's own `## Answer`
+// heading lives inside a ```markdown block and is not a section of this file.
+
+function splitRaw(rawText) {
+  const lines = rawText.replace(/\r\n/g, "\n").split("\n");
+  if (lines[0].trim() !== "---") throw new Error("file must begin with a '---' frontmatter delimiter");
+  let fmEnd = -1;
+  for (let i = 1; i < lines.length; i += 1) {
+    if (lines[i].trim() === "---") {
+      fmEnd = i;
+      break;
+    }
+  }
+  if (fmEnd === -1) throw new Error("frontmatter is never closed");
+  return { fmLines: lines.slice(1, fmEnd), bodyLines: lines.slice(fmEnd + 1) };
+}
+
+function joinRaw(fmLines, bodyLines) {
+  return ["---", ...fmLines, "---", ...bodyLines].join("\n");
+}
+
+/**
+ * The body's `## ` blocks, in order, each with the index of its heading line
+ * and the index one past its last line. Fenced regions are skipped, using the
+ * same toggling rule read.mjs's `parseBody` uses.
+ *
+ * @returns {Array<{name: string, start: number, end: number}>}
+ */
+function splitBodyBlocks(bodyLines) {
   const headingRe = /^(#{1,6})[ \t]+(.*?)\s*$/;
   const fenceRe = /^[ \t]*(`{3,}|~{3,})/;
   const boundaries = [];
   let fenceChar = null;
-  lines.forEach((line, index) => {
+  bodyLines.forEach((line, index) => {
     const fence = line.match(fenceRe);
     if (fence) {
       if (fenceChar === null) fenceChar = fence[1][0];
@@ -179,14 +213,86 @@ function splitSectionsLoose(bodyText) {
     const m = line.match(headingRe);
     if (m && m[1].length === 2) boundaries.push({ name: m[2], index });
   });
-  const sections = {};
-  boundaries.forEach((b, idx) => {
-    const end = idx + 1 < boundaries.length ? boundaries[idx + 1].index : lines.length;
-    sections[b.name] = lines.slice(b.index + 1, end).join("\n").trim();
-  });
-  return sections;
+  return boundaries.map((b, i) => ({
+    name: b.name,
+    start: b.index,
+    end: i + 1 < boundaries.length ? boundaries[i + 1].index : bodyLines.length,
+  }));
 }
 
+/** Drop the trailing blank lines of `lines[start..end)`, returning the new end. */
+function trimBlockEnd(lines, start, end) {
+  let e = end;
+  while (e > start && lines[e - 1].trim() === "") e -= 1;
+  return e;
+}
+
+/**
+ * Append one subsection to '## Account', creating the section when it is
+ * absent -- at the end of the body, which is where it belongs: '## Account'
+ * is the last section a node file may carry.
+ */
+function appendToAccount(text, subsection) {
+  const { fmLines, bodyLines } = splitRaw(text);
+  const blocks = splitBodyBlocks(bodyLines);
+  const account = blocks.find((b) => b.name === "Account");
+  const lines = [...bodyLines];
+  if (account) {
+    const end = trimBlockEnd(lines, account.start, account.end);
+    lines.splice(end, account.end - end, "", subsection, "");
+  } else {
+    const end = trimBlockEnd(lines, 0, lines.length);
+    lines.splice(end, lines.length - end, "", "## Account", "", subsection, "");
+  }
+  return joinRaw(fmLines, lines);
+}
+
+/**
+ * Append `### <name>` subsections to '## Alternatives', creating the section
+ * when it is absent -- before '## Recommendation'/'## Account' if either is
+ * there, since the reader fixes the section order, and at the end of the body
+ * otherwise.
+ */
+function appendAlternativeSubsections(text, entries) {
+  if (entries.length === 0) return text;
+  const { fmLines, bodyLines } = splitRaw(text);
+  const blocks = splitBodyBlocks(bodyLines);
+  const lines = [...bodyLines];
+  const rendered = [];
+  for (const e of entries) rendered.push("", `### ${e.name}`, "", e.text.trim());
+
+  const alternatives = blocks.find((b) => b.name === "Alternatives");
+  if (alternatives) {
+    const end = trimBlockEnd(lines, alternatives.start, alternatives.end);
+    lines.splice(end, alternatives.end - end, ...rendered, "");
+    return joinRaw(fmLines, lines);
+  }
+
+  const following = blocks.find((b) => SECTIONS_AFTER_ALTERNATIVES.includes(b.name));
+  if (following) {
+    lines.splice(following.start, 0, "## Alternatives", ...rendered, "", "");
+  } else {
+    const end = trimBlockEnd(lines, 0, lines.length);
+    lines.splice(end, lines.length - end, "", "## Alternatives", ...rendered, "");
+  }
+  return joinRaw(fmLines, lines);
+}
+
+// --------------------------------------------------------------- draft hash
+//
+// `--fields-only` targets nodes the live graph already carries at `stage:
+// ruling` without ever having had a `review` field written (the two 2026-
+// 09-03 batches, applied by hand before this script existed) -- so
+// `parseNode` on the untouched file throws (dialogue.md/clean-context-
+// review.md's own rule: "stage ruling requires a 'review' with verdict
+// forward"), before ever returning the `draftHash` this script needs to
+// write. `read.mjs` is off limits to edit here, so this mirrors just the two
+// mechanical, non-validating slices `deriveDraftHash` needs -- the
+// frontmatter's raw text and, when present, the exact '## Recommendation'
+// fence content -- using the same fence-aware boundary rule `parseBody` and
+// `extractDraftFence` use, but collecting no problems and never recursing
+// into the fence's own content. `deriveDraftHash` itself (imported, not
+// duplicated) does the actual hashing and dialogue-key stripping.
 function extractFenceLoose(sectionText) {
   const lines = sectionText.split("\n");
   let i = 0;
@@ -203,21 +309,14 @@ function extractFenceLoose(sectionText) {
 }
 
 function computeDraftHashUnvalidated(rawText) {
-  const lines = rawText.replace(/\r\n/g, "\n").split("\n");
-  let fmEnd = -1;
-  for (let i = 1; i < lines.length; i += 1) {
-    if (lines[i].trim() === "---") {
-      fmEnd = i;
-      break;
-    }
+  const { fmLines, bodyLines } = splitRaw(rawText);
+  const sections = {};
+  for (const b of splitBodyBlocks(bodyLines)) {
+    sections[b.name] = bodyLines.slice(b.start + 1, b.end).join("\n").trim();
   }
-  if (fmEnd === -1) throw new Error("frontmatter is never closed");
-  const fmText = lines.slice(1, fmEnd).join("\n");
-  const bodyText = lines.slice(fmEnd + 1).join("\n");
-  const sections = splitSectionsLoose(bodyText);
-  const draftFence = sections.Draft !== undefined ? extractFenceLoose(sections.Draft) : null;
+  const draftFence = sections.Recommendation !== undefined ? extractFenceLoose(sections.Recommendation) : null;
   return deriveDraftHash({
-    fmText,
+    fmText: fmLines.join("\n"),
     draftFence,
     answer: sections.Answer ?? null,
     rationale: sections.Rationale ?? null,
@@ -225,11 +324,6 @@ function computeDraftHashUnvalidated(rawText) {
 }
 
 // ------------------------------------------------------------- frontmatter
-//
-// Edits the raw frontmatter text directly (find the `stage:` scalar line
-// and the `review:` block by their line boundaries) rather than
-// YAML.parse + re-serialize, so every other frontmatter line -- key order,
-// comments if any, quoting style -- survives byte for byte.
 function findFrontmatterBlock(fmLines, key) {
   const start = fmLines.findIndex((l) => new RegExp(`^${key}:`).test(l));
   if (start === -1) return null;
@@ -239,38 +333,50 @@ function findFrontmatterBlock(fmLines, key) {
 }
 
 function renderReviewBlock({ verdict, strength, date, of }) {
-  return ["review:", `  verdict: ${verdict}`, `  strength: ${strength}`, `  date: ${date}`, `  of: ${of}`];
+  // an all-digit sha1 would parse as a YAML integer and fail the reader's
+  // `of: <sha1>` check, so it is quoted; every other hash is left bare, as
+  // the record already writes it.
+  const ofText = /^\d+$/.test(of) ? `"${of}"` : of;
+  return ["review:", `  verdict: ${verdict}`, `  strength: ${strength}`, `  date: ${date}`, `  of: ${ofText}`];
 }
 
 /**
- * Update `stage:`, unless `stage` is null, and the `review:` block, unless
- * `reviewLines` is null. `reviewLines` is null for a node touched only by a
- * frontier finding (no verdict of its own to record): whatever `review:`
- * block it already carries -- from an earlier round, or none at all -- is
- * left exactly as it stands. `stage` is null for a node no entry names a
- * stage for (a frontier finding that omits it from `stages`, with no
- * verdict and no override either): the top-level `stage:` line, if any, is
- * left exactly as it stands, and none is required to exist.
+ * One `alternatives` list entry, at the indentation the node's own list
+ * already uses (a YAML sequence cannot mix indentations), `source: review`
+ * and the review's date as its `ref`, quoted so an all-digit or date-shaped
+ * ref stays a string.
  */
-function upsertDialogueFields(rawText, { stage, reviewLines }) {
-  const lines = rawText.split("\n");
-  if (lines[0].trim() !== "---") throw new Error("file must begin with a '---' frontmatter delimiter");
-  let fmEnd = -1;
-  for (let i = 1; i < lines.length; i += 1) {
-    if (lines[i].trim() === "---") {
-      fmEnd = i;
-      break;
+function renderAlternativeEntry({ name, date }, indent) {
+  return [`${indent}- name: ${name}`, `${indent}  source: review`, `${indent}  ref: "${date}"`];
+}
+
+/**
+ * Update `stage:` (inserting the line when the node carries none, which is
+ * how a finding opens a dialogue on settled doctrine), unless `stage` is
+ * null; replace the `review:` block, unless `reviewLines` is null; and append
+ * `alternatives` entries, creating the list when absent.
+ *
+ * `reviewLines` is null for a node touched only by a finding (no verdict of
+ * its own to record): whatever `review:` block it already carries -- from an
+ * earlier round, or none at all -- is left exactly as it stands. `stage` is
+ * null for a node no entry names a stage for: the top-level `stage:` line, if
+ * any, is left exactly as it stands.
+ */
+function upsertDialogueFields(rawText, { stage, reviewLines, alternatives = [] }) {
+  const { fmLines: originalFm, bodyLines } = splitRaw(rawText);
+  const fmLines = [...originalFm];
+
+  let stageIdx = fmLines.findIndex((l) => /^stage:/.test(l));
+  if (stage !== null) {
+    if (stageIdx === -1) {
+      const questionIdx = fmLines.findIndex((l) => /^question:/.test(l));
+      stageIdx = questionIdx === -1 ? 0 : questionIdx + 1;
+      fmLines.splice(stageIdx, 0, `stage: ${stage}`);
+    } else {
+      fmLines[stageIdx] = `stage: ${stage}`;
     }
   }
-  if (fmEnd === -1) throw new Error("frontmatter is never closed");
-  const fmLines = lines.slice(1, fmEnd);
-  const bodyLines = lines.slice(fmEnd + 1);
-
-  const stageIdx = fmLines.findIndex((l) => /^stage:/.test(l));
-  if (stage !== null) {
-    if (stageIdx === -1) throw new Error("no top-level 'stage:' line found to update");
-    fmLines[stageIdx] = `stage: ${stage}`;
-  }
+  if (stageIdx === -1) stageIdx = fmLines.findIndex((l) => /^stage:/.test(l));
 
   if (reviewLines !== null) {
     const existingReview = findFrontmatterBlock(fmLines, "review");
@@ -285,7 +391,24 @@ function upsertDialogueFields(rawText, { stage, reviewLines }) {
     fmLines.splice(insertAt, 0, ...reviewLines);
   }
 
-  return ["---", ...fmLines, "---", ...bodyLines].join("\n");
+  if (alternatives.length > 0) {
+    const existing = findFrontmatterBlock(fmLines, "alternatives");
+    if (existing) {
+      const [start, end] = existing;
+      const firstItem = fmLines.slice(start + 1, end).find((l) => /^\s*- /.test(l));
+      const indent = firstItem ? firstItem.match(/^(\s*)- /)[1] : "  ";
+      const rendered = alternatives.flatMap((a) => renderAlternativeEntry(a, indent));
+      fmLines.splice(end, 0, ...rendered);
+    } else {
+      const review = findFrontmatterBlock(fmLines, "review");
+      const rec = findFrontmatterBlock(fmLines, "recommendation");
+      const insertAt = review ? review[1] : rec ? rec[1] : stageIdx + 1;
+      const rendered = alternatives.flatMap((a) => renderAlternativeEntry(a, "  "));
+      fmLines.splice(insertAt, 0, "alternatives:", ...rendered);
+    }
+  }
+
+  return joinRaw(fmLines, bodyLines);
 }
 
 // ------------------------------------------------------------------ prose
@@ -293,7 +416,7 @@ function renderSubsection({ scope, date, verdict, kickback_stage: kickbackStage,
   const heading = scope === "amendment" ? `### Clean-context review of the amendment, ${date}` : `### Clean-context review, ${date}`;
   const opening = scope === "amendment"
     ? "Read in clean context by a subagent given the node, its ancestry, the author's words, and the amendment named in the brief, and nothing of the sitting."
-    : "Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting.";
+    : "Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting.";
   const verdictSentence = verdict === "forward" ? "Verdict: forward to the author's ruling." : `Verdict: kicked back to the ${kickbackStage} stage.`;
 
   const parts = [heading, "", `${opening} ${verdictSentence}`, "", "Findings:", "", ...(findings || []).map((f) => `- ${f}`)];
@@ -307,19 +430,24 @@ function renderSubsection({ scope, date, verdict, kickback_stage: kickbackStage,
   return parts.join("\n");
 }
 
-/** The subsection a frontier finding appends to every node it names. */
-function renderFrontierSubsection({ date, kind, finding, proposal, otherIds }) {
+/**
+ * The subsection a finding appends to every node it names -- in the batch or
+ * outside it. An alternative the finding proposes is named here as well as
+ * recorded in the frontmatter, so the node's own account says where the
+ * merge or split it proposes went.
+ */
+function renderFrontierSubsection({ date, kind, finding, proposal, otherIds, alternatives, id }) {
   const namedLine = otherIds.length > 0 ? `Also named: ${otherIds.join(", ")}.` : "Names only this node.";
-  return [`### Frontier finding, ${date}`, "", `Kind: ${kind}.`, "", finding, "", namedLine, "", `Proposed: ${proposal}`].join("\n");
-}
-
-function appendToProposal(text, subsection) {
-  const trimmed = text.replace(/\s+$/, "");
-  const hasProposal = /^## Proposal[ \t]*$/m.test(text);
-  if (hasProposal) {
-    return `${trimmed}\n\n${subsection}\n`;
+  const parts = [`### Frontier finding, ${date}`, "", `Kind: ${kind}.`, "", finding, "", namedLine, "", `Proposed: ${proposal}`];
+  for (const a of alternatives || []) {
+    parts.push(
+      "",
+      a.node === id
+        ? `Recorded as a pending alternative on this node: \`${a.name}\` (source review, ${date}).`
+        : `Recorded as a pending alternative on ${a.node}: \`${a.name}\` (source review, ${date}).`,
+    );
   }
-  return `${trimmed}\n\n## Proposal\n\n${subsection}\n`;
+  return parts.join("\n");
 }
 
 // -------------------------------------------------------- old-shape plans
@@ -371,8 +499,8 @@ async function planEntry(entry, ctx) {
   const subsection = ctx.fieldsOnly ? null : renderSubsection({ scope, date: ctx.date, verdict, kickback_stage: kickbackStage, findings, counter_argument: counterArgument, strength, facts_check: factsCheck, reply });
 
   if (scope === "amendment") {
-    const rawTextAfter = appendToProposal(rawTextBefore, subsection);
-    return { id, file, scope, verdict, oldStage: currentStage, newStage: currentStage, rawTextBefore, rawTextAfter };
+    const rawTextAfter = appendToAccount(rawTextBefore, subsection);
+    return { id, file, scope, verdict, notes: [], oldStage: currentStage, newStage: currentStage, rawTextBefore, rawTextAfter };
   }
 
   const newStage = hasOverride ? ctx.overrides[id] : verdict === "forward" ? "ruling" : kickbackStage;
@@ -396,7 +524,7 @@ async function planEntry(entry, ctx) {
 
   const reviewLines = renderReviewBlock({ verdict, strength, date: ctx.date, of: draftHashBefore });
   let text = rawTextBefore;
-  if (subsection !== null) text = appendToProposal(text, subsection);
+  if (subsection !== null) text = appendToAccount(text, subsection);
   try {
     text = upsertDialogueFields(text, { stage: newStage, reviewLines });
   } catch (err) {
@@ -411,32 +539,37 @@ async function planEntry(entry, ctx) {
       return { id, problems: [`${id}: does not parse after edit: ${err.message}`] };
     }
     if (parsedAfter.draftHash !== draftHashBefore) {
-      return { id, problems: [`${id}: internal error -- draftHash changed by the edit (${draftHashBefore} -> ${parsedAfter.draftHash}); the proposal-is-not-part-of-the-hash assumption is violated`] };
+      return { id, problems: [`${id}: internal error -- draftHash changed by the edit (${draftHashBefore} -> ${parsedAfter.draftHash}); the account-is-not-part-of-the-hash assumption is violated`] };
     }
   }
 
-  return { id, file, scope, verdict, oldStage: currentStage, newStage, rawTextBefore, rawTextAfter: text };
+  return { id, file, scope, verdict, notes: [], oldStage: currentStage, newStage, rawTextBefore, rawTextAfter: text };
 }
 
 // ----------------------------------------------------------- batch checks
 //
-// frontier-consistency.md's own checks, run once over the whole batch
-// before any file is touched: every staged node named in `read`; `nodes`
-// exactly covering the review/ruling stage, no more and no fewer; every
-// frontier finding shaped and grounded; a strong counter-argument answered.
+// frontier-consistency.md's and clean-context-review.md's own checks, run
+// once over the whole batch before any file is touched: every batch node
+// named in `read`; `nodes` exactly covering the review stage, no more and no
+// fewer; every finding shaped and grounded, its named nodes real (in the
+// batch or outside it); every proposed alternative shaped, named on a node
+// the finding names, and not already listed there; a strong counter-argument
+// answered.
 function validateBatch(batch, graph, { replies, overrides }) {
   const problems = [];
   const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
   const readSet = new Set(Array.isArray(batch.read) ? batch.read : []);
 
-  for (const node of graph.nodes) {
-    if (node.stage && !readSet.has(node.id)) {
-      problems.push(`'read' is missing ${node.id}, which carries stage '${node.stage}'`);
-    }
+  const expectedIds = graph.nodes.filter((n) => n.stage === "review").map((n) => n.id);
+  const expectedSet = new Set(expectedIds);
+
+  for (const id of expectedIds) {
+    if (!readSet.has(id)) problems.push(`'read' is missing ${id}, which is in the batch (stage review)`);
+  }
+  for (const id of readSet) {
+    if (!nodesById.has(id)) problems.push(`'read' names ${id}, which is not a node`);
   }
 
-  const expectedIds = graph.nodes.filter((n) => n.stage === "review" || n.stage === "ruling").map((n) => n.id);
-  const expectedSet = new Set(expectedIds);
   const nodeEntries = Array.isArray(batch.nodes) ? batch.nodes : [];
   const gotIds = nodeEntries.map((e) => e && e.id);
   const seen = new Set();
@@ -445,10 +578,13 @@ function validateBatch(batch, graph, { replies, overrides }) {
     seen.add(id);
   }
   for (const id of expectedIds) {
-    if (!seen.has(id)) problems.push(`'nodes' is missing an entry for ${id} (stage ${nodesById.get(id).stage})`);
+    if (!seen.has(id)) problems.push(`'nodes' is missing an entry for ${id} (stage review)`);
   }
   for (const id of gotIds) {
-    if (!expectedSet.has(id)) problems.push(`'nodes' names ${id}, which is not at stage review or ruling`);
+    if (expectedSet.has(id)) continue;
+    if (Object.prototype.hasOwnProperty.call(overrides, id)) continue;
+    const stage = nodesById.has(id) ? nodesById.get(id).stage || "none" : "not a node";
+    problems.push(`'nodes' names ${id}, which is not in the batch (stage ${stage}); only the batch receives verdicts`);
   }
 
   for (const entry of nodeEntries) {
@@ -468,6 +604,7 @@ function validateBatch(batch, graph, { replies, overrides }) {
   }
 
   const frontier = Array.isArray(batch.frontier) ? batch.frontier : [];
+  const proposedNames = new Set();
   frontier.forEach((f, i) => {
     const label = f && isNonEmptyString(f.kind) ? `frontier[${i}] (${f.kind})` : `frontier[${i}]`;
     if (!f || !FRONTIER_KINDS.has(f.kind)) {
@@ -491,6 +628,36 @@ function validateBatch(batch, graph, { replies, overrides }) {
         problems.push(`${label}: 'stages' for ${id} must be 'periagogic' or 'maieutic', found '${JSON.stringify(s)}'`);
       }
     }
+
+    const alts = f && f.alternatives;
+    if (alts !== undefined && alts !== null && !Array.isArray(alts)) {
+      problems.push(`${label}: 'alternatives' must be a list of {node, name, text}`);
+    } else {
+      for (const [j, a] of (Array.isArray(alts) ? alts : []).entries()) {
+        const altLabel = `${label}.alternatives[${j}]`;
+        if (!a || typeof a !== "object") {
+          problems.push(`${altLabel}: must be {node, name, text}`);
+          continue;
+        }
+        if (!isNonEmptyString(a.node) || !nodesById.has(a.node)) {
+          problems.push(`${altLabel}: 'node' must name a node, found '${JSON.stringify(a.node)}'`);
+        } else if (nodeIds && !nodeIds.includes(a.node)) {
+          problems.push(`${altLabel}: proposes an alternative on ${a.node}, which this finding does not name in 'nodes'`);
+        }
+        if (!isNonEmptyString(a.name) || !ALTERNATIVE_NAME_RE.test(a.name) || a.name === "standing") {
+          problems.push(`${altLabel}: 'name' must be a lowercase slug and never 'standing', found '${JSON.stringify(a.name)}'`);
+        }
+        if (!isNonEmptyString(a.text)) problems.push(`${altLabel}: 'text' is required`);
+        if (isNonEmptyString(a.node) && isNonEmptyString(a.name)) {
+          const key = `${a.node} ${a.name}`;
+          if (proposedNames.has(key)) problems.push(`${altLabel}: '${a.name}' is proposed on ${a.node} more than once in this batch`);
+          proposedNames.add(key);
+        }
+      }
+    }
+    if (f && f.kind === "merge" && !(Array.isArray(alts) && alts.length > 0)) {
+      problems.push(`${label}: a 'merge' finding must propose at least one alternative (the node it goes on, its name, its prose)`);
+    }
   });
 
   return problems;
@@ -504,25 +671,36 @@ function stageRank(stage) {
 
 /**
  * Every node the batch touches -- named in `nodes` (a verdict), named by a
- * `frontier` finding (findings only), or both -- keyed by id, in the order
- * first encountered (`nodes` first, then `frontier` in array order).
+ * `frontier` finding (findings only, in the batch or outside it), or both --
+ * keyed by id, in the order first encountered (`nodes` first, then `frontier`
+ * in array order). A finding's proposed alternatives are collected onto the
+ * node each goes on, which the checks above have already required the finding
+ * to name.
  */
 function collectTouched(batch) {
   const touched = new Map();
+  const ensure = (id) => {
+    if (!touched.has(id)) touched.set(id, { nodeEntry: null, findings: [], alternatives: [] });
+    return touched.get(id);
+  };
   for (const rawEntry of batch.nodes || []) {
     const entry = withDefaults(rawEntry);
-    touched.set(entry.id, { nodeEntry: entry, findings: [] });
+    ensure(entry.id).nodeEntry = entry;
   }
   for (const f of batch.frontier || []) {
+    const alternatives = Array.isArray(f.alternatives) ? f.alternatives : [];
     for (const id of f.nodes) {
-      if (!touched.has(id)) touched.set(id, { nodeEntry: null, findings: [] });
-      touched.get(id).findings.push({
+      ensure(id).findings.push({
         kind: f.kind,
         finding: f.finding,
         proposal: f.proposal,
         stage: f.stages ? f.stages[id] : undefined,
         otherIds: f.nodes.filter((x) => x !== id),
+        alternatives,
       });
+    }
+    for (const a of alternatives) {
+      ensure(a.node).alternatives.push({ name: a.name, text: a.text });
     }
   }
   return touched;
@@ -531,12 +709,16 @@ function collectTouched(batch) {
 /**
  * Plan one touched node's edit: the final stage (an override, else the
  * earliest stage among every entry naming it -- periagogic < maieutic <
- * review < ruling -- ignoring a frontier finding that names this node but
- * assigns it no stage; if no entry assigns it one at all, its stage is left
- * exactly as it stands), every subsection to append in input order (the
- * node's own verdict first, if it has one, then each frontier finding in
- * the order `frontier` lists it), and the `review:` block, written only
- * when the node has a verdict of its own.
+ * review < ruling -- ignoring a finding that names this node but assigns it
+ * no stage; if no entry assigns it one at all, its stage is left exactly as
+ * it stands), every subsection to append in input order (the node's own
+ * verdict first, if it has one, then each finding in the order `frontier`
+ * lists it), each proposed alternative not already listed on the node, and
+ * the `review:` block, written only when the node has a verdict of its own.
+ *
+ * The node is parsed before the edit and again after it: a node that does not
+ * parse after the write is reported and left unwritten, and so is a node the
+ * edit would leave without the `stage` its new dialogue state requires.
  */
 async function planTouchedNode(id, t, ctx) {
   let graphName, slug, file;
@@ -552,7 +734,15 @@ async function planTouchedNode(id, t, ctx) {
   } catch (err) {
     return { id, problems: [`${id}: cannot read ${file}: ${err.message}`] };
   }
-  const currentStage = extractScalar(rawTextBefore, "stage");
+
+  let parsedBefore;
+  try {
+    parsedBefore = parseNode(rawTextBefore, { id, graph: graphName, slug, path: file });
+  } catch (err) {
+    return { id, problems: [`${id}: does not parse before edit: ${err.message}`] };
+  }
+  const currentStage = parsedBefore.stage;
+  const draftHashBefore = parsedBefore.draftHash;
 
   const candidates = [];
   if (t.nodeEntry) candidates.push(t.nodeEntry.verdict === "forward" ? "ruling" : t.nodeEntry.kickback_stage);
@@ -562,8 +752,8 @@ async function planTouchedNode(id, t, ctx) {
 
   const hasOverride = Object.prototype.hasOwnProperty.call(ctx.overrides, id);
   // No candidate at all means nothing named for this node assigns it a
-  // stage (only frontier findings that omitted it from their `stages`):
-  // its stage is left exactly as it stands, not forced to any value.
+  // stage (only findings that omitted it from their `stages`): its stage is
+  // left exactly as it stands, not forced to any value.
   const stageTouched = hasOverride || candidates.length > 0;
   const finalStage = hasOverride
     ? ctx.overrides[id]
@@ -571,10 +761,31 @@ async function planTouchedNode(id, t, ctx) {
       ? candidates.reduce((best, s) => (stageRank(s) < stageRank(best) ? s : best))
       : currentStage;
 
+  if (!stageTouched && currentStage === null) {
+    return {
+      id,
+      problems: [`${id}: carries no stage, and nothing in this batch names one for it; a finding recorded on a node opens its dialogue, so name its stage in the finding's 'stages' (or in --overrides)`],
+    };
+  }
+
+  // An alternative whose name is already on the node is skipped, not
+  // refused: the record already carries that answer, and a second entry of
+  // the same name would not validate.
+  const listed = new Set((parsedBefore.alternatives || []).map((a) => a.name));
+  const newAlternatives = [];
+  const notes = [];
+  for (const a of t.alternatives) {
+    if (listed.has(a.name)) {
+      notes.push(`${id}: alternative '${a.name}' is already listed on this node; skipped (the finding is still recorded)`);
+      continue;
+    }
+    listed.add(a.name);
+    newAlternatives.push(a);
+  }
+
   const subsections = [];
   const labels = [];
   let reviewLines = null;
-  let draftHashBefore = null;
 
   if (t.nodeEntry) {
     const entry = t.nodeEntry;
@@ -591,50 +802,56 @@ async function planTouchedNode(id, t, ctx) {
       reply,
     }));
     labels.push("Clean-context review");
-
-    let parsedBefore;
-    try {
-      parsedBefore = parseNode(rawTextBefore, { id, graph: graphName, slug, path: file });
-    } catch (err) {
-      return { id, problems: [`${id}: does not parse before edit: ${err.message}`] };
-    }
-    draftHashBefore = parsedBefore.draftHash;
     reviewLines = renderReviewBlock({ verdict: entry.verdict, strength: entry.strength, date: ctx.date, of: draftHashBefore });
   }
 
   for (const f of t.findings) {
-    subsections.push(renderFrontierSubsection({ date: ctx.date, kind: f.kind, finding: f.finding, proposal: f.proposal, otherIds: f.otherIds }));
+    subsections.push(renderFrontierSubsection({
+      date: ctx.date,
+      kind: f.kind,
+      finding: f.finding,
+      proposal: f.proposal,
+      otherIds: f.otherIds,
+      alternatives: f.alternatives,
+      id,
+    }));
     labels.push("Frontier finding");
+  }
+  if (newAlternatives.length > 0) {
+    labels.push(`alternative${newAlternatives.length > 1 ? "s" : ""} ${newAlternatives.map((a) => `'${a.name}'`).join(", ")}`);
   }
 
   let text = rawTextBefore;
-  for (const s of subsections) text = appendToProposal(text, s);
   try {
-    text = upsertDialogueFields(text, { stage: stageTouched ? finalStage : null, reviewLines });
+    text = appendAlternativeSubsections(text, newAlternatives);
+    for (const s of subsections) text = appendToAccount(text, s);
+    text = upsertDialogueFields(text, {
+      stage: stageTouched ? finalStage : null,
+      reviewLines,
+      alternatives: newAlternatives.map((a) => ({ name: a.name, date: ctx.date })),
+    });
   } catch (err) {
     return { id, problems: [`${id}: ${err.message}`] };
   }
 
-  if (t.nodeEntry) {
-    let parsedAfter;
-    try {
-      parsedAfter = parseNode(text, { id, graph: graphName, slug, path: file });
-    } catch (err) {
-      return { id, problems: [`${id}: does not parse after edit: ${err.message}`] };
-    }
-    if (parsedAfter.draftHash !== draftHashBefore) {
-      return { id, problems: [`${id}: internal error -- draftHash changed by the edit (${draftHashBefore} -> ${parsedAfter.draftHash}); the proposal-is-not-part-of-the-hash assumption is violated`] };
-    }
+  let parsedAfter;
+  try {
+    parsedAfter = parseNode(text, { id, graph: graphName, slug, path: file });
+  } catch (err) {
+    return { id, problems: [`${id}: does not parse after edit: ${err.message}`] };
+  }
+  if (parsedAfter.draftHash !== draftHashBefore) {
+    return { id, problems: [`${id}: internal error -- draftHash changed by the edit (${draftHashBefore} -> ${parsedAfter.draftHash}); the account-is-not-part-of-the-hash assumption is violated`] };
   }
 
-  return { id, file, labels, oldStage: currentStage, newStage: finalStage, rawTextBefore, rawTextAfter: text };
+  return { id, file, labels, notes, oldStage: currentStage, newStage: finalStage, rawTextBefore, rawTextAfter: text };
 }
 
 /**
- * Apply the whole-frontier batch: `validateBatch` first, refusing (writing
- * nothing) on any problem; otherwise plan every touched node, refusing
- * (still writing nothing) on any planning problem; otherwise write every
- * plan, remove the lock, and report, the `ruling_order` as its last lines.
+ * Apply the batch: `validateBatch` first, refusing (writing nothing) on any
+ * problem; otherwise plan every touched node, refusing (still writing
+ * nothing) on any planning problem; otherwise write every plan, remove the
+ * lock, and report, the notes and then the `ruling_order` as its last lines.
  */
 async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overrides, date, dry }) {
   const graph = await readGraph(rootDir);
@@ -658,11 +875,12 @@ async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overri
     throw new Error(planProblems.join("\n"));
   }
 
-  const report = plans.map((p) => `${p.id}: ${p.labels.join(" + ")}, ${p.oldStage} → ${p.newStage}`);
+  const report = plans.map((p) => `${p.id}: ${p.labels.join(" + ")}, ${p.oldStage ?? "no stage"} → ${p.newStage ?? "no stage"}`);
+  const notes = plans.flatMap((p) => p.notes || []);
   const rulingOrder = Array.isArray(batch.ruling_order) ? batch.ruling_order : [];
 
   if (dry) {
-    return { plans, report, validation: null, rulingOrder };
+    return { plans, report: [...report, ...notes], validation: null, rulingOrder, notes };
   }
 
   for (const p of plans) {
@@ -680,7 +898,7 @@ async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overri
   const lockPath = path.join(reviewDir, "frontier.lock");
   await rm(lockPath, { force: true });
 
-  return { plans, report: [...report, ...rulingOrder], validation, rulingOrder };
+  return { plans, report: [...report, ...notes, ...rulingOrder], validation, rulingOrder, notes };
 }
 
 /**
@@ -689,8 +907,8 @@ async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overri
  * nothing, if any check fails; otherwise write every node file and, unless
  * `dry`, run `readGraph` once afterward and report (without reverting)
  * whether it still has problems. `batch` (or a loaded file shaped like
- * one -- a `nodes` array) runs the whole-frontier flow; otherwise this is
- * the old per-entry flow, kept for `--fields-only` and its own tests.
+ * one -- a `nodes` array) runs the batch flow; otherwise this is the old
+ * per-entry flow, kept for `--fields-only` and its own tests.
  *
  * @returns {Promise<{plans: object[], report: string[], validation: {ok:boolean, message?:string}|null}>}
  */

@@ -131,11 +131,17 @@ alignment through the report instead of through a node:
 
 - **A divergence that needs the author**, when a node's answer is silent
   or contradictory about the artifact it justifies, or the bite would need
-  a decision only the author can make: take no bite on it. Report the
+  a decision only the author can make: take no bite on it. A conflicting
+  answer found here is a proposal in the sense the `authority` node
+  defines, a conflicting answer that arose outside alignment. Report the
   node, the divergence, and a recommendation with its authority class,
   boldness, and persistence class (`growth`, `transience`), in a form the
-  author can paste into `/align`. The divergence stays on the frontier,
-  derived and never stored, until the alignment dialogue records it.
+  author can paste into `/align`, which records it on the node as an
+  alternative of source `proposal` naming this report or the instrument
+  that raised it and opens the node's dialogue at the periagogic stage
+  (`dialogue`); the standing answer keeps its authority meanwhile. The
+  divergence stays on the frontier, derived and never stored, until the
+  alignment dialogue records it.
 - **A shim whose liquidation condition this session has met**: liquidate
   the artifact on this ref and report that the declaration on the node is
   owed its removal by alignment; the declaration stands until then.

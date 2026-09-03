@@ -7,7 +7,7 @@ stage: periagogic
 
 Still open.
 
-## Draft
+## Recommendation
 
 ```markdown
 ---

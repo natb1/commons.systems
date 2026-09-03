@@ -7,6 +7,6 @@ stage: periagogic
 
 Still open.
 
-## Draft
+## Recommendation
 
 Not a fence at all.

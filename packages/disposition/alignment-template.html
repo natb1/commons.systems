@@ -202,7 +202,12 @@
   .pill.rev-forward { background: var(--ratified-soft); color: var(--ratified); }
   .pill.rev-kickback { background: var(--proposal-soft); color: var(--proposal); }
   .pill.rev-strength, .pill.rev-date { background: var(--paper-3); color: var(--ink-2); }
-  .pill.rev-stale { background: var(--deferred-soft); color: var(--deferred); }
+  .pill.rev-stale, .pill.rec-stale { background: var(--deferred-soft); color: var(--deferred); }
+  .pill.rec-adopts { background: var(--accent-soft); color: var(--accent-ink); }
+  .pill.alt-src, .pill.alt-ref { background: var(--paper-3); color: var(--ink-2); }
+  .pill.alt-ref { text-transform: none; letter-spacing: .02em; }
+  .pill.alt-prune { background: var(--proposal-soft); color: var(--proposal); }
+  .pill.alt-adopted { background: var(--accent-soft); color: var(--accent-ink); }
   .pills { margin: 0 0 8px; }
 
   .notice { font-size: 13.5px; color: var(--proposal); background: var(--proposal-soft); border-radius: 4px; padding: 8px 12px; margin: 0 0 18px; }
@@ -246,6 +251,14 @@
   .quoted .blk-label { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 8px; }
   .quoted pre { margin: 0; }
   .account { padding: 14px 16px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; }
+
+  /* ---------- the alternatives ---------- */
+  .altlist { list-style: none; margin: 0; padding: 0; }
+  .alt { margin: 0 0 14px; padding: 10px 0 0 14px; border-left: 2px solid var(--line); }
+  .alt:last-child { margin-bottom: 0; }
+  .alt.adopted { border-left-color: var(--accent-ink); }
+  .altname { margin: 0 0 8px; font-size: 14px; }
+  .altname .mono { font-family: var(--mono); font-size: 12.5px; color: var(--ink); margin-right: 10px; overflow-wrap: anywhere; }
 
   /* ---------- the draft and the edit ---------- */
   .draftsec { border-left: 2px solid var(--accent); padding-left: 14px; }

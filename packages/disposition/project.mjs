@@ -328,13 +328,21 @@ export function renderFrontier(graph) {
     }
     if (node.stage) lines.push(`  stage: ${node.stage}`);
     if (node.recommendation) {
-      lines.push(`  recommendation: ${node.recommendation.class}, boldness ${node.recommendation.boldness}`);
+      const rec = node.recommendation;
+      const adopted = (node.alternatives || []).find((a) => a.name === rec.adopts);
+      const prune = adopted && adopted.prune ? " (prune)" : "";
+      const stale = node.recommendationStale ? ", standing text changed since the recommendation" : "";
+      lines.push(`  recommendation: adopts ${rec.adopts}${prune}, ${rec.class}, boldness ${rec.boldness}${stale}`);
     }
     if (node.review) {
       const stale = node.reviewStale ? ", draft changed since the review" : "";
       lines.push(`  review: ${node.review.verdict} (${node.review.strength}, ${node.review.date})${stale}`);
     }
     if (node.draft) lines.push("  draft: yes");
+    if (node.alternatives && node.alternatives.length > 0) {
+      const named = node.alternatives.map((a) => `${a.name}:${a.source}`).join(", ");
+      lines.push(`  alternatives: ${node.alternatives.length} (${named})`);
+    }
     if (node.answer == null) lines.push(`  under: ${(node.under || []).join(", ")}`);
     if (node.instrument) {
       const note = node.instrument.note ? ` — ${node.instrument.note}` : "";
@@ -389,6 +397,9 @@ const WORDS_PLACEHOLDER = "Your words: your account of the ground, or your inten
 
 const NO_ANSWER_LINE = "No answer yet: this node is the author's disposition awaiting its answer.";
 const EDIT_CAPTION = "Confirm ratifies the draft as the node. The node as it stands is what remains if you deny.";
+const PRUNE_CAPTION = "Confirm prunes the node; the node as it stands is what remains if you deny.";
+const ADOPTED_MARK = "the recommendation adopts this";
+const PRUNE_MARK = "prune";
 const LEDE =
   "Every node is unanswered until the author confirms it, here or in prose. Listed by rank, the purpose node first. Respond to any subset and submit; the alignment session reads the responses back.";
 
@@ -493,14 +504,15 @@ function alignHtml(src) {
 }
 
 /**
- * `## Proposal`, with a fenced ```markdown block -- a draft quoted into
- * the account -- called out in its own labelled block so it is never
- * mistaken for "The node as it stands" or for the node's own `## Draft`.
+ * `## Account`, with a fenced ```markdown block -- a recommended text
+ * quoted into the account -- called out in its own labelled block so it is
+ * never mistaken for "The node as it stands" or for the node's own
+ * `## Recommendation`.
  *
  * @param {string} src
  * @returns {string}
  */
-function renderProposal(src) {
+function renderAccount(src) {
   return alignBlocks(src).map((b) => {
     if (b.type === "code" && b.lang === "markdown") {
       return `<div class="quoted"><p class="blk-label">Quoted in the account; the sections above are the node</p>${b.html}</div>`;
@@ -522,7 +534,9 @@ function alignSection(label, bodyHtml, cls) {
 
 // Every frontmatter key the reader carries except `question` (the
 // validator already holds the draft to the node's own question) and the
-// three dialogue keys, which are the dialogue's state and not the edit.
+// dialogue-state keys -- `stage`, `alternatives`, `recommendation`,
+// `review`, `depends` -- which are the dialogue's own state, removed at the
+// recording, and never part of what the author rules on.
 const EDIT_FM_KEYS = [
   "form", "authority", "under", "tier", "boost", "cites", "instrument",
   "after", "source", "relation", "defines", "shims", "order",
@@ -558,9 +572,7 @@ function flowYaml(v) {
 /**
  * The frontmatter half of the edit: one entry per field whose value
  * differs between the node as it stands and its draft, in the reader's own
- * key order. `stage`, `recommendation` and `review` are ignored -- they
- * are the dialogue's own state, removed at the recording, and never part
- * of what the author rules on.
+ * key order. The dialogue-state keys (see EDIT_FM_KEYS) are ignored.
  *
  * @param {object} node - a node as `read.mjs` returns it.
  * @param {{frontmatter: object}} draft - `node.draft`.
@@ -708,6 +720,40 @@ function renderDraft(n) {
     + `<p class="caption">${alignEsc(EDIT_CAPTION)}</p></section>`;
 }
 
+/* --------------------------------------------- the alternatives ----- */
+
+/**
+ * "The alternatives": every answer on the table beside the one the node
+ * stands on, in the `alternatives` list's own order, each with its name,
+ * where it came from (`source`, and the `ref` that dates it or names the
+ * instrument that raised it) and its prose from the `## Alternatives`
+ * subsection of the same name. The one the recommendation adopts is
+ * marked, and so is one that would prune the node rather than rewrite it.
+ *
+ * Nothing is rendered for a node with no alternatives: an empty section on
+ * every other item would be noise on a page the author reads top to bottom.
+ *
+ * @param {object} n - a node as `read.mjs` returns it.
+ * @returns {string}
+ */
+function renderAlternatives(n) {
+  const alts = Array.isArray(n.alternatives) ? n.alternatives : [];
+  if (alts.length === 0) return "";
+  const adopts = n.recommendation ? n.recommendation.adopts : null;
+  const text = n.alternativesText || {};
+  const items = alts.map((a) => {
+    const pills = [`<span class="pill alt-src">${alignEsc(a.source)}</span>`];
+    if (a.ref) pills.push(`<span class="pill alt-ref mono">${alignEsc(a.ref)}</span>`);
+    if (a.prune) pills.push(`<span class="pill alt-prune">${alignEsc(PRUNE_MARK)}</span>`);
+    if (a.name === adopts) pills.push(`<span class="pill alt-adopted">${alignEsc(ADOPTED_MARK)}</span>`);
+    const body = text[a.name] ? `<div class="mdbody">${alignHtml(text[a.name])}</div>` : "";
+    return `<li class="alt${a.name === adopts ? " adopted" : ""}">`
+      + `<p class="altname"><span class="mono">${alignEsc(a.name)}</span>${pills.join("")}</p>`
+      + `${body}</li>`;
+  }).join("");
+  return `<section class="alts"><p class="lbl">The alternatives</p><ul class="altlist">${items}</ul></section>`;
+}
+
 /* ------------------------- the recommendation and the review --------- */
 
 // The shims a confirmation would leave standing: the draft's when the node
@@ -722,14 +768,27 @@ function renderRecommendation(n) {
   if (!n.recommendation) {
     return '<section class="rec"><p class="lbl">The recommendation</p><p class="none">No recommendation yet.</p></section>';
   }
-  const pills = `<span class="pill rec-class-${alignEsc(n.recommendation.class)}">class: ${alignEsc(n.recommendation.class)}</span>`
-    + `<span class="pill rec-bold-${alignEsc(n.recommendation.boldness)}">boldness: ${alignEsc(n.recommendation.boldness)}</span>`;
+  const rec = n.recommendation;
+  const adopted = (n.alternatives || []).find((a) => a.name === rec.adopts);
+  let pills = `<span class="pill rec-adopts">adopts: ${alignEsc(rec.adopts)}</span>`;
+  if (adopted && adopted.prune) pills += `<span class="pill alt-prune">${alignEsc(PRUNE_MARK)}</span>`;
+  pills += `<span class="pill rec-class-${alignEsc(rec.class)}">class: ${alignEsc(rec.class)}</span>`
+    + `<span class="pill rec-bold-${alignEsc(rec.boldness)}">boldness: ${alignEsc(rec.boldness)}</span>`;
+  if (n.recommendationStale) {
+    pills += '<span class="pill rec-stale">standing text changed since the recommendation</span>';
+  }
   const shims = persistenceShims(n);
   const persistence = shims.length === 0
     ? '<p class="persist">Persistence: standing.</p>'
     : `<p class="persist">Persistence: standing, with ${shims.length} shim${shims.length === 1 ? "" : "s"}:</p>`
       + `<ul class="shims">${shims.map((s) => `<li>${alignInline(s.artifact)}</li>`).join("")}</ul>`;
-  return `<section class="rec"><p class="lbl">The recommendation</p><p class="pills">${pills}</p>${persistence}</section>`;
+  // A prune quotes no `## Recommendation` fence -- a deleted node has no
+  // text -- so its caption cannot sit under an edit the way EDIT_CAPTION
+  // does; it says what a confirmation would do right here instead.
+  const caption = adopted && adopted.prune
+    ? `<p class="caption">${alignEsc(PRUNE_CAPTION)}</p>`
+    : "";
+  return `<section class="rec"><p class="lbl">The recommendation</p><p class="pills">${pills}</p>${persistence}${caption}</section>`;
 }
 
 function renderReview(n) {
@@ -789,10 +848,11 @@ function renderAlignmentItem(n) {
     ? alignHtml(n.answer) + (n.rationale ? alignHtml(n.rationale) : "")
     : `<p class="none">${alignEsc(NO_ANSWER_LINE)}</p>`;
   html += alignSection("The node as it stands", stands, "stands");
+  html += renderAlternatives(n);
   if (n.draft) html += renderDraft(n);
   html += renderRecommendation(n);
   html += renderReview(n);
-  if (n.proposal) html += alignSection("The AI's account", renderProposal(n.proposal), "account");
+  if (n.account) html += alignSection("The AI's account", renderAccount(n.account), "account");
   html += renderResponse(n);
   html += "</article>";
   return html;

@@ -1,12 +1,24 @@
 #!/usr/bin/env node
 // .claude/skills/align-review/brief.mjs
 //
-// Writes one clean-context-review brief for the whole unanswered frontier:
-// brief.md with its placeholders filled from the graph's current frontier
-// and answered set (SKILL.md §2, frontier-consistency.md: "EVERY invocation
-// ... is a batch operation that evaluates the full unanswered frontier").
-// Locks tmp/review/frontier.lock against a concurrent batch
-// (frontier-consistency.md: "One review runs at a time over the frontier").
+// Writes one clean-context-review brief for the batch of nodes at the review
+// stage, judged against the full graph: brief.md with its placeholders filled
+// from the graph as it stands (SKILL.md §2; clean-context-review.md: "every
+// invocation of it is one batch: the nodes at the review stage, evaluated
+// against the full graph, answered and unanswered at every stage, read in one
+// context, with nothing isolated by node"). Locks tmp/review/frontier.lock
+// against a concurrent batch (frontier-consistency.md: "One review runs at a
+// time over the frontier").
+//
+// The batch's nodes are carried in full -- question, disposition, answer,
+// rationale, every pending alternative with its prose, the recommendation with
+// its staleness, the '## Recommendation' fence when there is one, and the
+// account -- because that is what receives a verdict. Every other node is
+// carried as context -- stamp, stage, question, answer, and its pending
+// alternatives -- so the reviewer can tell whether a node or an alternative is
+// a new question or a new answer to a question the record already asks
+// (frontier-consistency.md, validation 15). Nothing of the invoking session
+// enters the brief.
 //
 // Usage:
 //   node brief.mjs [rootDir] [--date YYYY-MM-DD] [--dry]
@@ -52,6 +64,14 @@ function stampText(node) {
   return node.authority ? `${node.authority.class}, ${node.authority.by}, ${node.authority.date}` : "no stamp";
 }
 
+function nodeFile(node) {
+  return `disposition/${node.graph}/${node.slug}.md`;
+}
+
+function indexLine(node) {
+  return `- ${node.id} | stage ${node.stage} | rank ${node.rank.toFixed(4)} | ${stampText(node)} | ${nodeFile(node)}`;
+}
+
 /**
  * The frontier's order, exactly as `renderFrontier` (descending rank, id
  * tiebreak) lists it -- recovered from its own rendered listing rather than
@@ -74,14 +94,108 @@ function frontierOrderIds(graph) {
   return ids;
 }
 
+function recommendationLine(node) {
+  const rec = node.recommendation;
+  if (!rec) return "none (this node carries no recommendation)";
+  const adopted = (node.alternatives || []).find((a) => a.name === rec.adopts);
+  const prune = adopted && adopted.prune ? " (prune: the alternative deletes the node)" : "";
+  const stale = node.recommendationStale
+    ? " — STALE: the standing text has changed since this recommendation was drafted (`recommendationStale`)"
+    : "";
+  return `adopts ${rec.adopts}${prune}, ${rec.class}, boldness ${rec.boldness}, amends ${rec.amends}, at ${rec.at}${stale}`;
+}
+
+function reviewLine(node) {
+  if (!node.review) return "none (never reviewed)";
+  const stale = node.reviewStale ? " — the recommended text has changed since that review" : "";
+  return `${node.review.verdict} (${node.review.strength}, ${node.review.date}, of ${node.review.of})${stale}`;
+}
+
+function alternativesSummary(node) {
+  const alts = node.alternatives || [];
+  if (alts.length === 0) return "none";
+  return `${alts.length} (${alts.map((a) => `${a.name}:${a.source}${a.prune ? ":prune" : ""}`).join(", ")})`;
+}
+
+function renderAlternatives(node, headingPrefix) {
+  const alts = node.alternatives || [];
+  if (alts.length === 0) return [];
+  const out = [];
+  for (const alt of alts) {
+    const bits = [`source ${alt.source}`];
+    if (alt.ref) bits.push(`ref ${alt.ref}`);
+    if (alt.prune) bits.push("prune");
+    out.push(`${headingPrefix} ${alt.name} (${bits.join(", ")})`, "");
+    out.push((node.alternativesText || {})[alt.name] || "(no prose recorded for this alternative)", "");
+  }
+  return out;
+}
+
+/** One batch node, whole: everything the reviewer gives a verdict on. */
+function renderBatchNode(node) {
+  const parts = [
+    `### ${node.id}`,
+    "",
+    `- File: ${nodeFile(node)}`,
+    `- Question: ${node.question}`,
+    `- Stage: ${node.stage} | rank ${node.rank.toFixed(4)} | status ${node.status} | stamp: ${stampText(node)}`,
+    `- Recommendation: ${recommendationLine(node)}`,
+    `- Earlier review: ${reviewLine(node)}`,
+    `- Alternatives on the table: ${alternativesSummary(node)}`,
+    `- Depends: ${(node.depends || []).join(", ") || "none"} | under: ${(node.under || []).join(", ") || "none"}`,
+    "",
+    "#### Disposition (the author's words)",
+    "",
+    node.disposition || "(no '## Disposition' section)",
+    "",
+    "#### Answer (the node as it stands)",
+    "",
+    node.answer || "(no '## Answer' section: this node has no standing answer)",
+    "",
+    "#### Rationale",
+    "",
+    node.rationale || "(no '## Rationale' section)",
+    "",
+  ];
+
+  parts.push("#### Alternatives", "");
+  const alts = renderAlternatives(node, "#####");
+  if (alts.length === 0) parts.push("(none pending)", "");
+  else parts.push(...alts);
+
+  parts.push("#### Recommendation (the recommended text, when it differs from the node as it stands)", "");
+  if (node.draft && typeof node.draft.raw === "string") {
+    parts.push("```markdown", node.draft.raw, "```", "");
+  } else {
+    parts.push("(no '## Recommendation' fence: the recommendation adopts the node as it stands, or a prune)", "");
+  }
+
+  parts.push("#### Account (the AI's account, with the subsections of earlier reviews)", "");
+  parts.push(node.account || "(no '## Account' section)", "");
+
+  return parts.join("\n");
+}
+
+/** One context node: what the batch is judged against. */
+function renderContextNode(node) {
+  const head = [`### ${node.id}`, "", `- File: ${nodeFile(node)}`, `- Question: ${node.question}`];
+  head.push(`- Status: ${node.status} | stamp: ${stampText(node)} | rank ${node.rank.toFixed(4)} | stage: ${node.stage || "none (no dialogue open)"}`);
+  if (node.recommendation) head.push(`- Recommendation: ${recommendationLine(node)}`);
+  head.push(`- Alternatives pending: ${alternativesSummary(node)}`);
+  head.push("", "#### Answer", "", node.answer || "(no '## Answer' section: this node has no standing answer yet)", "");
+  const alts = renderAlternatives(node, "####");
+  if (alts.length > 0) head.push("#### Alternatives pending", "", ...alts);
+  return head.join("\n");
+}
+
 /**
- * Fill brief.md for the whole unanswered frontier and write it, locking
- * tmp/review/frontier.lock against a concurrent batch -- unless `dry`, which
- * prints the filled brief to stdout and writes nothing at all, lock
- * included. Refuses (letting the reader's own message through) on a graph
- * that does not validate.
+ * Fill brief.md for the batch at the review stage, with the full graph as
+ * context, and write it, locking tmp/review/frontier.lock against a
+ * concurrent batch -- unless `dry`, which prints the filled brief to stdout
+ * and writes nothing at all, lock included. Refuses (letting the reader's
+ * own message through) on a graph that does not validate.
  *
- * @returns {Promise<{briefPath: string, lockPath: string, frontierCount: number, answeredCount: number}>}
+ * @returns {Promise<{briefPath: string, lockPath: string, batchCount: number, contextCount: number, lines: number}>}
  */
 export async function writeFrontierBrief({ rootDir, reviewDir, date = null, dry = false }) {
   const lockPath = path.join(reviewDir, "frontier.lock");
@@ -106,28 +220,63 @@ export async function writeFrontierBrief({ rootDir, reviewDir, date = null, dry 
   const effectiveDate = date ?? todayIsoUtc();
 
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
-  const frontierNodes = frontierOrderIds(graph)
-    .map((id) => byId.get(id))
-    .filter((n) => n && n.stage);
-  const frontierText = frontierNodes
-    .map((n) => `- ${n.id} | stage ${n.stage} | rank ${n.rank.toFixed(4)} | ${stampText(n)} | disposition/${n.graph}/${n.slug}.md`)
-    .join("\n");
+  const ordered = frontierOrderIds(graph).map((id) => byId.get(id)).filter(Boolean);
 
-  const answeredNodes = graph.nodes.filter((n) => n.status === "answered");
-  const answeredText = answeredNodes.length > 0
-    ? answeredNodes.map((n) => `${n.id} (disposition/${n.graph}/${n.slug}.md)`).join(", ")
-    : "none";
+  // The batch: the nodes at the review stage, in the frontier's order. The
+  // context: every other node, answered or unanswered, at whatever stage.
+  const batchNodes = ordered.filter((n) => n.stage === "review");
+  const contextNodes = ordered.filter((n) => n.stage !== "review");
+
+  const batchIndexText = batchNodes.length > 0
+    ? batchNodes.map(indexLine).join("\n")
+    : "(the batch is empty: no node carries `stage: review`)";
+  const batchText = batchNodes.length > 0
+    ? batchNodes.map(renderBatchNode).join("\n")
+    : "(the batch is empty: no node carries `stage: review`, so there is no verdict to give)";
+  const contextIndexText = contextNodes.length > 0
+    ? contextNodes
+      .map((n) => `- ${n.id} | ${n.status} | stage ${n.stage || "none"} | rank ${n.rank.toFixed(4)} | ${stampText(n)} | ${nodeFile(n)}`)
+      .join("\n")
+    : "(no other node: the batch is the whole graph)";
+  const contextText = contextNodes.length > 0
+    ? contextNodes.map(renderContextNode).join("\n")
+    : "(no other node: the batch is the whole graph)";
 
   const template = await readFile(BRIEF_TEMPLATE_PATH, "utf8");
-  const filled = template
+  const withoutNav = template
     .split("{{date}}").join(effectiveDate)
-    .split("{{frontier}}").join(frontierText)
-    .split("{{answered}}").join(answeredText)
+    .split("{{repo}}").join(path.resolve(rootDir, ".."))
+    .split("{{batch_count}}").join(String(batchNodes.length))
+    .split("{{context_count}}").join(String(contextNodes.length))
+    .split("{{batch_index}}").join(batchIndexText)
+    .split("{{context_index}}").join(contextIndexText)
+    .split("{{batch}}").join(batchText)
+    .split("{{context}}").join(contextText)
     .split("{{out}}").join(OUT_FILE);
+
+  // {{nav}} is filled last, from the filled text itself: the brief is long,
+  // and a reader that must read it whole is told where its parts begin. The
+  // replacement is one line, as the placeholder's own line is, so the line
+  // numbers it names stay true.
+  const navLines = withoutNav.split("\n");
+  const lineOf = (heading) => {
+    const i = navLines.findIndex((l) => l === heading || l.startsWith(`${heading} `));
+    return i === -1 ? "?" : String(i + 1);
+  };
+  const nav = `This brief is ${navLines.length} lines. Read it whole before writing anything: "## The batch" begins at line ${lineOf("## The batch")}, "## The full graph, as context" at line ${lineOf("## The full graph, as context")}, and "## Output" at line ${lineOf("## Output")}.`;
+  const filled = navLines.map((l) => (l === "{{nav}}" ? nav : l)).join("\n");
+
+  const result = {
+    briefPath,
+    lockPath,
+    batchCount: batchNodes.length,
+    contextCount: contextNodes.length,
+    lines: navLines.length,
+  };
 
   if (dry) {
     process.stdout.write(filled);
-    return { briefPath, lockPath, frontierCount: frontierNodes.length, answeredCount: answeredNodes.length };
+    return result;
   }
 
   await mkdir(reviewDir, { recursive: true });
@@ -137,7 +286,7 @@ export async function writeFrontierBrief({ rootDir, reviewDir, date = null, dry 
     `${JSON.stringify({ pid: process.pid, started: new Date().toISOString(), brief: "tmp/review/frontier.brief.md", out: OUT_FILE }, null, 2)}\n`,
   );
 
-  return { briefPath, lockPath, frontierCount: frontierNodes.length, answeredCount: answeredNodes.length };
+  return result;
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
@@ -157,6 +306,12 @@ if (isMain) {
       const result = await writeFrontierBrief({ rootDir, reviewDir, date: opts.date, dry: opts.dry });
       if (!opts.dry) {
         console.log(result.briefPath);
+        console.log(`batch: ${result.batchCount} node(s) at stage review; context: ${result.contextCount} node(s); ${result.lines} lines`);
+        if (result.lines > 4000) {
+          process.stderr.write(
+            `note: this brief is ${result.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`,
+          );
+        }
       }
     } catch (err) {
       if (err.lockContents) console.log(err.lockContents);

@@ -4,7 +4,9 @@ description: Record or revise one node of the disposition graph by interview wit
 ---
 # Align
 
-> **Shim notice (2026-09-02, revised 2026-09-03).** Hand-materialized from
+> **Shim notice (2026-09-02, revised 2026-09-03, reconciled to the
+> dialogue-state encoding the same day under the author's bootstrap grant
+> on `dialogue`).** Hand-materialized from
 > the nodes `growth`, `recording`, `unanswered`, `dialogue`,
 > `clean-context-review`, `frontier-consistency`, `checkpoint`,
 > `alignment-target`, `authority`, `node`, `under`, `projection`,
@@ -60,8 +62,8 @@ skill only when the session starts in the checkout that carries it.
    default would be the capture it guards against. Never assume it, never
    carry it over from an earlier grant in the same session, and never read
    a grant for one reconciliation as a grant for the next. That the two
-   kinds read the same rule oppositely is recorded as a proposal on
-   `authority` and is not settled.
+   kinds read the same rule oppositely is recorded on `authority` as an
+   open point of its dialogue and is not settled.
 3. Sessions divide by ref (`work-loop`): this skill writes the
    `disposition` ref and publishes pages, and never commits to the
    implementation ref; rules and the other projections are the
@@ -106,7 +108,8 @@ skill only when the session starts in the checkout that carries it.
      alternatives, with the three exits open.
   4. Review (`recording`, `clean-context-review`, `frontier-consistency`).
      Before the author sees the recommendation, `/align-review` reads the
-     whole unanswered frontier, the sitting's drafts among the rest, in
+     batch of nodes at the review stage, the sitting's drafts among the
+     rest, against the full graph, in
      one fresh context (§5) and either forwards each draft, with its
      strongest counter-argument when it found one and the session's
      reply, or kicks it back to stage 2 or 3 with findings; a finding
@@ -115,9 +118,10 @@ skill only when the session starts in the checkout that carries it.
      unanswered node in rank order, this project's graph before the
      public graph and so the purpose node first, each item carrying the
      node's question, its stage, the author's words it rests on with
-     their dates, the node as it stands, the draft and the edit it makes
-     when the node carries one, the recommendation's class and boldness,
-     the alternatives rejected and why, the review's counter-argument and
+     their dates, the node as it stands, the alternatives pending on it
+     with their sources, the recommendation naming the one it adopts with
+     its class, boldness, and pin, the draft and the edit it makes when
+     the recommendation adopts an alternative, the review's counter-argument and
      the reply when there is one, and the three responses open on any
      subset at once: confirm, confirm with edits, deny with feedback
      (`unanswered`). The author rules there or in prose.
@@ -136,7 +140,7 @@ skill only when the session starts in the checkout that carries it.
   un-aligned disposition and land it (§6), then continue the sitting in
   hand: a node under the node the disposition would refine, with
   `question`, `stage: periagogic`, a `## Disposition` section holding the
-  author's words verbatim and dated, and a `## Proposal` section naming
+  author's words verbatim and dated, and an `## Account` section naming
   what the sitting would amend and its periagogic object; no `## Answer`,
   no stamp. For a node the author names, set `stage` on that node and add
   the `## Disposition` of their words. `stage` names the next movement
@@ -156,20 +160,37 @@ skill only when the session starts in the checkout that carries it.
   author said is held only in a context. When the graph cannot validate at
   a transition, write the node to the worktree anyway and report the
   failure; never hold it back in context until it can land.
-- **The dialogue's state** (`dialogue`) is on the node and nowhere else:
-  `stage`; `## Disposition`; `## Draft`, one fenced markdown block holding
-  the whole proposed node when the recommendation differs from the node as
-  it stands, and absent when the node is its own draft; `recommendation`,
-  the `class` a confirmation confers and the `boldness`, required from the
-  review stage on; `review`, the clean-context review's `verdict`,
-  `strength`, `date`, and `of`, the hash of the draft text it read, which
-  the frontier flags when the draft has changed since; `depends`, the ids
-  of the still-open questions this one's ruling waits on, as data, so the
-  page can order the author's queue and show what a ruling here unblocks,
-  its inverse being derived and never stored; and `## Proposal`, the
-  account in prose. A ruling-stage node without a forward verdict is
-  invalid; a draft changed after its review is sent through the review
-  again when the change is substance. The state must do three things
+- **The dialogue's state** (`dialogue`) is on the node and nowhere else,
+  and a node carries it while it is unanswered or while an alternative is
+  pending on its answer, whose authority, of any class, holds until an
+  alternative is confirmed: `stage`; `## Disposition`; `alternatives`, the
+  candidate answers pending the author's ruling, each with a `name`, its
+  `source` (`author`, `ai`, `review`, or `proposal`, the last a conflicting
+  answer that arose outside alignment, as `authority` defines it), and a
+  `ref` (the date of the words or the review, or the instrument or node
+  that raised the proposal), with `## Alternatives` holding one `###`
+  subsection per name saying what it would answer; `recommendation`,
+  required from the review stage on, with `adopts`, the alternative it
+  adopts or `standing` for the node as it stands, the `class` a
+  confirmation confers, the `boldness`, and its pin, `amends`, the hash
+  of the standing text it amends, and `at`, the graph commit it was
+  drafted at, which the frontier flags when the standing text has moved
+  since; `## Recommendation`, one fenced markdown block holding the whole
+  proposed node, present exactly when the recommendation adopts an
+  alternative; `review`, the clean-context review's `verdict`, `strength`,
+  `date`, and `of`, the hash of the recommended text it read, the fence
+  or the standing text, which the frontier flags when that text has
+  changed since; `depends`, the ids of the still-open questions this one's
+  ruling waits on, as data, so the page can order the author's queue and
+  show what a ruling here unblocks, its inverse being derived and never
+  stored; and `## Account`, the account in prose, which is not a proposal
+  and does not carry that name. A ruling-stage node without a forward
+  verdict is invalid; a recommendation changed after its review is sent
+  through the review again when the change is substance. A proposal from
+  outside alignment, reported by the reconciliation skill or raised by an
+  instrument, is recorded here as an alternative of source `proposal` on
+  the node it conflicts with, which opens that node's dialogue at
+  `periagogic`. The state must do three things
   between them: survive the session that held it, so a session which loses
   its context resumes every node from its stage; hold the author's
   intention against the account that accumulates around it, which the
@@ -252,21 +273,24 @@ skill only when the session starts in the checkout that carries it.
   between the graph and the AI's own knowledge; redundant seams.
 - Test the draft against the record it joins, the `under` chain to its
   ceiling and the global-tier nodes, read at `origin/disposition`. A draft
-  that contradicts doctrine is not written as an answer; it is a proposal,
-  and it opens review of the delegated answer it came from (`authority`).
+  that contradicts doctrine is not written as an answer; it is an
+  alternative on the node it contradicts, and it opens review of the
+  delegated answer it came from (`authority`).
 
 ## 3. Record
 
 - The author's words go into the node in the same turn they are given:
   verbatim and dated in `## Disposition` while the dialogue is open, quoted
   into the rationale at the recording, when `## Disposition` and `stage`
-  are removed. The AI's account goes into `## Proposal`: evidence,
-  findings, the recommendation with its three facts, the alternatives, the
-  review's counter-argument and the reply, and the responses open. A
-  `## Proposal` on an answered node is the pending findings of its sitting.
+  are removed. The alternatives go into `alternatives` and
+  `## Alternatives` as they arise, each with its source. The AI's account
+  goes into `## Account`: evidence, findings, the reasoning behind the
+  recommendation's three facts, the review's counter-argument and the
+  reply, and the responses open. An `## Account` on an answered node is
+  the pending findings of the dialogue open on it.
 - Write the node: question, form, `under`, the answer, the rationale with
-  rejected alternatives and the author's steers, a proposal for anything out
-  of scope, `defines` for the terms it defines, an instrument where one
+  rejected alternatives and the author's steers, an alternative on the node
+  it belongs to for anything out of scope, `defines` for the terms it defines, an instrument where one
   exists, readings as nodes under it. The record is the sole carrier: a
   decision that is not in the node did not happen. Every decision of the
   round maps to a field, and the round's report states the map.
@@ -303,8 +327,9 @@ rule projections are regenerated by the next reconciliation run, not here.
 - **Review in clean context**, before the author sees a recommendation.
   Set `stage: review` on each recommended disposition of the round, land
   (`checkpoint`), and invoke `/align-review` (`clean-context-review`,
-  `frontier-consistency`): one batch over the whole unanswered frontier,
-  every node with a stage, the round's drafts among the rest, read by one
+  `frontier-consistency`): one batch of the nodes at the review stage,
+  the round's drafts among the rest, judged against the full graph,
+  answered and unanswered at every stage, all of it read by one
   fresh subagent (opus, high effort), never a fork, in one context, whose
   brief carries nothing but the record and the validations the
   frontier-consistency node lists: on each draft, whether it answers the
@@ -320,14 +345,14 @@ rule projections are regenerated by the next reconciliation run, not here.
   naming its nodes and recommending their stage with the edit, merge, or
   split it proposes; it writes nothing. One batch runs at a time: wait
   for any review already running. Apply each verdict on its own: a
-  kickback sets `stage` and appends the findings to `## Proposal`; a
+  kickback sets `stage` and appends the findings to `## Account`; a
   forward sets `stage: ruling`, writes `review` with the verdict, the
-  strength, the date, and the hash of the draft it read, and puts the
+  strength, the date, and the hash of the recommended text it read, and puts the
   item on the page with the counter-argument and the session's reply, or
   with the note that the review found no strong counter-argument; a
   frontier finding kicks back each node it names with the finding and the
-  proposed edit appended, and a merge or split is put to the author as a
-  proposal, never done by the session. A disposition still in review
+  proposed edit appended, and a merge or split is put to the author as an
+  alternative on the node it would change, never done by the session. A disposition still in review
   never holds one that was forwarded.
 - **Classify the response** (`recording`, `unanswered`). `confirm`:
   record, ratified, or delegated where the author's words delegate it.
@@ -348,9 +373,12 @@ rule projections are regenerated by the next reconciliation run, not here.
 - **Record.** Write the stamp (`ratified`, `by: <the author's name>`,
   dated, with the ruling quoted and dated in the rationale; a ratified
   stamp whose ruling is not in the record is invalid; or `delegated`),
-  copy the draft into the node when it carries one, remove `stage`,
-  `recommendation`, `review`, `## Draft`, and `## Disposition`, validate,
-  and land.
+  copy the recommended text into the node when the recommendation adopts
+  an alternative, fold the alternatives into the rationale as rejected
+  lines with the ruling quoted, remove `stage`, `alternatives`,
+  `recommendation`, `review`, `depends`, `## Alternatives`,
+  `## Recommendation`, `## Account`, and `## Disposition`, validate, and
+  land.
 - Steer: amend the node; the steer enters the rationale as a rejected
   alternative or an amendment; project again.
 - The author's choice of the next node is a boost (`attention`).

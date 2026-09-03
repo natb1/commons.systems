@@ -43,7 +43,7 @@ after(async () => {
 function loadRenderer() {
   const m = TEMPLATE.match(/<script>\n([\s\S]*?)\n<\/script>/);
   assert.ok(m, "template has a plain <script> block");
-  const api = "esc inline mdHtml mdBlocks groupRejected plain firstSentence termIndex termRegex fmtPct formWord safeHref truncate shimsHtml chooseRoute savePlace loadPlace PLACE_KEY STATUS_WORD STATUS_CLASS pill stampPill unansweredPill draftNoteHtml authorityHtml rowHtml";
+  const api = "esc inline mdHtml mdBlocks groupRejected plain firstSentence termIndex termRegex fmtPct formWord safeHref truncate shimsHtml chooseRoute savePlace loadPlace PLACE_KEY STATUS_WORD STATUS_CLASS pill stampPill unansweredPill draftNoteHtml alternativesHtml authorityHtml rowHtml";
   return new Function(`${m[1]}\nreturn { ${api.split(" ").join(", ")} };`)();
 }
 const R = loadRenderer();
@@ -443,13 +443,15 @@ test("renderFrontier prints recommendation/review/draft lines after the stage li
   const reviewAt = rulingBlock.indexOf("  review:");
   const draftAt = rulingBlock.indexOf("  draft:");
   assert.ok(stageAt >= 0 && stageAt < recAt && recAt < reviewAt && reviewAt < draftAt, "recommendation, then review, then draft, all after stage");
-  assert.ok(rulingBlock.includes(`  recommendation: ${ruling.recommendation.class}, boldness ${ruling.recommendation.boldness}`));
+  assert.ok(rulingBlock.includes(
+    `  recommendation: adopts ${ruling.recommendation.adopts}, ${ruling.recommendation.class}, boldness ${ruling.recommendation.boldness}`,
+  ));
   assert.ok(rulingBlock.includes(`  review: forward (strong, 2026-09-03)`), "not stale (of matches)");
   assert.ok(!rulingBlock.includes("draft changed since the review"));
   assert.ok(rulingBlock.includes("  draft: yes"));
 
   const reviewOnlyBlock = blockFor("review-node");
-  assert.ok(reviewOnlyBlock.includes("  recommendation: delegated, boldness high"));
+  assert.ok(reviewOnlyBlock.includes("  recommendation: adopts standing, delegated, boldness high"));
   assert.ok(!reviewOnlyBlock.includes("  review:"), "no review yet at the review stage");
   assert.ok(!reviewOnlyBlock.includes("  draft:"));
 });
@@ -460,11 +462,46 @@ test("renderFrontier appends ', draft changed since the review' when reviewStale
   await writeFile(join(dir, "disposition.yaml"), "module: example.test\ngraphs:\n  main:\n    about: fixture\n");
   await writeFile(
     join(dir, "main", "stale.md"),
-    "---\nquestion: Stale?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\nstage: ruling\nrecommendation:\n  class: ratified\n  boldness: low\nreview:\n  verdict: forward\n  strength: none\n  date: 2026-01-01\n  of: " + "a".repeat(40) + "\n---\n\n## Answer\n\nAns.\n",
+    "---\nquestion: Stale?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\nstage: ruling\nrecommendation:\n  adopts: standing\n  class: ratified\n  boldness: low\n  amends: " + "b".repeat(40) + "\n  at: a1b2c3d\nreview:\n  verdict: forward\n  strength: none\n  date: 2026-01-01\n  of: " + "a".repeat(40) + "\n---\n\n## Answer\n\nAns.\n",
   );
   const graph = await readGraph(dir);
   const listing = renderFrontier(graph);
   assert.ok(listing.includes("  review: forward (none, 2026-01-01), draft changed since the review"));
+});
+
+test("renderFrontier names what the recommendation adopts, marks a prune, and marks a stale recommendation", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-alternatives"));
+  const listing = renderFrontier(graph);
+  const blockFor = (slug) => {
+    const node = graph.nodes.find((n) => n.slug === slug);
+    assert.ok(node, `fixture has no node ${slug}`);
+    const start = listing.indexOf(`- ${node.id}`);
+    const next = listing.indexOf("\n- ", start + 1);
+    return listing.slice(start, next === -1 ? listing.length : next);
+  };
+
+  const fresh = blockFor("fresh-node");
+  assert.ok(fresh.includes("  recommendation: adopts split-the-node, ratified, boldness high"));
+  assert.ok(!fresh.includes("(prune)"), "the adopted alternative is not a prune");
+  assert.ok(!fresh.includes("standing text changed since the recommendation"));
+  assert.ok(fresh.includes("  draft: yes"));
+  assert.ok(fresh.includes(
+    "  alternatives: 3 (keep-standing:author, split-the-node:review, follow-the-instrument:proposal)",
+  ), "the count, then each name with its source, in the list's own order");
+  const draftAt = fresh.indexOf("  draft:");
+  const altsAt = fresh.indexOf("  alternatives:");
+  assert.ok(draftAt >= 0 && draftAt < altsAt, "the alternatives line comes last of the dialogue lines");
+
+  const prune = blockFor("prune-node");
+  assert.ok(prune.includes("  recommendation: adopts fold-into-the-parent (prune), delegated, boldness moderate"));
+  assert.ok(!prune.includes("  draft:"), "a prune quotes no fence");
+  assert.ok(prune.includes("  alternatives: 1 (fold-into-the-parent:review)"));
+
+  const stale = blockFor("stale-node");
+  assert.ok(stale.includes(
+    "  recommendation: adopts standing, delegated, boldness low, standing text changed since the recommendation",
+  ));
+  assert.ok(!stale.includes("  alternatives:"), "no alternatives line when there are none");
 });
 
 /* ------------------------------------------------------- page constraints */
@@ -590,10 +627,61 @@ test("unansweredPill renders 'unanswered · <stage>' only for an unanswered node
   assert.equal(R.unansweredPill({ status: "answered" }), "", "an answered node never gets the pill even if it carries a stage");
 });
 
-test("draftNoteHtml points to the alignment page only when the node carries a Draft", () => {
-  assert.equal(R.draftNoteHtml({ draft: { raw: "x" } }), '<p class="draftnote">A draft awaits the author\'s ruling on the alignment page.</p>');
+test("draftNoteHtml points to the alignment page only when the node carries a Recommendation", () => {
+  assert.equal(R.draftNoteHtml({ draft: { raw: "x" } }), '<p class="draftnote">A recommendation awaits the author\'s ruling on the alignment page.</p>');
   assert.equal(R.draftNoteHtml({ draft: null }), "");
   assert.equal(R.draftNoteHtml({}), "");
+});
+
+test("alternativesHtml lists each pending alternative with its source, ref and prose, and says the standing answer still holds", () => {
+  const html = R.alternativesHtml({
+    alternatives: [
+      { name: "keep-standing", source: "author", ref: "2026-09-01", prune: false },
+      { name: "fold-into-the-parent", source: "review", ref: "2026-09-02", prune: true },
+      { name: "follow-the-instrument", source: "proposal", ref: "node --test x.mjs", prune: false },
+    ],
+    alternativesText: {
+      "keep-standing": "Leave the node as it stands.",
+      "fold-into-the-parent": "Delete the node; the one sentence that survives moves up.",
+      "follow-the-instrument": "The instrument contradicts the standing answer.",
+    },
+  });
+  assert.ok(html.includes("Pending alternatives"));
+  for (const name of ["keep-standing", "fold-into-the-parent", "follow-the-instrument"]) {
+    assert.ok(html.includes(`>${name}</span>`), `${name} is named`);
+  }
+  assert.ok(html.includes("author · 2026-09-01"), "the source and the ref that dates it");
+  assert.ok(html.includes("proposal · node --test x.mjs"), "the ref that names the instrument");
+  assert.ok(html.includes("Leave the node as it stands."), "each alternative's prose");
+  assert.ok(html.includes("Delete the node; the one sentence that survives moves up."));
+  assert.ok(html.includes('<span class="pill sm prune">prune</span>'), "the prune is marked");
+  assert.equal(html.split('class="pill sm prune"').length - 1, 1, "and only the prune is");
+  assert.ok(
+    html.includes("The standing answer keeps its authority until the author confirms one of these."),
+    "the line that says what the list does not do",
+  );
+
+  assert.equal(R.alternativesHtml({ alternatives: [] }), "", "nothing for a node with none");
+  assert.equal(R.alternativesHtml({}), "");
+});
+
+test("the browser's node page carries the pending alternatives beside the stamp", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-alternatives"));
+  const fresh = graph.nodes.find((n) => n.slug === "fresh-node");
+  assert.equal(fresh.alternatives.length, 3, "fixture precondition: three answers on the table");
+  const html = R.alternativesHtml(fresh);
+  assert.ok(html.includes(">split-the-node</span>") && html.includes(">follow-the-instrument</span>"));
+  assert.ok(html.includes("review · 2026-09-02"));
+  assert.ok(html.includes("the question is two questions"), "the alternative's prose");
+  assert.ok(!html.includes("prune"), "no prune among these three");
+
+  const pruned = R.alternativesHtml(graph.nodes.find((n) => n.slug === "prune-node"));
+  assert.ok(pruned.includes(">fold-into-the-parent</span>"));
+  assert.ok(pruned.includes('<span class="pill sm prune">prune</span>'), "a prune alternative is marked as one");
+
+  // and the browser keeps every node of this fixture: each has an answer
+  const kept = excludeUnaligned(graph).nodes.map((n) => n.slug).sort();
+  assert.deepEqual(kept, ["fresh-node", "prune-node", "stale-node"]);
 });
 
 test("authorityHtml appends the unanswered pill beside the stamp it already shows", () => {
@@ -602,7 +690,13 @@ test("authorityHtml appends the unanswered pill beside the stamp it already show
   assert.ok(stamped.includes('<span class="pill unans">unanswered · ruling</span>'));
 
   const settled = R.authorityHtml({ authority: { class: "ratified", by: "nathan", date: "2026-09-02" }, status: "answered" });
-  assert.ok(!settled.includes("unans"), "an answered node gets no unanswered pill");
+  assert.ok(!settled.includes("unans"), "an answered node with no dialogue gets no stage pill");
+
+  // an answered node whose standing answer holds while a dialogue runs on
+  // it anyway: the stage shows, but "unanswered" would misdescribe it.
+  const reopened = R.authorityHtml({ authority: { class: "ratified", by: "nathan", date: "2026-09-02" }, status: "answered", stage: "review" });
+  assert.ok(reopened.includes('<span class="pill unans">in dialogue · review</span>'));
+  assert.ok(!reopened.includes("unanswered"));
 
   const unstamped = R.authorityHtml({ authority: null, answer: "x", status: "unanswered", stage: "maieutic" });
   assert.ok(unstamped.includes('<span class="pill none">unstamped</span>'));
@@ -808,7 +902,7 @@ test("--alignment carries the author's words, the node as it stands, and the no-
   assert.ok(rulingItem.includes(ruling.answer), "the current answer text");
   assert.ok(rulingItem.includes(ruling.rationale), "the rationale text");
   assert.ok(rulingItem.includes("The AI's account"));
-  assert.ok(rulingItem.includes(ruling.proposal), "the proposal text");
+  assert.ok(rulingItem.includes(ruling.account), "the account text");
 
   const unalignedItem = itemHtml(html, unaligned.id);
   assert.equal(unaligned.answer, null, "fixture precondition: no answer");
@@ -911,6 +1005,86 @@ test("wordDiff matches off the shared head and tail, and returns null past the t
   assert.ok(!/too long to diff/i.test(html));
 });
 
+test("--alignment lists the alternatives after the node as it stands, marking the adopted one and any prune", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-alternatives"));
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  const fresh = nodeBySlug(graph, "fresh-node");
+  const article = itemHtml(html, fresh.id);
+
+  assert.ok(article.includes("The alternatives"), "the section's label");
+  const standsAt = article.indexOf("The node as it stands");
+  const altsAt = article.indexOf("The alternatives");
+  const recAt = article.indexOf("The recommendation");
+  assert.ok(standsAt >= 0 && standsAt < altsAt && altsAt < recAt, "after the node, before the recommendation");
+
+  for (const name of ["keep-standing", "split-the-node", "follow-the-instrument"]) {
+    assert.ok(article.includes(`<span class="mono">${name}</span>`), `${name} is named`);
+  }
+  assert.ok(article.includes('<span class="pill alt-src">author</span>'), "each alternative's source");
+  assert.ok(article.includes('<span class="pill alt-src">proposal</span>'));
+  assert.ok(
+    article.includes('<span class="pill alt-ref mono">node --test packages/disposition/read.test.mjs</span>'),
+    "the ref the proposal names",
+  );
+  assert.ok(article.includes("leave the node as it stands and close the dialogue"), "the prose of an alternative");
+  assert.ok(article.includes("the question is two questions"));
+
+  assert.equal(
+    article.split("the recommendation adopts this").length - 1, 1,
+    "exactly one alternative is marked as adopted",
+  );
+  const adoptedAt = article.indexOf("the recommendation adopts this");
+  const splitAt = article.indexOf('<span class="mono">split-the-node</span>');
+  const followAt = article.indexOf('<span class="mono">follow-the-instrument</span>');
+  assert.ok(splitAt < adoptedAt && adoptedAt < followAt, "and it is the one the recommendation names");
+  assert.ok(article.includes('class="alt adopted"'), "the adopted entry is marked on its own element too");
+
+  // a node with nothing on the table renders no section at all
+  const plain = itemHtml(html, nodeBySlug(graph, "stale-node").id);
+  assert.ok(!plain.includes("The alternatives"));
+});
+
+test("--alignment marks a prune alternative and captions what confirming it does", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-alternatives"));
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  const prune = nodeBySlug(graph, "prune-node");
+  assert.equal(prune.alternatives[0].prune, true, "fixture precondition: the alternative prunes the node");
+  assert.equal(prune.draft, null, "fixture precondition: a prune quotes no fence");
+  const article = itemHtml(html, prune.id);
+
+  assert.ok(article.includes('<span class="pill alt-prune">prune</span>'), "the entry is marked a prune");
+  assert.ok(article.includes("the recommendation adopts this"));
+  assert.ok(article.includes("adopts: fold-into-the-parent"), "the recommendation names it");
+  assert.ok(
+    article.includes("Confirm prunes the node; the node as it stands is what remains if you deny."),
+    "the prune's own caption",
+  );
+  assert.ok(!article.includes("Confirm ratifies the draft as the node."), "not the edit's caption");
+  assert.ok(!article.includes("The edit"), "and no edit, since there is no recommended text");
+
+  const fresh = itemHtml(html, nodeBySlug(graph, "fresh-node").id);
+  assert.ok(!fresh.includes("Confirm prunes the node"), "a recommendation that rewrites gets the edit's caption");
+  assert.ok(fresh.includes("Confirm ratifies the draft as the node."));
+});
+
+test("--alignment shows what the recommendation adopts and pills a stale one", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-alternatives"));
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+
+  const stale = nodeBySlug(graph, "stale-node");
+  assert.equal(stale.recommendationStale, true, "fixture precondition: the standing text moved");
+  const staleItem = itemHtml(html, stale.id);
+  assert.ok(staleItem.includes("adopts: standing"), "adopts is shown even for the node as it stands");
+  assert.ok(staleItem.includes("class: delegated") && staleItem.includes("boldness: low"));
+  assert.ok(staleItem.includes("standing text changed since the recommendation"), "the staleness pill");
+
+  const fresh = nodeBySlug(graph, "fresh-node");
+  assert.equal(fresh.recommendationStale, false, "fixture precondition: the recommendation still pins the text");
+  const freshItem = itemHtml(html, fresh.id);
+  assert.ok(freshItem.includes("adopts: split-the-node"));
+  assert.ok(!freshItem.includes("standing text changed since the recommendation"));
+});
+
 test("--alignment renders the recommendation's pills and persistence line, or says there is none", () => {
   const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
   const ruling = nodeBySlug(ALIGNMENT_GRAPH, "child-ruling");
@@ -999,13 +1173,13 @@ test("the doc id in --alignment output replaces '/' with ':'", () => {
   assert.ok(html.includes(`href="#item-${doc}"`), "and so does the rail's link to it");
 });
 
-test("a fenced ```markdown block inside a Proposal is quoted in its own labelled block", () => {
+test("a fenced ```markdown block inside an Account is quoted in its own labelled block", () => {
   const graph = {
     module: "example.test", ref: null, graphs: { main: { about: "fixture" } },
     nodes: [{
       id: "example.test/main/d", slug: "d", question: "Drafted?", graph: "main", stage: "ruling",
       under: [], rank: 1, status: "unanswered", answer: "Current answer.",
-      proposal: "Ordinary account prose.\n\n```markdown\n## Answer\n\nA quoted earlier draft.\n```\n\nMore prose after.",
+      account: "Ordinary account prose.\n\n```markdown\n## Answer\n\nA quoted earlier draft.\n```\n\nMore prose after.",
     }],
   };
   const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);

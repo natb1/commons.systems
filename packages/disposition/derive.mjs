@@ -218,19 +218,20 @@ export function deriveStatus(node) {
 
 /**
  * Strip the dialogue keys from a node file's raw frontmatter text, by line:
- * `stage`, `recommendation`, and `review`, each together with every line
- * nested under it (indented relative to it), so that writing this hash into
- * `review.of` -- or removing `review` from the frontmatter afterward --
- * never changes it. Operates on the raw YAML source text, not the parsed
- * object, because it is the *lines* belonging to a key that must go, not
- * just the key's value.
+ * `stage`, `recommendation`, `review`, `alternatives`, and `depends`, each
+ * together with every line nested under it (indented relative to it), so
+ * that writing this hash into `review.of` or `recommendation.amends` -- or
+ * removing either from the frontmatter afterward, or adding an alternative
+ * to the list -- never changes it. Operates on the raw YAML source text,
+ * not the parsed object, because it is the *lines* belonging to a key that
+ * must go, not just the key's value.
  *
  * @param {string} fmText - the raw text between the frontmatter's `---`
  *   delimiters (as `read.mjs`'s `parseNode` extracts it, before YAML.parse).
  * @returns {string}
  */
 function stripDialogueFrontmatterLines(fmText) {
-  const removedKeyRe = /^(stage|recommendation|review):/;
+  const removedKeyRe = /^(stage|recommendation|review|alternatives|depends):/;
   let skipping = false;
   return fmText
     .split('\n')
@@ -246,6 +247,30 @@ function stripDialogueFrontmatterLines(fmText) {
 }
 
 /**
+ * The standing hash: the sha1 hex digest of the node *as it stands*, which
+ * `recommendation.amends` pins and whose mismatch against a current
+ * recomputation is what `node.recommendationStale` means. It covers the
+ * frontmatter's raw text with every dialogue key removed (see
+ * `stripDialogueFrontmatterLines`), then a newline, the raw `## Answer`
+ * text (`''` when the node has none), a newline, and the raw
+ * `## Rationale` text (`''` when the node has none) -- so the standing
+ * answer and the fields that carry it are hashed, and the dialogue running
+ * beside them is not.
+ *
+ * A plain sha1 over synthesized text, not `blobSha1`'s git-blob framing:
+ * the git framing exists so a hash matches `git hash-object` on a real
+ * file's exact bytes, and this splice was never a file of its own.
+ *
+ * @param {{fmText: string, answer: string|null, rationale: string|null}} parts
+ * @returns {string} 40-hex sha1
+ */
+export function deriveStandingHash({ fmText, answer, rationale }) {
+  const strippedFm = stripDialogueFrontmatterLines(fmText);
+  const text = `${strippedFm}\n${answer ?? ''}\n${rationale ?? ''}`;
+  return createHash('sha1').update(text, 'utf8').digest('hex');
+}
+
+/**
  * The draft hash: the sha1 hex digest that `review.of` pins, and whose
  * mismatch against a current recomputation is what `node.reviewStale`
  * means (see commons.systems/disposition-graph/dialogue). This is a plain
@@ -255,13 +280,10 @@ function stripDialogueFrontmatterLines(fmText) {
  * and the text hashed here -- a fence's content, or a frontmatter-minus-
  * dialogue-keys/answer/rationale splice -- was never a file of its own.
  *
- * With a `## Draft`, the hash is of the fence's content, exactly: the
- * draft is a whole proposed node quoted verbatim, so any change to it is a
- * new draft. With no `## Draft` (the node is its own draft), the hash
- * covers the frontmatter's raw text with the `stage`, `recommendation`,
- * and `review` keys removed (see `stripDialogueFrontmatterLines`), then a
- * newline, the raw `## Answer` text (`''` when the node has none), a
- * newline, and the raw `## Rationale` text (`''` when the node has none).
+ * With a `## Recommendation` fence, the hash is of the fence's content,
+ * exactly: the recommendation is a whole proposed node quoted verbatim, so
+ * any change to it is a new draft. With no fence (the recommendation
+ * adopts the node as it stands), the hash is the standing hash.
  *
  * `read.mjs`'s `parseNode` calls this, passing the raw frontmatter text and
  * raw section text it extracts while parsing a node file -- the parsed,
@@ -276,9 +298,7 @@ export function deriveDraftHash({ fmText, draftFence, answer, rationale }) {
   if (draftFence !== null && draftFence !== undefined) {
     return createHash('sha1').update(draftFence, 'utf8').digest('hex');
   }
-  const strippedFm = stripDialogueFrontmatterLines(fmText);
-  const text = `${strippedFm}\n${answer ?? ''}\n${rationale ?? ''}`;
-  return createHash('sha1').update(text, 'utf8').digest('hex');
+  return deriveStandingHash({ fmText, answer, rationale });
 }
 
 /**

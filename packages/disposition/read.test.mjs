@@ -17,6 +17,7 @@ import {
   deriveChildren,
   deriveDraftHash,
   deriveRank,
+  deriveStandingHash,
   deriveStatus,
 } from './derive.mjs';
 import { parseNode, readGraph } from './read.mjs';
@@ -126,24 +127,58 @@ describe('derive.mjs', () => {
     assert.equal(deriveStatus({ authority: null, answer: null }), 'unanswered');
   });
 
-  test('deriveDraftHash: with a Draft, hashes the fence content exactly; without one, hashes stripped frontmatter + answer + rationale', () => {
+  test('deriveDraftHash: with a Recommendation fence, hashes the fence content exactly; without one, falls back to the standing hash', () => {
     const withDraft = deriveDraftHash({ fmText: 'question: Q?\nstage: ruling', draftFence: 'question: Q?\n', answer: 'ignored', rationale: 'ignored' });
     assert.equal(withDraft, createHash('sha1').update('question: Q?\n', 'utf8').digest('hex'));
 
-    const noDraft = deriveDraftHash({ fmText: 'question: Q?\nstage: review', draftFence: null, answer: 'Ans.', rationale: 'Rat.' });
+    const parts = { fmText: 'question: Q?\nstage: review', answer: 'Ans.', rationale: 'Rat.' };
+    const noDraft = deriveDraftHash({ ...parts, draftFence: null });
     assert.equal(noDraft, createHash('sha1').update('question: Q?\nAns.\nRat.', 'utf8').digest('hex'));
+    assert.equal(noDraft, deriveStandingHash(parts), 'the no-fence draft hash is exactly the standing hash');
   });
 
-  test('deriveDraftHash: stage/recommendation/review lines (and everything nested under them) do not affect the no-draft hash', () => {
-    const bare = deriveDraftHash({
-      fmText: 'question: Q?\nform: rule',
-      draftFence: null, answer: 'Ans.', rationale: null,
+  test('deriveStandingHash: stripped frontmatter, then the answer, then the rationale', () => {
+    const hash = deriveStandingHash({ fmText: 'question: Q?\nform: rule', answer: 'Ans.', rationale: 'Rat.' });
+    assert.equal(hash, createHash('sha1').update('question: Q?\nform: rule\nAns.\nRat.', 'utf8').digest('hex'));
+    const bare = deriveStandingHash({ fmText: 'question: Q?', answer: null, rationale: null });
+    assert.equal(bare, createHash('sha1').update('question: Q?\n\n', 'utf8').digest('hex'), 'an absent section hashes as the empty string');
+  });
+
+  test('deriveStandingHash: every dialogue key (and everything nested under it) is invisible to the hash', () => {
+    const bare = deriveStandingHash({ fmText: 'question: Q?\nform: rule', answer: 'Ans.', rationale: null });
+    const dressedUp = deriveStandingHash({
+      fmText: [
+        'question: Q?',
+        'stage: review',
+        'alternatives:',
+        '  - name: other-way',
+        '    source: ai',
+        'depends:',
+        '  - example.test/main/open',
+        'recommendation:',
+        '  adopts: other-way',
+        '  class: ratified',
+        '  boldness: high',
+        `  amends: ${'b'.repeat(40)}`,
+        '  at: a1b2c3d',
+        'form: rule',
+        'review:',
+        '  verdict: forward',
+        '  strength: none',
+        '  date: 2026-01-01',
+        `  of: ${'a'.repeat(40)}`,
+      ].join('\n'),
+      answer: 'Ans.', rationale: null,
     });
-    const dressedUp = deriveDraftHash({
-      fmText: 'question: Q?\nstage: review\nrecommendation:\n  class: ratified\n  boldness: high\nform: rule\nreview:\n  verdict: forward\n  strength: none\n  date: 2026-01-01\n  of: ' + 'a'.repeat(40),
-      draftFence: null, answer: 'Ans.', rationale: null,
-    });
-    assert.equal(bare, dressedUp, 'adding stage/recommendation/review to the frontmatter changes nothing the hash reads');
+    assert.equal(bare, dressedUp, 'stage, alternatives, depends, recommendation, and review are all stripped');
+  });
+
+  test('deriveDraftHash and deriveStandingHash agree with the reader on a real fixture node', async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-alternatives'));
+    const fresh = graph.nodes.find((n) => n.id === 'example.test/main/fresh-node');
+    assert.equal(fresh.recommendation.amends, fresh.standingHash, 'the fixture pins the current standing hash');
+    assert.equal(fresh.review.of, fresh.draftHash, 'the fixture pins the current fence hash');
+    assert.notEqual(fresh.standingHash, fresh.draftHash, 'a fence makes the two hashes diverge');
   });
 });
 
@@ -231,11 +266,11 @@ describe('parseNode', () => {
     assert.throws(() => parseNode(text, loc), /'order' requires an '## Answer' section/);
   });
 
-  // ---- '## Draft': dialogue.md's "the validator parses it and checks only
-  // that it answers the same question" -- no field rule, shape rule,
-  // vocabulary, or section-requirement rule applies inside the fence. ----
+  // ---- '## Recommendation': dialogue.md's "the validator parses it and
+  // checks only that it answers the same question" -- no field rule, shape
+  // rule, vocabulary, or section-requirement rule applies inside the fence. ----
 
-  test('a ## Draft with an unknown frontmatter key parses without error -- only structure and the question are checked', () => {
+  test('a ## Recommendation fence with an unknown frontmatter key parses without error -- only structure and the question are checked', () => {
     const text = [
       '---',
       'question: What?',
@@ -246,7 +281,7 @@ describe('parseNode', () => {
       '',
       'Open.',
       '',
-      '## Draft',
+      '## Recommendation',
       '',
       '```markdown',
       '---',
@@ -263,6 +298,62 @@ describe('parseNode', () => {
     const node = parseNode(text, loc);
     assert.ok(node.draft, 'the draft parses despite its unrecognized frontmatter key');
     assert.equal(node.draft.question, 'What?');
+  });
+
+  // ---- '## Alternatives': every line of it belongs to one alternative,
+  // so prose before the first '### ' heading has no alternative to belong
+  // to. (The list/heading correspondence rules are covered by fixtures.) ----
+
+  test("'## Alternatives' rejects prose before its first '### ' heading", () => {
+    const text = [
+      '---',
+      'question: What?',
+      'stage: periagogic',
+      'alternatives:',
+      '  - name: other-way',
+      '    source: ai',
+      '---',
+      '',
+      '## Disposition',
+      '',
+      'Open.',
+      '',
+      '## Alternatives',
+      '',
+      'Stray prose belonging to no alternative.',
+      '',
+      '### other-way',
+      '',
+      'The one alternative on the table.',
+      '',
+    ].join('\n');
+    assert.throws(
+      () => parseNode(text, loc),
+      /'## Alternatives' has text before the first '### ' heading: "Stray prose belonging to no alternative\."/,
+    );
+  });
+
+  test("a '### ' heading outside '## Alternatives' stays content", () => {
+    const text = [
+      '---',
+      'question: What?',
+      'stage: periagogic',
+      '---',
+      '',
+      '## Disposition',
+      '',
+      'Open.',
+      '',
+      '## Account',
+      '',
+      '### Clean-context review, 2026-09-03',
+      '',
+      'The reviewer read the node and forwarded it.',
+      '',
+    ].join('\n');
+    const node = parseNode(text, loc);
+    assert.ok(node.account.startsWith('### Clean-context review, 2026-09-03'));
+    assert.deepEqual(node.alternativesText, {});
   });
 });
 
@@ -412,7 +503,7 @@ describe('readGraph: invalid fixtures', () => {
     // status / dialogue rules (session-context: an unanswered node -- a
     // deferred stamp, no stamp, or no '## Answer' -- carries the dialogue).
     ['invalid-unaligned-without-stage', /example\.test\/main\/bad is unanswered and must carry stage/],
-    ['invalid-stage-without-dialogue', /stage requires a '## Disposition', '## Proposal', or '## Answer' section/],
+    ['invalid-stage-without-dialogue', /stage requires a '## Disposition', '## Account', or '## Answer' section/],
     ['invalid-disposition-without-stage', /'## Disposition' requires 'stage'/],
     ['invalid-stage-value', /'stage' must be one of: periagogic, maieutic, ruling, review/],
     ['invalid-unaligned-tier', /'tier' requires an '## Answer' section/],
@@ -424,20 +515,46 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-order-head', /'order' puts example\.test\/main\/a in its first step, but example\.test\/main\/d \(rank 0\.9901\) outranks it and is not its ancestor/],
     ['invalid-order-unresolved', /'order' names example\.test\/main\/does-not-exist, which is not a node/],
     ['invalid-order-no-answer', /'order' requires an '## Answer' section/],
-    // dialogue fields: recommendation, review, and '## Draft' (dialogue.md).
-    ['invalid-recommendation-shape', /'recommendation' must be \{class: ratified\|delegated, boldness: low\|moderate\|high\}/],
+    // dialogue fields: alternatives, recommendation, review, and the
+    // '## Alternatives' / '## Recommendation' / '## Account' sections.
+    ['invalid-recommendation-shape', /'recommendation' must be \{adopts: standing\|<alternative name>, class: ratified\|delegated, boldness: low\|moderate\|high, amends: <sha1>, at: <7-40 hex commit>\}/],
+    ['invalid-recommendation-missing-amends', /'recommendation' must be \{adopts: .*amends: <sha1>, at: <7-40 hex commit>\}/],
     ['invalid-review-shape', /'review' must be \{verdict: forward\|kickback, strength: strong\|moderate\|weak\|none, date: YYYY-MM-DD, of: <sha1>\}/],
     // `siblings` (the other drafts a per-node reviewer once read) is no
     // longer part of the review schema now that every review is a batch
     // over the whole frontier; this fixture's extra 'siblings' key fails
     // the same generic shape check invalid-review-shape does.
     ['invalid-review-siblings-unresolved', /'review' must be \{verdict: forward\|kickback, strength: strong\|moderate\|weak\|none, date: YYYY-MM-DD, of: <sha1>\}/],
-    ['invalid-dialogue-without-stage', /'recommendation', 'review', and '## Draft' are parts of the dialogue and require stage/],
-    ['invalid-draft-not-fenced', /'## Draft' must hold exactly one fenced markdown block/],
-    ['invalid-draft-parse-error', /'## Draft' does not parse as a node: /],
-    ['invalid-draft-wrong-question', /'## Draft' answers a different question/],
+    ['invalid-dialogue-without-stage', /'alternatives', 'recommendation', 'review', 'depends', '## Alternatives', '## Recommendation', and '## Account' are parts of the dialogue and require stage/],
+    ['invalid-account-without-stage', /'alternatives', 'recommendation', 'review', 'depends', '## Alternatives', '## Recommendation', and '## Account' are parts of the dialogue and require stage/],
+    ['invalid-draft-not-fenced', /'## Recommendation' must hold exactly one fenced markdown block/],
+    ['invalid-draft-parse-error', /'## Recommendation' does not parse as a node: /],
+    ['invalid-draft-wrong-question', /'## Recommendation' answers a different question/],
     ['invalid-stage-needs-recommendation', /stage review or ruling requires 'recommendation'/],
     ['invalid-stage-ruling-needs-forward-review', /stage ruling requires a 'review' with verdict forward/],
+    // the 'alternatives' list: its own shape, its unique names, and the
+    // name 'standing', which belongs to the node as it stands.
+    ['invalid-alternatives-shape', /'alternatives' must be a list of \{name: <lowercase slug>, source: author\|ai\|review\|proposal, ref: <non-empty string, required when source is proposal>, prune: <optional boolean>\}/],
+    ['invalid-alternatives-proposal-without-ref', /'alternatives' must be a list of \{name: <lowercase slug>, source: author\|ai\|review\|proposal, ref: <non-empty string, required when source is proposal>, prune: <optional boolean>\}/],
+    ['invalid-alternatives-duplicate-name', /'alternatives' names same twice/],
+    ['invalid-alternatives-standing-name', /'alternatives' names an alternative 'standing', which is reserved for the node as it stands/],
+    // '## Alternatives' stands with the list: present iff it is non-empty,
+    // one '### <name>' subsection per entry, in the entries' order.
+    ['invalid-alternatives-without-section', /'alternatives' is non-empty and requires a '## Alternatives' section/],
+    ['invalid-alternatives-section-without-list', /'## Alternatives' requires a non-empty 'alternatives' list/],
+    ['invalid-alternatives-heading-mismatch', /'## Alternatives' subsections must match the 'alternatives' list in order: expected '### second' at position 2, found '### third'/],
+    // 'recommendation.adopts' resolves, and the '## Recommendation' fence
+    // is present exactly when it names an alternative.
+    ['invalid-adopts-unlisted', /'recommendation\.adopts' names 'unlisted', which is neither 'standing' nor a listed alternative/],
+    ['invalid-adopts-standing-without-answer', /'recommendation\.adopts' is 'standing', which requires an '## Answer' section/],
+    ['invalid-adopts-standing-with-fence', /'recommendation\.adopts' is 'standing', so the node carries no '## Recommendation' section/],
+    ['invalid-adopts-alternative-without-fence', /'recommendation\.adopts' names the alternative 'the-other-way', which requires a '## Recommendation' section/],
+    // a prune alternative deletes the node, so it proposes no text and
+    // carries no fence (the amendment of 2026-09-03).
+    ['invalid-adopts-prune-with-fence', /'recommendation\.adopts' names the prune alternative 'delete-it', so the node carries no '## Recommendation' section/],
+    // the two retired headings are now just unknown headings.
+    ['invalid-proposal-heading', /unexpected '## Proposal' heading \(only Disposition, Answer, Rationale, Alternatives, Recommendation, Account are allowed\)/],
+    ['invalid-draft-heading', /unexpected '## Draft' heading \(only Disposition, Answer, Rationale, Alternatives, Recommendation, Account are allowed\)/],
   ];
 
   for (const [dirName, pattern] of cases) {
@@ -469,11 +586,11 @@ describe('readGraph: invalid fixtures', () => {
     });
   });
 
-  test('invalid-draft-wrong-question fails on the question mismatch alone -- the draft is otherwise old-doctrine-valid', async () => {
+  test('invalid-draft-wrong-question fails on the question mismatch alone -- the fence is otherwise old-doctrine-valid', async () => {
     await assert.rejects(readGraph(path.join(FIXTURES, 'invalid-draft-wrong-question')), (err) => {
       const lines = err.message.split('\n');
       assert.equal(lines.length, 1, 'no other field on this well-formed draft is checked, so this is the only problem');
-      assert.match(lines[0], /'## Draft' answers a different question$/);
+      assert.match(lines[0], /'## Recommendation' answers a different question$/);
       return true;
     });
   });
@@ -508,7 +625,8 @@ describe('readGraph: fenced-body fixture', () => {
     assert.equal(graph.nodes.length, 1);
     const node = graph.nodes[0];
     assert.equal(node.rationale, null);
-    assert.equal(node.proposal, null);
+    assert.equal(node.account, null, "the section is 'account' now, not 'proposal'");
+    assert.equal(node.proposal, undefined, "'proposal' is gone from the node object");
     assert.ok(node.answer.startsWith('Real answer text before the example.'));
     assert.ok(node.answer.endsWith('More real answer text after the fence.'));
     assert.ok(
@@ -584,17 +702,26 @@ describe('readGraph: valid-unaligned fixture', () => {
     assert.equal(unaligned.answer, null);
 
     // a node with '## Disposition', '## Answer', '## Rationale', and
-    // '## Proposal' all together: still mid-dialogue (carries a stage,
+    // '## Account' all together: still mid-dialogue (carries a stage,
     // recommendation, and a forward review), but an '## Answer' means it
     // is not an un-aligned disposition -- it is unanswered only because its
     // stamp is deferred, not because it has no answer.
     const ruling = byId('child-ruling');
     assert.equal(ruling.status, 'unanswered');
     assert.equal(ruling.stage, 'ruling');
-    assert.deepEqual(ruling.recommendation, { class: 'ratified', boldness: 'moderate' });
+    assert.deepEqual(ruling.recommendation, {
+      adopts: 'standing',
+      class: 'ratified',
+      boldness: 'moderate',
+      amends: ruling.standingHash,
+      at: 'a1b2c3d',
+    });
+    assert.equal(ruling.recommendationStale, false, "the fixture's amends pins the current standing hash");
     assert.equal(ruling.review.verdict, 'forward');
     assert.equal(ruling.reviewStale, true, "the fixture's placeholder review.of does not match the computed draft hash");
-    assert.ok(ruling.disposition && ruling.answer && ruling.rationale && ruling.proposal);
+    assert.ok(ruling.disposition && ruling.answer && ruling.rationale && ruling.account);
+    assert.deepEqual(ruling.alternatives, [], 'a recommendation that adopts the standing answer needs none');
+    assert.deepEqual(ruling.alternativesText, {});
   });
 });
 
@@ -636,16 +763,26 @@ describe('readGraph: valid-dialogue fixture', () => {
     return node;
   }
 
-  test('a node at ruling carries recommendation, a forward review whose "of" matches the draft hash, and a parsed Draft', async () => {
+  test('a node at ruling carries recommendation, a forward review whose "of" matches the draft hash, and a parsed Recommendation fence', async () => {
     const node = await byId('ruling-node');
     assert.equal(node.status, 'unanswered');
     assert.equal(node.stage, 'ruling');
-    assert.deepEqual(node.recommendation, { class: 'ratified', boldness: 'moderate' });
+    assert.deepEqual(node.recommendation, {
+      adopts: 'whole-node',
+      class: 'ratified',
+      boldness: 'moderate',
+      amends: node.standingHash,
+      at: 'a1b2c3d',
+    });
+    assert.equal(node.recommendationStale, false);
+    assert.deepEqual(node.alternatives, [{ name: 'whole-node', source: 'ai', ref: '2026-09-03', prune: false }]);
+    assert.ok(node.alternativesText['whole-node'].startsWith('Read the fence as a whole proposed node'));
+    assert.ok(node.account.startsWith('Ratify the alternative above'), "the account replaces the old '## Proposal'");
     assert.equal(node.review.verdict, 'forward');
     assert.deepEqual(Object.keys(node.review).sort(), ['date', 'of', 'strength', 'verdict'], "no 'siblings' key");
     assert.equal(node.review.of, node.draftHash, "the fixture's review.of is kept in step with the draft hash");
     assert.equal(node.reviewStale, false);
-    assert.ok(node.draft, 'the node carries a parsed Draft');
+    assert.ok(node.draft, 'the node carries a parsed Recommendation fence');
     assert.equal(node.draft.question, node.question, "the draft answers the node's own question");
     assert.equal(node.draft.frontmatter.authority.class, 'ratified');
     assert.ok(node.draft.sections.Answer.startsWith('Yes: a draft is a whole proposed node'));
@@ -655,10 +792,17 @@ describe('readGraph: valid-dialogue fixture', () => {
     const node = await byId('review-node');
     assert.equal(node.status, 'unanswered');
     assert.equal(node.stage, 'review');
-    assert.deepEqual(node.recommendation, { class: 'delegated', boldness: 'high' });
+    assert.deepEqual(node.recommendation, {
+      adopts: 'standing',
+      class: 'delegated',
+      boldness: 'high',
+      amends: node.standingHash,
+      at: 'a1b2c3d',
+    });
     assert.equal(node.review, null);
     assert.equal(node.reviewStale, false, 'reviewStale is only ever true when a review exists');
-    assert.equal(node.draft, null);
+    assert.equal(node.draft, null, "adopts: standing means there is no '## Recommendation' fence");
+    assert.equal(node.draftHash, node.standingHash, 'with no fence the two hashes are the same');
   });
 
   test('an answered ratified node needs no stage at all', async () => {
@@ -666,6 +810,7 @@ describe('readGraph: valid-dialogue fixture', () => {
     assert.equal(node.status, 'answered');
     assert.equal(node.stage, null);
     assert.equal(node.recommendation, null);
+    assert.equal(node.recommendationStale, false, 'recommendationStale is only ever true when a recommendation exists');
     assert.equal(node.review, null);
   });
 
@@ -674,9 +819,15 @@ describe('readGraph: valid-dialogue fixture', () => {
     assert.equal(node.status, 'answered');
     assert.equal(node.stage, 'review');
     assert.equal(node.disposition, null);
-    assert.equal(node.proposal, null);
+    assert.equal(node.account, null);
     assert.ok(node.answer, 'only an Answer section supports the stage here');
-    assert.deepEqual(node.recommendation, { class: 'ratified', boldness: 'low' });
+    assert.deepEqual(node.recommendation, {
+      adopts: 'standing',
+      class: 'ratified',
+      boldness: 'low',
+      amends: node.standingHash,
+      at: 'a1b2c3d',
+    });
   });
 });
 
@@ -738,6 +889,84 @@ describe('readGraph: valid-draft-old-doctrine fixture', () => {
     }, 'an authority.date that fails isValidDate is passed through unvalidated, not rejected or normalized to null');
     assert.equal(node.draft.frontmatter.tier, 'cosmic', "'tier' outside its vocabulary is passed through, not rejected");
     assert.equal(node.reviewStale, false, "the fixture's review.of is kept in step with the draft hash");
+    assert.equal(node.recommendationStale, false, "the fixture's recommendation.amends is kept in step with the standing hash");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readGraph: valid-alternatives fixture
+// ---------------------------------------------------------------------------
+
+describe('readGraph: valid-alternatives fixture', () => {
+  const graphPromise = readGraph(path.join(FIXTURES, 'valid-alternatives'));
+  async function byId(slug) {
+    const graph = await graphPromise;
+    const node = graph.nodes.find((n) => n.id === `example.test/main/${slug}`);
+    assert.ok(node, `expected a node with slug ${slug}`);
+    return node;
+  }
+
+  test('a stamped node carries its alternatives, one per source, with ref null only where the source allows it', async () => {
+    const node = await byId('fresh-node');
+    assert.equal(node.status, 'unanswered', 'a deferred stamp is still unanswered');
+    assert.equal(node.authority.class, 'deferred');
+    assert.deepEqual(node.alternatives, [
+      { name: 'keep-standing', source: 'author', ref: '2026-09-01', prune: false },
+      { name: 'split-the-node', source: 'review', ref: '2026-09-02', prune: false },
+      { name: 'follow-the-instrument', source: 'proposal', ref: 'node --test packages/disposition/read.test.mjs', prune: false },
+    ], "an entry with no 'prune' key reads as prune: false");
+  });
+
+  test('alternativesText maps each listed name to its trimmed subsection prose', async () => {
+    const node = await byId('fresh-node');
+    assert.deepEqual(Object.keys(node.alternativesText), [
+      'keep-standing', 'split-the-node', 'follow-the-instrument',
+    ], "the map's keys are the list's names, in the list's order");
+    assert.ok(node.alternativesText['keep-standing'].startsWith("The author's own alternative"));
+    assert.ok(node.alternativesText['split-the-node'].endsWith('before any of it is ratified.'));
+    assert.ok(!node.alternativesText['follow-the-instrument'].includes('###'), 'the heading itself is not part of the prose');
+  });
+
+  test('a recommendation adopting an alternative carries the fence, and both hashes pin what they name', async () => {
+    const node = await byId('fresh-node');
+    assert.equal(node.recommendation.adopts, 'split-the-node');
+    assert.equal(node.recommendation.class, 'ratified');
+    assert.equal(node.recommendation.boldness, 'high');
+    assert.ok(node.draft, "adopting an alternative means a '## Recommendation' fence");
+    assert.equal(node.draft.question, node.question);
+    assert.ok(node.draft.sections.Answer.startsWith('Split the node'));
+    assert.equal(node.review.of, node.draftHash);
+    assert.equal(node.reviewStale, false);
+    assert.equal(node.recommendation.amends, node.standingHash);
+    assert.equal(node.recommendationStale, false, 'amends equals the computed standing hash');
+    assert.notEqual(node.standingHash, node.draftHash);
+  });
+
+  test('a recommendation adopting a prune alternative carries no fence, and the node still stands', async () => {
+    const node = await byId('prune-node');
+    assert.equal(node.status, 'unanswered');
+    assert.deepEqual(node.alternatives, [
+      { name: 'fold-into-the-parent', source: 'review', ref: '2026-09-02', prune: true },
+    ]);
+    assert.equal(node.recommendation.adopts, 'fold-into-the-parent');
+    assert.equal(node.draft, null, 'a deleted node has no text, so there is no fence to parse');
+    assert.equal(node.draftHash, node.standingHash, 'with no fence the draft hash is the standing hash');
+    assert.equal(node.review.of, node.draftHash);
+    assert.equal(node.reviewStale, false);
+    assert.equal(node.recommendation.amends, node.standingHash);
+    assert.equal(node.recommendationStale, false);
+    assert.ok(node.answer, 'the node as it stands is what remains if the author denies the prune');
+    assert.ok(node.alternativesText['fold-into-the-parent'].startsWith('Prune the node'));
+  });
+
+  test('recommendationStale is true when amends no longer matches the standing hash', async () => {
+    const node = await byId('stale-node');
+    assert.equal(node.recommendation.adopts, 'standing');
+    assert.equal(node.recommendation.amends, 'a'.repeat(40));
+    assert.notEqual(node.standingHash, 'a'.repeat(40));
+    assert.equal(node.recommendationStale, true);
+    assert.equal(node.reviewStale, false, 'no review, so nothing is stale on that side');
+    assert.equal(node.draft, null);
   });
 });
 
