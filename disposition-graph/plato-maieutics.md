@@ -9,7 +9,6 @@ under:
   - commons.systems/disposition-graph/growth
 source: Plato, Theaetetus 148e to 151d (Socrates practises his mother's art of midwifery on souls, is himself barren of wisdom, and delivers what the other carries) and 151e, 157d, 160e to 161a (the offspring is tested, and a wind-egg is exposed and set aside).
 relation: adopted
-ledger: L35
 ---
 ## Answer
 
@@ -17,4 +16,4 @@ Yes, for the conduct in which the answer lives in the author, unrecorded. Socrat
 
 ## Rationale
 
-Adopted as the name and the ground of the maieutic conduct. The divergence to keep in view: the AI is not barren; it drafts, and the draft can lead. That is why the draft must be visible and refusable, and why the periagogic conduct runs first when the ground is already recorded. Ledger L35.
+Adopted as the name and the ground of the maieutic conduct. The divergence to keep in view: the AI is not barren; it drafts, and the draft can lead. That is why the draft must be visible and refusable, and why the periagogic conduct runs first when the ground is already recorded.

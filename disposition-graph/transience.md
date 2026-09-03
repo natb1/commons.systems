@@ -17,7 +17,6 @@ instrument:
   kind: check
   ref: the validator and the frontier projection on the implementation ref, not yet materialized for shims
   note: every declared shim resolves to the node it stands in for and to a liquidation condition; live shims are listed; a shim whose condition is met is flagged; no node has a form or field that records a unit of work
-ledger: L37
 ---
 ## Answer
 

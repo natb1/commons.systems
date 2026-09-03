@@ -12,7 +12,6 @@ defines:
   - rank
   - ceiling
   - context
-ledger: L14
 ---
 ## Answer
 
@@ -20,4 +19,4 @@ The question or questions named in its `under` field. This is the only hierarchi
 
 ## Rationale
 
-Ask "why does this question exist?"; the answer names its parent. Never choose a parent to change priority; that is what boost is for, and boost is the author's alone. Rejected: separate edges for attention, context, and containment, each of which turned out to be a reading of the same fact; a second reference kind for cousins, which differs from `under` by exactly one bit, motivation, and is kept as `cites`. Ledger L13, L14.
+Ask "why does this question exist?"; the answer names its parent. Never choose a parent to change priority; that is what boost is for, and boost is the author's alone. Rejected: separate edges for attention, context, and containment, each of which turned out to be a reading of the same fact; a second reference kind for cousins, which differs from `under` by exactly one bit, motivation, and is kept as `cites`.

@@ -10,7 +10,6 @@ under:
 defines:
   - boost
   - onboarding path
-ledger: L13
 ---
 ## Answer
 
@@ -18,4 +17,4 @@ By rank, which is one fact with three readings. Rank is computed from the `under
 
 ## Rationale
 
-The author's ruling of 2026-09-02 that ranking serves onboarding. Prerequisites come from `under` and importance from rank, so a pedagogical order and a priority order do not fight: the walk descends the tree and orders siblings by rank. Rejected: choosing a parent to change priority. Ledger L13.
+The author's ruling of 2026-09-02 that ranking serves onboarding. Prerequisites come from `under` and importance from rank, so a pedagogical order and a priority order do not fight: the walk descends the tree and orders siblings by rank. Rejected: choosing a parent to change priority.

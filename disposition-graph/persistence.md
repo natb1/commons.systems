@@ -10,7 +10,6 @@ under:
 defines:
   - land
   - disposition ref
-ledger: L04
 ---
 ## Answer
 
@@ -18,4 +17,4 @@ On a ref of its own, named `disposition`, in the repository whose disposition it
 
 ## Rationale
 
-The author's rejection of pull-request landing for the graph, 2026-09-02, on the grounds that review was redundant with the interview and a shared ref queued graph writes behind implementation checks. Traditions to record as readings: optimistic concurrency control (Kung and Robinson, 1981); resource versions in Kubernetes. Ledger L04.
+The author's rejection of pull-request landing for the graph, 2026-09-02, on the grounds that review was redundant with the interview and a shared ref queued graph writes behind implementation checks. Traditions to record as readings: optimistic concurrency control (Kung and Robinson, 1981); resource versions in Kubernetes.

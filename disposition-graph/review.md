@@ -12,9 +12,13 @@ defines:
   - blocking finding
 instrument:
   kind: check
-  ref: the detached code-review instrument on `main`, `.claude/skills/dispatch-propagate/scripts/dispatch-code-review`, run from the `greenfield` worktree (shim)
-  note: liquidates when an instrument on the `greenfield` ref produces the assessment from this node; until then the incumbent instrument's detachment, locks, await loop, and resume cache are facts, not doctrine
-ledger: L29
+  ref: the code-review instrument on the implementation ref, producing the assessment this node describes
+  note: not yet materialized; the shim below stands in for it
+shims:
+  - artifact: the detached code-review instrument on `main`, `.claude/skills/dispatch-propagate/scripts/dispatch-code-review`, run from the `greenfield` worktree
+    for: the instrument of this node
+    liquidation: an instrument on the `greenfield` ref produces the assessment from this node; until then the incumbent instrument's detachment, locks, await loop, and resume cache are facts, not doctrine
+    declared: 2026-09-02
 ---
 ## Answer
 
@@ -22,7 +26,7 @@ By an adversarial review of each landing's diff before it lands, producing an as
 
 ## Rationale
 
-The author's ruling of 2026-09-02 that every bootstrap landing requires shimmed code review, adopted from the rules the legacy bootstrap recorded after measurement: one change thrashed sixteen rounds and fifty-six findings when review settled on zero findings, another went fourteen rounds and twenty-three commits because its diff grew between rounds, and a full assessment costs thirteen to fifteen minutes of wall clock at high effort and about seven at medium. Hence a severity gate that prose findings cannot move, a hard cap with no design-surface exemption, batching, a frozen scope, and a frontier channel for everything the gate excludes. Review is part of reconciliation in both directions: it checks the landing against the disposition it serves, and every excluded finding is a candidate disposition. The bootstrap ordering is the author's ruling of 2026-09-02: "The code review is expensive ... during bootstrap code review is only required after ratification. This is analogous to the recorded greenfield doctrine in the legacy graph that the reconciliation frontier should first validate functionality, and only spend cycles on cross-cutting non-functional validation after that." The graph landing is excluded because its review is the interview itself; the legacy attempt reviewed graph landings by self-review and an audit skill instead of the code instrument, and that asymmetry is settled here rather than carried. Traditions to record as readings: Deming, Out of the Crisis (1986), point 3, cease dependence on inspection, diverged from in keeping adversarial review; content-addressed incremental builds (Bazel, Nix), adopted for pinning what an assessment read so that an unrelated change does not expire it. Ledger L29.
+The author's ruling of 2026-09-02 that every bootstrap landing requires shimmed code review, adopted from the rules the legacy bootstrap recorded after measurement: one change thrashed sixteen rounds and fifty-six findings when review settled on zero findings, another went fourteen rounds and twenty-three commits because its diff grew between rounds, and a full assessment costs thirteen to fifteen minutes of wall clock at high effort and about seven at medium. Hence a severity gate that prose findings cannot move, a hard cap with no design-surface exemption, batching, a frozen scope, and a frontier channel for everything the gate excludes. Review is part of reconciliation in both directions: it checks the landing against the disposition it serves, and every excluded finding is a candidate disposition. The bootstrap ordering is the author's ruling of 2026-09-02: "The code review is expensive ... during bootstrap code review is only required after ratification. This is analogous to the recorded greenfield doctrine in the legacy graph that the reconciliation frontier should first validate functionality, and only spend cycles on cross-cutting non-functional validation after that." The graph landing is excluded because its review is the interview itself; the legacy attempt reviewed graph landings by self-review and an audit skill instead of the code instrument, and that asymmetry is settled here rather than carried. Traditions to record as readings: Deming, Out of the Crisis (1986), point 3, cease dependence on inspection, diverged from in keeping adversarial review; content-addressed incremental builds (Bazel, Nix), adopted for pinning what an assessment read so that an unrelated change does not expire it.
 
 ## Proposal
 

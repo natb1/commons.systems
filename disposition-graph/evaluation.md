@@ -11,7 +11,11 @@ tier: global
 defines:
   - greenfield
   - adversarial review
-ledger: L30
+shims:
+  - artifact: "`.claude/rules/evaluation.md` on the implementation ref, hand-written from this node"
+    for: the rule projection of this global-tier node
+    liquidation: rules are materialized from global-tier nodes by the projector
+    declared: 2026-09-02
 ---
 ## Answer
 
@@ -19,4 +23,4 @@ Against the full solution frontier. Nothing is sacred: no doctrine is implied by
 
 ## Rationale
 
-The author's rulings in the legacy bootstrap of 2026-08-31 to 2026-09-02, given again to this bootstrap as the standing rule for the AI's evaluations: reference the incumbent for principles, never as authority. The legacy rule projection on `main` and the ratified clarifications behind it are the evidence. The overrule rules are the authority node's attenuation seen from the evaluator's side. Traditions to record as readings: the Pareto frontier of multi-objective choice, adopted for the sense of "frontier"; Chesterton's fence (The Thing, 1929), diverged from in part, since here the record, not the fence, carries the reason, and a fence without a recorded reason is a prune-by-default proposal. Ledger L30.
+The author's rulings in the legacy bootstrap of 2026-08-31 to 2026-09-02, given again to this bootstrap as the standing rule for the AI's evaluations: reference the incumbent for principles, never as authority. The legacy rule projection on `main` and the ratified clarifications behind it are the evidence. The overrule rules are the authority node's attenuation seen from the evaluator's side. Traditions to record as readings: the Pareto frontier of multi-objective choice, adopted for the sense of "frontier"; Chesterton's fence (The Thing, 1929), diverged from in part, since here the record, not the fence, carries the reason, and a fence without a recorded reason is a prune-by-default proposal.

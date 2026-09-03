@@ -9,7 +9,6 @@ under:
   - commons.systems/disposition-graph/knowledge-store
 source: Aristotle, Nicomachean Ethics II.5, 1105b19 to 1106a13 (virtue is a hexis, a settled state, acquired by habituation, neither a feeling nor a capacity); Categories 8, 8b26 to 9a13 (a hexis is stable and hard to change, a diathesis is easily changed).
 relation: adopted
-ledger: L12
 ---
 ## Answer
 

@@ -9,7 +9,6 @@ under:
   - commons.systems/public/agency
 source: Aristotle, Eudemian Ethics II.6, 1222b15 to 1223a20 (a person is an archē of actions as the archai of mathematics are of proofs); Nicomachean Ethics III.3, 1112b31 to 32, and III.5, 1113b17 to 21 (a person is the origin and begetter of actions); Politics I.4, 1253b33 to 1254a1 (instruments that work by themselves); Metaphysics V.1, 1012b34 to 1013a23 (the senses of archē).
 relation: adopted
-ledger: L02
 ---
 ## Answer
 

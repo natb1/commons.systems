@@ -9,7 +9,6 @@ under:
   - commons.systems/disposition-graph/purpose
 source: IEEE Std 830-1998, Recommended Practice for Software Requirements Specifications, section 1 (Purpose, Scope, Definitions, References, Overview); ISO/IEC/IEEE 29148:2018, section 9, the SRS outline (purpose, scope, product overview, definitions).
 relation: adopted
-ledger: L12
 ---
 ## Answer
 

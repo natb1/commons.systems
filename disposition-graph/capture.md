@@ -7,7 +7,6 @@ authority:
   date: 2026-09-02
 under:
   - commons.systems/disposition-graph/purpose
-ledger: L12
 ---
 ## Answer
 

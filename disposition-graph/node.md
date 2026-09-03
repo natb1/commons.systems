@@ -17,7 +17,6 @@ instrument:
   kind: check
   ref: packages/disposition/validate.mjs on the implementation ref
   note: every file parses as one question, at most one answer, and only defined fields
-ledger: L14
 ---
 ## Answer
 
@@ -25,4 +24,4 @@ One question and its standing answer. The question is one line someone could ask
 
 ## Rationale
 
-One question per node makes "same scope" decidable: two texts share a node only if one replaced the other. Rejected: the node as a topic, which mixes authority in one text; the node as a cluster around a default scope; history kept inside the node. Traditions to record as readings: issues as questions (Kunz and Rittel, IBIS, 1970); the answer as an accumulated restatement (the common-law restatement); store once and derive the rest (Codd). Ledger L01, L14.
+One question per node makes "same scope" decidable: two texts share a node only if one replaced the other. Rejected: the node as a topic, which mixes authority in one text; the node as a cluster around a default scope; history kept inside the node. Traditions to record as readings: issues as questions (Kunz and Rittel, IBIS, 1970); the answer as an accumulated restatement (the common-law restatement); store once and derive the rest (Codd).

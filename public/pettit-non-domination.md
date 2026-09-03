@@ -9,7 +9,6 @@ under:
   - commons.systems/public/agency
 source: Pettit, Republicanism, A Theory of Freedom and Government (1997), chapter 2, "Liberty as non-domination"; Skinner, Liberty before Liberalism (1998).
 relation: adopted
-ledger: L02
 ---
 ## Answer
 

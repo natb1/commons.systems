@@ -2,7 +2,6 @@
 question: What does this repository contain, and what does it leave out?
 under:
   - commons.systems/disposition-graph/purpose
-ledger: L24
 ---
 ## Proposal
 
@@ -32,4 +31,4 @@ Outside the purpose as worded, each with the question that would bring it in or 
 11. A tabletop-gaming blog, recorded as a deliberately indirect way of promoting one of the principles. Is covert promotion of the author's values through unrelated content within the purpose, or a hobby that a legacy node happened to rationalize?
 12. Shared engineering and host infrastructure: about twenty libraries, the Firebase backend and its rules tests, and the author's own machine configuration, backups, and monitoring. Is the author's computing environment one more institution of daily life the purpose should name, or infrastructure with no purpose of its own?
 
-Two further findings bear on the audience node. The evidence names at least five audiences: practitioners forking the harness, the author alone, prospective consulting clients, the general public downloading a stand-alone plugin, and an unspecified future collaborator. And the third-ref shim (ledger L28) makes this question load-bearing: whatever on `main` has no supporting disposition by bootstrap exit is pruned by the swap, so functions 9 to 12 need an answer before then.
+Two further findings bear on the audience node. The evidence names at least five audiences: practitioners forking the harness, the author alone, prospective consulting clients, the general public downloading a stand-alone plugin, and an unspecified future collaborator. And the third-ref shim makes this question load-bearing: whatever on `main` has no supporting disposition by bootstrap exit is pruned by the swap, so functions 9 to 12 need an answer before then.

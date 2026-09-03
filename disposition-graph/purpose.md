@@ -3,7 +3,6 @@ question: What is this repository for?
 form: target
 under:
   - commons.systems/public/agency
-ledger: L12
 ---
 ## Answer
 
@@ -15,7 +14,7 @@ Two further functions are hypotheses, recorded as assumptions under this node: t
 
 Why it matters leads up to the archē this node refines. Delegating work to autonomous tools is expected and good; it buys attention at the level where intent is set. What must not be lost is the person's standing as the origin of what is done in their name, and the capacity to notice capture and recover. A record of intent that the tools act under, and that the person can read, amend, and rank, is how the origin stays with the person while the tools work.
 
-The author's words for this answer (2026-09-02) are quoted in the ledger, entry L12. "Spec-driven development" and "software factories" are the audience's own vocabulary; each is a reading under this node, validated against its tradition and marked where this repository diverges.
+"Spec-driven development" and "software factories" are the audience's own vocabulary; each is a reading under this node, validated against its tradition and marked where this repository diverges.
 
 ### Rejected
 

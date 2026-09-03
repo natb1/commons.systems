@@ -9,7 +9,6 @@ under:
   - commons.systems/disposition-graph/growth
 source: Plato, Republic VII, 518b to 518d (education is not putting sight into blind eyes but turning the whole soul, the art of the turning, periagōgē) and 521c (the turning from what becomes to what is); also 515c to 516a, the prisoner turned toward the fire.
 relation: adopted
-ledger: L35
 ---
 ## Answer
 
@@ -17,4 +16,4 @@ Yes, for the conduct in which the record is authoritative and the author is turn
 
 ## Rationale
 
-Adopted as the name and the ground of the periagogic conduct. The divergence to keep in view: Plato's turning is toward the forms, while here it is toward a record the author wrote or accepted, so the authority that the turning appeals to is the author's own past decision, not a truth above the author. Ledger L35.
+Adopted as the name and the ground of the periagogic conduct. The divergence to keep in view: Plato's turning is toward the forms, while here it is toward a record the author wrote or accepted, so the authority that the turning appeals to is the author's own past decision, not a truth above the author.

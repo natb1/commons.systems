@@ -9,7 +9,6 @@ under:
   - commons.systems/disposition-graph/purpose
 source: Cusumano, Japan's Software Factories (1991), on Hitachi, Toshiba, NEC, and Fujitsu from 1969 onward; Greenfield and Short, Software Factories (2004); the contemporary "AI software factory", agent pipelines that turn specifications into shipped software (usage of 2025 and 2026).
 relation: diverged
-ledger: L12
 ---
 ## Answer
 

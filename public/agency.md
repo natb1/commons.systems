@@ -12,8 +12,7 @@ defines:
 instrument:
   kind: assessment
   ref: re-grasp on event, never on a calendar
-  note: the triggers are recorded under the instruments node (ledger L07, L08)
-ledger: L02
+  note: the triggers are recorded under the instruments node
 ---
 ## Answer
 
@@ -32,4 +31,4 @@ The modal content is the point: capacity, not exercise. Being unable to recover 
 - *Detachment as retention* ("how detached am I?"): measures the wrong thing. Dependence is fine; unrecoverable dependence is capture.
 - *Forced detachment*: dogma, and dogma needs power to maintain.
 
-Stub note: drafted by the AI under the bootstrap grant from the author's rulings of 2026-09-02 and the author's own legacy text. Deferred until the author ratifies it. Pending readings to add under this node: Sen on capability, Hirschman on exit and voice, Korsgaard on authorship (ledger L06, L09).
+Stub note: drafted by the AI under the bootstrap grant from the author's rulings of 2026-09-02 and the author's own legacy text. Deferred until the author ratifies it. Pending readings to add under this node: Sen on capability, Hirschman on exit and voice, Korsgaard on authorship.

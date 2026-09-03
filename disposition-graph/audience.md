@@ -7,7 +7,6 @@ authority:
   date: 2026-09-02
 under:
   - commons.systems/disposition-graph/purpose
-ledger: L12
 ---
 ## Answer
 
@@ -19,4 +18,4 @@ The author's words, 2026-09-02. Purpose, scope, audience, and definitions are th
 
 ## Proposal
 
-The incumbent record addresses at least five audiences, and this answer names one. For the author to rule on with the scope node: practitioners forking the harness into their own repository (the README's runbook, the fork template, the separability audit); the author alone (the morning brief); prospective consulting clients (the public site's About page); the general public downloading a stand-alone plugin (the budget listing); and an unspecified future collaborator (the brand voice guide). Either the answer above covers them by saying the others are served through the primary audience's tooling, or the excluded ones are named and their surfaces become unsupported implementation at the swap (ledger L28).
+The incumbent record addresses at least five audiences, and this answer names one. For the author to rule on with the scope node: practitioners forking the harness into their own repository (the README's runbook, the fork template, the separability audit); the author alone (the morning brief); prospective consulting clients (the public site's About page); the general public downloading a stand-alone plugin (the budget listing); and an unspecified future collaborator (the brand voice guide). Either the answer above covers them by saying the others are served through the primary audience's tooling, or the excluded ones are named and their surfaces become unsupported implementation at the swap.

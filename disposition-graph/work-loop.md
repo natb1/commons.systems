@@ -12,7 +12,6 @@ defines:
   - bite
   - reconcile
   - variance
-ledger: L11
 ---
 ## Answer
 
@@ -20,4 +19,4 @@ By reconciliation in both directions. The frontier is derived, never stored: eve
 
 ## Rationale
 
-The author's ruling of 2026-09-02 that reconciliation must run from disposition to missing implementation and from unsupported implementation to new disposition or pruning. The second direction subsumes transcription of the legacy record and its drain: legacy nodes are pulled in when a question needs them and pruned in bulk otherwise. Traditions to record as readings: level-triggered reconciliation in Kubernetes; one-piece flow. Ledger L11, L17.
+The author's ruling of 2026-09-02 that reconciliation must run from disposition to missing implementation and from unsupported implementation to new disposition or pruning. The second direction subsumes transcription of the legacy record and its drain: legacy nodes are pulled in when a question needs them and pruned in bulk otherwise. Traditions to record as readings: level-triggered reconciliation in Kubernetes; one-piece flow.

@@ -9,7 +9,6 @@ under:
   - commons.systems/disposition-graph/model
 defines:
   - legacy record
-ledger: L17
 ---
 ## Answer
 
@@ -17,4 +16,4 @@ Evidence. The tree under `intentions/` on the main branch, its kinds and its voc
 
 ## Rationale
 
-The author's ruling of 2026-09-02 that this session was over-bound by legacy disposition and that incumbent code is context, never doctrine. The legacy record neither matched its own specification nor served long-horizon dispatch, so starting fresh regresses nothing; only the knowledge needs re-encoding, and the work loop's second direction is how it gets pulled in. Ledger L17.
+The author's ruling of 2026-09-02 that this session was over-bound by legacy disposition and that incumbent code is context, never doctrine. The legacy record neither matched its own specification nor served long-horizon dispatch, so starting fresh regresses nothing; only the knowledge needs re-encoding, and the work loop's second direction is how it gets pulled in.
