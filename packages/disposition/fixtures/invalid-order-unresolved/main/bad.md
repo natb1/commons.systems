@@ -7,6 +7,7 @@ authority:
   date: 2026-01-01
 order:
   - example.test/main/does-not-exist
+stage: maieutic
 ---
 
 ## Answer

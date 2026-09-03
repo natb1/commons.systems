@@ -11,6 +11,7 @@ boost: 5
 order:
   - [example.test/main/order-node, example.test/main/leaf-a]
   - example.test/main/leaf-b
+stage: maieutic
 ---
 
 ## Answer

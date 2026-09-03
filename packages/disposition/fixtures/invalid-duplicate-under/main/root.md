@@ -1,6 +1,7 @@
 ---
 question: Fixture root for the duplicate-under case?
 form: target
+stage: maieutic
 ---
 
 ## Answer

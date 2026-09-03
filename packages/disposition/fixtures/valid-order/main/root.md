@@ -5,6 +5,7 @@ authority:
   class: deferred
   by: Fixture Author
   date: 2026-01-01
+stage: maieutic
 ---
 
 ## Answer

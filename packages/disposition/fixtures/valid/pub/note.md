@@ -1,6 +1,7 @@
 ---
 question: What is noted, for the public record?
 form: target
+stage: maieutic
 ---
 
 ## Answer

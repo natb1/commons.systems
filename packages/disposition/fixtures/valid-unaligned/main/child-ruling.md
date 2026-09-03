@@ -6,6 +6,14 @@ authority:
   by: Fixture Author
   date: 2026-01-01
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
+review:
+  verdict: forward
+  strength: weak
+  date: 2026-01-01
+  of: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 boost: 1
 under:
   - example.test/main/root

@@ -6,6 +6,7 @@ authority:
   by: Fixture Author
   date: 2026-01-01
 boost: 2
+stage: maieutic
 ---
 
 ## Answer

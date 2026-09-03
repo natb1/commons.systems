@@ -200,18 +200,85 @@ export function deriveCeiling(nodeId, nodesById) {
 }
 
 /**
- * A node's status: the stamp's class when it has one; `proposal` when it
- * has an `## Answer` but no stamp; `unaligned` when it has no `## Answer` --
- * an un-aligned disposition that has not yet survived the alignment
- * dialogue.
+ * A node's status: `answered` when the stamp's class is `ratified` or
+ * `delegated` -- the two classes only the author's ruling confers -- and
+ * `unanswered` otherwise, whatever the node carries: a stamp of class
+ * `deferred`, no stamp at all, or no `## Answer` section. See
+ * commons.systems/disposition-graph/unanswered. The values `proposal` and
+ * `unaligned` this function used to return are gone: both were forms of
+ * "not yet answered" that the two-value encoding now names directly.
  *
- * @param {{authority: Authority|null, answer: string|null}} node
- * @returns {'ratified'|'delegated'|'deferred'|'proposal'|'unaligned'}
+ * @param {{authority: Authority|null}} node
+ * @returns {'answered'|'unanswered'}
  */
 export function deriveStatus(node) {
-  if (node.authority) return node.authority.class;
-  if (node.answer !== null && node.answer !== undefined) return 'proposal';
-  return 'unaligned';
+  const cls = node.authority ? node.authority.class : null;
+  return cls === 'ratified' || cls === 'delegated' ? 'answered' : 'unanswered';
+}
+
+/**
+ * Strip the dialogue keys from a node file's raw frontmatter text, by line:
+ * `stage`, `recommendation`, and `review`, each together with every line
+ * nested under it (indented relative to it), so that writing this hash into
+ * `review.of` -- or removing `review` from the frontmatter afterward --
+ * never changes it. Operates on the raw YAML source text, not the parsed
+ * object, because it is the *lines* belonging to a key that must go, not
+ * just the key's value.
+ *
+ * @param {string} fmText - the raw text between the frontmatter's `---`
+ *   delimiters (as `read.mjs`'s `parseNode` extracts it, before YAML.parse).
+ * @returns {string}
+ */
+function stripDialogueFrontmatterLines(fmText) {
+  const removedKeyRe = /^(stage|recommendation|review):/;
+  let skipping = false;
+  return fmText
+    .split('\n')
+    .filter((line) => {
+      const isTopLevel = /^\S/.test(line);
+      if (isTopLevel) {
+        skipping = removedKeyRe.test(line);
+        return !skipping;
+      }
+      return !skipping;
+    })
+    .join('\n');
+}
+
+/**
+ * The draft hash: the sha1 hex digest that `review.of` pins, and whose
+ * mismatch against a current recomputation is what `node.reviewStale`
+ * means (see commons.systems/disposition-graph/dialogue). This is a plain
+ * sha1 over synthesized text, not `blobSha1`'s git-blob framing (`"blob "
+ * + length + "\0" + bytes`) used elsewhere in this module: the git framing
+ * exists so a hash matches `git hash-object` on a real file's exact bytes,
+ * and the text hashed here -- a fence's content, or a frontmatter-minus-
+ * dialogue-keys/answer/rationale splice -- was never a file of its own.
+ *
+ * With a `## Draft`, the hash is of the fence's content, exactly: the
+ * draft is a whole proposed node quoted verbatim, so any change to it is a
+ * new draft. With no `## Draft` (the node is its own draft), the hash
+ * covers the frontmatter's raw text with the `stage`, `recommendation`,
+ * and `review` keys removed (see `stripDialogueFrontmatterLines`), then a
+ * newline, the raw `## Answer` text (`''` when the node has none), a
+ * newline, and the raw `## Rationale` text (`''` when the node has none).
+ *
+ * `read.mjs`'s `parseNode` calls this, passing the raw frontmatter text and
+ * raw section text it extracts while parsing a node file -- the parsed,
+ * structured node object this module otherwise deals with does not retain
+ * that raw text, only the fields YAML.parse and the section split resolve
+ * it into.
+ *
+ * @param {{fmText: string, draftFence: string|null, answer: string|null, rationale: string|null}} parts
+ * @returns {string} 40-hex sha1
+ */
+export function deriveDraftHash({ fmText, draftFence, answer, rationale }) {
+  if (draftFence !== null && draftFence !== undefined) {
+    return createHash('sha1').update(draftFence, 'utf8').digest('hex');
+  }
+  const strippedFm = stripDialogueFrontmatterLines(fmText);
+  const text = `${strippedFm}\n${answer ?? ''}\n${rationale ?? ''}`;
+  return createHash('sha1').update(text, 'utf8').digest('hex');
 }
 
 /**

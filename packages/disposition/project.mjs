@@ -129,7 +129,8 @@ export async function writeRules(graph, dir) {
     const fileName = `${node.slug}.md`;
     const filePath = join(target, fileName);
     const { class: cls, by, date } = node.authority;
-    const notice = `> Projected from ${node.id} (${cls}, ${by}, ${date}). ${RULES_NOTICE} If this file conflicts with the graph on the disposition ref, the graph wins.`;
+    const stamp = node.stage ? `${node.status}: ${cls}, ${by}, ${date}; stage ${node.stage}` : `${node.status}: ${cls}, ${by}, ${date}`;
+    const notice = `> Projected from ${node.id} (${stamp}). ${RULES_NOTICE} If this file conflicts with the graph on the disposition ref, the graph wins.`;
     const content = `# ${node.question}\n${notice}\n\n${node.answer}\n`;
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, content);
@@ -220,12 +221,17 @@ export async function writeAncestry(graph, nodeId, file) {
   for (const id of chain) {
     const node = nodesById.get(id);
     if (node.tier === "global") continue;
-    // Mirrors derive.mjs's deriveStatus (stamp, then answer-without-stamp,
-    // then un-aligned) without importing it: this file is sometimes copied
-    // standalone (see project.test.mjs's space-in-path CLI test), so it
-    // must not pick up a static sibling-module dependency.
+    // The stamp's class when there is one (ratified/delegated/deferred --
+    // unaffected by the answered/unanswered status split, which collapses
+    // deferred into "unanswered" but is not what this label shows); with no
+    // stamp, "unstamped" when the node at least has an answer to be a draft
+    // of, and "un-aligned" (the disposition with a question and no answer
+    // yet) when it does not. Inlined rather than importing deriveStatus:
+    // this file is sometimes copied standalone (see project.test.mjs's
+    // space-in-path CLI test), so it must not pick up a static
+    // sibling-module dependency.
     const hasAnswer = typeof node.answer === "string" && node.answer.length > 0;
-    const label = node.authority ? node.authority.class : hasAnswer ? "proposal" : "un-aligned";
+    const label = node.authority ? node.authority.class : hasAnswer ? "unstamped" : "un-aligned";
     lines.push(`## ${node.question}`, "", `${node.id} (${label})`);
     if (typeof node.answer === "string" && node.answer.length > 0) {
       lines.push("", node.answer);
@@ -242,15 +248,19 @@ export async function writeAncestry(graph, nodeId, file) {
 }
 
 /**
- * Drop every node whose status is "unaligned" (an un-aligned disposition
- * that has not survived the alignment dialogue) from the data the browser
- * receives: it renders no page, appears in no nav tree or search, and
- * defines no term, simply by being absent from `nodes`. Any surviving
- * node's `cites` entries and `children` list that point at a dropped id are
- * removed too, since the cited/child node no longer exists in this
- * projection; nothing else about a node changes. A graph with nothing to
- * drop is returned unchanged, and a node that names no dropped id in either
- * field is returned unchanged as well.
+ * Drop every node with no `## Answer` (`node.answer == null`) -- an
+ * un-aligned disposition that has not survived the alignment dialogue --
+ * from the data the browser receives: it renders no page, appears in no
+ * nav tree or search, and defines no term, simply by being absent from
+ * `nodes`. This is no longer a `status` check: `status` is now derived
+ * from the stamp alone (see `deriveStatus`) and an unanswered node with an
+ * answer -- a deferred or unstamped draft -- is very much shown, just
+ * marked unanswered; only a genuine no-answer node is excluded here. Any
+ * surviving node's `cites` entries and `children` list that point at a
+ * dropped id are removed too, since the cited/child node no longer exists
+ * in this projection; nothing else about a node changes. A graph with
+ * nothing to drop is returned unchanged, and a node that names no dropped
+ * id in either field is returned unchanged as well.
  *
  * This runs after `check()`, not before: `check()` validates the reader's
  * full contract, and a citation or child reference into a node this
@@ -260,7 +270,7 @@ export async function writeAncestry(graph, nodeId, file) {
  * @returns {{nodes: object[]}}
  */
 export function excludeUnaligned(graph) {
-  const dropped = new Set(graph.nodes.filter((n) => n.status === "unaligned").map((n) => n.id));
+  const dropped = new Set(graph.nodes.filter((n) => n.answer == null).map((n) => n.id));
   if (dropped.size === 0) return graph;
   const nodes = graph.nodes
     .filter((n) => !dropped.has(n.id))
@@ -304,7 +314,8 @@ export function renderFrontier(graph) {
   for (const node of nodes) {
     const head = [
       node.id,
-      node.authority ? `${node.status} (${node.authority.by}, ${node.authority.date})` : node.status,
+      node.status,
+      node.authority ? `${node.authority.class} (${node.authority.by}, ${node.authority.date})` : "no stamp",
       `rank ${node.rank.toFixed(4)}`,
     ];
     if (node.tier === "global") head.push("tier global");
@@ -316,7 +327,18 @@ export function renderFrontier(graph) {
       lines.push(`  order: ${stepsText}`);
     }
     if (node.stage) lines.push(`  stage: ${node.stage}`);
-    if (node.status === "unaligned") lines.push(`  under: ${(node.under || []).join(", ")}`);
+    if (node.recommendation) {
+      lines.push(`  recommendation: ${node.recommendation.class}, boldness ${node.recommendation.boldness}`);
+    }
+    if (node.review) {
+      const stale = node.reviewStale ? ", draft changed since the review" : "";
+      const siblings = node.review.siblings && node.review.siblings.length > 0
+        ? `; read ${node.review.siblings.length} other drafts`
+        : "";
+      lines.push(`  review: ${node.review.verdict} (${node.review.strength}, ${node.review.date})${stale}${siblings}`);
+    }
+    if (node.draft) lines.push("  draft: yes");
+    if (node.answer == null) lines.push(`  under: ${(node.under || []).join(", ")}`);
     if (node.instrument) {
       const note = node.instrument.note ? ` — ${node.instrument.note}` : "";
       lines.push(`  instrument: ${node.instrument.kind}: ${node.instrument.ref}${note}`);
@@ -617,7 +639,27 @@ export async function project(opts) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const opts = parseArgs(process.argv.slice(2));
-  const { out, html, graph, warnings } = await project(opts);
+  await runCli(opts);
+}
+
+// `readGraph` either returns a fully valid graph or throws with every
+// problem it found and no partial data at all -- there is no "graph, plus
+// a list of what's wrong with it" to render around. Rendering the frontier
+// or the browser anyway on a graph that fails validation would need that
+// contract to change everywhere `readGraph` is read from (validate.mjs,
+// every output here, every test), which is a larger change than this
+// unit's dialogue rules; the CLI's obligation ends at reporting that it
+// cannot, cleanly, in the reader's own per-line message style, rather than
+// an uncaught exception's raw stack trace.
+async function runCli(opts) {
+  let out, html, graph, warnings;
+  try {
+    ({ out, html, graph, warnings } = await project(opts));
+  } catch (err) {
+    process.stderr.write(`${err.message}\n`);
+    process.exitCode = 1;
+    return;
+  }
 
   if (opts.rules) {
     const result = await writeRules(graph, opts.rules);

@@ -6,6 +6,7 @@ under:
 cites:
   - id: pub.example/pub/note
     hash: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+stage: maieutic
 ---
 
 ## Answer

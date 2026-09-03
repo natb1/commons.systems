@@ -5,6 +5,7 @@ source: Aristotle, Nicomachean Ethics I.4
 relation: adopted
 under:
   - example.test/main/multi
+stage: maieutic
 ---
 
 ## Answer

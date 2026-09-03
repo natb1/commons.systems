@@ -8,6 +8,7 @@ after:
   - example.test/main/root-a
 defines:
   - agreement
+stage: maieutic
 ---
 
 ## Answer

@@ -15,6 +15,7 @@ import {
   canonicalizeId,
   deriveCeiling,
   deriveChildren,
+  deriveDraftHash,
   deriveRank,
   deriveStatus,
 } from './derive.mjs';
@@ -116,11 +117,33 @@ describe('derive.mjs', () => {
     assert.equal(deriveCeiling('unrelated-root', nodesById), null);
   });
 
-  test('deriveStatus reads the stamp, then answer-without-stamp, then unaligned', () => {
-    assert.equal(deriveStatus({ authority: { class: 'ratified' }, answer: 'x' }), 'ratified');
-    assert.equal(deriveStatus({ authority: { class: 'deferred' }, answer: null }), 'deferred');
-    assert.equal(deriveStatus({ authority: null, answer: 'x' }), 'proposal');
-    assert.equal(deriveStatus({ authority: null, answer: null }), 'unaligned');
+  test('deriveStatus: answered only for a ratified or delegated stamp; unanswered for deferred, no stamp, or no answer', () => {
+    assert.equal(deriveStatus({ authority: { class: 'ratified' }, answer: 'x' }), 'answered');
+    assert.equal(deriveStatus({ authority: { class: 'delegated' }, answer: 'x' }), 'answered');
+    assert.equal(deriveStatus({ authority: { class: 'deferred' }, answer: 'x' }), 'unanswered');
+    assert.equal(deriveStatus({ authority: { class: 'deferred' }, answer: null }), 'unanswered');
+    assert.equal(deriveStatus({ authority: null, answer: 'x' }), 'unanswered');
+    assert.equal(deriveStatus({ authority: null, answer: null }), 'unanswered');
+  });
+
+  test('deriveDraftHash: with a Draft, hashes the fence content exactly; without one, hashes stripped frontmatter + answer + rationale', () => {
+    const withDraft = deriveDraftHash({ fmText: 'question: Q?\nstage: ruling', draftFence: 'question: Q?\n', answer: 'ignored', rationale: 'ignored' });
+    assert.equal(withDraft, createHash('sha1').update('question: Q?\n', 'utf8').digest('hex'));
+
+    const noDraft = deriveDraftHash({ fmText: 'question: Q?\nstage: review', draftFence: null, answer: 'Ans.', rationale: 'Rat.' });
+    assert.equal(noDraft, createHash('sha1').update('question: Q?\nAns.\nRat.', 'utf8').digest('hex'));
+  });
+
+  test('deriveDraftHash: stage/recommendation/review lines (and everything nested under them) do not affect the no-draft hash', () => {
+    const bare = deriveDraftHash({
+      fmText: 'question: Q?\nform: rule',
+      draftFence: null, answer: 'Ans.', rationale: null,
+    });
+    const dressedUp = deriveDraftHash({
+      fmText: 'question: Q?\nstage: review\nrecommendation:\n  class: ratified\n  boldness: high\nform: rule\nreview:\n  verdict: forward\n  strength: none\n  date: 2026-01-01\n  of: ' + 'a'.repeat(40),
+      draftFence: null, answer: 'Ans.', rationale: null,
+    });
+    assert.equal(bare, dressedUp, 'adding stage/recommendation/review to the frontmatter changes nothing the hash reads');
   });
 });
 
@@ -174,13 +197,13 @@ describe('parseNode', () => {
   // need the whole graph and are covered by the fixtures below instead). ----
 
   test('order: a bare string step and a tied-list step both normalize to arrays of ids', () => {
-    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\norder:\n  - [a, b]\n  - c\n---\n\n## Answer\n\nx\n';
+    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\nstage: maieutic\norder:\n  - [a, b]\n  - c\n---\n\n## Answer\n\nx\n';
     const node = parseNode(text, loc);
     assert.deepEqual(node.order, [['a', 'b'], ['c']]);
   });
 
   test('order: absent field normalizes to an empty array', () => {
-    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\n---\n\n## Answer\n\nx\n';
+    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\nstage: maieutic\n---\n\n## Answer\n\nx\n';
     assert.deepEqual(parseNode(text, loc).order, []);
   });
 
@@ -270,12 +293,12 @@ describe('readGraph: valid fixture', () => {
   });
 
   test('status', async () => {
-    assert.equal((await byId('example.test/main/root-a')).status, 'proposal');
-    assert.equal((await byId('example.test/main/root-b')).status, 'ratified');
-    assert.equal((await byId('example.test/main/child-a1')).status, 'proposal');
-    assert.equal((await byId('example.test/main/child-a2')).status, 'proposal');
-    assert.equal((await byId('example.test/main/multi')).status, 'proposal');
-    assert.equal((await byId('example.test/main/reading')).status, 'proposal');
+    assert.equal((await byId('example.test/main/root-a')).status, 'unanswered');
+    assert.equal((await byId('example.test/main/root-b')).status, 'answered');
+    assert.equal((await byId('example.test/main/child-a1')).status, 'unanswered');
+    assert.equal((await byId('example.test/main/child-a2')).status, 'unanswered');
+    assert.equal((await byId('example.test/main/multi')).status, 'unanswered');
+    assert.equal((await byId('example.test/main/reading')).status, 'unanswered');
   });
 
   test('children', async () => {
@@ -345,10 +368,10 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-ledger-key', /unknown frontmatter key 'ledger'/],
     ['invalid-shim-missing-liquidation', /'shims\[0\]\.liquidation' is required/],
     ['invalid-shim-unknown-key', /unknown key 'shims\[0\]\.bogus'/],
-    // stage / un-aligned-disposition rules (session-context: an un-aligned
-    // disposition is a node with no '## Answer').
-    ['invalid-unaligned-without-stage', /a node without an '## Answer' section is an un-aligned disposition and must carry 'stage'/],
-    ['invalid-stage-without-dialogue', /'stage' requires a '## Disposition' or a '## Proposal' section/],
+    // status / dialogue rules (session-context: an unanswered node -- a
+    // deferred stamp, no stamp, or no '## Answer' -- carries the dialogue).
+    ['invalid-unaligned-without-stage', /example\.test\/main\/bad is unanswered and must carry stage/],
+    ['invalid-stage-without-dialogue', /stage requires a '## Disposition', '## Proposal', or '## Answer' section/],
     ['invalid-disposition-without-stage', /'## Disposition' requires 'stage'/],
     // graph-level rule: an un-aligned disposition (no answer) has no children.
     ['invalid-unaligned-with-child', /'under' names example\.test\/main\/unaligned, which has no '## Answer'; an un-aligned disposition has no children/],
@@ -362,6 +385,16 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-order-head', /'order' puts example\.test\/main\/a in its first step, but example\.test\/main\/d \(rank 0\.9901\) outranks it and is not its ancestor/],
     ['invalid-order-unresolved', /'order' names example\.test\/main\/does-not-exist, which is not a node/],
     ['invalid-order-no-answer', /'order' requires an '## Answer' section/],
+    // dialogue fields: recommendation, review, and '## Draft' (dialogue.md).
+    ['invalid-recommendation-shape', /'recommendation' must be \{class: ratified\|delegated, boldness: low\|moderate\|high\}/],
+    ['invalid-review-shape', /'review' must be \{verdict: forward\|kickback, strength: strong\|moderate\|weak\|none, date: YYYY-MM-DD, of: <sha1>\}/],
+    ['invalid-review-siblings-unresolved', /'review\.siblings' names example\.test\/main\/does-not-exist, which is not a node/],
+    ['invalid-dialogue-without-stage', /'recommendation', 'review', and '## Draft' are parts of the dialogue and require stage/],
+    ['invalid-draft-not-fenced', /'## Draft' must hold exactly one fenced markdown block/],
+    ['invalid-draft-parse-error', /'## Draft' does not parse as a node: /],
+    ['invalid-draft-wrong-question', /'## Draft' answers a different question/],
+    ['invalid-stage-needs-recommendation', /stage review or ruling requires 'recommendation'/],
+    ['invalid-stage-ruling-needs-forward-review', /stage ruling requires a 'review' with verdict forward/],
   ];
 
   for (const [dirName, pattern] of cases) {
@@ -474,27 +507,91 @@ describe('readGraph: shims fixture', () => {
 // ---------------------------------------------------------------------------
 
 describe('readGraph: valid-unaligned fixture', () => {
-  test('an un-aligned node reads with stage/disposition populated and status "unaligned"; a mid-dialogue node with an answer stays aligned', async () => {
+  test('an unanswered node reads with stage/disposition populated; a mid-dialogue node with an answer stays unanswered until ratified', async () => {
     const graph = await readGraph(path.join(FIXTURES, 'valid-unaligned'));
     const byId = (slug) => graph.nodes.find((n) => n.id === `example.test/main/${slug}`);
 
+    // root is ratified: answered, and so carries no stage of its own, even
+    // though this fixture is otherwise about nodes still in the dialogue.
     const root = byId('root');
-    assert.equal(root.status, 'deferred');
+    assert.equal(root.status, 'answered');
     assert.equal(root.stage, null);
 
     const unaligned = byId('child-unaligned');
-    assert.equal(unaligned.status, 'unaligned');
+    assert.equal(unaligned.status, 'unanswered');
     assert.equal(unaligned.stage, 'periagogic');
     assert.equal(unaligned.disposition, 'The author has not yet ruled on this branch.');
     assert.equal(unaligned.answer, null);
 
     // a node with '## Disposition', '## Answer', '## Rationale', and
-    // '## Proposal' all together: still mid-dialogue (carries a stage), but
-    // an '## Answer' means it is not an un-aligned disposition.
+    // '## Proposal' all together: still mid-dialogue (carries a stage,
+    // recommendation, and a forward review), but an '## Answer' means it
+    // is not an un-aligned disposition -- it is unanswered only because its
+    // stamp is deferred, not because it has no answer.
     const ruling = byId('child-ruling');
-    assert.equal(ruling.status, 'deferred');
+    assert.equal(ruling.status, 'unanswered');
     assert.equal(ruling.stage, 'ruling');
+    assert.deepEqual(ruling.recommendation, { class: 'ratified', boldness: 'moderate' });
+    assert.equal(ruling.review.verdict, 'forward');
+    assert.equal(ruling.reviewStale, true, "the fixture's placeholder review.of does not match the computed draft hash");
     assert.ok(ruling.disposition && ruling.answer && ruling.rationale && ruling.proposal);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readGraph: valid-dialogue fixture
+// ---------------------------------------------------------------------------
+
+describe('readGraph: valid-dialogue fixture', () => {
+  const graphPromise = readGraph(path.join(FIXTURES, 'valid-dialogue'));
+  async function byId(slug) {
+    const graph = await graphPromise;
+    const node = graph.nodes.find((n) => n.id === `example.test/main/${slug}`);
+    assert.ok(node, `expected a node with slug ${slug}`);
+    return node;
+  }
+
+  test('a node at ruling carries recommendation, a forward review whose "of" matches the draft hash, siblings, and a parsed Draft', async () => {
+    const node = await byId('ruling-node');
+    assert.equal(node.status, 'unanswered');
+    assert.equal(node.stage, 'ruling');
+    assert.deepEqual(node.recommendation, { class: 'ratified', boldness: 'moderate' });
+    assert.equal(node.review.verdict, 'forward');
+    assert.deepEqual(node.review.siblings, ['example.test/main/review-node']);
+    assert.equal(node.review.of, node.draftHash, "the fixture's review.of is kept in step with the draft hash");
+    assert.equal(node.reviewStale, false);
+    assert.ok(node.draft, 'the node carries a parsed Draft');
+    assert.equal(node.draft.question, node.question, "the draft answers the node's own question");
+    assert.equal(node.draft.frontmatter.authority.class, 'ratified');
+    assert.ok(node.draft.sections.Answer.startsWith('Yes: a draft is a whole proposed node'));
+  });
+
+  test('a node at review carries a recommendation only -- no review yet', async () => {
+    const node = await byId('review-node');
+    assert.equal(node.status, 'unanswered');
+    assert.equal(node.stage, 'review');
+    assert.deepEqual(node.recommendation, { class: 'delegated', boldness: 'high' });
+    assert.equal(node.review, null);
+    assert.equal(node.reviewStale, false, 'reviewStale is only ever true when a review exists');
+    assert.equal(node.draft, null);
+  });
+
+  test('an answered ratified node needs no stage at all', async () => {
+    const node = await byId('answered-no-stage');
+    assert.equal(node.status, 'answered');
+    assert.equal(node.stage, null);
+    assert.equal(node.recommendation, null);
+    assert.equal(node.review, null);
+  });
+
+  test('a ratified node may still carry a stage, satisfied by "## Answer" alone (the relaxed rule)', async () => {
+    const node = await byId('answered-with-stage');
+    assert.equal(node.status, 'answered');
+    assert.equal(node.stage, 'review');
+    assert.equal(node.disposition, null);
+    assert.equal(node.proposal, null);
+    assert.ok(node.answer, 'only an Answer section supports the stage here');
+    assert.deepEqual(node.recommendation, { class: 'ratified', boldness: 'low' });
   });
 });
 

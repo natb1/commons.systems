@@ -167,6 +167,7 @@
   .pill.def { background: var(--deferred-soft); color: var(--deferred); }
   .pill.pro { background: var(--proposal-soft); color: var(--proposal); }
   .pill.none { background: var(--paper-3); color: var(--ink-3); }
+  .pill.unans { background: var(--deferred-soft); color: var(--deferred); }
 
   /* ---------- node header ---------- */
   .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 14px; }
@@ -179,6 +180,7 @@
   .facts dd a { color: var(--accent-ink); }
   .facts .stamp { color: var(--ink-3); font-size: 13px; margin-left: 7px; }
   .facts .sep { color: var(--ink-3); margin: 0 6px; }
+  .draftnote { font-size: 13px; line-height: 1.4; color: var(--ink-3); margin: 0 0 20px; }
   .idv { font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
   .copy { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; background: none; border: 1px solid var(--line); border-radius: 3px; color: var(--ink-3); padding: 1px 6px; cursor: pointer; margin-left: 6px; }
   .copy:hover { border-color: var(--accent); color: var(--accent-ink); }
@@ -580,8 +582,12 @@ function linkTextNode(node, used, selfId) {
 
 var FORM_WORD = { target: "target", rule: "rule", assumption: "assumption", arche: "archē", reading: "reading" };
 var FORM_MARK = { target: "tgt", rule: "rule", assumption: "asm", arche: "arch", reading: "rdg" };
-var STATUS_CLASS = { ratified: "rat", delegated: "del", deferred: "def", proposal: "pro", unaligned: "none" };
-var STATUS_WORD = { ratified: "ratified", delegated: "delegated", deferred: "deferred", proposal: "proposal", unaligned: "un-aligned" };
+// Only the three stamp classes now: `status` (answered/unanswered, see
+// derive.mjs's deriveStatus) is no longer a per-node word painted through
+// this map -- an unanswered node gets its own "unanswered · <stage>" pill
+// (unansweredPill, below) instead of a repurposed status color.
+var STATUS_CLASS = { ratified: "rat", delegated: "del", deferred: "def" };
+var STATUS_WORD = { ratified: "ratified", delegated: "delegated", deferred: "deferred" };
 
 function formWord(f) { return FORM_WORD[f] || (f ? String(f) : "unanswered"); }
 function formMark(f) { return FORM_MARK[f] || "··"; }
@@ -592,11 +598,36 @@ function fmtPct(r) {
   return (p >= 10 ? p.toFixed(0) : p.toFixed(1)) + "%";
 }
 
-function statusOf(n) { return n.status || "question"; }
-
 function pill(status, small) {
   return '<span class="pill' + (small ? " sm" : "") + " " + (STATUS_CLASS[status] || "none") + '">' +
     esc(STATUS_WORD[status] || status) + "</span>";
+}
+
+/* The stamp pill a node's own page and the nav/cards show: the authority
+   class when there is one, "unstamped" (neutral) when there is not -- a
+   node with neither is a no-answer node, hidden from the browser entirely
+   (excludeUnaligned), so this never has to render "no answer yet" for real
+   embedded data. */
+function stampPill(n, small) {
+  if (n.authority && n.authority.class) return pill(n.authority.class, small);
+  return pill("unstamped", small);
+}
+
+/* The one thing every unanswered node adds beside its stamp: which stage of
+   the dialogue it is at. Reuses the same `.pill` look (the "deferred" color,
+   since a deferred stamp is itself always unanswered) rather than a bespoke
+   color, so it already carries both themes. */
+function unansweredPill(n, small) {
+  if (n.status !== "unanswered") return "";
+  var label = "unanswered" + (n.stage ? " · " + n.stage : "");
+  return '<span class="pill unans' + (small ? " sm" : "") + '">' + esc(label) + "</span>";
+}
+
+/* The browser never renders a draft's content (that is the alignment page's
+   job); a node that carries one just says so, once, beside its stamp. */
+function draftNoteHtml(n) {
+  if (!n.draft) return "";
+  return '<p class="draftnote">' + "A draft awaits the author's ruling on the alignment page." + "</p>";
 }
 
 /* ------------------------------------------------------------------ *
@@ -673,7 +704,7 @@ function rowHtml(n, current) {
     ' title="' + esc(n.question || n.id) + '">' +
     '<span class="rq">' + esc(n.question || n.id) + "</span>" +
     '<span class="rf" title="' + esc(formWord(n.form)) + '">' + esc(formMark(n.form)) + "</span>" +
-    pill(statusOf(n), true) + "</a>";
+    stampPill(n, true) + unansweredPill(n, true) + "</a>";
 }
 
 function treeHtml(nodes, current, path, budget) {
@@ -743,16 +774,19 @@ function fact(k, v, dtTitle) {
 }
 
 function authorityHtml(n) {
-  var st = statusOf(n);
   var a = n.authority;
+  var html;
   if (a && a.class) {
     var stamp = [];
     if (a.by) stamp.push("by " + a.by);
     if (a.date) stamp.push(a.date);
-    return pill(a.class) + (stamp.length ? '<span class="stamp">' + esc(stamp.join(" · ")) + "</span>" : "");
+    html = pill(a.class) + (stamp.length ? '<span class="stamp">' + esc(stamp.join(" · ")) + "</span>" : "");
+  } else if (n.answer) {
+    html = pill("unstamped") + '<span class="stamp">no authority</span>';
+  } else {
+    html = pill("question") + '<span class="stamp">no answer yet</span>';
   }
-  if (st === "proposal") return pill("proposal") + '<span class="stamp">no authority</span>';
-  return pill("question") + '<span class="stamp">no answer yet</span>';
+  return html + unansweredPill(n);
 }
 
 /* One line per shim: what it is, what it is for (when recorded), what
@@ -795,7 +829,8 @@ function nodeHeader(n) {
 
   return '<p class="eyebrow">' + eyebrow.join(" &nbsp; ") + "</p>" +
     "<h1 tabindex=\"-1\" id=\"nodetitle\">" + esc(n.question || n.id) + "</h1>" +
-    '<dl class="facts">' + items.join("") + "</dl>";
+    '<dl class="facts">' + items.join("") + "</dl>" +
+    draftNoteHtml(n);
 }
 
 /* A reading's own page has to carry the citation it is a reading of. */
@@ -812,7 +847,7 @@ function answerSection(n) {
   var html = mdHtml(n.answer);
   var lead = '<span class="lead">' + esc(formWord(n.form)) + ".</span>";
   html = html.indexOf("<p>") === 0 ? "<p>" + lead + html.slice(3) : "<p>" + lead + "</p>" + html;
-  var unstamped = statusOf(n) === "proposal" ? " unstamped" : "";
+  var unstamped = !(n.authority && n.authority.class) ? " unstamped" : "";
   return '<section class="answer"><h2 class="sect">Answer</h2>' +
     '<div class="mdbody' + unstamped + '">' + html + "</div></section>";
 }
@@ -875,7 +910,7 @@ function refinementsSection(kids) {
     return '<a class="card" href="#' + esc(k.id) + '">' +
       '<h3 class="cq">' + esc(k.question || k.id) + "</h3>" +
       '<p class="cmeta"><span>' + esc(formWord(k.form)) + "</span>" +
-      pill(statusOf(k), true) +
+      stampPill(k, true) + unansweredPill(k, true) +
       '<span class="num">' + fmtPct(k.rank) + "</span></p></a>";
   }).join("");
   return '<section><h2 class="sect">Refinements</h2><div class="cards">' + cards + "</div></section>";

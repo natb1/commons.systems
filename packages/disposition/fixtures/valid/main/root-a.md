@@ -3,6 +3,7 @@ question: Why does the fixture graph exist?
 form: assumption
 defines:
   - fixture
+stage: maieutic
 ---
 
 ## Answer

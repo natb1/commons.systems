@@ -8,6 +8,7 @@ authority:
 under:
   - example.test/main/root
 boost: 3
+stage: maieutic
 ---
 
 ## Answer

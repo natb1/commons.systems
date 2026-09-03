@@ -19,6 +19,7 @@ import {
   deriveCeiling,
   deriveChildren,
   deriveDescendants,
+  deriveDraftHash,
   deriveRank,
   deriveStatus,
 } from './derive.mjs';
@@ -26,17 +27,21 @@ import {
 const FRONTMATTER_KEYS = new Set([
   'question', 'form', 'authority', 'under', 'tier', 'boost', 'cites',
   'instrument', 'after', 'source', 'relation', 'defines', 'shims', 'stage',
-  'order',
+  'order', 'recommendation', 'review',
 ]);
 const FORMS = new Set(['target', 'rule', 'assumption', 'arche', 'reading']);
 const AUTHORITY_CLASSES = new Set(['ratified', 'delegated', 'deferred']);
 const RELATIONS = new Set(['adopted', 'diverged', 'chosen-over']);
 const INSTRUMENT_KINDS = new Set(['check', 'assessment']);
 const STAGES = new Set(['periagogic', 'maieutic', 'ruling', 'review']);
+const RECOMMENDATION_CLASSES = new Set(['ratified', 'delegated']);
+const BOLDNESS_VALUES = new Set(['low', 'moderate', 'high']);
+const REVIEW_VERDICTS = new Set(['forward', 'kickback']);
+const REVIEW_STRENGTHS = new Set(['strong', 'moderate', 'weak', 'none']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HASH_RE = /^[0-9a-f]{40}$/;
 const SHIM_KEYS = new Set(['artifact', 'liquidation', 'declared', 'for']);
-const SECTION_ORDER = ['Disposition', 'Answer', 'Rationale', 'Proposal'];
+const SECTION_ORDER = ['Disposition', 'Answer', 'Rationale', 'Draft', 'Proposal'];
 
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -55,13 +60,13 @@ function isValidDate(s) {
 
 /**
  * Split a body into its `## Disposition` / `## Answer` / `## Rationale` /
- * `## Proposal` sections. `###`+ headings are content, not section
- * boundaries. Pushes one message per problem (without file-path prefix)
- * onto `problems`.
+ * `## Draft` / `## Proposal` sections. `###`+ headings are content, not
+ * section boundaries. Pushes one message per problem (without file-path
+ * prefix) onto `problems`.
  *
  * @param {string} bodyText
  * @param {string[]} problems
- * @returns {{Disposition: string|null, Answer: string|null, Rationale: string|null, Proposal: string|null}}
+ * @returns {{Disposition: string|null, Answer: string|null, Rationale: string|null, Draft: string|null, Proposal: string|null}}
  */
 function parseBody(bodyText, problems) {
   const lines = bodyText.split('\n');
@@ -92,7 +97,7 @@ function parseBody(bodyText, problems) {
     problems.push(`body has text before the first '##' heading: ${snippet}`);
   }
 
-  const sections = { Disposition: null, Answer: null, Rationale: null, Proposal: null };
+  const sections = { Disposition: null, Answer: null, Rationale: null, Draft: null, Proposal: null };
   let lastOrder = -1;
   boundaries.forEach((boundary, idx) => {
     const end = idx + 1 < boundaries.length ? boundaries[idx + 1].index : lines.length;
@@ -170,6 +175,103 @@ function fail(relPath, problemList) {
 }
 
 /**
+ * Extract the exact content of a `## Draft` section's one fenced markdown
+ * block: a line that, trimmed, is exactly `` ```markdown `` opens it, a
+ * line that trimmed is exactly `` ``` `` closes it, and nothing but blank
+ * lines may sit outside the fence. Pushes the one shape-error message and
+ * returns null on anything else -- more than one fence, text beside it,
+ * or no fence at all.
+ *
+ * @param {string} sectionText - `sections.Draft`, already trimmed by `parseBody`.
+ * @param {string[]} problems
+ * @returns {string|null} the fence's inner lines, joined by '\n'.
+ */
+function extractDraftFence(sectionText, problems) {
+  const fail1 = () => {
+    problems.push("'## Draft' must hold exactly one fenced markdown block");
+    return null;
+  };
+  const lines = sectionText.split('\n');
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === '') i += 1;
+  if (i >= lines.length || lines[i].trim() !== '```markdown') return fail1();
+  i += 1;
+  const content = [];
+  while (i < lines.length && lines[i].trim() !== '```') {
+    content.push(lines[i]);
+    i += 1;
+  }
+  if (i >= lines.length) return fail1(); // opened but never closed
+  i += 1;
+  while (i < lines.length) {
+    if (lines[i].trim() !== '') return fail1(); // text beside the fence
+    i += 1;
+  }
+  return content.join('\n');
+}
+
+/**
+ * Parse a `## Draft` fence's content with this same file's node parser --
+ * frontmatter and sections, the full single-file rules `parseNode` applies
+ * to any node file -- and reduce the result to the shape the dialogue node
+ * defines: `{raw, question, frontmatter, sections}`. Applies exactly one
+ * rule beyond parsing: the draft must answer the same question as the node
+ * it drafts.
+ *
+ * @param {string} fenceText
+ * @param {string} question - the enclosing node's own (already-validated) question.
+ * @param {{id: string, graph: string, slug: string, path: string}} ctx - the
+ *   enclosing node's own location, for attributing a nested parse error.
+ * @param {string[]} problems
+ * @returns {{raw: string, question: string, frontmatter: object, sections: object}|null}
+ */
+function parseDraftFence(fenceText, question, ctx, problems) {
+  let parsed;
+  try {
+    parsed = parseNode(fenceText, {
+      id: `${ctx.id}#draft`,
+      graph: ctx.graph,
+      slug: `${ctx.slug}#draft`,
+      path: `${ctx.path} (## Draft)`,
+    });
+  } catch (err) {
+    problems.push(`'## Draft' does not parse as a node: ${err.message}`);
+    return null;
+  }
+  if (parsed.question !== question) {
+    problems.push("'## Draft' answers a different question");
+  }
+  return {
+    raw: fenceText,
+    question: parsed.question,
+    frontmatter: {
+      form: parsed.form,
+      authority: parsed.authority,
+      under: parsed.under,
+      tier: parsed.tier,
+      boost: parsed.boost,
+      cites: parsed.cites,
+      instrument: parsed.instrument,
+      after: parsed.after,
+      source: parsed.source,
+      relation: parsed.relation,
+      defines: parsed.defines,
+      shims: parsed.shims,
+      stage: parsed.stage,
+      order: parsed.order,
+      recommendation: parsed.recommendation,
+      review: parsed.review,
+    },
+    sections: {
+      Disposition: parsed.disposition,
+      Answer: parsed.answer,
+      Rationale: parsed.rationale,
+      Proposal: parsed.proposal,
+    },
+  };
+}
+
+/**
  * Parse and validate a single node file's text (frontmatter + body).
  * Does not resolve `under`/`after`/`cites[].id` against a manifest or
  * against sibling nodes, and does not compute `children`/`rank`/`ceiling`/
@@ -179,7 +281,9 @@ function fail(relPath, problemList) {
  * @param {string} text - the file's decoded text.
  * @param {{id: string, graph: string, slug: string, path: string}} loc
  * @returns {object} a partial node (all deliverable-1 fields except
- *   `children`, `rank`, `ceiling`, `status`, `hash`).
+ *   `children`, `rank`, `ceiling`, `status`, `hash`), plus the dialogue
+ *   fields this unit adds: `recommendation`, `review`, `reviewStale`,
+ *   `draft`, `draftHash`.
  * @throws {Error} listing every problem found in this file, one per line,
  *   each prefixed with `loc.path`.
  */
@@ -287,6 +391,51 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
       problems.push(`'stage' must be one of: ${[...STAGES].join(', ')}`);
     } else {
       stage = fm.stage;
+    }
+  }
+
+  // recommendation: the facts a recommendation must state, required from the
+  // review stage on (checked below, once stage is known). One combined
+  // message for any shape problem -- missing field, bad value, or an extra
+  // key -- there is no per-field message for this one, unlike authority.
+  let recommendation = null;
+  if (!isAbsent(fm.recommendation)) {
+    const r = fm.recommendation;
+    const ok = isPlainObject(r)
+      && Object.keys(r).length === 2
+      && RECOMMENDATION_CLASSES.has(r.class)
+      && BOLDNESS_VALUES.has(r.boldness);
+    if (!ok) {
+      problems.push("'recommendation' must be {class: ratified|delegated, boldness: low|moderate|high}");
+    } else {
+      recommendation = { class: r.class, boldness: r.boldness };
+    }
+  }
+
+  // review: the state of the clean-context review of the draft. Same
+  // single-message-on-any-shape-problem style as recommendation above.
+  // `siblings` is a fifth, optional key -- which other drafts the reviewer
+  // was given -- whose own shape (a list of id strings) is checked here;
+  // that each id actually resolves needs the whole graph and is checked by
+  // readGraph, like 'under'/'after'/'order'.
+  let review = null;
+  if (!isAbsent(fm.review)) {
+    const r = fm.review;
+    const hasSiblings = isPlainObject(r) && !isAbsent(r.siblings);
+    const siblingsOk = !hasSiblings
+      || (Array.isArray(r.siblings) && r.siblings.every((x) => typeof x === 'string' && x.length > 0));
+    const keyCount = isPlainObject(r) ? Object.keys(r).length : -1;
+    const ok = isPlainObject(r)
+      && (keyCount === 4 || (keyCount === 5 && hasSiblings))
+      && REVIEW_VERDICTS.has(r.verdict)
+      && REVIEW_STRENGTHS.has(r.strength)
+      && typeof r.date === 'string' && isValidDate(r.date)
+      && typeof r.of === 'string' && HASH_RE.test(r.of)
+      && siblingsOk;
+    if (!ok) {
+      problems.push("'review' must be {verdict: forward|kickback, strength: strong|moderate|weak|none, date: YYYY-MM-DD, of: <sha1>}");
+    } else {
+      review = { verdict: r.verdict, strength: r.strength, date: r.date, of: r.of, siblings: hasSiblings ? r.siblings : [] };
     }
   }
 
@@ -443,6 +592,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   const sections = parseBody(bodyText, problems);
   const hasAnswer = sections.Answer !== null;
   const hasDisposition = sections.Disposition !== null;
+  const hasDraftSection = sections.Draft !== null;
 
   if (hasAnswer && form === null) {
     problems.push("'form' is required when the body has an '## Answer' section");
@@ -456,15 +606,54 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   if (order.length > 0 && !hasAnswer) {
     problems.push("'order' requires an '## Answer' section");
   }
-  if (stage !== null && !hasDisposition && sections.Proposal === null) {
-    problems.push("'stage' requires a '## Disposition' or a '## Proposal' section");
+  if (stage !== null && !hasDisposition && !hasAnswer && sections.Proposal === null) {
+    problems.push("stage requires a '## Disposition', '## Proposal', or '## Answer' section");
   }
   if (hasDisposition && stage === null) {
     problems.push("'## Disposition' requires 'stage'");
   }
-  if (!hasAnswer && stage === null) {
-    problems.push("a node without an '## Answer' section is an un-aligned disposition and must carry 'stage'");
+  if ((recommendation !== null || review !== null || hasDraftSection) && stage === null) {
+    problems.push("'recommendation', 'review', and '## Draft' are parts of the dialogue and require stage");
   }
+
+  // status: answered when the stamp is ratified or delegated, unanswered
+  // otherwise (a deferred stamp, no stamp, or -- below -- no answer at
+  // all). Every unanswered node carries the dialogue and so must carry a
+  // stage; the validator refuses one that does not.
+  const status = deriveStatus({ authority });
+  if (status === 'unanswered' && stage === null) {
+    problems.push(`${id} is unanswered and must carry stage`);
+  }
+  if ((stage === 'review' || stage === 'ruling') && recommendation === null) {
+    problems.push("stage review or ruling requires 'recommendation'");
+  }
+  if (stage === 'ruling' && (review === null || review.verdict !== 'forward')) {
+    problems.push("stage ruling requires a 'review' with verdict forward");
+  }
+
+  // '## Draft': one fenced ```markdown block, parsed with this same
+  // function (frontmatter and sections; no further rule beyond parsing
+  // except that it answers the same question) and exposed reduced to
+  // {raw, question, frontmatter, sections}. `draftFenceText` (the fence's
+  // exact content, or null with no '## Draft') feeds the draft hash below
+  // regardless of whether the draft is otherwise valid -- that value is
+  // only ever read once this function has returned without throwing.
+  let draft = null;
+  let draftFenceText = null;
+  if (hasDraftSection) {
+    draftFenceText = extractDraftFence(sections.Draft, problems);
+    if (draftFenceText !== null) {
+      draft = parseDraftFence(draftFenceText, question, { id, graph, slug, path: relPath }, problems);
+    }
+  }
+
+  const draftHash = deriveDraftHash({
+    fmText,
+    draftFence: draftFenceText,
+    answer: sections.Answer,
+    rationale: sections.Rationale,
+  });
+  const reviewStale = review !== null && review.of !== draftHash;
 
   if (problems.length > 0) {
     throw fail(relPath, problems);
@@ -491,6 +680,11 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     shims,
     stage,
     order,
+    recommendation,
+    review,
+    reviewStale,
+    draft,
+    draftHash,
     answer: sections.Answer,
     rationale: sections.Rationale,
     proposal: sections.Proposal,
@@ -610,6 +804,9 @@ export async function readGraph(rootDir) {
     node.after = node.after.map((refId) => canonicalizeId(refId, manifest));
     node.cites = node.cites.map((c) => ({ ...c, id: canonicalizeId(c.id, manifest) }));
     node.order = node.order.map((step) => step.map((refId) => canonicalizeId(refId, manifest)));
+    if (node.review) {
+      node.review = { ...node.review, siblings: node.review.siblings.map((refId) => canonicalizeId(refId, manifest)) };
+    }
   }
 
   // referential integrity: every 'under' entry must resolve within this
@@ -617,7 +814,9 @@ export async function readGraph(rootDir) {
   // double that parent's rank contribution and duplicate the child in
   // `children`); a resolved 'under' parent must itself carry an
   // '## Answer' -- an un-aligned disposition has no children; every
-  // 'after' entry must also resolve within this graph.
+  // 'after' entry must also resolve within this graph; every
+  // 'review.siblings' entry -- the other drafts a reviewer was given --
+  // must resolve too.
   const nodesById = new Map(parsed.map((n) => [n.id, n]));
   const idSet = new Set(nodesById.keys());
   for (const node of parsed) {
@@ -636,6 +835,11 @@ export async function readGraph(rootDir) {
     for (const a of node.after) {
       if (!idSet.has(a)) {
         problems.push(`${node.path}: unresolved after reference: ${a}`);
+      }
+    }
+    for (const sib of node.review ? node.review.siblings : []) {
+      if (!idSet.has(sib)) {
+        problems.push(`${node.path}: 'review.siblings' names ${sib}, which is not a node`);
       }
     }
   }

@@ -9,6 +9,7 @@ order:
   - example.test/main/a
   - example.test/main/b
   - example.test/main/c
+stage: maieutic
 ---
 
 ## Answer

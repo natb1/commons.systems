@@ -1,6 +1,7 @@
 ---
 question: Does a fenced example survive body parsing?
 form: target
+stage: maieutic
 ---
 
 ## Answer
