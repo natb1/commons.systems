@@ -142,13 +142,16 @@
           let
             weztermTests = pkgs.callPackage ./nix/home/wezterm.test.nix { };
             claudeCodeTests = pkgs.callPackage ./nix/home/claude-code.test.nix { };
+            zshTests = pkgs.callPackage ./nix/home/zsh.test.nix { };
           in
           {
             wezterm-test-suite = weztermTests.wezterm-test-suite;
             claude-code-test-suite = claudeCodeTests.claude-code-test-suite;
+            zsh-test-suite = zshTests.zsh-test-suite;
           }
           // weztermTests.wezterm-tests
           // claudeCodeTests.claude-code-tests
+          // zshTests.zsh-tests
         );
       };
 
