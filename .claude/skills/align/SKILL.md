@@ -5,11 +5,12 @@ description: Record or revise one node of the disposition graph by interview wit
 # Align
 
 > **Shim notice (2026-09-02, revised 2026-09-03).** Hand-materialized from
-> the nodes `growth`, `recording`, `authority`, `node`, `under`,
-> `projection`, `persistence`, `readings`, `review`, `evaluation`,
-> `attention`, `delegation`, and `transience` of
-> `commons.systems/disposition-graph`, all stamped deferred, and from the
-> author's rulings quoted on them. This text has no authority of its own.
+> the nodes `growth`, `recording`, `unanswered`, `dialogue`,
+> `alignment-target`, `authority`, `node`, `under`, `projection`,
+> `persistence`, `readings`, `review`, `evaluation`, `attention`,
+> `delegation`, and `transience` of `commons.systems/disposition-graph`,
+> all stamped deferred and unanswered, and from the author's rulings quoted
+> on them. This text has no authority of its own.
 > Where it conflicts with the graph at `origin/disposition`, the graph wins
 > and the conflict is recorded as an un-aligned disposition on the node it
 > conflicts with. It is declared as a shim on `growth`. Liquidation: the
@@ -17,14 +18,18 @@ description: Record or revise one node of the disposition graph by interview wit
 > deleted. The principles adopted from the incumbent `/align` on `main` are
 > named on `growth`; none of its mechanics are adopted.
 
-Two usages, each a sitting in two stages. `/align <disposition>`, the
+Three usages, each a sitting in two stages. `/align <disposition>`, the
 disposition in the author's words, records or revises the node that answers
 it; its periagogic object is the nodes the disposition would amend and the
 implementation their criteria point to, read before anything is changed.
 `/align <node id>` runs the sitting on an existing node, to ratify it or to
 review its ratification; its periagogic object is the node's page and the
-readings under it. A node is one question and its standing answer; a round
-is one node. A disposition the author states while a sitting is in hand is
+readings under it. `/align` with nothing takes up the highest-ranked
+unanswered node (`alignment-target`, §1). A node is one question and its
+standing answer; a round is one node. Every node is unanswered until the
+author confirms it through this dialogue (`unanswered`): a deferred or
+unstamped answer is a draft, and the node carries the dialogue's state
+(`dialogue`). A disposition the author states while a sitting is in hand is
 queued (§1, the queue) and the sitting continues. The harness finds this
 skill only when the session starts in the checkout that carries it.
 
@@ -49,10 +54,13 @@ skill only when the session starts in the checkout that carries it.
    refines, and leave the author's overrule open.
 4. Read the open dialogue before opening a new one:
    `node packages/disposition/project.mjs disposition --frontier -` lists
-   every node with a `stage`, and the alignment page's responses are read
-   with the Artifact tool (`read_db`, collection `responses`; a document's
-   id is the node id with each `/` replaced by `:`). Resume each sitting at
-   its stage.
+   every node with its status, stamp, `stage`, recommendation, and review
+   state, and the alignment page's responses are read with the Artifact
+   tool (`read_db`, collection `responses`; a document's id is the node id
+   with each `/` replaced by `:`; a document carries `node`, `stage`,
+   `ruling` as `confirm`, `edit`, or `deny`, `text`, and `updated`). Act
+   on every response before anything else (§5), then resume each sitting
+   at its stage.
 
 ## 1. Frame
 
@@ -81,18 +89,23 @@ skill only when the session starts in the checkout that carries it.
      and either forwards it, with its strongest counter-argument when it
      found one and the session's reply, or kicks it back to stage 2 or 3
      with findings.
-  5. Ruling. The recommendations are put on the alignment page, one item
-     per node, each carrying the node's question, the author's words it
-     rests on with their dates, the node as it would stand, the three
-     facts, the alternatives rejected and why, the review's
-     counter-argument and the reply when there is one, and the responses
-     open: ratify as shown, ratify with edits, defer, overrule, or prose.
-     The author rules there or in prose.
-  6. Recording. The response is classified and, where it is not a
-     confirmation, kicked back (§5); a confirmed disposition is stamped
-     and landed. The follow-up readings, vocabulary, and key concepts the
-     sitting surfaced are named in the rationale and derive onto the
-     frontier from there.
+  5. Ruling. The node is put on the alignment page, which lists every
+     unanswered node in rank order, this project's graph before the
+     public graph and so the purpose node first, each item carrying the
+     node's question, its stage, the author's words it rests on with
+     their dates, the node as it stands, the draft and the edit it makes
+     when the node carries one, the recommendation's class and boldness,
+     the alternatives rejected and why, the review's counter-argument and
+     the reply when there is one, and the three responses open on any
+     subset at once: confirm, confirm with edits, deny with feedback
+     (`unanswered`). The author rules there or in prose.
+  6. Recording. The response is classified (§5): a confirmation is
+     stamped and landed; a confirmation with edits is applied, reviewed
+     again when the edits change substance, and stamped; a denial is
+     kicked back to the movement it calls for with the feedback recorded
+     as the author's words. The follow-up readings, vocabulary, and key
+     concepts the sitting surfaced are named in the rationale and derive
+     onto the frontier from there.
   The named deviation is putting the AI's account before the author's; when
   it happens, hold the account back and restart the stage. A ratified node
   under review keeps its stamp until the author rules.
@@ -106,18 +119,33 @@ skill only when the session starts in the checkout that carries it.
   no stamp. For a node the author names, set `stage` on that node and add
   the `## Disposition` of their words. `stage` names the next movement
   owed, `periagogic`, `maieutic`, `review`, or `ruling`; advance it as the
-  movements complete and remove it at the recording. The queue is the set
-  of nodes with a stage, in rank order; the author's choice of what comes
-  next is a boost (`attention`). Nothing about the queue lives in this
-  session, in memory, or in scratch (`transience`).
+  movements complete and remove it, with the rest of the dialogue's
+  fields, at the recording. The queue is the set of unanswered nodes, in
+  rank order; the author's choice of what comes next is a boost
+  (`attention`). Nothing about the queue lives in this session, in
+  memory, or in scratch (`transience`).
+- **The dialogue's state** (`dialogue`) is on the node and nowhere else:
+  `stage`; `## Disposition`; `## Draft`, one fenced markdown block holding
+  the whole proposed node when the recommendation differs from the node as
+  it stands, and absent when the node is its own draft; `recommendation`,
+  the `class` a confirmation confers and the `boldness`, required from the
+  review stage on; `review`, the clean-context review's `verdict`,
+  `strength`, `date`, and `of`, the hash of the draft text it read, which
+  the frontier flags when the draft has changed since; and `## Proposal`,
+  the account in prose. A ruling-stage node without a forward verdict is
+  invalid; a draft changed after its review is sent through the review
+  again when the change is substance.
+- No argument (`alignment-target`): take the first unanswered node of the
+  frontier in rank order, this project's graph before the public graph, and
+  run the sitting from the node's stage, repeating no movement behind it,
+  up to the author's confirmation, asked for in the interview when the
+  author is present and read from the page otherwise. One node at a time;
+  the author's choice of another node is a boost or an argument, and the
+  session takes the node the author names.
 - A question or a requirement: search the graph for a node with the same
   question. A keyword search only shortlists; only reading a node disposes of
   it. Same question, same node, and the round is an edit. A requirement that
   bundles independent questions is several rounds, one node each.
-- No argument: the onboarding walk. Open the browser at
-  `commons.systems/disposition-graph/purpose`, run the validator, and walk
-  the author to one question in their own words, in prose, one question at a
-  time.
 - State the conduct before the dialectic (`growth`).
   Periagogic: the record is authoritative and the author is turned back to
   it; the record at `origin/disposition` is the fixed object, the author
@@ -222,27 +250,33 @@ rule projections are regenerated by the next reconciliation run, not here.
   movement they name, plus the counter-argument when it found one worth
   the author's time; it writes nothing. Apply each verdict on its own: a
   kickback sets `stage` and appends the findings to `## Proposal`; a
-  forward sets `stage: ruling` and puts the item on the page with the
-  counter-argument and the session's reply, or with the note that the
-  review found no strong counter-argument. A disposition still in review
-  never holds one that was forwarded.
-- **Classify the response** (`recording`). Confirmation as shown, or the
-  recommended option taken: record. Otherwise decide where the dialogue
+  forward sets `stage: ruling`, writes `review` with the verdict, the
+  strength, the date, and the hash of the draft it read, and puts the
+  item on the page with the counter-argument and the session's reply, or
+  with the note that the review found no strong counter-argument. A
+  disposition still in review never holds one that was forwarded.
+- **Classify the response** (`recording`, `unanswered`). `confirm`:
+  record, ratified, or delegated where the author's words delegate it.
+  `edit`: apply the author's edits to the draft; when they change
+  substance, send the draft through the review again and put it back for
+  confirmation; otherwise record with the edits, the author's words being
+  the ruling. `deny`, or prose that is neither: decide where the dialogue
   resumes and set `stage` to it: `periagogic` when the response shows the
   author has lost hold of the record's ground (asking for what the record
   forbids for a reason they have not engaged, contradicting an ancestor
   they have not cited); `maieutic` when the response is ambiguous while
   the AI's understanding of the ground is complete; `ruling` in the common
-  case, the draft refined with the author's edits and put back for
-  confirmation (a refined draft that changes substance goes through the
-  review again). A deferral leaves the answer deferred and closes the
-  sitting; an overrule is drafted as what the author said stands, reviewed,
-  and put back for confirmation.
+  case, the draft refined with the feedback and put back for
+  confirmation. Leaving a node unconfirmed is the deferral; an overrule is
+  drafted as what the author said stands, reviewed, and put back for
+  confirmation. A confirmation on a node whose review has not run is held
+  until the review runs and recorded when it forwards.
 - **Record.** Write the stamp (`ratified`, `by: <the author's name>`,
   dated, with the ruling quoted and dated in the rationale; a ratified
-  stamp whose ruling is not in the record is invalid; or `deferred` when
-  the author deferred), remove `stage` and `## Disposition`, validate, and
-  land.
+  stamp whose ruling is not in the record is invalid; or `delegated`),
+  copy the draft into the node when it carries one, remove `stage`,
+  `recommendation`, `review`, `## Draft`, and `## Disposition`, validate,
+  and land.
 - Steer: amend the node; the steer enters the rationale as a rejected
   alternative or an amendment; project again.
 - The author's choice of the next node is a boost (`attention`).
