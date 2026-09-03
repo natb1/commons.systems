@@ -27,7 +27,8 @@ with `main` at bootstrap exit. Its tree:
 - `.claude/skills/align/SKILL.md` — the `/align` shim (L15).
 - `.claude/rules/` — hand-materialized projections of global-tier nodes (L30).
 - `bootstrap/` — evidence gathered during bootstrap (surveys, the revision-2
-  model page); deleted with the ledger.
+  model page) and `bootstrap/review/`, the record of each sitting's review
+  items and the builder of its review page; deleted with the ledger.
 - `LEDGER.md`, this file.
 - `disposition/` — the nested worktree of the `disposition` ref, gitignored
   here. That ref holds the graphs and only the graphs (L25): the manifest
@@ -52,8 +53,12 @@ the ledger: it interviews the author, writes and amends nodes, keeps
 `LEDGER.md` current, reviews subagent output, and lands commits. It does not
 write tooling, tests, surveys, or pages itself.
 
-Every simple reconciliation, materialization, or implementation task is
-delegated to a subagent with the appropriate model and effort:
+Every simple reconciliation, materialization, or implementation task, and
+every investigation whose context is verbose, is delegated to a subagent
+with the appropriate model and effort (`delegation`, author 2026-09-03):
+debugging, driving a browser, reading logs, transcripts, or diagnostic
+output, and surveys are never done on the main thread, which reads the
+subagent's conclusion and the commands it ran, never the context.
 
 - **Unit.** One deliverable with a written contract (inputs, outputs, file
   paths, error behaviour) and a test or a verifiable output. A unit that needs
@@ -87,6 +92,10 @@ Commands, from this worktree:
 - ratify: recorded by the session after the author's ruling in the
   interview, in the author's name with the ruling quoted (L32); no command
 - tests: `node --test packages/disposition/*.test.mjs`
+- review page: `node bootstrap/review/build.mjs`, then publish the html it
+  writes under `bootstrap/review/` with the `db` capability; read the
+  author's responses with the artifact tool's `read_db` action on the
+  `responses` collection (L40)
 - land the graph: from `disposition/`, `git commit` and `git push origin
   disposition`; no pull request
 - land implementation: on this ref, after code review (below), `git push
@@ -212,7 +221,53 @@ rounds review the delta from the last reviewed commit.
   standing, shim, proposal, open question, evidence, not recorded); and the
   playback restated in that form. All three done the same day; the
   restated playback, seventeen encodings and nine questions with defaults,
-  is the open turn.
+  is the open turn. The author ruled on items 1 to 6 the same day (L39):
+  1, 2, and 4 recorded; 5 recorded as shims and the field removal; 3 and 6
+  not ruled for want of context. The review is paused pending the
+  evaluation of a review page (L40). Every remaining item and question,
+  with its context, is at `bootstrap/review/sitting-purpose-2026-09-03.yaml`,
+  projected to the review page; the author's responses are read with
+  `read_db`. Open on the page: the nodes purpose, growth, authority, node,
+  instruments, readings, namespaces, projection, model, materialization,
+  transience, session-context, scope, audience, knowledge-store, capture,
+  srs-introduction, the new harness tradition, reconciliation reading,
+  domain-assumptions reading, stub traditions, and form vocabulary; the
+  questions q1 forms, q2 traditions home, q4 hexis, q6 second stop, q8
+  purpose criteria, q10 author quotes, q11 ledger sunset, q12 review-item
+  context, q13 the review page.
+  Later the same day the author added four points (L41): q14 rationale
+  and the under edge, q15 tier as scope, q16 rejected alternatives as
+  structure, all on the page with the `under` node queued whole; and the
+  browser's address, tested in the viewer, recorded on `projection` with
+  the reading `web-routing` and a browser fix that keeps the reader's place.
+  Then the delegation rule (L42) and the priority ruling (L43): priority is
+  rank, recorded as boosts; the second priority after the alignment
+  disposition is the materialization of harness rules, and the projector now
+  writes `.claude/rules/` (`--rules`) and the ancestry projection
+  (`--ancestry`).
+- **In flight (2026-09-03, written to survive compaction; this log wins
+  over any summary).** Two units running: the review-page builder, which
+  writes `bootstrap/review/build.mjs` and
+  `bootstrap/review/sitting-purpose-2026-09-03.html` from the YAML beside
+  them, and the projector unit, which adds `--rules <dir>` and
+  `--ancestry <id> --local <file>` to `project.mjs`, removes the validator
+  rule that boost needs a ratified stamp, and regenerates `.claude/rules/`
+  (authority, session-context, evaluation, delegation). When both report:
+  set the boosts (`model` 8, `growth` 4, `projection` 3, `session-context`
+  2; script `edit-boosts-0903.py` in the job's tmp dir, trivially
+  re-creatable), validate, project and republish the browser by its URL,
+  run `node bootstrap/review/build.mjs` and publish the html as a new
+  private artifact with `capabilities: {db: {}}`, record its address on
+  `growth`'s second shim and in the commands above, commit `packages/` and
+  `.claude/rules/` on greenfield and the boosts and `delegation`'s tier on
+  disposition, push both, then report to the author: the recorded rulings
+  with their three facts, the evaluations q10 (quotes: no new schema, the
+  ruling verbatim in the landing commit), q11 (sunset: yes, after the
+  `delegation` node closed the survey's one blocker; survey section D), q12
+  (review-item context), q13 (the page, responses read with `read_db`),
+  q14 to q16, the routing test result, the delegation rule, the priority
+  boosts, and the review page link. The greenfield commit before this
+  paragraph holds everything the units are not writing.
 - **Review log.** Each landing on this ref: commit range, out-dir tag,
   rounds, verdict.
   - Tooling, `684ac70f..6912c361`, tag `r0-tooling`, round one at high:

@@ -54,6 +54,11 @@ exists · `ratified` the node is ratified and the entry closes · `rejected`.
 | L36 | functional validation before non-functional validation | stubbed | author | `disposition-graph/validation-order` |
 | L37 | transient disposition: never a disposition; criterion, shim, proposal, open question, evidence, or not recorded; no work-shaped nodes | stubbed | author + proposal | `disposition-graph/transience` |
 | L38 | every recommendation presented before recording, with authority, boldness, and persistence class | stubbed | author | `disposition-graph/growth`; the shim |
+| L39 | rulings of 2026-09-03 on playback items 1 to 6: recorded; stamps per node; `shims` field; `ledger` field removed; `bootstrap` pruned | recorded | author | `growth`, `authority`, `materialization`, `session-context`; `bootstrap/review/sitting-purpose-2026-09-03.yaml` |
+| L40 | the sitting's review page, a shim on `growth`; responses read from its database | stubbed as a shim, pending q12 and q13 | author + proposal | `bootstrap/review/` |
+| L41 | rationale and the under edge, tier as scope, rejected alternatives as structure (q14 to q16); every node has an address, the reader's place kept (recorded) | recorded / open | author + proposal | `projection`, `web-routing`; the review page |
+| L42 | verbose investigation (debugging, driving a browser, logs) is subagent work, never the main thread's | stubbed | author | `disposition-graph/delegation`; `CLAUDE.md`; the shim |
+| L43 | priority is rank: alignment disposition first, harness-rule materialization second; rules, `CLAUDE.local.md`, `CLAUDE.md` projected by the projector, shimmed in bootstrap | recorded | author | boosts on `model`, `growth`, `projection`, `session-context`; `project.mjs --rules`, `--ancestry` |
 | L29 | shimmed code review for every bootstrap landing; review doctrine before exit | stubbed | author | `disposition-graph/review`; the incumbent detached review instrument as shim |
 
 ## L01 archē is the root answer form
@@ -816,3 +821,172 @@ graph."
 is a contradiction in terms; the persistence classes are standing, shim,
 proposal, open question, evidence, and not recorded (L37). The playback of
 the purpose sitting restated in this form on 2026-09-03 (round log).
+
+---
+## L39 rulings of 2026-09-03 on the purpose playback, items 1 to 6
+
+**Source.** Author, 2026-09-03, answering the restated playback by item. On
+1: "Ratified on the rule. Ratified on the shim." On 2: "The ledger is a
+shim, it shouldn't receive standing disposition. Ratified as a shim. The
+standing disposition (ratified) is that ratification happens only through
+alignment dialogue." On 3: "This review item does not have enough context
+for me to make a ruling. Each review item must have sufficient context for
+me to make a ruling. Recommend a disposition for the type of context each
+review item must have (extract of original author text, etc.) Evaluate,
+would it make sense for alignment dialogue (`/align`) to use an html
+artifact for structured disposition review? periagoge and maieutic can use
+the interview tool for the back-and-forth of alignment dialogue, then the
+final phase can produce this artifact with better layout with a structured
+list of review items - context, authority, boldness, persistence, final node
+details (q/a for a new disposition, or whichever part of the node is being
+updated by the review item), etc. Can you take responses directly from this
+artifact? If so it would make it easy to ensure explicit responses for each
+review item - responses are often inferred unexpectedly." On 4: "general
+disposition is that all materialized implementation (including the browser)
+is a projection of the graph - anything not justified by the graph is
+subject to liquidation through reconciliation. 'implementation unit' kind
+of makes it sound like we are recording transient dispositions - ensure
+that we are not." On 5: "Yes, you can record bootstrap as a shim for
+reconciliation process if it helps you manage context, or in bootstrap
+operations (delegating to subagents, etc.) Just make sure there are not
+redundancies between the function/content of any shims, bootstrap
+operations document, session memories, and ledger. Also evaluate, now that
+we have a shimmed alignment skill, can the ledger me migrated to deferred
+dispositions and sunset?" and "Author quotes on disposition are rarely
+expected to be recorded as disposition verbatim. Dialogue is expected to
+edit for clarification and writing quality. It may make sense to retain
+original author quotes as reference though - evaluate whether this function
+earns new schema. It would need to be subject to the node accumulation
+dispositions which roll up appended records and use git for history
+retention." On 6: "Need more context. This is the kind of thing that would
+be clarified with an artifact for review items. Rather that deferring a
+partial edit to a disposition which is confusing (how is that even
+recorded) the artifact would allow you to show me the edit to the
+disposition and approve the disposition as a whole." Then: "Let's pause
+here on the review pending an evaluation of that proposed artifact (as a
+shim until materialization via reconciliation is implemented). Integrate
+this feedback so far, don't forget to follow up with the remaining review
+items and questions. Make sure the remaining review items and questions
+survive compaction with their necessary context."
+
+**Content.** Recorded on the disposition ref: `growth` (both stages in both
+usages, the periagogic object of each), `authority` (ratification only
+through the dialogue), `materialization` (everything materialized is a
+projection of the graph; unjustified implementation is liquidated through
+reconciliation), the `bootstrap` node pruned, the `ledger` field removed
+from the schema and from every node with every body reference stripped, and
+a `shims` field added, each shim declared on the node it serves with
+artifact, purpose, verbatim liquidation condition, and date: the skill and
+the review page on `growth`; this ledger and the bootstrap grant on
+`authority`; the `greenfield` ref and the yaml import on `materialization`;
+`CLAUDE.md` on `session-context`, its liquidation the former exit criteria;
+the published browser on `projection`; the incumbent code-review instrument
+on `review`; the public mount on `namespaces`; the rule file on
+`evaluation`. Stamps are per node, so a node whose rule the author ratified
+stays deferred until the author rules on it whole; each is on the review
+page. Items 3 and 6, the quote-retention evaluation, and the ledger sunset
+evaluation are open questions on the review page (q10 to q13); the
+migration survey is `bootstrap/ledger-migration-survey-2026-09-03.md`. The
+sitting's record, every open item and question with its context, is
+`bootstrap/review/sitting-purpose-2026-09-03.yaml`.
+
+---
+## L40 the sitting's review page
+
+**Source.** Author, 2026-09-03, item 3 and the pause, quoted in L39.
+
+**Content.** A shim declared on `growth`: the review page of a sitting,
+built by `bootstrap/review/build.mjs` from the sitting's record and
+published as a private page with the `db` capability, so that the author's
+rulings are recorded per item and read back by the session with the
+artifact tool's `read_db` action; a copy button is the fallback.
+Liquidation, verbatim on the node: the implementation projects the review
+page from the record of a sitting and reads the rulings from it, and the
+hand-built page and its builder are deleted. The context every item
+carries is recommended on the page as q12, adoption of the page as q13. The
+shim applies by default (`evaluation`) and is removed with its declaration
+if the author overrules q13.
+
+---
+## L41 rationale, tier, rejected alternatives, and the browser's address
+
+**Source.** Author, 2026-09-03, on the purpose page and other deferred
+nodes: "'Rationale' states that the node rationale stems from the node this
+node is under. Evaluate: would that always be the case? The disposition for
+the under edge seems to state this 'Ask "why does this question exist?"; the
+answer names its parent.' If so, does it make sense to make the 'rationale'
+the prose property of the under edge?" "'Tier' (as in global-tier) needs a
+disposition. As a disposition references in the projected documentation
+must be hyperlinked. Is 'tier' even the right primitive? Even cross-cutting
+non-functional concerns have scope. A static typing convention doesn't apply
+to the purpose node. Evaluate adversarially and from greenfield perspective
+whether cross-cutting non-functional concern could be reduced to topology
+and/or citations." "The under edge disposition lists 'rejected' as prose
+under 'rationale' - it may make sense to record rejected dispositions, but
+this seems too ad-hoc." "The url in the artifact is not updated on
+navigation between nodes. This could cause navigation confusion. Record
+reference to web app routing tradition for disposition. Edit the browser
+shim to reconcile the disposition."
+
+**Content.** The first three are evaluated and put on the review page as
+q14 (recommended: the rationale stays the node's own, why this answer
+stands; the edge carries no prose), q15 (recommended: prune `tier`; a rule
+binds the subtrees of the nodes that cite it, inherited along `under`; the
+rules projection is the rules cited by `purpose`; every field name and
+value on a page links to its defining node), and q16 (recommended: a
+`rejected` list on the node, projected in the authority section), with the
+`under` node queued for whole-node review. The fourth was tested in the
+viewer the same day (the page opened on `purpose` although the address
+named `model`; navigation changed nothing in the address bar; the viewer
+frames the page in a sandboxed iframe) and recorded at the author's
+direction: the address rule on `projection`, the reading `web-routing`
+under it, both deferred, and the browser shim edited to keep the reader's
+place; deep links through the viewer's address wait on the browser being
+published from the implementation ref, the shim's liquidation condition.
+
+---
+## L42 verbose investigation is subagent work
+
+**Source.** Author, 2026-09-03: "new disposition (should affect both
+alignment and bootstrap/reconciliation shims): debugging activities like
+those are prime candidates for subagents - driving a browser with max
+effort fable is very expensive. Debugging context can be verbose and
+pollute the main thread." Given after the session drove the browser on the
+main thread to test the artifact's address behaviour.
+
+**Content.** `disposition-graph/delegation`, deferred, under `growth`,
+carrying the token-efficiency rule (L21, L23) with the new clause: every
+investigation whose context is verbose is a unit, the main thread reads the
+conclusion and never the context. Projected into `CLAUDE.md` (token
+efficiency) and the shim (model and delegation). L21 is closed by this
+node.
+
+---
+## L43 priority is rank; harness rules are the second priority
+
+**Source.** Author, 2026-09-03: "A disposition like that (subagents for
+debugging) is a rule that in greenfield with materialize automatically into
+the rules context for both reconciliation and alignment. While maintaining
+ratification of the alignment disposition (persistent doctrine driving the
+alignment shim and eventually the materialized alignment skill), let's set
+the second priority to materialization of harness rules (CLAUDE.md if any,
+.claude/rules, and CLAUDE.local.md for workspace context) and shimming of
+the rules (bootstrap in lieu of reconciliation) so that we can formalize
+context management in the harness." And: "priotity is encoded as rank".
+
+**Content.** The priority is recorded as boost, the author's allocation:
+`model` first among the children of `purpose`, `growth` first and
+`projection` second among the children of `model`, `session-context` first
+under `projection`; the validator's rule that boost needs a ratified stamp
+is removed, since a boost is the author's act whatever the answer's stamp
+(`attention`). The projector materializes the rules (`--rules`, one file
+per node binding every session, today those marked `tier: global`:
+`authority`, `session-context`, `evaluation`, `delegation`; the selector
+changes to citation scope if q15 is ruled so) and the ancestry projection
+(`--ancestry`, the `CLAUDE.local.md` of a bite's worktree). The
+hand-written `.claude/rules/evaluation.md` is replaced by the generated
+file, which liquidates the shim declared on `evaluation`. `CLAUDE.md` waits
+on the ledger migration (q11), after which the projector generates it from
+`purpose` and `projection` and the operations residue moves where the
+survey recommends. `delegation` is marked global so that it reaches every
+session now.

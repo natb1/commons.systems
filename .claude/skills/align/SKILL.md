@@ -4,23 +4,27 @@ description: Record or revise one node of the disposition graph by interview wit
 ---
 # Align
 
-> **Shim notice (2026-09-02, ledger L15).** Hand-materialized from the nodes
+> **Shim notice (2026-09-02).** Hand-materialized from the nodes
 > `growth`, `authority`, `node`, `under`, `projection`, `persistence`,
 > `readings`, `review`, `evaluation`, `attention`, and `transience` of
 > `commons.systems/disposition-graph`, all stamped deferred, and from the
-> author's rulings on `LEDGER.md`. This text has no authority of its own.
-> Where it conflicts with the graph at `origin/disposition`, the graph wins
-> and the conflict is recorded as a proposal on `disposition-graph/bootstrap`.
+> author's rulings. This text has no authority of its own. Where it
+> conflicts with the graph at `origin/disposition`, the graph wins and the
+> conflict is recorded as a proposal on the node it conflicts with. It is
+> declared as a shim on `growth`.
 > Liquidation: the projector materializes this skill from ratified nodes and
 > this file is deleted. The principles adopted from the incumbent `/align` on
 > `main` are named in `bootstrap/align-survey.md` section B; none of its
 > mechanics are adopted.
 
-Two usages (ledger L33). `/align <disposition>`, the disposition in the
-author's words, records or revises the node that answers it. `/align
-<node id>` runs the same dialectic on an existing node, to ratify it or to
-review its ratification. A node is one question and its standing answer; a
-round is one node. In the bootstrap
+Two usages, each a sitting in two stages. `/align <disposition>`, the
+disposition in the author's words, records or revises the node that answers
+it; its periagogic object is the nodes the disposition would amend and the
+implementation their criteria point to, read before anything is changed.
+`/align <node id>` runs the sitting on an existing node, to ratify it or to
+review its ratification; its periagogic object is the node's page and the
+readings under it. A node is one question and its standing answer; a round
+is one node. In the bootstrap
 session the loop is run by reading this file; in a session rooted at the
 `greenfield` worktree it is the skill.
 
@@ -31,18 +35,19 @@ session the loop is run by reading this file; in a session rooted at the
    this check; a stale or dirty tree stops the round.
 2. Reconcile this text to the graph: read the nodes it projects at their
    current text; where a node differs from this file, follow the node and
-   record the difference as a proposal on `bootstrap`. Apply every declared
-   shim (this file, `CLAUDE.md`, the review instrument named on `review`,
-   the rule projections under `.claude/rules/`) without being asked; bypass
-   one only when prompted to.
+   record the difference as a proposal on that node. Apply every shim
+   declared on the nodes (the `shims` field: this file, `CLAUDE.md`, the
+   review instrument on `review`, the rule projections under
+   `.claude/rules/`, the published browser, the sitting's review page)
+   without being asked; bypass one only when prompted to.
 3. The worktree is the claim; during bootstrap there is one writer. Landing
    location is never a question for the author: place the node under the
    question it refines, and leave the author's overrule open.
 
 ## 1. Frame
 
-- A node id names a ratification or a review of one: a sitting (ledger
-  L34, L35), in these movements.
+- A node id names a ratification or a review of one; a disposition names
+  the nodes it would amend. Either is a sitting, in these movements.
   1. Reading. Point the author to the page at the node's id and to the
      readings under it. Say nothing else.
   2. Periagogic stage, comprehension. One probe per turn, in prose, from
@@ -61,9 +66,15 @@ session the loop is run by reading this file; in a session rooted at the
      the record the node joins; then the recommendation, carrying its
      authority class, its boldness, its persistence class, and the
      alternatives, with the three exits open.
-  4. Ruling. The author rules; the stamp and the quoted ruling are written
-     (step 5). The follow-up readings, vocabulary, and key concepts the
-     sitting surfaced enter the frontier as deferred readings.
+  4. Ruling. The recommendations are put on the sitting's review page,
+     one item per node, each carrying the node's question, the author's
+     words it rests on with their dates, the node as it would stand, whole,
+     with the change marked against the current text, the three facts, the
+     alternatives rejected and why, and the rulings open: ratify as shown,
+     ratify with edits, defer, overrule. The author rules there or in prose;
+     the session reads the responses back and writes the stamp and the
+     ruling (step 5). The follow-up readings, vocabulary, and key concepts
+     the sitting surfaced enter the frontier as open questions.
   The named deviation is putting the AI's account before the author's; when
   it happens, hold the account back and restart the stage. A ratified node
   under review keeps its stamp until the author rules.
@@ -75,7 +86,7 @@ session the loop is run by reading this file; in a session rooted at the
   `commons.systems/disposition-graph/purpose`, run the validator, and walk
   the author to one question in their own words, in prose, one question at a
   time.
-- State the conduct before the dialectic (`growth`, ledger L35).
+- State the conduct before the dialectic (`growth`).
   Periagogic: the record is authoritative and the author is turned back to
   it; the record at `origin/disposition` is the fixed object, the author
   articulates their account before the AI's appears, and compulsion is
@@ -132,15 +143,19 @@ session the loop is run by reading this file; in a session rooted at the
   `ratified`. An edit reconciles the whole node, not one sentence.
 - Every node the round touched or cited has its stamp checked; a node with
   none is an unanswered question or a proposal, never an answer.
-- During bootstrap, append the author's doctrine to `LEDGER.md` in their
-  words, in the same turn it is given.
+- During bootstrap, append the author's doctrine to `LEDGER.md`, a shim
+  declared on `authority`, in their words, in the same turn it is given.
 
 ## 4. Project
 
 Run `node packages/disposition/validate.mjs disposition`, then
 `node packages/disposition/project.mjs disposition --out dist/browser/index.html`,
-then publish the page to the address recorded on `projection`. The page at
-the node's id is what the author reads; the file is not.
+then publish the page to the address in the shim declared on `projection`.
+The page at the node's id is what the author reads; the file is not. When a
+sitting reaches its ruling, build its review page with
+`node bootstrap/review/build.mjs` and publish it with the `db` capability;
+read the responses with the artifact tool's `read_db` action on the
+`responses` collection.
 
 ## 5. Ratify or steer
 
@@ -179,5 +194,8 @@ round disposed of.
 
 The interview is not delegable and runs on the main thread; the author's
 default model for the alignment skill is fable. Everything mechanical
-(validation, projection, publication, surveys, tooling) is a subagent unit
-under the token-efficiency rule in `CLAUDE.md`.
+(validation, projection, publication, surveys, tooling) and every
+investigation whose context is verbose (debugging, driving a browser,
+reading logs or transcripts) is a subagent unit under `delegation` and the
+token-efficiency rule in `CLAUDE.md`; the main thread reads the conclusion,
+never the context.
