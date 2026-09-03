@@ -129,6 +129,24 @@ let
           "echo 'FAIL: Linux config missing default_gui_startup_args for nixos mux auto-connect' && exit 1"
       }
       ${
+        if lib.hasInfix "config.unix_domains" luaConfig && lib.hasInfix "proxy_command" luaConfig then
+          "echo 'PASS: Linux config declares a unix domain for the WSL mux'"
+        else
+          "echo 'FAIL: Linux config missing unix_domains/proxy_command for the WSL mux' && exit 1"
+      }
+      ${
+        if lib.hasInfix "'wezterm', 'cli', 'proxy'" luaConfig then
+          "echo 'PASS: Linux config proxies the WSL mux via wezterm cli proxy'"
+        else
+          "echo 'FAIL: Linux config missing the wezterm cli proxy proxy_command' && exit 1"
+      }
+      ${
+        if lib.hasInfix "status.Self and not is_windows" luaConfig then
+          "echo 'PASS: Linux config excludes the Tailscale Self node from ssh_domains on Windows'"
+        else
+          "echo 'FAIL: Linux config still adds the Tailscale Self node to ssh_domains on Windows' && exit 1"
+      }
+      ${
         if lib.hasInfix "native_macos_fullscreen_mode" luaConfig then
           "echo 'FAIL: Linux config should not include macOS settings' && exit 1"
         else
@@ -190,6 +208,12 @@ let
           "echo 'FAIL: macOS config should not include WSL default_prog' && exit 1"
         else
           "echo 'PASS: macOS config excludes WSL default_prog'"
+      }
+      ${
+        if lib.hasInfix "unix_domains" luaConfig then
+          "echo 'FAIL: macOS config should not include the WSL unix domain' && exit 1"
+        else
+          "echo 'PASS: macOS config excludes the WSL unix domain'"
       }
       ${
         if lib.hasInfix "ssh_domains" luaConfig then

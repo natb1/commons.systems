@@ -5,7 +5,8 @@
 # location so the Windows WezTerm installation uses this config.
 #
 # Platform-specific behavior:
-# - Linux (WSL): Includes default_prog to launch WSL, copies config to Windows
+# - Linux (WSL): Includes default_prog to launch WSL, a unix domain that reaches
+#   the WSL mux server through wsl.exe, and copies the config to Windows
 # - macOS: Includes native fullscreen mode setting
 # - All: Minimal config using config_builder()
 
@@ -40,6 +41,23 @@
         -- mux server also reads it — wsl.exe only exists on the Windows side.
         if wezterm.target_triple:find('windows') then
           config.default_prog = { 'wsl.exe', '-d', 'NixOS', '--cd', '/home/' .. ${lib.strings.toJSON config.home.username} }
+
+          -- Reach the WSL mux server directly through wsl.exe rather than over
+          -- the tailnet. Tailscale runs INSIDE WSL, so the Windows host has no
+          -- MagicDNS entry for `nixos` and no route to its 100.x address — the
+          -- ssh_domain built from the Tailscale Self node below is unreachable
+          -- from here, even though every other tailnet peer resolves it fine.
+          -- A unix domain whose proxy_command shells into the distro needs no
+          -- DNS, no TCP listener and no SSH key. `wezterm` resolves on the
+          -- distro's default PATH, so no login shell is needed — and none is
+          -- used, since login-shell chatter would corrupt the proxy pipe.
+          config.unix_domains = {
+            {
+              name = 'nixos',
+              proxy_command = { 'wsl.exe', '-d', 'NixOS', '--', 'wezterm', 'cli', 'proxy' },
+            },
+          }
+
           config.default_gui_startup_args = { 'connect', 'nixos' }
         end
       ''}
@@ -71,9 +89,13 @@
           wezterm.log_warn('Failed to parse tailscale status JSON; stdout length: ' .. #stdout)
           return
         end
-        -- Collect all nodes: Self + Peers
+        -- Collect all nodes: Self + Peers.
+        -- Self is skipped on Windows: it is the local WSL instance, already
+        -- reached through the unix domain above. Adding it here would collide
+        -- on the domain name `nixos` and point at an address the Windows host
+        -- cannot resolve or route to.
         local nodes = {}
-        if status.Self then
+        if status.Self and not is_windows then
           table.insert(nodes, status.Self)
         end
         if status.Peer then
