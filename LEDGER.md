@@ -509,6 +509,54 @@ Crisis (1986), point 3, diverged from in keeping adversarial review;
 content-addressed incremental builds (Bazel, Nix) for pinning what a review
 read.
 
+**Amendment, 2026-09-02, from the legacy session "interview deferral options
+(2)" (its reply, received the same day; author-ruled items are marked).**
+Rules not derivable from `origin/main`:
+- hard cap of two review rounds per landing, no design-surface exemption
+  (author, 2026-08-31: "Two-strike rule hardened: no design-surface
+  exemption. Do not reinstate that exemption from memory"); a finding after
+  round two becomes a follow-up entry, never a third round; a blocking
+  finding raised by round two is fixed before landing;
+- settle on blocking severity, never on zero findings (author-approved
+  2026-08-30 after one change thrashed sixteen rounds and fifty-six findings);
+  blocking = changes behaviour, breaks an anchor, or would lead an executor to
+  a wrong action; everything else is recorded and dropped, and dropping is an
+  action;
+- tier by diff kind (author-approved 2026-08-30): code on a dispatch or graph
+  write path at effort high on opus; documents, plans, or tests only, exactly
+  one medium round; the gate is never skipped;
+- two strikes within a defect class: a class repaired twice is cut, not
+  repaired a third time, with a fail-before, pass-after regression test;
+- scope frozen at round one: nothing is added to a file under review, since
+  line drift invalidates anchored findings (one change went fourteen rounds
+  and twenty-three commits that way); route to a follow-up;
+- functional before non-functional, both before landing; trust a figure that
+  arrives with its command and output, never re-measure it.
+Graph-only landings did not pass through the review shim in the legacy
+attempt; adversarial self-review and an audit skill stood in. In this graph
+the interview is the review of a graph landing (L04) and the review
+instrument reviews implementation; that split is to be ratified at `review`.
+Recipe adopted for the shim, to be kept in `CLAUDE.md` on `greenfield`: run
+`.claude/skills/dispatch-propagate/scripts/dispatch-code-review --target
+<base-sha>..HEAD --out-dir tmp/code-review-<tag> --effort high` from the
+worktree with the sandbox disabled and a 600000 ms tool timeout; the target
+must be a range of resolved shas; exit 5 means still running, so repeat the
+identical call (two calls covered every high round measured); one review per
+worktree at a time; grade on `output.txt`, read `summary.txt` for the
+resolved shas and wall clock; a fresh out-dir tag every round; never commit
+while a run is in flight, since the run is keyed to HEAD and a commit
+discards it; check `output.txt` for a usage-limit notice before grading (a
+short wall clock is the tell); `--fix` is inert under `.claude/skills/`, so
+those findings are hand-applied; assert the reviewed commit is an ancestor of
+`target_head_sha` before citing an out-dir. Orphan ref: make an empty root
+commit the first commit on `greenfield`, review round one as
+`<root>..HEAD`, and later rounds as the delta from the last reviewed commit;
+split a first landing that would approach the 5400 s deadline into units.
+Measured: high rounds 790 to 880 s wall clock, medium 436 s; lost-time
+patterns in order of cost: zero-findings thrash, a diff that grows between
+rounds, a commit during a run, usage limits misread as infrastructure,
+re-measuring shown figures, a reaped worktree taking its out-dirs.
+
 ## L20 delete this ledger
 
 When every other entry is `ratified` or `rejected`, delete this file. Its
