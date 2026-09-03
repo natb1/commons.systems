@@ -33,6 +33,9 @@ The author, 2026-09-03, on the sitting of dialogue, the part that answers this q
 The author, 2026-09-03, a note on the same:
 > A conflicting answer that arises in alignment AND survives periagoge/meiutic/adversarial review is marked unanswered until confirmed. A conflicting answer that arises outside of alignment is a proposal.
 
+The author, 2026-09-03, retracting the marking and stating the function it served:
+> The flipping of node I suggested from answered to unanswered pending confirmation feels like a hack. At a functional level, when reading the documentation for a node that has been previously confirmed/answered I want to see if there are alternate proposals surfaced outside of alignment, or alternate answers surfaced during alignment which are pending confirmation.
+
 ## Answer
 
 When the author has ruled on it through the alignment dialogue. A disposition is answered when its stamp is ratified or delegated, the two classes that only the author's ruling confers; until then it is unanswered, whatever the node carries: an answer stamped deferred, an answer with no stamp, or no answer at all. Unanswered is a status the projections derive, never a field: the stamp stays as it is, saying who holds the answer and since when, and the answer stays as it is, the draft the author rules on, so that reclassifying a node loses nothing of its encoding.
@@ -123,3 +126,7 @@ Proposed: Dialogue is the survivor of what an unanswered node carries and unansw
 ### The author's words of 2026-09-03 on dialogue
 
 The sentence quoted above says what becomes of a conflicting answer that survives the dialogue: it is marked unanswered until confirmed. The answer says when a disposition is answered and does not say what an answer in conflict with a recorded one is, nor whether the node it conflicts with stays answered while the conflict is open; the stage returns to maieutic for that. The whole disposition is on the dialogue node, whose sitting carries it.
+
+### The author's retraction, 2026-09-03
+
+The sentence carried above, that a surviving conflicting answer is marked unanswered until confirmed, is retracted by the author's words of the same day as a hack. What stands in its place is the function: an answered node with an alternative pending on it, a proposal from outside alignment or an alternate answer from inside it, keeps its stamp and shows the pending alternative to its reader. This node's answer already says the status is derived and never a field, and that an answered node carries the dialogue while its ratification is under review, keeping its stamp until the author rules; the redraft under the sitting on dialogue extends that from ratification under review to any pending alternative, and this node's part of it is whether the standing answer keeps its authority meanwhile, put to the author in the maieutic movement.

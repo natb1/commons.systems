@@ -1,6 +1,6 @@
 ---
 question: Who may change an answer?
-stage: review
+stage: maieutic
 recommendation:
   class: ratified
   boldness: moderate
@@ -43,6 +43,9 @@ The author, 2026-09-03:
 
 The author, 2026-09-03:
 > Author quotes on disposition are rarely expected to be recorded as disposition verbatim. Dialogue is expected to edit for clarification and writing quality. It may make sense to retain original author quotes as reference though - evaluate whether this function earns new schema.
+
+The author, 2026-09-03, on the sitting of dialogue, narrowing this node's definition of a proposal:
+> closer to the second meaning. A conflicting answer that arises outside of alignment is a proposal. eg. via some evidence/signal/instrument/criteria or because a conflict is identified outside of alignment. The term must not be overloaded - it is technical vocabulary. This narrows the authority node definition is that conflicting answers evaluated in alignment are recorded differently.
 
 ## Answer
 
@@ -245,3 +248,7 @@ Four node files end with a bare 'null' on its own line, where a session's reply 
 Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/transience.
 
 Proposed: Write the four missing replies, or state on each that the review's findings are accepted, and strike the 'null'. The pattern is a serialization defect in whatever applied the reviews rather than four independent omissions, so the apply step should be checked: .claude/skills/align-review/apply.mjs is the script that writes replies, and a reply of JavaScript null being stringified into the file is the likely cause. Until it is fixed, every future review round will leave the same trace.
+
+### The author's narrowing, 2026-09-03
+
+The draft's sentence "A proposal is content, never a class: a candidate answer, an amendment, or a finding with no authority, recorded in a stamped node or in a sitting's record for the author's ruling" is narrowed by the author's words quoted above: a proposal is a conflicting answer that arises outside alignment, from an instrument, a criterion, a signal, or a conflict found in reconciliation, and a conflicting answer that arises in alignment is recorded differently, as an alternative in the dialogue state the dialogue node defines. The term is technical vocabulary and is not to be overloaded. The stage returns to maieutic because the draft's substance changed in the author's words and has not been redrafted; the redraft is part of the reconciliation the author's conditional grant on dialogue names, and the review runs on it after.
