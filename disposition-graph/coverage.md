@@ -1,6 +1,13 @@
 ---
 question: Which of the recorded functions fall within the purpose?
 stage: periagogic
+alternatives:
+  - name: audiences-served-through-primary
+    source: ai
+    ref: "2026-09-03"
+  - name: name-excluded-audiences
+    source: ai
+    ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/purpose
 ---
@@ -12,7 +19,17 @@ The author, 2026-09-02, on coverage:
 The author, 2026-09-02:
 > "Who is this repository for?" to the extent this needs to be recorded right now it is handled by the purpose node already. It can be pruned. We might fold some of this in from the incumbent graph later.
 
-## Proposal
+## Alternatives
+
+### audiences-served-through-primary
+
+One of the two candidate answers to the audience part of this question, moved here when the audience node was recommended for pruning. The purpose node's one audience covers the other four the evidence names — practitioners forking the harness, the author alone, prospective consulting clients, the general public downloading a stand-alone plugin, and an unspecified future collaborator — because each is served through the primary audience's tooling, and no surface is excluded on that ground.
+
+### name-excluded-audiences
+
+The alternative to the above, also moved here from the audience node's account: the audiences outside the purpose are named as excluded, and the surfaces built for them — the public site's About page, the plugin listing, the fork template and separability audit, the morning brief — become unsupported implementation at the swap of the implementation ref with main. It is the same choice the twelve-function survey poses for functions nine to twelve, applied to readers rather than to functions.
+
+## Account
 
 This evidence contradicts the purpose disposition as worded and requires the author's clarification. A survey of what the repository is recorded as doing (evidence: the README, the root manifest's workspaces, the top-level directories, the statements of the seven legacy root nodes and fifty-eight legacy strategy nodes, forty skill files, and the nix outputs; kept at `bootstrap/scope-survey.md` on the `greenfield` ref) finds twelve recorded functions. Against the purpose above, five fall under the primary function, one under the knowledge-store hypothesis, two under the capture hypothesis, and four outside all three as currently worded.
 
@@ -77,3 +94,10 @@ Four author quotations are carried verbatim on more than one node, verified by e
 Also named: commons.systems/disposition-graph/audience, commons.systems/disposition-graph/knowledge-store, commons.systems/disposition-graph/capture, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/node, commons.systems/disposition-graph/form-vocabulary, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/self-documentation, commons.systems/disposition-graph/rsi.
 
 Proposed: Most of these are legitimate context on a child that answers a part of the words, and the validation should say so: amend frontier-consistency's validation 14 to read that each part of a disposition is answered by exactly one node, and that a quotation may be carried on a child as the ground of the part it answers. Two are genuine double answers and should be resolved: audience and coverage both answer the audience question, which the audience prune resolves in coverage's favour; knowledge-store, capture and purpose all carry the form question, which forms answers, so all three should cite forms rather than each carry the quote.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `audiences-served-through-primary` (ai, 2026-09-03); `name-excluded-audiences` (ai, 2026-09-03).
+Merge analysis of the author's words: 2026-09-02, own-question: If there are other recorded functions in the incumbent code or graph, they are to be presented for review so that the scope's coverage is complete. 2026-09-02, own-question: The audience question is handled by the purpose node already and can be pruned, though some of the incumbent graph's material on it might be folded in later — the folding being this node's question, and the same words grounding the prune recommended on the audience node.
+The census unit's note: The node carries no `## Answer` and no `recommendation`, so `adopts` is null and it stands at the periagogic stage awaiting the author's clarification against the twelve-function survey. The survey itself, and the four questions it attaches to functions nine to twelve, are evidence and open questions with no candidate answer, so they are not alternatives. The two I did record are the audience choice, which the audience node's account states as a genuine either-or and which this node's own text says now belongs here. The second author block is classified own-question rather than new-answer on audience even though audience carries the same words: this node's account says the paragraph that addressed audience now addresses this question, and the words' last sentence, about folding the incumbent graph in later, is this node's own. The two frontier findings carried here are duplicates of those on audience and their elsewhere entries are recorded there once.

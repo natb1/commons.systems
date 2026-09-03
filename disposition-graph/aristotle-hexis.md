@@ -2,13 +2,26 @@
 question: Does Aristotle's hexis support reading this record as a projection of its author's dispositions?
 stage: ruling
 recommendation:
+  adopts: standing
   class: delegated
   boldness: high
+  amends: "2b2f43f9f4df2093a9f0a8182145295cd84f71f9"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: 2b2f43f9f4df2093a9f0a8182145295cd84f71f9
+alternatives:
+  - name: drop-the-diathesis-mapping
+    source: review
+    ref: "2026-09-03"
+  - name: logos-not-hexis
+    source: review
+    ref: "2026-09-03"
+  - name: hold-for-knowledge-store
+    source: review
+    ref: "2026-09-03"
 form: reading
 authority:
   class: deferred
@@ -27,7 +40,21 @@ Supports, and refines the hypothesis. A hexis is a settled disposition acquired 
 
 The legacy record ratified the hexis reading of its root layer on 2026-07-13, in a reading program on its kind-virtue node; that ratification is evidence for this reading, not authority over it. Validated by the AI on 2026-09-02 from its own knowledge of the loci; deferred until the author reads them.
 
-## Proposal
+## Alternatives
+
+### drop-the-diathesis-mapping
+
+The answer maps Categories 8 onto the record, a ratified answer being a hexis and a delegated or deferred answer a diathesis. Under the unanswered node a deferred answer is not a weaker kind of answer but no answer at all, so the gradation no longer maps onto the record it describes. The alternative drops the mapping, or re-reads it against the derived status and records the divergence; the session accepted this as owed at the sitting and it has not been written.
+
+### logos-not-hexis
+
+The reviewer's counter-argument, twice: a hexis in Nicomachean Ethics II.5 is acquired by acting and is precisely not a set of propositions one holds, so a written record of standing answers is nearer to a logos of one's dispositions than to the hexis itself. The node's move, that the record is both a projection of the hexis and part of how it is formed, is the strongest form of the claim and the point where it stops being Aristotle's. The alternative answers that the reading supports the weaker claim only, which leaves knowledge-store's hypothesis without this ground.
+
+### hold-for-knowledge-store
+
+The parent, knowledge-store, is an unruled hypothesis at the ruling stage, and a third node, hexis, decides the same clause of purpose's text, so this reading grounds a claim the author has not yet made. The alternative says on the node that the reading cannot be confirmed before knowledge-store is, and orders the two rulings accordingly.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -76,3 +103,10 @@ Readings' rule is that a reading is 'ratified when the author has read the prima
 Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/readings.
 
 Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `drop-the-diathesis-mapping` (review, 2026-09-03); `logos-not-hexis` (review, 2026-09-03); `hold-for-knowledge-store` (review, 2026-09-03).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+The census unit's note: The reading has a standing answer and no recommended text, so it adopts standing, and it carries no author words, so its dispositions list is empty. Three alternatives are pending: dropping or re-reading the hexis and diathesis mapping that unanswered has falsified, the reviewer's rival that the record is a logos of the dispositions rather than the hexis, and holding the reading until its parent hypothesis is ruled. The stale prose facts line was corrected in the snapshot. The readings coverage finding carried here is identical to the one on pettit-non-domination, from which I emit the four class changes, so this node's elsewhere list is empty.

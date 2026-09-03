@@ -2,8 +2,11 @@
 question: How is work divided between the main thread and subagents?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: low
+  amends: "f502a72fb724801305671c884e3c090573471853"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
@@ -35,8 +38,7 @@ The main thread is the session that holds the interview and the record: it inter
 
 The author's rulings of 2026-09-02, that implementation is delegated by unit, model, and effort, and of 2026-09-03: "new disposition (should affect both alignment and bootstrap/reconciliation shims): debugging activities like those are prime candidates for subagents - driving a browser with max effort fable is very expensive. Debugging context can be verbose and pollute the main thread." The rule binds the alignment session and the reconciliation sessions alike; during bootstrap it is projected into the operations document and the alignment skill. Rejected: a fixed model for every task, because the cost is set by the most capable model at full effort and most units do not need it; letting the main thread investigate when a question seems small, because the size of a debugging context is unknown until it has been read.
 
-
-## Proposal
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -95,3 +97,10 @@ The author, 2026-09-03, quoted under '## Disposition' on work-loop: 'reconsiliat
 Also named: commons.systems/disposition-graph/work-loop.
 
 Proposed: Work-loop's Answer strikes the graph-writing clause and says instead that a divergence a reconciliation session finds is reported and stays on the derived frontier until the alignment dialogue records it, and that a shim whose condition reconciliation has met keeps its declaration until alignment removes it — which is what work-loop's own closing Proposal paragraph already argues. Delegation's Answer adds one clause saying the prohibition covers reconciliation sessions, citing the author's ruling on work-loop. Work-loop is the survivor of the rule; delegation carries the citation.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: Debugging activities are prime candidates for subagents, since driving a browser at max effort is expensive and debugging context is verbose and pollutes the main thread; this should affect both the alignment and the bootstrap or reconciliation shims.
+The census unit's note: Nothing is pending. Both reviews forwarded with a weak counter-argument, that the rule generalises past the author's words and needs a floor on what counts as a unit, and the session met it with the lookup exemption now in the standing text. The contradiction finding proposing that work-loop strike its graph-writing clause and that delegation cite the author's ruling is verified applied on both sides: work-loop's answer now says a reconciliation session never writes the graph, and delegation's last sentence carries the citation. The reviews' remaining asks are that boldness read moderate for the unit contract and that tier's placement be settled; the first changes a recommendation fact, the second is a question with no candidate answer.

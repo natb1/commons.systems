@@ -2,13 +2,35 @@
 question: How would we know an answer still holds?
 stage: maieutic
 recommendation:
+  adopts: criteria-draft
   class: ratified
   boldness: moderate
+  amends: "11ed21e08230f8aec15782655434a2bce7946e68"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: fbf4c5047cca6d46e77585d115ac371e239f89f4
+alternatives:
+  - name: criteria-draft
+    source: ai
+    ref: "2026-09-03"
+  - name: facts-name-the-migration
+    source: review
+    ref: "2026-09-03"
+  - name: assumption-stays-a-form
+    source: review
+    ref: "2026-09-03"
+  - name: traditions-to-readings
+    source: review
+    ref: "2026-09-03"
+  - name: define-criterion
+    source: review
+    ref: "2026-09-03"
+  - name: no-hard-fail-on-an-unratified-answer
+    source: ai
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -39,8 +61,33 @@ By an instrument bound to the answer: a check the machine runs, or an assessment
 
 The author rejected cadence review of first principles on 2026-09-02; the record diverges from the periodic-convention strand (Jefferson to Madison, 1789; New York Constitution Article XIX) and adopts Peirce, for whom inquiry begins with genuine doubt from surprise and manufactured doubt is paper doubt. The other triggers come from reflective equilibrium (Rawls, Goodman, Daniels), Kuhn's anomalies, the overruling factors of Planned Parenthood v. Casey, and management of change in process safety; the proof-test interval of IEC 61508 is where expiry belongs. Each is owed a reading. Open: whether a delegated stamp itself sunsets. Readings also owed for Seneca, De Ira III.36, and the Ignatian examen, the periodic review of conduct against principle, and for sunset clauses on delegated and emergency powers.
 
+## Alternatives
 
-## Draft
+### criteria-draft
+
+The draft replaces the single instrument bound to an answer with criteria of three kinds, a check the machine runs, an assessment that is a dated human judgment, and an assumption, a condition about the world under which the answer holds. It moves assumption out of the forms and into instrumentation, adds criterion and unguarded to defines and drops instrument, and says every page shows an answer's criteria or the word unguarded. The standing answer instead keeps one instrument, keeps assumption a form, and carries the target-versus-rule distinction in the sentence that a target's failing check is work while a rule's is a variance.
+
+### facts-name-the-migration
+
+Both reviews found that the draft renames the field in prose while nothing implements it: criteria is not a schema key, so no node can carry criteria today, and four nodes still carry an instrument field. This alternative has the node's facts state that confirming it orders a schema change and the migration of those four nodes, which the session's reply promised and the text does not say.
+
+### assumption-stays-a-form
+
+The second review's counter-argument is that with the achieve-or-maintain sentence withdrawn and forms keeping rule beside disposition, the argument that carried assumption out of the forms is gone, so the criterion kinds should be re-read whole rather than patched. On this alternative assumption stays a form, two nodes keep it today, and criteria carry only checks and assessments. The session accepted that the draft should be re-read as a whole, which is what the maieutic stage is for.
+
+### traditions-to-readings
+
+The rationale names Peirce, reflective equilibrium, Kuhn, Casey, management of change and IEC 61508 in prose, which readings' draft forbids and which stub-traditions names this node among the offenders for. The alternative moves them to readings under that ruling and leaves the rationale with the argument alone.
+
+### define-criterion
+
+The vocabulary finding of 2026-09-03 verified that criterion and criteria are used in the answers of transience, scope, work-loop and purpose's draft, and as a frontmatter key on four drafts, while no node's defines carries the term and the schema has no criteria key: it is defined only inside instruments' own draft. Instruments is the survivor and must be ruled before the nodes that use the word. At its recording its defines gains criterion and unguarded, the schema gains the criteria key, and the four nodes carrying an instrument field are migrated; until then the answers that use the word say instrument or disclose that the term arrives with instruments. (Raised on commons.systems/disposition-graph/scope.)
+
+### no-hard-fail-on-an-unratified-answer
+
+This node and transience both leave the same question open on instruments and neither decides it: whether a machine check should ever hard-fail an answer that is not ratified. The no-children rule was enforced by a check that hard-failed, which gave a deferred answer the force of a ratified one and removed in practice the overrule evaluation grants in principle. Instruments carries nothing about it today, so the candidate answer is that a check on an unanswered or deferred answer warns and does not fail. (Raised on commons.systems/disposition-graph/un-aligned-children.)
+
+## Recommendation
 
 ```markdown
 ---
@@ -70,7 +117,7 @@ By criteria bound to the answer, and every page shows them or says the answer is
 The author rejected cadence review of first principles on 2026-09-02; the record diverges from the periodic-convention strand and adopts Peirce, for whom inquiry begins with genuine doubt from surprise and manufactured doubt is paper doubt. Assumption moved from the forms to the criteria because it was instrumentation from the start, the condition under which an answer stays valid, and the requirements tradition records domain assumptions beside the specification for the same reason. Rejected: criteria as nodes of their own, because a criterion that needs its own stamp is a question of its own and becomes a node then; a single instrument per node, because an answer commonly has a check and an assessment. Open: whether a delegated stamp itself sunsets.
 ```
 
-## Proposal
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -143,3 +190,12 @@ Kind: vocabulary.
 Also named: commons.systems/disposition-graph/transience, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/purpose.
 
 Proposed: Instruments is the survivor and must be ruled before the nodes that use the word. Until it is, the answers that use 'criterion' say 'instrument', the term instruments actually defines, or the drafts that use it disclose that the term arrives with instruments. At the recording, instruments' defines gains 'criterion' and 'unguarded', the schema gains the 'criteria' key, and the four nodes carrying 'instrument:' are migrated — which instruments' own facts should name, as its reply promises.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `criteria-draft` (ai, 2026-09-03); `facts-name-the-migration` (review, 2026-09-03); `assumption-stays-a-form` (review, 2026-09-03); `traditions-to-readings` (review, 2026-09-03); `define-criterion` (review, 2026-09-03, from commons.systems/disposition-graph/scope); `no-hard-fail-on-an-unratified-answer` (ai, 2026-09-03, from commons.systems/disposition-graph/un-aligned-children).
+The recommendation adopts `criteria-draft` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, own-question: There is no projected documentation of instrumentation, and every disposition should carry instrumentation or criteria of some kind. 2026-09-02, new-answer on commons.systems/disposition-graph/forms: Assumption may not be a form at all: it started as instrumentation, the condition under which an answer stays valid.
+Moved to other nodes as alternatives: `assumption-is-instrumentation` on commons.systems/disposition-graph/forms; `revert-the-draft-to-five-forms` on commons.systems/disposition-graph/node; `say-instrument-not-criterion` on commons.systems/disposition-graph/scope; `say-instrument-not-criterion` on commons.systems/disposition-graph/work-loop; `say-instrument-not-criterion` on commons.systems/disposition-graph/purpose.
+The census unit's note: The node carries a draft, so the recommendation adopts it and I named it criteria-draft. Its second author block I classified as a new answer for forms rather than for this node: instruments asks how we would know an answer still holds, while the words say where assumption belongs, which is forms' question, and forms' surviving option leaves it unanswered, so the elsewhere entry on forms is the one that matters most here. The two reviews' accepted edits that were already applied, the achieve-or-maintain sentence and the three criterion kinds, I excluded; what remains pending are the unnamed migration, the whole re-read the second counter-argument asks for, and the prose traditions. The criterion vocabulary finding proposes edits to four other nodes, of which transience is mine and carries its own alternative; scope, work-loop and purpose are here.

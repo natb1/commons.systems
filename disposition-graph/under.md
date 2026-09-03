@@ -1,6 +1,13 @@
 ---
 question: What does a node refine?
 stage: maieutic
+alternatives:
+  - name: the-edge-alone
+    source: review
+    ref: "2026-09-03"
+  - name: draft-after-three-rulings
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -33,8 +40,17 @@ The question or questions named in its `under` field. This is the only hierarchi
 
 Ask "why does this question exist?"; the answer names its parent. Never choose a parent to change priority; that is what boost is for, and boost is the author's alone. Rejected: separate edges for attention, context, and containment, each of which turned out to be a reading of the same fact; a second reference kind for cousins, which differs from `under` by exactly one bit, motivation, and is kept as `cites`.
 
+## Alternatives
 
-## Proposal
+### the-edge-alone
+
+The decomposition finding holds that this node answers four questions at once, what the edge means, how rank is computed, what a ceiling is and how context loads, and defines all four terms, while standing at the maieutic stage with no drafted text and with its own account saying it cannot be drafted until three other questions are ruled. Three of the four are answered in full elsewhere, so under survives as the edge alone: what a node refines, that it is the only hierarchical edge, and that a node may refine more than one question. Rank moves to attention, context to session-context and ceiling to authority, after which under can be drafted without waiting on rationale-edge and tier. Raised on commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/attention.
+
+### draft-after-three-rulings
+
+The same finding proposes that under be drafted from the outcomes of rationale-edge and a re-answered tier, and simplified as the decomposition finding proposes, since under's own account plans a draft after three rulings and one of them, tier, was kicked back with its recommendation withdrawn, so under cannot be drafted as planned. (Raised on commons.systems/disposition-graph/traditions-home.)
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -81,3 +97,15 @@ Two ruling-stage nodes rest on maieutic ground without saying so. Rationale-edge
 Also named: commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/tier, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/namespaces.
 
 Proposed: Rule traditions-home before readings and namespaces, and show the manifest entry on traditions-home so the author sees what they are creating. Rule rationale-edge and re-answer tier before under, and add to rationale-edge one clause saying its parent is unanswered. Under is then drafted from the three outcomes, simplified as the decomposition finding proposes.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `the-edge-alone` (review, 2026-09-03); `edge-alone` (review, 2026-09-03, from commons.systems/disposition-graph/session-context); `draft-after-three-rulings` (review, 2026-09-03, from commons.systems/disposition-graph/traditions-home); `simplify-to-the-edge` (review, 2026-09-03, from commons.systems/disposition-graph/attention).
+Merge analysis of the author's words: 2026-09-03, new-answer on commons.systems/disposition-graph/rationale-edge: If a node's rationale always stems from the node it is under, does it make sense to make the rationale the prose property of the under edge?. 2026-09-03, new-answer on commons.systems/disposition-graph/tier: Tier needs a disposition and may not be the right primitive, since even cross-cutting concerns have scope; evaluate whether a cross-cutting concern reduces to topology or citations. 2026-09-03, new-answer on commons.systems/disposition-graph/rejected: Listing rejected alternatives as prose under the rationale seems too ad hoc, though recording rejected dispositions may make sense.
+Moved to other nodes as alternatives: `rank-moves-here` on commons.systems/disposition-graph/attention; `context-moves-here` on commons.systems/disposition-graph/session-context; `ceiling-moves-here` on commons.systems/disposition-graph/authority; `rationale-as-the-edge-prose` on commons.systems/disposition-graph/rationale-edge; `say-the-parent-is-unanswered` on commons.systems/disposition-graph/rationale-edge; `record-rejected-dispositions` on commons.systems/disposition-graph/rejected; `show-the-manifest-entry` on commons.systems/disposition-graph/traditions-home.
+The census unit's note: The node has a standing answer but no recommendation field and its account says the recommendation is pending, so adopts is null rather than standing; its own sitting cannot draft it until three other questions are ruled. All three of the author's blocks answer other nodes' questions, and all three targets already carry the same words verbatim, so the elsewhere entries on rationale-edge and rejected record where the author's leaning differs from the target's recommendation rather than adding words the target lacks; the tier block needed no entry, tier being one of my own nodes and carrying the quote. The decomposition finding gives the one alternative on this node and three defines moves elsewhere. The contingent edits in the sitting's own summary are not alternatives: the one that would have replaced the tier sentence rested on the cites-based scope rule that tier withdrew.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `the-edge-alone` absorbs `edge-alone`, `simplify-to-the-edge`. The merge unit's note: draft-after-three-rulings restates the simplification but its own proposal is about when and from what under is drafted, that it be drafted from the outcomes of rationale-edge and a re-answered tier since tier was kicked back with its recommendation withdrawn, so it stays separate.

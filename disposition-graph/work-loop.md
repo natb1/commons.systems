@@ -2,13 +2,26 @@
 question: How does work happen?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "76ee45c91d469c6861239859fa0b66083a0b3dd1"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: kickback
   strength: strong
   date: 2026-09-03
   of: 2ab46e3e5ed431e37cc78268623ead05324369ad
+alternatives:
+  - name: split-the-shim
+    source: review
+    ref: "2026-09-03"
+  - name: no-persisted-state
+    source: ai
+    ref: "2026-09-03"
+  - name: say-instrument-not-criterion
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -62,7 +75,21 @@ The author, 2026-09-03, on bootstrap operations: "I will check out the greenfiel
 
 Evaluated adversarially before recording, 2026-09-03. One rank, two orders: the record had one rank serving onboarding, and reconciliation in rank order needs the same rank to serve the author's bite order; the boosts now transcribe that order (attention), and a walk that meets projection before growth costs onboarding nothing. A browser node is not needed for rank, since a child's rank is a share of its parent's: the browser bite ranks first through projection's boost, and the browser node is owed by projection's own shim at its sitting. Batching validation to exit lets defects surface late; the mitigation is that tests and use still gate every landing, that the exit list is the liquidation condition of a declared shim, derived onto the frontier and never a checklist, and that the alignment sessions exercise the alignment skill every day it is used. Two sessions on one checkout: the graph and the implementation are separate refs with separate worktrees and indexes, so an alignment session and a reconciliation session collide only when both write the graph, which the reconciliation session does for one file at a time, committed by pathspec and pushed at once. On the model: selecting a bite and writing its unit's contract from prose criteria is judgment, so the shim runs on the larger model and its units on the smaller until every frontier node carries an executable check and each kind of bite has a skill, the last bite in the author's order; a skill's model field holds only for the turn that invokes it, and the loop runs within that turn. Rejected: a stored bite list or plan for the shim, forbidden by the transience node; a worktree of the shim's own, because its landings go straight to the ref and a worktree would only add a merge. The derivation of unsupported artifacts onto the frontier, the second direction, is not yet materialized; until it is, the coverage node's survey is the list, and the swap waits on the coverage ruling, as materialization's shim says.
 
-## Proposal
+## Alternatives
+
+### split-the-shim
+
+The reconciliation shim's single liquidation condition, now eleven clauses covering all batched validation together with the bootstrap exit criteria, is split into separate shims, or reduced to the clauses the frontier can actually derive. Two clean-context reviews raised it and the session decided neither way, replying that the split is put to the author. The node as it stands keeps one declaration whose met clauses no projection reads, which is the case transience's shim exemption is being tested by.
+
+### no-persisted-state
+
+Reconciliation persists nothing of its own between invocations and re-derives the frontier from the graph and the implementation each time, which is what the shim does today. The answer's own recommendation is the opposite, that such state lives on the implementation ref as committed files a disposition justifies, and the answer names the question as open after the author observed that a session which cannot write the graph may need other metadata. The rationale's rejection of a stored bite list under transience is the argument for this alternative.
+
+### say-instrument-not-criterion
+
+The answer's phrase, each stage a reconciliation of the criteria the node carries, says instrument instead, the term the instruments node actually defines, or discloses that the term arrives with instruments until instruments is ruled. The vocabulary finding of 2026-09-03 verified that criterion is defined by no node outside instruments' own draft and is not a schema key, while four ruling-stage answers depend on the word. Raised on commons.systems/disposition-graph/instruments.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -132,3 +159,15 @@ Kind: vocabulary.
 Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/purpose.
 
 Proposed: Instruments is the survivor and must be ruled before the nodes that use the word. Until it is, the answers that use 'criterion' say 'instrument', the term instruments actually defines, or the drafts that use it disclose that the term arrives with instruments. At the recording, instruments' defines gains 'criterion' and 'unguarded', the schema gains the 'criteria' key, and the four nodes carrying 'instrument:' are migrated — which instruments' own facts should name, as its reply promises.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `split-the-shim` (review, 2026-09-03); `no-persisted-state` (ai, 2026-09-03); `criterion-to-instrument` (review, 2026-09-03); `say-instrument-not-criterion` (review, 2026-09-03, from commons.systems/disposition-graph/instruments).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: The author sets out the transition to new bootstrap operations: the alignment skill and page begin marking dispositions answered, the reconciliation shim exists with no work until an answered frontier exists, and it then takes one bite per invocation in rank order. 2026-09-03, own-question: Resolving in both directions is required for bootstrap exit but not for the transition; the disposition must be answered before the second direction is shimmed or materialized, so the shim resolves only from graph to implementation. 2026-09-03, own-question: Draining all legacy tactic nodes is likewise required for bootstrap exit and not for the transition. 2026-09-03, own-question: Implementation is delegated and each bite type gets a skill with appropriate recursive subagents, what counts as appropriate being left open, but reconciliation does not edit the graph, which is alignment's alone. 2026-09-03, own-question: Since reconciliation does not edit the graph it may need to persist some other metadata to track its own reconciliation state.
+The census unit's note: The node has an answer and no draft, so it adopts standing even though it sits at the review stage with a kickback verdict and a draft changed since that review. I turned into alternatives only what is genuinely before the author: the shim split the session explicitly declined to decide, the negative of the recommendation on reconciliation's own state, and the criterion-to-instrument wording the vocabulary finding proposes for this answer. I excluded edits the session already accepted and owes at the recording (pruning the operational paragraph from the rationale, disclosing that nothing derives the second direction) since they are not pending on the author. Nothing goes elsewhere: the contradiction finding's clause is already written into delegation's answer, and the vocabulary finding is carried verbatim on instruments, transience, scope and purpose, so each of those nodes yields it directly. The author's fourth block is mixed, correcting both work-loop's session rule and delegation's subagent rule; I kept it as own-question because delegation has already absorbed its half by citation.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `say-instrument-not-criterion` absorbs `criterion-to-instrument`. The merge unit's note: `say-instrument-not-criterion` was kept over `criterion-to-instrument` because the same alternative is carried under that name on scope, transience and purpose.

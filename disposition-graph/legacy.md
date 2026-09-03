@@ -2,13 +2,26 @@
 question: What is the legacy record to this graph?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "85155207f04a45efdc5963068dc021e1285d1dac"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: ed34becb8ac6964e85671226becd828fbb50d45c
+alternatives:
+  - name: add-a-disposition-section
+    source: review
+    ref: "2026-09-03"
+  - name: deferred-rather-than-ratified
+    source: review
+    ref: "2026-09-03"
+  - name: drain-as-an-exit-criterion
+    source: ai
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -29,7 +42,21 @@ The author's ruling of 2026-09-02 that this session was over-bound by legacy dis
 
 Evidence for the claim that the legacy record neither matched its own specification nor served long-horizon dispatch: the two transient-disposition surveys on the implementation ref, `bootstrap/transient-disposition-graph-survey.md` and `bootstrap/transient-disposition-transcript-survey.md`, which the transience node cites. The rejected-alternative mechanism is unexercised until a legacy doctrine is overruled.
 
-## Proposal
+## Alternatives
+
+### add-a-disposition-section
+
+Both reviews found that the node has no Disposition section and that its ground, the author's ruling of 2026-09-02 that the session was over-bound by legacy disposition and that incumbent code is context and never doctrine, is paraphrased rather than quoted. Authority makes a ratified stamp whose ruling is not in the record invalid, so this alternative adds the section with the ruling and its date before any stamp is written.
+
+### deferred-rather-than-ratified
+
+The placement finding's other branch, for each of the twenty-two nodes with no Disposition section: if the ruling is not brought into the node, the recommendation changes from ratified to deferred, since a ratified stamp the node cannot support is worse than an honest deferral.
+
+### drain-as-an-exit-criterion
+
+The reviewers' surviving counter-argument is that the drain of the legacy record has no owner and no rank, so it will be done at exit under time pressure or not at all: reading a legacy node when a question needs it is the only path in, and nothing derives which knowledge a question needs. The session replied that the author's words after compaction make the drain an exit criterion, on the exit list rather than on a rank, with the exit as its owner. That answer is in the reply and not in the node's answer, so it stands as a candidate edit.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -80,3 +107,10 @@ Authority's rule is that 'a ratified stamp whose ruling is not in the record is 
 Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/review, commons.systems/disposition-graph/attention, commons.systems/disposition-graph/recording.
 
 Proposed: Rule quotes first, after agency. Then, before any ratified stamp is written, each of the twenty-two nodes either gains a '## Disposition' section carrying the ruling it rests on with its date — attention and recording already have the quotations in their rationales and need only move them, which also makes the alignment page show them — or its recommendation changes from ratified to deferred, since a ratified stamp it cannot support is worse than an honest deferral. Quotes' facts state the count.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `add-a-disposition-section` (review, 2026-09-03); `deferred-rather-than-ratified` (review, 2026-09-03); `drain-as-an-exit-criterion` (ai, 2026-09-03).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+The census unit's note: No Disposition section, so the dispositions list is empty; the author's ruling of 2026-09-02 survives only as a paraphrase in the rationale, which is what the first two alternatives are about. The vocabulary scoping the first review asked for was applied before the snapshot, and the second review confirmed the two surveys now cited as evidence, so neither is pending. I recorded the drain answer as an alternative because the session gave a substantive answer in a reply that the node's own text does not carry. The placement finding on this node is the same one carried by recording, so I recorded its proposal for quotes once, from recording, rather than twice.

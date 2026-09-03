@@ -2,13 +2,25 @@
 question: Does the requirements-specification tradition support opening with purpose, then scope, then references?
 stage: review
 recommendation:
+  adopts: draft
   class: delegated
   boldness: moderate
+  amends: "686388606159b2b7c10aacf520c592e38d170982"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
   date: 2026-09-03
   of: c7b6a5849e318cdf4efdf5c3071a6c56d7ad12f1
+alternatives:
+  - name: draft
+    source: ai
+  - name: record-overview-divergence
+    source: review
+    ref: "2026-09-03"
+  - name: delegated-not-ratified
+    source: review
+    ref: "2026-09-03"
 form: reading
 authority:
   class: deferred
@@ -32,8 +44,21 @@ Supports. The tradition opens a specification with purpose, then scope, then the
 
 Validated by the AI from its own knowledge of the standards on 2026-09-02; deferred until the author reads the sections. The one divergence to record: an SRS is a document about one product release, while this graph is a standing record, so "scope" here is a node that can be re-answered rather than a section that is rewritten.
 
+## Alternatives
 
-## Draft
+### draft
+
+The draft re-orients the reading on the author's words of 2026-09-02. Where the standing answer says the tradition opens with purpose, then scope, then the intended audience and definitions, and adopts purpose, scope, audience and the vocabulary-defining nodes, the draft states the standard's own order, purpose, scope, definitions, references, overview, and adopts only the first two: definitions are met through the terms each node defines, the overview is left to projections shaped like an introduction, and the intended readers are stated inside purpose. It also drops the standing answer's settling of scope against purpose as a starting place. The rationale records the re-orientation and keeps the one divergence, that a specification is about one release while this graph is a standing record.
+
+### record-overview-divergence
+
+Both readings found a second divergence the draft's rationale does not record: the standard has an Overview section and this graph defers the overview to projections rather than to a node, which evaluation calls an unrecorded conflict with a cited tradition. The session's reply left it owed at the sitting. This alternative is the draft with both divergences recorded, the handling of definitions through links and the deferral of the overview, and the relation stated against them.
+
+### delegated-not-ratified
+
+The same finding names this node as one of the four readings recommending a class the record's own rule forbids, and proposes the recommendation change from ratified to delegated with the prose Facts line rewritten to match. (Raised on commons.systems/disposition-graph/spec-driven-development.) Also raised on commons.systems/public/pettit-non-domination.
+
+## Recommendation
 
 ```markdown
 ---
@@ -57,7 +82,7 @@ Supports. The tradition opens a specification with purpose, then scope, then def
 Validated by the AI from its own knowledge of the standards on 2026-09-02, and re-oriented on the author's ruling that the progression is purpose, scope, reference, with definitions covered by links and overview by blog-shaped content; deferred until the author reads the sections. The one divergence to record: a requirements specification is a document about one product release, while this graph is a standing record, so scope here is a node that can be re-answered rather than a section that is rewritten.
 ```
 
-## Proposal
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -110,3 +135,11 @@ Readings' rule is that a reading is 'ratified when the author has read the prima
 Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/aristotle-hexis, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/readings.
 
 Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `draft` (ai); `record-overview-divergence` (review, 2026-09-03); `delegated-not-ratified` (review, 2026-09-03, from commons.systems/disposition-graph/spec-driven-development).
+The recommendation adopts `draft` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, own-question: The tradition's title alone does not support progressing to audience, which is acceptable; the progression from purpose to scope to reference makes sense, with definitions covered by hyperlinks and the overview by blog-shaped content, and the question should be re-oriented around that.
+The census unit's note: The Draft is the recommendation and is the AI's rewrite rather than a transcription of the author's words, so its source is ai. The second alternative is the one review finding the session left owed rather than applied: I verified the draft now states the standard's order, so that half is discharged, while the overview divergence is still unrecorded in the draft's rationale. The counter-argument that the reading now supports what the author already decided proposes no text and is excluded. The reading-class coverage finding carried here is discharged; the node's prose Facts line still says deferred where the frontmatter says delegated, which is a Facts-line cleanup rather than an alternative.

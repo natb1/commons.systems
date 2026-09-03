@@ -2,13 +2,32 @@
 question: What is this repository for?
 stage: review
 recommendation:
+  adopts: draft
   class: ratified
   boldness: moderate
+  amends: "2266ff6ab8146396366abd0d87850c26a4db9d08"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: dbde6b3821fb7aecf1358c0f5ea782a90157b202
+alternatives:
+  - name: draft
+    source: ai
+    ref: "2026-09-03"
+  - name: fold-option-nodes
+    source: review
+    ref: "2026-09-03"
+  - name: disclose-unstated-arche
+    source: review
+    ref: "2026-09-03"
+  - name: cite-forms
+    source: review
+    ref: "2026-09-03"
+  - name: say-instrument-not-criterion
+    source: review
+    ref: "2026-09-03"
 form: target
 under:
   - commons.systems/public/agency
@@ -62,8 +81,29 @@ Drafted by the AI from the record, for the author to confirm or strike at ratifi
 - *Intent carried in prompts, chat, or memory.* Not durable, not reviewable, not rankable; it is the tacit form this repository exists to replace.
 - *Issue trackers as the record of intent.* Tried here at length; they record work, not dispositions, and cannot carry authority or rank.
 
+## Alternatives
 
-## Draft
+### draft
+
+The recommended text rewrites the mechanism sentence in the author's own terms, that dialogue with an AI maintains the dispositions as a graph through the alignment skill and a harness then directs long-horizon work on it, strikes 'explicit' from 'explicit intent', and defines the factory as the reconciliation of the standing answers with implementation in both directions. It drops the ledger reference, restates the two hypotheses with the hexis claim first and without storing the children's validation state, and folds the rejected alternatives into the rationale, adding one the node does not carry: the incumbent's framing of the graph as a data structure the harness consumes, rejected because it makes the harness the origin. It also drops the '### Rejected' heading and carries no Disposition section, so the nine dated quotations are not in it. The criteria block it once carried was struck after purpose-criteria's reply.
+
+### fold-option-nodes
+
+Three option-nodes decide clauses a parent's recommended text already contains: hexis on whether the hexis claim comes first, purpose-criteria on whether purpose carries criteria, second-stop on the model rewrite. The finding's second branch folds each option into its parent's account as an explicit alternative rather than keeping it a node, which is what this re-encoding makes structural; its first branch keeps the option-nodes and has each say it is a sub-ruling that must be ruled first. Either way purpose's account names the option-nodes its text presumes, which it does not today.
+
+### disclose-unstated-arche
+
+Purpose's parent, public/agency, is at the periagogic stage with no author words anywhere on it and an answer written in the author's first person by the AI, and every node at the review or ruling stage descends from it. The placement finding proposes purpose add one clause saying it rests on an archē the author has not yet stated, which frontier-consistency's placement validation requires of any node ruling on periagogic ground. Raised on commons.systems/public/aristotle-arche-of-action, commons.systems/public/agency.
+
+### cite-forms
+
+The author's question whether assumption is a form at all, and whether it is correctly encoded as form assumption against form disposition with unvalidated instrumentation, is carried verbatim on knowledge-store, capture and purpose, and forms is the node that answers it. The coverage finding proposes all three cite forms instead of each carrying the quotation, so that one part of one disposition is answered by one node; purpose keeps the quotations that ground the parts it does answer. Raised on commons.systems/disposition-graph/scope, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/knowledge-store.
+
+### say-instrument-not-criterion
+
+The same finding names purpose's draft, which uses criterion and the criteria frontmatter key that the schema does not hold. Until instruments is ruled the draft says instrument or discloses that the term and the key arrive with instruments. (Raised on commons.systems/disposition-graph/instruments.)
+
+## Recommendation
 
 ```markdown
 ---
@@ -89,7 +129,7 @@ Why it matters leads up to the archē this node refines. Delegating work to auto
 Rejected: defining the repository by its parts, a data structure plus a harness, which is scope and not purpose; intent carried in prompts, chat, or memory, which is not durable, reviewable, or rankable, and is the tacit form this record replaces; issue trackers as the record of intent, which with the scrum-like workflows that operate on them are designed for humans with different requirements that do not fit this purpose; and the strongest form of the incumbent's framing, a graph that is a data structure the harness consumes, because it makes the harness the origin.
 ```
 
-## Proposal
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -195,3 +235,16 @@ Four author quotations are carried verbatim on more than one node, verified by e
 Also named: commons.systems/disposition-graph/audience, commons.systems/disposition-graph/coverage, commons.systems/disposition-graph/knowledge-store, commons.systems/disposition-graph/capture, commons.systems/disposition-graph/node, commons.systems/disposition-graph/form-vocabulary, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/self-documentation, commons.systems/disposition-graph/rsi.
 
 Proposed: Most of these are legitimate context on a child that answers a part of the words, and the validation should say so: amend frontier-consistency's validation 14 to read that each part of a disposition is answered by exactly one node, and that a quotation may be carried on a child as the ground of the part it answers. Two are genuine double answers and should be resolved: audience and coverage both answer the audience question, which the audience prune resolves in coverage's favour; knowledge-store, capture and purpose all carry the form question, which forms answers, so all three should cite forms rather than each carry the quote.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `draft` (ai, 2026-09-03); `fold-option-nodes` (review, 2026-09-03); `disclose-unstated-arche` (review, 2026-09-03); `cite-forms-for-the-form-question` (review, 2026-09-03); `rests-on-unstated-arche` (review, 2026-09-03, from commons.systems/public/agency); `cite-forms` (review, 2026-09-03, from commons.systems/disposition-graph/audience); `say-instrument-not-criterion` (review, 2026-09-03, from commons.systems/disposition-graph/instruments); `cite-forms-not-the-quote` (review, 2026-09-03, from commons.systems/disposition-graph/knowledge-store).
+The recommendation adopts `draft` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, own-question: The factory is the reconciliation of disposition with implementation, to be wordsmithed and validated against tradition. 2026-09-02, own-question: Dialogue with an AI maintains the person's dispositions as a graph through an /align skill rather than executing tasks directly, and a harness then directs long-horizon work on that graph. 2026-09-02, own-question: The disposition must not refer to the ledger, which is temporary bootstrap scaffolding, because disposition must resist drift. 2026-09-02, new-answer on commons.systems/disposition-graph/harness-tradition: Harnesses are to be referenced as a tradition, and tradition references are not to be replicated in the rationale section since there is already a tradition section. 2026-09-02, own-question: Defining the repository by its parts is rejected for this node, though the graph must carry disposition for both the graph and the harness, which both serve this purpose. 2026-09-02, own-question: Intent carried in prompts, chat, or memory is noted as a rejected alternative. 2026-09-02, own-question: Issue trackers as the record of intent are rejected and the rejection is ratified, since they and the scrum-like workflows on them are built for humans with requirements that do not fit this purpose. 2026-09-02, new-answer on commons.systems/disposition-graph/forms: The author asks whether the hypotheses are correctly encoded as form assumption against form disposition with unvalidated instrumentation, and whether assumption is a form at all, saying the concept of an assumption started as instrumentation. 2026-09-03, new-answer on commons.systems/disposition-graph/dialogue: Rather than deferring a partial edit to a disposition, the artifact should show the author the edit and let them approve the disposition as a whole.
+Moved to other nodes as alternatives: `assumption-is-instrumentation` on commons.systems/disposition-graph/forms; `sub-ruling-of-purpose` on commons.systems/disposition-graph/hexis.
+The census unit's note: Purpose carries a Recommendation fence, so it adopts the draft; the draft's differences from the node as it stands are in that entry. I turned three review and frontier proposals into alternatives: the fold of the option-nodes, the clause disclosing that agency's archē is unstated, and citing forms for the form question. The coverage finding's proposal to amend frontier-consistency's validation 14 is already applied in the snapshot, so I did not move it. Three of the nine author blocks are answered elsewhere, following the second review's own analysis: the form question by forms, the harness and rationale-tradition instruction by harness-tradition and readings, and the whole-node-edit instruction by dialogue's recommendation part. Only the forms one still needs an alternative on its target; the other two targets already carry the words.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `disclose-unstated-arche` absorbs `rests-on-unstated-arche`; `cite-forms` absorbs `cite-forms-for-the-form-question`, `cite-forms-not-the-quote`. The merge unit's note: fold-option-nodes and say-instrument-not-criterion are different changes and stay.

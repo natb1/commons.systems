@@ -2,13 +2,21 @@
 question: Who is this repository for?
 stage: review
 recommendation:
+  adopts: prune
   class: ratified
   boldness: low
+  amends: "7e0658e014ebf7b9b751a068f9e930037a776ca4"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
   date: 2026-09-03
   of: 7e0658e014ebf7b9b751a068f9e930037a776ca4
+alternatives:
+  - name: prune
+    source: author
+    ref: "2026-09-02"
+    prune: true
 form: rule
 authority:
   class: deferred
@@ -30,7 +38,13 @@ Humans who want to manage the alignment of long-horizon AI agent workflows, or s
 
 The author's words, 2026-09-02. Purpose, scope, audience, and definitions are the first four things a requirements specification states, in that order, and the onboarding walk of this graph follows the same order (the reading under the purpose node). That the audience may arrive via an AI is why the onboarding pages must be legible to a model as well as to a person: plain statements, defined vocabulary, and stable ids.
 
-## Proposal
+## Alternatives
+
+### prune
+
+Prune: in the author's own words, the question is handled by the purpose node already and can be pruned. Purpose states its readers, as the requirements tradition states them inside its purpose section; the five-audience finding moves to coverage, which carries the author's words on the audience verbatim; and projection no longer names audience as a source of the description and tags. The coverage finding of 2026-09-03 verified that those words are carried verbatim on both audience and coverage, so one disposition is answered twice while audience still stands at the review stage recommending a ratified answer of its own, and proposes the double answer be resolved in coverage's favour. Its persistence is 'not recorded', naming purpose and coverage as the destinations. Raised on commons.systems/disposition-graph/scope.
+
+## Account
 
 The incumbent record addresses at least five audiences, and this answer names one. For the author to rule on with the scope node: practitioners forking the harness into their own repository (the README's runbook, the fork template, the separability audit); the author alone (the morning brief); prospective consulting clients (the public site's About page); the general public downloading a stand-alone plugin (the budget listing); and an unspecified future collaborator (the brand voice guide). Either the answer above covers them by saying the others are served through the primary audience's tooling, or the excluded ones are named and their surfaces become unsupported implementation at the swap.
 
@@ -97,3 +111,16 @@ Four author quotations are carried verbatim on more than one node, verified by e
 Also named: commons.systems/disposition-graph/coverage, commons.systems/disposition-graph/knowledge-store, commons.systems/disposition-graph/capture, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/node, commons.systems/disposition-graph/form-vocabulary, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/self-documentation, commons.systems/disposition-graph/rsi.
 
 Proposed: Most of these are legitimate context on a child that answers a part of the words, and the validation should say so: amend frontier-consistency's validation 14 to read that each part of a disposition is answered by exactly one node, and that a quotation may be carried on a child as the ground of the part it answers. Two are genuine double answers and should be resolved: audience and coverage both answer the audience question, which the audience prune resolves in coverage's favour; knowledge-store, capture and purpose all carry the form question, which forms answers, so all three should cite forms rather than each carry the quote.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `prune` (author, 2026-09-02); `fold-into-coverage` (review, 2026-09-03, from commons.systems/disposition-graph/scope).
+The recommendation adopts `prune` (a prune) and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, own-question: The audience question is already handled by the purpose node and can be pruned, though some of the incumbent graph's material on it might be folded in later.
+Moved to other nodes as alternatives: `regenerate-enumeration` on commons.systems/disposition-graph/stub-traditions; `incomplete-enumeration-in-facts` on commons.systems/disposition-graph/readings; `cite-forms` on commons.systems/disposition-graph/knowledge-store; `cite-forms` on commons.systems/disposition-graph/capture; `cite-forms` on commons.systems/disposition-graph/purpose.
+The census unit's note: The mechanical rule would make `adopts` 'standing' because the node has an answer and no draft, but that would misreport the recommendation, which is that the node be deleted; I named the prune as an alternative, sourced to the author's own words of 2026-09-02, and made the recommendation adopt it. The keep-as-an-open-question option is recorded as rejected in the sitting and both counter-arguments conclude the prune is well grounded, so I left it out. The cross-reference and duplicate-quotation findings are carried verbatim on both audience and coverage; I recorded their elsewhere entries once, here, to avoid minting the same alternative twice. Their proposal to amend frontier-consistency's validation 14 is excluded: that node's answer already admits a quotation carried on a child.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `prune` absorbs `fold-into-coverage`. The merge unit's note: Both entries are prunes of this node and `prune` is the one the recommendation adopts, so it is the survivor; the merged text keeps the coverage finding's verification and coverage as the second destination.

@@ -2,8 +2,11 @@
 question: May an un-aligned disposition have children?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: low
+  amends: "2f12ff318a1a0fd5bc4c64e8b2584c88b2672a8c"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 form: rule
 authority:
   class: deferred
@@ -31,7 +34,7 @@ Two further facts made the rule weaker than it looked. It keyed on the absence o
 
 Rejected: keeping the rule and requiring a reading owed to an open question to be parked on the question's parent, which is what happened to `npm-committed-lockfile` on 2026-09-03 and which misplaces a reading for the life of the question. Rejected: keeping the rule but softening the instrument to a warning, which leaves a struck inference standing in the record as a rule nobody enforces. Not decided here, and left open on `instruments`, an alternative for its dialogue: whether a machine check should ever hard-fail an answer that is not ratified.
 
-## Proposal
+## Account
 
 The rule is in the record, not only in the validator. The answer above states it: "An un-aligned disposition has no children, and at its recording it becomes an answer, an amendment quoted into the node it refines, or nothing." `node` states it a second time, as the schema node's only statement of what an unanswered node is, and `packages/disposition/read.mjs` implements it as a validation whose message quotes it. Three of the frontier findings of 2026-09-03, on `node`, `authority` and `dialogue`, already contest which node should own the sentence, and all three assume the rule itself.
 
@@ -75,3 +78,11 @@ The question is answered under the bootstrap authority the author granted the sa
 The account above, written while the rule was thought binding, is left as it stands. It records that the AI treated a deferred answer as fixed, framed the author's challenge inside that frame, and parked a reading on the wrong parent rather than exercising the overrule the record already granted. `fidelity` cites this node as an instance of intention misread under perfect coverage.
 
 One consequence is now due and is not taken here: `npm-committed-lockfile` was placed under `materialization` only because this rule blocked its proper parent. With the rule struck it belongs under `lockfile`, the question it bears on. Moving it is a graph edit that changes what the reading is a reading of, so it is put to the author rather than done silently.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: Why do un-aligned dispositions have no children: an unanswered disposition should be just a disposition plus alignment dialogue state, a class registered for the dialogue that carries no authority for reconciliation unless bootstrap authority is explicitly granted.
+Moved to other nodes as alternatives: `no-hard-fail-on-an-unratified-answer` on commons.systems/disposition-graph/instruments; `move-under-lockfile` on commons.systems/disposition-graph/npm-committed-lockfile.
+The census unit's note: The node has a standing answer, no draft and a recommendation of standing, and nothing pending on the answer itself: it was answered under the author's bootstrap authority the same day, and the clean-context review on it has not yet run, so no reviewer has proposed a different text. Its two consequences that were deliberately not taken are both changes to other nodes and went to elsewhere, on instruments and on the npm reading. I did not record an entry on node, whose restatement of the no-children rule was already struck in the same landing. One thing the session should see: the node's own Facts section still says 'Authority none' and 'The movement owed is periagogic and has not been run', which the later section and the frontmatter contradict, so the account is stale against its own recommendation.

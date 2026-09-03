@@ -2,13 +2,26 @@
 question: What does a session load, and where does it come from?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: low
+  amends: "5022100045d3fec87a66697115d238de6eead5cc"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
   date: 2026-09-03
   of: 10154f9fe3509c5c036bc68fba0ff5b4c0b1953c
+alternatives:
+  - name: commit-settings-json
+    source: review
+    ref: "2026-09-03"
+  - name: context-moves-here
+    source: review
+    ref: "2026-09-03"
+  - name: strike-ledger-sunset-dependency
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -44,8 +57,21 @@ From three projections and nothing else. Rules, one file per global-tier node un
 
 The author's ruling of 2026-09-02 that `CLAUDE.md` must be justified and materialized by disposition like rules and `CLAUDE.local.md`, with the question whether it serves any function rules do not. Evaluated against the harness: rules and `CLAUDE.md` are both always-loaded instructions; rules are scoped to the project root and may be scoped to paths, `CLAUDE.md` is scoped to the working directory and its ancestors and may import files; skills load on invocation; memory is private to one account and one path, so it can carry nothing the record needs. The functions that had accumulated in the bootstrap `CLAUDE.md` map as follows: the token-efficiency rule and the loop to the growth node and the skill; the code-review recipe to the review node's instrument; environment traps to evidence on the node whose instrument they qualify; the round log and the decisions list to git history. Rejected: deleting `CLAUDE.md` outright, because the arriving-session function is real for the audience and costs one projected page; keeping operating rules in it, because the projector cannot see them there. Traditions to record as readings: the Unix `README` and `INSTALL` convention, adopted, orientation kept apart from rules; twelve-factor configuration, one home per fact, adopted. The exit conditions this shim carried until 2026-09-03 are the liquidation condition of the reconciliation shim on the work-loop node, where the bootstrap operations now live.
 
+## Alternatives
 
-## Proposal
+### commit-settings-json
+
+The shim coverage finding verified that this node's declared shim named a settings file on the implementation ref that is not tracked there at all, so the shim named an artifact that does not exist. It gave two fixes: commit `.claude/settings.json` to the ref, which is what the shim said, or restate the artifact as harness configuration held outside the ref with that as part of the liquidation condition. The session took the restatement and the shim now reads that way, so the alternative pending for the author is the first: the harness configuration becomes a projected, committed artifact rather than a file in the author's checkout. It bears on what a session loads, since the settings decide the permissions and the worktree base a session runs with. Raised on commons.systems/disposition-graph/transience.
+
+### context-moves-here
+
+The decomposition finding on `under` proposes that the term 'context' move from under's `defines` to this node's, since session-context already answers what a session loads and where it comes from while under answers four questions at once. Verified: under's defines carries under, rank, ceiling and context, and this node's carries session context and rules. Adopting it adds one entry to the frontmatter and lets under be drafted as the edge alone. Raised on commons.systems/disposition-graph/attention, commons.systems/disposition-graph/under.
+
+### strike-ledger-sunset-dependency
+
+Session-context's account carries 'Depends on: ledger-sunset', which names no node; the ledger was liquidated on 2026-09-03, so the dependency is met. The finding proposes striking it, as growth's own two dangling dependencies were struck, since a question that lives only on a page beside the record is what transience rejects. (Raised on commons.systems/disposition-graph/growth.)
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -123,3 +149,16 @@ Two declared shims fail transience's own requirement that a shim name an artifac
 Also named: commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/transience.
 
 Proposed: Session-context either commits .claude/settings.json to the implementation ref, which is what its own shim says, or restates the artifact as harness configuration held outside the ref with that as part of the liquidation condition. Materialization restates its second shim as the ancestor node_modules resolution alone, the manifest half being met. Transience's instrument note is upgraded to a declared shim for the unmaterialized flagging, as its own reviewer asked and as its rule requires.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `commit-settings-json` (review, 2026-09-03); `defines-context` (review, 2026-09-03); `restate-the-settings-shim` (review, 2026-09-03, from commons.systems/disposition-graph/transience); `context-moves-here` (review, 2026-09-03, from commons.systems/disposition-graph/under); `strike-ledger-sunset-dependency` (review, 2026-09-03, from commons.systems/disposition-graph/growth).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: Bootstrap may be recorded as a shim for the reconciliation process or in a bootstrap operations document if it helps manage context, provided there are no redundancies between the function or content of any shims, the operations document, session memories, and the ledger.
+Moved to other nodes as alternatives: `edge-alone` on commons.systems/disposition-graph/under; `defines-rank` on commons.systems/disposition-graph/attention; `defines-ceiling` on commons.systems/disposition-graph/authority; `strike-phantom-depends` on commons.systems/disposition-graph/growth; `restate-node-modules-shim` on commons.systems/disposition-graph/materialization; `declare-flagging-shim` on commons.systems/disposition-graph/transience.
+The census unit's note: The node has an answer and no draft, so the recommendation adopts the standing text; both reviews forwarded it weakly. Two alternatives are pending: the shim option the session did not take, committing `.claude/settings.json` to the implementation ref rather than holding it in the author's checkout, and the decomposition finding's move of the term 'context' into this node's `defines`. Everything else the reviews raised — the stale Proposal summary, the phantom `ledger-sunset` dependency, the rules-directory count — the session's replies have already applied, and I verified the frontmatter rather than trusting them. The one author block is treated as own-question: it authorises the shims this node carries and sets the no-redundancy constraint across the surfaces a session loads. The decomposition and cross-reference findings' consequences for under, attention, authority, growth, materialization and transience are moved to those nodes.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `commit-settings-json` absorbs `restate-the-settings-shim`; `context-moves-here` absorbs `defines-context`. The merge unit's note: The two settings entries are the two branches of one finding and one branch is already taken, so they are merged into the single live alternative; if the main thread would rather keep the restatement visible as an alternative the author could still rule against, keep them apart.

@@ -2,13 +2,29 @@
 question: How is a design or a proposal evaluated?
 stage: ruling
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "6d87ee51ffab4195c5465354a36d4a2bc1f4fa1e"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: 6d87ee51ffab4195c5465354a36d4a2bc1f4fa1e
+alternatives:
+  - name: deferred-until-ruling-quoted
+    source: review
+    ref: "2026-09-03"
+  - name: two-kinds-of-shim
+    source: ai
+    ref: "2026-09-03"
+  - name: traditions-to-readings
+    source: review
+    ref: "2026-09-03"
+  - name: bounded-overrule
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -29,7 +45,25 @@ Against the full solution frontier. Nothing is sacred: no doctrine is implied by
 
 The author's rulings in the legacy bootstrap of 2026-08-31 to 2026-09-02, given again to this bootstrap as the standing rule for the AI's evaluations: reference the incumbent for principles, never as authority. The legacy rule projection on `main` and the ratified clarifications behind it are the evidence. The overrule rules are the authority node's attenuation seen from the evaluator's side. Traditions to record as readings: the Pareto frontier of multi-objective choice, adopted for the sense of "frontier"; Chesterton's fence (The Thing, 1929), diverged from in part, since here the record, not the fence, carries the reason, and a fence without a recorded reason is a prune-by-default proposal. The clean-context review is the author's disposition of 2026-09-03, recorded on the recording node under growth.
 
-## Proposal
+## Alternatives
+
+### deferred-until-ruling-quoted
+
+Evaluation carries no Disposition section and quotes no ruling of any date, resting its whole answer on the author's rulings in the legacy bootstrap, which legacy and this node itself make evidence and never authority. Authority's rule is that a ratified stamp whose ruling is not in the record is invalid. The alternative is that the recommendation change from ratified to deferred until a dated ruling is quoted in the node, since a ratified stamp the record cannot support is worse than an honest deferral.
+
+### two-kinds-of-shim
+
+Evaluation holds that a shim declared on the record is applied by default and a prompt is required only to bypass it, while the bootstrap-authority shim declared on authority is a permission that does nothing until the author invokes it, so applying it by default would be the capture it guards against. The alternative amends this answer to cover two kinds of shim, a stopgap artifact standing in for a projection and a standing permission exercised on demand; the other branch is that bootstrap authority is not a shim at all but a second class of authority, which authority would define. The tension was put to this node from authority's sitting, whose account says so explicitly, and is undecided. Raised on commons.systems/disposition-graph/authority.
+
+### traditions-to-readings
+
+This node's own rule is that every tradition surfaced is recorded as a reading with the resolution it informed, and its rationale carries a prose tradition list, the Pareto frontier and Chesterton's fence, which readings' recommended text forbids. The alternative strikes the list from the rationale and mints the two as readings, which is the remedy stub-traditions holds and which the session deferred to the readings ruling. Fourteen rationales are in the same position.
+
+### bounded-overrule
+
+The answer lets the AI overrule delegated and deferred answers on its best judgment without limit, and since nothing is ratified that is the whole record between two sittings. The brake the session named, that an overrule at the ruling stage sends the node back to review and shows on the frontier, is real but covers only that stage; an overrule at the review or maieutic stage leaves no review state to go stale. The alternative bounds the rule so that an overrule of any unanswered node re-opens its dialogue at the stage the change touches, which is also what the amendment review asked authority to add.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -80,3 +114,15 @@ Authority's rule is that 'a ratified stamp whose ruling is not in the record is 
 Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/review, commons.systems/disposition-graph/attention, commons.systems/disposition-graph/recording.
 
 Proposed: Rule quotes first, after agency. Then, before any ratified stamp is written, each of the twenty-two nodes either gains a '## Disposition' section carrying the ruling it rests on with its date — attention and recording already have the quotations in their rationales and need only move them, which also makes the alignment page show them — or its recommendation changes from ratified to deferred, since a ratified stamp it cannot support is worse than an honest deferral. Quotes' facts state the count.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `deferred-until-ruling-quoted` (review, 2026-09-03); `two-kinds-of-shim` (ai, 2026-09-03); `traditions-to-readings` (review, 2026-09-03); `bounded-overrule` (review, 2026-09-03); `shim-two-kinds` (ai, 2026-09-03, from commons.systems/disposition-graph/authority).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Moved to other nodes as alternatives: `move-recommended-marker` on commons.systems/disposition-graph/quotes.
+The census unit's note: Evaluation has a standing answer, no recommended text and no Disposition section, so it adopts standing and its dispositions list is empty. Four alternatives are pending: deferring the stamp until a dated ruling is in the node, the two-kinds-of-shim amendment put to this node from authority's sitting, moving the prose tradition list to readings, and bounding the overrule rule, which is the residue of the strong counter-argument the session answered only for the ruling stage. The superseded bootstrap-grant citations in the recorded reply were annotated in place at the author's instruction and are not alternatives. The quotes proposal is carried on several nodes; I emit it once, here.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `two-kinds-of-shim` absorbs `shim-two-kinds`.

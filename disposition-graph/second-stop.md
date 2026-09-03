@@ -1,19 +1,63 @@
 ---
 question: What does a newcomer read after purpose?
-stage: ruling
+stage: review
 recommendation:
+  adopts: rewrite-model
   class: ratified
   boldness: moderate
-review:
-  verdict: forward
-  strength: moderate
-  date: 2026-09-03
-  of: b5c872a03ea888a605ea0ed45211099a5205ec47
+  amends: "b5c872a03ea888a605ea0ed45211099a5205ec47"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+alternatives:
+  - name: rewrite-model
+    source: ai
+    ref: "2026-09-03"
+  - name: primer-node
+    source: ai
+    ref: "2026-09-03"
+  - name: fold-into-model
+    source: review
+    ref: "2026-09-03"
+    prune: true
 under:
   - commons.systems/disposition-graph/model
 ---
+## Alternatives
 
-## Proposal
+### rewrite-model
+
+The model node's answer is rewritten for the reader arriving from purpose, without changing rank: projection stays first among model's children, since the high-level order the author recorded on scope on 2026-09-03 puts self-documentation through the browser before alignment, and the model node may say that alignment is where the newcomer acts first. This is the recommended option as amended after the review, the boost half having been withdrawn; model's draft is the rewrite it names.
+
+### primer-node
+
+A new primer node sits between purpose and model, introducing the graph primitives, and model's answer is left as it stands. Model's draft rationale rejects this on the ground that such a node would answer no question model does not.
+
+### fold-into-model
+
+Prune: This node is pruned and its two options are carried on model as alternatives in model's own dialogue state, so the author rules once rather than on two screens with no ordering shown. The redundancy finding of 2026-09-03 offers this against keeping the option-node as the survivor of its question, and observes that confirming model's draft as shown decides this question by that act.
+
+## Recommendation
+
+```markdown
+---
+question: What does a newcomer read after purpose?
+form: rule
+authority:
+  class: ratified
+  by: Nathan Buesgens
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/model
+---
+## Answer
+
+The model node. Its answer is written for the newcomer rather than for a reader looking something up: it introduces the primitives, the disposition, the graph and the node, well enough to use the alignment skill, and it may say that alignment is where the newcomer acts first. No rank changes with it: projection stays first among the model node's children, following the order the author recorded on the scope node on 2026-09-03, which places self-documentation through the browser before alignment. No node is inserted between purpose and model, so the second stop is the node that already answers the question, written for the reader who arrives at it.
+
+## Rationale
+
+The author found the model node's answer too reference-shaped for the second thing a newcomer reads, which is a defect in the writing and not a missing node; a primer would restate the model node's answer in a second place, the drift this record resists everywhere else. Rewriting also costs no rank, so the onboarding walk and the reconciliation order stay one list and rank keeps serving both. Rejected: a new primer node between purpose and model, because it duplicates the model node's answer and adds a page the record must keep in step with it; and the boost that would have put growth first among the model node's children, withdrawn because the author's own recorded order puts the browser before alignment and two other nodes' rationales rest on that order.
+```
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -82,3 +126,11 @@ Three option-nodes decide clauses that a sibling's draft already contains. Hexis
 Also named: commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/purpose-criteria, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/model.
 
 Proposed: Keep the option-nodes as the survivors of their questions, since each is a real decision the author should make separately, and add one line to each saying it is a sub-ruling of the named parent's draft and must be ruled first. Correspondingly, each parent's Proposal names the option-nodes its draft presumes. Alternatively fold each option into its parent's Proposal as an explicit alternative, which is what rejected's option 1 would make structural — but that decision is itself unruled.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `rewrite-model` (ai, 2026-09-03); `primer-node` (ai, 2026-09-03); `fold-into-model` (review, 2026-09-03).
+The recommendation adopts `rewrite-model` and is pinned to the standing text as it was at that commit. The recommended text was drafted at the re-encoding from the option the account marks recommended, so that the recommendation adopts an alternative with a text and not only a name; the earlier review read the options and not this text, so it is removed and the node returns to the review stage for the clean-context review of the batch.
+Moved to other nodes as alternatives: `primer-node` on commons.systems/disposition-graph/model.
+The census unit's note: The node has no answer and no draft but does carry a recommendation, so adopts names the recommended option rather than standing; under the new encoding this node is almost entirely dialogue state. Its two options become alternatives, and the redundancy finding's second half, folding the option into the parent, becomes a third, which is exactly the fold the new encoding makes possible. I did not make an alternative of the review's request that the kickback verdict beside the review stage be explained, since it asks for a note in the review state and not for a different answer. The redundancy question makes model the survivor of the substance, so I added the primer-node candidate on model as an elsewhere and said so here rather than duplicating it as a model alternative.

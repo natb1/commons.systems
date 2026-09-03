@@ -2,13 +2,32 @@
 question: How is transient disposition recorded?
 stage: maieutic
 recommendation:
+  adopts: standing
   class: ratified
   boldness: high
+  amends: "e1f5fea813e4b060aeb470ef0faf78417b32c728"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: 5146c975ea09a8483495b379e9faca8819ce3e11
+alternatives:
+  - name: cite-unanswered-for-the-browser-rule
+    source: review
+    ref: "2026-09-03"
+  - name: name-the-reduction-divergence
+    source: review
+    ref: "2026-09-03"
+  - name: instrument-note-as-a-declared-shim
+    source: review
+    ref: "2026-09-03"
+  - name: say-instrument-not-criterion
+    source: review
+    ref: "2026-09-03"
+  - name: reduce-un-aligned-paragraph
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -65,8 +84,29 @@ Traditions, owed as readings: Aristotle on hexis and kinesis, Nicomachean Ethics
 
 The author, 2026-09-03, on the un-aligned shape: "Let's go ahead and also record a deferred disposition which use the \"unanswered\" primitives to record \"un-aligned\" dispositions. Consider the unanswered encoding from this perspective - it must encode things like (but not limited to) where in the dialog flow are we on this point, has it survived periogoge, maieutic? Reduce all functions of the unanswered primitive to this - persistence of un-aligned dispositions from the user. eg. the currently labeled \"What does this repository contain, and what does it leave out?\" sounds more like a proposal - \"this evidence contradicts the purpose disposition and so requires author clarification.\" Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact)." Evaluated: a stored stage is the exception to the rule above that a step is derived, made by this ruling and justified because the author's words in a dialogue have no other home; it is bounded, since a stage exists only while a dialogue is open, and the validator refuses a stage with no dialogue text and dialogue text with no stage. Rejected: a stored transcript of the whole dialogue, because the AI's side is re-derived from the record and the author's words; a queue kept outside the graph, because a list beside the record is the ledger the author asked to sunset. The author, 2026-09-03, on shims: "Yes, you can record bootstrap as a shim for reconciliation process if it helps you manage context, or in bootstrap operations (delegating to subagents, etc.) Just make sure there are not redundancies between the function/content of any shims, bootstrap operations document, session memories, and ledger." Evidence: `bootstrap/transient-disposition-graph-survey.md` and `bootstrap/transient-disposition-transcript-survey.md` on the implementation ref, the surveys this answer was drawn from; `bootstrap/ledger-migration-survey-2026-09-03.md`, the redundancy check the second ruling asks for.
 
+## Alternatives
 
-## Proposal
+### cite-unanswered-for-the-browser-rule
+
+The supersession finding proposes that the un-aligned paragraph drop its own restatement of the rule that unanswered nodes are hidden from the browser and listed by the alignment page, and cite unanswered for the status and projection for what the browser shows. The author's earlier words that node carries were narrowed later the same day by the classification of every disposition as unanswered, which applied literally would empty the browser. The node still states the earlier rule as its own with no note of the narrowing.
+
+### name-the-reduction-divergence
+
+The amendment review found that the sentence 'Every function of the un-aligned disposition reduces to this' narrows the author's own words, which reduced the functions of the unanswered primitive, not of the un-aligned disposition, and that the primitive acquired a second function the same day when answered nodes began carrying a dialogue. This alternative records the narrowing as a divergence forced by the later ruling and puts the pair to the author rather than leaving the author's reduction binding on nothing. The session accepted it for the sitting and has not written it.
+
+### instrument-note-as-a-declared-shim
+
+Two reviews and the shim coverage finding hold that the frontmatter instrument note, which records that the flagging of a met shim condition is not yet materialized, is by this node's own rule a shim rather than a note: a stand-in for a materialization not yet made needs an artifact and a liquidation condition the frontier can read, and this node's own rule makes a shim whose condition is met and which still exists a frontier item. This alternative replaces the note with a declared shim. The session accepted it for the sitting. Raised on commons.systems/disposition-graph/session-context.
+
+### say-instrument-not-criterion
+
+The vocabulary finding holds that criterion is carried by no node's defines and exists only inside instruments' draft, while this node's answer opens its first shape with 'A criterion, when the temporary thing is really a standing obligation'. Until instruments is ruled the word here becomes instrument, the term instruments actually defines, or the answer discloses that the term arrives with instruments.
+
+### reduce-un-aligned-paragraph
+
+The frontier survey's decomposition finding proposes cutting the un-aligned paragraph down to two sentences: that an un-aligned disposition is a node with a question and no answer, and that it carries the dialogue as the dialogue node defines it. The enumeration of the dialogue's parts would go to dialogue and the status rule to unanswered, which already carry them, since three nodes now carry one list and drift between them is invisible until they are read together. The five-shape taxonomy, which is what this node is for, is untouched. Transience's own session reply accepts the reduction and defers it to its sitting, so it is owed and the text still carries the full enumeration. Raised on commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/unanswered.
+
+## Account
 
 ### Overrule: the un-aligned disposition is a node, 2026-09-03
 
@@ -220,3 +260,16 @@ Four node files end with a bare 'null' on its own line, where a session's reply 
 Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/growth, commons.systems/disposition-graph/projection.
 
 Proposed: Write the four missing replies, or state on each that the review's findings are accepted, and strike the 'null'. The pattern is a serialization defect in whatever applied the reviews rather than four independent omissions, so the apply step should be checked: .claude/skills/align-review/apply.mjs is the script that writes replies, and a reply of JavaScript null being stringified into the file is the likely cause. Until it is fixed, every future review round will leave the same trace.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `reduced-un-aligned-paragraph` (review, 2026-09-03); `cite-unanswered-for-the-browser-rule` (review, 2026-09-03); `name-the-reduction-divergence` (review, 2026-09-03); `instrument-note-as-a-declared-shim` (review, 2026-09-03); `say-instrument-not-criterion` (review, 2026-09-03); `reduce-un-aligned-paragraph` (review, 2026-09-03, from commons.systems/disposition-graph/dialogue); `declare-flagging-shim` (review, 2026-09-03, from commons.systems/disposition-graph/session-context).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, own-question: Dispositions must resist decay: they are persistent records and do not track operational or transient state such as the bootstrap process. 2026-09-03, own-question: Evaluate greenfield the scope of what recording transient disposition requires, under the constraint of resisting drift and without reinventing tactic nodes, and record the recommendation as deferred.
+Moved to other nodes as alternatives: `say-the-browser-rule-was-narrowed` on commons.systems/disposition-graph/projection; `restate-the-settings-shim` on commons.systems/disposition-graph/session-context; `un-aligned-disposition-not-open-question` on commons.systems/disposition-graph/node.
+The census unit's note: The node has a standing answer, no draft and a recommendation of standing, so everything pending is an edit somebody has proposed and nobody has applied. I turned five into alternatives: the two paragraph reductions the decomposition and supersession findings ask for, the divergence the amendment review found between the author's reduction of the unanswered primitive and the node's narrowing of it to the un-aligned shape, the upgrade of the instrument note to a declared shim, and the criterion-versus-instrument wording. I moved three findings to their targets: the narrowing clause to projection, the settings shim to session-context, and the vocabulary fix to node's draft. Borderline and excluded: the contradiction finding's proposal that node's draft restore 'and it has no children', which the same day's overrule on this node struck, so it is stale rather than pending; the counter-argument that un-aligned has become a rendering rule, which the session answered without proposing different text; the bare-null coverage finding, a defect fix rather than a candidate answer; and the materialization shim half of the shim coverage finding, already applied there.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `reduce-un-aligned-paragraph` absorbs `reduced-un-aligned-paragraph`; `instrument-note-as-a-declared-shim` absorbs `declare-flagging-shim`. The merge unit's note: cite-unanswered-for-the-browser-rule, name-the-reduction-divergence and say-instrument-not-criterion each change a different sentence and stay.

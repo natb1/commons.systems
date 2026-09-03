@@ -2,13 +2,32 @@
 question: What is materialized implementation, and where does it live?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: low
+  amends: "0826bba52cd81cceefb22d57298511ed3e173c38"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: e47a9f5936f7d8e33eae62c1e0037c69ad3d2f35
+alternatives:
+  - name: facts-carry-each-shim-liquidation
+    source: review
+    ref: "2026-09-03"
+  - name: disclose-that-sessions-run-under-this-rule
+    source: review
+    ref: "2026-09-03"
+  - name: traditions-to-readings
+    source: review
+    ref: "2026-09-03"
+  - name: restate-node-modules-shim
+    source: review
+    ref: "2026-09-03"
+  - name: strike-met-yaml-shim
+    source: ai
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -44,8 +63,29 @@ Everything written to a repository other than the graph itself: code, skills, ru
 
 The author's rulings of 2026-09-02, and of 2026-09-03 that all materialized implementation, the browser included, is a projection of the graph and that anything the graph does not justify is liquidated through reconciliation. Keeping the disposition ref to the graph alone keeps its writes small, its history legible, and its readers simple; tooling changes never land as graph changes. The monorepo convention is the tradition of Lerna (2015), Yarn workspaces (2017), and npm workspaces (npm 7, 2020), themselves descendants of the single-repository practice described by Potvin and Levenberg (2016); a reading is owed. The incumbent repository already uses `packages/`, which is evidence, not authority. The third ref has one consequence to keep in view: whatever on `main` is to survive the swap must be reconciled into `greenfield` under a supporting disposition before exit, or it is pruned by the swap. The author, 2026-09-03: "general disposition is that all materialized implementation (including the browser) is a projection of the graph - anything not justified by the graph is subject to liquidation through reconciliation. 'implementation unit' kind of makes it sound like we are recording transient dispositions - ensure that we are not." This node binds every session that writes to the implementation ref, subagents included, so it is projected as a rule.
 
+## Alternatives
 
-## Proposal
+### facts-carry-each-shim-liquidation
+
+Both reviews found that the prose facts line says only 'persistence standing; two shims' and does not carry each shim's liquidation condition, which growth's presentation rule requires. It matters here because the greenfield shim's liquidation is a swap that prunes whatever no disposition supports, so without the condition the author cannot see that confirming this node arms a deletion. The alternative states both conditions in the facts.
+
+### disclose-that-sessions-run-under-this-rule
+
+The second review asked the account to say that a kickback or an overrule here changes what sessions are running under today, since the rules directory now holds this node's projection as one of the five global-tier rules. The session's reply promised it at the sitting and the text does not say it.
+
+### traditions-to-readings
+
+The rationale names Lerna, Yarn workspaces, npm workspaces and Potvin and Levenberg in prose as the monorepo tradition, which readings' draft forbids and which stub-traditions names this node for. The alternative moves the reference to a reading before landing and leaves the rationale with the argument.
+
+### restate-node-modules-shim
+
+The coverage finding carried on session-context proposes that materialization restate its second shim as the ancestor `node_modules` resolution alone, since `packages/disposition/package.json` exists and declares yaml, so the shim's description of the artifact is false and half its liquidation condition is already met. (Raised on commons.systems/disposition-graph/session-context.)
+
+### strike-met-yaml-shim
+
+Materialization's second shim, packages/disposition resolving the yaml package it declares from an ancestor node_modules, is struck, its liquidation condition having been met on 2026-09-03 when the root tree was removed and npm install run at the workspace root, so yaml now resolves from the workspace's own install. Transience makes a shim whose condition is met and which still exists a frontier item. The lockfile node records this rather than applying it, because materialization stands at the review stage with a forward verdict and the amendment would be a change of substance. (Raised on commons.systems/disposition-graph/lockfile.)
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -101,3 +141,11 @@ Two declared shims fail transience's own requirement that a shim name an artifac
 Also named: commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/transience.
 
 Proposed: Session-context either commits .claude/settings.json to the implementation ref, which is what its own shim says, or restates the artifact as harness configuration held outside the ref with that as part of the liquidation condition. Materialization restates its second shim as the ancestor node_modules resolution alone, the manifest half being met. Transience's instrument note is upgraded to a declared shim for the unmaterialized flagging, as its own reviewer asked and as its rule requires.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `facts-carry-each-shim-liquidation` (review, 2026-09-03); `disclose-that-sessions-run-under-this-rule` (review, 2026-09-03); `traditions-to-readings` (review, 2026-09-03); `restate-node-modules-shim` (review, 2026-09-03, from commons.systems/disposition-graph/session-context); `strike-met-yaml-shim` (ai, 2026-09-03, from commons.systems/disposition-graph/lockfile).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: All materialized implementation, the browser included, is a projection of the graph, anything the graph does not justify is subject to liquidation through reconciliation, and the record must not be made to hold transient dispositions in the shape of implementation units.
+The census unit's note: Standing answer, no draft, recommendation of standing. Almost everything the two reviews raised was applied before the snapshot: liquidation is now a pruning proposed for the author's ruling rather than an action, the greenfield shim's condition names the coverage ruling, and the second shim was restated as the ancestor resolution alone, so the shim coverage finding's proposal for this node is met and I did not record it. What is left are three unwritten edits, two of them promised in the session's own replies. The strong counter-argument, that ratifying this node arms an unruled deletion, is answered in the shim's liquidation condition rather than pending, so I did not make it an alternative. The shim coverage finding's proposal for session-context is recorded from transience, which carries the same finding, to avoid a duplicate.

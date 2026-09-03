@@ -2,13 +2,23 @@
 question: Does Plato's midwifery ground the maieutic conduct of the interview?
 stage: ruling
 recommendation:
+  adopts: standing
   class: delegated
   boldness: high
+  amends: "14b35991f614846973e8e1b3ce3a4c1cb929aabe"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: 14b35991f614846973e8e1b3ce3a4c1cb929aabe
+alternatives:
+  - name: relation-diverged
+    source: review
+    ref: "2026-09-03"
+  - name: propose-and-critique
+    source: review
+    ref: "2026-09-03"
 form: reading
 authority:
   class: deferred
@@ -27,7 +37,17 @@ Yes, for the conduct in which the answer lives in the author, unrecorded. Socrat
 
 Adopted as the name and the ground of the maieutic conduct. The divergence to keep in view: the AI is not barren; it drafts, and the draft can lead. That is why the draft must be visible and refusable, and why the periagogic conduct runs first when the ground is already recorded.
 
-## Proposal
+## Alternatives
+
+### relation-diverged
+
+Both readings found the divergence named in the rationale, that the AI is not barren but drafts and the draft can lead, standing under a relation of adopted, which evaluation calls an unrecorded conflict with a cited tradition. The session's reply says in terms that the author may rule the relation diverged while the session keeps adopted with the divergence named. This alternative is the reading with relation diverged, the answer otherwise unchanged.
+
+### propose-and-critique
+
+The strong counter-argument, twice recorded: Socrates' midwifery rests on his being barren, and the AI is the opposite, drafting first while the author reacts, so the visible refusable draft is an anchor and what is delivered is the drafter's. On this reading the interview's actual method is a propose-and-critique loop, and calling it maieutic imports a guarantee about whose answer emerges that the mechanism does not provide. The alternative answers the question with a qualified no: the tradition names the test of the offspring and not the conduct, and the conduct is described in its own terms, which growth compounds by making the maieutic stage the one where the ruling is taken.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -78,3 +98,10 @@ Readings' rule is that a reading is 'ratified when the author has read the prima
 Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/aristotle-hexis, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/readings.
 
 Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `relation-diverged` (review, 2026-09-03); `propose-and-critique` (review, 2026-09-03).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+The census unit's note: No Disposition section. The two alternatives are the relation the session explicitly handed to the author and the review's steelman, which is a different answer to the node's question rather than an observation about it. Excluded as editorial: the loci in the answer still differ from the source field and from growth's citation of the same passage, which is a correction owed at the sitting, and the frontmatter names no tradition because traditions-home is unruled. The reading-class coverage finding carried here is discharged: all ten reading nodes now carry recommendation class delegated, and this node's prose Facts line has already been rewritten to match.

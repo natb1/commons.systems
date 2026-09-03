@@ -2,13 +2,32 @@
 question: Does the same record serve as a knowledge store?
 stage: review
 recommendation:
+  adopts: criterion-draft
   class: ratified
   boldness: low
+  amends: "cdf3ee5e6bebfb505979e42af0b6e66490192646"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
   date: 2026-09-03
   of: f0f2a3f638d234a077592bac4a7bdf10c43fd039
+alternatives:
+  - name: criterion-draft
+    source: ai
+    ref: "2026-09-03"
+  - name: keep-the-hedge
+    source: review
+    ref: "2026-09-03"
+  - name: unguarded-and-said-so
+    source: ai
+    ref: "2026-09-03"
+  - name: define-hexis
+    source: review
+    ref: "2026-09-03"
+  - name: cite-forms
+    source: review
+    ref: "2026-09-03"
 form: assumption
 authority:
   class: deferred
@@ -30,8 +49,29 @@ Yes. A record of a person's standing answers, with their rationale and the alter
 
 The author's hypothesis, 2026-09-02. What would fail it: the record proving useful only while work is in flight, or its answers needing a second store to be findable or trusted. The reading under this node tests the hexis framing against Aristotle. An instrument is owed.
 
+## Alternatives
 
-## Draft
+### criterion-draft
+
+The draft keeps the answer and the assumption form but moves the failure condition out of the rationale into a criterion, an assessment made by the author at each sitting on this node, and drops the ledger reference. It also drops the hedge, saying the record is a projection of its author's hexis where the standing answer says something like a projection. Its criteria frontmatter key is not in the schema, so the drafted node could not land as written.
+
+### keep-the-hedge
+
+Both reviews found that the draft strengthens a hypothesis while keeping it a hypothesis, and that the strengthened claim is the one hexis asks the author to rule on. This alternative keeps 'something like a projection of its author's hexis' until hexis is ruled. The session replied that the dropped hedge is the wording the hexis option recommends and that the author rules hexis first, so the two rulings are coupled.
+
+### unguarded-and-said-so
+
+The session's own reply offers this to the author: the answer stands unguarded and says so, as purpose-criteria's now-recommended answer does for the parent. The reviewers' counter-argument is the ground, that a failure condition not observable on any timescale a sitting can reach cannot fail and therefore cannot guard, so the criterion buys nothing operational and an assumption whose failure sends the question back to the author is what this node already is.
+
+### define-hexis
+
+Both reviews of hexis find that no node's defines carries the term, verified against the parsed graph's eighty-eight defined terms, while projection's draft requires every defined term to link to the node that defines it, so the first Greek word a newcomer meets in purpose is one the browser cannot link. They propose adding hexis to knowledge-store's defines in the same landing, since that is where the sentence carrying it lives; knowledge-store has no defines field today and carries no record of this proposal. (Raised on commons.systems/disposition-graph/hexis.)
+
+### cite-forms
+
+The coverage finding of 2026-09-03 verified that the author's form question, 'Is this correctly encoded as form: assumption vs form: disposition with unvalidated instrumentation? Is assumption a form at all?', is carried verbatim on knowledge-store, capture and purpose, and that forms is the node that answers it; it is one of the two genuine double answers among the four duplicated quotations. The finding proposes all three cite forms rather than each carry the quote. On this node the words would be replaced by a citation of forms for the form decision, keeping the hypothesis itself, so that one disposition is answered by one node. Raised on commons.systems/disposition-graph/scope, commons.systems/disposition-graph/audience.
+
+## Recommendation
 
 ```markdown
 ---
@@ -57,7 +97,7 @@ Yes. A record of a person's standing answers, with their rationale and the alter
 The author's hypothesis, 2026-09-02. The reading under this node tests the hexis framing against Aristotle.
 ```
 
-## Proposal
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -113,3 +153,16 @@ Four author quotations are carried verbatim on more than one node, verified by e
 Also named: commons.systems/disposition-graph/audience, commons.systems/disposition-graph/coverage, commons.systems/disposition-graph/capture, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/node, commons.systems/disposition-graph/form-vocabulary, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/self-documentation, commons.systems/disposition-graph/rsi.
 
 Proposed: Most of these are legitimate context on a child that answers a part of the words, and the validation should say so: amend frontier-consistency's validation 14 to read that each part of a disposition is answered by exactly one node, and that a quotation may be carried on a child as the ground of the part it answers. Two are genuine double answers and should be resolved: audience and coverage both answer the audience question, which the audience prune resolves in coverage's favour; knowledge-store, capture and purpose all carry the form question, which forms answers, so all three should cite forms rather than each carry the quote.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `criterion-draft` (ai, 2026-09-03); `keep-the-hedge` (review, 2026-09-03); `unguarded-and-said-so` (ai, 2026-09-03); `cite-forms-not-the-quote` (review, 2026-09-03); `define-hexis` (review, 2026-09-03, from commons.systems/disposition-graph/hexis); `cite-forms-for-the-form-question` (review, 2026-09-03, from commons.systems/disposition-graph/scope); `cite-forms` (review, 2026-09-03, from commons.systems/disposition-graph/audience).
+The recommendation adopts `criterion-draft` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, own-question: Is this node correctly encoded as an assumption rather than a disposition with unvalidated instrumentation, and is assumption a form at all?.
+Moved to other nodes as alternatives: `cite-forms-not-the-quote` on commons.systems/disposition-graph/capture; `cite-forms-not-the-quote` on commons.systems/disposition-graph/purpose.
+The census unit's note: The node carries a draft, which the recommendation adopts, so I named it criterion-draft and described how it differs from the standing text. Its first sentence asks about this node's own form and its answer addresses that, so I classified the author's block as an own question and noted that its second sentence, whether assumption is a form at all, is forms' and is currently unanswered by forms' surviving option. Three edits the reviews raised were applied before the snapshot, the stored not-yet-validated marker, the stale form claim and the two-class facts line, so I left them out. The unguarded alternative and the hedge are both explicitly held open in the session's reply. The coverage finding's proposal for frontier-consistency's validation 14 is already applied there, so I recorded only its proposals for capture and purpose.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `cite-forms` absorbs `cite-forms-not-the-quote`, `cite-forms-for-the-form-question`. The merge unit's note: keep-the-hedge and unguarded-and-said-so change different sentences and stay separate; define-hexis is a defines change and stays.

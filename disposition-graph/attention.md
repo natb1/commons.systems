@@ -2,13 +2,23 @@
 question: How is attention allocated?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "989b0c57e87d5795bcd6082b62f46d37144ab633"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: 6a5e093e68be10a9caaaae8af36ea7f1f5b30ecc
+alternatives:
+  - name: author-states-the-order
+    source: review
+    ref: "2026-09-03"
+  - name: rank-moves-here
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -36,7 +46,17 @@ By rank, which is one fact with three readings. Rank is computed from the `under
 
 The author's ruling of 2026-09-02 that ranking serves onboarding. Prerequisites come from `under` and importance from rank, so a pedagogical order and a priority order do not fight: the walk descends the tree and orders siblings by rank. Rejected: choosing a parent to change priority. The author, 2026-09-03, quoted above: priority is encoded as rank, and the shim bites the frontier in rank order, purpose and the browser first, then the alignment skill, then the harness context, then the non-shim reconciliation harness. The boosts of 2026-09-03 transcribe that order among the children of model, projection above growth above the work loop, with values the AI chose and the author has not ratified; the earlier boost of the same day, model first under purpose, stands. Later on 2026-09-03 the author recorded the high-level order on the scope node, and the boosts of the nodes it names were reset to realize it: the scope node 9 under purpose and session-context 6 under projection, raised from 2 because at 2 it ranked below the work loop; the validator holds the ranks to that order since 2026-09-03. A browser node was not added for rank: a child's rank is a share of its parent's, so the browser bite ranks first through projection's boost, and a browser node is owed by projection's shim at its sitting.
 
-## Proposal
+## Alternatives
+
+### author-states-the-order
+
+The reviewer's strongest counter-argument, made twice: one scalar cannot carry a teaching order, a work order and a compaction floor, and this node records the proof, since session-context at boost 2 ranked below the work loop against the author's order of the same day, and the fix was a hand-raised boost and then a whole new order field on scope. The alternative the answer never considers is to let the author state the order and derive nothing, with the recorded order as the mechanism and boost as at most a tie-break. It would make scope's order field the rule rather than a constraint on a derived rank.
+
+### rank-moves-here
+
+The decomposition finding proposes that 'rank' move from under's `defines` to attention's, since attention already answers how rank is computed and read, leaving under as the edge alone. Under answers four questions at once and stands at the maieutic stage with no drafted text, while four ruling-stage nodes rest on the term. Verified: under's defines carries rank and attention's carries only boost and the onboarding path. The session accepted the substance and left the ruling to under's sitting. Raised on commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/under.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -107,3 +127,16 @@ Authority's rule is that 'a ratified stamp whose ruling is not in the record is 
 Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
 
 Proposed: Rule quotes first, after agency. Then, before any ratified stamp is written, each of the twenty-two nodes either gains a '## Disposition' section carrying the ruling it rests on with its date — attention and recording already have the quotations in their rationales and need only move them, which also makes the alignment page show them — or its recommendation changes from ratified to deferred, since a ratified stamp it cannot support is worse than an honest deferral. Quotes' facts state the count.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `author-states-the-order` (review, 2026-09-03); `attention-defines-rank` (review, 2026-09-03); `defines-rank` (review, 2026-09-03, from commons.systems/disposition-graph/session-context); `rank-moves-here` (review, 2026-09-03, from commons.systems/disposition-graph/under).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: Priority is encoded as rank. 2026-09-03, own-question: The shim bites work from the frontier in rank order for reconciliation, purpose and the browser artifact first, then the alignment skill, then the rest of the harness context management, then the non-shim reconciliation harness.
+Moved to other nodes as alternatives: `simplify-to-the-edge` on commons.systems/disposition-graph/under; `defines-context` on commons.systems/disposition-graph/session-context; `defines-ceiling` on commons.systems/disposition-graph/authority; `strike-growth-first-sentence` on commons.systems/disposition-graph/model.
+The census unit's note: Attention has a standing answer and no recommended text, so it adopts standing. Two alternatives are pending: the reviewer's rival mechanism, that the author state the order and nothing be derived, which the session answered but did not close, and the move of the term rank into this node's defines, which the session accepted in substance and left to under's sitting. The earlier findings, moving the author's two quotations into a Disposition section and marking the compaction-floor reading as owed, are applied in the snapshot and are not carried. The bite-order quotation is also carried on work-loop for the reconciliation order; I read it here as answering this node's own question about rank order and noted the overlap rather than moving it.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `rank-moves-here` absorbs `attention-defines-rank`, `defines-rank`. The merge unit's note: author-states-the-order is a different answer to the same question (the author states the order and nothing is derived) and stays separate.

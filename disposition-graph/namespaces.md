@@ -2,13 +2,22 @@
 question: How are nodes named across graphs?
 stage: review
 recommendation:
+  adopts: draft
   class: ratified
   boldness: moderate
+  amends: "75b18577aced0fec1e9425504e2d9e25328ef48c"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
   date: 2026-09-03
   of: 905dbc2b9536e4856734dec32a3fa98f72883043
+alternatives:
+  - name: draft
+    source: ai
+  - name: traditions-graph-declares-move
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -39,8 +48,17 @@ By import path, as Go names packages. A repository is a module named by its path
 
 The author's ruling of 2026-09-02. Traditions to record as readings: Go modules, whose `replace` directive is the shim's model; Unix mount namespaces, which map a path prefix to another tree.
 
+## Alternatives
 
-## Draft
+### draft
+
+The draft adds to the standing answer one sentence creating the traditions graph: a graph may be a mount of what is not this project's own disposition, the traditions graph holding one root node per tradition the record reads, with a tradition that comes to have a graph of its own reached by the same path. It carries the same public-graph mount shim, now with the redirect obligation web-routing adopts, and a rationale naming the model of a tradition as a mount. It presumes traditions-home's recommended option, which is unruled, and the manifest entry that would create the graph is shown on traditions-home rather than here.
+
+### traditions-graph-declares-move
+
+The counter-argument, twice recorded: the traditions graph inherits the manifest's shape for graphs that move, a target and a liquidation, and has neither, so the manifest would carry a graph of a third kind with no declared future, while the author's own model is that a tradition could be represented by its own graph, a move this entry does not anticipate and which web-routing's adopted principle would make owe redirects. This alternative gives the traditions graph a declared target and liquidation like the public graph's, one line in the manifest entry, so that every graph in the manifest declares its future.
+
+## Recommendation
 
 ```markdown
 ---
@@ -71,7 +89,7 @@ By import path, as Go names packages. A repository is a module named by its path
 The author's ruling of 2026-09-02, and the model of a tradition as a mount that could be a graph of its own.
 ```
 
-## Proposal
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -129,3 +147,12 @@ Two ruling-stage nodes rest on maieutic ground without saying so. Rationale-edge
 Also named: commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/under, commons.systems/disposition-graph/tier, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/readings.
 
 Proposed: Rule traditions-home before readings and namespaces, and show the manifest entry on traditions-home so the author sees what they are creating. Rule rationale-edge and re-answer tier before under, and add to rationale-edge one clause saying its parent is unanswered. Under is then drafted from the three outcomes, simplified as the decomposition finding proposes.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `draft` (ai); `traditions-graph-declares-move` (review, 2026-09-03).
+The recommendation adopts `draft` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, own-question: A tradition is a mount because it could theoretically be represented by its own graph with its own archē and its own references to traditions.
+Moved to other nodes as alternatives: `show-the-manifest-entry` on commons.systems/disposition-graph/traditions-home; `disclose-unanswered-parent` on commons.systems/disposition-graph/rationale-edge.
+The census unit's note: The Draft is the recommendation, source ai. The second alternative is the review's counter-argument, which the session's reply hands to the sitting to decide. Excluded as already ruled: a graph per tradition, rejected in the sitting's own Rejected list. Excluded as applied: the redirect obligation web-routing asked the shim to carry, which I verified is now in both the frontmatter and the draft. The author's words here are a fragment of a longer 2026-09-02 quotation whose home is readings; carried on this node as the ground of the naming question, which validation 14 admits. Two elsewhere entries come from this node's placement finding.

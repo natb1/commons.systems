@@ -1,6 +1,17 @@
 ---
 question: What preserves the author's intention while the dialogue rationalizes it?
 stage: periagogic
+alternatives:
+  - name: fidelity-check-in-review
+    source: ai
+  - name: periagoge-across-sittings
+    source: ai
+  - name: signal-measure-on-frontier
+    source: ai
+  - name: compacted-account
+    source: ai
+  - name: no-mechanism
+    source: ai
 under:
   - commons.systems/disposition-graph/growth
 ---
@@ -9,7 +20,29 @@ under:
 The author, 2026-09-03:
 > we also require (unanswered) disposition about how the dialogue phases avoid the loss of author intention prior to confirmation. Confirmation is a gate that prevents misclassified authority of disposition, but what preserves the signal of author intention while the dialogue is rationalizing the unanswered frontier (like in this session).
 
-## Proposal
+## Alternatives
+
+### fidelity-check-in-review
+
+A fidelity check in the clean-context review, separate from coverage: the reviewer reads the author's verbatim words and the draft, and nothing else, and judges whether the draft is what the author meant. The clean-context review already runs a fresh context; this asks it a different question with a narrower brief, and would add a validation to the frontier-consistency list.
+
+### periagoge-across-sittings
+
+The periagogic conduct extended across sittings rather than within one: on re-entry to a node the author is turned back to their own prior words before the AI's accumulated account, so the frame is re-grounded at every return. This amends growth's conduct rather than adding a check.
+
+### signal-measure-on-frontier
+
+A signal measure on the frontier, whatever the right one is, surfaced beside rank, so that a node whose author-signal has thinned is visible without being read in full. The byte ratio measured here, 6.2 per cent across the graph and falling to about 4 per cent from the second review round on, is offered as a symptom rather than as the measure; naming the right measure is part of what this question asks, and the measure would join attention's rank.
+
+### compacted-account
+
+Compaction of the account: superseded review sections collapse at each recording, so that the node's account does not grow without bound while the author's words stay fixed. This bounds the dilution at its source rather than measuring or checking it, and would change what a node carries, which is dialogue's question.
+
+### no-mechanism
+
+Nothing, on the argument that the author's verbatim words are always present in the node and the author always rules on the whole node, so no further mechanism is owed. The node's own evidence against it is that two of the three losses it records were caught only because the author was reading closely, which is the attention the record exists to conserve.
+
+## Account
 
 Confirmation gates authority: it prevents an answer being stamped at a class the author did not grant, and `authority` makes the guard explicit, a ratified stamp whose ruling is not in the record being invalid. It gates nothing about meaning. A node can arrive at confirmation carrying the author's authority class correctly and the author's intention only distantly, and the confirmation ritual cannot tell the two cases apart, because by then the thing being confirmed is the AI's text.
 
@@ -72,3 +105,10 @@ Authority none: an un-aligned disposition in the author's words, recorded at the
 The movement owed is periagogic and has not been run.
 
 Also named: `commons.systems/disposition-graph/clean-context-review`, `commons.systems/disposition-graph/frontier-consistency`, `commons.systems/disposition-graph/dialogue`, `commons.systems/disposition-graph/quotes`, `commons.systems/disposition-graph/attention`, `commons.systems/disposition-graph/un-aligned-children`.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `fidelity-check-in-review` (ai); `periagoge-across-sittings` (ai); `signal-measure-on-frontier` (ai); `compacted-account` (ai); `no-mechanism` (ai).
+Merge analysis of the author's words: 2026-09-03, own-question: An unanswered disposition is owed about how the dialogue's phases avoid the loss of author intention before confirmation, since confirmation gates misclassified authority but not the preservation of the author's signal while the frontier is being rationalized.
+The census unit's note: The five entries are the node's own list of candidates, offered as alternatives and not as an answer, with no recommendation and no Answer section, so adopts is null and the list transcribes them. The four mechanisms the account describes, growth's periagogic conduct, dialogue and checkpoint, frontier-consistency's coverage, and quotes and recording, are evidence of what is already protected and are not alternatives. I minted no elsewhere entries: the section naming what this sitting would amend, growth, clean-context-review, frontier-consistency, dialogue and attention, is conditional on a ruling that has not been given, so nothing there proposes a change to a target yet.

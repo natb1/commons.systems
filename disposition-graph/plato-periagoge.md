@@ -2,13 +2,23 @@
 question: Does Plato's turning of the soul ground the periagogic conduct of the interview?
 stage: ruling
 recommendation:
+  adopts: standing
   class: delegated
   boldness: high
+  amends: "0f30a15c1ff956bcde006cef7e51516c58570a67"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: 0f30a15c1ff956bcde006cef7e51516c58570a67
+alternatives:
+  - name: relation-diverged
+    source: review
+    ref: "2026-09-03"
+  - name: citation-once
+    source: review
+    ref: "2026-09-03"
 form: reading
 authority:
   class: deferred
@@ -27,7 +37,17 @@ Yes, for the conduct in which the record is authoritative and the author is turn
 
 Adopted as the name and the ground of the periagogic conduct. The divergence to keep in view: Plato's turning is toward the forms, while here it is toward a record the author wrote or accepted, so the authority that the turning appeals to is the author's own past decision, not a truth above the author.
 
-## Proposal
+## Alternatives
+
+### relation-diverged
+
+The reading's relation becomes diverged rather than adopted, recording what the rationale already names: Plato's turning is toward the forms, while here the turning is toward a record the author wrote or accepted, so the authority appealed to is the author's own past decision and not a truth above the author. Two reviews found the divergence stated in prose under a relation of adopted, which readings provides diverged for, and the session's reply says the author may rule the relation diverged.
+
+### citation-once
+
+The Republic loci are stated once, on this reading, and growth cites the reading instead of restating them. Growth's answer cites 518b to d while this node's source adds 521c and 515c to 516a, so the record gives the same conduct two citations and growth's periagogic movement requires probes cited by locus.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -78,3 +98,11 @@ Readings' rule is that a reading is 'ratified when the author has read the prima
 Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/aristotle-hexis, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/readings.
 
 Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `relation-diverged` (review, 2026-09-03); `citation-once` (review, 2026-09-03).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Moved to other nodes as alternatives: `cite-the-reading` on commons.systems/disposition-graph/growth.
+The census unit's note: The node has an answer and no draft, so it adopts standing, and its recommendation is already delegated as the readings rule requires. The one substantive thing still before the author is the relation: the divergence is named in the rationale and the relation still reads adopted, and the session's reply explicitly leaves the ruling to the author. The locus mismatch is the second, since the record still carries two citations for one conduct. I excluded the facts-line repairs, the one matching the frontmatter having been applied and the boldness split being an account of the facts rather than a different answer, and the readings coverage finding, which this node already satisfies. There is no Disposition section, so the merge analysis is empty. The locus proposal touches growth, which does not carry this review, so it goes elsewhere.

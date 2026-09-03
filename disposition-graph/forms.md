@@ -1,19 +1,74 @@
 ---
 question: Which forms may an answer take?
-stage: ruling
+stage: review
 recommendation:
+  adopts: rule-beside-disposition
   class: ratified
   boldness: moderate
-review:
-  verdict: forward
-  strength: moderate
-  date: 2026-09-03
-  of: 2443bdd51f8aad4c8b45db6d5276e12aceebd5e5
+  amends: "2443bdd51f8aad4c8b45db6d5276e12aceebd5e5"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+alternatives:
+  - name: rule-beside-disposition
+    source: ai
+  - name: all-five-forms
+    source: ai
+  - name: mint-assumption-question
+    source: review
+    ref: "2026-09-03"
+  - name: authors-form-questions
+    source: author
+    ref: "2026-09-02"
+  - name: assumption-is-instrumentation
+    source: author
+    ref: "2026-09-02"
 under:
   - commons.systems/disposition-graph/node
 ---
+## Alternatives
 
-## Proposal
+### rule-beside-disposition
+
+Keep rule as a form beside disposition and migrate nothing, which is where the recommendation moved after the first review's strong counter-argument. The merge it replaced rested on a carrier no criterion has: nothing in the graph says whether an answer is to be achieved or maintained, almost every node is unguarded, and instruments' operational reading of a failure as work or as a variance would lose its class. Nothing migrates under it, which the second review verified is the strongest fact in its favour.
+
+### all-five-forms
+
+Keep all five forms, target, rule, assumption, archē and reading, of low boldness. The second review's counter-argument argues for it: the author asked three separate questions and the recommended option answers only the second, while assumption as a form is still doing work, two nodes carrying form assumption today and their drafts keeping it, so the recommended option leaves the record with assumption as a form and instruments' draft calling it a criterion kind.
+
+### mint-assumption-question
+
+Take the recommended option and mint the author's unanswered question, whether assumption is a form at all, as its own question under this node rather than letting instruments' draft carry it. The session's reply offers this to the author beside the third option, and the contradiction finding recorded here proposes the same.
+
+### authors-form-questions
+
+Three of the five author quotations carried on node are the ground of forms' whole sitting, which paraphrases them as the author asking whether target is synonymous with disposition, what rule adds, and whether assumption is a form at all. The last, whether this is correctly encoded as form assumption against form disposition with unvalidated instrumentation, is carried verbatim on capture, knowledge-store and purpose and on no node that answers it, while forms carries no Disposition section of its own and stands at the ruling stage recommending ratified, which authority makes invalid without the ruling in the record. The candidate is that forms carry these words as its ground, node keeping them as context on the part it answers. Raised on commons.systems/disposition-graph/node, commons.systems/disposition-graph/capture.
+
+### assumption-is-instrumentation
+
+The author's words carried on instruments state that assumption is not a form but instrumentation, the condition under which an answer stays valid. Forms' option that carried this was withdrawn after its review, and its surviving recommendation, keeping rule beside disposition, leaves the question the author asked unanswered, as forms' own reply and the contradiction finding both say. The author's leaning is therefore a candidate answer with no option representing it. (Raised on commons.systems/disposition-graph/instruments.) Also raised on commons.systems/disposition-graph/purpose.
+
+## Recommendation
+
+```markdown
+---
+question: Which forms may an answer take?
+form: rule
+authority:
+  class: ratified
+  by: Nathan Buesgens
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/node
+---
+## Answer
+
+One of five: a target, something that should become true; a rule, something that must stay true while working; an assumption, something about the world the answer relies on; an arche, a first principle held and never derived; and a reading, what a tradition says about the answer above it. Rule stays beside target rather than merging with it into a single disposition form, because the difference between them is what a failing check means: a target's failing check is work, and a rule's failing check is a variance that gates the work that broke it. That difference has no other carrier, since no criterion says whether its answer is to be achieved or maintained and an unguarded node has no criterion at all, so a merge would leave a failure with no class for the frontier to read. Nothing migrates under this answer: the five names stand as the validator already accepts them, and no node is rewritten. Whether assumption is a form at all is not settled here; it stands as its own question under this node.
+
+## Rationale
+
+The author asked what a rule adds that a target does not, and the answer is the reading of its failure: work in the one case, a variance that gates work in the other, which is how the frontier decides what to do next. The merge that would have dissolved the question rests on a carrier the record does not have, and almost every node is unguarded, so the distinction it removes would have nowhere to live. Keeping the names also costs nothing, where the merge would make twenty-two nodes non-conforming at once and change the validator's accepted set. Rejected: four forms with target and rule merged as disposition and assumption made a criterion kind, because the distinction it removes has no carrier and the migration touches twenty-two nodes and the validator; and keeping all five forms as a bare status quo, because it records no reason and leaves the author's question about rule unanswered. The goal-oriented requirements tradition, which carries achieve and maintain on the goal's criterion rather than on its kind, is owed as a reading here.
+```
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -72,3 +127,14 @@ One schema question is in three states inside one batch. Forms' session reply: '
 Also named: commons.systems/disposition-graph/node, commons.systems/disposition-graph/instruments.
 
 Proposed: Forms is the survivor and is ruled first: move the '(recommended)' marker to option 2. Node's draft then reverts to five forms with the un-aligned-disposition sentence restored, and its Proposal summary is rewritten. Instruments' draft strikes the achieve-or-maintain sentence and keeps the three criterion kinds without it. The assumption question the author actually asked ('Is assumption a form at all?') is left unanswered by option 2 and should be minted as its own question under forms rather than carried by instruments' draft.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `rule-beside-disposition` (ai); `all-five-forms` (ai); `mint-assumption-question` (review, 2026-09-03); `authors-form-questions` (author, 2026-09-02, from commons.systems/disposition-graph/node); `assumption-as-form-question` (author, 2026-09-02, from commons.systems/disposition-graph/capture); `assumption-is-instrumentation` (author, 2026-09-02, from commons.systems/disposition-graph/instruments).
+The recommendation adopts `rule-beside-disposition` and is pinned to the standing text as it was at that commit. The recommended text was drafted at the re-encoding from the option the account marks recommended, so that the recommendation adopts an alternative with a text and not only a name; the earlier review read the options and not this text, so it is removed and the node returns to the review stage for the clean-context review of the batch.
+The census unit's note: No Answer and no Draft; the recommendation attaches to the option now marked recommended, keeping rule beside disposition. I excluded the four-form merge, since the Options block records it as withdrawn after the review and the session's reply says the counter-argument wins; if the author is to take it back it should be re-minted deliberately rather than inferred. The contradiction finding's two proposals for other nodes are in different states: node's draft still states the withdrawn merge, carried as an alternative on node itself, while instruments' draft no longer carries the achieve-or-maintain sentence. Three of the author's quotations on node ground this node's ruling and are moved here from there.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `authors-form-questions` absorbs `assumption-as-form-question`. The merge unit's note: assumption-as-form-question also restated the coverage finding's proposal that capture, knowledge-store and purpose cite forms, which is an alternative on those three nodes and not a change to forms, and it restated forms' second review's ask that the assumption half be minted under this node, which mint-assumption-question already carries and which stays separate. assumption-is-instrumentation is a different candidate answer (assumption is instrumentation, not a form) and stays.

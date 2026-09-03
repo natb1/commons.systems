@@ -1,19 +1,69 @@
 ---
 question: Where does a tradition node live?
-stage: ruling
+stage: review
 recommendation:
+  adopts: one-traditions-graph
   class: ratified
   boldness: moderate
-review:
-  verdict: forward
-  strength: moderate
-  date: 2026-09-03
-  of: 848aff5b9ecff9467e39717cc2fdb272394a3233
+  amends: "848aff5b9ecff9467e39717cc2fdb272394a3233"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+alternatives:
+  - name: one-traditions-graph
+    source: ai
+    ref: "2026-09-03"
+  - name: graph-per-tradition
+    source: ai
+    ref: "2026-09-03"
+  - name: nodes-inside-disposition-graph
+    source: ai
+    ref: "2026-09-03"
+  - name: show-the-manifest-entry
+    source: review
+    ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/readings
 ---
+## Alternatives
 
-## Proposal
+### one-traditions-graph
+
+The recommended option: one traditions graph on this ref, with one root node per tradition, added to the manifest beside the disposition graph and the public graph. A tradition root carries what any node carries, a question, an answer, a form and a stamp, and enters as an un-aligned disposition; the manifest entry declares no move, so unlike the public graph it carries no target and no liquidation condition. If a tradition later outgrows it, the record pays a directory move and a prefix rewrite with redirects.
+
+### graph-per-tradition
+
+One graph per tradition, which the review's strongest counter-argument prefers because it matches the author's own model exactly: a mount that could be represented by its own graph with its own archē and its own references. A tradition that later acquires its own repository needs no migration because it already is one, where the recommended option needs the same liquidation the public graph carries and that web-routing's adopted principle is uneasy with. Its cost is many near-empty manifests, which the reviewer calls real but cheap.
+
+### nodes-inside-disposition-graph
+
+Tradition nodes inside the disposition graph itself, with no new graph and no manifest edit, at low boldness. It is the cheapest option and the one the sitting ranks last; against it, stub-traditions proposes about thirty tradition roots, which would enter the disposition graph's rank order and the author's alignment queue directly rather than as a graph of their own.
+
+### show-the-manifest-entry
+
+Two readings of namespaces found that its draft creates a traditions graph the manifest does not carry, verified against disposition.yaml, and that the manifest edit is part of what the author would be confirming and is shown nowhere; the session's reply moved that obligation here, since traditions-home is ruled first. The placement finding of 2026-09-03 asks the same: rule traditions-home before readings and namespaces, and show on it the manifest entry the author is creating, with whatever target and liquidation the traditions graph needs. (Raised on commons.systems/disposition-graph/namespaces.) Also raised on commons.systems/disposition-graph/under.
+
+## Recommendation
+
+```markdown
+---
+question: Where does a tradition node live?
+form: rule
+authority:
+  class: ratified
+  by: Nathan Buesgens
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/readings
+---
+## Answer
+
+In a traditions graph of its own on this ref, one root node per tradition, declared in the manifest beside the disposition and public graphs. The entry carries no target and no liquidation condition, because the graph declares no move. A tradition root is a node like any other, a question, an answer, a form and a stamp, carrying the name it defines and its primary references, and it enters as an un-aligned disposition until the author has read it; the roots the stub-traditions node proposes join the author's queue in rank order like any other node. A tradition that outgrows the graph and acquires a repository of its own becomes a mount, and the record pays the move then, with redirects from the ids it had.
+
+## Rationale
+
+A tradition is a mount, and one graph gives every tradition an addressable home today at the cost of one manifest entry, where the alternative pays many near-empty manifests for a migration most traditions will never need. The manifest already carries a second graph, so the shape is proven and the readings and namespaces answers that assume a traditions graph can rest on it. Rejected: a graph per tradition, which matches the author's model that a tradition could be represented by its own graph but multiplies manifests for a case that has not arisen; and tradition nodes inside the disposition graph, because a tradition is not a disposition of this record's own and about thirty roots would enter the graph the author reads as their queue. The move a tradition may later make is the same liquidation the public graph carries, and web-routing's adopted principle makes it owe redirects, which is the price this answer accepts.
+```
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -70,3 +120,11 @@ Two ruling-stage nodes rest on maieutic ground without saying so. Rationale-edge
 Also named: commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/under, commons.systems/disposition-graph/tier, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/namespaces.
 
 Proposed: Rule traditions-home before readings and namespaces, and show the manifest entry on traditions-home so the author sees what they are creating. Rule rationale-edge and re-answer tier before under, and add to rationale-edge one clause saying its parent is unanswered. Under is then drafted from the three outcomes, simplified as the decomposition finding proposes.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `one-traditions-graph` (ai, 2026-09-03); `graph-per-tradition` (ai, 2026-09-03); `nodes-inside-disposition-graph` (ai, 2026-09-03); `show-the-manifest-entry` (review, 2026-09-03, from commons.systems/disposition-graph/namespaces).
+The recommendation adopts `one-traditions-graph` and is pinned to the standing text as it was at that commit. The recommended text was drafted at the re-encoding from the option the account marks recommended, so that the recommendation adopts an alternative with a text and not only a name; the earlier review read the options and not this text, so it is removed and the node returns to the review stage for the clean-context review of the batch.
+Moved to other nodes as alternatives: `parent-unanswered-clause` on commons.systems/disposition-graph/rationale-edge; `draft-after-three-rulings` on commons.systems/disposition-graph/under.
+The census unit's note: The node has no `## Answer` and no draft fence: its recommendation is one of three options listed in the account, so I named all three as alternatives and made the recommendation adopt the one marked recommended. Both reviews' findings — that the option does not say what a tradition root contains or what it does to the author's queue, and that the manifest edit is part of the option and is shown nowhere — were answered in the session's reply and are folded into the recommended option's text rather than minted as separate candidates. Whether a tradition is itself a form is left open by forms, node and this node's reply; I judged it a different question and did not make it an alternative here. The node has no `## Disposition` section, so there is no author text to merge. The placement finding's proposals for rationale-edge and under are moved to those nodes.

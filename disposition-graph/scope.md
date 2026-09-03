@@ -2,13 +2,27 @@
 question: What does this repository cover, and in what order?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "261ffa74ad0d8e02d42c421649e8996036cace9c"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: 708da26c3b97b18e98255c7e6b1cc499049aa303
+alternatives:
+  - name: derived-boosts
+    source: ai
+  - name: check-instrument
+    source: ai
+  - name: say-instrument-not-criterion
+    source: review
+    ref: "2026-09-03"
+  - name: order-names-self-documentation
+    source: ai
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -60,7 +74,25 @@ The boosts of 2026-09-03 realize the order: this node 9 under purpose, above mod
 
 How high-level rank is materialized from this node, the recommendation. The order is recorded on this node as data, the field `order`, an ordered list of steps, each step one node or several that are equal, and the validator refuses a graph whose derived ranks do not realize it: every member of a step outranks every member of every later step, and the members of the first step are outranked by nothing under this node's parent but their own ancestors and descendants. The boosts remain the one mechanism of rank and the frontier and browser keep showing them; the order is recorded once; and since every landing on the graph is validated first, a boost that contradicts the order cannot land, which is what avoiding drift requires. This is the way the record already keeps its other invariants that span nodes, acyclicity and resolved parents. Considered and not recommended: deriving the boosts of the named nodes from the order, which needs a solver that must lift ancestors to lift a descendant, cannot make ranks at different depths equal, and fails in exactly the cases the validation rule reports, while hiding the boosts the projections display; a check instrument on this node, since an instrument measures the implementation against the record and turns a failure into work for the reconciliation loop, whereas an order the ranks contradict is an inconsistency of the record that must not land at all; moving the ordered nodes under this one so that the order becomes sibling order, which would make the tree carry priority, the conflation the attention node rejects; and leaving the boosts as the only record, which is the drift. This node defines the field, and the validator has held the ranks to it since 2026-09-03; the hand-set boosts declared as a shim that day were liquidated the same day.
 
-## Proposal
+## Alternatives
+
+### derived-boosts
+
+Instead of validating the boosts against the order, derive them from it: a solver reads the order field and writes the boosts of the named nodes, so the order is the only hand-written record of high-level rank. The rationale considered and did not recommend it, because the solver must lift ancestors to lift a descendant, cannot make ranks equal at different depths, and hides the boosts the projections display; the Proposal nonetheless puts the mechanism to the author against the three alternatives it names.
+
+### check-instrument
+
+Instead of a validator rule, hang a check instrument on this node that measures the ranks against the order and reports a failure as work for the reconciliation loop. The rationale prefers the validator on the ground that an order the ranks contradict is an inconsistency of the record that must not land at all, rather than a gap between record and implementation; the author may prefer the instrument, which lets a contradicting boost land and be reconciled.
+
+### say-instrument-not-criterion
+
+The vocabulary finding makes instruments the survivor of criterion and holds that it must be ruled before the nodes that use the word. Until then scope's answer says instrument, the term instruments actually defines, or discloses that the term arrives with instruments. (Raised on commons.systems/disposition-graph/instruments.)
+
+### order-names-self-documentation
+
+Scope's order field substitutes the projection node for the author's own item, self documentation via the graph browser, and its validator rule materializes that substitution. If self-documentation becomes a node of its own the first step of the order must name it instead, so the alternative is that scope's answer say the mapping stands only until self-documentation is ruled, and that the substitution is the one item the AI changed in the author's list. (Raised on commons.systems/disposition-graph/self-documentation.)
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -122,3 +154,12 @@ Four author quotations are carried verbatim on more than one node, verified by e
 Also named: commons.systems/disposition-graph/audience, commons.systems/disposition-graph/coverage, commons.systems/disposition-graph/knowledge-store, commons.systems/disposition-graph/capture, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/node, commons.systems/disposition-graph/form-vocabulary, commons.systems/disposition-graph/self-documentation, commons.systems/disposition-graph/rsi.
 
 Proposed: Most of these are legitimate context on a child that answers a part of the words, and the validation should say so: amend frontier-consistency's validation 14 to read that each part of a disposition is answered by exactly one node, and that a quotation may be carried on a child as the ground of the part it answers. Two are genuine double answers and should be resolved: audience and coverage both answer the audience question, which the audience prune resolves in coverage's favour; knowledge-store, capture and purpose all carry the form question, which forms answers, so all three should cite forms rather than each carry the quote.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `derived-boosts` (ai); `check-instrument` (ai); `say-instrument-not-criterion` (review, 2026-09-03, from commons.systems/disposition-graph/instruments); `order-names-self-documentation` (ai, 2026-09-03, from commons.systems/disposition-graph/self-documentation).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: This node carries the rationale for high-level ranking, sits just after purpose as the scope section and the table of contents, records the order purpose, then scope and self-documentation as equals, then alignment, harness context management, reconciliation and rsi, and materializes high-level rank so it cannot drift.
+Moved to other nodes as alternatives: `define-criterion` on commons.systems/disposition-graph/instruments; `fold-into-coverage` on commons.systems/disposition-graph/audience; `cite-forms-for-the-form-question` on commons.systems/disposition-graph/purpose; `cite-forms-for-the-form-question` on commons.systems/disposition-graph/knowledge-store; `cite-forms-for-the-form-question` on commons.systems/disposition-graph/capture.
+The census unit's note: The two alternatives are the mechanism options the Proposal explicitly puts to the author against the recommended validator rule; I judged them pending rather than rejected because the Proposal says the ruling covers the mechanism, even though the rationale lists them under considered-and-not-recommended. I dropped the other two options there: sibling order is closed by attention's doctrine against the tree carrying priority, and leaving the boosts alone is the drift the disposition exists to stop. The counter-argument about a seventh section is an observation and is excluded. Five elsewhere entries come from this node's two frontier findings; the validation-14 half of the coverage finding is already applied on frontier-consistency and is not repeated.

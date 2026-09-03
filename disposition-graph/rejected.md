@@ -1,24 +1,83 @@
 ---
 question: How are rejected alternatives recorded?
-stage: ruling
+stage: review
 recommendation:
+  adopts: rejected-list-on-node
   class: ratified
   boldness: moderate
-review:
-  verdict: forward
-  strength: moderate
-  date: 2026-09-03
-  of: a690b78059fc71af0d30081475052a0b71ce3460
+  amends: "a690b78059fc71af0d30081475052a0b71ce3460"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+alternatives:
+  - name: rejected-list-on-node
+    source: ai
+    ref: "2026-09-03"
+  - name: rejected-nodes
+    source: ai
+    ref: "2026-09-03"
+  - name: prose-in-rationale
+    source: ai
+    ref: "2026-09-03"
+  - name: authors-rejected-section-question
+    source: author
+    ref: "2026-09-02"
+  - name: record-rejected-dispositions
+    source: author
+    ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/node
 ---
-
 ## Disposition
 
 The author, 2026-09-03:
 > The under edge disposition lists 'rejected' as prose under 'rationale' - it may make sense to record rejected dispositions, but this seems too ad-hoc.
 
-## Proposal
+## Alternatives
+
+### rejected-list-on-node
+
+A rejected list on the node, each entry one alternative answer and why it lost, projected in the authority section, with the rationale keeping only why the standing answer stands. It is a schema change, and adopting it means rewriting the rejected prose of purpose, authority, node, instruments, readings, namespaces, projection and model before any of them is recorded. The reviews ask it to say what an entry contains, whether an entry is versioned if the alternative is later adopted, and that a rationale may cite its rejected entries, since several rationales argue by elimination.
+
+### rejected-nodes
+
+Rejected alternatives become nodes of their own carrying a rejected class. It is the boldest of the three options and is neither recommended nor withdrawn.
+
+### prose-in-rationale
+
+Rejected alternatives stay prose in the rationale, as now, with the browser's heading match documented as the contract rather than left as an accident of the template. The second review established that the projector already renders a rejected section from a rationale heading, so the projection the author asked for needs no schema change, and the session's reply says this materially favours the third option at zero cost.
+
+### authors-rejected-section-question
+
+The author's words of 2026-09-02 asking what the rejected section is a projection of, and proposing an authority section with notes on pending ratification in its place, are the question rejected answers, and they are carried on node rather than on rejected. Rejected's own Disposition carries different words, those of 2026-09-03 on the under edge listing rejected as prose. It stands at the ruling stage recommending ratified, so the ground of its ruling should be on it. (Raised on commons.systems/disposition-graph/node.)
+
+### record-rejected-dispositions
+
+The author's words carried here say that listing rejected alternatives as prose under the rationale is too ad hoc and that recording rejected dispositions may make sense. Rejected carries the same words and its recommended option is the structured list, but its second review established that the browser already renders a rejected section from rationale prose, which materially favours keeping the prose. (Raised on commons.systems/disposition-graph/under.)
+
+## Recommendation
+
+```markdown
+---
+question: How are rejected alternatives recorded?
+form: rule
+authority:
+  class: ratified
+  by: Nathan Buesgens
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/node
+defines:
+  - rejected alternative
+---
+## Answer
+
+As a rejected list on the node, one entry for each alternative answer that was weighed and lost, each naming the alternative as it was put and the reason it lost. The projector reads the list into the authority section beside the stamp, so what was considered is shown with what was decided, rather than recovered from prose by matching a heading. The rationale keeps why the standing answer stands and may cite its rejected entries, since a rationale that argues by elimination has no argument left without them. An entry is not a page: an answer that was not taken has no standing and earns no node of its own. When an alternative is later adopted it leaves the list and becomes the answer, and version control holds what it replaced.
+
+## Rationale
+
+Decision records keep the considered options as structure with the reason each lost, and structure is what a projection can rely on. The browser today finds the rejected alternatives by matching a heading in the rationale, which works and is an accident of the template rather than a contract, and it is that ad-hoc quality the author objected to; a list makes the contract explicit at the price of a schema change and of rewriting the drafts in this batch before any of them is recorded, which is paid once. Rejected: rejected alternatives as nodes of their own with a rejected class, because an answer with no standing does not earn a page and the record would grow a node for every discarded option; and prose in the rationale as now, which needs no schema change and which the projector already reads, but which leaves the projection resting on a heading convention nothing checks. The author, 2026-09-03: "The under edge disposition lists 'rejected' as prose under 'rationale' - it may make sense to record rejected dispositions, but this seems too ad-hoc."
+```
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -65,3 +124,11 @@ On the three facts: The frontmatter recommendation (ratified, moderate) is right
 Strongest counter-argument (moderate): The author's objection was that the '### Rejected' section 'seems too ad-hoc' as a projection source, and the projector already reads it, so the schema change buys structure for the projector at the price of a field every node must maintain and that will accumulate entries nobody prunes — the drift the record resists elsewhere. With the projector fact now established, option 3 (prose in the rationale, as now) answers the author's objection at zero cost, provided the browser's heading match is documented as the contract rather than left as an accident of the template.
 
 The session's reply: Validated: the browser renders a rejected section from a rationale heading, so the projection the author asked for needs no schema change, which favours the third option; the first option would rewrite eight drafts before recording, and a rationale may cite its rejected entries. Stage ruling.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `rejected-list-on-node` (ai, 2026-09-03); `rejected-nodes` (ai, 2026-09-03); `prose-in-rationale` (ai, 2026-09-03); `authors-rejected-section-question` (author, 2026-09-02, from commons.systems/disposition-graph/node); `record-rejected-dispositions` (author, 2026-09-03, from commons.systems/disposition-graph/under).
+The recommendation adopts `rejected-list-on-node` and is pinned to the standing text as it was at that commit. The recommended text was drafted at the re-encoding from the option the account marks recommended, so that the recommendation adopts an alternative with a text and not only a name; the earlier review read the options and not this text, so it is removed and the node returns to the review stage for the clean-context review of the batch.
+Merge analysis of the author's words: 2026-09-03, own-question: The under edge disposition lists rejected as prose under rationale; recording rejected dispositions may make sense but this seems too ad hoc.
+The census unit's note: The node has no answer and no draft; its three options are the alternatives and adopts names the one the Options block still marks recommended. I flag a discrepancy the session must resolve: the second review's session reply says the established projector fact favours the third option, yet neither the recommended marker nor the frontmatter recommendation was moved, which is the same clerical hazard quotes' review named and which quotes did fix. If the reply is taken as the recommendation, adopts should be prose-in-rationale instead. I folded the counter-argument's condition, documenting the browser's heading match as a contract, into the third option's text rather than minting a fourth, and left the reviews' three refinements of option one, the entry's contents, versioning, and a rationale citing its entries, inside the first option's text. Nothing goes elsewhere: the eight drafts the first option would rewrite are a consequence of the ruling, not a separate proposal against those nodes.

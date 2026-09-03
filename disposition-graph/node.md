@@ -2,13 +2,28 @@
 question: What is a node?
 stage: maieutic
 recommendation:
+  adopts: four-form-draft
   class: ratified
   boldness: moderate
+  amends: "194ba2fa54f12193357a9e08b12ab850f809c186"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: kickback
   strength: strong
   date: 2026-09-03
   of: 50b9ea4f40a07e8facf86b081e6183c2381cce21
+alternatives:
+  - name: four-form-draft
+    source: ai
+  - name: five-forms-restored
+    source: review
+    ref: "2026-09-03"
+  - name: un-aligned-disposition-not-open-question
+    source: review
+    ref: "2026-09-03"
+  - name: absorb-form-vocabulary
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -52,8 +67,25 @@ One question and its standing answer. The question is one line someone could ask
 
 One question per node makes "same scope" decidable: two texts share a node only if one replaced the other. Rejected: the node as a topic, which mixes authority in one text; the node as a cluster around a default scope; history kept inside the node. Traditions to record as readings: issues as questions (Kunz and Rittel, IBIS, 1970); the answer as an accumulated restatement (the common-law restatement); store once and derive the rest (Codd). An archē is held, never derived, so nothing ranks above one: Metaphysics V.1 on the senses of archē, Posterior Analytics I.3 on the regress of demonstration, Nicomachean Ethics I.4 on beginning from what is known to us, each owed as a reading.
 
+## Alternatives
 
-## Draft
+### four-form-draft
+
+The Draft this node carries collapses the five forms to four: target and rule merge as disposition, with achieve or maintain carried by the criteria; archē and reading stay; tradition is added as a form. It also replaces the un-aligned-disposition sentence with a stamp rule, that every node carries a stamp or is an open question, and moves assumption out of the forms into a criterion kind. Its frontmatter uses a criteria key the schema does not have and drops instrument from defines while the node still carries an instrument block, so it could not land as written.
+
+### five-forms-restored
+
+The second review kicked the node back and the contradiction finding, which makes forms the survivor, proposes the recommended text revert to five forms and its summary be rewritten, since it still states the four-form merge and the assumption-is-a-criterion clause that forms' own reply withdrew, and no criterion in the record carries the achieve-or-maintain marker the merge rested on. It also restores the sentence that a node with a question and no answer is an un-aligned disposition, which is the schema node's only statement of the term the validator's message quotes, and leaves whether a tradition carries a form of its own to traditions-home. Node's reply accepts all of this and defers the redraft to the sitting, so it is owed and the text still carries the merge. Raised on commons.systems/disposition-graph/instruments.
+
+### un-aligned-disposition-not-open-question
+
+The vocabulary finding holds that transience is the survivor of the term: un-aligned disposition is defined there and open question is defined by no node while fifteen use it. Node's recommended text still says 'Every node carries a stamp, or it is an open question awaiting its answer', and node's own statement of the rule was struck. The finding proposes node take the defined term instead, restoring 'a node with a question and no answer is an un-aligned disposition', which is the sentence the validator's message quotes. Raised on commons.systems/disposition-graph/transience, commons.systems/disposition-graph/growth.
+
+### absorb-form-vocabulary
+
+The redundancy finding makes projection and readings the survivors of the linking rules and proposes that this node be folded into node's rationale as a rejected alternative and pruned. Node already carries the author's quotation verbatim, so the fold costs no words; what it adds to node is the recorded rejection of one node per form, on the ground that each such node would restate the definition its owning node already carries. (Raised on commons.systems/disposition-graph/form-vocabulary.) Also raised on commons.systems/disposition-graph/projection.
+
+## Recommendation
 
 ```markdown
 ---
@@ -84,7 +116,7 @@ One question and its standing answer. The question is one line someone could ask
 One question per node makes "same scope" decidable: two texts share a node only if one replaced the other. Target and rule were one form seen from two sides, achieve and maintain, which the goal-oriented requirements tradition carries on the goal's criterion rather than on its kind; assumption began as instrumentation, the condition under which an answer stays valid, and is recorded where it is checked. Rejected: the node as a topic, which mixes authority in one text; the node as a cluster around a default scope; history kept inside the node; five forms with target, rule, and assumption apart, because the split recorded the same fact twice, once as form and once as criterion.
 ```
 
-## Proposal
+## Account
 
 ### Amended with the transience overrule, 2026-09-03
 
@@ -181,3 +213,16 @@ Four author quotations are carried verbatim on more than one node, verified by e
 Also named: commons.systems/disposition-graph/audience, commons.systems/disposition-graph/coverage, commons.systems/disposition-graph/knowledge-store, commons.systems/disposition-graph/capture, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/form-vocabulary, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/self-documentation, commons.systems/disposition-graph/rsi.
 
 Proposed: Most of these are legitimate context on a child that answers a part of the words, and the validation should say so: amend frontier-consistency's validation 14 to read that each part of a disposition is answered by exactly one node, and that a quotation may be carried on a child as the ground of the part it answers. Two are genuine double answers and should be resolved: audience and coverage both answer the audience question, which the audience prune resolves in coverage's favour; knowledge-store, capture and purpose all carry the form question, which forms answers, so all three should cite forms rather than each carry the quote.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `four-form-draft` (ai); `five-forms-restored` (review, 2026-09-03); `un-aligned-disposition-not-open-question` (review, 2026-09-03, from commons.systems/disposition-graph/transience); `revert-the-draft-to-five-forms` (review, 2026-09-03, from commons.systems/disposition-graph/instruments); `absorb-form-vocabulary` (review, 2026-09-03, from commons.systems/disposition-graph/form-vocabulary); `un-aligned-disposition-term` (review, 2026-09-03, from commons.systems/disposition-graph/growth).
+The recommendation adopts `four-form-draft` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, new-answer on commons.systems/disposition-graph/forms: Is form: target synonymous with disposition, and would disposition be the better name; one of the three form questions forms' sitting is built on. 2026-09-02, new-answer on commons.systems/disposition-graph/form-vocabulary: Assumption deserves a target disposition, along with tradition and disposition, because that is how vocabulary is recorded rather than bolted on, with a recommendation for how hyperlinks avoid drift; carried verbatim on form-vocabulary, which answers it. 2026-09-02, new-answer on commons.systems/disposition-graph/forms: Is assumption a form at all, the concept having begun as instrumentation, an answer valid so long as an assumption holds. 2026-09-02, new-answer on commons.systems/disposition-graph/forms: What is the function of a rule form that a target or disposition does not already handle. 2026-09-02, new-answer on commons.systems/disposition-graph/rejected: What is the rejected section a projection of, and would an authority section with notes on pending ratification make more sense than an ad-hoc rejected section.
+Moved to other nodes as alternatives: `authors-form-questions` on commons.systems/disposition-graph/forms; `authors-rejected-section-question` on commons.systems/disposition-graph/rejected.
+The census unit's note: The Draft is what the recommendation adopts; the reverted five-form text the reviews and the contradiction finding ask for is the second alternative. That is borderline against excluding the standing answer, since the redraft is close to what stands but not identical: it takes un-aligned disposition for open question and leaves the tradition form to traditions-home. Four of five author quotations answer other nodes. Two of those, on the form list, are the ground of forms, which carries no words of its own, and one grounds rejected, so both moved elsewhere; the vocabulary quotation is already verbatim on form-vocabulary. The node-and-forms redundancy on the form list is a live contradiction the record flags, so I noted rather than proposed a fold.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `five-forms-restored` absorbs `revert-the-draft-to-five-forms`; `un-aligned-disposition-not-open-question` absorbs `un-aligned-disposition-term`. The merge unit's note: five-forms-restored is the broader of its pair and carries the un-aligned-disposition clause as well; that clause is also the whole of the second merged alternative, so the two remain separable only because five-forms-restored's change is the form list. absorb-form-vocabulary is a distinct fold and stays.

@@ -2,13 +2,26 @@
 question: Does freedom as non-domination support the modal reading of this root?
 stage: maieutic
 recommendation:
+  adopts: standing
   class: delegated
   boldness: high
+  amends: "d8e9b465fe722085ad7a3c570357d87947718e5b"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: d8e9b465fe722085ad7a3c570357d87947718e5b
+alternatives:
+  - name: record-the-divergence
+    source: review
+    ref: "2026-09-03"
+  - name: sen-capability-loss
+    source: review
+    ref: "2026-09-03"
+  - name: disclose-unstated-arche
+    source: review
+    ref: "2026-09-03"
 form: reading
 authority:
   class: deferred
@@ -27,7 +40,21 @@ Supports. Unfreedom is another's capacity to interfere arbitrarily, whether or n
 
 Sen's capability approach says the same of freedom in general, freedom as what one is able to do rather than what one does; a separate reading is owed for it. Validated by the AI on 2026-09-02 from its own knowledge; deferred until the author reads the chapter.
 
-## Proposal
+## Alternatives
+
+### record-the-divergence
+
+The frontmatter records the relation as adopted with no divergence, although the transposition is large: non-domination is a status between persons under institutions, applied here to a person's relation to their own tools. Evaluation requires the divergence to be recorded or it is a frontier item deferred to neither side. The alternative records the transposition as a divergence on this reading, which the session accepted as owed at the sitting and which has not been written.
+
+### sen-capability-loss
+
+The reviewer's counter-argument, twice: a dominus with arbitrary power is a relation under institutions one cannot exit, and a tool the author can switch off either dominates the way any dependency does or does not dominate at all, so the analogy proves too much or too little. The failure the record actually fears is capture through atrophy, which is Sen's capability loss and not Pettit's mechanism. The alternative grounds the archē on the Sen reading this node's rationale defers and has never written, with Pettit demoted to a supporting reading or recorded as diverged.
+
+### disclose-unstated-arche
+
+The parent, public/agency, is at the periagogic stage with no author words anywhere on it, and this reading stands at the ruling stage arguing for an answer the author has never given. The alternative adds one clause saying the reading rests on an archē the author has not yet stated, and holds the reading to be re-read against the account the author gives at agency's sitting. The counter-argument on agency also observes that Pettit's structural test is adopted as support without the record carrying any structural test of its own. Raised on commons.systems/public/aristotle-arche-of-action, commons.systems/public/agency.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -86,3 +113,15 @@ Readings' rule is that a reading is 'ratified when the author has read the prima
 Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/disposition-graph/aristotle-hexis, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/readings.
 
 Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `record-the-divergence` (review, 2026-09-03); `sen-capability-loss` (review, 2026-09-03); `disclose-unstated-arche` (review, 2026-09-03); `reread-after-arche` (review, 2026-09-03, from commons.systems/public/agency).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Moved to other nodes as alternatives: `authors-own-arche` on commons.systems/public/agency; `delegated-not-ratified` on commons.systems/disposition-graph/software-factories; `delegated-not-ratified` on commons.systems/disposition-graph/spec-driven-development; `delegated-not-ratified` on commons.systems/disposition-graph/srs-introduction; `delegated-not-ratified` on commons.systems/disposition-graph/web-routing.
+The census unit's note: The reading has a standing answer and no recommended text, so it adopts standing, and it carries no author words, so its dispositions list is empty. Three alternatives are pending: recording the transposition as a divergence, the reviewer's rival grounding on Sen's capability loss, and the clause saying the reading rests on an archē the author has not stated. The stale prose facts line was corrected in the snapshot. The readings coverage finding is carried identically on aristotle-hexis; I emit its four class changes once, from here, and the agency proposal likewise, since the placement finding is carried on both readings and on purpose.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `disclose-unstated-arche` absorbs `reread-after-arche`.

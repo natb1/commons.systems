@@ -9,7 +9,7 @@ under:
 The author, 2026-09-03:
 > record unanswered disposition with reference to npm standard tradition to justify commit of package-lock.json - do not proceed to periagoge. Then you have bootstrap authority to commit the lock prior to confirmation for a clean git status
 
-## Proposal
+## Account
 
 Materialization says materialized implementation is "organized by the JavaScript monorepo convention: one repository, a root manifest declaring workspaces, and one directory per package under `packages/`". It names the manifest and the package layout; it does not say which of the install artifacts the convention produces are part of the record. The lockfile is the one that matters, because it is the only one that is both generated and meant to be committed, and because nothing in the graph yet justifies its presence: on the reading of materialization's own answer it is unsupported implementation, on the frontier and liquidated through reconciliation. This node asks the question that would support it.
 
@@ -52,3 +52,10 @@ Also named: `commons.systems/disposition-graph/readings`, `commons.systems/dispo
 Authority none: this is an un-aligned disposition in the author's words, recorded at their direction and carrying no answer. Boldness low: the disposition, the evidence, and the failure that raised it are the author's own and this session's, and the tradition is held in a reading with its own stamp. Persistence open, until the author rules.
 
 The recording and the landing of the lockfile were directed by the author, who granted bootstrap authority to commit it before confirmation. The commit is not an answer to this question and confers nothing on it; it is reported as what it is, and stays open to every exit.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Merge analysis of the author's words: 2026-09-03, own-question: Record an unanswered disposition, with a reference to the npm standard tradition, that would justify committing package-lock.json, and do not proceed to periagoge; bootstrap authority is granted to commit the lock before confirmation for a clean git status.
+Moved to other nodes as alternatives: `strike-met-yaml-shim` on commons.systems/disposition-graph/materialization; `reparent-under-lockfile` on commons.systems/disposition-graph/npm-committed-lockfile.
+The census unit's note: The node carries no recommendation field, so adopts is null, and I recorded no alternatives. That is deliberate: the author directed on 2026-09-03 that the periagogic movement not be run, and the node says in its own words that nothing in it is an answer, so there is no candidate before the author yet. Manufacturing one from the npm reading would put a draft where the author asked for none. Both elsewhere entries come from the node's account rather than from a review: the finding that materialization's yaml shim now has its condition met, which the node deliberately did not apply, and the reading's placement, which the node itself says can move once the children rule is settled and which un-aligned-children has now settled. The bootstrap-authority grant in the author's words is already carried as evidence on authority's shim, so nothing is owed there.

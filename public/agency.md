@@ -6,6 +6,13 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 605bc6201b77362b6a671e4b887fd58660ced997
+alternatives:
+  - name: structural-test
+    source: review
+    ref: "2026-09-03"
+  - name: authors-own-arche
+    source: review
+    ref: "2026-09-03"
 form: arche
 authority:
   class: deferred
@@ -39,7 +46,17 @@ The modal content is the point: capacity, not exercise. Being unable to recover 
 
 Stub note: drafted by the AI under the bootstrap grant from the author's rulings of 2026-09-02 and the author's own legacy text. Deferred until the author ratifies it. Pending readings to add under this node: Sen on capability, Hirschman on exit and voice, Korsgaard on authorship.
 
-## Proposal
+## Alternatives
+
+### structural-test
+
+The review's strongest counter-argument is that the answer's 'capacity, not exercise' makes the archē unfalsifiable: no observable state of the world contradicts it, an author who had in fact been captured would read the same answer and find nothing failing, and the node's only instrument is a re-grasp on events that carries no date and records no judgment. Pettit is adopted as support, but Pettit's test is structural — does another hold arbitrary power over you — and the record records no structural test of its own. The alternative is an archē stated so that something could fail it, which is what the reading under this node already supplies.
+
+### authors-own-arche
+
+Agency is at the periagogic stage after a kickback with no Disposition section and no author words anywhere, and its answer is written in the author's first person by the AI, while every node at the review or ruling stage descends from it. The finding proposes nothing be ruled before the author's own account of who is the origin of what is done in their name is in the record, the next sitting being a periagogic one on agency whose product is a Disposition section in the author's words, after which the two readings under it are re-read. (Raised on commons.systems/public/pettit-non-domination.)
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -82,3 +99,10 @@ Public/agency is at the periagogic stage after a kickback, with no '## Dispositi
 Also named: commons.systems/disposition-graph/purpose, commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination.
 
 Proposed: Rule nothing before the author's account of 'Who is the origin of what is done in my name?' is in the record. The next sitting is a periagogic one on agency, whose product is a '## Disposition' section in the author's own words; the alignment page already renders the free-text control for that stage. Purpose and the two readings each add one clause saying they rest on an archē the author has not yet stated. The two readings are then re-read against the answer the author gives, since both currently argue for the AI's draft of it.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `structural-test` (review, 2026-09-03); `authors-own-arche` (review, 2026-09-03, from commons.systems/public/pettit-non-domination).
+Moved to other nodes as alternatives: `restate-as-record-not-capacity` on commons.systems/disposition-graph/capture; `rests-on-unstated-arche` on commons.systems/disposition-graph/purpose; `reread-after-arche` on commons.systems/public/aristotle-arche-of-action; `reread-after-arche` on commons.systems/public/pettit-non-domination.
+The census unit's note: The node carries no `recommendation` field, so `adopts` is null, and it has no `## Disposition` section at all, so `dispositions` is empty — which is precisely what the review's kickback is about: the answer to 'Who is the origin of what is done in my name?' is written in the author's first person by the AI, and the author's own account has never been elicited. The one alternative I recorded is the counter-argument's structural test; I judged it borderline, since it is framed as an objection rather than as a proposed text, but it is a genuinely different answer to the graph's root question and the author should see it beside the draft. The review's proposals about the facts line and about moving the node to periagogic are process, not candidate answers, and the stage move is already applied. The redundancy and placement findings are moved to capture, purpose, and the two readings.

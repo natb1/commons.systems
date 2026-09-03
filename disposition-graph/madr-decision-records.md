@@ -2,8 +2,11 @@
 question: Do architecture decision records in the MADR form support encoding the dialogue state as alternatives with a recommendation among them?
 stage: review
 recommendation:
+  adopts: standing
   class: delegated
   boldness: high
+  amends: "67e9eb68c573831ea8445c23e1e3069c4ce9b056"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 form: reading
 authority:
   class: deferred
@@ -22,6 +25,11 @@ Supports it, and the dialogue state adopts its form. A MADR record lists the con
 
 Surfaced in the sitting on the dialogue node on 2026-09-03, when the author asked for the unanswered frontier to be encoded as a recommendation with dialogue state and a list of alternatives, and recorded under that node's rationale as the tradition the encoding adopts. Validated by the AI from its own knowledge of the template; deferred until the author reads it. Divergence recorded: the status is derived, not stored.
 
-## Proposal
+## Account
 
 A reading node written under the author's bootstrap grant on the dialogue node, 2026-09-03, as the reconciliation recorded on that node requires. Facts: delegated, since readings are delegated in this graph and the author has not asked to rule on each; boldness high, since the reading rests on the AI's knowledge of the MADR template and the author has not yet read the source. Persistence: standing. Open for the author: whether the template's version and sections are cited accurately; whether the derived status is the right divergence to record.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.

@@ -2,13 +2,22 @@
 question: How are references to tradition recorded?
 stage: ruling
 recommendation:
+  adopts: draft
   class: ratified
   boldness: moderate
+  amends: "8029e1b5968e7e2801b1396b631c2e23d3e52adf"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: 8f46214fa1e80836a43e46c4d643f0e223cad9ce
+alternatives:
+  - name: draft
+    source: ai
+  - name: incomplete-enumeration-in-facts
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -42,8 +51,17 @@ As readings, which are nodes. A reading answers the question what a tradition sa
 
 The author's ruling of 2026-09-02 that tradition references carry authority classes. Making them nodes rather than field entries buys four things: one reading of a shared source is stored once and refined under each node it grounds; readings nest, which is what recursion needs; a reading has its own hash and pin, so a changed reading is distinguishable from a changed answer; and there is one write path, one queue, and one stamp vocabulary. The alternative, stamped entries in a field with a derived reading frontier, is workable and was the author's framing; the difference is parsimony of mechanism against parsimony of files.
 
+## Alternatives
 
-## Draft
+### draft
+
+The Draft distinguishes tradition from reading where the standing answer runs them together: a tradition is a mount, one root node in a traditions graph until it has a graph of its own, carrying the name it defines and its primary references, and a reading is a node under the disposition it bears on, naming the tradition it reads with its source, locus and relation. It adds that many questions reading one tradition are many readings naming one tradition, that the tradition's page shows every reading citing it, that prose reaches a tradition through the name it defines, and that a rationale never repeats its readings. Its own reviews record that ratifying it makes fourteen existing rationales non-conforming at once, that the ten reading nodes name no tradition and no traditions graph exists in the manifest, and that no migration is named.
+
+### incomplete-enumeration-in-facts
+
+The same finding proposes that readings' facts say the remedy's enumeration is incomplete, so the author knows the size of what ratifying the rule puts on the frontier; readings' draft rests its rule that a rationale never repeats its readings on that enumeration being the remedy. (Raised on commons.systems/disposition-graph/audience.)
+
+## Recommendation
 
 ```markdown
 ---
@@ -71,7 +89,7 @@ As readings under the node that refers, and traditions they refer to. A traditio
 The author's rulings of 2026-09-02 that tradition references carry authority classes and that a tradition is a mount. Making readings nodes rather than field entries buys four things: one tradition is stored once and read under each node it grounds; readings nest, which is what recursion needs; a reading has its own hash and pin, so a changed reading is distinguishable from a changed answer; and there is one write path, one queue, and one stamp vocabulary. Rejected: stamped entries in a field with a derived reading frontier, workable and the author's first framing, parsimony of mechanism against parsimony of files; readings in the rationale prose, which drift and cannot carry a stamp; one node per tradition inside this graph, because a tradition is not a disposition of this project and is mounted rather than held.
 ```
 
-## Proposal
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -161,3 +179,12 @@ Readings' rule is that a reading is 'ratified when the author has read the prima
 Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/aristotle-hexis, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing.
 
 Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `draft` (ai); `incomplete-enumeration-in-facts` (review, 2026-09-03, from commons.systems/disposition-graph/audience).
+The recommendation adopts `draft` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, own-question: Re-evaluate the naming and function of the reading form against tradition, with tradition as a mount of another project that could be its own graph, references to it supporting or diverging and carrying an authority class, and a recommendation for how many questions referencing one tradition are encoded. 2026-09-02, new-answer on commons.systems/disposition-graph/projection: References to tradition in the prose of the documentation projection should hyperlink to the tradition node, keeping the way target dispositions are hyperlinked. 2026-09-02, own-question: Do not replicate tradition references in the rationale section, and confirm the tradition section is projected from the references rather than duplicated in the node body; the first half is this node's rule and the second bears on projection.
+Moved to other nodes as alternatives: `hyperlink-traditions-in-prose` on commons.systems/disposition-graph/projection; `fold-into-node-and-prune` on commons.systems/disposition-graph/form-vocabulary.
+The census unit's note: At ruling with a Draft, so the recommendation adopts it and the draft is the only pending alternative; the counter-argument about multiplying files is the trade the rationale already records as rejected, so it was not minted. Two findings here are verified resolved and carried nowhere: the four reading nodes the coverage finding names all carry class delegated today, and the cross-reference finding's audience half is applied. What remains of that finding, the incomplete enumeration, is carried on stub-traditions instead. The author's hyperlink words ground projection's linking rule and sit on no other node, so they move there; the form-vocabulary fold is the redundancy this node's own finding proposes.

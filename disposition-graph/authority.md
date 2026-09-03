@@ -2,8 +2,21 @@
 question: Who may change an answer?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "0a273ae3449272b35acc7d47e266cf3cb1b3c571"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+alternatives:
+  - name: bootstrap-authority-as-class
+    source: ai
+    ref: "2026-09-03"
+  - name: clause-level-ratification
+    source: review
+    ref: "2026-09-03"
+  - name: ceiling-moves-here
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -58,7 +71,21 @@ The author, 2026-09-03, on the bootstrap ledger: "The ledger is a shim, it shoul
 
 The author, 2026-09-03, in the sitting on the dialogue node, quoted above, narrowed the word proposal: the draft of this node had defined it as any candidate answer, amendment, or finding with no authority, recorded in a stamped node or in a sitting's record, and the author ruled that the term is technical vocabulary for a conflicting answer arising outside alignment, that it must not be overloaded, and that conflicting answers evaluated in alignment are recorded differently, as alternatives in the dialogue state. The same day the author ruled that a standing answer of any class, ratified, delegated, or deferred, keeps its full authority while an alternative is pending, and that a proposal from outside alignment opens the dialogue on its node. This answer was written from the draft under the author's bootstrap grant on the dialogue node, folding the draft's text into the standing answer with the narrowing; the ratified stamp the draft carried is what a confirmation confers and is not written before it. Rejected: proposal as any recorded candidate, the draft's definition, since it overloaded a term the author reserves for the outside-alignment case and would have named the AI's own account and every alternative in a sitting with one word.
 
-## Proposal
+## Alternatives
+
+### bootstrap-authority-as-class
+
+Recorded on the node as a tension the sitting did not decide. Bootstrap authority is declared here as a shim, but it is a standing permission exercised only when the author invokes it, not a stopgap artifact applied by default, which is what evaluation's shim rule describes. Either the shim vocabulary covers two kinds, or bootstrap authority is a second class of authority beside ratified, delegated and deferred, which this node's answer would then have to define. The author's words name it a shim and it is recorded as one, so what is pending is the class.
+
+### clause-level-ratification
+
+A frontier finding carried on this node observes that the author ruled clause by clause on growth — 'Ratified on the rule. Ratified on the shim.' — while the record gives a node one stamp, so a ruling the author has given is recorded nowhere and the author will be asked for it again. The finding says that whether a clause can be ratified separately is a question for this node and should be minted here. The alternative is an answer that lets a stamp attach to a named clause rather than to the whole node. Also raised on commons.systems/disposition-graph/growth.
+
+### ceiling-moves-here
+
+The decomposition finding proposes that under survive as the edge alone and that three of the four terms it defines move to the nodes that answer them, rank to attention, context to session-context, and ceiling to authority, whose answer already carries the scope rule the term names: that a node's ceiling is its nearest ratified ancestor and nothing recorded under it may contradict it. Verified: under's defines carries ceiling and authority's does not, and authority is not among the nodes the finding names, so the proposed change to its defines is recorded nowhere on it. The cross-reference finding adds that ceiling and up-to-the-roots are two different rules for the reviewer's world, coinciding today only because nothing is ratified. Raised on commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/attention, commons.systems/disposition-graph/under.
+
+## Account
 
 ### The stub grant expired, 2026-09-03
 
@@ -216,3 +243,16 @@ Proposed: Write the four missing replies, or state on each that the review's fin
 ### The author's narrowing, 2026-09-03
 
 The draft's sentence "A proposal is content, never a class: a candidate answer, an amendment, or a finding with no authority, recorded in a stamped node or in a sitting's record for the author's ruling" is narrowed by the author's words quoted above: a proposal is a conflicting answer that arises outside alignment, from an instrument, a criterion, a signal, or a conflict found in reconciliation, and a conflicting answer that arises in alignment is recorded differently, as an alternative in the dialogue state the dialogue node defines. The term is technical vocabulary and is not to be overloaded. The stage returns to maieutic because the draft's substance changed in the author's words and has not been redrafted; the redraft is part of the reconciliation the author's conditional grant on dialogue names, and the review runs on it after.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `draft` (ai, 2026-09-03); `narrowed-proposal` (author, 2026-09-03); `pending-keeps-authority` (author, 2026-09-03); `bootstrap-authority-as-class` (ai, 2026-09-03); `clause-level-ratification` (review, 2026-09-03); `ceiling-in-defines` (review, 2026-09-03, from commons.systems/disposition-graph/rationale-edge); `defines-ceiling` (review, 2026-09-03, from commons.systems/disposition-graph/session-context); `ceiling-moves-here` (review, 2026-09-03, from commons.systems/disposition-graph/under); `un-aligned-disposition-term` (review, 2026-09-03, from commons.systems/disposition-graph/growth).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit. The census said the recommendation adopts `draft`, but the node carries no recommended text, so it adopts the node as it stands.
+Merge analysis of the author's words: 2026-09-02, own-question: All doctrine on the recorded graph must be rolled back to deferred for review, and ratification can happen only through periagogic and maieutic alignment dialogue, whose outputs will be the first valid ratifications. 2026-09-02, own-question: The `proposal` label is mislabelled by the existing disposition, since a proposal is meant to indicate a contradiction with doctrine and no authority to act, and there is no doctrine yet while the deferred graph and implementation were bootstrapped under that disposition. 2026-09-03, own-question: The bootstrap ledger is a shim and receives no standing disposition; the standing ratified disposition is that ratification happens only through alignment dialogue. 2026-09-03, new-answer on commons.systems/disposition-graph/quotes: The author's quotes are rarely expected to be recorded as disposition verbatim, the dialogue editing for clarification and writing quality, though retaining the original quotes as reference may earn its own schema. 2026-09-03, own-question: A proposal is technical vocabulary for a conflicting answer that arises outside alignment, which narrows this node's definition and means conflicting answers evaluated in alignment are recorded differently. 2026-09-03, own-question: A standing answer of any class keeps its full authority while an alternative is pending on it, until the author confirms an alternative.
+Moved to other nodes as alternatives: `edited-not-verbatim` on commons.systems/disposition-graph/quotes; `shim-two-kinds` on commons.systems/disposition-graph/evaluation; `clauses-already-ratified` on commons.systems/disposition-graph/growth.
+The census unit's note: Turned into alternatives: the draft the recommendation adopts; the author's narrowing of `proposal`, which the account itself says the draft no longer matches; the author's rule that a pending alternative leaves the standing answer's authority intact; the undecided question whether bootstrap authority is a shim or a fourth class, which the account explicitly puts to this node; and the clause-level ratification question a frontier finding asks be minted here. Moved elsewhere: the author's words on quotes, which answer that node's question and are carried here only; the shim-vocabulary tension to evaluation; the clause account to growth. Judged borderline and excluded: the placement finding's proposal that twenty-two nodes without a `## Disposition` be demoted from ratified to deferred, which quotes' own session reply has already rejected; and the contradiction and vocabulary findings' proposals for `node`, which node.md has already absorbed by striking the no-children rule.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `ceiling-moves-here` absorbs `ceiling-in-defines`, `defines-ceiling`; `draft` dropped, The entry describes 'the recommended text carried in the node's fenced draft', and the node now carries no `## Recommendation` fence: the recommendation adopts standing, so the redraft the entry says the node was standing at the maieutic stage for is the present answer, which carries the draft's distinguishing sentence 'A node without a stamp is unanswered, as the unanswered node says' and, in place of the draft's stale proposal-as-content sentence, the author's narrowing the entry itself records; `narrowed-proposal` dropped, Carried word for word by the answer's sentences 'A proposal is technical vocabulary and is not overloaded: a conflicting answer that arises outside alignment, from evidence, a signal, an instrument, a criterion, or a conflict identified in reconciliation' and 'A conflicting answer that arises in alignment is not a proposal; it is an alternative in the dialogue state, with its source, and is recorded as the dialogue node says.'; `pending-keeps-authority` dropped, Carried by the answer's sentence 'A standing answer of any class keeps its full authority while an alternative to it is pending, until the author confirms an alternative.'; `un-aligned-disposition-term` dropped, The alternative proposes the recommended text drop 'open question' for the defined terms; the answer no longer uses the phrase anywhere ('A node without a stamp is unanswered, as the unanswered node says'), and the node's own reply of 2026-09-03 records the finding as met, 'open question' giving way to unanswered and un-aligned disposition. The merge unit's note: Dropping `draft` is the one judgment call here: the answer does not restate the draft's proposal-as-content definition, it supersedes it with the author's narrowing, and the fenced text the entry names no longer exists. If the main thread wants the superseded definition kept visible to the author, keep `draft` and rewrite its text to say what it now differs on. bootstrap-authority-as-class and clause-level-ratification are distinct open questions and stay.

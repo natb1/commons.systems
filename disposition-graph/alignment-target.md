@@ -2,8 +2,11 @@
 question: What does the alignment session take up when given nothing?
 stage: ruling
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "cf7380d981f78d72c48354ded418402738858428"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
@@ -30,7 +33,7 @@ The highest-ranked unanswered disposition, and it progresses that one node throu
 
 The author's ruling of 2026-09-03, quoted above. Rank is the order of the author's attention, and the unanswered nodes are the queue of the dialogue; a session given nothing has one question to answer, which item of that queue comes first, and rank answers it without the session's judgment entering. Progressing from the stage rather than from the beginning is what the stored stage is for: it exists, the transience node says, so that what the dialogue has done survives the session that did it. Up to confirmation and not beyond: the confirmation is the author's act, and the session's work on a node ends when it has put the node before the author with everything the ruling needs, the draft, the three facts, and the review's counter-argument; where the author is in the interview, the session asks for the ruling there, and where the author rules on the page, the session reads the ruling back at its next sitting. Replaced: the earlier no-argument usage of the alignment skill, an onboarding walk from the purpose node to a question in the author's words, which presumed a record with nothing unanswered to take up; while any node is unanswered, the first unanswered node is that walk. Rejected: choosing by the oldest stage, or by the fewest movements owed, since either substitutes a heuristic for the rank the record already carries; asking the author which node to take, since the author's answer would be a boost, which they can set without being asked.
 
-## Proposal
+## Account
 
 ### Recording of 2026-09-03
 
@@ -71,3 +74,10 @@ On the three facts: The frontmatter recommendation (ratified, moderate) states o
 Strongest counter-argument (moderate): Taking the highest-ranked unanswered node is right if rank is the author's attention, and it is not: every boost in the record is the AI's and unratified, as attention's own answer now says, and the one order the author did state covers six nodes out of sixty-two. So 'rank answers it without the session's judgment entering' describes a queue the AI itself ordered and presents an AI choice to the author as the record's own. The session's reply — that the page shows the author the whole queue at every visit — is a real answer and is now true of the built page, which weakens but does not dissolve the objection.
 
 The session's reply: Validated: the frontier's first entry is agency, the page groups by graph with purpose first, and the status is derived. A stage set by the author's reclassification is trusted as one reached by a movement, which the answer says. The first no-argument sitting is agency's periagogic movement, the most expensive first sitting and the right one. On the counter-argument, that rank is the AI's boosts: the page shows the author the whole queue at every visit, and every boost is presented as unratified. Stage ruling.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: Called with no disposition and no node id, `/align` chooses the highest-ranking unanswered disposition and progresses it through the movements its state still owes, up to confirmation.
+The census unit's note: Nothing is pending. The node stands at the ruling stage with a forward verdict, an answer and no draft, so the recommendation adopts the standing text. Both reviews' findings were accepted and applied in the answer — the id-prefix reading of the frontier, the striking of 'or an argument', the sentence on the stage set by the author's reclassification — and the remaining points are account corrections or observations. The two rejected alternatives, choosing by the oldest stage or the fewest movements owed and asking the author which node to take, are recorded in the rationale and excluded. I checked whether `alignment-order` duplicates this node's question and it does not: that node asks whether rank is the right order at all and its own account distinguishes the two, so no fold is proposed, though a ruling there could later amend this answer.

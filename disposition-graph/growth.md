@@ -2,13 +2,38 @@
 question: How does the graph grow?
 stage: maieutic
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "2f75c4a5f319a25611a615e86d33499292c12b6e"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: ba115e9727a9c3000ba85a9dca2cb63d7b1ebd70
+alternatives:
+  - name: split-presentation-and-movements
+    source: review
+    ref: "2026-09-03"
+  - name: define-sitting
+    source: review
+    ref: "2026-09-03"
+  - name: cite-unanswered-for-responses
+    source: review
+    ref: "2026-09-03"
+  - name: facts-from-recommendation-field
+    source: review
+    ref: "2026-09-03"
+  - name: partial-ratification
+    source: review
+    ref: "2026-09-03"
+  - name: strike-phantom-depends
+    source: review
+    ref: "2026-09-03"
+  - name: cite-the-reading
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -54,8 +79,37 @@ By a loop of three moves. Draft: the AI writes a node, or an amendment, in the r
 
 The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost. The author, 2026-09-03, on the presentation of recommendations: "recommended disposition are always presented for review before recording and always include the authority, boldness AND if it is a persistent or some transient form of disposition (eg. shim) ... This way I know if I am approving some transient stop-gap or something that will persist in the graph." The author, 2026-09-03, on the two-stage rule and the skill shim: "Ratified on the rule. Ratified on the shim." The author, 2026-09-03, on dispositions stated mid-sitting: "we expect that alignment dialogues like this one (which is mixed in with ad-hoc reconciliation during bootstrap) will trigger recursive disposition statements from the author. This is supported usage of the alignment skill. The expected behavior of the skill is to queue each disposition (newly stated or via node_id) in some state that persists across alignment context compaction. Are these new un-aligned dispositions - dispositions that aren't just unratified/unreviewed, but haven't even survived the alignment dialog yet." And later that day: "Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact). The alignment artifacts outputs are consumed by the greenfield/shimmed alignment skill." Kept in force from the incumbent alignment skill, as principles and never as mechanics: fable as the default model, landing location never asked of the author, the mechanical floor, one question per node, whole-node amendment, doctrine currency before a round; rejected from it: issue trackers, tactics, phases, the router and its gates, born-parked review, placement gates, the curriculum, and the skill's own text as authority (evidence: `bootstrap/align-survey.md` on the implementation ref).
 
+## Alternatives
 
-## Proposal
+### split-presentation-and-movements
+
+Growth's answer is one paragraph answering at least seven separable questions, against node's rule that a text answering two questions is two nodes. This alternative splits the three-fact presentation rule into a child node asking what a recommendation must state before it is recorded, carrying the three facts, the persistence list and the ban on transient dispositions, and splits the movements of a sitting into a child node carrying the periagogic and maieutic objects; growth survives as the loop of three moves and the three usages of the skill, citing both. The reviewer proposed it twice and the session declined twice, referring the split to the author. Recording, delegation, alignment-target and checkpoint are the precedent for a part of growth becoming a node of its own.
+
+### define-sitting
+
+Growth adds 'sitting' to its defines and one sentence saying what a sitting is: one run of the dialogue on one node, from its stage to the author's ruling. The word names the record's central act and is used by growth, recording, dialogue, transience and alignment-target and in about twenty account headings, yet no node defines it, so it is the one word the browser cannot link. Nothing else in the answer changes. Also raised on commons.systems/disposition-graph/dialogue. Also raised on commons.systems/disposition-graph/recording.
+
+### cite-unanswered-for-responses
+
+Growth stops restating the alignment page's three responses and cites the unanswered node, which defines them and which the page implements. Three response vocabularies are live for one act across unanswered, recording and growth, and every restatement is a place they can drift; the response-vocabulary contradiction finding makes unanswered the survivor, so one node defines what the author may answer and the page implements that one list. The rest of the answer is untouched. Raised on commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/recording.
+
+### facts-from-recommendation-field
+
+Growth's presentation rule says explicitly that the three facts are presented from the node's recommendation field and its declared shims, never from a prose line in the account. The coverage finding verified that sixteen nodes still carry a generic prose Facts line contradicting their own recommendation field, and the page renders both, so the author is shown two accounts of one stamp on a quarter of the frontier. Growth's answer states the presentation rule without naming where the facts are read from; this closes the duplication at its source instead of node by node. Raised on commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/recording.
+
+### partial-ratification
+
+The author already ruled 'Ratified on the rule. Ratified on the shim.' in a sitting, and growth still carries a deferred stamp and is offered for a fresh ruling on the whole node. This alternative has growth's account state which clauses the author already ratified, the two-stage rule in both usages and the alignment-skill shim, and the recommendation cover only the rest, so the author is not asked twice for a ruling they gave. Growth's own reply accepts this and defers it to its sitting, so the change is owed rather than made. It raises the question whether a clause can carry a stamp separately from its node, which belongs to authority. Raised on commons.systems/disposition-graph/authority.
+
+### strike-phantom-depends
+
+The cross-reference finding carried on session-context proposes that growth's two dependencies naming no node — review-context and review-artifact — be struck as superseded in substance by clean-context-review and growth's own alignment-page shim, or minted as un-aligned dispositions, since a question that lives only on a page is the ledger the record asked to sunset. (Raised on commons.systems/disposition-graph/session-context.)
+
+### cite-the-reading
+
+Growth's answer drops its own Republic citation for the periagogic movement and cites this reading instead, so the loci are stated in one place. The review of 2026-09-03 found the two citations disagreeing in extent, growth naming 518b to d while the reading names 518b to 518d plus 521c and 515c to 516a. (Raised on commons.systems/disposition-graph/plato-periagoge.)
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -203,3 +257,16 @@ Sixteen nodes still carry the reclassification's generic prose Facts line, 'auth
 Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/recording.
 
 Proposed: Dialogue is the survivor of the requirement. The sixteen prose Facts lines are rewritten to match each node's frontmatter recommendation, or deleted, since the recommendation field now carries the two facts and growth's presentation rule is satisfied by it plus each shim named in prose. Growth's presentation rule should say explicitly that the three facts are presented from the recommendation field and the node's shims, not from a prose line, so the duplication cannot recur.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `split-presentation-and-movements` (review, 2026-09-03); `define-sitting` (review, 2026-09-03); `cite-unanswered-for-responses` (review, 2026-09-03); `facts-from-recommendation-field` (review, 2026-09-03); `partial-ratification` (review, 2026-09-03); `facts-from-recommendation` (review, 2026-09-03, from commons.systems/disposition-graph/dialogue); `clauses-already-ratified` (review, 2026-09-03, from commons.systems/disposition-graph/authority); `cite-unanswered-for-page-responses` (review, 2026-09-03, from commons.systems/disposition-graph/unanswered); `strike-phantom-depends` (review, 2026-09-03, from commons.systems/disposition-graph/session-context); `cite-unanswered-for-the-responses` (review, 2026-09-03, from commons.systems/disposition-graph/recording); `facts-presented-from-the-recommendation-field` (review, 2026-09-03, from commons.systems/disposition-graph/recording); `cite-the-reading` (review, 2026-09-03, from commons.systems/disposition-graph/plato-periagoge).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, own-question: Every alignment, on a node id or on a disposition, runs both a periagogic and a maieutic phase, and the periagogic of a sitting on a disposition confirms the author understands the existing record before it is changed. 2026-09-03, new-question: Every recommended disposition is presented for review before it is recorded and states its authority, its boldness, and whether it is persistent or a transient form such as a shim, so the author knows what they are approving. 2026-09-03, own-question: The author's ruling 'Ratified on the rule. Ratified on the shim.', given in the dialogue on the two-stage rule and the alignment-skill shim.
+Moved to other nodes as alternatives: `cite-unanswered-responses` on commons.systems/disposition-graph/recording; `clause-level-ratification` on commons.systems/disposition-graph/authority; `un-aligned-disposition-term` on commons.systems/disposition-graph/authority; `un-aligned-disposition-term` on commons.systems/disposition-graph/node; `strike-ledger-sunset-dependency` on commons.systems/disposition-graph/session-context.
+The census unit's note: Growth has a standing answer and no recommended text, so it adopts standing. The five alternatives are what the reviews and the frontier findings left open for the author: the split the session twice declined and twice referred to the author, the definition of 'sitting', citing unanswered instead of restating the responses, sourcing the three facts from the recommendation field, and covering only what the author has not already ratified. The dangling-dependency and null-reply findings are resolved in the snapshot and are not carried. I classed the author's presentation-rule words a new question rather than growth's own, following the frontier finding that the author stated it as a disposition in its own right; growth answers it today, so this is the borderline call.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `cite-unanswered-for-responses` absorbs `cite-unanswered-for-page-responses`, `cite-unanswered-for-the-responses`; `facts-from-recommendation-field` absorbs `facts-from-recommendation`, `facts-presented-from-the-recommendation-field`; `partial-ratification` absorbs `clauses-already-ratified`. The merge unit's note: Twelve entries fall to seven. split-presentation-and-movements, define-sitting, strike-phantom-depends and cite-the-reading are each a different change and stay.

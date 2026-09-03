@@ -2,13 +2,22 @@
 question: How is the clean-context review run?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "ed187b8bb3bc8ec9a6fe41a12722dab24a6f82c5"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: cc12bc5e8b31752fb30a2675585d223df09ad155
+alternatives:
+  - name: per-node-context
+    source: review
+    ref: "2026-09-03"
+  - name: rerun-earlier-reviews
+    source: ai
 form: rule
 authority:
   class: deferred
@@ -50,7 +59,17 @@ The author, 2026-09-03: "alignment adversarial review is materialized as a skill
 
 The author, later on 2026-09-03: "This superceded existing unanswered dispositions about the adversarial review skill (case in point). EVERY invocation of the adversarial alignment review skill is a batch operation that evaluates the full unanswered frontier (without isolating any context by disposition)." The per-node isolation the morning's words asked for, and the sibling drafts the second reading added to it, were the answer to a narrower question, how one draft is judged; the author's later words ask how the frontier is kept consistent, and a reading of one node, however many siblings it is handed, cannot see drift between nodes it was not handed. The clean context stays, since the independence the recording node argues for is of framing; the isolation by node goes, since the object of the review is now the frontier. The case in point is this node: its answer of the morning stood at the review stage, twice read and twice forwarded, while the frontier it belonged to drifted from it. Divergence, recorded: the two readings of this node on 2026-09-03 ran under the superseded answer, each in a context of its own, and their subsections below are kept as the record of that; the batches of the same day, read in one context each before the skill existed, turn out to have had the shape the author's later words prescribe, though without the survey.
 
-## Proposal
+## Alternatives
+
+### per-node-context
+
+The superseded per-node answer, kept live by the review's strong counter-argument: each draft is read in a context of its own, holding the record and the round's other drafts, so that no verdict is formed by a reader carrying sixty-odd drafts' framing. The standing answer buys the survey of the frontier at the cost of the independence the per-node reading bought, and nothing replaces that independence. The author's later words rule that every invocation is one batch over the whole frontier, so this alternative stands against them; it is listed because the review judged the cost worth the author's sight rather than a line in the account.
+
+### rerun-earlier-reviews
+
+The account holds open, as wholly the AI's, that the two review batches of 2026-09-03 stand as the reviews of that day rather than being re-run under this answer. The alternative is that they do not stand: every node whose only review was read in one of those batches goes back through the skill before the author rules on it. The author may take it simply by invoking the review, which the node itself says.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -138,3 +157,16 @@ Recording's Answer describes the reviewer's world as 'the node as it would be co
 Also named: commons.systems/disposition-graph/recording, commons.systems/disposition-graph/under.
 
 Proposed: Clean-context-review is the survivor, since it is the node that answers how the review is run and its rule is the one the brief and the skill implement. Recording's sentence cites it rather than restating the input set, which also removes the only use of 'ceiling' outside under and lets under be simplified as the decomposition finding proposes.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `per-node-context` (review, 2026-09-03); `rerun-earlier-reviews` (ai).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: The adversarial review is materialized as a skill, invocable by a sitting or directly, with the scope following the invoker and the context isolated per node. 2026-09-03, own-question: Superseding the morning's words: every invocation of the review skill is one batch over the full unanswered frontier with no context isolated by disposition. 2026-09-03, own-question: The alignment main thread validates the review's findings before any of them is applied.
+Moved to other nodes as alternatives: `cite-run-mechanics` on commons.systems/disposition-graph/frontier-consistency; `cite-reviewers-world` on commons.systems/disposition-graph/recording.
+The census unit's note: Two alternatives, both from what the node itself holds open: the review's strong counter-argument for the superseded per-node context, and the account's own offer that the author may overrule the standing of the day's batch reviews by re-running them. Borderline and included deliberately: the per-node alternative contradicts the author's explicit words that every invocation is a batch, and the text says so. Excluded as observations: the ceiling-versus-roots finding (moved to recording as an elsewhere), the unmaterialized wait between batches, and the rationale's list of rejected mechanisms. I also propose a fold to frontier-consistency, which restates this node's batch and serialization rules verbatim.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: . The merge unit's note: No change. Checked as one of the five redrafted nodes: neither pending alternative is carried by the answer. per-node-context stands against the answer, which says every invocation is one batch 'with nothing isolated by node', and the entry says so itself; rerun-earlier-reviews asks whether the two review batches of 2026-09-03 stand, which the answer nowhere states. What the redraft added, that a finding may name a node outside the batch and that the invoking session validates every finding on its own thread, is not what either entry proposes.

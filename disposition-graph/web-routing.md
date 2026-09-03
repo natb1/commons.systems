@@ -2,13 +2,29 @@
 question: Does the web-routing tradition support addressing every node of the browser?
 stage: review
 recommendation:
+  adopts: standing
   class: delegated
   boldness: moderate
+  amends: "74904a88c15edb6ed067605b3ee2c0fe1f5216de"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: b3b2840be3a3c909dc10ac8ad49b1ff6aa94ecdb
+alternatives:
+  - name: narrow-fielding-citation
+    source: review
+    ref: "2026-09-03"
+  - name: split-the-sources
+    source: review
+    ref: "2026-09-03"
+  - name: divergence-as-shim
+    source: review
+    ref: "2026-09-03"
+  - name: delegated-not-ratified
+    source: review
+    ref: "2026-09-03"
 form: reading
 authority:
   class: deferred
@@ -32,8 +48,25 @@ Supports. The tradition holds that everything a reader can reach has an address,
 
 Recorded at the author's direction on 2026-09-03 after the address was seen not to change on navigation in the framed viewer, and tested the same day: the viewer neither passes a fragment in nor reflects one out. Validated by the AI from its own knowledge of the sources; deferred until the author reads them.
 
+## Alternatives
 
-## Proposal
+### narrow-fielding-citation
+
+The source field is rewritten so that Fielding chapter 5 is cited for the principle of identification by address only, and the fragment mechanism is cited to the HTML Living Standard's History interface and fragment navigation. A fragment is resolved client-side and is never seen by a server, so citing Fielding for a fragment scheme is loose. The session accepted the narrowing twice and the frontmatter still lists Fielding first among four sources unchanged.
+
+### split-the-sources
+
+The node's four sources under one relation of adopted are split into separate readings, or the answer states that the single relation covers the group. Readings speaks of a reading's source, locus and relation in the singular, so if one of the four were later diverged from, one relation could not say so.
+
+### divergence-as-shim
+
+The host's divergence, that a framed page can neither show nor receive its address so the page keeps the reader's place itself, leaves this answer and becomes part of projection's browser shim with a liquidation condition. As a clause in an answer it is a stand-in for an unmade materialization that the frontier cannot read, which transience makes a shim.
+
+### delegated-not-ratified
+
+The same finding names this node as one of the four readings recommending a class the record's own rule forbids, and proposes the recommendation change from ratified to delegated with the prose Facts line rewritten to match. (Raised on commons.systems/disposition-graph/spec-driven-development.) Also raised on commons.systems/public/pettit-non-domination.
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -91,3 +124,12 @@ Readings' rule is that a reading is 'ratified when the author has read the prima
 Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/aristotle-hexis, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/readings.
 
 Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `narrow-fielding-citation` (review, 2026-09-03); `split-the-sources` (review, 2026-09-03); `divergence-as-shim` (review, 2026-09-03); `delegated-not-ratified` (review, 2026-09-03, from commons.systems/disposition-graph/spec-driven-development).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: Record a reference to the web app routing tradition as disposition, and edit the browser shim to reconcile it.
+Moved to other nodes as alternatives: `shim-carries-framed-viewer` on commons.systems/disposition-graph/projection.
+The census unit's note: The node has an answer and no draft, so it adopts standing, and its recommendation class is already delegated as the readings rule requires. The record's own divergence, the prefix rewrite of the public graph's ids, was accepted and has been written into the answer, and namespaces' shim liquidation now carries the redirect obligation, so that item is closed rather than pending. The three alternatives are the review findings the session said would be settled at a sitting that has not happened: the Fielding narrowing, the four sources under one relation, and the host divergence that belongs in a shim. The last of those proposes a change to projection's shim, which projection does not carry, so it goes elsewhere. The author's single block is quoted more fully on projection; here it is the words that mint this reading.

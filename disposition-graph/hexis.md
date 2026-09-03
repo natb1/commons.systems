@@ -1,19 +1,68 @@
 ---
 question: In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?
-stage: ruling
+stage: review
 recommendation:
+  adopts: hexis-first
   class: ratified
   boldness: moderate
-review:
-  verdict: forward
-  strength: moderate
-  date: 2026-09-03
-  of: 08108baa5fb010e1a2baf2d430b7a75af73de656
+  amends: "08108baa5fb010e1a2baf2d430b7a75af73de656"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+alternatives:
+  - name: hexis-first
+    source: ai
+  - name: knowledge-store-first
+    source: ai
+  - name: fold-into-purpose
+    source: review
+    ref: "2026-09-03"
+    prune: true
+  - name: sub-ruling-of-purpose
+    source: review
+    ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/purpose
 ---
+## Alternatives
 
-## Proposal
+### hexis-first
+
+State the hexis claim first in the purpose answer with the knowledge store as its gloss, so that the record is a projection of its author's hexis, which is what a knowledge store would hold. Aristotle makes hexis the settled state itself and the record the projection of it, and a store is what would hold that projection. The wording is already in purpose's draft, and the reading that grounds it is delegated rather than ratified because the author has not read the loci.
+
+### knowledge-store-first
+
+Keep the order the page had, a knowledge store, a projection of its author's hexis, of low boldness. The reviews' counter-argument backs it: purpose is the onboarding entry point and the README's source, no node's defines carries hexis so the browser cannot link it, and the apposition teaches the term instead of assuming it, the philosophical precision belonging on knowledge-store where the hypothesis and its reading live.
+
+### fold-into-purpose
+
+Prune: The redundancy finding notes that this node decides a clause purpose's draft already contains, so a confirmation of purpose as shown decides it by that act and a contrary ruling here would reopen purpose's draft. Its alternative to keeping the option-node is to fold the option into purpose's Proposal as an explicit alternative, which is what the first option on rejected would make structural, that decision being itself unruled.
+
+### sub-ruling-of-purpose
+
+Hexis decides a clause purpose's recommended text already contains, that the record is a projection of its author's hexis, which is what a knowledge store would hold. The finding proposes hexis carry one line saying it is a sub-ruling of purpose's text and must be ruled first, or be folded into purpose's account as an alternative, since confirming purpose as shown would decide hexis by that act. (Raised on commons.systems/disposition-graph/purpose.)
+
+## Recommendation
+
+```markdown
+---
+question: In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?
+form: rule
+authority:
+  class: ratified
+  by: Nathan Buesgens
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/purpose
+---
+## Answer
+
+Yes. The purpose answer states the hexis claim first and glosses it with the store: the record is a projection of its author's hexis, which is what a knowledge store would hold. Aristotle makes hexis the settled state itself, so what is projected is the state and not its container, and a store is what would hold the projection. The apposition stays in the sentence, so the term is taught where it is first used rather than assumed of the reader. The term is defined by the knowledge-store node, whose defines carries it, so the browser links its first use and a newcomer can follow it. What stands ratified here is the wording; the reading of Aristotle it rests on is delegated until the author reads the loci.
+
+## Rationale
+
+Hexis names the settled state, and this record is a projection of that state, so leading with the store would put the container before the claim it holds and make the gloss the assertion. The apposition answers the onboarding cost of a Greek term in the first paragraph a newcomer reads: the sentence teaches the word where it stands, and the knowledge-store node defines it so the browser can link it. Rejected: the knowledge store first, as the page had it, because it states the container as the claim and demotes the state to a qualifier, which is the reverse of what the reading supports. The ground is Aristotle, Nicomachean Ethics II.5, read by the AI and not yet by the author, which is why the reading under this wording is delegated while the wording itself is ratified.
+```
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -68,3 +117,11 @@ Three option-nodes decide clauses that a sibling's draft already contains. Hexis
 Also named: commons.systems/disposition-graph/purpose-criteria, commons.systems/disposition-graph/second-stop, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/model.
 
 Proposed: Keep the option-nodes as the survivors of their questions, since each is a real decision the author should make separately, and add one line to each saying it is a sub-ruling of the named parent's draft and must be ruled first. Correspondingly, each parent's Proposal names the option-nodes its draft presumes. Alternatively fold each option into its parent's Proposal as an explicit alternative, which is what rejected's option 1 would make structural — but that decision is itself unruled.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `hexis-first` (ai); `knowledge-store-first` (ai); `fold-into-purpose` (review, 2026-09-03); `sub-ruling-of-purpose` (review, 2026-09-03, from commons.systems/disposition-graph/purpose).
+The recommendation adopts `hexis-first` and is pinned to the standing text as it was at that commit. The recommended text was drafted at the re-encoding from the option the account marks recommended, so that the recommendation adopts an alternative with a text and not only a name; the earlier review read the options and not this text, so it is removed and the node returns to the review stage for the clean-context review of the batch.
+Moved to other nodes as alternatives: `define-hexis` on commons.systems/disposition-graph/knowledge-store.
+The census unit's note: No Answer and no Draft, only an Options block with a recommendation, so the recommended option is what it adopts and the second option is pending, backed by both counter-arguments. The redundancy finding's own alternative, folding the option into purpose, is minted as a third. The ordering findings, that this is a sub-ruling of purpose and must be ruled first, are stated in the session's reply and are not candidate answers. The proposal that each parent's Proposal name the option-nodes its draft presumes is already recorded on purpose, purpose-criteria, second-stop and model, so the only entry elsewhere is the defines gap on knowledge-store, which carries no trace of it.

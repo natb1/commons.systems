@@ -2,13 +2,32 @@
 question: How is a disposition confirmed and recorded?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "75336fcff7555274971f7db32a861b19c5651f4e"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: 408e9e31c58b5503b0dd10b8bc608295223a91e6
+alternatives:
+  - name: move-the-quotations-into-a-disposition-section
+    source: review
+    ref: "2026-09-03"
+  - name: deferred-rather-than-ratified
+    source: review
+    ref: "2026-09-03"
+  - name: mechanical-checks-instead-of-a-full-reading
+    source: review
+    ref: "2026-09-03"
+  - name: cite-reviewers-world
+    source: review
+    ref: "2026-09-03"
+  - name: cite-unanswered-responses
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -34,7 +53,29 @@ Why a second reader with no context: the session that ran the dialogue shares th
 
 Traditions, owed as readings: the office of the promotor fidei (Sixtus V, 1587; reformed 1983), adopted for a standing adversary to every candidate and diverged from in that the adversary here cannot stall, only send back or object on the record; blinded peer review, adopted for the independence of the reader's context; the four-eyes principle of financial control, adopted for a second reader before every write to the record; Peirce on paper doubt, adopted for the optional steelman. The evaluation node's rule that adversarial review of one's own output is part of producing it still holds; this node adds the reader who did not produce it.
 
-## Proposal
+## Alternatives
+
+### move-the-quotations-into-a-disposition-section
+
+The placement finding verified that this node carries no Disposition section although its rationale quotes the author three times with dates, and that authority makes a ratified stamp invalid without the ruling in the record. This alternative moves those quotations into a Disposition section before any stamp is written, which also makes the alignment page show them, since the page renders the author's words only from that section.
+
+### deferred-rather-than-ratified
+
+The same finding offers the other branch: if the quotations are not moved, the recommendation changes from ratified to deferred, on the ground that a ratified stamp the node cannot support is worse than an honest deferral. It bears on this node as one of the twenty-two carrying no Disposition section while recommending ratification.
+
+### mechanical-checks-instead-of-a-full-reading
+
+Both reviews' strongest counter-argument is that a mandatory, unbounded second reading of the record before every confirmation buys what a check would catch: the node's own failure modes are mechanical, a ruling is quoted with its date or it is not, a shim's artifact exists or it does not, a cited command runs or it does not. The alternative answer is that the review is a set of checks over the frontier plus a narrower reading, rather than a whole reading per batch. The session replied that the checks become instruments as the reader grows but that the whole reading stays by the author's ruling, so the alternative is live and unruled.
+
+### cite-reviewers-world
+
+The frontier finding of 2026-09-03 records that recording describes the reviewer's world as the nodes a draft joins up to its ceiling while clean-context-review describes it as the answered nodes they join up to the roots; the two rules coincide only while nothing is ratified, and ceiling is defined by under, which is itself at the maieutic stage. Clean-context-review is the survivor. Recording's sentence cites it instead of restating the input set, which also removes the only use of ceiling outside the under node. (Raised on commons.systems/disposition-graph/clean-context-review.)
+
+### cite-unanswered-responses
+
+The contradiction finding carried on unanswered proposes that recording cite unanswered for the author's three responses rather than restating four outcomes of its own, and recast its second step as the classification of each of the three: a deferral being a node left unconfirmed, an overrule being a denial with feedback. Three response vocabularies are live for one act and the page implements only unanswered's three. (Raised on commons.systems/disposition-graph/unanswered.) Also raised on commons.systems/disposition-graph/growth.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -125,3 +166,11 @@ Sixteen nodes still carry the reclassification's generic prose Facts line, 'auth
 Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/growth.
 
 Proposed: Dialogue is the survivor of the requirement. The sixteen prose Facts lines are rewritten to match each node's frontmatter recommendation, or deleted, since the recommendation field now carries the two facts and growth's presentation rule is satisfied by it plus each shim named in prose. Growth's presentation rule should say explicitly that the three facts are presented from the recommendation field and the node's shims, not from a prose line, so the duplication cannot recur.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `move-the-quotations-into-a-disposition-section` (review, 2026-09-03); `deferred-rather-than-ratified` (review, 2026-09-03); `mechanical-checks-instead-of-a-full-reading` (review, 2026-09-03); `cite-reviewers-world` (review, 2026-09-03, from commons.systems/disposition-graph/clean-context-review); `cite-unanswered-responses` (review, 2026-09-03, from commons.systems/disposition-graph/unanswered).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Moved to other nodes as alternatives: `cite-unanswered-for-the-responses` on commons.systems/disposition-graph/growth; `define-sitting` on commons.systems/disposition-graph/growth; `facts-presented-from-the-recommendation-field` on commons.systems/disposition-graph/growth; `facts-state-the-count` on commons.systems/disposition-graph/quotes.
+The census unit's note: The node has a standing answer, no draft, and no Disposition section at all, so its dispositions list is empty even though its rationale quotes the author three times; that gap is itself the substance of two of its alternatives. Everything the two reviews raised about the answer's text was applied by the session before the snapshot, so the pending items are the placement finding's two branches and the reviewers' shared counter-argument, which I treated as an alternative because it proposes a different answer rather than an observation. The four findings that name other nodes went to growth, three times, and to quotes. I did not record the cross-reference finding on ceiling, whose proposed edit to this node's answer is already applied.

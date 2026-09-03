@@ -1,6 +1,10 @@
 ---
 question: What does the npm standard say a workspace commits?
 stage: periagogic
+alternatives:
+  - name: reparent-under-lockfile
+    source: ai
+    ref: "2026-09-03"
 form: reading
 authority:
   class: deferred
@@ -30,3 +34,21 @@ Weighed and not adopted: that a lockfile is generated output and so belongs with
 Where projects do depart, it is normally a published library, whose consumers resolve their own trees and for which the lockfile is not honoured downstream. That exception does not reach a private workspace root, which this is.
 
 Validated by the AI on 2026-09-03 from its own knowledge of the npm documentation, not from a fetch of the source; deferred until the author reads it. A reading whose verdict changes on re-reading is a re-grasp trigger for the node it grounds.
+
+## Alternatives
+
+### reparent-under-lockfile
+
+The npm reading moves from under materialization to under lockfile, the question it actually grounds. It was placed on the parent only because the struck no-children rule blocked its proper parent; un-aligned-children now answers that a disposition plus dialogue state may be refined by children exactly as an answered node may, naming this very reading as the misplacement the struck rule caused. The node's own account says the move is a graph edit that changes what the reading is a reading of, so it is put to the author rather than done silently. It still sits under materialization in the record. Raised on commons.systems/disposition-graph/un-aligned-children, commons.systems/disposition-graph/lockfile.
+
+## Account
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `move-under-lockfile` (ai, 2026-09-03, from commons.systems/disposition-graph/un-aligned-children); `reparent-under-lockfile` (ai, 2026-09-03, from commons.systems/disposition-graph/lockfile).
+The census unit's note: A reading with an answer, no draft, no recommendation field and no Disposition section, standing at the periagogic stage under materialization; adopts is null because the node carries no recommendation. Nothing is pending: the two positions weighed and not adopted in the rationale, that a lockfile is generated output belonging with the ignored directories and that this repository's install is too shallow for drift to matter, are ruled there, and the note that the reading was validated from the AI's own knowledge rather than a fetch is a fact about its class, not a candidate answer. Its question does not duplicate lockfile's, which asks whether this repository commits one; this asks only what the npm standard says.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `reparent-under-lockfile` absorbs `move-under-lockfile`. The merge unit's note: The node has no recommendation, so neither name is adopted; `reparent-under-lockfile` was kept as the clearer of the two.

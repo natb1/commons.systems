@@ -2,13 +2,25 @@
 question: How is intent recorded here?
 stage: review
 recommendation:
+  adopts: draft
   class: ratified
   boldness: moderate
+  amends: "194966b07144904d820896a7cf3428680b9fe4f3"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: e0c2b97382c629a532bf40f75dd73f51cae992c9
+alternatives:
+  - name: draft
+    source: ai
+  - name: alignment-acts-first
+    source: review
+    ref: "2026-09-03"
+  - name: primer-node
+    source: ai
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -35,8 +47,21 @@ As a disposition graph. A disposition is one standing answer to one question, he
 
 The refinements of this node define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, instruments, readings, the work loop, materialized implementation, and the standing of the legacy record. Each is ratified in onboarding order.
 
+## Alternatives
 
-## Draft
+### draft
+
+The draft rewrites the answer for a reader arriving from purpose who needs to use the alignment skill rather than look up the schema: disposition and the three stamp classes, the under edge and how rank follows it, readings with their relations, criteria as check, assessment or assumption, and the sitting, in that order. The standing answer is the terse schema statement the author found too reference-shaped, and its list of refinements moves to the draft's rationale, which also rejects a separate primer node. The draft presumes the instruments vocabulary, which no node's defines carries today, and keeps a deferred stamp with a placeholder date the recording is to replace.
+
+### alignment-acts-first
+
+Model's recommended rationale says growth is first among model's children because the sitting is the first thing a newcomer does, which second-stop's amendment withdrew and which attention's recorded boosts and the frontier's ranks contradict, projection standing at 5 and growth at 4. The alternative strikes that sentence and says at most that alignment is where the newcomer acts first, asserting no rank, which second-stop's amended option permits and which the contradiction finding of 2026-09-03 proposes as the form the claim may take. Raised on commons.systems/disposition-graph/attention.
+
+### primer-node
+
+Model carries the primer-node option as an alternative of its own, a new node between purpose and model introducing the graph primitives, with model's answer left as it stands, and second-stop is folded away. Under the new encoding an option-node whose whole content is a choice between two answers to a sibling's question is that sibling's alternatives list, which is what the redundancy finding of 2026-09-03 offers as the alternative to keeping the option-node. (Raised on commons.systems/disposition-graph/second-stop.)
+
+## Recommendation
 
 ```markdown
 ---
@@ -62,7 +87,7 @@ As a disposition graph, which you read from the purpose node down and change onl
 This node is the second stop of the onboarding walk, after purpose, and it is written for a reader who needs to use the skill, not for one looking up the schema. Its refinements define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, criteria, readings, the work loop, materialized implementation, transience, and the standing of the legacy record. Rejected: a separate primer node between purpose and this one, because it would answer no question this node does not.
 ```
 
-## Proposal
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -132,3 +157,15 @@ Three option-nodes decide clauses that a sibling's draft already contains. Hexis
 Also named: commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/purpose-criteria, commons.systems/disposition-graph/second-stop, commons.systems/disposition-graph/purpose.
 
 Proposed: Keep the option-nodes as the survivors of their questions, since each is a real decision the author should make separately, and add one line to each saying it is a sub-ruling of the named parent's draft and must be ruled first. Correspondingly, each parent's Proposal names the option-nodes its draft presumes. Alternatively fold each option into its parent's Proposal as an explicit alternative, which is what rejected's option 1 would make structural — but that decision is itself unruled.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `draft` (ai); `alignment-acts-first` (review, 2026-09-03); `strike-growth-first-sentence` (review, 2026-09-03, from commons.systems/disposition-graph/attention); `primer-node` (ai, 2026-09-03, from commons.systems/disposition-graph/second-stop).
+The recommendation adopts `draft` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, own-question: The next onboarding refinement under purpose should introduce the graph primitives well enough to use the alignment skill, since How is intent recorded here jumps too quickly into reference-shaped material, and the reader's navigation from purpose to graph concepts to alignment usage should be considered.
+The census unit's note: The node carries a draft, so the recommendation adopts it. Most of what the reviews raised has been applied: the growth-first sentence is struck from the draft rationale, the boost clause now reads which only the author ratifies, and the placeholder stamp is settled at the recording, so none of those is pending. What remains open on this node is the positive form of the struck sentence, which the contradiction finding offers. I deliberately did not add the primer-node candidate here, because second-stop owns that question and carries it as an option; the redundancy finding of 2026-09-03 proposes folding second-stop's option into this node's alternatives, and I recorded that as an elsewhere on model from second-stop rather than duplicating it. The author's one block is this node's own question; note that its cites sentence is carried verbatim on projection as well, which is a duplicate quotation of the kind validation 14 watches.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `alignment-acts-first` absorbs `strike-growth-first-sentence`.

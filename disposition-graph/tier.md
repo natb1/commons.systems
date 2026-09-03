@@ -6,16 +6,39 @@ review:
   strength: strong
   date: 2026-09-03
   of: b771f61884d089ade840320426bdb133f11fabc8
+alternatives:
+  - name: keep-tier-as-a-stored-flag
+    source: ai
+    ref: "2026-09-03"
+  - name: scope-by-under-alone
+    source: ai
+    ref: "2026-09-03"
+  - name: record-what-makes-a-rule-global
+    source: review
+    ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/under
 ---
-
 ## Disposition
 
 The author, 2026-09-03:
 > 'Tier' (as in global-tier) needs a disposition. As a disposition references in the projected documentation must be hyperlinked. Is 'tier' even the right primitive? Even cross-cutting non-functional concerns have scope. A static typing convention doesn't apply to the purpose node. Evaluate adversarially and from greenfield perspective whether cross-cutting non-functional concern could be reduced to topology and/or citations.
 
-## Proposal
+## Alternatives
+
+### keep-tier-as-a-stored-flag
+
+The second option of the sitting: tier stays a stored flag on the node and the rules projection reads it, which is what the record runs on and what the projector implements today. The reviewer's counter-argument favours it, noting that all five global-tier nodes genuinely do bind every session and that no narrower cross-cutting rule has ever been recorded here.
+
+### scope-by-under-alone
+
+The third option of the sitting: a rule binds the subtree it sits in, and tier is pruned. The sitting's own reasoning rejects it because a rule's home question and its scope differ, evaluation living under growth while binding every evaluation, but the author has not ruled on it.
+
+### record-what-makes-a-rule-global
+
+The reviewer's cheaper answer, offered when the recommended option was kicked back: record what makes a rule global and keep the flag as its projection, so tier is derived from a stated property rather than being either an unexplained field or a new citation mechanism. The session accepted the kickback and named this as one of the two readings the maieutic movement must draw out.
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -78,3 +101,11 @@ Two ruling-stage nodes rest on maieutic ground without saying so. Rationale-edge
 Also named: commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/under, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/namespaces.
 
 Proposed: Rule traditions-home before readings and namespaces, and show the manifest entry on traditions-home so the author sees what they are creating. Rule rationale-edge and re-answer tier before under, and add to rationale-edge one clause saying its parent is unanswered. Under is then drafted from the three outcomes, simplified as the decomposition finding proposes.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `keep-tier-as-a-stored-flag` (ai, 2026-09-03); `scope-by-under-alone` (ai, 2026-09-03); `record-what-makes-a-rule-global` (review, 2026-09-03).
+Merge analysis of the author's words: 2026-09-03, own-question: Tier needs a disposition and may not be the right primitive, since even cross-cutting non-functional concerns have scope; evaluate adversarially and greenfield whether a cross-cutting concern reduces to topology or citations, and hyperlink every reference in the projected documentation.
+Moved to other nodes as alternatives: `strike-the-field-link-clause` on commons.systems/disposition-graph/projection.
+The census unit's note: The node carries no answer, no draft and no recommendation field, so adopts is null: the recommended option was withdrawn by the session's own reply after the kickback, which is why I did not record it as pending. What is pending are the two surviving options from the sitting and the reviewer's third reading, that tier be derived from a stated property of a rule while the flag remains its projection. The reviewer's two probes, whether the author wants a rule narrower than global and what such a rule would be, are questions with no candidate answer and I left them out. The author's block is this node's own question, though its hyperlink clause is answered by projection; the finding that carries that to projection is the elsewhere entry. The decomposition and placement findings on this node concern under and are recorded from under.

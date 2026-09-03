@@ -2,13 +2,23 @@
 question: Does Aristotle's account of the agent as archē support this root?
 stage: maieutic
 recommendation:
+  adopts: standing
   class: delegated
   boldness: high
+  amends: "0acb85683a8d46d0b6fc7eecea8c602915370b39"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: 0acb85683a8d46d0b6fc7eecea8c602915370b39
+alternatives:
+  - name: record-divergence
+    source: review
+    ref: "2026-09-03"
+  - name: disclose-unstated-arche
+    source: review
+    ref: "2026-09-03"
 form: reading
 authority:
   class: deferred
@@ -27,7 +37,17 @@ Supports, and supplies the identification this graph rests on: the first princip
 
 Metaphysics V.1 gives the word its senses at once, the starting point of a derivation, the origin of motion or action, and rule. Posterior Analytics I.3 makes first principles indemonstrable, which is why an archē in this graph is held by the author and never derived by the AI. Validated by the AI on 2026-09-02 from its own knowledge of the loci; deferred until the author reads them.
 
-## Proposal
+## Alternatives
+
+### record-divergence
+
+Both readings press the same divergence and the session accepted it as owed at the sitting: Politics I.4 introduces the self-working instrument to argue about natural slavery, not to preserve a master's origin-hood through delegation, and Eudemian II.6's analogy between a person and the archai of mathematics is about indemonstrability rather than about authorship surviving through intermediaries. This alternative records that divergence in the node and sets the relation to diverged, against the standing text's relation of adopted with the divergence named nowhere. Evaluation makes an unrecorded conflict with a cited tradition a frontier item deferred to neither side, which is why the choice is the author's.
+
+### disclose-unstated-arche
+
+The placement finding of 2026-09-03 records that public/agency stands at the periagogic stage with no author words anywhere on it, while this reading stands at the ruling stage arguing for the AI's draft of the answer it is said to support. This alternative adds one clause saying the reading rests on an archē the author has not yet stated, and holds the reading to be re-read against whatever account the author gives at agency's periagogic sitting before it is ruled. Raised on commons.systems/public/agency.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -86,3 +106,15 @@ Readings' rule is that a reading is 'ratified when the author has read the prima
 Also named: commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/aristotle-hexis, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/readings.
 
 Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `record-divergence` (review, 2026-09-03); `disclose-unstated-arche` (review, 2026-09-03); `reread-after-arche` (review, 2026-09-03, from commons.systems/public/agency).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Moved to other nodes as alternatives: `disclose-unstated-arche` on commons.systems/disposition-graph/purpose; `disclose-unstated-arche` on commons.systems/public/pettit-non-domination.
+The census unit's note: No Disposition section, so no dispositions to classify. The two alternatives are the divergence the reviews pressed twice and the session left owed at the sitting, and the placement finding's clause about the unstated archē. The coverage finding about reading classes carried here is discharged: I verified every one of the ten reading nodes now carries recommendation class delegated, so only the prose Facts lines remain, and this node's has already been rewritten. I did not mint an elsewhere on public/agency, since what that finding asks of agency is the author's own words rather than a change to its text; it is a ruling-order proposal for the page.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `disclose-unstated-arche` absorbs `reread-after-arche`.

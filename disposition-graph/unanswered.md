@@ -2,8 +2,11 @@
 question: When is a disposition answered?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "b5717e656b723368acf1ad6f3609c7ab85c6a1a3"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 form: rule
 authority:
   class: deferred
@@ -48,7 +51,7 @@ The author's ruling of 2026-09-03, quoted above. The bootstrap wrote its answers
 
 Why a confirmation ratifies: the recording node makes the confirmation the last movement before the stamp, and the three responses the author asked for are the ruling's three outcomes as that node classifies them, recorded, refined, or kicked back; a fourth response, defer, is not needed, because leaving a node unconfirmed is the deferral. Why the purpose node first: rank alone puts the public graph's root above this project's, since the purpose node stands under it, while the author's order recorded on the scope node begins at purpose; listing each graph in the manifest's order, by rank within it, gives the author's order without touching a rank. Rejected: reading the earlier ruling that unanswered nodes are hidden from the browser as covering every unanswered node, which would empty the browser of the record it documents; that ruling was made of nodes with no answer and is kept for them. Rejected: a fourth authority class, or a field, for unanswered, since the status is derived from the stamp and the answer and a stored copy would drift; marking an answered node unanswered while an alternative is pending, the author's own first suggestion of 2026-09-03, retracted by the author the same day, since a pending alternative is dialogue state beside the answer and the answer's authority does not lapse until one is confirmed, as the author ruled that day, quoted above. Rejected: leaving the deferred answers without a stage, which would keep the queue a reading of the stamps instead of a dialogue the page lists. Not adopted from the incumbent record: review-item nodes and a curriculum, since the queue is the unanswered nodes themselves.
 
-## Proposal
+## Account
 
 ### Recording of 2026-09-03
 
@@ -128,3 +131,16 @@ The sentence quoted above says what becomes of a conflicting answer that survive
 ### The author's retraction, 2026-09-03
 
 The sentence carried above, that a surviving conflicting answer is marked unanswered until confirmed, is retracted by the author's words of the same day as a hack. What stands in its place is the function: an answered node with an alternative pending on it, a proposal from outside alignment or an alternate answer from inside it, keeps its stamp and shows the pending alternative to its reader. This node's answer already says the status is derived and never a field, and that an answered node carries the dialogue while its ratification is under review, keeping its stamp until the author rules; the redraft under the sitting on dialogue extends that from ratification under review to any pending alternative, and this node's part of it is whether the standing answer keeps its authority meanwhile, put to the author in the maieutic movement.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `pending-alternative-keeps-stamp` (author, 2026-09-03); `standing-keeps-authority` (author, 2026-09-03).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: Because the bootstrap recorded deferred dispositions before the alignment dialogue existed, every disposition is reclassified as unanswered with no loss of encoding, anything not yet adversarially reviewed is reviewed, and the alignment artifact sorts unanswered nodes by rank with purpose first and offers confirm, confirm with edits, and deny with feedback on any subset. 2026-09-03, own-question: A conflicting answer that arises in alignment and survives periagoge, maieutic and adversarial review is marked unanswered until confirmed. 2026-09-03, own-question: The same marking rule, with the addition that a conflicting answer arising outside alignment is a proposal — the second sentence answering authority's question and already carried there. 2026-09-03, own-question: The flip from answered to unanswered pending confirmation is retracted as a hack; what the author wants at the functional level is to see, on a node already confirmed, the proposals surfaced outside alignment and the alternate answers pending confirmation. 2026-09-03, own-question: When an alternative is pending on any node with authority, the previously confirmed answer keeps its full authority until an alternative is confirmed.
+Moved to other nodes as alternatives: `cite-unanswered-responses` on commons.systems/disposition-graph/recording; `cite-unanswered-for-page-responses` on commons.systems/disposition-graph/growth; `reduce-un-aligned-paragraph` on commons.systems/disposition-graph/transience; `narrowing-clause` on commons.systems/disposition-graph/projection.
+The census unit's note: The node carries an answer and no draft, so the recommendation adopts the standing text. Two alternatives are pending, both in the author's own later words: that an answered node with a pending alternative keeps its stamp and shows what is pending, which the author gave when retracting the flip to unanswered, and that a standing answer keeps its full authority meanwhile. The marking rule of the earlier blocks is not an alternative because the author retracted it themselves. Excluded as already ruled: the counter-argument's proposal to leave the deferred stamps as the queue and put a stage only where a dialogue is open, which the rationale rejects by name. Moved elsewhere: the response-vocabulary finding to recording and growth, the decomposition finding to transience, the supersession finding to projection.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `pending-alternative-keeps-stamp` dropped, Carried by the answer's sentence 'an answered node carries one while an alternative is pending on it, from the alignment dialogue or from a proposal outside it, keeping its stamp and its full authority, whatever its class, until an alternative is confirmed; the author's first suggestion, that such a node be marked unanswered until confirmed, was retracted by the author on 2026-09-03 as a hack, and the projections show the pending alternatives beside the answer instead', together with the page listing 'the alternatives pending with their sources'; `standing-keeps-authority` dropped, Carried by the same sentence: an answered node with an alternative pending keeps 'its stamp and its full authority, whatever its class, until an alternative is confirmed', which is the author's words that a pending alternative does not unanswer a node. The merge unit's note: Both entries drop, so the `alternatives` list becomes empty and the `## Alternatives` section must be removed with it: the validator requires the section present iff the list is non-empty. The node keeps its stage and its recommendation of `standing`.

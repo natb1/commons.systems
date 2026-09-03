@@ -2,8 +2,20 @@
 question: How is the unanswered frontier kept consistent with itself?
 stage: review
 recommendation:
+  adopts: standing
   class: ratified
   boldness: moderate
+  amends: "a870b3a1ce42036ac4ddc5422ca46bb8176838f0"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+alternatives:
+  - name: new-question-or-new-answer
+    source: author
+    ref: "2026-09-03"
+  - name: split-survey-from-per-draft
+    source: review
+    ref: "2026-09-03"
+  - name: cite-run-mechanics
+    source: ai
 form: rule
 authority:
   class: deferred
@@ -68,7 +80,21 @@ Drift between unanswered nodes is invisible to any reading of one node: the seco
 
 The merge validation and the batch scope were added on 2026-09-03 under the author's bootstrap grant, quoted above, when the frontier was re-encoded with the merge analysis the author's words ask for: the batch is the nodes at the review stage, the context is the full graph, and the author's earlier words that every invocation evaluates the full unanswered frontier are kept as the context read and narrowed as to what is judged. Rejected: a review of each node in a context of its own, the previous answer of the clean-context-review node, which sees only the round's drafts named for it and never the frontier's drift; a validator rule for consistency, since a validator holds ids, edges, ranks, and shapes, and whether two answers disagree is judgment; a survey at reconciliation time, which is too late, the implementation being built by then on inconsistent drafts. Kept from the previous answer: the clean context, a fresh subagent that is never a fork, since the review must be independent of the sitting's framing even while it reads everything the sitting wrote.
 
-## Proposal
+## Alternatives
+
+### new-question-or-new-answer
+
+The author's words on the sitting of dialogue name the analysis of whether a disposition is a new question or a new answer to a question already recorded as performed by periagoge and by the adversarial review. Validation 15 now carries it for the review; the standing answer's periagogic sentence covers a draft's inconsistency with the answered graph and not this analysis. This alternative is the answer with the analysis named as belonging to the periagogic stage as well as to the review, so that a sitting checks it before a draft exists and not only when the batch is read.
+
+### split-survey-from-per-draft
+
+The review's counter-argument, which the session's reply left standing as a proposal a sitting may put: validations one to six duplicate what the recording node already requires of every draft review, so every batch pays twice for the per-node pass. The alternative splits the two: the survey, validations seven to fourteen, runs over the whole frontier at every invocation, while the per-draft review runs only on drafts that changed since their last reading. It keeps the author's requirement that inconsistency within the frontier be surfaced and bounds the cost of an unbounded reading over sixty-odd nodes.
+
+### cite-run-mechanics
+
+Both nodes state the same two run rules in full: that every invocation is one batch over the whole frontier read in one context, and that one review runs at a time by the invoking session's discipline until a lock exists. Clean-context-review is the survivor of the run mechanics, since its question is how the review is run and it is the node the skill implements. Frontier-consistency cites it for the batch scope and the serialization and keeps what is its own, the fifteen validations and the kickback flow, so that drift between the two restatements cannot open. (Raised on commons.systems/disposition-graph/clean-context-review.)
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -95,3 +121,15 @@ The session's reply: Validated. Amended tonight: validation 14 admits a quotatio
 ### The author's words of 2026-09-03 on dialogue
 
 The sentence quoted above adds a validation the answer does not list: whether a disposition is a new question or a new answer to a question already recorded, answered or unanswered. The draft does not answer it, so the stage returns to maieutic; the whole disposition is on the dialogue node, whose sitting carries it.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `new-question-or-new-answer` (author, 2026-09-03); `split-survey-from-per-draft` (review, 2026-09-03); `cite-run-mechanics` (ai, from commons.systems/disposition-graph/clean-context-review).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-03, own-question: The unanswered frontier's self-consistency must be enforced by the adversarial review skill, whose every invocation is a batch over the full frontier with no context isolated by disposition, and which must run a full list of validations including a survey for inconsistencies and redundancies. 2026-09-03, own-question: A conflict the review identifies produces the same kickback flow, recommending a return to an earlier dialogue phase with context and edits. 2026-09-03, own-question: The review skill is serialized after any adversarial review already running in the session. 2026-09-03, own-question: Periagoge and the adversarial review both analyse whether a disposition is a new question or a new answer to a question already recorded, answered or unanswered.
+The census unit's note: Two alternatives: the author's own added validation, which the node records as unanswered by the standing text and which sent it back to maieutic, and the review's split of the survey from the per-draft pass, which the session's reply explicitly left as a proposal for a sitting. The review's other findings are already applied in the answer, verified by reading validation 14 (the quotation carried on a child) and the kickback sentence (the node whose text must change), so they are not alternatives. The circularity finding and the finding that persistence is nowhere derived are observations with no proposed text. The fold of this node's restated batch and serialization rules into clean-context-review is proposed from that node.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: . The merge unit's note: No change proposed. new-question-or-new-answer is only PARTLY carried and stays: the answer now lists fifteen validations, and validation 15 carries the author's words verbatim, so the first half of the alternative is met, but the answer names only the review as running the analysis; the author's words say 'One of the analyses performed by periagoge and adversarial alignment review', and the answer's periagogic sentence covers a draft's inconsistency with the answered graph, not this analysis. The entry's own text is now stale on two facts, that the answer 'lists fourteen validations and no such analysis' and that 'the stage returned to maieutic'; the node stands at the review stage. If the main thread wants it rewritten rather than kept as-is, the remaining alternative is the answer with the analysis named as belonging to the periagogic stage as well as to the review.

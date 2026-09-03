@@ -1,19 +1,63 @@
 ---
 question: What criteria guard the purpose node?
-stage: ruling
+stage: review
 recommendation:
+  adopts: unguarded
   class: ratified
   boldness: low
-review:
-  verdict: forward
-  strength: strong
-  date: 2026-09-03
-  of: 344adc6d0c702185eb7c60d50d6523d171c5a3a6
+  amends: "344adc6d0c702185eb7c60d50d6523d171c5a3a6"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+alternatives:
+  - name: unguarded
+    source: ai
+    ref: "2026-09-03"
+  - name: drafted-criteria
+    source: ai
+    ref: "2026-09-03"
+  - name: fold-into-purpose
+    source: review
+    ref: "2026-09-03"
+    prune: true
 under:
   - commons.systems/disposition-graph/purpose
 ---
+## Alternatives
 
-## Proposal
+### unguarded
+
+Criteria are deferred to a later sitting and purpose shows as unguarded, the record saying so, with the two criteria re-proposed when the reconciliation harness exists, the check written against it and the assessment given a threshold. This is what the session's reply adopted after the counter-argument, and what the frontmatter recommendation already states at low boldness. Instruments' text makes unguarded a legible state the record announces rather than a defect it hides.
+
+### drafted-criteria
+
+Purpose carries the two criteria as drafted: a check that every unit of work the harness dispatches cites the node it serves, and an assessment that work done in the author's name since the last sitting traces to a recorded disposition. The session withdrew it after the review, on the ground that the check names a harness that does not exist and the assessment has no failure condition, so it cannot fail and cannot guard; the Options block nevertheless still lists it. It remains on the table as the option the author may take.
+
+### fold-into-purpose
+
+Prune: The redundancy finding holds that this node decides a clause purpose's own recommended text contains, so confirming purpose as shown would decide it by that act. Its second branch folds the option into purpose's account as an explicit alternative and prunes this node, which is what the new encoding makes structural; its first branch keeps the node with one line saying it is a sub-ruling of purpose that must be ruled first.
+
+## Recommendation
+
+```markdown
+---
+question: What criteria guard the purpose node?
+form: rule
+authority:
+  class: ratified
+  by: Nathan Buesgens
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/purpose
+---
+## Answer
+
+None today. The purpose node stands unguarded, and the record says so on its page rather than leaving the absence to be inferred. The two criteria drafted on 2026-09-03 are withdrawn: the check, that every unit of work the harness dispatches cites the node it serves, named a harness that does not exist on the implementation ref, and the assessment, that work done in the author's name traces to a recorded disposition, stated no threshold and so could not fail. Both are re-proposed when the reconciliation harness exists, the check written against it and the assessment carrying the proportion of untraced work that fails it. Until then purpose carries one stamp and no criteria, since a criterion that would need a stamp of its own is a question of its own and becomes a node then.
+
+## Rationale
+
+Unguarded is a legible state the record announces rather than a defect it hides, so an honest absence is worth more than a check against a mechanism the implementation does not have and an assessment with no failure condition. Purpose ranks first, so a criterion that could only fail spuriously would put a false frontier item at the top of every ranked list, ahead of the work that would build the harness the check assumes. Rejected: the check and the assessment as drafted, because neither could guard anything today and because their stated authority, deferred, cannot stand beside purpose's ratified stamp on a node that carries one stamp. The author's words behind this question were a question of their own, whether every disposition has instrumentation or criteria or something like that, and not a direction that the purpose node must carry criteria before the harness they would check exists.
+```
+
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -81,3 +125,10 @@ Three option-nodes decide clauses that a sibling's draft already contains. Hexis
 Also named: commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/second-stop, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/model.
 
 Proposed: Keep the option-nodes as the survivors of their questions, since each is a real decision the author should make separately, and add one line to each saying it is a sub-ruling of the named parent's draft and must be ruled first. Correspondingly, each parent's Proposal names the option-nodes its draft presumes. Alternatively fold each option into its parent's Proposal as an explicit alternative, which is what rejected's option 1 would make structural — but that decision is itself unruled.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `unguarded` (ai, 2026-09-03); `drafted-criteria` (ai, 2026-09-03); `fold-into-purpose` (review, 2026-09-03).
+The recommendation adopts `unguarded` and is pinned to the standing text as it was at that commit. The recommended text was drafted at the re-encoding from the option the account marks recommended, so that the recommendation adopts an alternative with a text and not only a name; the earlier review read the options and not this text, so it is removed and the node returns to the review stage for the clean-context review of the batch.
+The census unit's note: This node has a recommendation but no standing answer and no recommended text: it is an options node, and the recommendation matches option 2, so it adopts the alternative I named unguarded. Option 1 stays listed and is carried as a pending alternative, since nothing rejects it in a rationale, and the fold proposed by the redundancy finding is the third. The stale recommended marker on option 1 and purpose's criteria block are both fixed in the snapshot, so the contradiction finding is resolved. The counter-argument's residue, that purpose stays unguarded with no date to re-propose, is answered in prose and I did not raise it to an alternative. The fold is recorded here and, from purpose's side, as its fold-option-nodes alternative.

@@ -2,13 +2,26 @@
 question: Does the software-factory tradition support this repository's purpose?
 stage: review
 recommendation:
+  adopts: standing
   class: delegated
   boldness: moderate
+  amends: "b0e69687251e57fc7db912dde66beb28e1515ef5"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: b0e69687251e57fc7db912dde66beb28e1515ef5
+alternatives:
+  - name: divided-sources
+    source: review
+    ref: "2026-09-03"
+  - name: divergence-of-ownership
+    source: review
+    ref: "2026-09-03"
+  - name: delegated-not-ratified
+    source: review
+    ref: "2026-09-03"
 form: reading
 authority:
   class: deferred
@@ -27,7 +40,21 @@ Supports the audience's framing and marks the divergence that defines this repos
 
 The Japanese factories of the 1970s and 1980s and the model-driven factories of the 2000s both answered "how do we produce software reliably at scale"; the agentic factories of 2025 answer it again with agents. None answers "how does the owner stay the origin of what the factory makes", which is the question above this one. Validated by the AI on 2026-09-02 from its own knowledge; deferred until the author reads the sources.
 
-## Proposal
+## Alternatives
+
+### divided-sources
+
+Both readings found that the source field bundles three distinct traditions under one relation, Cusumano's Japanese software factories, Greenfield and Short's model-driven factories, and the contemporary AI software factory of 2025 and 2026, which has no primary text at all, so the condition on which a deferred or delegated class rests cannot be met for the third. The session accepted the division as owed at the sitting. This alternative divides the reading, one relation per tradition with the contemporary usage held as usage rather than as a source, and replaces the sentence restating the archē's argument with a citation of commons.systems/public/aristotle-arche-of-action.
+
+### divergence-of-ownership
+
+The counter-argument, twice recorded: the divergence claimed, that factory literature is about the factory's own process while this record is about the owner's intent, is the divergence every specification method claims, and Greenfield and Short's factories are organised around a product-line specification playing much the role this record plays. This alternative recasts the divergence as one of ownership and authority rather than of subject matter, which puts it in Pettit's territory rather than Cusumano's; its limit case is that the phrase is a discovery term borrowed for the audience, diverging on nothing load-bearing, which purpose already concedes when it calls it the audience's own vocabulary.
+
+### delegated-not-ratified
+
+The coverage finding carried on spec-driven-development proposes that the reading nodes still recommending 'ratified' change to 'delegated', since readings' rule makes ratified conditional on the author having read the primary source and each of these nodes' own rationale says the reading is deferred until then, and that every reading's prose Facts line be rewritten to 'delegated on confirmation; ratified after the author's reading' in place of the stale line offering two classes for one stamp. (Raised on commons.systems/disposition-graph/spec-driven-development.) Also raised on commons.systems/public/pettit-non-domination.
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -76,3 +103,10 @@ Readings' rule is that a reading is 'ratified when the author has read the prima
 Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/aristotle-hexis, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/readings.
 
 Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `divided-sources` (review, 2026-09-03); `divergence-of-ownership` (review, 2026-09-03); `delegated-not-ratified` (review, 2026-09-03, from commons.systems/disposition-graph/spec-driven-development).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+The census unit's note: No Disposition section, and the reviews note that a confirmation here would write a stamp authority calls invalid for want of a quoted ruling; that is a defect of the node rather than a candidate answer, so it is not an alternative. The two alternatives are the edits the session accepted as owed at the sitting and the counter-argument's recasting of the divergence, which the reply says the sitting will say in those words. The reading-class coverage finding is discharged: this node's recommendation is already delegated, as are all ten readings'.

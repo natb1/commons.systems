@@ -2,13 +2,26 @@
 question: Does spec-driven development support this repository's purpose?
 stage: review
 recommendation:
+  adopts: standing
   class: delegated
   boldness: high
+  amends: "3d9e3b26cabec954290ca3c081d8c118bfbad14c"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: 7ebb474fc79deb134fa8e93ec67de404f64150bf
+alternatives:
+  - name: chosen-over
+    source: review
+    ref: "2026-09-03"
+  - name: split-sources
+    source: review
+    ref: "2026-09-03"
+  - name: delegated-not-ratified
+    source: review
+    ref: "2026-09-03"
 form: reading
 authority:
   class: deferred
@@ -27,7 +40,21 @@ Supports, with a recorded divergence. Adopted: the specification, not the prompt
 
 The term is current and dominant in AI coding practice of 2025 and 2026, which makes it the audience's own vocabulary and a discovery term. Its older lineage is the tradition that the description of the program is the source of truth. Validated by the AI on 2026-09-02 from its own knowledge, not from primary reading; deferred until the author reads the sources.
 
-## Proposal
+## Alternatives
+
+### chosen-over
+
+Both reviews' strongest counter-argument is that the recorded divergence is the whole of the practice: what makes spec-driven development work in the 2025 tools is exactly the per-feature requirements, design and task documents this reading rejects, and replacing them with a graph of standing answers keeps the name and drops the mechanism. On the thing the tradition is for, the relation is nearer to 'chosen over' than to 'adopted', and calling it adopted lets the audience's expectation of the term do work the record has not earned, which purpose leans on in its first paragraph. The session's reply hands the choice to the author: whether the specification reconciliation derives from the answers counts as adopting the tradition or choosing over it.
+
+### split-sources
+
+Both reviews find that the `source` field bundles two 2025 products, AWS Kiro and GitHub Spec Kit, with a three-item lineage, Knuth 1984, Meyer 1986 and Adzic 2011, under one `relation: adopted`, while the lineage is a different tradition from the tooling and would divide differently on the divergence recorded. Readings' rule is one tradition per reading. The session's reply records the split as owed at the sitting rather than made, so the alternative is a node whose source is the tooling alone, with the lineage read separately.
+
+### delegated-not-ratified
+
+Same finding: the node recommends ratified while its rationale defers the reading until the author reads the sources, which readings' rule forbids, so the recommendation class changes to delegated and the facts line reads delegated on confirmation, ratified after the author's reading. (Raised on commons.systems/public/pettit-non-domination.)
+
+## Account
 
 ### Recording of 2026-09-03
 
@@ -76,3 +103,11 @@ Readings' rule is that a reading is 'ratified when the author has read the prima
 Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/aristotle-hexis, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/readings.
 
 Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `chosen-over` (review, 2026-09-03); `split-sources` (review, 2026-09-03); `delegated-not-ratified` (review, 2026-09-03, from commons.systems/public/pettit-non-domination).
+The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
+Moved to other nodes as alternatives: `delegated-not-ratified` on commons.systems/disposition-graph/software-factories; `delegated-not-ratified` on commons.systems/disposition-graph/srs-introduction; `delegated-not-ratified` on commons.systems/disposition-graph/web-routing.
+The census unit's note: The node has an answer and no draft; its recommendation was already amended to delegated at high boldness, so it adopts the standing text. Two things are genuinely open for the author and I made them alternatives: whether the relation to the tradition is 'adopted with a recorded divergence' or 'chosen over', which the session's reply hands to the author in as many words, and the split of the bundled source into the tooling and its lineage, which the reply records as owed. The 'standing constitution of principles' point is an observation that the mechanism is unmaterialized, not a candidate answer, so it stays out. The node has no `## Disposition` section, so there is no merge analysis to do on the author's words here. The class-of-reading finding is moved to the three sibling readings it names.

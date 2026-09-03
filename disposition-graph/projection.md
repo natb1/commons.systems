@@ -2,13 +2,40 @@
 question: How is the record read?
 stage: review
 recommendation:
+  adopts: draft
   class: ratified
   boldness: moderate
+  amends: "cf07e99b282ef5c28b81af1f8865ee1ae2d366ca"
+  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: d83b91ee4a1a885cca639b03a3227acecda335bd
+alternatives:
+  - name: draft
+    source: ai
+  - name: narrowing-disclosed
+    source: review
+    ref: "2026-09-03"
+  - name: hold-for-self-documentation
+    source: review
+    ref: "2026-09-03"
+  - name: hyperlink-traditions-in-prose
+    source: author
+    ref: "2026-09-02"
+  - name: name-what-it-does-not-settle
+    source: review
+    ref: "2026-09-03"
+  - name: strike-the-field-link-clause
+    source: review
+    ref: "2026-09-03"
+  - name: absorb-self-documentation
+    source: ai
+    ref: "2026-09-03"
+  - name: shim-carries-framed-viewer
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -57,8 +84,41 @@ Through projections, never by opening node files, except in alignment sessions. 
 
 The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree. It keeps context focused, keeps legacy vocabulary out of working sessions, and makes the graph commit a session read from a pinned fact. The address rule was recorded at the author's direction on 2026-09-03, after the address was seen not to change on navigation in the framed viewer; the routing tradition is the reading under this node. The author, 2026-09-03: "The url in the artifact is not updated on navigation between nodes. This could cause navigation confusion. Record reference to web app routing tradition for disposition. Edit the browser shim to reconcile the disposition." And, the same day, that unanswered nodes are hidden from the browser and listed by the alignment page, quoted on the transience node. A hosted README cannot embed a live page, so the README renders the purpose page statically or links the browser at the purpose node; that bite on the main branch is unbuilt work, not a disposition.
 
+## Alternatives
 
-## Draft
+### draft
+
+The draft rewrites the answer so that the browser states nothing of its own: every page shows the question, the answer, the criteria or the word unguarded, the readings set apart from the answer they ground, the nodes it cites and the nodes that cite it, and an authority section projected from the stamp, the ruling behind it, the alternatives the rationale rejected, and what is pending for a deferred node. The standing answer carries none of that page structure. The draft also narrows the README, the repository description and the discovery tags to projections of the purpose node alone, which presumes the audience prune, and its rationale records the rejection of a how-to-read page, a vocabulary page and a rejected-alternatives section separate from authority. Three of its four projection promises, the criteria, the word unguarded, and the authority section, are unmaterialized in the browser today and are owed by the browser shim.
+
+### narrowing-disclosed
+
+The answer keeps the amended sentence, that only a node with no answer is hidden from the browser, and adds one clause saying plainly that this narrows the author's earlier words, quoted on transience, that unanswered nodes are hidden from the browser and listed by the alignment page, words the author's later reclassification of every disposition as unanswered would otherwise empty. Three reviews in a row and the supersession finding asked that the author be shown this as a change to what they said rather than as a restatement of it; it is what projection's own counter-argument asks for, and the facts line still does not say so. Raised on commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/transience.
+
+### hold-for-self-documentation
+
+Projection is not ruled at all until self-documentation is answered, because that answer decides whether projection is the self-documentation section and scope's order field already encodes the mapping. The finding's sequence is self-documentation first, then scope and projection ruled together, then the periagogic sittings on frontier-metrics and vocabulary-view against a settled projection node.
+
+### hyperlink-traditions-in-prose
+
+The author's words that references to tradition in the projected documentation should hyperlink to the tradition node, keeping the hyperlinking of target dispositions, are carried on readings and on no other node; projection's Disposition carries seven other quotations and not this one. The redundancy finding recorded here makes projection the survivor of the linking rule, whose draft already says every defined term and every tradition's name links to the node that defines it. The candidate is that projection carry these words as the ground of that rule. (Raised on commons.systems/disposition-graph/readings.)
+
+### name-what-it-does-not-settle
+
+The answer gains one clause naming which questions it does not settle, since three of projection's children stand at the periagogic or maieutic stage holding author words this answer partly answers: vocabulary-view on repository vocabulary and the layout of tradition references, frontier-metrics on heading metrics, and self-documentation on its placement as a section equal with scope. Projection's recommended text answers half of vocabulary-view's author words, so ruling it settles parts of three dialogues before they have run. The coverage finding offers this against holding projection until self-documentation is answered. Raised on commons.systems/disposition-graph/frontier-metrics, commons.systems/disposition-graph/vocabulary-view.
+
+### strike-the-field-link-clause
+
+The contradiction finding holds that projection's draft carries a clause the record has since withdrawn: that every field name and value on a page links to the node that defines it, which was this node's recommended option and was withdrawn with it. It is verified unmeetable, at least fifteen field names and sub-keys in use being named by no node's defines. Projection strikes the clause and keeps the defined-term and tradition-name links, which are the author's own request and are implemented; the field-link rule returns whenever tier is answered. (Raised on commons.systems/disposition-graph/tier.)
+
+### absorb-self-documentation
+
+If the mapping stands, projection is the self-documentation section of the author's order and this node is pruned into it, which makes projection the survivor of the question how the repository documents itself. The coverage finding carried on both nodes proposes projection either be ruled with one clause saying which of self-documentation's, vocabulary-view's and frontier-metrics' questions it does not settle, or be held until self-documentation is answered, since that answer decides whether projection is the section at all. (Raised on commons.systems/disposition-graph/self-documentation.)
+
+### shim-carries-framed-viewer
+
+Projection's browser shim gains the framed viewer's divergence in its liquidation condition: until the browser is published from the implementation ref, the page keeps the reader's place itself and shows the address of the node in view. The finding is that this stand-in currently lives as a clause in web-routing's answer, where the frontier cannot read it, and the parent's shim is where transience puts a stand-in for an unmade materialization. (Raised on commons.systems/disposition-graph/web-routing.)
+
+## Recommendation
 
 ```markdown
 ---
@@ -88,7 +148,7 @@ Through projections, never by opening node files, except in alignment sessions. 
 The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree, and of the same date that the browser must carry nothing the graph does not, since hand-written orientation and vocabulary drift and the onboarding walk is the orientation. Rejected: a how-to-read page and a vocabulary page in the browser; a rejected-alternatives section apart from authority, because what was rejected is part of how the answer came to stand.
 ```
 
-## Proposal
+## Account
 
 ### Sitting on purpose, 2026-09-03
 
@@ -205,3 +265,16 @@ Four node files end with a bare 'null' on its own line, where a session's reply 
 Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/growth, commons.systems/disposition-graph/transience.
 
 Proposed: Write the four missing replies, or state on each that the review's findings are accepted, and strike the 'null'. The pattern is a serialization defect in whatever applied the reviews rather than four independent omissions, so the apply step should be checked: .claude/skills/align-review/apply.mjs is the script that writes replies, and a reply of JavaScript null being stringified into the file is the likely cause. Until it is fixed, every future review round will leave the same trace.
+
+### Re-encoding, 2026-09-03
+
+Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
+Alternatives pending, with their sources: `draft` (ai); `narrowing-disclosed` (review, 2026-09-03); `disclose-unsettled-children` (review, 2026-09-03); `hold-for-self-documentation` (review, 2026-09-03); `hyperlink-traditions-in-prose` (author, 2026-09-02, from commons.systems/disposition-graph/readings); `narrowing-clause` (review, 2026-09-03, from commons.systems/disposition-graph/unanswered); `name-what-it-does-not-settle` (review, 2026-09-03, from commons.systems/disposition-graph/vocabulary-view); `say-the-browser-rule-was-narrowed` (review, 2026-09-03, from commons.systems/disposition-graph/transience); `strike-the-field-link-clause` (review, 2026-09-03, from commons.systems/disposition-graph/tier); `absorb-self-documentation` (ai, 2026-09-03, from commons.systems/disposition-graph/self-documentation); `shim-carries-framed-viewer` (review, 2026-09-03, from commons.systems/disposition-graph/web-routing).
+The recommendation adopts `draft` and is pinned to the standing text as it was at that commit.
+Merge analysis of the author's words: 2026-09-02, own-question: The browser's hand-written how-to-read and vocabulary sections are not materialized from the graph and are prone to drift; both should follow from the onboarding progression instead. 2026-09-02, own-question: The browser does not need to track bootstrapping concerns, which are transient and belong to the AI rather than to greenfield documentation. 2026-09-02, own-question: An authority section projected into the documentation, with notes on pending ratification for deferred authority, makes more sense than the ad-hoc rejected section, and those notes could feed the alignment dialogue. 2026-09-02, own-question: Projecting cites relationships will aid onboarding navigation. 2026-09-03, new-answer on commons.systems/disposition-graph/materialization: All materialized implementation, the browser included, is a projection of the graph, and anything the graph does not justify is subject to liquidation through reconciliation. 2026-09-03, own-question: The browser's address is not updated on navigation between nodes, which could confuse navigation; record a reference to the web app routing tradition and edit the browser shim to reconcile the disposition. 2026-09-03, new-answer on commons.systems/disposition-graph/tier: Tier, as in global-tier, needs a disposition of its own, and as a disposition references in the projected documentation must be hyperlinked.
+Moved to other nodes as alternatives: `absorb-form-vocabulary` on commons.systems/disposition-graph/node.
+The census unit's note: The node carries both an answer and a draft, so the recommendation adopts the draft. The two frontier findings that name projection alone in what they propose for it, the supersession narrowing and the coverage over its three unruled children, became alternatives; the coverage finding really offers two rulings, disclose or hold, so I split it. I dropped as already applied the struck field-link clause, the cites projection the session ruled not owed work, and the bare null. Blocks five and seven of the author's words answer other nodes' questions, but materialization and tier each carry the same quotation verbatim and already answer it, so I recorded the merge classification and added no alternative there; adding one would invent a pending item. The only elsewhere is the form-vocabulary fold, whose consequence for node is not carried on node itself.
+
+### Alternatives merged, 2026-09-03
+
+The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `narrowing-disclosed` absorbs `narrowing-clause`, `say-the-browser-rule-was-narrowed`; `name-what-it-does-not-settle` absorbs `disclose-unsettled-children`. The merge unit's note: hold-for-self-documentation is the other branch of the same finding (do not rule projection at all until self-documentation is answered) and is a different change, so it stays; absorb-self-documentation's own proposal is that projection be the survivor of the self-documentation question, which is a third change, so it stays too, though its text restates the same disjunction.
