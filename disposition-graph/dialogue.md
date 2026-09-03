@@ -5,8 +5,8 @@ recommendation:
   adopts: standing
   class: ratified
   boldness: high
-  amends: "34da76227436d861d9c2d0a53d74048e81158924"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+  amends: "163f5ee5130f88f160523f95c72381f26751e96d"
+  at: "9e3a6624"
 alternatives:
   - name: minimal-dialogue-state
     source: review
@@ -26,7 +26,7 @@ defines:
   - dialogue state
   - stage
   - alternative
-  - standing
+  - standing answer
   - draft
   - recommendation
   - review state

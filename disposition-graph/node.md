@@ -5,8 +5,8 @@ recommendation:
   adopts: four-form-draft
   class: ratified
   boldness: moderate
-  amends: "194ba2fa54f12193357a9e08b12ab850f809c186"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+  amends: "7f819037912b5f0a31a839f35624b060e4ba9c6a"
+  at: "9e3a6624"
 review:
   verdict: kickback
   strength: strong
@@ -36,7 +36,6 @@ defines:
   - answer
   - rationale
   - form
-  - proposal
 instrument:
   kind: check
   ref: packages/disposition/validate.mjs on the implementation ref
