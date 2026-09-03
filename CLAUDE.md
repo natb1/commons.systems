@@ -147,36 +147,63 @@ rounds review the delta from the last reviewed commit.
   this ref (L25 to L28). Code review of round zero's landing: pending, see
   below. Waiting on the author: the sitting on `purpose`, below, and
   the round-one steer.
-- **Sitting on `purpose` (2026-09-02, in progress).** Reading movement
-  issued; periagogic probe one posed on the Answer alone (for what; held
-  only as hypotheses; for whom; a sentence the author would not have
-  written). The author answers after a compaction. Probes still to come:
-  each of the four readings (relation, locus); the rationale and the
-  rejected list. Held-back counterpoint, to enter only after the author
-  commits, cited by locus: (1) the sentence "It records the person's
-  dispositions as a graph, and the work is derived from that record rather
-  than from prompts or chat" is the AI's, not in the author's L12 words,
-  and answers how, not why; (2) the capture hypothesis dropped the author's
-  "in the variety of ways it occurs in daily life"; (3) "explicit intent"
-  is legacy vocabulary the AI imported; (4) scope: four recorded functions
-  fall outside as worded (apps, site and blog, gaming blog, shared
-  infrastructure) and audience records five audiences against one; (5)
-  traditions: spec-driven development adopted with a divergence
-  (per-feature documents against a standing personal record with authority
-  stamps), software factories diverged (Cusumano 1991; Greenfield and
-  Short 2004), hexis in Nicomachean Ethics II.5 1105b19 to 1106a13 is a
-  settled disposition and not knowledge, so "projection of the author's
-  hexis" is the stronger phrase and "knowledge store" its gloss; (6) the
-  steelman, inverting primary and hypotheses so the repository is the
-  author's disposition and the tooling its instrument, resolved diverged
-  because the personal graph moves to natb1.com (L03); (7) the three
-  AI-drafted rejected alternatives are to be confirmed or struck.
-  Recommendation to put at the maieutic stage: ratify with amendments,
-  strike the mechanism sentence and "explicit intent", restore "in daily
-  life", hexis phrase first, the steelman as a rejected alternative; class
-  ratified; boldness low on the Answer, moderate on the readings, high on
-  the hexis point; alternatives: ratify as written, defer until scope and
-  audience are ruled, or restate in the author's words.
+- **Sitting on `purpose` (2026-09-02, maieutic stage).** The author
+  answered probe one broadly, verbatim at
+  `bootstrap/sitting-purpose-author-2026-09-02.md`: all feedback on the
+  page is in scope; the author expects to be interviewed for
+  clarifications, then a playback of author and AI dispositions with
+  recommended encoding and authority. Counterpoint entered: the mechanism
+  sentence converged with the author's rewrite; "explicit" struck; "in the
+  variety of ways it occurs in daily life" restored; the hexis phrase put to
+  the author; scope items deferred to the scope sitting; the steelman
+  proposed as a rejected alternative; IEEE 830 states the intended audience
+  inside the purpose subsection, which supports the author's prune of
+  `audience`. Playback issued with seventeen encodings and nine questions
+  with defaults; the author answers by number, "go", or prose. Encodings,
+  to land after the ruling: (1) `growth`: both usages run both stages, the
+  disposition usage's periagogic object being the nodes the disposition
+  would amend and the implementation their criteria point to; (2)
+  `authority`: no stamp is ratified today (checked by grep), the ledger's
+  author rulings are evidence and never stamps, the first ratified stamps
+  are this sitting's; (3) every answer carries a stamp (validator rule),
+  proposal is content not a class, `purpose` stamped deferred now and
+  ratified at the ruling; (4) `projection`: the browser states nothing of
+  its own; how-to-read, the vocabulary page, and the bootstrap view are
+  removed; (5) transient state is never a node: `bootstrap` pruned, "during
+  bootstrap" prose stripped as nodes are ratified, the `ledger:` field
+  removed from nodes, no body references to ledger entries, the author's
+  words quoted in the node instead; (6) the purpose Answer redrafted in the
+  author's words with the factory as reconciliation, plus a reading on
+  control-loop reconciliation (Kubernetes controllers; Burgess 1998),
+  adopted with the two-way divergence; (7) traditions define their own
+  names so prose links through the existing term mechanism; a rationale
+  never repeats the readings section; the "Traditions to record as
+  readings" prose lists in `authority`, `node`, `instruments`,
+  `namespaces`, `validation-order` become stub tradition nodes; (8) a
+  harness tradition node from the README's sources (Böckeler 2026;
+  Anthropic 2025 and 2026; OpenAI 2026), with a reading under purpose,
+  adopted with divergence; (9) the rejected list kept, the issue-tracker
+  reason in the author's words; (10) `audience` pruned, its five-audience
+  proposal moved to `scope`, `projection` amended to purpose only; (11)
+  `srs-introduction` re-oriented to purpose, scope, references, with
+  definitions inline and overview deferred; (12) assumption is a criterion
+  class, not a form (incumbent `kind-kind` ratification of 2026-09-01; Zave
+  and Jackson 1997), so `knowledge-store` and `capture` become dispositions
+  with unvalidated criteria; (13) forms become disposition (target and rule
+  merged, achieve or maintain carried by the criterion; KAOS), archē,
+  reading, tradition, each with a vocabulary node; (14) criteria projected
+  on every page, "unguarded" when none, `instrument` becomes a `criteria`
+  list of check, assessment, assumption; purpose's criteria proposed; (15)
+  an authority section projects the stamp, the ruling, the rejected
+  alternatives, and for deferred nodes the pending items the next sitting
+  opens on; `## Proposal` and `### Rejected` liquidate into it; (16)
+  traditions as a mounted `traditions` graph, one root node per tradition,
+  references as readings under the citing node carrying a `tradition:` id,
+  cited-by projected; (17) the onboarding walk purpose, scope, primitives
+  (`model` rewritten), `/align` (`growth` boosted first under `model`),
+  references; cites projected both ways. Recommended at the ruling:
+  `purpose` ratified; the other encodings land as amendments with the
+  author's words quoted, deferred until each node's own sitting.
 - **Review log.** Each landing on this ref: commit range, out-dir tag,
   rounds, verdict.
   - Tooling, `684ac70f..6912c361`, tag `r0-tooling`, round one at high:
