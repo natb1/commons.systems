@@ -51,6 +51,7 @@ exists · `ratified` the node is ratified and the entry closes · `rejected`.
 | L33 | `/align` usage: a disposition to record, or a node id to ratify or review | stubbed | author | `disposition-graph/growth`; the shim |
 | L34 | `/align <node id>` is the two-stage review sitting: comprehension, then intention | stubbed | author | `disposition-graph/growth`; the shim |
 | L35 | the interview conducts are named: periagogic (type b), maieutic (type a) | stubbed | author | `disposition-graph/growth`; readings `plato-periagoge`, `plato-maieutics` |
+| L36 | functional validation before non-functional validation | stubbed | author | `disposition-graph/validation-order` |
 | L29 | shimmed code review for every bootstrap landing; review doctrine before exit | stubbed | author | `disposition-graph/review`; the incumbent detached review instrument as shim |
 
 ## L01 archē is the root answer form
@@ -518,6 +519,25 @@ adopted".
 The `/align` shim reconciles itself to the graph at `origin/disposition`
 before the dialectic and applies every declared shim without prompting.
 
+## L36 functional validation before non-functional validation
+
+**Source.** Author, 2026-09-02: "Also record disposition for 'functional
+validation before non-functional validation' based on what is found in
+incumbent graph." Given with the review ruling of the same day: "the
+reconciliation frontier should first validate functionality, and only spend
+cycles on cross-cutting non-functional validation after that."
+
+**Content.** Stubbed in `disposition-graph/validation-order` under
+`work-loop`, from the legacy record: the criteria-class axis (functional =
+specific to the disposition and explicitly bitten; non-functional = standing,
+cross-cutting, sanctioned once, implicitly bitten by every claim) and the
+staged ordering (non-functional assessment production gates on a passing
+functional assessment), both marked author-required in the 2026-09-01
+review, qa, main-qa, and merge-gating clarification on the legacy node
+`strategy-graph-native-dispatch`, with its traditions block (Beck's make it
+work, make it right, make it fast; lean over-processing waste). Readings
+owed for those and for ISO/IEC 25010.
+
 ## L35 the interview conducts are named: periagogic, maieutic
 
 **Source.** Author, 2026-09-02: "Give 'type a' and 'type b' names as part of
@@ -554,7 +574,17 @@ and intends to bind is elicited and tested, and the ruling is taken. Each
 sitting recursively identifies follow-up readings, vocabulary, and key
 concepts for the review frontier (L09). Round zero's sitting on `purpose`
 restarts in this shape; its first turn had put the AI's account first,
-which is the named deviation.
+which is the named deviation. Author, on the restarted sitting's first
+probe, 2026-09-02: "This is better. Update the `/align` disposition (or
+ledger) and shim with this disposition for `/align <node_id>`." The shape
+recorded on `growth` and in the shim: reading (the page and its readings,
+nothing else said); comprehension, one probe per turn from the page, the
+answer first (what the node says the thing is for, what it holds only as
+hypotheses, whom it is for, and which sentence the author would not have
+written), then each reading's relation and locus, then the rationale and
+rejected alternatives, the AI's account held back until the author commits
+and entering only as counterpoint by locus; intention, the findings and the
+recommendation; the ruling.
 
 ## L33 `/align` usage: a disposition to record, or a node id to ratify or review
 

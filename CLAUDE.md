@@ -145,8 +145,38 @@ rounds review the delta from the last reviewed commit.
   survey (sonnet); survey of the incumbent `/align` record (opus). Browser
   published. The `/align` shim written. Implementation restructured onto
   this ref (L25 to L28). Code review of round zero's landing: pending, see
-  below. Waiting on the author: ratification of `purpose` through the shim,
-  and the round-one steer.
+  below. Waiting on the author: the sitting on `purpose`, below, and
+  the round-one steer.
+- **Sitting on `purpose` (2026-09-02, in progress).** Reading movement
+  issued; periagogic probe one posed on the Answer alone (for what; held
+  only as hypotheses; for whom; a sentence the author would not have
+  written). The author answers after a compaction. Probes still to come:
+  each of the four readings (relation, locus); the rationale and the
+  rejected list. Held-back counterpoint, to enter only after the author
+  commits, cited by locus: (1) the sentence "It records the person's
+  dispositions as a graph, and the work is derived from that record rather
+  than from prompts or chat" is the AI's, not in the author's L12 words,
+  and answers how, not why; (2) the capture hypothesis dropped the author's
+  "in the variety of ways it occurs in daily life"; (3) "explicit intent"
+  is legacy vocabulary the AI imported; (4) scope: four recorded functions
+  fall outside as worded (apps, site and blog, gaming blog, shared
+  infrastructure) and audience records five audiences against one; (5)
+  traditions: spec-driven development adopted with a divergence
+  (per-feature documents against a standing personal record with authority
+  stamps), software factories diverged (Cusumano 1991; Greenfield and
+  Short 2004), hexis in Nicomachean Ethics II.5 1105b19 to 1106a13 is a
+  settled disposition and not knowledge, so "projection of the author's
+  hexis" is the stronger phrase and "knowledge store" its gloss; (6) the
+  steelman, inverting primary and hypotheses so the repository is the
+  author's disposition and the tooling its instrument, resolved diverged
+  because the personal graph moves to natb1.com (L03); (7) the three
+  AI-drafted rejected alternatives are to be confirmed or struck.
+  Recommendation to put at the maieutic stage: ratify with amendments,
+  strike the mechanism sentence and "explicit intent", restore "in daily
+  life", hexis phrase first, the steelman as a rejected alternative; class
+  ratified; boldness low on the Answer, moderate on the readings, high on
+  the hexis point; alternatives: ratify as written, defer until scope and
+  audience are ruled, or restate in the author's words.
 - **Review log.** Each landing on this ref: commit range, out-dir tag,
   rounds, verdict.
   - Tooling, `684ac70f..6912c361`, tag `r0-tooling`, round one at high:

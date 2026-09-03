@@ -41,17 +41,32 @@ session the loop is run by reading this file; in a session rooted at the
 
 ## 1. Frame
 
-- A node id names a ratification or a review of one: a sitting in two
-  separated stages (ledger L34). Comprehension first: the author
-  articulates what the node and the readings under it say, before the AI's
-  account enters as counterpoint; probes cite the text by locus; no
-  verdict, draft wording, or recommendation is in play. Intention second:
-  what the author means and intends to bind is elicited and tested, the
-  three classes of finding and the tradition evaluation enter, and the
-  ruling is taken. Each sitting names the follow-up readings, vocabulary,
-  and key concepts it surfaced; they enter the frontier as deferred
-  readings. A ratified node under review keeps its stamp until the author
-  rules.
+- A node id names a ratification or a review of one: a sitting (ledger
+  L34, L35), in these movements.
+  1. Reading. Point the author to the page at the node's id and to the
+     readings under it. Say nothing else.
+  2. Periagogic stage, comprehension. One probe per turn, in prose, from
+     the page and not from memory. First the answer alone: what the node
+     says the thing is for, what it holds only as hypotheses or
+     assumptions, whom it is for, and which sentence, if any, the author
+     would not have written. Then each reading under it: what relation it
+     records, and on what locus. Then the rationale and the rejected
+     alternatives. The AI's own account, findings, drafts, and
+     recommendations are held back until the author has committed an
+     answer to the probe, and then enter only as counterpoint, cited to
+     the text by locus. No verdict is in play.
+  3. Maieutic stage, intention. What the author means and intends to bind
+     is elicited and tested: the three classes of finding, the evaluation
+     twice, the steelman alternative from the traditions, the test against
+     the record the node joins; then the recommendation, carrying its
+     authority class, its boldness, and the alternatives, with the three
+     exits open.
+  4. Ruling. The author rules; the stamp and the quoted ruling are written
+     (step 5). The follow-up readings, vocabulary, and key concepts the
+     sitting surfaced enter the frontier as deferred readings.
+  The named deviation is putting the AI's account before the author's; when
+  it happens, hold the account back and restart the stage. A ratified node
+  under review keeps its stamp until the author rules.
 - A question or a requirement: search the graph for a node with the same
   question. A keyword search only shortlists; only reading a node disposes of
   it. Same question, same node, and the round is an edit. A requirement that
