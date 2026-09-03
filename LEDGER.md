@@ -45,6 +45,7 @@ exists · `ratified` the node is ratified and the entry closes · `rejected`.
 | L26 | graph tooling is justified by disposition like all materialized implementation | stubbed | author | `disposition-graph/materialization` |
 | L27 | materialized implementation is organized as a `packages/` monorepo | stubbed | author | `disposition-graph/materialization`, a reading owed |
 | L28 | shim: greenfield implementation on a third ref, swapped with `main` at exit | stubbed | author | `disposition-graph/materialization`; the `greenfield` ref |
+| L29 | shimmed code review for every bootstrap landing; review doctrine before exit | stubbed | author | `disposition-graph/review`; the incumbent detached review instrument as shim |
 
 ## L01 archē is the root answer form
 
@@ -461,6 +462,50 @@ view: whatever on `main` is to survive the swap (the applications, host
 configuration, and anything else with a supporting disposition) must be
 reconciled into `greenfield` before exit, or the swap prunes it. That
 reconciliation is the second direction of L11 applied to the whole of `main`.
+
+## L29 shimmed code review for every bootstrap landing; review doctrine before exit
+
+**Source.** Author, 2026-09-02: "All bootstrap implementation will require
+shimmed code review. This is not trivial and a common source of lost
+time/tokens. The abandoned bootstrapping attempt has some rules for code
+review in bootstrap operations. Coordinate with that session named
+'interview deferral options (2)' to adopt those rules. Before bootstrap exit
+we will need good doctrine for code review as part of reconciliation."
+
+**Content.** Stubbed in `disposition-graph/review` under `work-loop`. The
+rules adopted from the legacy record (the review shim ratified 2026-09-01 on
+the legacy node `strategy-graph-native-dispatch`, and steering ledger entries
+[1], [6], [7] on the legacy bootstrap carrier), restated in this graph's
+vocabulary:
+- every landing of materialized implementation is reviewed by the review
+  instrument before it lands; the review is scoped to the landing's diff and
+  judges the match between the unit's contract and its evidence;
+- effort high by default; one medium regeneration for diffs that touch only
+  documents, plans, or tests;
+- settle on the severity gate: a finding blocks only if it violates the
+  unit's contract or regresses a check that ever passed; every other finding
+  never blocks and never enters the fix loop, and is recorded as a proposal
+  on the node the unit instruments (during bootstrap, on this ledger);
+- fix all findings, then regenerate once per batch, never per fix; at most
+  two regenerations per landing; an open blocking finding at the cap parks
+  the landing for the author and nothing lands over it;
+- functional findings reconcile before non-functional; both before landing;
+  no scope expansion inside a review window;
+- the diagnose-fix-verify loop for findings is a subagent unit (L23); the
+  main thread reads the verdict and lands.
+Shim: the incumbent detached instrument on `main`,
+`.claude/skills/dispatch-propagate/scripts/dispatch-code-review`, run from
+the `greenfield` worktree against a commit range on that ref; its
+detachment, locks, and await loop are instrument facts, not doctrine.
+Liquidation: assessments produced by an instrument on the `greenfield` ref
+from this graph's ratified `review` node. Applies retroactively to round
+zero: the tooling and the browser are reviewed under the shim before they
+land on `greenfield`. Coordination with the legacy session "interview
+deferral options (2)" requested 2026-09-02; its reply amends this entry.
+Traditions the legacy record cites, owed as readings: Deming, Out of the
+Crisis (1986), point 3, diverged from in keeping adversarial review;
+content-addressed incremental builds (Bazel, Nix) for pinning what a review
+read.
 
 ## L20 delete this ledger
 
