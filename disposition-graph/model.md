@@ -19,4 +19,4 @@ As a disposition graph. A disposition is one standing answer to one question, he
 
 ## Rationale
 
-The refinements of this node define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, instruments, readings, the work loop, materialized implementation, and the standing of the legacy record. Each is stubbed from the bootstrap ledger and ratified in onboarding order. The revision-2 proposal this model was drawn from is kept on this ref at `bootstrap/model-proposal.html` as input, not doctrine (ledger L19).
+The refinements of this node define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, instruments, readings, the work loop, materialized implementation, and the standing of the legacy record. Each is stubbed from the bootstrap ledger and ratified in onboarding order. The revision-2 proposal this model was drawn from is kept on the `greenfield` ref at `bootstrap/model-proposal.html` as input, not doctrine (ledger L19).
