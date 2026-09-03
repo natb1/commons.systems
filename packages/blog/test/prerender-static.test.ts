@@ -16,6 +16,8 @@ vi.mock(import("node:fs"), async (importOriginal) => ({
   mkdirSync: vi.fn(),
 }));
 
+// The single injection path: the template ships an empty `<div id="root">`
+// PageShell mount, into which prerender injects renderToString(<BlogPageShell…>).
 const TEMPLATE = `<!DOCTYPE html>
 <html>
 <head>
@@ -23,25 +25,19 @@ const TEMPLATE = `<!DOCTYPE html>
   <title>My Blog</title>
 </head>
 <body>
-  <nav><app-nav id="nav"></app-nav></nav>
-  <section class="landing-hero">default hero marker</section>
-  <main id="app"></main>
-  <aside id="info-panel" class="sidebar"></aside>
+  <div id="root"></div>
 </body>
 </html>`;
 
-const TEMPLATE_WITH_FOOTER = `<!DOCTYPE html>
+// No `<div id="root">` mount — used for the missing-mount-marker case.
+const TEMPLATE_NO_MOUNT = `<!DOCTYPE html>
 <html>
 <head>
   <meta name="description" content="Default site description">
   <title>My Blog</title>
 </head>
 <body>
-  <nav><app-nav id="nav"></app-nav></nav>
-  <section class="landing-hero">default hero marker</section>
-  <main id="app"></main>
-  <aside id="info-panel" class="sidebar"></aside>
-  <footer></footer>
+  <div id="other"></div>
 </body>
 </html>`;
 
@@ -67,7 +63,18 @@ function makeStaticConfig(
       { href: "/", label: "Home" },
       { href: "/about", label: "About" },
     ],
-    panelHtml: '<section class="panel-section"><h3>Panel</h3></section>',
+    aboutContent: createElement(
+      "section",
+      { className: "panel-section profile-card" },
+      createElement("p", { className: "profile-name" }, "Nathan Buesgens"),
+    ),
+    shell: {
+      mount: "root",
+      wordmark: "commons.systems",
+      // hero is set but must be gated OFF for an off-home static page.
+      hero: createElement(Hero, { headline: "SHOULD NOT APPEAR", cards: [] }),
+      panelAriaLabel: "Context",
+    },
     ...overrides,
   };
 }
@@ -198,83 +205,39 @@ describe("prerenderStaticPage", () => {
     expect(html).toContain('"@type":"WebPage"');
   });
 
-  it("strips the landing-hero block by default", () => {
-    prerenderStaticPage(makeStaticConfig());
-    const html = getWrittenHtml("/dist/about/index.html");
-    expect(html).not.toContain('<section class="landing-hero">');
-    expect(html).not.toContain("default hero marker");
-  });
-
-  it("preserves the landing-hero block when stripHero is false", () => {
-    prerenderStaticPage(makeStaticConfig({ stripHero: false }));
-    const html = getWrittenHtml("/dist/about/index.html");
-    expect(html).toContain('<section class="landing-hero">');
-    expect(html).toContain("default hero marker");
-  });
-
-  it("injects the body ReactNode (wrapped in a <div>) into <main id=\"app\">", () => {
+  it("renders the body ReactNode (wrapped in a <div>) as the shell's children", () => {
     prerenderStaticPage(makeStaticConfig());
     const html = getWrittenHtml("/dist/about/index.html");
     // The body is server-rendered wrapped in a <div> so it byte-matches the
     // client's createElement("div", null, node) entry-hydration wrapper.
     expect(html).toContain(
-      '<main id="app"><div><article id="about-body">About body</article></div></main>',
+      '<div><article id="about-body">About body</article></div>',
     );
   });
 
-  it("injects panelHtml into the aside info-panel", () => {
+  it("renders the panel through InfoPanelRegion's aboutContent branch", () => {
     prerenderStaticPage(makeStaticConfig());
-    const html = getWrittenHtml("/dist/about/index.html");
-    expect(html).toContain(
-      '<aside id="info-panel" class="sidebar"><section class="panel-section"><h3>Panel</h3></section></aside>',
-    );
-  });
-
-  it("renders the panel through InfoPanelRegion's aboutContent branch when aboutContent is set", () => {
-    const aboutPanel = createElement(
-      "section",
-      { className: "panel-section profile-card" },
-      createElement("p", { className: "profile-name" }, "Nathan Buesgens"),
-    );
-    prerenderStaticPage(
-      makeStaticConfig({
-        aboutContent: aboutPanel,
-        // panelHtml is ignored when aboutContent is set — its content must not leak.
-        panelHtml: '<section class="panel-section"><h3>IGNORED PANEL</h3></section>',
-      }),
-    );
     const html = getWrittenHtml("/dist/about/index.html");
     // InfoPanelRegion's aboutContent branch wraps the node in a <div>, so the
     // prerendered #info-panel matches what the client hydrates on a deep /about entry.
+    expect(html).toContain('<aside id="info-panel"');
     expect(html).toContain(
-      '<aside id="info-panel" class="sidebar"><div><section class="panel-section profile-card"><p class="profile-name">Nathan Buesgens</p></section></div></aside>',
+      '<div><section class="panel-section profile-card"><p class="profile-name">Nathan Buesgens</p></section></div>',
     );
-    expect(html).not.toContain("IGNORED PANEL");
   });
 
-  it("renders the panel through InfoPanelRegion even without panelHtml when aboutContent is set", () => {
-    const aboutPanel = createElement("section", { className: "profile-card" }, "about");
-    prerenderStaticPage(
-      makeStaticConfig({ aboutContent: aboutPanel, panelHtml: undefined }),
-    );
-    const html = getWrittenHtml("/dist/about/index.html");
-    expect(html).toContain('<aside id="info-panel" class="sidebar"><div>');
-    expect(html).toContain("profile-card");
-  });
-
-  it("throws when neither aboutContent nor panelHtml is provided", () => {
+  it("throws when aboutContent is not provided", () => {
     expect(() =>
-      prerenderStaticPage(makeStaticConfig({ panelHtml: undefined })),
-    ).toThrow("requires either aboutContent or panelHtml");
+      prerenderStaticPage(makeStaticConfig({ aboutContent: undefined })),
+    ).toThrow("shell mode requires aboutContent for the panel");
   });
 
-  it("injects nav links into <app-nav>", () => {
+  it("renders the shell nav with the configured links", () => {
     prerenderStaticPage(makeStaticConfig({ showHomeLink: true }));
     const html = getWrittenHtml("/dist/about/index.html");
-    // The <app-nav> wrapper survives; inside it the ds Nav renders both links
-    // (the /about link is align:undefined here, so it stays in the start group)
-    // plus the home link, anonymously (no "Login").
-    expect(html).toContain('<app-nav id="nav">');
+    // The PageShell's ds Nav renders both links (the /about link is
+    // align:undefined here, so it stays in the start group) plus the home link,
+    // anonymously (no "Login").
     expect(html).toContain("cs-nav");
     expect(html).toContain('href="/"');
     expect(html).toContain("Home");
@@ -288,7 +251,6 @@ describe("prerenderStaticPage", () => {
     prerenderStaticPage(makeStaticConfig());
     const html = getWrittenHtml("/dist/about/index.html");
     // Nav still renders with cs-nav and the configured nav links.
-    expect(html).toContain('<app-nav id="nav">');
     expect(html).toContain("cs-nav");
     expect(html).toContain('href="/"');
     expect(html).toContain("Home");
@@ -351,7 +313,7 @@ describe("prerenderStaticPage", () => {
   it("throws when </head> marker is missing from template", () => {
     vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
       if (String(path).endsWith("index.html"))
-        return '<html><title>X</title><body><app-nav id="nav"></app-nav><section class="landing-hero">h</section><main id="app"></main><aside id="info-panel" class="sidebar"></aside></body></html>';
+        return '<html><title>X</title><body><div id="root"></div></body></html>';
       throw new Error(`Unexpected readFileSync: ${path}`);
     }) as typeof fs.readFileSync);
     expect(() => prerenderStaticPage(makeStaticConfig())).toThrow(
@@ -362,7 +324,7 @@ describe("prerenderStaticPage", () => {
   it("throws when <title> tag is missing from template", () => {
     vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
       if (String(path).endsWith("index.html"))
-        return '<html><head></head><body><app-nav id="nav"></app-nav><main id="app"></main><aside id="info-panel" class="sidebar"></aside></body></html>';
+        return '<html><head></head><body><div id="root"></div></body></html>';
       throw new Error(`Unexpected readFileSync: ${path}`);
     }) as typeof fs.readFileSync);
     expect(() => prerenderStaticPage(makeStaticConfig())).toThrow(
@@ -370,130 +332,45 @@ describe("prerenderStaticPage", () => {
     );
   });
 
-  it("injects footerHtml into <footer> when provided", () => {
-    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
-      throw new Error(`Unexpected readFileSync: ${path}`);
-    }) as typeof fs.readFileSync);
-
-    prerenderStaticPage(makeStaticConfig({ footerHtml: "<p>FOOTER MARKER</p>" }));
-    const html = getWrittenHtml("/dist/about/index.html");
-    expect(html).toContain("<footer><p>FOOTER MARKER</p></footer>");
-    expect(html).not.toContain("<footer></footer>");
-  });
-
-  it("leaves <footer> untouched when footerHtml is not provided", () => {
-    vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-      if (String(path).endsWith("index.html")) return TEMPLATE_WITH_FOOTER;
-      throw new Error(`Unexpected readFileSync: ${path}`);
-    }) as typeof fs.readFileSync);
-
+  // ── PageShell rendering (the single injection path) ────────────────────────
+  // The template ships an empty `<div id="root">` PageShell mount; prerender
+  // injects renderToString(<BlogPageShell…>) there, requires `aboutContent` for
+  // the panel, and gates the hero off (page.url !== "/"). The <head> SEO runs
+  // on top.
+  it("injects the ds PageShell at the mount with the about panel, no hero", () => {
     prerenderStaticPage(makeStaticConfig());
     const html = getWrittenHtml("/dist/about/index.html");
-    expect(html).toContain("<footer></footer>");
+    expect(html).toContain('<div id="root"><div class="page">');
+    expect(html).toContain('class="content-grid"');
+    expect(html).toContain("cs-nav");
+    expect(html).toContain('<aside id="info-panel"');
+    expect(html).toContain("profile-card");
+    expect(html).toContain("Nathan Buesgens");
+    // /about is off the home gate — no hero.
+    expect(html).not.toContain("hero-band-section");
+    expect(html).not.toContain("SHOULD NOT APPEAR");
+    expect(html).not.toContain('<div id="root"></div>');
   });
 
-  it("throws when footerHtml is set but <footer> is absent", () => {
-    // The default TEMPLATE has no <footer> element.
-    expect(() =>
-      prerenderStaticPage(makeStaticConfig({ footerHtml: "<p>FOOTER MARKER</p>" })),
-    ).toThrow("<footer> marker not found in template");
+  it("keeps the <head> SEO intact (canonical + title + og)", () => {
+    prerenderStaticPage(makeStaticConfig());
+    const html = getWrittenHtml("/dist/about/index.html");
+    expect(html).toContain('<link rel="canonical" href="https://example.com/about">');
+    expect(html).toContain("<title>My Blog - About</title>");
+    expect(html).toContain('<meta property="og:title" content="About">');
+    // The homepage default description is stripped; the page description remains.
+    expect(html).not.toContain("Default site description");
+    expect(html).toContain('content="About this site"');
   });
 
-  it("throws when stripHero is true (default) and the landing-hero marker is absent", () => {
+  it("throws when the #root mount marker is absent from the template", () => {
     vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-      if (String(path).endsWith("index.html"))
-        return `<!DOCTYPE html><html><head><title>My Blog</title></head><body><app-nav id="nav"></app-nav><main id="app"></main><aside id="info-panel" class="sidebar"></aside></body></html>`;
+      if (String(path).endsWith("index.html")) return TEMPLATE_NO_MOUNT;
       throw new Error(`Unexpected readFileSync: ${path}`);
     }) as typeof fs.readFileSync);
     expect(() => prerenderStaticPage(makeStaticConfig())).toThrow(
-      '<section class="landing-hero"> marker not found in template',
+      '<div id="root"> mount marker not found in template',
     );
-  });
-
-  // ── Shell path (opt-in ds-chrome seam — landing /about) ────────────────────
-  // The template ships an empty `<div id="root">` PageShell mount; shell mode
-  // injects renderToString(<BlogPageShell…>) there, requires `aboutContent` for
-  // the panel, and gates the hero off (page.url !== "/"). The <head> SEO runs
-  // regardless. The legacy cases above are untouched (fellspiral guard).
-  describe("shell path", () => {
-    const TEMPLATE_WITH_ROOT = `<!DOCTYPE html>
-<html>
-<head>
-  <meta name="description" content="Default site description">
-  <title>My Blog</title>
-</head>
-<body>
-  <div id="root"></div>
-</body>
-</html>`;
-
-    beforeEach(() => {
-      vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-        if (String(path).endsWith("index.html")) return TEMPLATE_WITH_ROOT;
-        throw new Error(`Unexpected readFileSync: ${path}`);
-      }) as typeof fs.readFileSync);
-    });
-
-    function shellStaticConfig(overrides: Partial<StaticPageConfig> = {}): StaticPageConfig {
-      return makeStaticConfig({
-        aboutContent: createElement(
-          "section",
-          { className: "profile-card" },
-          createElement("p", { className: "profile-name" }, "Nathan Buesgens"),
-        ),
-        shell: {
-          mount: "root",
-          wordmark: "commons.systems",
-          // hero is set but must be gated OFF for an off-home static page.
-          hero: createElement(Hero, { headline: "SHOULD NOT APPEAR", cards: [] }),
-          panelAriaLabel: "Context",
-        },
-        ...overrides,
-      });
-    }
-
-    it("injects the ds PageShell at the mount with the about panel, no hero", () => {
-      prerenderStaticPage(shellStaticConfig());
-      const html = getWrittenHtml("/dist/about/index.html");
-      expect(html).toContain('<div id="root"><div class="page">');
-      expect(html).toContain('class="content-grid"');
-      expect(html).toContain("cs-nav");
-      expect(html).toContain('<aside id="info-panel"');
-      expect(html).toContain("profile-card");
-      expect(html).toContain("Nathan Buesgens");
-      // /about is off the home gate — no hero.
-      expect(html).not.toContain("hero-band-section");
-      expect(html).not.toContain("SHOULD NOT APPEAR");
-      expect(html).not.toContain('<div id="root"></div>');
-    });
-
-    it("keeps the <head> SEO intact (canonical + title + og)", () => {
-      prerenderStaticPage(shellStaticConfig());
-      const html = getWrittenHtml("/dist/about/index.html");
-      expect(html).toContain('<link rel="canonical" href="https://example.com/about">');
-      expect(html).toContain("<title>My Blog - About</title>");
-      expect(html).toContain('<meta property="og:title" content="About">');
-      // The homepage default description is stripped; the page description remains.
-      expect(html).not.toContain("Default site description");
-      expect(html).toContain('content="About this site"');
-    });
-
-    it("throws when shell mode is used without aboutContent for the panel", () => {
-      expect(() =>
-        prerenderStaticPage(shellStaticConfig({ aboutContent: undefined })),
-      ).toThrow("shell mode requires aboutContent for the panel");
-    });
-
-    it("throws when the #root mount marker is absent from the template", () => {
-      vi.mocked(fs.readFileSync).mockImplementation(((path: string) => {
-        if (String(path).endsWith("index.html")) return TEMPLATE; // no #root div
-        throw new Error(`Unexpected readFileSync: ${path}`);
-      }) as typeof fs.readFileSync);
-      expect(() => prerenderStaticPage(shellStaticConfig())).toThrow(
-        '<div id="root"> mount marker not found in template',
-      );
-    });
   });
 });
 

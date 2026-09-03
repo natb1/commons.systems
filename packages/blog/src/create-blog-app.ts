@@ -116,7 +116,8 @@ export interface CreateBlogAppConfig {
    * Opt-in ds-chrome seam. When present, the renderer mounts a SINGLE ds
    * `<PageShell>` root (via BlogPageShell) into `#${mount}` instead of the
    * legacy three-root (`#nav` / `#app` / `#info-panel`) + static-markup path.
-   * Absent (the default — fellspiral) runs the legacy path VERBATIM.
+   * Absent runs the legacy path VERBATIM. Both in-repo apps (landing and
+   * fellspiral) now pass `shell`; the prerender side has no legacy path left.
    */
   shell?: {
     mount: string;
