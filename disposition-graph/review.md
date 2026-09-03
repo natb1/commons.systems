@@ -1,9 +1,9 @@
 ---
 question: How is materialized implementation reviewed before it lands?
-stage: ruling
+stage: review
 recommendation:
   class: ratified
-  boldness: moderate
+  boldness: high
 review:
   verdict: forward
   strength: moderate
@@ -31,7 +31,7 @@ shims:
 ---
 ## Answer
 
-By an adversarial review of each landing's diff before it lands, producing an assessment: the subject diff, a verdict, and a pin of what the review read. The review judges one thing, whether the evidence in the diff matches the contract of the unit that produced it. A finding blocks only when it would change behaviour, break a cited anchor, or lead an executor to a wrong action; every other finding is recorded as a proposal on the node the unit instruments and then dropped from the landing, and dropping is an action, not an omission. Review never settles on zero findings. The landing's scope is frozen when review begins: nothing is added to a file under review, and whatever the review turns up outside the contract goes to a follow-up. Findings are fixed as a batch and the assessment regenerated once per batch, at most twice per landing; a blocking finding raised by the second assessment is fixed before landing, and a blocking finding still open at the cap parks the landing for the author, over which nothing lands. A defect class repaired twice is cut rather than repaired a third time, with a regression test that fails before and passes after. Functional findings reconcile before non-functional ones, both before landing. Effort follows the diff: high for code on a write path, one medium assessment for a diff of documents, plans, or tests only. After a ref's first assessment each review covers only the delta since the last reviewed commit. The fix loop is delegated as a unit; the main thread reads the verdict and lands. During bootstrap, review is required once the disposition a landing materializes is ratified, and for everything before exit; until then functional validation, tests and use, suffices. A graph landing is reviewed by the interview that produced it, not by this instrument.
+By an adversarial review of each landing's diff before it lands, producing an assessment: the subject diff, a verdict, and a pin of what the review read. The review judges one thing, whether the evidence in the diff matches the contract of the unit that produced it. A finding blocks only when it would change behaviour, break a cited anchor, or lead an executor to a wrong action; every other finding is recorded as a proposal on the node the unit instruments and then dropped from the landing, and dropping is an action, not an omission. Review never settles on zero findings. The landing's scope is frozen when review begins: nothing is added to a file under review, and whatever the review turns up outside the contract goes to a follow-up. Findings are fixed as a batch and the assessment regenerated once per batch, at most twice per landing; a blocking finding raised by the second assessment is fixed before landing, and a blocking finding still open at the cap parks the landing for the author, over which nothing lands. A defect class repaired twice is cut rather than repaired a third time, with a regression test that fails before and passes after. Functional findings reconcile before non-functional ones, both before landing. Effort follows the diff: high for code on a write path, one medium assessment for a diff of documents, plans, or tests only. After a ref's first assessment each review covers only the delta since the last reviewed commit. The fix loop is delegated as a unit; the main thread reads the verdict and lands. During bootstrap, review is required once the disposition a landing materializes is ratified, and for everything before exit; until then functional validation, tests and use, suffices. A graph landing is reviewed by the interview that produced it and by the clean-context review, never by this instrument.
 
 ## Rationale
 
@@ -45,7 +45,7 @@ For the author at ratification: whether the review cap and effort tiers stay sta
 
 Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
 
-Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness moderate, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.
+Facts: authority ratified; boldness high, every number in the answer being transcribed from the legacy record; persistence standing, with the shim, the incumbent code-review instrument on the main branch, and its liquidation condition.
 
 ### Clean-context review, 2026-09-03
 
@@ -61,3 +61,30 @@ Findings:
 On the three facts: Generic template, and it omits the shim entirely — this node declares the detached code-review instrument on main, and growth's presentation rule requires each shim with its liquidation condition. Boldness is high, not 'as the rationale shows': every number and every gate in the answer is the AI's transcription from the legacy record, which the author has not ruled on in this graph, and the author's only quoted words here concern when review is owed during bootstrap.
 
 Strongest counter-argument (moderate): The whole answer is a defence against one measured pathology — review loops that never converge — and every mechanism in it trades correctness for termination. Stated as doctrine that means a landing with a real blocking defect at the cap 'parks the landing for the author, over which nothing lands', converting a review failure into a full stop of the work queue; and 'Review never settles on zero findings' makes a clean diff evidence of a bad review rather than of good code. The cheaper answer the node never considers is to shrink the contract so a review can finish: its own evidence says one change thrashed because 'its diff grew between rounds', which is a scope defect, not a review defect, and delegation already requires one deliverable per unit.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Answer, last sentence: 'A graph landing is reviewed by the interview that produced it, not by this instrument.' Recording, in this same batch, adds a reader who did not produce it and makes it mandatory before every confirmation; frontier-consistency makes it a batch over the whole frontier. As written the sentence tells an executor that graph landings get no independent reader. Suggested edit: name the clean-context review as the graph landing's independent reader.
+- Frontmatter carries both an 'instrument:' whose note says 'not yet materialized; the shim below stands in for it' and the shim itself. The author's ruling quoted on transience asks for no redundancy between shims and other records; the note duplicates the shim's account. Suggested edit: let the shim carry it.
+- Proposal carries two open questions as prose ('whether the review cap and effort tiers stay stated here or derive from the class of the contract ... and whether the interview suffices as the review of a graph landing'). Transience makes an open question a node with a stage. Suggested edit: mint them, or fold them into the ruling's options.
+- The shim's artifact is 'the detached code-review instrument on `main`, `.claude/skills/dispatch-propagate/scripts/dispatch-code-review`'. Not verifiable from this ref, which carries no intentions/ or dispatch skills; the shim names a path on another branch and the frontier cannot read it. Suggested edit: say the artifact is on main and how the frontier is to check it.
+
+On the three facts: The frontmatter recommendation (ratified, moderate) states one class and one value; the prose Facts line is the generic template stating two, and it omits the shim entirely, which growth's presentation rule requires. Boldness is high, not moderate: every number and gate in the answer is transcribed from the legacy record, which the author has not ruled on in this graph.
+
+Strongest counter-argument (moderate): The whole answer is a defence against one measured pathology — review loops that never converge — and every mechanism in it trades correctness for termination. As doctrine that means a landing with a real blocking defect at the cap 'parks the landing for the author, over which nothing lands', converting a review failure into a full stop of the work queue; and 'Review never settles on zero findings' makes a clean diff evidence of a bad review rather than of good code. The cheaper answer the node never considers is to shrink the contract so a review can finish: its own evidence says one change thrashed because its diff grew between rounds, which is a scope defect, and delegation already requires one deliverable per unit.
+
+The session's reply: Validated. Amended tonight: a graph landing is reviewed by the interview and by the clean-context review, never by this instrument; the boldness is high, every number being transcribed from the legacy record. The instrument note that duplicates the shim, the two open questions in prose, and the shim's artifact on main, checked from a worktree of main, are settled at the sitting. On the counter-argument, that a smaller contract beats a cap: delegation's one-deliverable rule is that floor, and the cap remains for a contract that still thrashes; the author rules whether both stand. Stage review: the answer changed.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Authority's rule is that 'a ratified stamp whose ruling is not in the record is invalid', and quotes' session reply settles that the ruling stays in the node under '## Disposition'. Verified that twenty-two of the sixty-two nodes carry no '## Disposition' section at all, among them evaluation, persistence, legacy, validation-order, review, attention and recording — every one of which is at the ruling stage recommending 'ratified' — and all three public nodes. Quotes is therefore a bar on roughly a third of the frontier, and its own Options block still marks the withdrawn option as recommended.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/attention, commons.systems/disposition-graph/recording.
+
+Proposed: Rule quotes first, after agency. Then, before any ratified stamp is written, each of the twenty-two nodes either gains a '## Disposition' section carrying the ruling it rests on with its date — attention and recording already have the quotations in their rationales and need only move them, which also makes the alignment page show them — or its recommendation changes from ratified to deferred, since a ratified stamp it cannot support is worse than an honest deferral. Quotes' facts state the count.

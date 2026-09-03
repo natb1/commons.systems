@@ -31,4 +31,4 @@ Drafted after q2 fixes where tradition nodes live.
 
 Proposed: pending.
 
-Rulings open: ratify as shown; ratify with edits; defer; overrule.
+Responses open: confirm as shown; confirm with edits; deny with feedback.

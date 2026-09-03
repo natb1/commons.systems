@@ -1,12 +1,12 @@
 ---
 question: How is transient disposition recorded?
-stage: ruling
+stage: maieutic
 recommendation:
   class: ratified
   boldness: high
 review:
   verdict: forward
-  strength: strong
+  strength: moderate
   date: 2026-09-03
   of: 5146c975ea09a8483495b379e9faca8819ce3e11
 form: rule
@@ -84,7 +84,7 @@ Depends on: `quotes`
 
 Proposed: the node as it stands.
 
-Rulings open: ratify as shown; ratify with edits; defer; overrule.
+Responses open: confirm as shown; confirm with edits; deny with feedback.
 
 ### Clean-context review, 2026-09-03
 
@@ -117,3 +117,91 @@ Findings:
 On the three facts: The Facts line ('authority deferred; ratified if the author rules so; boldness moderate; persistence standing') predates the amendment, and the session's own reply on this node already raised boldness to high for the five-shape taxonomy without the facts being updated. The amended paragraph is high boldness too: the reduction sentence, the browser rule and the 'every unanswered node' scope are the AI's reconciliation of two author rulings made a day apart, one of which it narrows.
 
 Strongest counter-argument (moderate): The amendment makes the un-aligned disposition a special case of a dialogue that lives on every node, which is tidier and dissolves the distinction the author asked for. The author introduced 'un-aligned' as a name for a disposition that 'isn't just unratified/unreviewed, but hasn't even survived the alignment dialog yet', and the amendment answers that a node with an answer 'carries the same fields'. The fields therefore no longer mark the distinction, and the only thing left dividing the two is whether the file has an '## Answer' heading — a fact about the file, not about the dialogue. If everything carries the dialogue then 'un-aligned' has become a rendering rule for the browser rather than a class of disposition, and the author should be told that is what the amendment does before ruling on it.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- The file ends with a bare 'null' where the session's reply to the amendment review belongs. Four findings and a counter-argument stand unanswered, and the author would rule on an unanswered review. Suggested edit: write the reply.
+- Answer, amended: 'the browser shows such a node as it stands, with its stage.' Verified now true: browser-template.html builds the label 'unanswered' + ' · ' + n.stage. The amendment review's finding on this is resolved and should be corrected rather than left standing.
+- Answer: 'A node with an answer carries the same fields while its dialogue is open, which is every unanswered node.' Verified still false of the record: 20 of the 62 nodes carry no '## Answer', 22 carry no '## Disposition', and 14 nodes at the review or ruling stage carry no '## Proposal'-borne recommendation prose that matches their frontmatter. The rule is stated as a fact.
+- Answer, criterion paragraph: 'Transience is never stored; it is projected.' Four drafts in this batch (purpose, node, knowledge-store, capture) store 'not yet validated' in a criterion note, and scope's answer stores the same fact about two child nodes. The rule is unmet by five nodes of the batch that states it.
+- Frontmatter instrument note now reads 'the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized'. Verified: the frontier does print shims, and no flag exists. Honest, and the model the batch's other unmaterialized claims should follow — but by this node's own rule a stand-in for a materialization not yet made is a shim with a liquidation condition, not a note on an instrument.
+
+On the three facts: The frontmatter recommendation (ratified, high) states one class and one value, and high is right for a five-shape taxonomy built from two surveys. The prose Facts line still says 'boldness moderate', which the session's own earlier reply already raised to high, and it does not mention the amendment at all.
+
+Strongest counter-argument (moderate): The amendment makes the un-aligned disposition a special case of a dialogue that lives on every node, which dissolves the distinction the author asked for. The author introduced 'un-aligned' for a disposition that has not even survived the alignment dialogue, and the amendment answers that a node with an answer carries the same fields. The fields therefore no longer mark the distinction, and the only thing dividing the two is whether the file has an '## Answer' heading — a fact about the file, not about the dialogue. If everything carries the dialogue then 'un-aligned' is a rendering rule for the browser rather than a class of disposition, and the author should be told that before ruling.
+
+The session's reply: Validated. The bare null is gone, and the amendment review's findings are answered here: the first is accepted, the reduction narrowed by the later ruling is named as a divergence at the sitting; the second is stale, the browser rendering the stage since the afternoon; the third is rejected as stated, the fields a node carries being the frontmatter fields the validator enforces on every unanswered node, while the sections vary; the fourth is accepted, the stages being defined by dialogue. The instrument note becomes a declared shim and the un-aligned paragraph reduces to what dialogue and unanswered do not say, at the sitting. On the counter-argument: the distinction the author asked for is whether a node has an answer to rule on, which is what the file's Answer section records; the sitting says so. Stage maieutic.
+
+### Frontier finding, 2026-09-03
+
+Kind: contradiction.
+
+Authority's draft: 'A node without a stamp is an open question, not an answer.' Transience: an un-aligned disposition 'is a node with a question and no answer'. Node's current text agrees with transience; node's draft agrees with authority's draft. Verified the two rules classify the record differently: purpose has an answer and no stamp, and read.mjs's deriveStatus returns 'unaligned' only when there is no '## Answer', so the browser shows purpose while authority's draft would call it an open question. Authority's own session reply already accepted transience's test and the draft was not changed.
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/node.
+
+Proposed: Transience is the survivor: it defines 'un-aligned disposition' and the validator implements its test. Authority's draft strikes the sentence and, if a stamp rule is wanted, says instead that a node without a stamp is unanswered, which unanswered already defines. Node's draft restores 'A node with a question and no answer is an un-aligned disposition ... and it has no children', which is the schema node's only statement of the rule and which the validator's message quotes.
+
+### Frontier finding, 2026-09-03
+
+Kind: supersession.
+
+The author, quoted on transience: 'Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact.' Later the same day the author classified every disposition as unanswered ('Classify all dispositions as unanswered ... There should be no loss of disposition encoding'), which makes the earlier words, applied literally, empty the browser. Projection's amendment records the reconciliation and its counter-argument names it squarely; transience still carries the earlier rule as its own ('hidden from the browser and listed by the alignment page') with no note that its scope was narrowed by the later ruling; unanswered argues the narrowing in its rationale under 'Rejected'. The superseded words are answered by transience and the superseding words by two other nodes.
+
+Also named: commons.systems/disposition-graph/projection, commons.systems/disposition-graph/unanswered.
+
+Proposed: Unanswered is the survivor of the classification and projection of the browser rule. Transience's un-aligned paragraph cites unanswered for the status and projection for what the browser shows, and drops its own restatement of the hiding rule; projection's answer keeps the amended sentence and adds one clause saying it narrows the author's earlier words, which is what projection's own counter-argument asks for and what the author must rule on.
+
+### Frontier finding, 2026-09-03
+
+Kind: decomposition.
+
+Transience's un-aligned paragraph now enumerates the whole dialogue — 'the author's words, verbatim and dated, in a `## Disposition` section; the AI's account ... in a `## Proposal` section; `stage` ... and, from the review stage on, the recommendation's facts and the review's state as data' — which is dialogue's entire answer, and it states the status rule, which is unanswered's. Its own amendment review flagged the double definition of 'stage' and the frontmatter defines list was fixed; the prose enumeration was not. The result is that three nodes carry the same list and drift between them is invisible until they are read together, which is what this survey is for.
+
+Also named: commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/dialogue.
+
+Proposed: Dialogue is the survivor of what an unanswered node carries and unanswered of the status. Transience's un-aligned paragraph reduces to two sentences: that an un-aligned disposition is a node with a question and no answer, and that it carries the dialogue as dialogue defines it and has no children. Everything else in that paragraph moves to, or is already in, dialogue and unanswered. The five-shape taxonomy, which is what the node is for, is untouched.
+
+### Frontier finding, 2026-09-03
+
+Kind: vocabulary.
+
+'Open question' is used on fifteen nodes and defined by none; the parsed graph carries 88 defined terms and 'open question' is not among them. Transience defines 'un-aligned disposition' for the same thing, growth's amended persistence list now uses that term, and the validator's own message says 'is unanswered and must carry stage'. Authority's draft and node's draft each use 'open question' for a slightly different notion, and several Proposals use it for a third ('persistence open question until written').
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/node, commons.systems/disposition-graph/growth.
+
+Proposed: Transience is the survivor: 'un-aligned disposition' is the one term. Authority's and node's drafts use it; the Proposal facts lines that say 'persistence open question' say 'persistence un-aligned disposition', which is the shape transience's list actually names. No new defines entry is needed.
+
+### Frontier finding, 2026-09-03
+
+Kind: vocabulary.
+
+'Criterion' and 'criteria' are used in the answers of transience ('A criterion, when the temporary thing is really a standing obligation'), scope, work-loop ('each a reconciliation of the criteria the node carries') and purpose's draft, and in four drafts as a frontmatter key. No node's defines carries the term: the parsed graph's 88 terms include 'instrument', 'check', 'assessment' and 'evidence' from instruments, and 'criterion' only inside instruments' Draft. Verified the key is not in the schema either: FRONTMATTER_KEYS holds 'instrument' and not 'criteria'. A term four ruling-stage answers depend on is defined only inside a draft.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/purpose.
+
+Proposed: Instruments is the survivor and must be ruled before the nodes that use the word. Until it is, the answers that use 'criterion' say 'instrument', the term instruments actually defines, or the drafts that use it disclose that the term arrives with instruments. At the recording, instruments' defines gains 'criterion' and 'unguarded', the schema gains the 'criteria' key, and the four nodes carrying 'instrument:' are migrated — which instruments' own facts should name, as its reply promises.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Two declared shims fail transience's own requirement that a shim name an artifact that exists and a liquidation condition the frontier can read. Session-context declares '`.claude/settings.json` on the implementation ref, harness configuration the author writes at the transition of 2026-09-03': verified that no settings.json is tracked on greenfield (git ls-files lists only .claude/rules/* and .claude/skills/*), and .gitignore excludes only .claude/settings.local.json, so the artifact is not on the ref at all. Materialization declares '`packages/disposition` importing the `yaml` package from an ancestor `node_modules`, with no dependency manifest of its own': verified that packages/disposition/package.json exists and declares yaml as a dependency, so the artifact's description is false and half its liquidation condition is met. Transience: 'a shim whose condition is met and which still exists is a frontier item', and the flagging of a met condition is itself unmaterialized, so neither shows anywhere.
+
+Also named: commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/materialization.
+
+Proposed: Session-context either commits .claude/settings.json to the implementation ref, which is what its own shim says, or restates the artifact as harness configuration held outside the ref with that as part of the liquidation condition. Materialization restates its second shim as the ancestor node_modules resolution alone, the manifest half being met. Transience's instrument note is upgraded to a declared shim for the unmaterialized flagging, as its own reviewer asked and as its rule requires.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Four node files end with a bare 'null' on its own line, where a session's reply to a review belongs: authority, growth, projection and transience. On authority and transience the missing reply is to the amendment review, so four findings and a counter-argument stand unanswered on each, and the author would rule on a review nobody answered. The word parses as prose and passes the validator ('ok: 62 nodes'), so nothing catches it. Three of the four are among the record's most load-bearing nodes.
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/growth, commons.systems/disposition-graph/projection.
+
+Proposed: Write the four missing replies, or state on each that the review's findings are accepted, and strike the 'null'. The pattern is a serialization defect in whatever applied the reviews rather than four independent omissions, so the apply step should be checked: .claude/skills/align-review/apply.mjs is the script that writes replies, and a reply of JavaScript null being stringified into the file is the likely cause. Until it is fixed, every future review round will leave the same trace.

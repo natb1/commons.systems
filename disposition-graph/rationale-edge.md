@@ -33,7 +33,7 @@ Options:
 
 Feeds: `under`, `node`, `purpose`
 
-Rulings open: take the recommended option; take another option by number; defer; answer in prose.
+Responses open: confirm the recommended option; confirm with edits, naming another option; deny with feedback.
 
 ### Clean-context review, 2026-09-03
 
@@ -47,3 +47,40 @@ Findings:
 On the three facts: Ratified, moderate boldness, standing is right; the recommended option is not a schema change while options 2 and 3 are, which the facts correctly distinguish.
 
 Strongest counter-argument (weak): Option 2, a because clause on each under entry, is cheap and would put the refinement in structure exactly where the two questions do not show it, which is the case the recommended option leaves to a convention. Toulmin separates warrant from backing, but a warrant is still written down; the recommendation writes it down only sometimes and only in prose, so the projector cannot show why a node hangs where it does. Against that, a because clause on every edge is a field that will be filled with restatements of the two questions in the common case, which is the drift the record avoids elsewhere. Worth one line.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- The node is at the ruling stage and its parent, under, is at the maieutic stage with 'Proposed: pending' and no draft. Frontier-consistency: 'no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so.' Nothing here says so. Suggested edit: state it, and rule under after this and the two other questions it waits on.
+- The recommended option's second clause, 'where a refinement is not evident from the two questions the rationale's first sentence says so', is a convention with no criterion and nothing to check it. Unchanged since the previous review.
+- Feeds names under, whose Proposal says 'Drafted after q14, q15, and q16 are ruled'. Two of those three (tier, and this node) are in different states — tier was kicked back to maieutic and its recommendation withdrawn — so under's draft cannot be written from the three outcomes as planned. Suggested edit: say what under's text becomes now that tier's recommendation is withdrawn.
+- The node has no '## Answer' and no '## Draft'.
+
+On the three facts: The frontmatter recommendation (ratified, moderate) is right, and the option's own facts correctly distinguish the recommended option (no schema change) from options 2 and 3 (schema changes). The facts should add that the parent whose text this feeds is at the maieutic stage and cannot be drafted until tier is re-answered.
+
+Strongest counter-argument (weak): Option 2, a because clause on each under entry, is cheap and would put the refinement in structure exactly where the two questions do not show it, which is the case the recommended option leaves to a convention. Toulmin separates warrant from backing, but a warrant is still written down; the recommendation writes it down only sometimes and only in prose, so the projector cannot show why a node hangs where it does. Against that, a because clause on every edge will be filled with restatements of the two questions in the common case, which is the drift the record resists elsewhere.
+
+The session's reply: Validated. This node's parent is at the maieutic stage with no draft, and the ruling order puts this node and tier before under, whose text is then drafted from the outcomes; the finding is stated here and at under. On the counter-argument, the because clause: the recommended option leaves the refinement to prose where the two questions do not show it, and the author weighs the cost of a clause on every edge. Stage ruling.
+
+### Frontier finding, 2026-09-03
+
+Kind: decomposition.
+
+Under answers four questions at once — what an edge means, how rank is computed, what a ceiling is, and how context loads — and defines all four terms, while standing at the maieutic stage with 'Proposed: pending' and no draft. Three of the four are answered in full elsewhere: attention answers rank, session-context answers what a session loads, and authority's answer already carries the scope rule that 'ceiling' names. Two child nodes have been carved out of it already (rationale-edge, tier), and its Proposal says its own text cannot be drafted until three questions are ruled. Meanwhile four ruling-stage nodes rest on 'rank' and one on 'ceiling', terms only under defines.
+
+Also named: commons.systems/disposition-graph/under, commons.systems/disposition-graph/attention, commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/tier.
+
+Proposed: Under survives as the edge alone: what a node refines, that it is the only hierarchical edge, and that a node may refine more than one question. 'rank' moves to attention's defines, which already answers it; 'context' moves to session-context's defines; 'ceiling' moves to authority's defines, which is where the scope rule it names lives. Under then has one question and can be drafted without waiting on rationale-edge and tier.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Two ruling-stage nodes rest on maieutic ground without saying so. Rationale-edge is at ruling under under, which is at maieutic with 'Proposed: pending' and no draft, and under's own Proposal says its text is 'Drafted after q14, q15, and q16 are ruled' — one of which, tier, was kicked back and its recommendation withdrawn, so under cannot be drafted as planned. Separately, readings' draft and namespaces' draft both presume a traditions graph that traditions-home would create, and traditions-home is at ruling but is listed as a dependency of both; the manifest edit that would create the graph is shown on none of the three.
+
+Also named: commons.systems/disposition-graph/under, commons.systems/disposition-graph/tier, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/namespaces.
+
+Proposed: Rule traditions-home before readings and namespaces, and show the manifest entry on traditions-home so the author sees what they are creating. Rule rationale-edge and re-answer tier before under, and add to rationale-edge one clause saying its parent is unanswered. Under is then drafted from the three outcomes, simplified as the decomposition finding proposes.

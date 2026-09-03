@@ -1,6 +1,6 @@
 ---
 question: What does an unanswered node carry?
-stage: ruling
+stage: review
 recommendation:
   class: ratified
   boldness: high
@@ -33,7 +33,7 @@ The author, 2026-09-03:
 
 ## Answer
 
-The disposition and the dialogue on it. The disposition is the node as it stands: the question, its fields, the answer, and the rationale, the standing text when the node was once ratified and otherwise the AI's draft, stamped deferred or unstamped. The dialogue is everything the node carries only while it is unanswered, or while a ratified node is under review; it is removed at the recording, when the author's words are quoted into the rationale and the stamp is written. It has six parts, and each holds only what cannot be re-derived.
+The disposition and the dialogue on it. The disposition is the node as it stands: the question, its fields, the answer, and the rationale, the standing text when the node was once ratified and otherwise the AI's draft, stamped deferred or unstamped. The dialogue is everything the node carries only while it is unanswered, or while a ratified node is under review; it is removed at the recording, when the stamp is written, except as the quotes ruling decides for the author's words. It has six parts, and each holds only what cannot be re-derived.
 
 `stage`, the next movement owed: periagogic, maieutic, review, or ruling. The movements come in that order, so the stage also says what is behind the node, and a kickback moves it back.
 
@@ -47,7 +47,7 @@ The disposition and the dialogue on it. The disposition is the node as it stands
 
 `## Proposal`, the AI's account in prose: the evidence, the findings, the alternatives and why they were rejected, the reasoning behind each fact, the review's findings and its counter-argument with the session's reply, and what is open for the author.
 
-The validator holds the parts together: a stage on every unanswered node and on no answered node except one under review; a recommendation from the review stage on; a forward verdict at ruling; a draft that parses and answers the node's question. Everything else about the dialogue is derived: the status, the persistence, the queue and its order, whether the draft changed since the review, the edit the page shows, and the counts.
+The validator holds the parts together: a stage on every unanswered node and on no answered node except one under review; a recommendation from the review stage on; a forward verdict at ruling; a draft that parses and answers the node's question; the refusal of a stage on an answered node is latent until an answered node exists. Everything else about the dialogue is derived: the status, the persistence, the queue and its order, whether the draft changed since the review, the edit the page shows, and the counts.
 
 ## Rationale
 
@@ -59,7 +59,7 @@ The author's question of 2026-09-03, quoted above, answered greenfield. What the
 
 The author's question quoted above is answered as this node, stamped deferred and recommended for ratification. The author's: that an unanswered node is the disposition plus the state of the dialogue, and the list of what that state tracks. The AI's, open to the author's ruling: the six parts and which of them are data; the draft as a fenced block inside the node; the pin on the reviewed text; persistence derived rather than stored; the validator's rules. The tooling landed the same afternoon, and the migration of the existing nodes to these fields with it: every node at the review or ruling stage carries its recommendation, every proposed text is a draft section, and every node forwarded by a review carries the review's state with the hash of the draft it read; the frontier reads the stage and flags a review whose draft has changed since.
 
-Facts: authority ratified if the author confirms; boldness high, the model being the AI's construction from the author's list; persistence standing.
+Facts: authority ratified; boldness high, the model being the AI's construction from the author's list; persistence standing.
 
 ### Clean-context review, 2026-09-03
 
@@ -77,3 +77,50 @@ On the three facts: 'Authority ratified if the author confirms; boldness high, t
 Strongest counter-argument (strong): The node's own test for storing anything is that it 'cannot be re-derived once the session that held it is gone', and three of the six parts fail it. The recommendation's class and boldness are judgments the next session would make again from the same node; the review's verdict and strength are re-derivable by re-running a review that the recording node already requires be re-run whenever the draft changes; and the draft is a copy of a node inside the file that holds it. What genuinely cannot be re-derived is the author's words and the stage — which the record already carried. So the model formalises as schema what prose was carrying, and pays four new fields, a hash with no producer, and a section the validator rejects, against transience's rule that only what re-derivation cannot reconstruct is stored.
 
 The session's reply: The test is what re-derivation cannot reconstruct at a projection's cost. The recommendation's facts and the review's verdict are re-derivable only by running the judgment again, a sitting or a review, and the record stores the results of judgments for that reason, as it stores a stamp and a boost; the draft is not a copy of the node but differs from it by exactly the edit the author rules on, and the page shows that edit from the two. The hash's producer is the reader, deriveDraftHash, landed the same afternoon as this review, with the fields and the section; their absence at the time of reading was timing. Accepted: persistence is derived from the node's shape, standing for the node itself with each shim, evidence, and proposal in it named, as growth's presentation rule lists them; the recording removes the Disposition section only as the quotes ruling decides, the words being quoted into the rationale either way.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Answer: '## Disposition, the author's words, verbatim and dated' together with 'it is removed at the recording, when the author's words are quoted into the rationale'. Quotes' recorded resolution is the opposite — 'the verbatim ruling stays in the node, under Disposition with its date, rolled up at the next sitting' — and authority makes a stamp invalid without the ruling in the node. The session's reply says the removal happens 'only as the quotes ruling decides'; the answer does not say so. Suggested edit: put the contingency in the answer.
+- Answer: 'The validator holds the parts together: a stage on every unanswered node and on no answered node except one under review; a recommendation from the review stage on; a forward verdict at ruling; a draft that parses and answers the node's question.' Verified partly true: read.mjs enforces stage-on-unanswered, the recommendation requirement, and draft parse-and-question; it does not appear to refuse a stage on an answered node not under review, since no answered node exists to test it. The claim should say which parts are enforced and which are latent.
+- Answer: 'A node reaches the ruling stage only with a forward verdict.' Verified consistent with the record: the two kickback verdicts (public/agency, tier) sit at periagogic and maieutic. But second-stop carries a kickback verdict at stage review, which the rule does not cover.
+- Rationale carries a prose tradition list ('the RFC and PEP processes ... review approvals pinned to a revision in code review ... the review of a change as a diff against what stands'), which readings' draft forbids; stub-traditions' enumeration does not name this node.
+
+On the three facts: The frontmatter recommendation (ratified, high) states one class and one value and honestly names the model as the AI's construction. It should add that the migration is now complete — every node at review or ruling carries a recommendation and the graph validates — so the author is ratifying a schema already in force rather than a proposal.
+
+Strongest counter-argument (strong): The node's own test for storing anything is that it cannot be re-derived once the session that held it is gone, and three of the six parts fail it: the recommendation's class and boldness are judgments the next session would make again from the same node, the review's verdict and strength are re-derivable by re-running a review the recording node already requires be re-run when the draft changes, and the draft is a copy of a node inside the file that holds it. The session's reply — that the record stores the results of judgments, as it stores a stamp and a boost — is a good answer for the recommendation and the review; it is weaker for the draft, which is genuinely a copy, and the batch shows the cost: eight drafts in this batch have drifted from the replies that amended them.
+
+The session's reply: Validated. Amended tonight: the removal of the author's words at the recording is contingent on the quotes ruling, and the validator's latent refusal is named. Second-stop's kickback at the review stage is a recorded override. The traditions in the rationale go to readings. On the counter-argument, that three of the six parts are re-derivable: the record stores the results of judgments, and the draft is the copy the batch just showed can drift, which is why the hash pins it and the frontier flags it. Stage review.
+
+### Frontier finding, 2026-09-03
+
+Kind: decomposition.
+
+Transience's un-aligned paragraph now enumerates the whole dialogue — 'the author's words, verbatim and dated, in a `## Disposition` section; the AI's account ... in a `## Proposal` section; `stage` ... and, from the review stage on, the recommendation's facts and the review's state as data' — which is dialogue's entire answer, and it states the status rule, which is unanswered's. Its own amendment review flagged the double definition of 'stage' and the frontmatter defines list was fixed; the prose enumeration was not. The result is that three nodes carry the same list and drift between them is invisible until they are read together, which is what this survey is for.
+
+Also named: commons.systems/disposition-graph/transience, commons.systems/disposition-graph/unanswered.
+
+Proposed: Dialogue is the survivor of what an unanswered node carries and unanswered of the status. Transience's un-aligned paragraph reduces to two sentences: that an un-aligned disposition is a node with a question and no answer, and that it carries the dialogue as dialogue defines it and has no children. Everything else in that paragraph moves to, or is already in, dialogue and unanswered. The five-shape taxonomy, which is what the node is for, is untouched.
+
+### Frontier finding, 2026-09-03
+
+Kind: vocabulary.
+
+'Sitting' is the record's name for one run of the alignment dialogue and is used across growth ('each is a sitting in two separated stages', 'The sitting moves in order'), recording, dialogue, transience, alignment-target and roughly twenty Proposal headings ('### Sitting on purpose, 2026-09-03'). No node defines it: the parsed graph's 88 terms include 'periagogic', 'maieutic', 'propose', 'project', 'ratify' and 'steer' from growth, and no 'sitting'. Projection's draft requires every defined term to link to the node that defines it, so the word that names the record's central act is the one word the browser cannot link.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/recording.
+
+Proposed: Growth is the survivor and adds 'sitting' to its defines, with one sentence in the answer saying what a sitting is: one run of the dialogue on one node, from its stage to the author's ruling. Recording and dialogue then use the term without redefining it. Two neighbouring gaps should be closed in the same pass: 'bootstrap grant', named by authority's shim and used in evaluation and materialization, is defined nowhere; and 'frontier item', used by transience and work-loop, rests on work-loop's 'frontier'.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Sixteen nodes still carry the reclassification's generic prose Facts line, 'authority ratified if the author confirms, or delegated where the author's words delegate it; boldness ...; persistence standing': agency, recording, evaluation, attention, legacy, persistence, review, validation-order, work-loop, aristotle-hexis, software-factories, spec-driven-development, plato-maieutics, plato-periagoge, aristotle-arche-of-action and pettit-non-domination. Two of them (agency, recording) still say 'boldness as the rationale shows'. Dialogue requires 'one class and one boldness value from the review stage on', and each of the sixteen now carries a well-formed frontmatter recommendation that the prose contradicts. The alignment page renders both, so the author is shown two accounts of one stamp on a quarter of the frontier.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/recording.
+
+Proposed: Dialogue is the survivor of the requirement. The sixteen prose Facts lines are rewritten to match each node's frontmatter recommendation, or deleted, since the recommendation field now carries the two facts and growth's presentation rule is satisfied by it plus each shim named in prose. Growth's presentation rule should say explicitly that the three facts are presented from the recommendation field and the node's shims, not from a prose line, so the duplication cannot recur.

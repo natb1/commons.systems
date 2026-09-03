@@ -1,12 +1,12 @@
 ---
 question: Who may change an answer?
-stage: ruling
+stage: review
 recommendation:
   class: ratified
   boldness: moderate
 review:
-  verdict: forward
-  strength: strong
+  verdict: kickback
+  strength: moderate
   date: 2026-09-03
   of: f2be954ef2e4e325c6e1a96a367f8ebfaea506eb
 form: rule
@@ -77,10 +77,6 @@ defines:
   - author
   - proposal
 shims:
-  - artifact: "`LEDGER.md` on the implementation ref"
-    for: the record of the author's rulings during bootstrap, held as evidence; while it stands no stamp is ratified, and the first ratified stamps are those the sitting on `purpose` writes
-    liquidation: every entry is sorted into a node amendment, a criterion, a shim declaration, evidence, or nothing, and the file is deleted
-    declared: 2026-09-02
   - artifact: the bootstrap grant, under which the AI stubs nodes and materialized implementation stamped deferred with no ratified ancestor
     for: the scope rule of this node before any answer is ratified
     liquidation: the root and the purpose node are ratified, after which every deferred answer stands under a ratified ancestor
@@ -88,7 +84,7 @@ shims:
 ---
 ## Answer
 
-Every answer carries a stamp: who holds it, with what class, and since when. A node without a stamp is an open question, not an answer. Ratified means the author decided, in the alignment dialogue after its dialectic, and wants to be asked before it changes. Ratification happens only through that dialogue: the session that ran the sitting writes the stamp in the author's name, and the ruling that earned it is in the record, in the commit that lands it and restated in the node's rationale; transcribing the author's words from any other record confers nothing, and no command does, since a script that stamps on request is a rubber stamp and the guard against rubber stamps is the dialectic itself. Delegated means the author handed that class of decision to the AI and does not want to be asked again. Deferred means the AI decided within the author's rules and owes the author a review; the deferred stamps are the author's review queue. Doctrine is the ratified answers taken together. A proposal is content, never a class: a candidate answer, an amendment, or a finding with no authority, recorded in a stamped node or in a sitting's record for the author's ruling, where it becomes an answer, a rejected alternative, or nothing. The AI exercises authority within scope: it may answer under a ratified ancestor, may change delegated answers at will, and records anything that would contradict doctrine or exceed its scope as a proposal, which acts on nothing until the author rules. A proposal that contradicts doctrine also triggers review of the delegated disposition it was made under.
+Every answer carries a stamp: who holds it, with what class, and since when. A node without a stamp is unanswered, as the unanswered node says. Ratified means the author decided, in the alignment dialogue after its dialectic, and wants to be asked before it changes. Ratification happens only through that dialogue: the session that ran the sitting writes the stamp in the author's name, and the ruling that earned it is quoted in the node with its date; transcribing the author's words from any other record confers nothing, and no command does, since a script that stamps on request is a rubber stamp and the guard against rubber stamps is the dialectic itself. Delegated means the author handed that class of decision to the AI and does not want to be asked again. Deferred means the AI decided within the author's rules and owes the author a review; until the author rules, a deferred answer is unanswered, as the unanswered node says, and carries the stage of the dialogue owed on it. Doctrine is the ratified answers taken together. A proposal is content, never a class: a candidate answer, an amendment, or a finding with no authority, recorded in a stamped node or in a sitting's record for the author's ruling, where it becomes an answer, a rejected alternative, or nothing. The AI exercises authority within scope: it may answer under a ratified ancestor, may change delegated answers at will, and records anything that would contradict doctrine or exceed its scope as a proposal, which acts on nothing until the author rules. A proposal that contradicts doctrine also triggers review of the delegated disposition it was made under.
 
 ## Rationale
 
@@ -101,7 +97,7 @@ Attenuation: authority only narrows as it is handed down, never widens, so a bre
 
 **The authority node, whole**
 
-Adds to today's recording: a node without a stamp is an open question; proposal is content, never a class, and dies at the ruling into an answer, a rejected alternative, or nothing; the deferred stamps are the review queue; the ruling that earned a ratified stamp is in the landing commit and restated in the rationale (q10). The prose list of traditions leaves the rationale for the stub tradition nodes (n-stub-traditions). The two shims declared today stay.
+Adds to today's recording: a node without a stamp is unanswered; proposal is content, never a class, and dies at the ruling into an answer, a rejected alternative, or nothing; the deferred stamps are the review queue; the ruling that earned a ratified stamp is in the landing commit and restated in the rationale (q10). The prose list of traditions leaves the rationale for the stub tradition nodes (n-stub-traditions). The two shims declared today stay.
 
 Facts: authority ratified; boldness low; moderate on the ruling-in-the-record sentence; persistence standing.
 
@@ -113,7 +109,7 @@ Depends on: `quotes`
 
 Proposed text: the draft section of this node.
 
-Rulings open: ratify as shown; ratify with edits; defer; overrule.
+Responses open: confirm as shown; confirm with edits; deny with feedback.
 
 ### Clean-context review, 2026-09-03
 
@@ -146,3 +142,71 @@ Findings:
 On the three facts: The Facts line ('authority ratified; boldness low; moderate on the ruling-in-the-record sentence; persistence standing') is not updated for the amendment and does not mention it. The amended clause is not low boldness: the author's 2026-09-03 ruling quoted here is about classifying dispositions as unanswered, and the consequence drawn for the stamp vocabulary is the AI's. The facts should also carry the bootstrap-grant shim with its liquidation condition, which this node declares and which growth's presentation rule requires.
 
 Strongest counter-argument (moderate): Saying a deferred answer is unanswered puts the record's definition of authority at odds with how the record behaves. Deferred answers act: every file under .claude/rules/ is deferred, every session works under them, the projector writes them, and this batch was produced by them. Calling all of that 'unanswered' is accurate about the author's assent and misleading about the answers' force, and it leaves the record with no plain word for 'no answer at all', since transience now says the un-aligned disposition carries the same fields as everything else. The draft's own formulation — the deferred stamps are the author's review queue — says the same thing about assent without claiming the answers are absent.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: kicked back to the maieutic stage.
+
+Findings:
+
+- The Draft — which is what a confirmation ratifies — still carries three passages the session's own replies withdrew. Draft Answer: 'A node without a stamp is an open question, not an answer' (the reply accepted that 'the test for an un-aligned disposition is the absence of an Answer section'); 'the ruling that earned it is in the record, in the commit that lands it and restated in the node's rationale' (the reply: 'the draft's sentence that puts the ruling in the commit message is withdrawn'); and the re-declared LEDGER.md shim (the reply: 'the draft's re-declared ledger shim is stale, the ledger having been liquidated'). Verified: 'ls LEDGER.md' fails and the file is not in 'git ls-files'. A shim naming a file that does not exist cannot be checked, and the node is the one that defines the stamp vocabulary the whole batch rests on. This is why the verdict is a kickback.
+- The second review section, 'Clean-context review of the amendment', has no session reply: the file ends with a bare 'null' on its own line. Four findings and a counter-argument are recorded with nothing answering them, and the author would rule on an unanswered review. Suggested edit: write the reply, or state that the findings are accepted.
+- The Draft's Answer and the node's standing Answer now differ on what a deferred answer is — 'the deferred stamps are the author's review queue' against 'until the author rules, a deferred answer is unanswered, as the unanswered node says, and carries the stage of the dialogue owed on it' — and the Proposal does not say which the author is ruling on.
+- Answer, amended clause: 'and carries the stage of the dialogue owed on it'. Verified partly enforced: read.mjs raises 'is unanswered and must carry stage' when deriveStatus returns unanswered and stage is null, so the rule does hold for a node with a deferred stamp. The previous review's finding that nothing enforced it is now stale and should be corrected rather than left standing.
+- Vocabulary: this node's draft uses 'open question' for the thing transience defines as 'un-aligned disposition' and growth's amended list now calls by that name. Fifteen nodes use 'open question'; no node defines it.
+
+On the three facts: The frontmatter recommendation (ratified, moderate) states one class and one value. The prose Facts line ('authority ratified; boldness low; moderate on the ruling-in-the-record sentence; persistence standing') is stale in three ways: the ruling-in-the-record sentence was withdrawn, the ledger shim it should name is liquidated, and the bootstrap-grant shim it does declare — whose liquidation condition is the ratification of the root and the purpose node — is named nowhere in the facts.
+
+Strongest counter-argument (moderate): Saying a deferred answer is unanswered puts the record's definition of authority at odds with how the record behaves. Deferred answers act: every file under .claude/rules/ is deferred, every session works under them, the projector writes them, and this review was produced under them. Calling all of that 'unanswered' is accurate about the author's assent and misleading about the answers' force, and it leaves the record with no plain word for 'no answer at all'. The draft's own formulation — the deferred stamps are the author's review queue — says the same thing about assent without claiming the answers are absent, which is one more reason the draft and the node cannot both be forwarded.
+
+The session's reply: Validated against the draft: it carried the two withdrawn sentences and the liquidated ledger shim. Amended tonight: the ledger shim is removed from the draft, a node without a stamp is unanswered as the unanswered node says, the ruling that earns a stamp is quoted in the node with its date, and the draft's deferred sentence carries the amended clause the standing answer has. The amendment review's findings, unanswered until now: the first is met by these edits; the second is stale, the validator refusing an unanswered node without a stage since the afternoon; the third is accepted, an overrule of an unanswered draft re-opens the review through the hash the dialogue node pins, and the sitting adds the clause; the fourth is met, 'open question' giving way to unanswered and un-aligned disposition. The bootstrap-grant shim is named in the facts at the sitting. On the counter-argument, that deferred answers act: they act as shims act, by default until the author rules, and the record's plain word for no answer at all is un-aligned disposition. Stage review: the draft changed.
+
+### Frontier finding, 2026-09-03
+
+Kind: contradiction.
+
+Authority's draft: 'A node without a stamp is an open question, not an answer.' Transience: an un-aligned disposition 'is a node with a question and no answer'. Node's current text agrees with transience; node's draft agrees with authority's draft. Verified the two rules classify the record differently: purpose has an answer and no stamp, and read.mjs's deriveStatus returns 'unaligned' only when there is no '## Answer', so the browser shows purpose while authority's draft would call it an open question. Authority's own session reply already accepted transience's test and the draft was not changed.
+
+Also named: commons.systems/disposition-graph/transience, commons.systems/disposition-graph/node.
+
+Proposed: Transience is the survivor: it defines 'un-aligned disposition' and the validator implements its test. Authority's draft strikes the sentence and, if a stamp rule is wanted, says instead that a node without a stamp is unanswered, which unanswered already defines. Node's draft restores 'A node with a question and no answer is an un-aligned disposition ... and it has no children', which is the schema node's only statement of the rule and which the validator's message quotes.
+
+### Frontier finding, 2026-09-03
+
+Kind: vocabulary.
+
+'Open question' is used on fifteen nodes and defined by none; the parsed graph carries 88 defined terms and 'open question' is not among them. Transience defines 'un-aligned disposition' for the same thing, growth's amended persistence list now uses that term, and the validator's own message says 'is unanswered and must carry stage'. Authority's draft and node's draft each use 'open question' for a slightly different notion, and several Proposals use it for a third ('persistence open question until written').
+
+Also named: commons.systems/disposition-graph/node, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/growth.
+
+Proposed: Transience is the survivor: 'un-aligned disposition' is the one term. Authority's and node's drafts use it; the Proposal facts lines that say 'persistence open question' say 'persistence un-aligned disposition', which is the shape transience's list actually names. No new defines entry is needed.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Authority's rule is that 'a ratified stamp whose ruling is not in the record is invalid', and quotes' session reply settles that the ruling stays in the node under '## Disposition'. Verified that twenty-two of the sixty-two nodes carry no '## Disposition' section at all, among them evaluation, persistence, legacy, validation-order, review, attention and recording — every one of which is at the ruling stage recommending 'ratified' — and all three public nodes. Quotes is therefore a bar on roughly a third of the frontier, and its own Options block still marks the withdrawn option as recommended.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/review, commons.systems/disposition-graph/attention, commons.systems/disposition-graph/recording.
+
+Proposed: Rule quotes first, after agency. Then, before any ratified stamp is written, each of the twenty-two nodes either gains a '## Disposition' section carrying the ruling it rests on with its date — attention and recording already have the quotations in their rationales and need only move them, which also makes the alignment page show them — or its recommendation changes from ratified to deferred, since a ratified stamp it cannot support is worse than an honest deferral. Quotes' facts state the count.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+The author, 2026-09-03, quoted in growth's rationale: 'Ratified on the rule. Ratified on the shim.' Authority's answer says ratification happens only through the alignment dialogue, and this ruling was given in one. Growth nevertheless carries 'authority: class: deferred' and is offered to the author for a fresh ruling on the whole node; its own review asked the session to 'state in the Proposal which part of the node the deferred stamp is still waiting on' and nothing does. So a ruling the author has given is recorded nowhere as an answer, and the author will be asked for it again.
+
+Also named: commons.systems/disposition-graph/growth.
+
+Proposed: Growth's Proposal states which clauses the author already ratified — the two-stage rule in both usages, and the alignment-skill shim — and what the fresh ruling covers. If the record's rule is that a node has one stamp, growth stays deferred and says in prose that two of its clauses are ratified in the author's words; if a clause can be ratified separately, that is a question for authority and should be minted there. Either way the author should not be asked twice for a ruling they gave.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Four node files end with a bare 'null' on its own line, where a session's reply to a review belongs: authority, growth, projection and transience. On authority and transience the missing reply is to the amendment review, so four findings and a counter-argument stand unanswered on each, and the author would rule on a review nobody answered. The word parses as prose and passes the validator ('ok: 62 nodes'), so nothing catches it. Three of the four are among the record's most load-bearing nodes.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/transience.
+
+Proposed: Write the four missing replies, or state on each that the review's findings are accepted, and strike the 'null'. The pattern is a serialization defect in whatever applied the reviews rather than four independent omissions, so the apply step should be checked: .claude/skills/align-review/apply.mjs is the script that writes replies, and a reply of JavaScript null being stringified into the file is the likely cause. Until it is fixed, every future review round will leave the same trace.

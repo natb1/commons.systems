@@ -1,6 +1,6 @@
 ---
 question: What does a session load, and where does it come from?
-stage: ruling
+stage: review
 recommendation:
   class: ratified
   boldness: low
@@ -26,7 +26,7 @@ shims:
     for: the orientation page this node projects
     liquidation: the projector regenerates the file from the purpose and projection nodes
     declared: 2026-09-02
-  - artifact: "`.claude/settings.json` on the implementation ref, harness configuration the author writes at the transition of 2026-09-03, since the harness refuses the session that write: worktrees branch from the checkout's own head, and the permissions a session runs with"
+  - artifact: "`.claude/settings.json` in the author's checkout and not on the implementation ref, harness configuration the author writes at the transition of 2026-09-03, since the harness refuses the session that write: worktrees branch from the checkout's own head, and the permissions a session runs with"
     for: the harness configuration no node yet answers for
     liquidation: a node answers what the harness is configured to, and the projector writes the file
     declared: 2026-09-03
@@ -51,15 +51,15 @@ The author's ruling of 2026-09-02 that `CLAUDE.md` must be justified and materia
 
 **The session-context node, whole; the operations document as a shim**
 
-The operations document is declared as a shim on this node with the former bootstrap exit conditions as its liquidation condition. The rationale's mapping of the document's accumulated functions is kept; what the document retains after the ledger migration is the residue the survey behind q11 recommends.
+CLAUDE.md and the harness configuration are declared as shims on this node; the former bootstrap exit conditions are the liquidation condition of the shim declared on the work-loop node. The rationale's mapping of the document's accumulated functions is kept; what the document retains after the ledger migration is the residue the survey behind q11 recommends.
 
 Facts: authority ratified; boldness low; persistence standing; the shim.
 
-Depends on: `ledger-sunset`
+Depends on: none; the ledger was liquidated on 2026-09-03.
 
 Proposed: the node as it stands.
 
-Rulings open: ratify as shown; ratify with edits; defer; overrule.
+Responses open: confirm as shown; confirm with edits; deny with feedback.
 
 ### Clean-context review, 2026-09-03
 
@@ -75,3 +75,51 @@ Findings:
 On the three facts: 'Authority ratified; boldness low; persistence standing; the shim' undercounts: the node carries two shims, and the summary describes a third that is not in the node. Both existing shims and their liquidation conditions should be in the facts.
 
 Strongest counter-argument (weak): The node forbids CLAUDE.md from stating any rule of its own, but the harness loads CLAUDE.md by directory and rules from the project root, so a nested checkout inherits the orientation page and not necessarily the rules. The node names this asymmetry as CLAUDE.md's one distinct function and then denies it any content, which means the surface with the widest reach carries the least. Worth one line: the rule is right in principle and its projection should be checked against how the harness actually resolves rules for nested checkouts.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Frontmatter, second shim: the artifact is '`.claude/settings.json` on the implementation ref, harness configuration the author writes at the transition of 2026-09-03'. Verified absent from the ref: 'git ls-files' on greenfield lists no settings.json (it lists only .claude/rules/*, .claude/skills/*), and .gitignore excludes only .claude/settings.local.json, so the file is untracked rather than deliberately excluded. Transience requires a shim to name its artifact so the frontier can read it; this one names a file that is not on the implementation ref at all. Suggested edit: commit the file or restate the shim as the harness configuration held outside the ref, with that as part of its liquidation.
+- Answer, sentence 2: 'Rules, one file per global-tier node under `.claude/rules/`'. Verified true today: five nodes carry tier global (authority, delegation, evaluation, materialization, session-context) and .claude/rules/ holds exactly those five files. The previous review's finding is resolved.
+- Proposal summary, sentence 1: 'The operations document is declared as a shim on this node with the former bootstrap exit conditions as its liquidation condition.' No such shim is on the node; the two shims declared are CLAUDE.md and settings.json, and the rationale says the exit conditions moved to the work-loop shim. The author would be confirming an account the node does not match. Unchanged since the previous review.
+- Proposal: 'Depends on: `ledger-sunset`'. Verified: no node has that id.
+- Rationale cites 'The author's ruling of 2026-09-02 that `CLAUDE.md` must be justified and materialized by disposition' but quotes no ruling of that date; the only quotation on the node is the 2026-09-03 one about shims.
+
+On the three facts: The frontmatter recommendation (ratified, low) is right for the rule. The prose Facts line 'authority ratified; boldness low; persistence standing; the shim' still says one shim where the node declares two, and the second names an artifact that is not on the ref, so persistence as stated overstates what exists.
+
+Strongest counter-argument (weak): The node forbids CLAUDE.md from stating any rule of its own, but the harness loads CLAUDE.md by directory and rules from the project root, so a nested checkout inherits the orientation page and not necessarily the rules. The node names this asymmetry as CLAUDE.md's one distinct function and then denies that surface any content. The rule is right in principle; its projection should be checked against how the harness actually resolves rules for nested checkouts before it is ratified, since this review is itself running in a nested worktree.
+
+The session's reply: Validated: no settings.json is tracked on the implementation ref, and the rules directory holds exactly the five global-tier files. Amended tonight: the shim names the harness configuration as held in the author's checkout and not on the ref; the Proposal summary names the two shims declared here and sends the former exit conditions to the work-loop shim; the dependency on a node that does not exist is struck. The 2026-09-02 ruling on CLAUDE.md is quoted at the sitting. On the counter-argument: this review ran in a nested worktree whose root carries the rules directory, and the harness loaded them, so the asymmetry is between a nested checkout with a rules directory of its own and one without; the sitting states which. Stage review: the shim changed.
+
+### Frontier finding, 2026-09-03
+
+Kind: decomposition.
+
+Under answers four questions at once — what an edge means, how rank is computed, what a ceiling is, and how context loads — and defines all four terms, while standing at the maieutic stage with 'Proposed: pending' and no draft. Three of the four are answered in full elsewhere: attention answers rank, session-context answers what a session loads, and authority's answer already carries the scope rule that 'ceiling' names. Two child nodes have been carved out of it already (rationale-edge, tier), and its Proposal says its own text cannot be drafted until three questions are ruled. Meanwhile four ruling-stage nodes rest on 'rank' and one on 'ceiling', terms only under defines.
+
+Also named: commons.systems/disposition-graph/under, commons.systems/disposition-graph/attention, commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/tier.
+
+Proposed: Under survives as the edge alone: what a node refines, that it is the only hierarchical edge, and that a node may refine more than one question. 'rank' moves to attention's defines, which already answers it; 'context' moves to session-context's defines; 'ceiling' moves to authority's defines, which is where the scope rule it names lives. Under then has one question and can be drafted without waiting on rationale-edge and tier.
+
+### Frontier finding, 2026-09-03
+
+Kind: cross-reference.
+
+Three 'Depends on' entries name node ids that do not exist. Session-context: 'Depends on: `ledger-sunset`'. Growth: 'Depends on: `quotes`, `review-context`, `review-artifact`' — quotes exists, the other two do not. Verified by checking every backticked id in every 'Depends on' line against the graph directory. Transience rejects 'a queue kept outside the graph, because a list beside the record is the ledger the author asked to sunset'; these three dependencies are exactly that, questions that live only on a page.
+
+Also named: commons.systems/disposition-graph/growth.
+
+Proposed: Mint the two live questions as un-aligned dispositions under the nodes they bear on, or strike the dependencies. 'review-context' and 'review-artifact' are superseded in substance by clean-context-review and by growth's own alignment-page shim, so striking them is the honest fix; 'ledger-sunset' is met, the ledger having been liquidated on 2026-09-03, so it is struck too. Growth and session-context are the nodes that change.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Two declared shims fail transience's own requirement that a shim name an artifact that exists and a liquidation condition the frontier can read. Session-context declares '`.claude/settings.json` on the implementation ref, harness configuration the author writes at the transition of 2026-09-03': verified that no settings.json is tracked on greenfield (git ls-files lists only .claude/rules/* and .claude/skills/*), and .gitignore excludes only .claude/settings.local.json, so the artifact is not on the ref at all. Materialization declares '`packages/disposition` importing the `yaml` package from an ancestor `node_modules`, with no dependency manifest of its own': verified that packages/disposition/package.json exists and declares yaml as a dependency, so the artifact's description is false and half its liquidation condition is met. Transience: 'a shim whose condition is met and which still exists is a frontier item', and the flagging of a met condition is itself unmaterialized, so neither shows anywhere.
+
+Also named: commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/transience.
+
+Proposed: Session-context either commits .claude/settings.json to the implementation ref, which is what its own shim says, or restates the artifact as harness configuration held outside the ref with that as part of the liquidation condition. Materialization restates its second shim as the ancestor node_modules resolution alone, the manifest half being met. Transience's instrument note is upgraded to a declared shim for the unmaterialized flagging, as its own reviewer asked and as its rule requires.

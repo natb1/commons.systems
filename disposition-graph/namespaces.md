@@ -1,6 +1,6 @@
 ---
 question: How are nodes named across graphs?
-stage: ruling
+stage: review
 recommendation:
   class: ratified
   boldness: moderate
@@ -23,7 +23,7 @@ defines:
 shims:
   - artifact: the `public` graph in this repository's manifest, the public part of the author's personal disposition hosted here
     for: the mount of `commons.systems/public` at `natb1.com/public`
-    liquidation: a repository answers at natb1.com with a `disposition` ref; `public/` moves there and ids rewrite by prefix
+    liquidation: a repository answers at natb1.com with a `disposition` ref; `public/` moves there and ids rewrite by prefix, with redirects from the old addresses, as the web-routing reading adopts
     declared: 2026-09-02
 ---
 ## Disposition
@@ -59,7 +59,7 @@ defines:
 shims:
   - artifact: the `public` graph in this repository's manifest, the public part of the author's personal disposition hosted here
     for: the mount of `commons.systems/public` at `natb1.com/public`
-    liquidation: a repository answers at natb1.com with a `disposition` ref; `public/` moves there and ids rewrite by prefix
+    liquidation: a repository answers at natb1.com with a `disposition` ref; `public/` moves there and ids rewrite by prefix, with redirects from the old addresses, as the web-routing reading adopts
     declared: 2026-09-02
 ---
 ## Answer
@@ -88,7 +88,7 @@ Depends on: `traditions-home`
 
 Proposed text: the draft section of this node.
 
-Rulings open: ratify as shown; ratify with edits; defer; overrule.
+Responses open: confirm as shown; confirm with edits; deny with feedback.
 
 ### Clean-context review, 2026-09-03
 
@@ -102,3 +102,30 @@ Findings:
 On the three facts: Ratified if q2 stands, moderate boldness, standing, with the public-graph mount shim carried forward, is right as presented.
 
 Strongest counter-argument (weak): The traditions graph inherits the manifest's shape for graphs that move (target and liquidation) but has neither, so the manifest would carry a graph of a third kind with no declared future. The author's own model is that a tradition 'could theoretically be represented by its own graph', which is a move this manifest entry does not anticipate. One line.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Draft Answer adds the traditions graph, but the manifest carries only disposition-graph and public. Verified against disposition/disposition.yaml. The manifest edit is part of what the author would be confirming and is shown nowhere. Suggested edit: show the manifest entry in the Proposal.
+- The previous review's finding that 'Draft frontmatter form: disposition presumes the forms ruling' is stale: the draft carries 'form: rule'. It should be struck rather than left standing beside the amended draft.
+- Web-routing, in this same batch, adopts 'addresses do not change' from Berners-Lee while this node's shim liquidates by 'a directory move and a prefix rewrite of ids'. Web-routing's reply says the namespaces shim's liquidation 'should carry' the redirect obligation; it does not carry it. Suggested edit: add it in the same landing.
+- Draft: 'a tradition that comes to have a graph of its own is reached by the same path' presumes traditions-home's recommended option, which is listed as a dependency but is itself unruled.
+
+On the three facts: The frontmatter recommendation (ratified, moderate) is right, contingent on traditions-home. The prose Facts line says 'ratified if q2 stands', which names a question by a sitting label rather than a node id — the same defect as the three dangling 'Depends on' ids elsewhere in the batch.
+
+Strongest counter-argument (weak): The traditions graph inherits the manifest's shape for graphs that move (target and liquidation) but has neither, so the manifest would carry a graph of a third kind with no declared future. The author's own model is that a tradition 'could theoretically be represented by its own graph', which is a move this manifest entry does not anticipate — and web-routing has just adopted a principle that makes such a move owe redirects. One line in the manifest entry would settle it.
+
+The session's reply: Validated. Amended tonight: the public graph's shim carries the redirect obligation web-routing adopts, in the frontmatter and the draft. The manifest entry for the traditions graph is shown at traditions-home, which is ruled first. On the counter-argument: a traditions graph declares no move, and the sitting says whether it needs a target and a liquidation like public's. Stage review: the shim changed.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Two ruling-stage nodes rest on maieutic ground without saying so. Rationale-edge is at ruling under under, which is at maieutic with 'Proposed: pending' and no draft, and under's own Proposal says its text is 'Drafted after q14, q15, and q16 are ruled' — one of which, tier, was kicked back and its recommendation withdrawn, so under cannot be drafted as planned. Separately, readings' draft and namespaces' draft both presume a traditions graph that traditions-home would create, and traditions-home is at ruling but is listed as a dependency of both; the manifest edit that would create the graph is shown on none of the three.
+
+Also named: commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/under, commons.systems/disposition-graph/tier, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/readings.
+
+Proposed: Rule traditions-home before readings and namespaces, and show the manifest entry on traditions-home so the author sees what they are creating. Rule rationale-edge and re-answer tier before under, and add to rationale-edge one clause saying its parent is unanswered. Under is then drafted from the three outcomes, simplified as the decomposition finding proposes.

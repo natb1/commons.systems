@@ -6,7 +6,7 @@ recommendation:
   boldness: moderate
 review:
   verdict: forward
-  strength: weak
+  strength: moderate
   date: 2026-09-03
   of: 8f46214fa1e80836a43e46c4d643f0e223cad9ce
 form: rule
@@ -89,7 +89,7 @@ Depends on: `traditions-home`
 
 Proposed text: the draft section of this node.
 
-Rulings open: ratify as shown; ratify with edits; defer; overrule.
+Responses open: confirm as shown; confirm with edits; deny with feedback.
 
 ### Clean-context review, 2026-09-03
 
@@ -104,3 +104,60 @@ Findings:
 On the three facts: 'Ratified if q2 stands' is right, boldness moderate is right. The facts should add that ratifying this rule immediately makes twelve existing rationales non-conforming and that the fix is unruled.
 
 Strongest counter-argument (weak): Making every reading a node multiplies files where the author's first framing did not: one tradition read by three nodes becomes one root plus three readings, so the Aristotle material already spans three files and would span four. The node records this trade honestly as 'parsimony of mechanism against parsimony of files', and the four benefits it claims (shared storage, nesting, its own hash and pin, one stamp vocabulary) are real. Worth one line rather than a re-opening.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Draft Answer, last clause: 'the rationale of a node never repeats its readings.' Verified: fourteen nodes carry prose tradition lists today (authority, dialogue, evaluation, materialization, namespaces, node, persistence, recording, review, scope, session-context, transience, validation-order, work-loop), and the remedy, stub-traditions, is at the maieutic stage and enumerates only twelve — it omits dialogue, recording and scope, and names instruments, which uses no marker phrase. Ratifying this rule puts fourteen nodes on the frontier at once with an enumeration that is short by three.
+- Draft Answer: 'A reading is a node under the disposition it bears on, naming the tradition it reads.' The ten reading nodes carry source and relation and name no tradition, and no traditions graph exists in the manifest. No migration is named.
+- The previous review's finding that 'Draft frontmatter form: disposition presumes the forms ruling' is stale; the draft carries 'form: rule'.
+- Draft Answer: 'ratified when the author has read the primary source or understands the mounted graph and confirms the relation.' Verified applied to four readings (the three under public/agency and plato-maieutics, plato-periagoge now recommend delegated) and not to three (software-factories, spec-driven-development, srs-introduction still recommend ratified while their own rationales defer until the author reads).
+
+On the three facts: The frontmatter recommendation (ratified, moderate) is right, contingent on traditions-home. The facts should add that ratifying makes fourteen existing rationales non-conforming, that the remedy is unruled and its enumeration incomplete, and that three reading nodes still present a class this rule forbids.
+
+Strongest counter-argument (moderate): Making every reading a node multiplies files where the author's first framing did not: one tradition read by three nodes becomes one root plus three readings, so the Aristotle material already spans three files and would span four, and stub-traditions proposes about thirty more roots as open questions — every one of which, under transience, joins the author's queue. The node records the trade honestly as 'parsimony of mechanism against parsimony of files', and the four benefits it claims are real; but the queue effect is the cost the author will feel, and neither this node nor traditions-home states it.
+
+The session's reply: Validated: fourteen rationales carry prose tradition lists, and the enumeration on stub-traditions is short by dialogue, recording, and scope, which its sitting adds. Ratifying this rule puts them on the frontier, which the facts now say. The migration of the reading nodes to named traditions comes with traditions-home, ruled first. On the counter-argument, that the queue effect is the cost the author will feel: accepted and stated; stub traditions enter as un-aligned dispositions at the periagogic stage, ruled or pruned in rank order.
+
+### Frontier finding, 2026-09-03
+
+Kind: redundancy.
+
+Form-vocabulary's proposal is 'No new nodes. Each term is defined by the node that owns it, through the defines field ... the term index links every use in prose to that node, and a term no node defines is not linked, which is how drift shows.' That is what readings' draft already says for traditions ('Prose reaches a tradition through the name it defines') and what projection's draft already says for terms ('Every defined term and every tradition's name links to the node that defines it'), and what the browser already implements. Form-vocabulary restates two other nodes' answers and adds one decision — that no node per form is created — which is a rejected alternative rather than a question.
+
+Also named: commons.systems/disposition-graph/form-vocabulary, commons.systems/disposition-graph/projection.
+
+Proposed: Projection is the survivor for the linking rule and readings for the tradition rule. Form-vocabulary is folded into node's rationale as a rejected alternative ('one node per form, rejected because each would restate the definition its owning node already carries') and the node is pruned, which is what its own facts already say ('persistence not recorded'). The author's quote it carries is already carried verbatim on node.
+
+### Frontier finding, 2026-09-03
+
+Kind: cross-reference.
+
+Two prose references point at nodes that no longer say what is attributed to them. Audience's Proposal: 'the five-audience finding moves to scope' — verified stale, the finding is on coverage, whose own '### Sitting on purpose' section says 'The paragraph that addressed the audience node now addresses this question'. And stub-traditions enumerates the rationales carrying prose tradition lists as node, authority, instruments, namespaces, persistence, work-loop, evaluation, review, session-context, materialization, transience and validation-order; verified by grep that fourteen nodes carry such lists and that three of them — dialogue, recording and scope — are missing from the enumeration, while instruments carries its traditions without the marker phrase. Readings' draft rests its rule on that enumeration being the remedy.
+
+Also named: commons.systems/disposition-graph/audience, commons.systems/disposition-graph/coverage, commons.systems/disposition-graph/stub-traditions.
+
+Proposed: Audience's Proposal names coverage instead of scope. Stub-traditions' enumeration is regenerated from the record rather than maintained by hand — the same class of drift the scope node's order field was introduced to prevent — and until it is, dialogue, recording and scope are added. Readings' facts say that the remedy's enumeration is incomplete, so the author knows the size of what ratifying the rule puts on the frontier.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Two ruling-stage nodes rest on maieutic ground without saying so. Rationale-edge is at ruling under under, which is at maieutic with 'Proposed: pending' and no draft, and under's own Proposal says its text is 'Drafted after q14, q15, and q16 are ruled' — one of which, tier, was kicked back and its recommendation withdrawn, so under cannot be drafted as planned. Separately, readings' draft and namespaces' draft both presume a traditions graph that traditions-home would create, and traditions-home is at ruling but is listed as a dependency of both; the manifest edit that would create the graph is shown on none of the three.
+
+Also named: commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/under, commons.systems/disposition-graph/tier, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/namespaces.
+
+Proposed: Rule traditions-home before readings and namespaces, and show the manifest entry on traditions-home so the author sees what they are creating. Rule rationale-edge and re-answer tier before under, and add to rationale-edge one clause saying its parent is unanswered. Under is then drafted from the three outcomes, simplified as the decomposition finding proposes.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Readings' rule is that a reading is 'ratified when the author has read the primary source ... delegated when the AI's reading stands and the author declines to review it'. Five reading nodes now carry 'recommendation: class: delegated' (the two public readings, aristotle-hexis, plato-maieutics, plato-periagoge), applying the previous round's finding. Four do not: software-factories, spec-driven-development, srs-introduction and web-routing all carry 'class: ratified' while each of their own rationales says the reading is deferred until the author reads the sources. All ten readings additionally carry the stale prose Facts line offering 'ratified if the author confirms, or delegated where the author's words delegate it', which states two classes for one stamp.
+
+Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/aristotle-hexis, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing.
+
+Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.

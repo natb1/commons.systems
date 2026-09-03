@@ -62,3 +62,23 @@ Findings:
 On the three facts: The Facts line is the generic reclassification template and fails growth's presentation rule and dialogue's 'recommendation' requirement in both fields: 'ratified if the author confirms, or delegated where the author's words delegate it' states no class, and 'boldness as the rationale shows' states no value where dialogue requires low, moderate or high from the review stage on. For an AI-drafted archē in the author's voice with no quoted ruling the honest facts are boldness high, class not ratifiable until the author's own account is in the record, persistence standing — and they should name authority's bootstrap-grant shim, whose liquidation condition is this node's ratification.
 
 Strongest counter-argument (moderate): The answer makes a claim the record cannot check. 'Capacity, not exercise' means the archē is satisfied by a capacity that is never used, and its only instrument is a re-grasp on events, so no observable state of the world contradicts it: an author who had in fact been captured would read the same answer and find nothing failing. Pettit is adopted as support, but Pettit's test is structural — does another hold arbitrary power over you — and the record records no structural test of its own. So the graph's first principle is the one node that nothing can falsify, which is defensible for an archē and dangerous for the node that every prune, every prioritisation and every ratification below it appeals to.
+
+### Frontier finding, 2026-09-03
+
+Kind: redundancy.
+
+Capture asks 'Does the same discipline help manage capture of the author's intention by institutions generally?' and answers 'Yes. The ways an institution comes to set a person's problems for them recur across daily life, and a record of one's dispositions with instruments against them is a general defence.' Public/agency, its root, already names capture without restricting it to software — 'What must not atrophy is the capacity to notice that I have been captured and to recover' — and its readings (Pettit, and the owed Hirschman and Sen) are general. Capture's own counter-argument concedes it: 'the node may be a restatement of its own root rather than a hypothesis under it.' Both nodes also define 'capture' — verified, agency's defines carries it and capture's does not, so the term is defined once, but the claim is made twice.
+
+Also named: commons.systems/disposition-graph/capture.
+
+Proposed: Agency is the survivor of the general claim. Capture stays as the hypothesis but is rewritten to state only what agency does not: that the record, and not merely the capacity, is the instrument of noticing and recovering, and that this is untested outside delegated software. Its answer cites agency rather than restating it, and its draft's 'a general defence' becomes 'a general instrument for noticing capture and recovering from it', which is the archē's actual wording.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Public/agency is at the periagogic stage after a kickback, with no '## Disposition' and no author words anywhere on it, and its answer is written in the author's first person by the AI. Every one of the forty-eight nodes at the review or ruling stage descends from it: purpose is its only disposition-graph child, and the two readings sit directly under it at the ruling stage arguing for an answer the author has never given. Frontier-consistency: 'no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so.' No node says so. Authority's bootstrap-grant shim compounds it: its liquidation is 'the root and the purpose node are ratified', so nothing in the record can stand under a ratified ancestor until this node is answered.
+
+Also named: commons.systems/disposition-graph/purpose, commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination.
+
+Proposed: Rule nothing before the author's account of 'Who is the origin of what is done in my name?' is in the record. The next sitting is a periagogic one on agency, whose product is a '## Disposition' section in the author's own words; the alignment page already renders the free-text control for that stage. Purpose and the two readings each add one clause saying they rest on an archē the author has not yet stated. The two readings are then re-read against the answer the author gives, since both currently argue for the AI's draft of it.

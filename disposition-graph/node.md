@@ -1,12 +1,12 @@
 ---
 question: What is a node?
-stage: ruling
+stage: maieutic
 recommendation:
   class: ratified
   boldness: moderate
 review:
-  verdict: forward
-  strength: weak
+  verdict: kickback
+  strength: strong
   date: 2026-09-03
   of: 50b9ea4f40a07e8facf86b081e6183c2381cce21
 form: rule
@@ -102,7 +102,7 @@ Depends on: `forms`, `traditions-home`
 
 Proposed text: the draft section of this node.
 
-Rulings open: ratify as shown; ratify with edits; defer; overrule.
+Responses open: confirm as shown; confirm with edits; deny with feedback.
 
 ### Clean-context review, 2026-09-03
 
@@ -117,3 +117,61 @@ Findings:
 On the three facts: 'Ratified if q1 stands' is the right contingency, but 'boldness moderate' understates the deletion of the un-aligned-disposition sentence, which is the AI's own and is not announced.
 
 Strongest counter-argument (weak): The four-form model rests on the merge argued at forms, and the strongest case against it belongs there: the achieve-or-maintain distinction that target and rule carried has no field to move into, and no criterion in the record carries it. Ratifying this node bakes the merge into the schema definition before that carrier exists.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: kicked back to the maieutic stage.
+
+Findings:
+
+- The Draft states the four-form merge — 'the current position in one of four forms: a disposition ... An assumption is not a form but a criterion' — which forms' own session reply in this same batch withdrew: 'The counter-argument wins. The recommendation changes to the second option, rule kept beside disposition.' The Proposal summary here still presents the merge as what is recommended ('Four forms: disposition (target and rule merged ...). Assumption leaves the forms and becomes a criterion kind'). Two nodes of one batch now recommend opposite answers to the same schema question, and this is the schema node. The draft cannot be put to the author as it stands.
+- Draft Answer removes 'A node with a question and no answer is an un-aligned disposition ... and it has no children', the schema node's only statement of what an unanswered node is and of the no-children rule, and replaces it with 'Every node carries a stamp, or it is an open question awaiting its answer' — a term no node defines. Verified the removal is load-bearing: read.mjs's message is 'is unanswered and must carry stage', and the no-children rule holds today (no node with no '## Answer' has an under-child). The removal is not announced in the Proposal.
+- Draft frontmatter uses 'criteria:', not a schema key, and drops 'instrument' from defines while the node itself still carries an 'instrument:' block. The drafted node could not land as written.
+- Draft Answer: 'a tradition, the root of a mounted body of thought or work' makes tradition a form of node, while readings' draft puts traditions in a separate graph and forms' reply defers the question ('Whether a tradition carries a form of its own is put to the readings ruling'). Neither node settles it.
+- Of the five author quotes under '## Disposition', two are answered by other nodes rather than this one: 'assumption deserves a target disposition ...' is answered by form-vocabulary, which carries the same quote verbatim, and the rejected-section question is answered by rejected.
+
+On the three facts: The frontmatter recommendation (ratified, moderate) states one class and one value, but the class is wrong for a draft whose central change the record has withdrawn. The prose Facts line 'authority ratified if q1 stands; boldness moderate' understates the deletion of the un-aligned-disposition sentence, which is the AI's own and is not announced; boldness on the draft as it stands is high.
+
+Strongest counter-argument (strong): The four-form model rests on a merge whose carrier does not exist: no criterion in the graph says whether its answer is to be achieved or maintained, no field holds it, and instruments' draft sentence that would have introduced it is withdrawn. Instruments' current text uses the distinction operationally — 'A target's failing check is work. A rule's failing check is a variance that gates the work that broke it' — which is how the frontier decides what to do with a failure, and almost every node is unguarded, so under the merge an unguarded node's failure would have no class at all. Ratifying this draft bakes the merge into the schema definition after the record has already decided against it.
+
+The session's reply: Validated: the draft states the merge forms withdrew and drops the un-aligned sentence the validator quotes. The redraft reverts to five forms, restores the un-aligned disposition sentence and the no-children rule, and takes 'un-aligned disposition' in place of 'open question'; whether a tradition is a form waits on traditions-home; the criteria key arrives with instruments. The two quotations answered elsewhere are carried here as ground. On the counter-argument: accepted; the merge has no carrier. Stage maieutic: the sitting redrafts.
+
+### Frontier finding, 2026-09-03
+
+Kind: contradiction.
+
+One schema question is in three states inside one batch. Forms' session reply: 'The counter-argument wins. The recommendation changes to the second option, rule kept beside disposition.' Node's draft says the opposite: 'the current position in one of four forms: a disposition, something that should become or stay true ... An assumption is not a form but a criterion', and node's Proposal summary still reads 'Four forms: disposition (target and rule merged ...)'. Instruments' draft still carries the sentence the merge rested on — 'A criterion also says whether the answer is to be achieved ... or maintained' — although instruments' own reply says it 'is withdrawn at the recording'. Forms' Options block meanwhile still marks the withdrawn option '(recommended)'.
+
+Also named: commons.systems/disposition-graph/forms, commons.systems/disposition-graph/instruments.
+
+Proposed: Forms is the survivor and is ruled first: move the '(recommended)' marker to option 2. Node's draft then reverts to five forms with the un-aligned-disposition sentence restored, and its Proposal summary is rewritten. Instruments' draft strikes the achieve-or-maintain sentence and keeps the three criterion kinds without it. The assumption question the author actually asked ('Is assumption a form at all?') is left unanswered by option 2 and should be minted as its own question under forms rather than carried by instruments' draft.
+
+### Frontier finding, 2026-09-03
+
+Kind: contradiction.
+
+Authority's draft: 'A node without a stamp is an open question, not an answer.' Transience: an un-aligned disposition 'is a node with a question and no answer'. Node's current text agrees with transience; node's draft agrees with authority's draft. Verified the two rules classify the record differently: purpose has an answer and no stamp, and read.mjs's deriveStatus returns 'unaligned' only when there is no '## Answer', so the browser shows purpose while authority's draft would call it an open question. Authority's own session reply already accepted transience's test and the draft was not changed.
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/transience.
+
+Proposed: Transience is the survivor: it defines 'un-aligned disposition' and the validator implements its test. Authority's draft strikes the sentence and, if a stamp rule is wanted, says instead that a node without a stamp is unanswered, which unanswered already defines. Node's draft restores 'A node with a question and no answer is an un-aligned disposition ... and it has no children', which is the schema node's only statement of the rule and which the validator's message quotes.
+
+### Frontier finding, 2026-09-03
+
+Kind: vocabulary.
+
+'Open question' is used on fifteen nodes and defined by none; the parsed graph carries 88 defined terms and 'open question' is not among them. Transience defines 'un-aligned disposition' for the same thing, growth's amended persistence list now uses that term, and the validator's own message says 'is unanswered and must carry stage'. Authority's draft and node's draft each use 'open question' for a slightly different notion, and several Proposals use it for a third ('persistence open question until written').
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/growth.
+
+Proposed: Transience is the survivor: 'un-aligned disposition' is the one term. Authority's and node's drafts use it; the Proposal facts lines that say 'persistence open question' say 'persistence un-aligned disposition', which is the shape transience's list actually names. No new defines entry is needed.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Four author quotations are carried verbatim on more than one node, verified by exact match. 'Who is this repository for? ... It can be pruned' on audience and coverage. 'purpose -> [scope, self documentation (via the graph browser)] (equal) -> alignment -> harness context management -> reconciliation -> rsi' on scope, self-documentation and rsi. 'Is this correctly encoded as form: assumption vs form: disposition with unvalidated instrumentation? Is assumption a form at all?' on knowledge-store, capture and purpose. 'assumption deserves a target disposition, along with tradition and disposition ...' on node and form-vocabulary. Frontier-consistency's validation 14 says every disposition the author has given is 'answered by exactly one node: none unanswered, none answered twice', and admits no case for a quote carried as context on a child.
+
+Also named: commons.systems/disposition-graph/audience, commons.systems/disposition-graph/coverage, commons.systems/disposition-graph/knowledge-store, commons.systems/disposition-graph/capture, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/form-vocabulary, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/self-documentation, commons.systems/disposition-graph/rsi.
+
+Proposed: Most of these are legitimate context on a child that answers a part of the words, and the validation should say so: amend frontier-consistency's validation 14 to read that each part of a disposition is answered by exactly one node, and that a quotation may be carried on a child as the ground of the part it answers. Two are genuine double answers and should be resolved: audience and coverage both answer the audience question, which the audience prune resolves in coverage's favour; knowledge-store, capture and purpose all carry the form question, which forms answers, so all three should cite forms rather than each carry the quote.

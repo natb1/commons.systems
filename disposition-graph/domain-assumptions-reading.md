@@ -28,4 +28,4 @@ Drafted after q1 and q2.
 
 Proposed: pending.
 
-Rulings open: ratify as shown; ratify with edits; defer; overrule.
+Responses open: confirm as shown; confirm with edits; deny with feedback.

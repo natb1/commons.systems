@@ -1,6 +1,6 @@
 ---
 question: Who is this repository for?
-stage: ruling
+stage: review
 recommendation:
   class: ratified
   boldness: low
@@ -39,16 +39,16 @@ The incumbent record addresses at least five audiences, and this answer names on
 
 **Prune the audience node**
 
-The node is deleted. Purpose states its readers, as the requirements tradition states them inside its purpose section; the five-audience finding moves to scope; the projection node no longer names audience as a source of the description and tags.
+The node is deleted. Purpose states its readers, as the requirements tradition states them inside its purpose section; the five-audience finding moves to coverage, which carries the author's words on the audience verbatim; the projection node no longer names audience as a source of the description and tags.
 
-Facts: authority ratified; boldness low; persistence standing; the prune is a change to the record.
+Facts: authority ratified; boldness low; persistence not recorded, the reader statement moving to purpose and the five-audience finding to coverage; the prune is a change to the record.
 
 Rejected:
 - Keep the node as an open question. — It would carry nothing purpose does not until the incumbent's audiences are folded in, and that folding is a scope question.
 
 Proposed: the node is pruned.
 
-Rulings open: ratify as shown; ratify with edits; defer; overrule.
+Responses open: confirm as shown; confirm with edits; deny with feedback.
 
 ### Clean-context review, 2026-09-03
 
@@ -61,3 +61,39 @@ Findings:
 On the three facts: Authority ratified is right, since the author asked for the prune in their own words, and boldness low is right. Persistence should be 'not recorded' rather than 'standing'.
 
 Strongest counter-argument (weak): Pruning removes the only node whose question is 'Who is this repository for?', and purpose answers it in one subordinate clause that no criterion guards. The requirements tradition the record adopts does state the intended audience inside the purpose section, so the prune is well grounded; but the audience question is the one the twelve-function survey found the most divergence on, and it will have to be re-asked at the scope sitting. Worth one line.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Facts: 'persistence standing' for a node being deleted. Nothing standing remains on it. Unchanged since the previous review, which asked for 'not recorded' naming the two destinations.
+- Proposal: 'the five-audience finding moves to scope'. Verified stale: the finding now sits on coverage, whose own text says 'The paragraph that addressed the audience node now addresses this question', and coverage carries the same author quote verbatim. The author would be confirming a prune whose stated destination is wrong. Suggested edit: name coverage.
+- The node's '## Disposition' quote is carried verbatim on coverage as well. If audience is pruned the quote survives on coverage, which is the right outcome and should be said in the Proposal.
+
+On the three facts: Frontmatter ratified/low is right, since the author asked for the prune in their own words. Persistence should be 'not recorded', naming purpose and coverage as the two destinations, rather than 'standing'.
+
+Strongest counter-argument (weak): Pruning removes the only node whose question is 'Who is this repository for?', and purpose answers it in one subordinate clause that no criterion guards — and purpose-criteria now recommends leaving purpose unguarded, so it will stay that way. The requirements tradition the record adopts does state the intended audience inside the purpose section, so the prune is well grounded; but the audience question is the one coverage's survey found the most divergence on, and it will have to be re-asked at the coverage sitting.
+
+The session's reply: Validated. Amended tonight: the destination of the five-audience finding is coverage, which carries the author's words on the audience verbatim, and the persistence is not recorded, naming purpose and coverage. On the counter-argument: the audience question returns at coverage's sitting, where the survey found the divergence, and purpose states the readers as the requirements tradition does. Stage review.
+
+### Frontier finding, 2026-09-03
+
+Kind: cross-reference.
+
+Two prose references point at nodes that no longer say what is attributed to them. Audience's Proposal: 'the five-audience finding moves to scope' — verified stale, the finding is on coverage, whose own '### Sitting on purpose' section says 'The paragraph that addressed the audience node now addresses this question'. And stub-traditions enumerates the rationales carrying prose tradition lists as node, authority, instruments, namespaces, persistence, work-loop, evaluation, review, session-context, materialization, transience and validation-order; verified by grep that fourteen nodes carry such lists and that three of them — dialogue, recording and scope — are missing from the enumeration, while instruments carries its traditions without the marker phrase. Readings' draft rests its rule on that enumeration being the remedy.
+
+Also named: commons.systems/disposition-graph/coverage, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/readings.
+
+Proposed: Audience's Proposal names coverage instead of scope. Stub-traditions' enumeration is regenerated from the record rather than maintained by hand — the same class of drift the scope node's order field was introduced to prevent — and until it is, dialogue, recording and scope are added. Readings' facts say that the remedy's enumeration is incomplete, so the author knows the size of what ratifying the rule puts on the frontier.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Four author quotations are carried verbatim on more than one node, verified by exact match. 'Who is this repository for? ... It can be pruned' on audience and coverage. 'purpose -> [scope, self documentation (via the graph browser)] (equal) -> alignment -> harness context management -> reconciliation -> rsi' on scope, self-documentation and rsi. 'Is this correctly encoded as form: assumption vs form: disposition with unvalidated instrumentation? Is assumption a form at all?' on knowledge-store, capture and purpose. 'assumption deserves a target disposition, along with tradition and disposition ...' on node and form-vocabulary. Frontier-consistency's validation 14 says every disposition the author has given is 'answered by exactly one node: none unanswered, none answered twice', and admits no case for a quote carried as context on a child.
+
+Also named: commons.systems/disposition-graph/coverage, commons.systems/disposition-graph/knowledge-store, commons.systems/disposition-graph/capture, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/node, commons.systems/disposition-graph/form-vocabulary, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/self-documentation, commons.systems/disposition-graph/rsi.
+
+Proposed: Most of these are legitimate context on a child that answers a part of the words, and the validation should say so: amend frontier-consistency's validation 14 to read that each part of a disposition is answered by exactly one node, and that a quotation may be carried on a child as the ground of the part it answers. Two are genuine double answers and should be resolved: audience and coverage both answer the audience question, which the audience prune resolves in coverage's favour; knowledge-store, capture and purpose all carry the form question, which forms answers, so all three should cite forms rather than each carry the quote.

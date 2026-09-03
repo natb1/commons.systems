@@ -33,7 +33,7 @@ The legacy record ratified the hexis reading of its root layer on 2026-07-13, in
 
 Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
 
-Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness high, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.
+Facts: authority delegated on confirmation, ratified after the author's reading; boldness high; persistence standing.
 
 ### Clean-context review, 2026-09-03
 
@@ -49,3 +49,30 @@ Findings:
 On the three facts: Generic template with the wrong class for a reading. Boldness is moderate: the Categories 8 mapping onto ratified and deferred is the AI's construction, not something the text or the author says, and it is the part of the answer most likely to be wrong now that unanswered has redefined deferred.
 
 Strongest counter-argument (moderate): A hexis in Nicomachean Ethics II.5 is acquired by acting and is precisely not a set of propositions one holds; Aristotle contrasts it with both feelings and capacities, and it is how one is disposed to feel and choose. A written record of standing answers is nearer to what Aristotle would call a logos of one's dispositions than to the hexis itself. The node's move — 'the record is both a projection of the hexis and part of how it is formed' — is the strongest form of the claim and also the point where it stops being Aristotle's: writing answers down is an activity, but not the activity in which the relevant states are habituated. If the reading fails, the knowledge-store hypothesis loses its ground while keeping its name.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Frontmatter recommendation is now 'delegated, high', applying the previous review's finding; the prose Facts line still offers 'ratified if the author confirms, or delegated where the author's words delegate it'. One stamp, two accounts.
+- Answer: 'a ratified answer is a hexis, stable and changed only by the author; a delegated or deferred answer is a diathesis, easily changed.' Under unanswered, in this same batch, a deferred answer is not a weaker answer but no answer at all, so the gradation no longer maps onto the record it describes. Unchanged since the previous review; the divergence is recorded nowhere.
+- The parent, knowledge-store, is itself an unruled hypothesis at the ruling stage, and hexis (the wording question) is a third node deciding the same clause of purpose's answer. This reading grounds a claim the author has not yet made.
+- Rationale: 'The legacy record ratified the hexis reading of its root layer on 2026-07-13 ... that ratification is evidence for this reading, not authority over it.' Correctly framed under legacy, and the model the other reading nodes should follow.
+
+On the three facts: Frontmatter delegated/high is right for a source the author has not read. Boldness is arguably moderate rather than high: the adoption is straightforward and the AI's own construction is confined to the Categories 8 mapping onto ratified and deferred, which is also the part unanswered has now falsified.
+
+Strongest counter-argument (moderate): A hexis in Nicomachean Ethics II.5 is acquired by acting and is precisely not a set of propositions one holds; Aristotle contrasts it with both feelings and capacities. A written record of standing answers is nearer to a logos of one's dispositions than to the hexis itself. The node's move — that the record is both a projection of the hexis and part of how it is formed — is the strongest form of the claim and also where it stops being Aristotle's: writing answers down is an activity, but not the activity in which the relevant states are habituated. If the reading fails, knowledge-store loses its ground while keeping its name.
+
+The session's reply: Validated. Amended tonight: the Facts line matches the frontmatter, delegated on confirmation. Accepted and owed at the sitting: the mapping of hexis and diathesis onto ratified and deferred no longer fits a record where a deferred answer is unanswered, and the reading records that as a divergence or drops the mapping. The parent is a hypothesis the author has not ruled; the reading grounds the claim the author is asked to make, which is what a reading under a hypothesis does. On the counter-argument, that writing answers down is not the activity that habituates a hexis: it is the strongest objection to knowledge-store's claim and is put to the author there.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Readings' rule is that a reading is 'ratified when the author has read the primary source ... delegated when the AI's reading stands and the author declines to review it'. Five reading nodes now carry 'recommendation: class: delegated' (the two public readings, aristotle-hexis, plato-maieutics, plato-periagoge), applying the previous round's finding. Four do not: software-factories, spec-driven-development, srs-introduction and web-routing all carry 'class: ratified' while each of their own rationales says the reading is deferred until the author reads the sources. All ten readings additionally carry the stale prose Facts line offering 'ratified if the author confirms, or delegated where the author's words delegate it', which states two classes for one stamp.
+
+Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/readings.
+
+Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.

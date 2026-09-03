@@ -30,7 +30,7 @@ Options:
 
 Feeds: `under`, `node`, `projection`, `session-context`, `authority`
 
-Rulings open: take the recommended option; take another option by number; defer; answer in prose.
+Responses open: confirm the recommended option; confirm with edits, naming another option; deny with feedback.
 
 ### Clean-context review, 2026-09-03
 
@@ -48,3 +48,33 @@ On the three facts: 'Ratified; boldness moderate; a schema change' understates i
 Strongest counter-argument (strong): The author's question was whether cross-cutting concerns reduce to topology or citations. The recommendation answers 'citations' with a citation mechanism the record has never defined, and its own reasoning concedes that neither topology nor citations suffices alone. Meanwhile option 2, keeping tier as a stored flag, is what the record runs on and what the projector implements today. The author's objection is real, that a typing convention should not bind purpose, but no such convention has ever been recorded here: all five global-tier nodes genuinely do bind every session. The intention needs drawing out again: is the author asking for a mechanism that can express a rule with a narrower-than-global scope, in which case what would such a rule be, or asking why tier is a flag rather than derived, in which case the cheaper answer is to record what makes a rule global and keep the flag as its projection.
 
 The session's reply: Accepted; the stage returns to maieutic. The question to draw out is the reviewer's: whether the author wants a rule with a narrower scope than global, and what such a rule would be, or asks why tier is a stored flag rather than derived, in which case the cheaper answer records what makes a rule global and keeps the flag as its projection. The cites edge is defined by no node, and the recommendation that rested on it is withdrawn.
+
+### Frontier finding, 2026-09-03
+
+Kind: contradiction.
+
+Projection's draft Answer: 'Every defined term and every tradition's name links to the node that defines it, and so does every field name and value on a page.' The second clause is tier's recommended option, which tier's reviewer kicked back and whose session reply withdrew it: 'The cites edge is defined by no node, and the recommendation that rested on it is withdrawn.' Verified unmeetable: at least fifteen field names and sub-keys in use are named by no node's defines, and no node carries a 'cites' field although the schema and the browser both support one. Projection stands at the ruling stage carrying a clause the record has withdrawn at the maieutic stage.
+
+Also named: commons.systems/disposition-graph/projection.
+
+Proposed: Tier is the survivor of the question and it is unanswered. Projection's draft strikes 'and so does every field name and value on a page' and keeps the defined-term and tradition-name links, which are the author's own request and are implemented. The field-link rule returns with tier whenever tier is answered.
+
+### Frontier finding, 2026-09-03
+
+Kind: decomposition.
+
+Under answers four questions at once — what an edge means, how rank is computed, what a ceiling is, and how context loads — and defines all four terms, while standing at the maieutic stage with 'Proposed: pending' and no draft. Three of the four are answered in full elsewhere: attention answers rank, session-context answers what a session loads, and authority's answer already carries the scope rule that 'ceiling' names. Two child nodes have been carved out of it already (rationale-edge, tier), and its Proposal says its own text cannot be drafted until three questions are ruled. Meanwhile four ruling-stage nodes rest on 'rank' and one on 'ceiling', terms only under defines.
+
+Also named: commons.systems/disposition-graph/under, commons.systems/disposition-graph/attention, commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/rationale-edge.
+
+Proposed: Under survives as the edge alone: what a node refines, that it is the only hierarchical edge, and that a node may refine more than one question. 'rank' moves to attention's defines, which already answers it; 'context' moves to session-context's defines; 'ceiling' moves to authority's defines, which is where the scope rule it names lives. Under then has one question and can be drafted without waiting on rationale-edge and tier.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Two ruling-stage nodes rest on maieutic ground without saying so. Rationale-edge is at ruling under under, which is at maieutic with 'Proposed: pending' and no draft, and under's own Proposal says its text is 'Drafted after q14, q15, and q16 are ruled' — one of which, tier, was kicked back and its recommendation withdrawn, so under cannot be drafted as planned. Separately, readings' draft and namespaces' draft both presume a traditions graph that traditions-home would create, and traditions-home is at ruling but is listed as a dependency of both; the manifest edit that would create the graph is shown on none of the three.
+
+Also named: commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/under, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/namespaces.
+
+Proposed: Rule traditions-home before readings and namespaces, and show the manifest entry on traditions-home so the author sees what they are creating. Rule rationale-edge and re-answer tier before under, and add to rationale-edge one clause saying its parent is unanswered. Under is then drafted from the three outcomes, simplified as the decomposition finding proposes.

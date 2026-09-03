@@ -33,7 +33,7 @@ Adopted as the name and the ground of the maieutic conduct. The divergence to ke
 
 Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
 
-Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness high, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.
+Facts: authority delegated on confirmation, ratified after the author's reading; boldness high; persistence standing.
 
 ### Clean-context review, 2026-09-03
 
@@ -51,3 +51,30 @@ On the three facts: Generic template with the wrong class for a reading. Boldnes
 Strongest counter-argument (strong): Socrates' midwifery rests on his being barren: he delivers nothing of his own, which is what makes the offspring the interlocutor's. The AI is the opposite — it drafts first and the author reacts — so the 'visible, refusable draft' is an anchor, and the known effect of an anchor is that what is delivered is the drafter's. The node names this divergence and then keeps 'adopted', which is the wrong way round: the interview's actual method is a propose-and-critique loop, and calling it maieutic imports a guarantee about whose answer emerges that the mechanism does not provide. Growth compounds this by making the maieutic stage the one where 'the ruling is taken'.
 
 The session's reply: The divergence the counter-argument presses is recorded in the rationale: the AI is not barren, it drafts, and the draft can anchor. What the reading adopts is the test of the offspring, not the midwife's barrenness, and the conduct's guard against the anchor is the periagogic stage that precedes it, where the author's account is taken before any draft appears, and the refusable draft within it. The author may rule the relation diverged; the session keeps adopted with the divergence named. Accepted: a reading the author has not read is delegated on confirmation, not ratified, and the recommendation's class now says so; the loci are reconciled with the growth node.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Frontmatter recommendation is now 'delegated, high', applying the previous review's finding; the prose Facts line still offers 'ratified if the author confirms, or delegated where the author's words delegate it'. One stamp, two accounts.
+- Rationale: 'The divergence to keep in view: the AI is not barren; it drafts, and the draft can lead', under 'relation: adopted'. Readings provides 'diverged' and evaluation requires a divergence to be recorded; a divergence named in prose under an adopted relation is the unrecorded conflict evaluation calls 'a frontier item deferred to neither side'. The session's reply leaves the relation adopted and offers it to the author, which is a legitimate resolution and should be said in the frontmatter, not only in a review reply.
+- The loci in the answer ('150c to d', '151e') differ from the range in 'source' (148e to 151d, 151e, 157d, 160e to 161a) and from growth's citation for the same conduct ('Theaetetus 148e to 151d'). Growth's periagogic conduct requires probes that cite the text by locus; the loci must agree.
+- Frontmatter carries source and relation but names no tradition, and no traditions graph exists.
+
+On the three facts: Frontmatter delegated/high is right for a text the author has not read. Boldness is arguably moderate: the adoption is straightforward and what is the AI's own is the analogy between the visible draft and the midwife's test, which is the part the counter-argument attacks.
+
+Strongest counter-argument (strong): Socrates' midwifery rests on his being barren: he delivers nothing of his own, which is what makes the offspring the interlocutor's. The AI is the opposite — it drafts first and the author reacts — so the visible, refusable draft is an anchor, and the known effect of an anchor is that what is delivered is the drafter's. The node names this divergence and keeps 'adopted', which imports a guarantee about whose answer emerges that the mechanism does not provide. Growth compounds it by making the maieutic stage the one where the ruling is taken.
+
+The session's reply: Validated. Amended tonight: the Facts line matches the frontmatter, delegated on confirmation. The divergence named in the rationale under an adopted relation is put to the author at the sitting, as is the loci's agreement with growth's. On the counter-argument, that the AI drafts first and the author reacts: the visible refusable draft is the record's answer, and the author rules whether adopted stands.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Readings' rule is that a reading is 'ratified when the author has read the primary source ... delegated when the AI's reading stands and the author declines to review it'. Five reading nodes now carry 'recommendation: class: delegated' (the two public readings, aristotle-hexis, plato-maieutics, plato-periagoge), applying the previous round's finding. Four do not: software-factories, spec-driven-development, srs-introduction and web-routing all carry 'class: ratified' while each of their own rationales says the reading is deferred until the author reads the sources. All ten readings additionally carry the stale prose Facts line offering 'ratified if the author confirms, or delegated where the author's words delegate it', which states two classes for one stamp.
+
+Also named: commons.systems/public/aristotle-arche-of-action, commons.systems/public/pettit-non-domination, commons.systems/disposition-graph/aristotle-hexis, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/readings.
+
+Proposed: Readings is the survivor of the rule. The four remaining reading nodes change their recommendation class from ratified to delegated, and every reading's prose Facts line is rewritten to 'delegated on confirmation; ratified after the author's reading', which is what the rule says and what the corrected five already imply. This is a mechanical pass the session can make at the recording, but the author should not be shown four readings offering a class the record's own rule forbids.

@@ -6,7 +6,7 @@ recommendation:
   boldness: moderate
 review:
   verdict: forward
-  strength: strong
+  strength: moderate
   date: 2026-09-03
   of: cf7380d981f78d72c48354ded418402738858428
 form: rule
@@ -36,7 +36,7 @@ The author's ruling of 2026-09-03, quoted above. Rank is the order of the author
 
 The author's words quoted above are recorded as this node's answer, stamped deferred. The author's: the usage, the choice by rank, the progression by the node's state, and the end at confirmation. The AI's, open to the author's ruling: that "up to confirmation" includes asking for the ruling in the interview when the author is present; that this project's graph comes before the public graph, so that the purpose node is first, where rank alone would put the public graph's root first; and that the earlier onboarding walk is replaced rather than kept beside this usage. The alignment skill's no-argument usage was reconciled to this node the same day.
 
-Facts: authority ratified if the author confirms; boldness low on the usage and moderate on the reading of "up to confirmation" and on the order of the two graphs; persistence standing.
+Facts: authority ratified; boldness low on the usage and moderate on the reading of "up to confirmation" and on the order of the two graphs; persistence standing.
 
 ### Clean-context review, 2026-09-03
 
@@ -54,3 +54,20 @@ On the three facts: 'Authority ratified if the author confirms; boldness low on 
 Strongest counter-argument (strong): Taking the highest-ranked unanswered node is right if rank is the author's attention, and it is not: every boost in the record is the AI's and unratified, as attention's own rationale records, and the one order the author did state — the scope node's order field — covers six nodes out of sixty. So 'rank answers it without the session's judgment entering' describes a queue the AI itself ordered, and presents an AI choice to the author as the record's own. The rejected alternative, asking the author which node to take, is dismissed because 'the author's answer would be a boost, which they can set without being asked' — but the author has never set one, and the node offers no way for them to learn that they could.
 
 The session's reply: The boosts are the AI's and unratified, as attention records, and the order field is the author's for six nodes; the counter-argument is right about whose order rank is today. It is still the record's one order, and the alternative it favours is what the alignment page already does: the author sees the whole queue in rank order at every visit and rules on any subset, which is the author's choice without a boost. A session given nothing takes the first, and the first is the purpose node, which the author did order. Accepted: 'or an argument' is struck; the sentence on trusting the stage now says that the sixteen bootstrap drafts stand at review by the author's ruling of 2026-09-03, which set their stage; and the session reads this project's graph from the frontier by its id prefix, since the frontier is one order across graphs.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Answer: 'the session reads the frontier and takes the first unanswered node in rank order, this project's graph, read from the frontier by its id prefix, before the public graph'. Verified: the frontier is a single rank order across both graphs and its first entry is commons.systems/public/agency at rank 1.0000; the amendment's 'by its id prefix' now makes the instruction executable, which resolves the previous review's sharpest finding. The alignment page independently groups by graph in the manifest's order (orderAlignmentItems), so page and frontier now agree on purpose first.
+- Answer: 'while it is unanswered'. Verified now derivable: deriveStatus returns 'unanswered' and the frontier prints it. The previous review's finding is stale and should be corrected.
+- Answer: 'A movement already behind the node is not repeated: the stage is the record of what the dialogue has done, and the session trusts it', qualified by 'the bootstrap's drafts stand at the review stage by the author's ruling of 2026-09-03'. That covers the sixteen reclassified nodes; it does not cover public/agency, whose review kicked it back to periagogic and whose periagogic movement has never been run. A session trusting the stage there would be right, which is the point — but nothing distinguishes a stage reached by a movement from a stage set by reclassification.
+- The node is the first thing a no-argument session does, and it points that session at public/agency, whose parent-of-everything status and periagogic stage make it the correct but most expensive first sitting. The Proposal should say so.
+
+On the three facts: The frontmatter recommendation (ratified, moderate) states one class and one value, and the prose Facts line ('boldness low on the usage and moderate on the reading of up to confirmation and on the order of the two graphs') is the best-formed in the batch. The two-graph order it presented as unimplemented is now implemented, so the facts should be updated rather than left as a caveat.
+
+Strongest counter-argument (moderate): Taking the highest-ranked unanswered node is right if rank is the author's attention, and it is not: every boost in the record is the AI's and unratified, as attention's own answer now says, and the one order the author did state covers six nodes out of sixty-two. So 'rank answers it without the session's judgment entering' describes a queue the AI itself ordered and presents an AI choice to the author as the record's own. The session's reply — that the page shows the author the whole queue at every visit — is a real answer and is now true of the built page, which weakens but does not dissolve the objection.
+
+The session's reply: Validated: the frontier's first entry is agency, the page groups by graph with purpose first, and the status is derived. A stage set by the author's reclassification is trusted as one reached by a movement, which the answer says. The first no-argument sitting is agency's periagogic movement, the most expensive first sitting and the right one. On the counter-argument, that rank is the AI's boosts: the page shows the author the whole queue at every visit, and every boost is presented as unratified. Stage ruling.

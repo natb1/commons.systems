@@ -1,6 +1,6 @@
 ---
 question: How does the graph grow?
-stage: ruling
+stage: maieutic
 recommendation:
   class: ratified
   boldness: moderate
@@ -68,11 +68,11 @@ Facts: authority ratified; boldness moderate; persistence standing; the two shim
 Rejected:
 - Split the presentation rule and the sitting's movements into nodes of their own. — Each answers "how does the graph grow" from one side; a split would need a question neither answers alone.
 
-Depends on: `quotes`, `review-context`, `review-artifact`
+Depends on: `quotes`
 
 Proposed: the node as it stands.
 
-Rulings open: ratify as shown; ratify with edits; defer; overrule.
+Responses open: confirm as shown; confirm with edits; deny with feedback.
 
 ### Clean-context review, 2026-09-03
 
@@ -105,3 +105,101 @@ Findings:
 On the three facts: The Facts line ('authority ratified; boldness low; persistence standing; the two shims with their liquidation conditions') predates the amendment and is not updated for it. The amended page sentence is not low boldness: 'the purpose node first' is the author's, but 'every unanswered node in rank order' and the two-graph order behind it are the AI's reading recorded on unanswered, and the amended shim for: line now describes an artifact that does not behave that way, so the shim's liquidation cannot be checked as presented.
 
 Strongest counter-argument (moderate): The amendment makes growth cite two nodes that did not exist when it was written and states their content twice: the page's order and its responses live here and on unanswered, the third usage here and on alignment-target. Node's rule is that a text answering two questions is two nodes, and the previous review of this node already found the answer covering at least six separable questions in one 816-word paragraph; the amendment adds a seventh. Every duplicated sentence is a place two nodes can drift, which is what the record exists to prevent — and the cheap fix is half-applied: the third usage defers with 'as the alignment-target node says', the page sentence restates instead.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Answer: 'the three responses open, confirm, confirm with edits, and deny with feedback'. Verified true of the page today: RESPONSE_CHOICES in packages/disposition/project.mjs is exactly confirm / edit / deny. But twenty-four nodes' Proposals end 'Rulings open: ratify as shown; ratify with edits; defer; overrule' and nine end 'take the recommended option; take another option by number; defer; answer in prose'. Three response vocabularies are live in one record. Suggested edit: settle it here or on unanswered and have the Proposals use the settled words.
+- Answer: 'The alignment page lists every unanswered node in rank order, the purpose node first'. Verified true since the afternoon: orderAlignmentItems groups by the manifest's graph order and sorts by rank descending within a graph, so purpose (rank 0.3333) leads. The previous review's finding on this is resolved and the node should say so rather than leave the reader to check.
+- Answer, persistence list and the sitting's movements: the answer is still one paragraph covering the three moves, the three usages, the two conducts with loci, the six movements, the presentation rule, the ban on transient dispositions, un-aligned dispositions and the queue, the page, and legacy nodes. Node's own rule is that 'If a text answers two questions, it is two nodes.' The session declined the split; the author should rule on it explicitly, since the presentation rule was stated by the author on 2026-09-03 as a disposition in its own right.
+- Proposal: 'Depends on: `quotes`, `review-context`, `review-artifact`'. Verified: no node has the id review-context or review-artifact. Those questions live only on a page beside the record, which transience rejects as 'the ledger the author asked to sunset'. Suggested edit: mint them or drop them.
+- The file ends with a bare 'null' where the session's reply to the amendment review belongs.
+
+On the three facts: The frontmatter recommendation (ratified, high) states one class and one value, which is what dialogue requires. The prose Facts line ('authority ratified; boldness moderate; persistence standing; the two shims with their liquidation conditions') is stale for the amendment and for the author's 'Ratified on the rule. Ratified on the shim.', which is a ruling given in the dialogue that the record does not carry as ratified anywhere.
+
+Strongest counter-argument (strong): The node breaks the rule it sits under, and the cost is concrete rather than formal: growth is the alignment section of the author's own high-level order, so it is what a newcomer meets third, and an 816-word single paragraph answering seven separable questions is what they meet. The session's defence — that recording was split out when it needed a stamp of its own, and the presentation rule may be split the same way — concedes the principle and defers the act. Two of the questions the paragraph answers already have their own nodes (recording, alignment-target) and the paragraph restates both, which is exactly where drift enters.
+
+The session's reply: Validated. Amended tonight: the two dependencies on nodes that do not exist are struck, and the thirty-three Proposal closing lines across the frontier now offer the three responses the unanswered node defines and the page implements. The page lists every unanswered node in rank order with purpose first, as the finding verified. The split of the presentation rule and of the movements of a sitting into nodes of their own is a proposal the author rules on at this node's sitting, with the reviewer's counter-argument; the session does not split. The author's 'Ratified on the rule. Ratified on the shim.' is a ruling given in the dialogue, and the sitting records which clauses it covers and asks only for the rest. Stage maieutic: the split is the author's call.
+
+### Frontier finding, 2026-09-03
+
+Kind: contradiction.
+
+Three response vocabularies are live for one act. Unanswered: 'the author may confirm, confirm with edits, or deny with feedback', with 'a fourth response, defer, is not needed'. Recording's Answer classifies four outcomes: 'A confirmation as shown, or the recommended option taken, is recorded ... A deferral leaves the answer deferred; an overrule records what the author said stands.' Growth restates unanswered's three. The alignment page implements exactly three (RESPONSE_CHOICES: confirm, edit, deny in packages/disposition/project.mjs). Meanwhile twenty-four node Proposals close with 'Rulings open: ratify as shown; ratify with edits; defer; overrule' and nine with 'take the recommended option; take another option by number; defer; answer in prose' — a fourth and fifth wording, neither matching the page the author will use.
+
+Also named: commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/recording.
+
+Proposed: Unanswered is the survivor: it defines the responses and the page implements them. Recording cites unanswered rather than restating, and recasts its second step as the classification of each of the three responses (a deferral being a node left unconfirmed, an overrule being a denial with feedback). Growth cites unanswered for the page's responses instead of restating them. The thirty-three Proposal closing lines are rewritten to the three words the page uses, which is a mechanical pass the session can do at the recording.
+
+### Frontier finding, 2026-09-03
+
+Kind: decomposition.
+
+Growth's Answer is one paragraph answering at least seven separable questions: the three moves of the loop; the three usages of the alignment skill; the two conducts with their Plato loci; the six movements of a sitting; the three-fact presentation rule; the ban on transient dispositions and the queue of un-aligned dispositions; and what the alignment page lists and offers. Node's own rule is 'If a text answers two questions, it is two nodes.' The author stated the presentation rule on 2026-09-03 as a disposition in its own right ('recommended disposition are always presented for review before recording and always include the authority, boldness AND if it is a persistent or some transient form of disposition'), and the record has already precedent for splitting: recording, delegation, alignment-target and checkpoint were all split out from this node's subject matter.
+
+Names only this node.
+
+Proposed: Split the presentation rule into a node under growth answering 'What must a recommendation state before it is recorded?', carrying the three facts, the persistence list, and the ban on transient dispositions; growth cites it. Split the movements of a sitting into a node answering 'What are the movements of a sitting?', which is where the periagogic and maieutic objects belong; growth cites it. Growth survives as the loop and the three usages, and cites unanswered for the page rather than restating it. This is the split growth's own reviewer proposed and the session declined; the author should rule on it rather than the session.
+
+### Frontier finding, 2026-09-03
+
+Kind: vocabulary.
+
+'Open question' is used on fifteen nodes and defined by none; the parsed graph carries 88 defined terms and 'open question' is not among them. Transience defines 'un-aligned disposition' for the same thing, growth's amended persistence list now uses that term, and the validator's own message says 'is unanswered and must carry stage'. Authority's draft and node's draft each use 'open question' for a slightly different notion, and several Proposals use it for a third ('persistence open question until written').
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/node, commons.systems/disposition-graph/transience.
+
+Proposed: Transience is the survivor: 'un-aligned disposition' is the one term. Authority's and node's drafts use it; the Proposal facts lines that say 'persistence open question' say 'persistence un-aligned disposition', which is the shape transience's list actually names. No new defines entry is needed.
+
+### Frontier finding, 2026-09-03
+
+Kind: vocabulary.
+
+'Sitting' is the record's name for one run of the alignment dialogue and is used across growth ('each is a sitting in two separated stages', 'The sitting moves in order'), recording, dialogue, transience, alignment-target and roughly twenty Proposal headings ('### Sitting on purpose, 2026-09-03'). No node defines it: the parsed graph's 88 terms include 'periagogic', 'maieutic', 'propose', 'project', 'ratify' and 'steer' from growth, and no 'sitting'. Projection's draft requires every defined term to link to the node that defines it, so the word that names the record's central act is the one word the browser cannot link.
+
+Also named: commons.systems/disposition-graph/recording, commons.systems/disposition-graph/dialogue.
+
+Proposed: Growth is the survivor and adds 'sitting' to its defines, with one sentence in the answer saying what a sitting is: one run of the dialogue on one node, from its stage to the author's ruling. Recording and dialogue then use the term without redefining it. Two neighbouring gaps should be closed in the same pass: 'bootstrap grant', named by authority's shim and used in evaluation and materialization, is defined nowhere; and 'frontier item', used by transience and work-loop, rests on work-loop's 'frontier'.
+
+### Frontier finding, 2026-09-03
+
+Kind: cross-reference.
+
+Three 'Depends on' entries name node ids that do not exist. Session-context: 'Depends on: `ledger-sunset`'. Growth: 'Depends on: `quotes`, `review-context`, `review-artifact`' — quotes exists, the other two do not. Verified by checking every backticked id in every 'Depends on' line against the graph directory. Transience rejects 'a queue kept outside the graph, because a list beside the record is the ledger the author asked to sunset'; these three dependencies are exactly that, questions that live only on a page.
+
+Also named: commons.systems/disposition-graph/session-context.
+
+Proposed: Mint the two live questions as un-aligned dispositions under the nodes they bear on, or strike the dependencies. 'review-context' and 'review-artifact' are superseded in substance by clean-context-review and by growth's own alignment-page shim, so striking them is the honest fix; 'ledger-sunset' is met, the ledger having been liquidated on 2026-09-03, so it is struck too. Growth and session-context are the nodes that change.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+The author, 2026-09-03, quoted in growth's rationale: 'Ratified on the rule. Ratified on the shim.' Authority's answer says ratification happens only through the alignment dialogue, and this ruling was given in one. Growth nevertheless carries 'authority: class: deferred' and is offered to the author for a fresh ruling on the whole node; its own review asked the session to 'state in the Proposal which part of the node the deferred stamp is still waiting on' and nothing does. So a ruling the author has given is recorded nowhere as an answer, and the author will be asked for it again.
+
+Also named: commons.systems/disposition-graph/authority.
+
+Proposed: Growth's Proposal states which clauses the author already ratified — the two-stage rule in both usages, and the alignment-skill shim — and what the fresh ruling covers. If the record's rule is that a node has one stamp, growth stays deferred and says in prose that two of its clauses are ratified in the author's words; if a clause can be ratified separately, that is a question for authority and should be minted there. Either way the author should not be asked twice for a ruling they gave.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Four node files end with a bare 'null' on its own line, where a session's reply to a review belongs: authority, growth, projection and transience. On authority and transience the missing reply is to the amendment review, so four findings and a counter-argument stand unanswered on each, and the author would rule on a review nobody answered. The word parses as prose and passes the validator ('ok: 62 nodes'), so nothing catches it. Three of the four are among the record's most load-bearing nodes.
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/transience.
+
+Proposed: Write the four missing replies, or state on each that the review's findings are accepted, and strike the 'null'. The pattern is a serialization defect in whatever applied the reviews rather than four independent omissions, so the apply step should be checked: .claude/skills/align-review/apply.mjs is the script that writes replies, and a reply of JavaScript null being stringified into the file is the likely cause. Until it is fixed, every future review round will leave the same trace.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Sixteen nodes still carry the reclassification's generic prose Facts line, 'authority ratified if the author confirms, or delegated where the author's words delegate it; boldness ...; persistence standing': agency, recording, evaluation, attention, legacy, persistence, review, validation-order, work-loop, aristotle-hexis, software-factories, spec-driven-development, plato-maieutics, plato-periagoge, aristotle-arche-of-action and pettit-non-domination. Two of them (agency, recording) still say 'boldness as the rationale shows'. Dialogue requires 'one class and one boldness value from the review stage on', and each of the sixteen now carries a well-formed frontmatter recommendation that the prose contradicts. The alignment page renders both, so the author is shown two accounts of one stamp on a quarter of the frontier.
+
+Also named: commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/recording.
+
+Proposed: Dialogue is the survivor of the requirement. The sixteen prose Facts lines are rewritten to match each node's frontmatter recommendation, or deleted, since the recommendation field now carries the two facts and growth's presentation rule is satisfied by it plus each shim named in prose. Growth's presentation rule should say explicitly that the three facts are presented from the recommendation field and the node's shims, not from a prose line, so the duplication cannot recur.

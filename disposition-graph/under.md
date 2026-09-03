@@ -50,4 +50,34 @@ Drafted after q14, q15, and q16 are ruled; the current text is shown below.
 
 Proposed: pending.
 
-Rulings open: ratify as shown; ratify with edits; defer; overrule.
+Responses open: confirm as shown; confirm with edits; deny with feedback.
+
+### Frontier finding, 2026-09-03
+
+Kind: decomposition.
+
+Under answers four questions at once — what an edge means, how rank is computed, what a ceiling is, and how context loads — and defines all four terms, while standing at the maieutic stage with 'Proposed: pending' and no draft. Three of the four are answered in full elsewhere: attention answers rank, session-context answers what a session loads, and authority's answer already carries the scope rule that 'ceiling' names. Two child nodes have been carved out of it already (rationale-edge, tier), and its Proposal says its own text cannot be drafted until three questions are ruled. Meanwhile four ruling-stage nodes rest on 'rank' and one on 'ceiling', terms only under defines.
+
+Also named: commons.systems/disposition-graph/attention, commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/tier.
+
+Proposed: Under survives as the edge alone: what a node refines, that it is the only hierarchical edge, and that a node may refine more than one question. 'rank' moves to attention's defines, which already answers it; 'context' moves to session-context's defines; 'ceiling' moves to authority's defines, which is where the scope rule it names lives. Under then has one question and can be drafted without waiting on rationale-edge and tier.
+
+### Frontier finding, 2026-09-03
+
+Kind: cross-reference.
+
+Recording's Answer describes the reviewer's world as 'the node as it would be committed, the nodes it joins up to its ceiling and the rules that bind everywhere, the nodes it cites, the author's words, and the whole unanswered frontier'. Clean-context-review describes it as 'every node with a stage, the answered nodes they join up to the roots, the rules that bind everywhere, the manifest, and the author's words on each'. 'Up to its ceiling' and 'up to the roots' are different rules, and 'ceiling' is defined by under — 'a node's ceiling is its nearest ratified ancestor' — which is at the maieutic stage with no draft. With nothing ratified the two rules coincide today and will diverge at the first ratification.
+
+Also named: commons.systems/disposition-graph/recording, commons.systems/disposition-graph/clean-context-review.
+
+Proposed: Clean-context-review is the survivor, since it is the node that answers how the review is run and its rule is the one the brief and the skill implement. Recording's sentence cites it rather than restating the input set, which also removes the only use of 'ceiling' outside under and lets under be simplified as the decomposition finding proposes.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Two ruling-stage nodes rest on maieutic ground without saying so. Rationale-edge is at ruling under under, which is at maieutic with 'Proposed: pending' and no draft, and under's own Proposal says its text is 'Drafted after q14, q15, and q16 are ruled' — one of which, tier, was kicked back and its recommendation withdrawn, so under cannot be drafted as planned. Separately, readings' draft and namespaces' draft both presume a traditions graph that traditions-home would create, and traditions-home is at ruling but is listed as a dependency of both; the manifest edit that would create the graph is shown on none of the three.
+
+Also named: commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/tier, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/namespaces.
+
+Proposed: Rule traditions-home before readings and namespaces, and show the manifest entry on traditions-home so the author sees what they are creating. Rule rationale-edge and re-answer tier before under, and add to rationale-edge one clause saying its parent is unanswered. Under is then drafted from the three outcomes, simplified as the decomposition finding proposes.
