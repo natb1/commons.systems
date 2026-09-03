@@ -1,9 +1,14 @@
 ---
-question: Does the requirements-specification tradition support starting onboarding at purpose, then scope, audience, and definitions?
+question: Does the requirements-specification tradition support opening with purpose, then scope, then references?
 stage: ruling
 recommendation:
   class: ratified
   boldness: moderate
+review:
+  verdict: forward
+  strength: weak
+  date: 2026-09-03
+  of: c7b6a5849e318cdf4efdf5c3071a6c56d7ad12f1
 form: reading
 authority:
   class: deferred

@@ -4,6 +4,11 @@ stage: ruling
 recommendation:
   class: ratified
   boldness: moderate
+review:
+  verdict: forward
+  strength: weak
+  date: 2026-09-03
+  of: d83b91ee4a1a885cca639b03a3227acecda335bd
 form: rule
 authority:
   class: deferred
@@ -133,3 +138,5 @@ On the three facts: The Facts line ('authority ratified; boldness moderate; pers
 Strongest counter-argument (strong): The amendment reverses the author's ruling while appearing to record it. The author said 'Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact' (quoted on transience); the record now hides only the subset with no '## Answer' and shows the other fifty-odd as drafts. The reason given on unanswered — that hiding them all 'would empty the browser of the record it documents' — is a good argument that the ruling was made under a narrower sense of 'unanswered' than the one adopted hours later. But the effect is that the browser, which this node calls the record's own documentation and the newcomer's first surface, now presents fifty-odd unratified AI drafts as the record, with no stage shown to mark them as drafts, because the stage this very sentence promises is not rendered. Until the author rules, their literal instruction is the safer reading.
 
 The session's reply: The counter-argument is the strongest reading of the author's earlier words, and the author rules between the two. The session's reading: the ruling that unanswered nodes are hidden was made when unanswered meant a node with no answer, before the author classified every node unanswered the same day with the instruction that nothing of the encoding be lost, and self-documentation through the browser stands second in the author's order; hiding fifty-odd nodes would leave the browser with nothing to document. The stage the sentence promises is rendered by the browser since the same afternoon, so a draft shows as a draft. Accepted: the draft text carries the amended sentence, and it says every unanswered node of both kinds is listed for the ruling.
+
+null

@@ -4,6 +4,11 @@ stage: ruling
 recommendation:
   class: ratified
   boldness: moderate
+review:
+  verdict: forward
+  strength: weak
+  date: 2026-09-03
+  of: 08108baa5fb010e1a2baf2d430b7a75af73de656
 under:
   - commons.systems/disposition-graph/purpose
 ---

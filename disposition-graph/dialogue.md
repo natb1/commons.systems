@@ -4,6 +4,11 @@ stage: ruling
 recommendation:
   class: ratified
   boldness: high
+review:
+  verdict: forward
+  strength: strong
+  date: 2026-09-03
+  of: 9122d9e8c4485c763863f2d3368cd06138643146
 form: rule
 authority:
   class: deferred
@@ -52,7 +57,7 @@ The author's question of 2026-09-03, quoted above, answered greenfield. What the
 
 ### Recording of 2026-09-03
 
-The author's question quoted above is answered as this node, stamped deferred and recommended for ratification. The author's: that an unanswered node is the disposition plus the state of the dialogue, and the list of what that state tracks. The AI's, open to the author's ruling: the six parts and which of them are data; the draft as a fenced block inside the node; the pin on the reviewed text; persistence derived rather than stored; the validator's rules. The tooling and the migration of the existing nodes to these fields follow this recording; until they land, the fields are defined here and carried by no node, and the frontier reads only the stage.
+The author's question quoted above is answered as this node, stamped deferred and recommended for ratification. The author's: that an unanswered node is the disposition plus the state of the dialogue, and the list of what that state tracks. The AI's, open to the author's ruling: the six parts and which of them are data; the draft as a fenced block inside the node; the pin on the reviewed text; persistence derived rather than stored; the validator's rules. The tooling landed the same afternoon, and the migration of the existing nodes to these fields with it: every node at the review or ruling stage carries its recommendation, every proposed text is a draft section, and every node forwarded by a review carries the review's state with the hash of the draft it read; the frontier reads the stage and flags a review whose draft has changed since.
 
 Facts: authority ratified if the author confirms; boldness high, the model being the AI's construction from the author's list; persistence standing.
 

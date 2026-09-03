@@ -4,6 +4,11 @@ stage: ruling
 recommendation:
   class: ratified
   boldness: moderate
+review:
+  verdict: forward
+  strength: moderate
+  date: 2026-09-03
+  of: 708da26c3b97b18e98255c7e6b1cc499049aa303
 form: rule
 authority:
   class: deferred

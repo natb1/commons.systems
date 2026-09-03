@@ -1,6 +1,11 @@
 ---
 question: What gives a rule its scope?
 stage: maieutic
+review:
+  verdict: kickback
+  strength: strong
+  date: 2026-09-03
+  of: b771f61884d089ade840320426bdb133f11fabc8
 under:
   - commons.systems/disposition-graph/under
 ---

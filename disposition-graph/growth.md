@@ -4,6 +4,11 @@ stage: ruling
 recommendation:
   class: ratified
   boldness: moderate
+review:
+  verdict: forward
+  strength: strong
+  date: 2026-09-03
+  of: ba115e9727a9c3000ba85a9dca2cb63d7b1ebd70
 form: rule
 authority:
   class: deferred
@@ -100,3 +105,5 @@ Findings:
 On the three facts: The Facts line ('authority ratified; boldness low; persistence standing; the two shims with their liquidation conditions') predates the amendment and is not updated for it. The amended page sentence is not low boldness: 'the purpose node first' is the author's, but 'every unanswered node in rank order' and the two-graph order behind it are the AI's reading recorded on unanswered, and the amended shim for: line now describes an artifact that does not behave that way, so the shim's liquidation cannot be checked as presented.
 
 Strongest counter-argument (moderate): The amendment makes growth cite two nodes that did not exist when it was written and states their content twice: the page's order and its responses live here and on unanswered, the third usage here and on alignment-target. Node's rule is that a text answering two questions is two nodes, and the previous review of this node already found the answer covering at least six separable questions in one 816-word paragraph; the amendment adds a seventh. Every duplicated sentence is a place two nodes can drift, which is what the record exists to prevent — and the cheap fix is half-applied: the third usage defers with 'as the alignment-target node says', the page sentence restates instead.
+
+null

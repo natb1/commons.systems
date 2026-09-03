@@ -4,6 +4,11 @@ stage: ruling
 recommendation:
   class: delegated
   boldness: high
+review:
+  verdict: forward
+  strength: moderate
+  date: 2026-09-03
+  of: 2b2f43f9f4df2093a9f0a8182145295cd84f71f9
 form: reading
 authority:
   class: deferred

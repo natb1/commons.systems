@@ -1,9 +1,14 @@
 ---
 question: What does a newcomer read after purpose?
-stage: ruling
+stage: review
 recommendation:
   class: ratified
   boldness: moderate
+review:
+  verdict: kickback
+  strength: strong
+  date: 2026-09-03
+  of: b5c872a03ea888a605ea0ed45211099a5205ec47
 under:
   - commons.systems/disposition-graph/model
 ---
@@ -17,7 +22,7 @@ under:
 The author asked for a disposition that introduces the primitives well enough to use the skill, and found "How is intent recorded here" too reference-shaped. The model node is that question; its answer can be rewritten for that reader, or a new node can sit between purpose and it.
 
 Options:
-- (recommended) Rewrite the model node's answer (n-model) and boost growth first among its children — authority deferred on the draft; ratified on the boost; boldness moderate; persistence standing
+- (recommended) Rewrite the model node's answer (n-model) for that reader, without changing rank: projection stays first among model's children, since the high-level order the author recorded on the scope node on 2026-09-03 places self-documentation through the browser before alignment, and the model node may say that alignment is where the newcomer acts first — authority ratified on the choice, the model node's draft deferred on its own node; boldness moderate; persistence standing. Amended the same day, after the review below: the boost half of the option as first recommended is withdrawn.
 - A new primer node between purpose and model — authority deferred; boldness moderate; persistence standing
 
 Feeds: `model`
@@ -39,4 +44,4 @@ On the three facts: 'Authority deferred on the draft; ratified on the boost' can
 
 Strongest counter-argument (strong): The recommendation asks the author to ratify a boost that reverses an order the author themselves stated eight days into the bootstrap and that two nodes outside this batch argue for in their rationales, without naming a value or saying what happens to the sibling boost it displaces. Ratifying it would leave the record holding two incompatible accounts of what a newcomer meets after purpose, one in model's rationale and one in attention's and work-loop's, with the boost values agreeing with neither reading cleanly. The intention needs drawing out again: does the author want the onboarding walk and the reconciliation bite order to diverge, which would mean rank no longer serves both, or does the model node simply need to say that growth is where the newcomer acts first without changing rank at all?
 
-The session's reply: The reviewer's kickback was answered by the author the same day: the high-level order recorded on the scope node on 2026-09-03 places self-documentation through the browser before alignment, so projection stays first among model's children and the boost half of the recommendation is withdrawn. What remains is the model rewrite alone, deferred, which is forwarded for the author's ruling; the model node may say that alignment is where the newcomer acts first without changing rank.
+The session's reply: The reviewer's kickback was answered by the author the same day: the high-level order recorded on the scope node on 2026-09-03 places self-documentation through the browser before alignment, so projection stays first among model's children and the boost half of the recommendation is withdrawn. What remains is the model rewrite alone, deferred, which is forwarded for the author's ruling; the model node may say that alignment is where the newcomer acts first without changing rank. Corrected the same afternoon: a node reaches the ruling stage only on a forward verdict, as the dialogue node says, so the override to the ruling stage is withdrawn; the recommended option is amended above as this reply says, and the node stands at the review stage for the batch over the whole frontier.

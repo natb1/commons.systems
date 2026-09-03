@@ -4,6 +4,11 @@ stage: ruling
 recommendation:
   class: ratified
   boldness: moderate
+review:
+  verdict: forward
+  strength: strong
+  date: 2026-09-03
+  of: f2be954ef2e4e325c6e1a96a367f8ebfaea506eb
 form: rule
 authority:
   class: deferred
@@ -141,3 +146,5 @@ Findings:
 On the three facts: The Facts line ('authority ratified; boldness low; moderate on the ruling-in-the-record sentence; persistence standing') is not updated for the amendment and does not mention it. The amended clause is not low boldness: the author's 2026-09-03 ruling quoted here is about classifying dispositions as unanswered, and the consequence drawn for the stamp vocabulary is the AI's. The facts should also carry the bootstrap-grant shim with its liquidation condition, which this node declares and which growth's presentation rule requires.
 
 Strongest counter-argument (moderate): Saying a deferred answer is unanswered puts the record's definition of authority at odds with how the record behaves. Deferred answers act: every file under .claude/rules/ is deferred, every session works under them, the projector writes them, and this batch was produced by them. Calling all of that 'unanswered' is accurate about the author's assent and misleading about the answers' force, and it leaves the record with no plain word for 'no answer at all', since transience now says the un-aligned disposition carries the same fields as everything else. The draft's own formulation — the deferred stamps are the author's review queue — says the same thing about assent without claiming the answers are absent.
+
+null

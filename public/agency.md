@@ -1,6 +1,11 @@
 ---
 question: Who is the origin of what is done in my name?
 stage: periagogic
+review:
+  verdict: kickback
+  strength: moderate
+  date: 2026-09-03
+  of: 605bc6201b77362b6a671e4b887fd58660ced997
 form: arche
 authority:
   class: deferred

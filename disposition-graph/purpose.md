@@ -4,6 +4,11 @@ stage: ruling
 recommendation:
   class: ratified
   boldness: moderate
+review:
+  verdict: forward
+  strength: strong
+  date: 2026-09-03
+  of: dbde6b3821fb7aecf1358c0f5ea782a90157b202
 form: target
 under:
   - commons.systems/public/agency
