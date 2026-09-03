@@ -1,6 +1,6 @@
 ---
 question: How is the unanswered frontier kept consistent with itself?
-stage: review
+stage: maieutic
 recommendation:
   class: ratified
   boldness: moderate
@@ -29,6 +29,9 @@ The author, 2026-09-03, refining:
 
 The author, 2026-09-03, on the batch:
 > serialize the review skill after completion of any currently running adversarial review skill in this session
+
+The author, 2026-09-03, on the sitting of dialogue, the part that answers this question:
+> One of the analyses performed by periagoge and adversarial alignment review is whether disposition is a new question or a new answer for a disposition (answered or unanswered).
 
 ## Answer
 
@@ -87,3 +90,7 @@ On the three facts: The frontmatter recommendation (ratified, moderate) states o
 Strongest counter-argument (moderate): Fourteen validations over sixty-two nodes in one context is an unbounded reading, and the node sets no floor on what a finding must be worth. The author's requirement was that inconsistency within the frontier be surfaced, which the survey validations (7 to 14) do; validations 1 to 6 duplicate what the recording node already requires of every draft review, so every invocation pays twice for the per-node pass. Splitting the survey from the per-draft review would let the survey run over the whole frontier while the per-draft review runs only on drafts that changed — which is what the author's 'EVERY invocation is a batch operation' asks for and what the cost argues for.
 
 The session's reply: Validated. Amended tonight: validation 14 admits a quotation carried on a child as the ground of the part it answers, the kickback falls on the node whose text must change, and the proposal says the batch ran and its findings were validated by the session before recording. The circularity is disclosed: this reading was produced under the validations it reviews. Persistence is derived from the node's shape, which is what validation 3 asks the reviewer to check. On the counter-argument, that the survey and the per-draft review should split: the author ruled every invocation a batch; a per-draft pass over changed drafts only is a proposal the sitting can put. Stage review.
+
+### The author's words of 2026-09-03 on dialogue
+
+The sentence quoted above adds a validation the answer does not list: whether a disposition is a new question or a new answer to a question already recorded, answered or unanswered. The draft does not answer it, so the stage returns to maieutic; the whole disposition is on the dialogue node, whose sitting carries it.

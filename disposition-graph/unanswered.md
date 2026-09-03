@@ -1,6 +1,6 @@
 ---
 question: When is a disposition answered?
-stage: ruling
+stage: maieutic
 recommendation:
   class: ratified
   boldness: moderate
@@ -26,6 +26,9 @@ defines:
 
 The author, 2026-09-03:
 > bootstrap operations: Due to the bootstrap nature of the current graph which needed to record (deferred) dispositions that weren't yet answered by alignment dialogue because the alignment dialogue (shim) was not yet bootstrapped. Now that the alignment dialogue does exist, all existing dispositions need to be answered by it. Classify all dispositions as unanswered (the actual status). There should be no loss of disposition encoding - it is only a reclassification to unanswered. For any unanswered dispositions that have not already received adversarial review - do so. The alignment artifact must sort unanswered nodes by rank (purpose node first) and provide inputs to confirm/confirm with edits/or deny with feedback any subset of unanswered nodes.
+
+The author, 2026-09-03, on the sitting of dialogue, the part that answers this question:
+> A conflicting answer that arises in alignment AND survives periagoge/meiutic/adversarial review is marked unanswered until confirmed.
 
 ## Answer
 
@@ -113,3 +116,7 @@ Transience's un-aligned paragraph now enumerates the whole dialogue — 'the aut
 Also named: commons.systems/disposition-graph/transience, commons.systems/disposition-graph/dialogue.
 
 Proposed: Dialogue is the survivor of what an unanswered node carries and unanswered of the status. Transience's un-aligned paragraph reduces to two sentences: that an un-aligned disposition is a node with a question and no answer, and that it carries the dialogue as dialogue defines it and has no children. Everything else in that paragraph moves to, or is already in, dialogue and unanswered. The five-shape taxonomy, which is what the node is for, is untouched.
+
+### The author's words of 2026-09-03 on dialogue
+
+The sentence quoted above says what becomes of a conflicting answer that survives the dialogue: it is marked unanswered until confirmed. The answer says when a disposition is answered and does not say what an answer in conflict with a recorded one is, nor whether the node it conflicts with stays answered while the conflict is open; the stage returns to maieutic for that. The whole disposition is on the dialogue node, whose sitting carries it.

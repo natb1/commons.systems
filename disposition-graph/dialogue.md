@@ -1,6 +1,6 @@
 ---
 question: What does an unanswered node carry?
-stage: review
+stage: periagogic
 recommendation:
   class: ratified
   boldness: high
@@ -30,6 +30,15 @@ The author, 2026-09-03:
 
 The author, 2026-09-03:
 > It seems like an unanswered node is a disposition + other state needed to track progress through alignment (periogoge, mieutic, adversarial review state, recommended diff/authority/persistence/boldness) or something like that, evaluate greenfield and make a recommendation
+
+The author, 2026-09-03, on the recording of alignment-order and on this node's question:
+> Proposal is not an ideal way to record this because it suggests an answered incumbent, and escalation of delegated scope - which there is neither. It sounds like this might be better encoded (evaluate this adversarily) in the unanswered question encoding. Unanswered questions carry a list of alternative answers. Each may be suggested by the author (and reference author text) or suggested by the AI or it may be a steelman argument that emerges from adversarial review. An alignment diologue (like this one) records all of the alternatives that arise and whenever new alternatives arise the AI may update which answer is granted the AI recommendation (with what authority, etc.)
+>
+> In this model, unanswered questions are recommendation (same encoding as an answered disposition node, or diff) + diologue state around that recommendation including alternatives and any author text associated with the recommendation or any alternatives and dialogue phase, etc.
+>
+> One of the analyses performed by periagoge and adversarial alignment review is whether disposition is a new question or a new answer for a disposition (answered or unanswered). A conflicting answer that arises in alignment AND survives periagoge/meiutic/adversarial review is marked unanswered until confirmed.
+>
+> If these unanswered dispositions survives periagogic and meiutic scrutity (stop before adversarial review), you have bootstrap authority to reconcile the unanswered node encoding, the alignment skill, and alignment artifact and re-encode the unanswered frontier (the full graph) including merge analysis.
 
 ## Answer
 
@@ -150,3 +159,7 @@ Sixteen nodes still carry the reclassification's generic prose Facts line, 'auth
 Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/recording.
 
 Proposed: Dialogue is the survivor of the requirement. The sixteen prose Facts lines are rewritten to match each node's frontmatter recommendation, or deleted, since the recommendation field now carries the two facts and growth's presentation rule is satisfied by it plus each shim named in prose. Growth's presentation rule should say explicitly that the three facts are presented from the recommendation field and the node's shims, not from a prose line, so the duplication cannot recur.
+
+### The author's second disposition, 2026-09-03
+
+The author's words above, given during the sitting on alignment-order, answer this node's question differently from the draft the review forwarded: the dialogue's state becomes a recommendation, encoded as an answered node or a diff, and a list of alternatives, each with its source, the author, the AI, or the adversarial review, and the author's text attached to whichever it bears on. The stage returns to periagogic at the author's direction: the disposition is to survive periagogic and maieutic scrutiny, and the adversarial review is not to run on it. The bootstrap-authority grant in the last paragraph is conditional on that survival and is not in force; it names the reconciliation it covers, the unanswered-node encoding, the alignment skill, the alignment page, and the re-encoding of the whole unanswered frontier with merge analysis, and it is quoted here, on the node it bears on, before any implementation is written, as the authority shim requires. Two parts of the words are carried on the nodes whose questions they answer: the analysis of new question against new answer on frontier-consistency, and the marking of a surviving conflicting answer on unanswered.
