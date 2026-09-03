@@ -5,6 +5,7 @@ authority:
   class: deferred
   by: claude
   date: 2026-09-02
+boost: 2
 under:
   - commons.systems/disposition-graph/projection
 tier: global

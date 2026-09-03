@@ -11,11 +11,6 @@ tier: global
 defines:
   - greenfield
   - adversarial review
-shims:
-  - artifact: "`.claude/rules/evaluation.md` on the implementation ref, hand-written from this node"
-    for: the rule projection of this global-tier node
-    liquidation: rules are materialized from global-tier nodes by the projector
-    declared: 2026-09-02
 ---
 ## Answer
 
