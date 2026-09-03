@@ -80,6 +80,7 @@
     "audio": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
     "landing": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
     "office-hours": { "entry": ["seeds/**", "e2e/**"] },
+    "demo": { "entry": ["seeds/**", "e2e/**"] },
     "print": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
     "budget": { "entry": ["seeds/**", "e2e/**", "scripts/**"] },
     "packages/authutil": { "entry": ["bin/**"] },
