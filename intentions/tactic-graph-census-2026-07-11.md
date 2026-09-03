@@ -9,7 +9,6 @@ status: codified
 parent: null
 rationale: null
 reading: null
-gap: null
 serves:
   - strategy-graph-native-dispatch
 recovers: []
@@ -22,7 +21,8 @@ execution: null
 validates: []
 blocked_by:
   - tactic-flake-unit-tests-select-tick
-  - tactic-dispatch-stop-backstop-comment
+superseded_by: []
+supersession_expiry: null
 office_hours: null
 pace_exempt: false
 rounds: null

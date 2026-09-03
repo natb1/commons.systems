@@ -10,8 +10,14 @@ parent: null
 rationale: "Surfaced by the 2026-09-02 stop-hook/status-line diagnosis (/align
   disposition round): the author observed the status line failing; the visible
   symptom traces to unguarded jq over stdin, and a second latent defect silently
-  kills the dispatch rate-limit telemetry side effect in worktree sessions.
-  Neither was covered by any existing tactic. Frontier-visible via gap note
+  kills the statusline's rate-limit telemetry write in worktree sessions.
+  Ratified the same day on strategy-graph-native-dispatch: both statusline
+  functions are supported; the telemetry has two writers by necessity
+  (assumption criterion
+  assume-no-supported-headless-subscription-usage-surface), and the headless
+  probe dispatch-refresh-rate-limits is the budgeter's primary since #1127 - so
+  defect 2 (jq guard) is the visible bug and defect 1 (worktree path) is
+  redundancy repair of the secondary writer. Frontier-visible via gap note
   2026-09-02 (statusline defects); this draft retains the repair context for
   /align-tactics."
 reading: null
@@ -58,6 +64,18 @@ audit; anchors verified at head that day). Two independent defects in
    (the `current`/`ctx_size` regex checks at :51) show the intended fail-open
    posture; extend it to the initial parse (e.g. a `jq empty`-style validity
    check with a model-only or static fallback render).
+
+Ruling context (ratified 2026-09-02 on strategy-graph-native-dispatch, "Is the
+status line's functionality disposition-supported"): both functions are
+supported; the telemetry has two writers by necessity — the headless probe
+`dispatch-refresh-rate-limits` (run first on every non-paused `dispatch-tick`
+since #1127, undocumented OAuth header surface) is the budgeter's primary, and
+the statusline writer is the documented, interactive-only secondary. So defect 2
+is the visible bug and defect 1 is redundancy repair of the secondary writer:
+still worth porting (it is the documented fallback if the probe's surface
+breaks), but lower priority than first recorded. Do not delete the piggyback
+call — the assumption-class criterion
+`assume-no-supported-headless-subscription-usage-surface` records why it stays.
 
 Out of scope: the dispatch-phase segment (migrated correctly in
 tactic-dispatch-legacy-rewire Unit 2; reads graph `phase:` frontmatter, no

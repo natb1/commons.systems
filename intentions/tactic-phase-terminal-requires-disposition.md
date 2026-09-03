@@ -723,14 +723,14 @@ Unit 3.
 
 ## Collision to flag, not to action
 
-`tactic-dispatch-stop-backstop-comment` (`status: raw`, `phase: implement`) is
-separately planned to *reword* `dispatch-stop.sh:62-63` on the premise that the
+The stop-backstop-comment sibling tactic (pruned 2026-09-02 as moot: c06c7295
+had already deleted its target before it ran) was separately planned to *reword* `dispatch-stop.sh:62-63` on the premise that the
 backstop is now "far-ahead-safe." Unit 4 above **deletes** the block that
 reword targets. Whichever plan lands second conflicts with the other's diff.
 This plan does not touch that sibling node — do not action it from here.
 Recommended resolution, for whoever lands either PR: land this node's Unit 4
-first and then close `tactic-dispatch-stop-backstop-comment` as moot, since its
-target text will no longer exist.
+first and then close that sibling as moot, since its target text will no
+longer exist. (Done: resolved as moot and pruned in the 2026-09-02 /align round.)
 
 ---
 
