@@ -204,6 +204,15 @@ rounds review the delta from the last reviewed commit.
   references; cites projected both ways. Recommended at the ruling:
   `purpose` ratified; the other encodings land as amendments with the
   author's words quoted, deferred until each node's own sitting.
+  2026-09-03: before ruling, the author asked for three things: the
+  disposition for recording transient disposition, recorded deferred as
+  `transience` (L37, two surveys under `bootstrap/`); the presentation rule
+  on `growth` and in the shim (L38: every recommendation presented before
+  recording, with authority class, boldness, and persistence class:
+  standing, shim, proposal, open question, evidence, not recorded); and the
+  playback restated in that form. All three done the same day; the
+  restated playback, seventeen encodings and nine questions with defaults,
+  is the open turn.
 - **Review log.** Each landing on this ref: commit range, out-dir tag,
   rounds, verdict.
   - Tooling, `684ac70f..6912c361`, tag `r0-tooling`, round one at high:

@@ -52,6 +52,8 @@ exists · `ratified` the node is ratified and the entry closes · `rejected`.
 | L34 | `/align <node id>` is the two-stage review sitting: comprehension, then intention | stubbed | author | `disposition-graph/growth`; the shim |
 | L35 | the interview conducts are named: periagogic (type b), maieutic (type a) | stubbed | author | `disposition-graph/growth`; readings `plato-periagoge`, `plato-maieutics` |
 | L36 | functional validation before non-functional validation | stubbed | author | `disposition-graph/validation-order` |
+| L37 | transient disposition: never a disposition; criterion, shim, proposal, open question, evidence, or not recorded; no work-shaped nodes | stubbed | author + proposal | `disposition-graph/transience` |
+| L38 | every recommendation presented before recording, with authority, boldness, and persistence class | stubbed | author | `disposition-graph/growth`; the shim |
 | L29 | shimmed code review for every bootstrap landing; review doctrine before exit | stubbed | author | `disposition-graph/review`; the incumbent detached review instrument as shim |
 
 ## L01 archē is the root answer form
@@ -758,3 +760,59 @@ the nodes the tooling instruments.
 
 When every other entry is `ratified` or `rejected`, delete this file. Its
 history stays in git.
+
+---
+## L37 transient disposition
+
+**Source.** Author, 2026-09-02, on the bootstrap node: "dispositions must
+resist decay. They are persistent records, they don't track operational or
+transient state (like the current bootstrap process)." Author, 2026-09-03:
+"several of my points were about how transient dispositions were being
+written into the graph which were prone to drift. The incumbent graph lists
+several options for recording transient dispositions so they resist drift
+(eg. shims that self liquidate, or rewording as persistent dispositions with
+instrumentation for transient operational state). Session
+de6ae9cb-1bf0-4a91-a04e-c8086377aeff evaluates some of these options. Do not
+adopt incumbent disposition without scrutiny, but do evaluate the scope of
+requirements for recording transient disposition under the constraint of
+resisting drift and inconsistency. Do not reinvent 'tactic nodes' which were
+a persistent pain point and superceded by the reconciliation model. Record
+as deferred the recommended disposition for recording transient disposition
+and avoiding tactic-shaped drift." The author's legacy ruling of 2026-09-02
+on transient-disposition classes is quoted in the node.
+
+**Content.** `disposition-graph/transience`, deferred. Evidence:
+`bootstrap/transient-disposition-graph-survey.md` (the incumbent's shim
+principle, transient constraints, tactic pain points, and reconciliation
+model, by locus) and `bootstrap/transient-disposition-transcript-survey.md`
+(the evaluation in the legacy bootstrap sessions: the census of 657 tactics,
+eight unmapped content types, the resolution onto four constructs, the
+null-authority shim; the cited session held the shim evaluation, the class
+model was formed in this session's own pre-compaction history). Scrutiny:
+adopted from the incumbent the rule that transience is never stored and the
+shim's declared, verbatim liquidation condition; rejected its stored
+self-liquidating class, shims declared in artifacts alone, and every
+transient kind of node; the shim declaration moves onto the instrument or
+projection of the node it serves; evidence is named as a shape of its own.
+Owed before exit: the `bootstrap` node's content re-homed as criteria on
+standing nodes and the grant as a shim on `authority`; the shim declarations
+now in artifact headers and on this ledger re-declared on the nodes they
+instrument; the frontier projection for shims, an implementation unit.
+
+---
+## L38 recommendations carry authority, boldness, and persistence class
+
+**Source.** Author, 2026-09-03: "update the `/align` shim and disposition
+(guiding this current dialog) so that recommended disposition are always
+presented for review before recording and always include the authority,
+boldness AND if it is a persistent or some transient form of disposition
+(eg. shim) If this is not the recommended ontology then refine it (is a
+transient disposition still called a disposition, etc.) This way I know if I
+am approving some transient stop-gap or something that will persist in the
+graph."
+
+**Content.** `growth` amended, defining boldness; the shim's step 1
+(movement 3), step 2, and step 3. Ontology refined: a transient disposition
+is a contradiction in terms; the persistence classes are standing, shim,
+proposal, open question, evidence, and not recorded (L37). The playback of
+the purpose sitting restated in this form on 2026-09-03 (round log).

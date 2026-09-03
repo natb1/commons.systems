@@ -6,7 +6,7 @@ description: Record or revise one node of the disposition graph by interview wit
 
 > **Shim notice (2026-09-02, ledger L15).** Hand-materialized from the nodes
 > `growth`, `authority`, `node`, `under`, `projection`, `persistence`,
-> `readings`, `review`, `evaluation`, and `attention` of
+> `readings`, `review`, `evaluation`, `attention`, and `transience` of
 > `commons.systems/disposition-graph`, all stamped deferred, and from the
 > author's rulings on `LEDGER.md`. This text has no authority of its own.
 > Where it conflicts with the graph at `origin/disposition`, the graph wins
@@ -59,8 +59,8 @@ session the loop is run by reading this file; in a session rooted at the
      is elicited and tested: the three classes of finding, the evaluation
      twice, the steelman alternative from the traditions, the test against
      the record the node joins; then the recommendation, carrying its
-     authority class, its boldness, and the alternatives, with the three
-     exits open.
+     authority class, its boldness, its persistence class, and the
+     alternatives, with the three exits open.
   4. Ruling. The author rules; the stamp and the quoted ruling are written
      (step 5). The follow-up readings, vocabulary, and key concepts the
      sitting surfaced enter the frontier as deferred readings.
@@ -90,11 +90,15 @@ session the loop is run by reading this file; in a session rooted at the
 - Open matters are prose turns, the reply captured as it is. Bounded
   choices are numbered options with the recommendation first, answered by
   number or "go".
-- Every recommendation carries the authority class under which it would be
-  accepted (ratified, delegated, deferred), a boldness assessment (how much
-  rests on the graph and this session's record against the AI's own
-  knowledge), and genuine alternatives, never the first option re-spelled
-  under another class. Escalate one class toward ratified when being wrong
+- Every recommendation is presented before anything is recorded, and
+  carries the authority class under which it would be accepted (ratified,
+  delegated, deferred), a boldness assessment (how much rests on the graph
+  and the author's words against the AI's own knowledge), its persistence
+  class (standing, shim with its liquidation condition, proposal, open
+  question, evidence, or not recorded; a transient disposition is a
+  contradiction in terms, see `transience`), and genuine alternatives,
+  never the first option re-spelled under another class. What the author
+  directs to be recorded is reported with the same three facts. Escalate one class toward ratified when being wrong
   is expensive, irreversible, or capture-shaped. Deliver a question's
   context where the author will read it, the page or the prose turn, never
   the AI's own preamble.
@@ -121,6 +125,9 @@ session the loop is run by reading this file; in a session rooted at the
   exists, readings as nodes under it. The record is the sole carrier: a
   decision that is not in the node did not happen. Every decision of the
   round maps to a field, and the round's report states the map.
+- Nothing is recorded that was not presented with its authority class,
+  boldness, and persistence class, except at the author's direction, and
+  then the report states them.
 - Stamp `deferred`, `by: claude`, dated, within the AI's scope; never
   `ratified`. An edit reconciles the whole node, not one sentence.
 - Every node the round touched or cited has its stamp checked; a node with
