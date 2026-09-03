@@ -1,6 +1,6 @@
 ---
 name: align-review
-description: Clean-context adversarial review of the whole unanswered frontier in one batch. One fresh subagent reads every node that carries a stage and returns a verdict per draft and the frontier's findings; the invoking session applies them as forwards and kickbacks. Invoked by the alignment sitting at its review stage or directly; the scope is always the whole frontier. Bootstrap shim declared on clean-context-review; the graph wins on conflict.
+description: Clean-context adversarial review of the whole unanswered frontier in one batch. One fresh subagent reads every node that carries a stage and returns a verdict per draft and the frontier's findings; the invoking session validates every finding against the record before applying any as a forward or a kickback. Invoked by the alignment sitting at its review stage or directly; the scope is always the whole frontier. Bootstrap shim declared on clean-context-review; the graph wins on conflict.
 ---
 # Align review
 
@@ -24,8 +24,9 @@ result. The alignment sitting invokes it when its dialogue reaches the
 review stage; the author or a session invokes it directly. The scope is
 the same either way (`clean-context-review`): no ids are taken, and a
 sitting's drafts are reviewed among the rest. The reviewer recommends and
-never writes; the session running this skill decides and answers for the
-record (`recording`).
+never writes; the session running this skill validates what the reviewer
+found before it applies anything, and decides and answers for the record
+(`recording`; the author, 2026-09-03, quoted on `clean-context-review`).
 
 ## 0. Currency and serialization
 
@@ -84,14 +85,21 @@ stays at its stage.
 1. Read `tmp/review/frontier.json`: `nodes`, one entry per node with a
    draft, and `frontier`, the findings across nodes, each with the ids it
    names, the finding, the stage it recommends for each node, and the
-   edit, merge, or split it proposes. For each node entry whose
-   `strength` is `strong`, and for any other where the session has
-   something to say, write the session's reply into
-   `tmp/review/replies.json` as `{ "<id>": "<reply>" }`: why the
-   disposition stands regardless, or what the session accepts and amends.
-   Where the session's judgment departs from a verdict or from the stage a
-   frontier finding recommends, write `tmp/review/overrides.json` as
-   `{ "<id>": "<stage>" }`.
+   edit, merge, or split it proposes. Validate every finding before any
+   is applied, on this thread and never delegated: open the node, check
+   that the text the finding quotes is there and says what the finding
+   says, that the claim about the record or the implementation is true,
+   and that the stage or edit it recommends follows from the doctrine the
+   finding cites. Record the validation as the session's reply in
+   `tmp/review/replies.json`, `{ "<id>": "<reply>" }`, one per node entry
+   and one per node a frontier finding names: which findings the session
+   accepts and what it amends for them, which it rejects and why, and why
+   the disposition stands against the counter-argument or what changes
+   for it. A rejected verdict or a rejected stage recommendation is held
+   by `tmp/review/overrides.json`, `{ "<id>": "<stage>" }`; the finding is
+   still recorded on the node with the reply, as the dialogue's history,
+   and the author sees both on the alignment page. Nothing is applied
+   unvalidated.
 2. `node .claude/skills/align-review/apply.mjs tmp/review/frontier.json --replies tmp/review/replies.json [--overrides tmp/review/overrides.json] [--date YYYY-MM-DD]`.
    For each node entry it verifies the node's stage, appends
    `### Clean-context review, <date>` to `## Proposal` with the verdict,
@@ -131,6 +139,7 @@ transition (`checkpoint`).
 ## Model and delegation
 
 The reviewer runs on `opus` at high effort (`delegation`: judgment). The
-orchestration runs on whatever model invoked the skill; the replies, the
-overrides, and what is put to the author from a merge or a split are the
-session's judgment and are never delegated.
+orchestration runs on whatever model invoked the skill; the validation of
+the findings, the replies, the overrides, and what is put to the author
+from a merge or a split are the session's judgment and are never
+delegated.
