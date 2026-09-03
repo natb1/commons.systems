@@ -36,6 +36,9 @@ The author, 2026-09-03, a note on the same:
 The author, 2026-09-03, retracting the marking and stating the function it served:
 > The flipping of node I suggested from answered to unanswered pending confirmation feels like a hack. At a functional level, when reading the documentation for a node that has been previously confirmed/answered I want to see if there are alternate proposals surfaced outside of alignment, or alternate answers surfaced during alignment which are pending confirmation.
 
+The author, 2026-09-03, on the sitting of dialogue, on what grounds work while an alternative is pending:
+> When an alternative is pending on ANY node with authority (ratified, deferred or delegated - remember that ratified has specific technical meaning) the previously confirmed answer keeps its full authority until an alternative is confirmed.
+
 ## Answer
 
 When the author has ruled on it through the alignment dialogue. A disposition is answered when its stamp is ratified or delegated, the two classes that only the author's ruling confers; until then it is unanswered, whatever the node carries: an answer stamped deferred, an answer with no stamp, or no answer at all. Unanswered is a status the projections derive, never a field: the stamp stays as it is, saying who holds the answer and since when, and the answer stays as it is, the draft the author rules on, so that reclassifying a node loses nothing of its encoding.
