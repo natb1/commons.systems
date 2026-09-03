@@ -47,11 +47,14 @@ For each node write `tmp/review/<slug>.brief.md` from `brief.md` beside
 this file, filling `{{id}}`, `{{path}}` (the node file), `{{ancestry}}`
 (the file written by
 `node packages/disposition/project.mjs disposition --ancestry <id> --local tmp/review/<slug>.ancestry.md`),
-`{{amendment}}` (the amended text to judge, or "the whole node"), and
-`{{out}}` (`tmp/review/<slug>.json`). The brief carries the judging
-criteria from `recording` and nothing of the session: no drafts of the
-reply, no account of the sitting, no verdict hoped for. `tmp/` is
-gitignored scratch.
+`{{amendment}}` (the amended text to judge, or "the whole node"),
+`{{siblings}}` (the other node files in this run's scope, the sitting's
+other drafts, or "none"), and `{{out}}` (`tmp/review/<slug>.json`). The
+brief carries the judging criteria from `recording` and nothing of the
+session: no drafts of the reply, no account of the sitting, no verdict
+hoped for. What is isolated is the session's framing, never the record:
+the reviewer reads the sitting's other drafts as part of the record the
+node joins. `tmp/` is gitignored scratch.
 
 ## 3. One subagent per node
 
@@ -85,8 +88,10 @@ a second failure is reported and its node stays at `review`.
    `### Clean-context review of the amendment, <date>` and changes no
    stage. Nothing else in a node is touched.
 3. Amend any node the reply says the session accepts, then, when the
-   amendment changes substance, that node goes back to `review` and
-   through this skill again (`recording`).
+   amendment changes substance, set that node back to `stage: review`
+   and send it through this skill again (`recording`); the frontier
+   flags a review whose draft has changed since. The earlier review's
+   subsection stays in the proposal as the dialogue's history.
 
 ## 5. Land
 
