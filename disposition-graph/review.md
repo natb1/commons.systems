@@ -9,7 +9,6 @@ under:
   - commons.systems/disposition-graph/work-loop
 defines:
   - review
-  - assessment
   - blocking finding
 instrument:
   kind: check
