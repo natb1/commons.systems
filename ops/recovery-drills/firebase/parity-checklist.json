@@ -1,0 +1,149 @@
+{
+  "_comment": "Parity checklist for the landing recovery drill. header_rules and rewrites are the machine-extracted landing hosting contract from firebase.json (regenerate with: jq -f ops/recovery-drills/firebase/extract-parity.jq firebase.json). test_cases and webmention_stub are hand-maintained probing instructions (not derivable from firebase.json) that a later drill step uses to curl the substitute host and assert response headers. In each test case, expected_headers is the FULL set Firebase merges onto that response, applying header_rules in array order with later rules overriding earlier ones for the same key.",
+  "target": "landing",
+  "document_root": "landing/dist",
+  "header_rules": [
+    {
+      "source": "**",
+      "headers": [
+        { "key": "Content-Security-Policy", "value": "default-src 'none'; script-src 'self' https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com https://apis.google.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://mirrors.creativecommons.org https://www.google.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://raw.githubusercontent.com https://static.cloudflareinsights.com https://www.google-analytics.com; frame-src 'self' https://*.firebaseapp.com https://www.google.com https://apis.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains; preload" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/blogroll.opml",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Content-Type", "value": "text/x-opml+xml; charset=utf-8" }
+      ]
+    },
+    {
+      "source": "/feed.xml",
+      "headers": [
+        { "key": "Content-Type", "value": "application/rss+xml; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    },
+    { "source": "**/*.jpg",  "headers": [ { "key": "Cache-Control", "value": "public, max-age=31536000" } ] },
+    { "source": "**/*.jpeg", "headers": [ { "key": "Cache-Control", "value": "public, max-age=31536000" } ] },
+    { "source": "**/*.png",  "headers": [ { "key": "Cache-Control", "value": "public, max-age=31536000" } ] },
+    { "source": "**/*.gif",  "headers": [ { "key": "Cache-Control", "value": "public, max-age=31536000" } ] },
+    { "source": "**/*.webp", "headers": [ { "key": "Cache-Control", "value": "public, max-age=31536000" } ] },
+    { "source": "**/*.avif", "headers": [ { "key": "Cache-Control", "value": "public, max-age=31536000" } ] },
+    { "source": "**/*.svg",  "headers": [ { "key": "Cache-Control", "value": "public, max-age=31536000" } ] },
+    { "source": "**/*.woff2","headers": [ { "key": "Cache-Control", "value": "public, max-age=31536000" } ] },
+    { "source": "/assets/**","headers": [ { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" } ] }
+  ],
+  "rewrites": [
+    { "source": "/api/webmention", "destination": null, "function": "webmention" },
+    { "source": "**", "destination": "/index.html", "function": null }
+  ],
+  "webmention_stub": {
+    "path": "/api/webmention",
+    "expected_status": 503,
+    "parity": false,
+    "reason": "firebase.json rewrites /api/webmention to the webmention Cloud Function. A static nginx host cannot re-host a Cloud Function. This surface is deliberately stubbed 503 and is expected, measured drill residue (the non-projectable, compute-backed part of the hosted tier), not a parity failure."
+  },
+  "test_cases": [
+    {
+      "name": "spa-root",
+      "path": "/",
+      "expected_status": 200,
+      "parity": true,
+      "notes": "Root serves index.html; only the shared ** security headers apply.",
+      "expected_headers": {
+        "Content-Security-Policy": "default-src 'none'; script-src 'self' https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com https://apis.google.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://mirrors.creativecommons.org https://www.google.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://raw.githubusercontent.com https://static.cloudflareinsights.com https://www.google-analytics.com; frame-src 'self' https://*.firebaseapp.com https://www.google.com https://apis.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "X-Frame-Options": "DENY",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Content-Type-Options": "nosniff"
+      }
+    },
+    {
+      "name": "spa-deep-route",
+      "path": "/any/unmatched/client-route",
+      "expected_status": 200,
+      "parity": true,
+      "notes": "Catch-all ** rewrite serves index.html for any unmatched path. Shared security headers apply.",
+      "expected_headers": {
+        "Content-Security-Policy": "default-src 'none'; script-src 'self' https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com https://apis.google.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://mirrors.creativecommons.org https://www.google.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://raw.githubusercontent.com https://static.cloudflareinsights.com https://www.google-analytics.com; frame-src 'self' https://*.firebaseapp.com https://www.google.com https://apis.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "X-Frame-Options": "DENY",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Content-Type-Options": "nosniff"
+      }
+    },
+    {
+      "name": "blogroll-opml",
+      "path": "/blogroll.opml",
+      "expected_status": 200,
+      "parity": true,
+      "notes": "Shared security headers PLUS the blogroll rule (ACAO + forced Content-Type). Requires landing/dist/blogroll.opml to exist.",
+      "expected_headers": {
+        "Content-Security-Policy": "default-src 'none'; script-src 'self' https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com https://apis.google.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://mirrors.creativecommons.org https://www.google.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://raw.githubusercontent.com https://static.cloudflareinsights.com https://www.google-analytics.com; frame-src 'self' https://*.firebaseapp.com https://www.google.com https://apis.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "X-Frame-Options": "DENY",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Content-Type-Options": "nosniff",
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "text/x-opml+xml; charset=utf-8"
+      }
+    },
+    {
+      "name": "feed-xml",
+      "path": "/feed.xml",
+      "expected_status": 200,
+      "parity": true,
+      "notes": "Shared security headers PLUS the feed rule (forced Content-Type + 1h cache). Requires landing/dist/feed.xml to exist.",
+      "expected_headers": {
+        "Content-Security-Policy": "default-src 'none'; script-src 'self' https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com https://apis.google.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://mirrors.creativecommons.org https://www.google.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://raw.githubusercontent.com https://static.cloudflareinsights.com https://www.google-analytics.com; frame-src 'self' https://*.firebaseapp.com https://www.google.com https://apis.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "X-Frame-Options": "DENY",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Type": "application/rss+xml; charset=utf-8",
+        "Cache-Control": "public, max-age=3600"
+      }
+    },
+    {
+      "name": "assets-hashed-file",
+      "path": "/assets/<pick-a-real-hashed-asset>",
+      "expected_status": 200,
+      "parity": true,
+      "notes": "Substitute a real file from landing/dist/assets/ (e.g. an index-*.js). The /assets/** rule is last in header_rules, so its immutable Cache-Control wins even for an image under /assets/ (the substitute host enforces this with an ^~ prefix location that outranks the image-extension regex).",
+      "expected_headers": {
+        "Content-Security-Policy": "default-src 'none'; script-src 'self' https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com https://apis.google.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://mirrors.creativecommons.org https://www.google.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://raw.githubusercontent.com https://static.cloudflareinsights.com https://www.google-analytics.com; frame-src 'self' https://*.firebaseapp.com https://www.google.com https://apis.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "X-Frame-Options": "DENY",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    },
+    {
+      "name": "root-image-non-asset",
+      "path": "/<pick-a-real-image-outside-assets>",
+      "expected_status": 200,
+      "parity": true,
+      "notes": "A real image/font at a non-/assets/ path (e.g. /favicon.png, /og-image.jpg if present). Matches the extension rule: 1-year cache WITHOUT immutable. Skip if landing/dist has no such file.",
+      "expected_headers": {
+        "Content-Security-Policy": "default-src 'none'; script-src 'self' https://www.google.com https://www.gstatic.com https://static.cloudflareinsights.com https://apis.google.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https://mirrors.creativecommons.org https://www.google.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.googleapis.com https://*.firebaseapp.com https://raw.githubusercontent.com https://static.cloudflareinsights.com https://www.google-analytics.com; frame-src 'self' https://*.firebaseapp.com https://www.google.com https://apis.google.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; manifest-src 'self'",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "X-Frame-Options": "DENY",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "public, max-age=31536000"
+      }
+    },
+    {
+      "name": "webmention-unrehostable",
+      "path": "/api/webmention",
+      "expected_status": 503,
+      "parity": false,
+      "notes": "NOT a parity assertion. See webmention_stub: Cloud Function surface that a static host cannot reproduce; stubbed 503 as measured drill residue."
+    }
+  ]
+}
