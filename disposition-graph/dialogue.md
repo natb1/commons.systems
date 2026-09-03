@@ -57,6 +57,12 @@ The author's question of 2026-09-03, quoted above, answered greenfield. What the
 
 ## Proposal
 
+### Finding: the review pin does not cover the standing answer, 2026-09-03
+
+`review.of` is defined above as the hash of the draft text the reviewer read, "so that a draft changed since the review shows as changed on the frontier and the page". Found while verifying this session's own landing: when a node carries a `## Draft`, the pin covers the draft alone, so an amendment to the node's standing answer is invisible to it. `node` had its answer amended on 2026-09-03 to strike the no-children rule and the frontier does not flag it, while `transience`, `dialogue` and `authority`, which carry no draft and are therefore their own drafts, are flagged correctly.
+
+The consequence is narrow but is the drift this answer exists to prevent: a reviewer's verdict stands against text that has since moved, and the reader is not told. The fix is not obvious enough to take here — pinning both texts, pinning the whole node, or holding that the standing answer of a node under draft should not be amended at all are three different answers with different costs — so it is recorded as a finding on this node and left for the review.
+
 ### Reconciled to the author's requirements, 2026-09-03
 
 The author, 2026-09-03:
