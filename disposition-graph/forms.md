@@ -1,6 +1,9 @@
 ---
 question: Which forms may an answer take?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 under:
   - commons.systems/disposition-graph/node
 ---

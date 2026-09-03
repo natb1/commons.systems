@@ -1,6 +1,9 @@
 ---
 question: What does this repository cover, and in what order?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: rule
 authority:
   class: deferred

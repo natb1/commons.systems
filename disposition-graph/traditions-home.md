@@ -1,6 +1,9 @@
 ---
 question: Where does a tradition node live?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 under:
   - commons.systems/disposition-graph/readings
 ---

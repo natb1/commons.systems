@@ -1,6 +1,9 @@
 ---
 question: How are rejected alternatives recorded?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 under:
   - commons.systems/disposition-graph/node
 ---

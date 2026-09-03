@@ -1,6 +1,9 @@
 ---
 question: Does the same discipline help manage capture of the author's intention by institutions generally?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: low
 form: assumption
 authority:
   class: deferred
@@ -23,24 +26,12 @@ Yes. The ways an institution comes to set a person's problems for them recur acr
 The author's hypothesis, 2026-09-02. The archē this graph rests on already names capture as the thing that must remain recoverable; this node asks whether the same record that guards against capture by delegated software guards against capture by other institutions. The traditions that would ground it are gathered as an open question under this node, for the author to choose from.
 
 
-## Proposal
-
-### Sitting on purpose, 2026-09-03
-
-**The capture hypothesis as a disposition with an unvalidated criterion**
-
-Form changes from assumption to disposition; a criterion marked not yet validated is added.
-
-Facts: authority ratified on the form; the answer stays deferred as the author's hypothesis; boldness low; persistence standing.
-
-Depends on: `forms`, `instruments`
-
-Proposed text:
+## Draft
 
 ```markdown
 ---
 question: Does the same discipline help manage capture of the author's intention by institutions generally?
-form: disposition
+form: assumption
 authority:
   class: deferred
   by: claude
@@ -60,6 +51,20 @@ Yes. The ways an institution comes to set a person's problems for them recur acr
 
 The author's hypothesis, 2026-09-02. The archē this graph rests on already names capture as the thing that must remain recoverable; this node asks whether the same record that guards against capture by delegated software guards against capture by other institutions. The traditions that would ground it are gathered as an open question under this node, for the author to choose from.
 ```
+
+## Proposal
+
+### Sitting on purpose, 2026-09-03
+
+**The capture hypothesis as a disposition with an unvalidated criterion**
+
+Form changes from assumption to disposition; a criterion marked not yet validated is added.
+
+Facts: authority ratified on the form; the answer stays deferred as the author's hypothesis; boldness low; persistence standing.
+
+Depends on: `forms`, `instruments`
+
+Proposed text: the draft section of this node.
 
 Rulings open: ratify as shown; ratify with edits; defer; overrule.
 

@@ -1,6 +1,9 @@
 ---
 question: When is a disposition answered?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: rule
 authority:
   class: deferred

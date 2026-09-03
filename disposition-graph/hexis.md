@@ -1,6 +1,9 @@
 ---
 question: In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 under:
   - commons.systems/disposition-graph/purpose
 ---

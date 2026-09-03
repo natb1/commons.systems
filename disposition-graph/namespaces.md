@@ -1,6 +1,9 @@
 ---
 question: How are nodes named across graphs?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: rule
 authority:
   class: deferred
@@ -32,27 +35,12 @@ By import path, as Go names packages. A repository is a module named by its path
 The author's ruling of 2026-09-02. Traditions to record as readings: Go modules, whose `replace` directive is the shim's model; Unix mount namespaces, which map a path prefix to another tree.
 
 
-## Proposal
-
-### Sitting on purpose, 2026-09-03
-
-**The namespaces node, whole; a traditions graph**
-
-A traditions graph is declared in the manifest beside the public graph, one root node per tradition, reached by the same import path as any node. The mount shim declared today stays.
-
-Facts: authority ratified if q2 stands; boldness moderate; persistence standing.
-
-Rejected:
-- A graph per tradition. — One file per tradition suffices until a tradition is articulated; a graph each would be many near-empty manifests.
-
-Depends on: `traditions-home`
-
-Proposed text:
+## Draft
 
 ```markdown
 ---
 question: How are nodes named across graphs?
-form: disposition
+form: rule
 authority:
   class: ratified
   by: Nathan Buesgens
@@ -77,6 +65,23 @@ By import path, as Go names packages. A repository is a module named by its path
 
 The author's ruling of 2026-09-02, and the model of a tradition as a mount that could be a graph of its own.
 ```
+
+## Proposal
+
+### Sitting on purpose, 2026-09-03
+
+**The namespaces node, whole; a traditions graph**
+
+A traditions graph is declared in the manifest beside the public graph, one root node per tradition, reached by the same import path as any node. The mount shim declared today stays.
+
+Facts: authority ratified if q2 stands; boldness moderate; persistence standing.
+
+Rejected:
+- A graph per tradition. — One file per tradition suffices until a tradition is articulated; a graph each would be many near-empty manifests.
+
+Depends on: `traditions-home`
+
+Proposed text: the draft section of this node.
 
 Rulings open: ratify as shown; ratify with edits; defer; overrule.
 

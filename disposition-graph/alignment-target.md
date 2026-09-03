@@ -1,6 +1,9 @@
 ---
 question: What does the alignment session take up when given nothing?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: rule
 authority:
   class: deferred

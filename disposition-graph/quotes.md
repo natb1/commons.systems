@@ -1,6 +1,9 @@
 ---
 question: How are the author's words retained when a ruling is recorded?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 under:
   - commons.systems/disposition-graph/authority
 ---

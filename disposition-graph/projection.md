@@ -1,6 +1,9 @@
 ---
 question: How is the record read?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: rule
 authority:
   class: deferred
@@ -50,27 +53,12 @@ Through projections, never by opening node files, except in alignment sessions. 
 The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree. It keeps context focused, keeps legacy vocabulary out of working sessions, and makes the graph commit a session read from a pinned fact. The address rule was recorded at the author's direction on 2026-09-03, after the address was seen not to change on navigation in the framed viewer; the routing tradition is the reading under this node. The author, 2026-09-03: "The url in the artifact is not updated on navigation between nodes. This could cause navigation confusion. Record reference to web app routing tradition for disposition. Edit the browser shim to reconcile the disposition." And, the same day, that unanswered nodes are hidden from the browser and listed by the alignment page, quoted on the transience node. A hosted README cannot embed a live page, so the README renders the purpose page statically or links the browser at the purpose node; that bite on the main branch is unbuilt work, not a disposition.
 
 
-## Proposal
-
-### Sitting on purpose, 2026-09-03
-
-**The projection node, whole; the browser states nothing of its own**
-
-Every node has an address and the page keeps the reader's place (recorded today at the author's direction, deferred; the framed viewer cannot show or receive the address, which the reading under this node records as the host's divergence). Every field name and value on a page links to its defining node (q15). The browser states nothing of its own; each page shows the question, the answer, the criteria or the word unguarded, the readings under the node, the nodes it cites and that cite it, and an authority section projected from the stamp, the ruling, the rejected alternatives, and what is pending for a deferred node. Every defined term and every tradition name links. The README, description, and tags project from purpose alone, since audience is pruned. The session-context part is unchanged. The browser shim declared today stays.
-
-Facts: authority ratified; boldness moderate; persistence standing.
-
-Rejected:
-- Keep a rejected-alternatives section apart from authority. — What was rejected is part of how the answer came to stand, and the author found the separate section ad hoc.
-
-Depends on: `instruments`, `readings`
-
-Proposed text:
+## Draft
 
 ```markdown
 ---
 question: How is the record read?
-form: disposition
+form: rule
 authority:
   class: ratified
   by: Nathan Buesgens
@@ -94,6 +82,23 @@ Through projections, never by opening node files, except in alignment sessions. 
 
 The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree, and of the same date that the browser must carry nothing the graph does not, since hand-written orientation and vocabulary drift and the onboarding walk is the orientation. Rejected: a how-to-read page and a vocabulary page in the browser; a rejected-alternatives section apart from authority, because what was rejected is part of how the answer came to stand.
 ```
+
+## Proposal
+
+### Sitting on purpose, 2026-09-03
+
+**The projection node, whole; the browser states nothing of its own**
+
+Every node has an address and the page keeps the reader's place (recorded today at the author's direction, deferred; the framed viewer cannot show or receive the address, which the reading under this node records as the host's divergence). Every field name and value on a page links to its defining node (q15). The browser states nothing of its own; each page shows the question, the answer, the criteria or the word unguarded, the readings under the node, the nodes it cites and that cite it, and an authority section projected from the stamp, the ruling, the rejected alternatives, and what is pending for a deferred node. Every defined term and every tradition name links. The README, description, and tags project from purpose alone, since audience is pruned. The session-context part is unchanged. The browser shim declared today stays.
+
+Facts: authority ratified; boldness moderate; persistence standing.
+
+Rejected:
+- Keep a rejected-alternatives section apart from authority. — What was rejected is part of how the answer came to stand, and the author found the separate section ad hoc.
+
+Depends on: `instruments`, `readings`
+
+Proposed text: the draft section of this node.
 
 Rulings open: ratify as shown; ratify with edits; defer; overrule.
 

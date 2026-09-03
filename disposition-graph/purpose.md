@@ -1,6 +1,9 @@
 ---
 question: What is this repository for?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: target
 under:
   - commons.systems/public/agency
@@ -55,30 +58,12 @@ Drafted by the AI from the record, for the author to confirm or strike at ratifi
 - *Issue trackers as the record of intent.* Tried here at length; they record work, not dispositions, and cannot carry authority or rank.
 
 
-## Proposal
-
-### Sitting on purpose, 2026-09-03
-
-**The purpose node, whole**
-
-The mechanism sentence is rewritten in the author's terms and "explicit" is struck. The factory is defined as the reconciliation of the standing answers with implementation, in both directions. The ledger reference is gone. The two hypotheses are carried as dispositions with criteria not yet validated, not as assumptions. The rationale no longer lists readings; the harness and the reconciliation loop become readings under this node and the work loop. The rejected alternatives move into the rationale with the author's reasons, and the strongest form of the incumbent's framing is added as a rejected alternative. Two criteria are added. The stamp is written at the ruling.
-
-Facts: authority ratified; boldness low on the answer; moderate on the criteria and the added rejected alternative; persistence standing.
-
-Rejected:
-- Keep "explicit intent". — The author struck it; making intent explicit is what the record does, so the adjective claimed a precondition.
-- Knowledge store first, hexis as its gloss, as the page had it. — q4 puts hexis first because it is the claim and the knowledge store is what would hold it.
-- Drop the rejected alternatives from the node. — The author ratified the issue-tracker reason and noted the other two; what was rejected is part of how the answer stands.
-- Defer criteria to a later sitting and show purpose as unguarded. — Open as q8; the drafted pair is the AI's, not the author's.
-
-Depends on: `forms`, `hexis`, `purpose-criteria`
-
-Proposed text:
+## Draft
 
 ```markdown
 ---
 question: What is this repository for?
-form: disposition
+form: target
 authority:
   class: ratified
   by: Nathan Buesgens
@@ -105,6 +90,26 @@ Why it matters leads up to the archē this node refines. Delegating work to auto
 
 Rejected: defining the repository by its parts, a data structure plus a harness, which is scope and not purpose; intent carried in prompts, chat, or memory, which is not durable, reviewable, or rankable, and is the tacit form this record replaces; issue trackers as the record of intent, which with the scrum-like workflows that operate on them are designed for humans with different requirements that do not fit this purpose; and the strongest form of the incumbent's framing, a graph that is a data structure the harness consumes, because it makes the harness the origin.
 ```
+
+## Proposal
+
+### Sitting on purpose, 2026-09-03
+
+**The purpose node, whole**
+
+The mechanism sentence is rewritten in the author's terms and "explicit" is struck. The factory is defined as the reconciliation of the standing answers with implementation, in both directions. The ledger reference is gone. The two hypotheses are carried as dispositions with criteria not yet validated, not as assumptions. The rationale no longer lists readings; the harness and the reconciliation loop become readings under this node and the work loop. The rejected alternatives move into the rationale with the author's reasons, and the strongest form of the incumbent's framing is added as a rejected alternative. Two criteria are added. The stamp is written at the ruling.
+
+Facts: authority ratified; boldness low on the answer; moderate on the criteria and the added rejected alternative; persistence standing.
+
+Rejected:
+- Keep "explicit intent". — The author struck it; making intent explicit is what the record does, so the adjective claimed a precondition.
+- Knowledge store first, hexis as its gloss, as the page had it. — q4 puts hexis first because it is the claim and the knowledge store is what would hold it.
+- Drop the rejected alternatives from the node. — The author ratified the issue-tracker reason and noted the other two; what was rejected is part of how the answer stands.
+- Defer criteria to a later sitting and show purpose as unguarded. — Open as q8; the drafted pair is the AI's, not the author's.
+
+Depends on: `forms`, `hexis`, `purpose-criteria`
+
+Proposed text: the draft section of this node.
 
 Rulings open: ratify as shown; ratify with edits; defer; overrule.
 

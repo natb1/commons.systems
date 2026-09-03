@@ -1,6 +1,9 @@
 ---
 question: How is transient disposition recorded?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: high
 form: rule
 authority:
   class: deferred
@@ -66,7 +69,7 @@ The author, 2026-09-03, on the un-aligned shape: "Let's go ahead and also record
 
 As recorded on 2026-09-03 at the author's direction: never as a disposition; criterion, shim, proposal, open question, evidence, or not recorded; no work-shaped node. The rationale quotes the author verbatim twice, which q10 decides. Here for the ruling on the whole.
 
-Facts: authority deferred; ratified if the author rules so; boldness moderate; persistence standing.
+Facts: authority deferred; ratified if the author rules so; boldness high; persistence standing.
 
 Rejected:
 - A stored self-liquidating class of node. — Expiry stored on a node is the state that drifts, and the legacy record found none needed.

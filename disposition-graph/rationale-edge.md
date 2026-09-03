@@ -1,6 +1,9 @@
 ---
 question: Is the rationale the prose of the under edge?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 under:
   - commons.systems/disposition-graph/under
 ---

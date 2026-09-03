@@ -1,6 +1,9 @@
 ---
 question: How are references to tradition recorded?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: rule
 authority:
   class: deferred
@@ -35,28 +38,12 @@ As readings, which are nodes. A reading answers the question what a tradition sa
 The author's ruling of 2026-09-02 that tradition references carry authority classes. Making them nodes rather than field entries buys four things: one reading of a shared source is stored once and refined under each node it grounds; readings nest, which is what recursion needs; a reading has its own hash and pin, so a changed reading is distinguishable from a changed answer; and there is one write path, one queue, and one stamp vocabulary. The alternative, stamped entries in a field with a derived reading frontier, is workable and was the author's framing; the difference is parsimony of mechanism against parsimony of files.
 
 
-## Proposal
-
-### Sitting on purpose, 2026-09-03
-
-**The readings node, whole; tradition as mount**
-
-Tradition and reading are distinguished. A tradition is a mount, one root node in a traditions graph until it has a graph of its own, carrying the name it defines and its primary references. A reading is one node's reference to a tradition, under the node it bears on, with source, locus, relation, and a stamp. Many questions reading one tradition are many readings naming one tradition, and the tradition's page shows them all. Prose links to a tradition through the name it defines. A rationale never repeats the readings.
-
-Facts: authority ratified if q2 stands; boldness moderate; persistence standing.
-
-Rejected:
-- Stamped entries in a field with a derived reading frontier, the author's first framing. — Workable; parsimony of mechanism against parsimony of files, and a reading needs its own hash and pin.
-- One node per tradition inside this graph. — A tradition is not a disposition of this project; it is mounted, not held (q2).
-
-Depends on: `traditions-home`
-
-Proposed text:
+## Draft
 
 ```markdown
 ---
 question: How are references to tradition recorded?
-form: disposition
+form: rule
 authority:
   class: ratified
   by: Nathan Buesgens
@@ -78,6 +65,24 @@ As readings under the node that refers, and traditions they refer to. A traditio
 
 The author's rulings of 2026-09-02 that tradition references carry authority classes and that a tradition is a mount. Making readings nodes rather than field entries buys four things: one tradition is stored once and read under each node it grounds; readings nest, which is what recursion needs; a reading has its own hash and pin, so a changed reading is distinguishable from a changed answer; and there is one write path, one queue, and one stamp vocabulary. Rejected: stamped entries in a field with a derived reading frontier, workable and the author's first framing, parsimony of mechanism against parsimony of files; readings in the rationale prose, which drift and cannot carry a stamp; one node per tradition inside this graph, because a tradition is not a disposition of this project and is mounted rather than held.
 ```
+
+## Proposal
+
+### Sitting on purpose, 2026-09-03
+
+**The readings node, whole; tradition as mount**
+
+Tradition and reading are distinguished. A tradition is a mount, one root node in a traditions graph until it has a graph of its own, carrying the name it defines and its primary references. A reading is one node's reference to a tradition, under the node it bears on, with source, locus, relation, and a stamp. Many questions reading one tradition are many readings naming one tradition, and the tradition's page shows them all. Prose links to a tradition through the name it defines. A rationale never repeats the readings.
+
+Facts: authority ratified if q2 stands; boldness moderate; persistence standing.
+
+Rejected:
+- Stamped entries in a field with a derived reading frontier, the author's first framing. — Workable; parsimony of mechanism against parsimony of files, and a reading needs its own hash and pin.
+- One node per tradition inside this graph. — A tradition is not a disposition of this project; it is mounted, not held (q2).
+
+Depends on: `traditions-home`
+
+Proposed text: the draft section of this node.
 
 Rulings open: ratify as shown; ratify with edits; defer; overrule.
 

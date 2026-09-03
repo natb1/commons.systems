@@ -1,6 +1,9 @@
 ---
 question: Does the web-routing tradition support addressing every node of the browser?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: reading
 authority:
   class: deferred

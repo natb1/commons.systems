@@ -1,6 +1,9 @@
 ---
 question: Who is this repository for?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: low
 form: rule
 authority:
   class: deferred

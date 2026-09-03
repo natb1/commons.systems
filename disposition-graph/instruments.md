@@ -1,6 +1,9 @@
 ---
 question: How would we know an answer still holds?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: rule
 authority:
   class: deferred
@@ -32,28 +35,12 @@ By an instrument bound to the answer: a check the machine runs, or an assessment
 The author rejected cadence review of first principles on 2026-09-02; the record diverges from the periodic-convention strand (Jefferson to Madison, 1789; New York Constitution Article XIX) and adopts Peirce, for whom inquiry begins with genuine doubt from surprise and manufactured doubt is paper doubt. The other triggers come from reflective equilibrium (Rawls, Goodman, Daniels), Kuhn's anomalies, the overruling factors of Planned Parenthood v. Casey, and management of change in process safety; the proof-test interval of IEC 61508 is where expiry belongs. Each is owed a reading. Open: whether a delegated stamp itself sunsets. Readings also owed for Seneca, De Ira III.36, and the Ignatian examen, the periodic review of conduct against principle, and for sunset clauses on delegated and emergency powers.
 
 
-## Proposal
-
-### Sitting on purpose, 2026-09-03
-
-**The instruments node, whole; criteria on every page**
-
-The single instrument becomes a list of criteria; three kinds, check, assessment, assumption; each says whether the answer is achieved or maintained; every page shows its criteria or the word unguarded; the re-grasp triggers are unchanged; the prose list of traditions leaves the rationale.
-
-Facts: authority ratified; boldness moderate; persistence standing; the schema change is materialized by the validator and projector.
-
-Rejected:
-- Criteria as child nodes with their own stamps, which the legacy transcription chose. — A criterion that needs its own stamp is a question of its own and becomes a node then; the common case is a line on the node it guards.
-- Keep one instrument per node. — An answer commonly has a check and an assessment, and purpose has both.
-
-Depends on: `forms`
-
-Proposed text:
+## Draft
 
 ```markdown
 ---
 question: How would we know an answer still holds?
-form: disposition
+form: rule
 authority:
   class: ratified
   by: Nathan Buesgens
@@ -77,6 +64,24 @@ By criteria bound to the answer, and every page shows them or says the answer is
 
 The author rejected cadence review of first principles on 2026-09-02; the record diverges from the periodic-convention strand and adopts Peirce, for whom inquiry begins with genuine doubt from surprise and manufactured doubt is paper doubt. Assumption moved from the forms to the criteria because it was instrumentation from the start, the condition under which an answer stays valid, and the requirements tradition records domain assumptions beside the specification for the same reason. Rejected: criteria as nodes of their own, because a criterion that needs its own stamp is a question of its own and becomes a node then; a single instrument per node, because an answer commonly has a check and an assessment. Open: whether a delegated stamp itself sunsets.
 ```
+
+## Proposal
+
+### Sitting on purpose, 2026-09-03
+
+**The instruments node, whole; criteria on every page**
+
+The single instrument becomes a list of criteria; three kinds, check, assessment, assumption; each says whether the answer is achieved or maintained; every page shows its criteria or the word unguarded; the re-grasp triggers are unchanged; the prose list of traditions leaves the rationale.
+
+Facts: authority ratified; boldness moderate; persistence standing; the schema change is materialized by the validator and projector.
+
+Rejected:
+- Criteria as child nodes with their own stamps, which the legacy transcription chose. — A criterion that needs its own stamp is a question of its own and becomes a node then; the common case is a line on the node it guards.
+- Keep one instrument per node. — An answer commonly has a check and an assessment, and purpose has both.
+
+Depends on: `forms`
+
+Proposed text: the draft section of this node.
 
 Rulings open: ratify as shown; ratify with edits; defer; overrule.
 

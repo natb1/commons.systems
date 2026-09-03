@@ -1,6 +1,9 @@
 ---
 question: Who may change an answer?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: rule
 authority:
   class: deferred
@@ -47,28 +50,12 @@ Attenuation: authority only narrows as it is handed down, never widens, so a bre
 The author, 2026-09-03, on the bootstrap ledger: "The ledger is a shim, it shouldn't receive standing disposition. Ratified as a shim. The standing disposition (ratified) is that ratification happens only through alignment dialogue." And later that day: "The ledger is expected to be sunset and encoded as deferred dispositions. I am concerned that it has not been, I am concerned about drift between the ledger and the greenfield graph." The ledger shim declared here on 2026-09-02 was liquidated on 2026-09-03: every entry was sorted, by the survey `bootstrap/ledger-migration-survey-2026-09-03.md` on the implementation ref and by the session for the entries after it, into a node amendment, a shim declaration, an un-aligned disposition, or nothing, and the file was deleted. While it stood no stamp was ratified, and none is yet; the first ratified stamps are those the sitting on purpose writes.
 
 
-## Proposal
-
-### Sitting on purpose, 2026-09-03
-
-**The authority node, whole**
-
-Adds to today's recording: a node without a stamp is an open question; proposal is content, never a class, and dies at the ruling into an answer, a rejected alternative, or nothing; the deferred stamps are the review queue; the ruling that earned a ratified stamp is in the landing commit and restated in the rationale (q10). The prose list of traditions leaves the rationale for the stub tradition nodes (n-stub-traditions). The two shims declared today stay.
-
-Facts: authority ratified; boldness low; moderate on the ruling-in-the-record sentence; persistence standing.
-
-Rejected:
-- Keep proposal as a fourth authority class. — A class with no authority is a review-queue label, and the deferred stamp already is that queue; the page had labelled purpose "proposal" only because it had no stamp.
-- Quote the ruling verbatim in the node, as the node said until today. — Open as q10.
-
-Depends on: `quotes`
-
-Proposed text:
+## Draft
 
 ```markdown
 ---
 question: Who may change an answer?
-form: disposition
+form: rule
 authority:
   class: ratified
   by: Nathan Buesgens
@@ -102,6 +89,24 @@ Every answer carries a stamp: who holds it, with what class, and since when. A n
 
 Attenuation: authority only narrows as it is handed down, never widens, so a breakout would have to be written up the tree, and nothing writes up. Rejected: recording out-of-scope answers as deferred, because deferred still acts; a ratify command run by the author as the act of ratification, because it guaranteed nothing, stamped under the same version-control identity every session commits with, and made the act a keystroke instead of a decision; proposal as an authority class, because a class with no authority is a review-queue label and the deferred stamp already is that queue.
 ```
+
+## Proposal
+
+### Sitting on purpose, 2026-09-03
+
+**The authority node, whole**
+
+Adds to today's recording: a node without a stamp is an open question; proposal is content, never a class, and dies at the ruling into an answer, a rejected alternative, or nothing; the deferred stamps are the review queue; the ruling that earned a ratified stamp is in the landing commit and restated in the rationale (q10). The prose list of traditions leaves the rationale for the stub tradition nodes (n-stub-traditions). The two shims declared today stay.
+
+Facts: authority ratified; boldness low; moderate on the ruling-in-the-record sentence; persistence standing.
+
+Rejected:
+- Keep proposal as a fourth authority class. — A class with no authority is a review-queue label, and the deferred stamp already is that queue; the page had labelled purpose "proposal" only because it had no stamp.
+- Quote the ruling verbatim in the node, as the node said until today. — Open as q10.
+
+Depends on: `quotes`
+
+Proposed text: the draft section of this node.
 
 Rulings open: ratify as shown; ratify with edits; defer; overrule.
 

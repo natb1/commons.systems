@@ -1,6 +1,9 @@
 ---
 question: What does a session load, and where does it come from?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: low
 form: rule
 authority:
   class: deferred

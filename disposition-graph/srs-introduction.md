@@ -1,6 +1,9 @@
 ---
 question: Does the requirements-specification tradition support starting onboarding at purpose, then scope, audience, and definitions?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: reading
 authority:
   class: deferred
@@ -25,17 +28,7 @@ Supports. The tradition opens a specification with purpose, then scope, then the
 Validated by the AI from its own knowledge of the standards on 2026-09-02; deferred until the author reads the sections. The one divergence to record: an SRS is a document about one product release, while this graph is a standing record, so "scope" here is a node that can be re-answered rather than a section that is rewritten.
 
 
-## Proposal
-
-### Sitting on purpose, 2026-09-03
-
-**The requirements reading, re-oriented**
-
-The question is re-oriented to purpose, scope, references; definitions are met through the terms nodes define; overview is left to projections; the intended readers are stated inside purpose as the tradition states them inside its purpose section.
-
-Facts: authority deferred until the author reads the sections; boldness moderate; persistence standing.
-
-Proposed text:
+## Draft
 
 ```markdown
 ---
@@ -58,6 +51,18 @@ Supports. The tradition opens a specification with purpose, then scope, then ref
 
 Validated by the AI from its own knowledge of the standards on 2026-09-02, and re-oriented on the author's ruling that the progression is purpose, scope, reference, with definitions covered by links and overview by blog-shaped content; deferred until the author reads the sections. The one divergence to record: a requirements specification is a document about one product release, while this graph is a standing record, so scope here is a node that can be re-answered rather than a section that is rewritten.
 ```
+
+## Proposal
+
+### Sitting on purpose, 2026-09-03
+
+**The requirements reading, re-oriented**
+
+The question is re-oriented to purpose, scope, references; definitions are met through the terms nodes define; overview is left to projections; the intended readers are stated inside purpose as the tradition states them inside its purpose section.
+
+Facts: authority deferred until the author reads the sections; boldness moderate; persistence standing.
+
+Proposed text: the draft section of this node.
 
 Rulings open: ratify as shown; ratify with edits; defer; overrule.
 

@@ -1,6 +1,9 @@
 ---
 question: How is intent recorded here?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: rule
 authority:
   class: deferred
@@ -28,27 +31,12 @@ As a disposition graph. A disposition is one standing answer to one question, he
 The refinements of this node define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, instruments, readings, the work loop, materialized implementation, and the standing of the legacy record. Each is ratified in onboarding order.
 
 
-## Proposal
-
-### Sitting on purpose, 2026-09-03
-
-**The model node, rewritten as the second stop of the walk**
-
-The answer is rewritten for a reader arriving from purpose who needs to use the skill: disposition, authority, rank, readings and traditions, criteria, and the sitting, in that order; the list of refinements moves to the rationale; growth is boosted first among the children, which is the author's boost to record on the growth node.
-
-Facts: authority deferred; the boost ratified; boldness moderate; persistence standing.
-
-Rejected:
-- A new primer node between purpose and model. — Open as q6; it would answer no question this node does not.
-
-Depends on: `second-stop`, `forms`
-
-Proposed text:
+## Draft
 
 ```markdown
 ---
 question: How is intent recorded here?
-form: disposition
+form: rule
 authority:
   class: deferred
   by: claude
@@ -68,6 +56,23 @@ As a disposition graph, which you read from the purpose node down and change onl
 
 This node is the second stop of the onboarding walk, after purpose, and it is written for a reader who needs to use the skill, not for one looking up the schema. Its refinements define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, criteria, readings, the work loop, materialized implementation, transience, and the standing of the legacy record; growth is first among them because the sitting is the first thing a newcomer does. Rejected: a separate primer node between purpose and this one, because it would answer no question this node does not.
 ```
+
+## Proposal
+
+### Sitting on purpose, 2026-09-03
+
+**The model node, rewritten as the second stop of the walk**
+
+The answer is rewritten for a reader arriving from purpose who needs to use the skill: disposition, authority, rank, readings and traditions, criteria, and the sitting, in that order; the list of refinements moves to the rationale; growth is boosted first among the children, which is the author's boost to record on the growth node.
+
+Facts: authority deferred; the boost ratified; boldness moderate; persistence standing.
+
+Rejected:
+- A new primer node between purpose and model. — Open as q6; it would answer no question this node does not.
+
+Depends on: `second-stop`, `forms`
+
+Proposed text: the draft section of this node.
 
 Rulings open: ratify as shown; ratify with edits; defer; overrule.
 

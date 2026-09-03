@@ -1,6 +1,9 @@
 ---
 question: What is a node?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: rule
 authority:
   class: deferred
@@ -45,28 +48,12 @@ One question and its standing answer. The question is one line someone could ask
 One question per node makes "same scope" decidable: two texts share a node only if one replaced the other. Rejected: the node as a topic, which mixes authority in one text; the node as a cluster around a default scope; history kept inside the node. Traditions to record as readings: issues as questions (Kunz and Rittel, IBIS, 1970); the answer as an accumulated restatement (the common-law restatement); store once and derive the rest (Codd). An archē is held, never derived, so nothing ranks above one: Metaphysics V.1 on the senses of archē, Posterior Analytics I.3 on the regress of demonstration, Nicomachean Ethics I.4 on beginning from what is known to us, each owed as a reading.
 
 
-## Proposal
-
-### Sitting on purpose, 2026-09-03
-
-**The node node, whole; forms collapse to four**
-
-Four forms: disposition (target and rule merged; whether it is to be achieved or maintained is carried by its criteria), archē, reading, tradition. Assumption leaves the forms and becomes a criterion kind. Every node carries a stamp or is an open question; proposal is content. The rationale carries the rejected alternatives with their reasons and the page projects them beside the stamp. The prose list of traditions leaves the rationale. Vocabulary stays with the nodes that define each term (n-form-vocabulary).
-
-Facts: authority ratified if q1 stands; boldness moderate; the achieve-or-maintain carrier is the goal-oriented requirements tradition, the merge is the author's question; persistence standing.
-
-Rejected:
-- Keep rule as a form beside disposition. — Open as q1; a rule is a disposition to be maintained, which its criterion already says.
-- Keep all five forms. — Open as q1; assumption as a form recorded the same fact twice, once as form and once as criterion.
-
-Depends on: `forms`, `traditions-home`
-
-Proposed text:
+## Draft
 
 ```markdown
 ---
 question: What is a node?
-form: disposition
+form: rule
 authority:
   class: ratified
   by: Nathan Buesgens
@@ -91,6 +78,24 @@ One question and its standing answer. The question is one line someone could ask
 
 One question per node makes "same scope" decidable: two texts share a node only if one replaced the other. Target and rule were one form seen from two sides, achieve and maintain, which the goal-oriented requirements tradition carries on the goal's criterion rather than on its kind; assumption began as instrumentation, the condition under which an answer stays valid, and is recorded where it is checked. Rejected: the node as a topic, which mixes authority in one text; the node as a cluster around a default scope; history kept inside the node; five forms with target, rule, and assumption apart, because the split recorded the same fact twice, once as form and once as criterion.
 ```
+
+## Proposal
+
+### Sitting on purpose, 2026-09-03
+
+**The node node, whole; forms collapse to four**
+
+Four forms: disposition (target and rule merged; whether it is to be achieved or maintained is carried by its criteria), archē, reading, tradition. Assumption leaves the forms and becomes a criterion kind. Every node carries a stamp or is an open question; proposal is content. The rationale carries the rejected alternatives with their reasons and the page projects them beside the stamp. The prose list of traditions leaves the rationale. Vocabulary stays with the nodes that define each term (n-form-vocabulary).
+
+Facts: authority ratified if q1 stands; boldness moderate; the achieve-or-maintain carrier is the goal-oriented requirements tradition, the merge is the author's question; persistence standing.
+
+Rejected:
+- Keep rule as a form beside disposition. — Open as q1; a rule is a disposition to be maintained, which its criterion already says.
+- Keep all five forms. — Open as q1; assumption as a form recorded the same fact twice, once as form and once as criterion.
+
+Depends on: `forms`, `traditions-home`
+
+Proposed text: the draft section of this node.
 
 Rulings open: ratify as shown; ratify with edits; defer; overrule.
 

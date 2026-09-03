@@ -1,6 +1,9 @@
 ---
 question: What criteria guard the purpose node?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: low
 under:
   - commons.systems/disposition-graph/purpose
 ---

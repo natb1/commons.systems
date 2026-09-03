@@ -1,6 +1,9 @@
 ---
 question: What does an unanswered node carry?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: high
 form: rule
 authority:
   class: deferred
@@ -35,7 +38,7 @@ The disposition and the dialogue on it. The disposition is the node as it stands
 
 `recommendation`, the facts a recommendation must state, as data, required from the review stage on: `class`, the stamp a confirmation confers, ratified or delegated; and `boldness`, low, moderate, or high, how much of the draft rests on the AI's own knowledge against the record and the author's words. The third fact, persistence, is derived from the node's shape and never stored: the node itself is standing, and each shim, each piece of evidence, and each proposal in it is named with its own persistence, as the growth node's presentation rule lists them. The reasoning behind each fact is prose in the proposal.
 
-`review`, the state of the clean-context review of the draft: `verdict`, forward or kickback; `strength`, of the counter-argument, strong, moderate, weak, or none; `date`; `of`, the hash of the draft text the reviewer read, so that a draft changed since the review shows as changed on the frontier and the page; and `siblings`, the ids of the round's other drafts the reviewer was given, so that what it saw can be reconstructed. A node reaches the ruling stage only with a forward verdict.
+`review`, the state of the clean-context review of the draft: `verdict`, forward or kickback; `strength`, of the counter-argument, strong, moderate, weak, or none; `date`; `of`, the hash of the draft text the reviewer read, so that a draft changed since the review shows as changed on the frontier and the page; what the reviewer saw is the whole unanswered frontier at the review's date, as the clean-context-review node says, and needs no field. A node reaches the ruling stage only with a forward verdict.
 
 `## Proposal`, the AI's account in prose: the evidence, the findings, the alternatives and why they were rejected, the reasoning behind each fact, the review's findings and its counter-argument with the session's reply, and what is open for the author.
 

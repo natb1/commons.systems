@@ -1,6 +1,9 @@
 ---
 question: How is work divided between the main thread and subagents?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: low
 form: rule
 authority:
   class: deferred

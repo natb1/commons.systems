@@ -1,6 +1,9 @@
 ---
 question: What does a newcomer read after purpose?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 under:
   - commons.systems/disposition-graph/model
 ---

@@ -1,6 +1,9 @@
 ---
 question: Does the same record serve as a knowledge store?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: low
 form: assumption
 authority:
   class: deferred
@@ -23,24 +26,12 @@ Yes. A record of a person's standing answers, with their rationale and the alter
 The author's hypothesis, 2026-09-02. What would fail it: the record proving useful only while work is in flight, or its answers needing a second store to be findable or trusted. The reading under this node tests the hexis framing against Aristotle. An instrument is owed.
 
 
-## Proposal
-
-### Sitting on purpose, 2026-09-03
-
-**The knowledge-store hypothesis as a disposition with an unvalidated criterion**
-
-Form changes from assumption to disposition; the failure condition moves from the rationale into a criterion marked not yet validated; the ledger reference is gone.
-
-Facts: authority ratified on the form; the answer stays deferred as the author's hypothesis; boldness low; persistence standing.
-
-Depends on: `forms`, `instruments`
-
-Proposed text:
+## Draft
 
 ```markdown
 ---
 question: Does the same record serve as a knowledge store?
-form: disposition
+form: assumption
 authority:
   class: deferred
   by: claude
@@ -60,6 +51,20 @@ Yes. A record of a person's standing answers, with their rationale and the alter
 
 The author's hypothesis, 2026-09-02. The reading under this node tests the hexis framing against Aristotle.
 ```
+
+## Proposal
+
+### Sitting on purpose, 2026-09-03
+
+**The knowledge-store hypothesis as a disposition with an unvalidated criterion**
+
+Form changes from assumption to disposition; the failure condition moves from the rationale into a criterion marked not yet validated; the ledger reference is gone.
+
+Facts: authority ratified on the form; the answer stays deferred as the author's hypothesis; boldness low; persistence standing.
+
+Depends on: `forms`, `instruments`
+
+Proposed text: the draft section of this node.
 
 Rulings open: ratify as shown; ratify with edits; defer; overrule.
 

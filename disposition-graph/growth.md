@@ -1,6 +1,9 @@
 ---
 question: How does the graph grow?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: moderate
 form: rule
 authority:
   class: deferred
@@ -55,7 +58,7 @@ The loop is the alignment interview made incremental: one page, one ruling. The 
 
 The node as it stands after today's recording: both stages in both usages with the periagogic object stated, the presentation rule with the three facts, the sitting's movements, and two shims declared (the skill file, the review page). The stamp is deferred; the author's ruling on the rule is recorded in the content, and the node is here for the ruling on the whole. The rationale still quotes the author verbatim, which q10 decides.
 
-Facts: authority ratified; boldness low; persistence standing; the two shims with their liquidation conditions.
+Facts: authority ratified; boldness moderate; persistence standing; the two shims with their liquidation conditions.
 
 Rejected:
 - Split the presentation rule and the sitting's movements into nodes of their own. — Each answers "how does the graph grow" from one side; a split would need a question neither answers alone.

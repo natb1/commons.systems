@@ -1,6 +1,9 @@
 ---
 question: What is materialized implementation, and where does it live?
 stage: ruling
+recommendation:
+  class: ratified
+  boldness: low
 form: rule
 authority:
   class: deferred
