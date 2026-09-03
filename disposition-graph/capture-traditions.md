@@ -2,6 +2,7 @@
 question: Which traditions ground the capture hypothesis?
 under:
   - commons.systems/disposition-graph/capture
+stage: maieutic
 ---
 ## Proposal
 

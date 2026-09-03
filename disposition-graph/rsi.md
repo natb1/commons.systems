@@ -1,0 +1,16 @@
+---
+question: How does this system improve its own loop?
+stage: maieutic
+under:
+  - commons.systems/disposition-graph/model
+---
+## Disposition
+
+The author, 2026-09-03, naming the last section of the high-level order recorded on the scope node:
+> purpose -> [scope, self documentation (via the graph browser)] (equal) -> alignment -> harness context management -> reconciliation -> rsi
+
+## Proposal
+
+The author named `rsi` as the section that follows reconciliation and gave no account of it. The AI reads the word as recursive self-improvement, which the legacy record used for the harness's measurement and improvement of its own sessions: the work loop applied to the work loop, its instruments read against itself, and its improvements landed through the same dialogue and reconciliation as any other change. The question for the author is what the term covers here and what bounds it: whether it is a section of the record with dispositions of its own, or the name of what the loop does when the frontier bites the loop's own nodes; and whether a bound is owed, such as the author's ratification of every change to a node the loop uses to change itself. The node is placed under the model node as a peer of alignment and reconciliation, where the author's order puts it, and ranked last by that order.
+
+Facts: authority none, an un-aligned disposition in the author's one word; boldness low, the reading of the word is the AI's; persistence open until the author answers.

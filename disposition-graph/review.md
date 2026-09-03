@@ -15,7 +15,7 @@ instrument:
   ref: the code-review instrument on the implementation ref, producing the assessment this node describes
   note: not yet materialized; the shim below stands in for it
 shims:
-  - artifact: the detached code-review instrument on `main`, `.claude/skills/dispatch-propagate/scripts/dispatch-code-review`, run from the `greenfield` worktree
+  - artifact: the detached code-review instrument on `main`, `.claude/skills/dispatch-propagate/scripts/dispatch-code-review`, run from the implementation checkout with the script taken from a worktree of `main`, at bootstrap exit for every landing made under the reconciliation shim
     for: the instrument of this node
     liquidation: an instrument on the `greenfield` ref produces the assessment from this node; until then the incumbent instrument's detachment, locks, await loop, and resume cache are facts, not doctrine
     declared: 2026-09-02
