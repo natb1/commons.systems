@@ -8,6 +8,7 @@ description: Record or revise one node of the disposition graph by interview wit
 > the nodes `growth`, `recording`, `unanswered`, `dialogue`,
 > `clean-context-review`, `frontier-consistency`, `checkpoint`,
 > `alignment-target`, `authority`, `node`, `under`, `projection`,
+> `un-aligned-children`, `fidelity`,
 > `persistence`, `readings`, `review`, `evaluation`, `attention`,
 > `delegation`, and `transience` of `commons.systems/disposition-graph`,
 > all stamped deferred and unanswered, and from the author's rulings quoted
@@ -30,7 +31,11 @@ unanswered node (`alignment-target`, §1). A node is one question and its
 standing answer; a round is one node. Every node is unanswered until the
 author confirms it through this dialogue (`unanswered`): a deferred or
 unstamped answer is a draft, and the node carries the dialogue's state
-(`dialogue`). A disposition the author states while a sitting is in hand is
+(`dialogue`). An unanswered disposition is a disposition plus that state,
+a node like any other, which may be refined by children as any node may;
+what it lacks is authority, not standing, and it grounds no work until it
+is answered (`un-aligned-children`, the author's ruling of 2026-09-03).
+A disposition the author states while a sitting is in hand is
 queued (§1, the queue) and the sitting continues. The harness finds this
 skill only when the session starts in the checkout that carries it.
 
@@ -144,10 +149,19 @@ skill only when the session starts in the checkout that carries it.
   the `class` a confirmation confers and the `boldness`, required from the
   review stage on; `review`, the clean-context review's `verdict`,
   `strength`, `date`, and `of`, the hash of the draft text it read, which
-  the frontier flags when the draft has changed since; and `## Proposal`,
-  the account in prose. A ruling-stage node without a forward verdict is
+  the frontier flags when the draft has changed since; `depends`, the ids
+  of the still-open questions this one's ruling waits on, as data, so the
+  page can order the author's queue and show what a ruling here unblocks,
+  its inverse being derived and never stored; and `## Proposal`, the
+  account in prose. A ruling-stage node without a forward verdict is
   invalid; a draft changed after its review is sent through the review
-  again when the change is substance.
+  again when the change is substance. The state must do three things
+  between them: survive the session that held it, so a session which loses
+  its context resumes every node from its stage; hold the author's
+  intention against the account that accumulates around it, which the
+  `fidelity` question asks and the state does not yet do; and give the
+  author, at the ruling, the context to see how this question stands to
+  the rest of the frontier.
 - No argument (`alignment-target`): take the first unanswered node of the
   frontier in rank order, this project's graph before the public graph, and
   run the sitting from the node's stage, repeating no movement behind it,
@@ -188,6 +202,30 @@ skill only when the session starts in the checkout that carries it.
   irreversible, or capture-shaped. Deliver a question's context where the
   author will read it, the alignment page or the prose turn, never the
   AI's own preamble.
+- The AI's own authority over the record (`evaluation`, `authority`). A
+  ratified answer changes only by interview. Delegated and deferred
+  answers need no interview: the AI may overrule them on its best
+  judgment, and every such overrule enters the author's review, a
+  delegated answer overruled becoming deferred and a deferred answer
+  staying deferred. This is not a licence to churn: an overrule is
+  recorded on the node with the reasoning and the author's words it rests
+  on, it sends the node back through the clean-context review on the
+  changed text, and the frontier shows it as changed. Read it the other
+  way too. A recorded answer that is not ratified binds the author not at
+  all and the session only as evidence, so treating one as fixed, routing
+  around it, or minting a question to ask permission the record already
+  gave is the named deviation here. During bootstrap nothing is ratified,
+  so this is the ordinary case and not the exception.
+- Bootstrap authority (the shim on `authority`, declared 2026-09-03). An
+  explicit grant from the author lets this skill reconcile an unanswered
+  node — writing an answer, an overrule, or an amendment onto a node whose
+  dialectic has not concluded — and land the materialized implementation
+  that follows, which §3 and §6 otherwise reserve. The grant is explicit
+  in the author's words for a named reconciliation, never assumed, never
+  inferred from a prior grant, never standing; the answer it writes is
+  stamped deferred and not ratified, since the dialectic has not run; and
+  it expires at bootstrap exit, after which an unanswered node is
+  reconciled only through the dialectic.
 - Three exits stay open to the author at all times: amend the record, defer
   (the answer stays deferred, and the deferred stamp is the review queue; a
   deferred reading is a reading node), or claim authority over the AI's

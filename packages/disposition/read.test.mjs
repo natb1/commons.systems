@@ -398,6 +398,13 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-duplicate-under', /duplicate under reference: example\.test\/main\/root/],
     // validator rule: an 'after' reference must resolve like 'under' does.
     ['invalid-unresolved-after', /unresolved after reference: example\.test\/main\/does-not-exist/],
+    // validator rules for 'depends': a dependency must resolve, must not
+    // repeat, must not be the node's own id, and must name an unanswered
+    // node -- a dependency is on an open question, not a settled one.
+    ['invalid-unresolved-depends', /unresolved 'depends' reference: example\.test\/main\/does-not-exist/],
+    ['invalid-duplicate-depends', /duplicate 'depends' reference: example\.test\/main\/root/],
+    ['invalid-depends-answered', /'depends' names example\.test\/main\/root, which is answered; a dependency is on an open question/],
+    ['invalid-depends-self', /'depends' names itself/],
     // ledger is no longer a field: a 'ledger:' key is just another unknown key.
     ['invalid-ledger-key', /unknown frontmatter key 'ledger'/],
     ['invalid-shim-missing-liquidation', /'shims\[0\]\.liquidation' is required/],
@@ -407,8 +414,6 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-unaligned-without-stage', /example\.test\/main\/bad is unanswered and must carry stage/],
     ['invalid-stage-without-dialogue', /stage requires a '## Disposition', '## Proposal', or '## Answer' section/],
     ['invalid-disposition-without-stage', /'## Disposition' requires 'stage'/],
-    // graph-level rule: an un-aligned disposition (no answer) has no children.
-    ['invalid-unaligned-with-child', /'under' names example\.test\/main\/unaligned, which has no '## Answer'; an un-aligned disposition has no children/],
     ['invalid-stage-value', /'stage' must be one of: periagogic, maieutic, ruling, review/],
     ['invalid-unaligned-tier', /'tier' requires an '## Answer' section/],
     ['invalid-section-order', /'## Disposition' heading is out of order/],
@@ -590,6 +595,31 @@ describe('readGraph: valid-unaligned fixture', () => {
     assert.equal(ruling.review.verdict, 'forward');
     assert.equal(ruling.reviewStale, true, "the fixture's placeholder review.of does not match the computed draft hash");
     assert.ok(ruling.disposition && ruling.answer && ruling.rationale && ruling.proposal);
+  });
+});
+
+describe('readGraph: valid-unanswered-with-child fixture', () => {
+  // an unanswered parent (no '## Answer') may have a child: the graph-level
+  // rule that once forbade this was retired, so this fixture -- an
+  // unaligned node with a child under it -- now validates cleanly.
+  test('loads without throwing', async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-unanswered-with-child'));
+    assert.equal(graph.nodes.length, 2);
+  });
+});
+
+describe('readGraph: valid-depends fixture', () => {
+  // 'depends' names a dependency that must itself be an open question: an
+  // unanswered node may depend on another unanswered node.
+  test('loads without throwing, and depends resolves to the local canonical id', async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-depends'));
+    assert.equal(graph.nodes.length, 2);
+    const dependent = graph.nodes.find((n) => n.id === 'example.test/main/dependent');
+    assert.ok(dependent);
+    assert.equal(dependent.status, 'unanswered');
+    assert.deepEqual(dependent.depends, ['example.test/main/prerequisite']);
+    const prerequisite = graph.nodes.find((n) => n.id === 'example.test/main/prerequisite');
+    assert.equal(prerequisite.status, 'unanswered');
   });
 });
 

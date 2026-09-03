@@ -27,7 +27,7 @@ import {
 const FRONTMATTER_KEYS = new Set([
   'question', 'form', 'authority', 'under', 'tier', 'boost', 'cites',
   'instrument', 'after', 'source', 'relation', 'defines', 'shims', 'stage',
-  'order', 'recommendation', 'review',
+  'order', 'recommendation', 'review', 'depends',
 ]);
 const FORMS = new Set(['target', 'rule', 'assumption', 'arche', 'reading']);
 const AUTHORITY_CLASSES = new Set(['ratified', 'delegated', 'deferred']);
@@ -333,7 +333,7 @@ function parseDraftFence(fenceText, question, ctx, problems) {
 
 /**
  * Parse and validate a single node file's text (frontmatter + body).
- * Does not resolve `under`/`after`/`cites[].id` against a manifest or
+ * Does not resolve `under`/`after`/`depends`/`cites[].id` against a manifest or
  * against sibling nodes, and does not compute `children`/`rank`/`ceiling`/
  * `status`/`hash` -- those need the whole graph and the raw file bytes, and
  * are added by `readGraph`.
@@ -402,9 +402,10 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     }
   }
 
-  // under / after
+  // under / after / depends
   const under = readIdList(fm, 'under', problems);
   const after = readIdList(fm, 'after', problems);
+  const depends = readIdList(fm, 'depends', problems);
 
   // tier
   let tier = null;
@@ -702,6 +703,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     cites,
     instrument,
     after,
+    depends,
     source,
     relation,
     defines,
@@ -830,6 +832,7 @@ export async function readGraph(rootDir) {
   for (const node of parsed) {
     node.under = node.under.map((refId) => canonicalizeId(refId, manifest));
     node.after = node.after.map((refId) => canonicalizeId(refId, manifest));
+    node.depends = node.depends.map((refId) => canonicalizeId(refId, manifest));
     node.cites = node.cites.map((c) => ({ ...c, id: canonicalizeId(c.id, manifest) }));
     node.order = node.order.map((step) => step.map((refId) => canonicalizeId(refId, manifest)));
   }
@@ -837,9 +840,10 @@ export async function readGraph(rootDir) {
   // referential integrity: every 'under' entry must resolve within this
   // graph and must not repeat the same parent twice (a repeated id would
   // double that parent's rank contribution and duplicate the child in
-  // `children`); a resolved 'under' parent must itself carry an
-  // '## Answer' -- an un-aligned disposition has no children; every
-  // 'after' entry must also resolve within this graph.
+  // `children`); every 'after' entry must also resolve within this graph.
+  // every 'depends' entry must resolve within this graph, must not repeat,
+  // must not name the node itself, and must name a node whose status is
+  // unanswered -- a dependency is on an open question, not a settled one.
   const nodesById = new Map(parsed.map((n) => [n.id, n]));
   const idSet = new Set(nodesById.keys());
   for (const node of parsed) {
@@ -847,8 +851,6 @@ export async function readGraph(rootDir) {
     for (const u of node.under) {
       if (!idSet.has(u)) {
         problems.push(`${node.path}: unresolved 'under' reference: ${u}`);
-      } else if (nodesById.get(u).answer === null) {
-        problems.push(`${node.path}: 'under' names ${u}, which has no '## Answer'; an un-aligned disposition has no children`);
       }
       if (seenUnder.has(u)) {
         problems.push(`${node.path}: duplicate under reference: ${u}`);
@@ -859,6 +861,22 @@ export async function readGraph(rootDir) {
       if (!idSet.has(a)) {
         problems.push(`${node.path}: unresolved after reference: ${a}`);
       }
+    }
+    const seenDepends = new Set();
+    for (const d of node.depends) {
+      if (d === node.id) {
+        problems.push(`${node.path}: 'depends' names itself`);
+        continue;
+      }
+      if (!idSet.has(d)) {
+        problems.push(`${node.path}: unresolved 'depends' reference: ${d}`);
+      } else if (deriveStatus(nodesById.get(d)) === 'answered') {
+        problems.push(`${node.path}: 'depends' names ${d}, which is answered; a dependency is on an open question`);
+      }
+      if (seenDepends.has(d)) {
+        problems.push(`${node.path}: duplicate 'depends' reference: ${d}`);
+      }
+      seenDepends.add(d);
     }
   }
 

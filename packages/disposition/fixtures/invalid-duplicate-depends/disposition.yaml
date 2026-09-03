@@ -1,0 +1,4 @@
+module: example.test
+graphs:
+  main:
+    about: fixture

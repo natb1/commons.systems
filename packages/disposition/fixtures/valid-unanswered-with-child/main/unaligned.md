@@ -1,5 +1,5 @@
 ---
-question: Can an un-aligned disposition have a child?
+question: What is decided about this branch?
 stage: periagogic
 ---
 
