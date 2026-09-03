@@ -1,6 +1,6 @@
 ---
 name: reconcile
-description: Reconcile materialized implementation to the disposition graph, one bite per invocation from the answered frontier in rank order, from disposition to implementation only. Bootstrap shim declared on work-loop; the graph wins on conflict. The session runs on opus, its units on sonnet.
+description: Reconcile materialized implementation to the disposition graph, one bite per invocation from the answered frontier in rank order, from disposition to implementation only, never writing the graph. Bootstrap shim declared on work-loop; the graph wins on conflict. The session runs on opus, its units on sonnet.
 model: opus
 effort: high
 disable-model-invocation: true
@@ -13,8 +13,8 @@ disable-model-invocation: true
 > `authority` of `commons.systems/disposition-graph`, all unanswered, and
 > from the author's dispositions of 2026-09-03 quoted on `work-loop`.
 > This text has no authority of its own. Where it conflicts with the graph
-> at `origin/disposition`, the graph wins and the conflict is recorded as an
-> un-aligned disposition (§4). Declared as a shim on `work-loop`, whose
+> at `origin/disposition`, the graph wins and the conflict is reported for
+> alignment (§4). Declared as a shim on `work-loop`, whose
 > liquidation condition is the exit list (§5).
 
 `/reconcile` runs one iteration of reconciliation on the implementation
@@ -24,9 +24,9 @@ answer, delegate the bite as a unit, verify, land, report, and stop. The
 next invocation derives the frontier again. Bites run from disposition to
 implementation only: an artifact no node justifies is not a bite under
 this shim (§5). It never interviews the author and never records a
-standing answer. A divergence that needs the author becomes an un-aligned
-disposition for the alignment skill; un-aligned dispositions are never
-this skill's bites.
+standing answer, and it never writes the graph: a divergence that needs
+the author is reported for the alignment skill, which alone writes the
+graph; un-aligned dispositions are never this skill's bites.
 
 ## Model
 
@@ -34,7 +34,9 @@ Run the session on `opus`: `claude --model opus`, then `/reconcile`. The
 `model` field above sets the model for the turn that invokes the skill and
 the bite runs inside that turn, but the flag is the sure way. Units run on
 `sonnet` unless the brief names design or judgment, then `opus`; lookups
-on `haiku` (`delegation`). Sonnet can run this skill itself once every
+on `haiku` (`delegation`, whose draft answers on the AI's judgment what
+makes a subagent, a model, and an effort appropriate; the author's words
+of 2026-09-03 on `work-loop` leave that question open). Sonnet can run this skill itself once every
 frontier node carries an executable check and each kind of bite has a
 skill of its own, which is the last bite in the author's order; until
 then choosing a bite and writing its contract from prose criteria is
@@ -52,8 +54,8 @@ judgment.
    (`rules: regenerate from <node ids>`): rules bind every session and
    must be current before a bite is taken.
 4. Read this file against the nodes it projects. Where a node differs,
-   follow the node and record the difference as an un-aligned disposition
-   (§4). Apply every shim the nodes declare without being asked.
+   follow the node and report the difference (§4). Apply every shim the
+   nodes declare without being asked.
 
 ## 1. Frontier
 
@@ -66,8 +68,8 @@ never pre-empts the author. If no node is answered, report
 nodes top down and take the first where one of these holds:
 
 - a shim whose liquidation condition is met while its artifact still
-  exists: liquidate it, delete or replace the artifact and remove the
-  declaration (§4);
+  exists: liquidate it, delete or replace the artifact, and report the
+  declaration for alignment to remove (§4);
 - an instrument whose ref says it is not yet materialized, or whose check
   fails when run: materialize it or fix what it checks;
 - an answer that names an artifact, the browser, a rule, a skill, a page,
@@ -121,29 +123,29 @@ read and stop.
   commit, and what the projector shows, and stop: the frontier re-derives
   at the next invocation.
 
-## 4. Writing the graph
+## 4. The graph
 
-This session writes the `disposition` ref for two things only, each in a
-commit of that one file, pushed at once.
+This session never writes the `disposition` ref: the graph is alignment's
+alone (the author, 2026-09-03, quoted on `work-loop`). Two things reach
+alignment through the report instead of through a node:
 
-- **An un-aligned disposition**, when a node's answer is silent or
-  contradictory about the artifact it justifies, or a bite would need a
-  decision only the author can make. Write
-  `disposition/disposition-graph/<slug>.md`: `question`, `stage: review`,
-  `recommendation` with its authority class and boldness, `under` the node
-  it refines, and a `## Proposal` carrying the evidence, the divergence,
-  and the recommendation with its persistence class (`growth`,
-  `transience`, `dialogue`). No `## Answer` and no stamp. Validate; from
-  `disposition/`, `git commit -- disposition-graph/<slug>.md` and
-  `git push origin disposition`; on rejection fetch, rebase, push. The
-  batch review reads it with the frontier, and the alignment skill takes
-  it from there.
-- **A shim declaration whose condition this session has met**: remove the
-  entry from the node's `shims` list, nothing else in the node; validate,
-  commit that file alone, push.
+- **A divergence that needs the author**, when a node's answer is silent
+  or contradictory about the artifact it justifies, or the bite would need
+  a decision only the author can make: take no bite on it. Report the
+  node, the divergence, and a recommendation with its authority class,
+  boldness, and persistence class (`growth`, `transience`), in a form the
+  author can paste into `/align`. The divergence stays on the frontier,
+  derived and never stored, until the alignment dialogue records it.
+- **A shim whose liquidation condition this session has met**: liquidate
+  the artifact on this ref and report that the declaration on the node is
+  owed its removal by alignment; the declaration stands until then.
 
-Never write an answer, a stamp, or any other field. Never edit a node
-that has `stage` (an open dialogue).
+Whether reconciliation keeps state of its own outside the graph, the
+divergences it has reported, a bite in flight, is a question the author
+opened on 2026-09-03 (`work-loop`) and has not ruled on. Until then this
+shim persists nothing beyond the git log: each invocation re-derives the
+frontier and reports a divergence again if alignment has not yet recorded
+it.
 
 ## 5. Exit
 
