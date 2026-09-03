@@ -14,12 +14,12 @@ defines:
 instrument:
   kind: check
   ref: bootstrap exit criteria (ledger L16)
-  note: LEDGER.md is empty and deleted; /align exists on this ref; dispatch selects from this graph; nothing live reads intentions/
+  note: LEDGER.md is empty and deleted; /align exists on the implementation ref; dispatch selects from this graph; nothing live reads intentions/; every materialized implementation, tooling and artifacts, has a completed review under `review`
 ledger: L10
 ---
 ## Answer
 
-By a bootstrap operation run as onboarding. One node at a time, in the order a newcomer should meet them, the AI proposes a node, projects its page in the graph browser, and the author ratifies or steers. During the operation the AI holds a grant to stub dispositions and materialized implementation; every stub is stamped deferred, listed on the bootstrap ledger, and ratified, amended, or pruned before exit. Emptying the ledger is the critical path to a materialized `/align` skill, after which every further node is recorded through that skill. The operation exits when every rule this project runs under is a node or a declared shim, dispatch selects from this graph, `/align` is the only recording path, and nothing live reads the legacy record.
+By a bootstrap operation run as onboarding. One node at a time, in the order a newcomer should meet them, the AI proposes a node, projects its page in the graph browser, and the author ratifies or steers. During the operation the AI holds a grant to stub dispositions and materialized implementation; every stub is stamped deferred, listed on the bootstrap ledger, and ratified, amended, or pruned before exit. Emptying the ledger is the critical path to a materialized `/align` skill, after which every further node is recorded through that skill. The operation exits when every rule this project runs under is a node or a declared shim, dispatch selects from this graph, `/align` is the only recording path, every materialized implementation, tooling and artifacts alike, has a completed code review, and nothing live reads the legacy record.
 
 ## Rationale
 

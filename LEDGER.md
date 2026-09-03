@@ -317,8 +317,9 @@ session following `CLAUDE.md` on this ref.
 **Content.** In `disposition-graph/bootstrap`, as its instrument: every rule
 this project runs under is a node or a declared shim; dispatch selects from
 this graph's frontier; `/align` is the only path by which a node is recorded;
-nothing live reads the legacy `intentions/` tree; this ledger is empty and
-deleted.
+nothing live reads the legacy `intentions/` tree; every materialized
+implementation, tooling and artifacts, has a completed code review (L29);
+this ledger is empty and deleted.
 
 ## L17 legacy nodes are evidence, never imported
 
@@ -472,9 +473,15 @@ shimmed code review. This is not trivial and a common source of lost
 time/tokens. The abandoned bootstrapping attempt has some rules for code
 review in bootstrap operations. Coordinate with that session named
 'interview deferral options (2)' to adopt those rules. Before bootstrap exit
-we will need good doctrine for code review as part of reconciliation."
+we will need good doctrine for code review as part of reconciliation." And,
+later the same day: "code-review of all materialized implementation (tooling
+and artifacts) must be completed before bootstrap exit."
 
-**Content.** Stubbed in `disposition-graph/review` under `work-loop`. The
+**Content.** Stubbed in `disposition-graph/review` under `work-loop`. Exit
+criterion (L16): every materialized implementation on the `greenfield` ref,
+tooling and artifacts alike, has a completed review under this rule before
+bootstrap exit; the round log in `CLAUDE.md` tracks which landings have been
+reviewed and at what commit. The
 rules adopted from the legacy record (the review shim ratified 2026-09-01 on
 the legacy node `strategy-graph-native-dispatch`, and steering ledger entries
 [1], [6], [7] on the legacy bootstrap carrier), restated in this graph's
