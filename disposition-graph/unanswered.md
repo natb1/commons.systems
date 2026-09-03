@@ -30,6 +30,9 @@ The author, 2026-09-03:
 The author, 2026-09-03, on the sitting of dialogue, the part that answers this question:
 > A conflicting answer that arises in alignment AND survives periagoge/meiutic/adversarial review is marked unanswered until confirmed.
 
+The author, 2026-09-03, a note on the same:
+> A conflicting answer that arises in alignment AND survives periagoge/meiutic/adversarial review is marked unanswered until confirmed. A conflicting answer that arises outside of alignment is a proposal.
+
 ## Answer
 
 When the author has ruled on it through the alignment dialogue. A disposition is answered when its stamp is ratified or delegated, the two classes that only the author's ruling confers; until then it is unanswered, whatever the node carries: an answer stamped deferred, an answer with no stamp, or no answer at all. Unanswered is a status the projections derive, never a field: the stamp stays as it is, saying who holds the answer and since when, and the answer stays as it is, the draft the author rules on, so that reclassifying a node loses nothing of its encoding.

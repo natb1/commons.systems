@@ -40,6 +40,9 @@ The author, 2026-09-03, on the recording of alignment-order and on this node's q
 >
 > If these unanswered dispositions survives periagogic and meiutic scrutity (stop before adversarial review), you have bootstrap authority to reconcile the unanswered node encoding, the alignment skill, and alignment artifact and re-encode the unanswered frontier (the full graph) including merge analysis.
 
+The author, 2026-09-03, a note on the same:
+> A conflicting answer that arises in alignment AND survives periagoge/meiutic/adversarial review is marked unanswered until confirmed. A conflicting answer that arises outside of alignment is a proposal.
+
 ## Answer
 
 The disposition and the dialogue on it. The disposition is the node as it stands: the question, its fields, the answer, and the rationale, the standing text when the node was once ratified and otherwise the AI's draft, stamped deferred or unstamped. The dialogue is everything the node carries only while it is unanswered, or while a ratified node is under review; it is removed at the recording, when the stamp is written, except as the quotes ruling decides for the author's words. It has seven parts, and each holds only what cannot be re-derived. Three requirements fix what they must be between them: the dialogue must survive the session that held it, so that a session which loses its context resumes every node from its stage; it must hold the author's intention against the account that accumulates around it, the requirement the fidelity node asks and this answer does not yet meet; and it must give the author, at the moment of ruling, the context to see how this question stands to the rest of the unanswered frontier.
