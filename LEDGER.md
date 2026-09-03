@@ -41,6 +41,10 @@ exists · `ratified` the node is ratified and the entry closes · `rejected`.
 | L22 | vocabulary and traditions on the onboarding path, with their own layout | stubbed | author | `defines` field; the browser |
 | L23 | token-efficiency rule for bootstrap sessions | recorded in CLAUDE.md | author | `disposition-graph/bootstrap` |
 | L24 | scope node and coverage review | open | author | `disposition-graph/scope` |
+| L25 | the disposition ref stores the graphs and only the graphs | stubbed | author | `disposition-graph/materialization`, `persistence` |
+| L26 | graph tooling is justified by disposition like all materialized implementation | stubbed | author | `disposition-graph/materialization` |
+| L27 | materialized implementation is organized as a `packages/` monorepo | stubbed | author | `disposition-graph/materialization`, a reading owed |
+| L28 | shim: greenfield implementation on a third ref, swapped with `main` at exit | stubbed | author | `disposition-graph/materialization`; the `greenfield` ref |
 
 ## L01 archē is the root answer form
 
@@ -400,6 +404,63 @@ scope."
 `bootstrap/scope-survey.md`; `disposition-graph/scope` is drafted from it as
 an open question with the clusters as its proposal, for the author to rule on
 in round one.
+
+## L25 the disposition ref stores the graphs and only the graphs
+
+**Source.** Author, 2026-09-02: "the disposition ref stores the graph(s) and
+only the graph(s)".
+
+**Content.** In `disposition-graph/materialization` and `persistence`. The
+`disposition` ref's tree is the manifest `disposition.yaml` and the graph
+directories, nothing else. Alignment of the bootstrapped implementation:
+`tools/`, `browser/`, `bootstrap/`, `LEDGER.md`, and `CLAUDE.md` move off the
+disposition ref to the `greenfield` ref (L28), the tooling under
+`packages/disposition/` (L27); paths cited by nodes are updated.
+
+## L26 graph tooling is justified by disposition like all materialized implementation
+
+**Source.** Author, 2026-09-02: "graph tooling is justified by disposition
+just like all other materialized implementation".
+
+**Content.** In `disposition-graph/materialization`. Each tool is the
+instrument of the schema node whose answer it checks or projects (L14); a
+tool no disposition cites or instruments is unsupported implementation on the
+frontier (L11). The reader, validator, ratify command, and projector are
+instruments of `node`, `authority`, and `projection`.
+
+## L27 materialized implementation is organized as a `packages/` monorepo
+
+**Source.** Author, 2026-09-02: "all materialized implementation is organized
+using javascript monorepo convention of a packages/ directory (make reference
+to this tradition)".
+
+**Content.** In `disposition-graph/materialization`. The tradition: Lerna
+(2015, out of Babel), Yarn workspaces (2017), npm workspaces (npm 7, 2020),
+pnpm workspaces; one repository, a root manifest declaring `workspaces:
+["packages/*"]`, one directory per package; the older single-repository
+practice in Potvin and Levenberg, "Why Google Stores Billions of Lines of
+Code in a Single Repository" (2016). A reading is owed. The incumbent
+`packages/intentionsutil` on `main` is evidence of the convention, not
+authority. The greenfield tooling lives at `packages/disposition/`.
+
+## L28 shim: greenfield implementation on a third ref, swapped with `main` at exit
+
+**Source.** Author, 2026-09-02: "as a shim to avoid conflicts with incumbent
+code, materialized implementation for the greenfield disposition graph being
+bootstrapped may be kept in a third ref which will be swapped with main on
+bootstrap exit."
+
+**Content.** The ref is named `greenfield` (a delegated choice; rename
+freely). Orphan, created 2026-09-02, worktree `.claude/worktrees/greenfield`.
+It holds `CLAUDE.md`, `LEDGER.md`, `bootstrap/`, and `packages/`. The
+disposition worktree is nested inside it at `greenfield/disposition/`,
+gitignored, so one session can write both trees; tooling takes the graph
+directory as an argument and will later read the ref directly. Liquidation:
+at bootstrap exit `greenfield` is swapped with `main`. Consequence to keep in
+view: whatever on `main` is to survive the swap (the applications, host
+configuration, and anything else with a supporting disposition) must be
+reconciled into `greenfield` before exit, or the swap prunes it. That
+reconciliation is the second direction of L11 applied to the whole of `main`.
 
 ## L20 delete this ledger
 

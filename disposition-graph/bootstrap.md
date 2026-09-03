@@ -23,4 +23,4 @@ By a bootstrap operation run as onboarding. One node at a time, in the order a n
 
 ## Rationale
 
-The author's rulings of 2026-09-02 (ledger L10, L12, L13, L15, L16). Onboarding is the ordering principle because it makes the bootstrap order a recorded fact with permanent consumers: rank later steers frontier attention and compaction floors. The grant decouples the critical path from that order, so schema nodes can be stubbed at once and ratified as the walk reaches them. Operational rules for the bootstrap sessions themselves live in `CLAUDE.md` on this ref and liquidate into this node and the skill.
+The author's rulings of 2026-09-02 (ledger L10, L12, L13, L15, L16). Onboarding is the ordering principle because it makes the bootstrap order a recorded fact with permanent consumers: rank later steers frontier attention and compaction floors. The grant decouples the critical path from that order, so schema nodes can be stubbed at once and ratified as the walk reaches them. Operational rules for the bootstrap sessions themselves live in `CLAUDE.md` on the `greenfield` implementation ref, beside the ledger, and liquidate into this node and the skill.

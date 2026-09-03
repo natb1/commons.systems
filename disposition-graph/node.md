@@ -15,7 +15,7 @@ defines:
   - proposal
 instrument:
   kind: check
-  ref: tools/validate.mjs
+  ref: packages/disposition/validate.mjs on the implementation ref
   note: every file parses as one question, at most one answer, and only defined fields
 ledger: L14
 ---
