@@ -25,10 +25,6 @@ defines:
   - doctrine
   - author
 shims:
-  - artifact: the bootstrap grant, under which the AI stubs nodes and materialized implementation stamped deferred with no ratified ancestor
-    for: the scope rule of this node before any answer is ratified
-    liquidation: the root and the purpose node are ratified, after which every deferred answer stands under a ratified ancestor
-    declared: 2026-09-02
   - artifact: bootstrap authority, an explicit grant from the author by which an alignment session may reconcile an unanswered node — writing an answer, an overrule, or an amendment onto a node whose dialectic has not concluded, and landing the materialized implementation that follows — which the scope rule of this node otherwise reserves to the dialectic
     for: the scope rule of this node during bootstrap, when nothing is ratified and so no answer has a ratified ancestor to be answered under
     liquidation: bootstrap exit, at the swap of the implementation ref with the main branch, after which the grant expires and an unanswered node is reconciled only through the dialectic
@@ -81,10 +77,10 @@ defines:
   - author
   - proposal
 shims:
-  - artifact: the bootstrap grant, under which the AI stubs nodes and materialized implementation stamped deferred with no ratified ancestor
-    for: the scope rule of this node before any answer is ratified
-    liquidation: the root and the purpose node are ratified, after which every deferred answer stands under a ratified ancestor
-    declared: 2026-09-02
+  - artifact: bootstrap authority, an explicit grant from the author by which an alignment session may reconcile an unanswered node — writing an answer, an overrule, or an amendment onto a node whose dialectic has not concluded, and landing the materialized implementation that follows — which the scope rule of this node otherwise reserves to the dialectic
+    for: the scope rule of this node during bootstrap, when nothing is ratified and so no answer has a ratified ancestor to be answered under
+    liquidation: bootstrap exit, at the swap of the implementation ref with the main branch, after which the grant expires and an unanswered node is reconciled only through the dialectic
+    declared: 2026-09-03
 ---
 ## Answer
 
@@ -96,6 +92,26 @@ Attenuation: authority only narrows as it is handed down, never widens, so a bre
 ```
 
 ## Proposal
+
+### The stub grant expired, 2026-09-03
+
+The author, 2026-09-03:
+> bootstrap authority to stub nodes is now expired in lieu of unanswered node concepts.
+
+and, correcting the wording the same day:
+> (replaced by, not "in lieu of")
+
+The first shim on this node is struck. It read "the bootstrap grant, under which the AI stubs nodes and materialized implementation stamped deferred with no ratified ancestor", declared 2026-09-02, to be liquidated when the root and the purpose node were ratified. It is liquidated earlier and on a different ground: not that a ratified ancestor now exists, since none does, but that the thing it authorized has been replaced.
+
+What replaced it. The grant existed because this node's scope rule lets the AI answer only under a ratified ancestor, and a stub was an answer written where there was none. Under the model the author ruled on the same day, what the AI writes when it opens a question is not an answer but an unanswered disposition: a node carrying a question and the dialogue state on it, which has no authority and grounds no work until it is answered. That needs no grant, because it exercises no authority. The mechanism the shim stood in for now exists in the record, which is what liquidates a shim.
+
+The consequence for what is already recorded, and the reading that makes the expiry safe. Forty-six nodes carry a deferred stamp and not one stands under a ratified ancestor, so if a deferred answer were an exercise of the scope rule, striking this shim would leave all forty-six unsupported. It is not: `unanswered` holds that until the author rules a deferred answer is unanswered, and `dialogue` holds that such a node's text is the AI's draft. The scope rule governs answered writes, the ratified and the delegated. The forty-six are drafts in open dialogues, and the expiry costs them nothing. This reading is what the replacement rests on, and it is stated here because striking the shim without it would silently unsupport a third of the graph.
+
+What remains. The second shim, bootstrap authority, is untouched and covers something the stub grant did not: an explicit grant letting an alignment session reconcile an unanswered node and land the implementation that follows. Stubbing needed no ruling from the author; reconciling one does, which is why the two expire at different times and why they were not merged.
+
+Two cross-references are now stale and are not rewritten here. `evaluation`'s recorded reply grounds the scope of its overrule rule in "the bootstrap grant declared on the authority node", which no longer exists; the substance holds unchanged, since nothing is ratified and the overrule's scope is still the whole record, but the citation should move to the unanswered model. And the frontier finding carried on `recording`, `dialogue` and `growth` that "'bootstrap grant' ... is defined nowhere" is half resolved: the term it names is gone, while the term that replaced it, bootstrap authority, is defined in its own shim text and still not in `defines`.
+
+The `## Draft` on this node carried the struck shim too, and confirming it would have restored an expired grant. The draft's shims are brought into line with the frontmatter in the same edit. This is the second instance today of a draft diverging from the node it drafts, after `node`'s answer, and it is the case the finding recorded on `dialogue` predicts: the review pin hashes the draft, so the frontmatter's shim list can change under a reviewed draft without the frontier saying so.
 
 ### Bootstrap authority declared as a shim, 2026-09-03
 
