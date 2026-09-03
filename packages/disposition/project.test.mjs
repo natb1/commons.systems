@@ -4,17 +4,35 @@
 // read back, and that the page's own renderer (extracted from the template and
 // run without a DOM) turns markdown into the HTML the layout expects.
 
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { readFile, mkdtemp, mkdir, cp, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import os from "node:os";
+import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { build } from "./project.mjs";
+import { build, project } from "./project.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE = await readFile(resolve(HERE, "browser-template.html"), "utf8");
 const FIXTURE = JSON.parse(await readFile(resolve(HERE, "fixtures/browser/nodes.json"), "utf8"));
+
+// os.tmpdir() may be unset in this sandbox; when a job scratch dir is
+// available, prefer it over an empty os.tmpdir() (mirrors read.test.mjs).
+function tmpBase() {
+  const jobDir = process.env.CLAUDE_JOB_DIR;
+  return jobDir ? join(jobDir, "tmp") : os.tmpdir();
+}
+const tmpDirs = [];
+async function freshTmpDir(prefix) {
+  const dir = await mkdtemp(join(tmpBase(), prefix));
+  tmpDirs.push(dir);
+  return dir;
+}
+after(async () => {
+  await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
+});
 
 /* The template's script is written so that every top-level statement is a
    declaration and the one call is guarded on `document`. That lets the whole
@@ -53,6 +71,46 @@ test("the inlined payload cannot close its own script element", () => {
 
 test("build refuses a template with no marker", () => {
   assert.throws(() => build("<title>x</title>", FIXTURE), /DG:GRAPH/);
+});
+
+/* -------------------------------------------------------------- project() */
+
+// covers finding project.mjs:62 -- a `graphs` entry with a null value (YAML
+// `main:` with nothing after it, which readGraph and canonicalizeId both
+// accept) was flagged as undeclared by a `!graph.graphs[n.graph]` truthiness
+// test; `in` must accept a declared-but-empty entry.
+test("check() does not warn on a node whose graph entry is null", async () => {
+  const dir = await freshTmpDir("project-null-graph-");
+  const out = join(dir, "index.html");
+  const input = resolve(HERE, "fixtures/browser/null-graph-entry.json");
+  const { warnings } = await project({ input, out });
+  assert.deepEqual(warnings, []);
+});
+
+// covers finding project.mjs:102 -- the old main-module guard compared
+// `import.meta.url` to a hand-built `file://${argv[1]}`, which does not
+// percent-encode a space, so the CLI silently produced no output through any
+// path containing one. This copies just project.mjs + the template (not the
+// whole package) into a space-containing directory and drives it with
+// --input, so it needs no ancestor node_modules for read.mjs's 'yaml' import.
+test("CLI writes its output when invoked through a path containing a space", async () => {
+  const dir = await freshTmpDir("project-space-");
+  const spaceDir = join(dir, "has space");
+  await mkdir(spaceDir, { recursive: true });
+  await cp(join(HERE, "project.mjs"), join(spaceDir, "project.mjs"));
+  await cp(join(HERE, "browser-template.html"), join(spaceDir, "browser-template.html"));
+
+  const input = resolve(HERE, "fixtures/browser/nodes.json");
+  const outFile = join(dir, "out", "index.html");
+
+  const stdout = execFileSync(
+    process.execPath,
+    [join(spaceDir, "project.mjs"), "--input", input, "--out", outFile],
+    { encoding: "utf8" },
+  );
+  assert.match(stdout, /^\d+ nodes, \d+ graphs -> /);
+  const html = await readFile(outFile, "utf8");
+  assert.ok(html.includes('<script type="application/json" id="graph">'));
 });
 
 /* ------------------------------------------------------- page constraints */

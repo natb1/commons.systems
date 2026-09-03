@@ -1,0 +1,19 @@
+{
+  "_fixture": "Regression fixture for project.mjs's check(): a `graphs` entry with a null value (YAML `main:` with nothing after it) must not be flagged as an undeclared graph.",
+  "module": "example.test",
+  "ref": null,
+  "graphs": { "main": null },
+  "nodes": [
+    {
+      "id": "example.test/main/solo",
+      "graph": "main",
+      "question": "Does a null graph entry avoid a false warning?",
+      "rank": 1,
+      "status": "question",
+      "children": [],
+      "under": [],
+      "cites": [],
+      "defines": []
+    }
+  ]
+}

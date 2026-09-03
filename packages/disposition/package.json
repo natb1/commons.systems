@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Reader, validator, ratify command, and browser projector for the disposition graph",
+  "description": "Reader, validator, and browser projector for the disposition graph",
   "scripts": { "test": "node --test *.test.mjs" },
   "dependencies": { "yaml": "^2" }
 }

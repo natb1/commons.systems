@@ -61,8 +61,19 @@ function isValidDate(s) {
 function parseBody(bodyText, problems) {
   const lines = bodyText.split('\n');
   const headingRe = /^(#{1,6})[ \t]+(.*?)\s*$/;
+  const fenceRe = /^[ \t]*(`{3,}|~{3,})/;
   const boundaries = [];
+  // A '##' line inside a fenced code block is content, not a boundary: a node
+  // that shows this very file format in an example must not be re-sliced by it.
+  let fenceChar = null;
   lines.forEach((line, index) => {
+    const fence = line.match(fenceRe);
+    if (fence) {
+      if (fenceChar === null) fenceChar = fence[1][0];
+      else if (fence[1][0] === fenceChar) fenceChar = null;
+      return;
+    }
+    if (fenceChar !== null) return;
     const m = line.match(headingRe);
     if (m && m[1].length === 2) {
       boundaries.push({ name: m[2], index });
@@ -490,12 +501,25 @@ export async function readGraph(rootDir) {
     node.cites = node.cites.map((c) => ({ ...c, id: canonicalizeId(c.id, manifest) }));
   }
 
-  // referential integrity: every 'under' entry must resolve within this graph
+  // referential integrity: every 'under' entry must resolve within this
+  // graph and must not repeat the same parent twice (a repeated id would
+  // double that parent's rank contribution and duplicate the child in
+  // `children`); every 'after' entry must also resolve within this graph.
   const idSet = new Set(parsed.map((n) => n.id));
   for (const node of parsed) {
+    const seenUnder = new Set();
     for (const u of node.under) {
       if (!idSet.has(u)) {
         problems.push(`${node.path}: unresolved 'under' reference: ${u}`);
+      }
+      if (seenUnder.has(u)) {
+        problems.push(`${node.path}: duplicate under reference: ${u}`);
+      }
+      seenUnder.add(u);
+    }
+    for (const a of node.after) {
+      if (!idSet.has(a)) {
+        problems.push(`${node.path}: unresolved after reference: ${a}`);
       }
     }
   }

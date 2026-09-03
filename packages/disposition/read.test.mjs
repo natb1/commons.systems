@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { after, describe, test } from 'node:test';
@@ -20,14 +20,12 @@ import {
 } from './derive.mjs';
 import { parseNode, readGraph } from './read.mjs';
 import { validate } from './validate.mjs';
-import { ratify } from './ratify.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(HERE, 'fixtures');
 const VALID_DIR = path.join(FIXTURES, 'valid');
 const READ_MJS = path.join(HERE, 'read.mjs');
 const VALIDATE_MJS = path.join(HERE, 'validate.mjs');
-const RATIFY_MJS = path.join(HERE, 'ratify.mjs');
 
 // os.tmpdir() may be unset in this sandbox; when a job scratch dir is
 // available, prefer it over an empty os.tmpdir().
@@ -39,11 +37,6 @@ const tmpDirs = [];
 async function freshTmpDir(prefix) {
   const dir = await mkdtemp(path.join(tmpBase(), prefix));
   tmpDirs.push(dir);
-  return dir;
-}
-async function makeTmpCopy() {
-  const dir = await freshTmpDir('disposition-ratify-');
-  await cp(VALID_DIR, dir, { recursive: true });
   return dir;
 }
 after(async () => {
@@ -303,6 +296,11 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-cycle', /cycle in 'under'/],
     ['invalid-stamp-without-answer', /'authority' requires an '## Answer' section/],
     ['invalid-stray-heading', /unexpected '## Notes' heading/],
+    // validator rule: a repeated id in 'under' would double that parent's
+    // rank contribution and duplicate the child in `children`.
+    ['invalid-duplicate-under', /duplicate under reference: example\.test\/main\/root/],
+    // validator rule: an 'after' reference must resolve like 'under' does.
+    ['invalid-unresolved-after', /unresolved after reference: example\.test\/main\/does-not-exist/],
   ];
 
   for (const [dirName, pattern] of cases) {
@@ -339,6 +337,30 @@ describe('readGraph: invalid fixtures', () => {
   test('a missing disposition.yaml is a clear, path-named error', async () => {
     const dir = await freshTmpDir('disposition-empty-');
     await assert.rejects(readGraph(dir), /disposition\.yaml.*cannot read manifest/s);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readGraph: fenced-body fixture
+// ---------------------------------------------------------------------------
+
+describe('readGraph: fenced-body fixture', () => {
+  // covers finding read.mjs:65 (parseBody fence handling): pre-fix, a '##'
+  // line inside a fenced code block was read as a real section boundary, so
+  // this fixture's nested '## Answer' example threw "duplicate '## Answer'
+  // heading" instead of parsing as content.
+  test('a "## Answer" line inside a fenced example is content, not a section boundary', async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-fenced-body'));
+    assert.equal(graph.nodes.length, 1);
+    const node = graph.nodes[0];
+    assert.equal(node.rationale, null);
+    assert.equal(node.proposal, null);
+    assert.ok(node.answer.startsWith('Real answer text before the example.'));
+    assert.ok(node.answer.endsWith('More real answer text after the fence.'));
+    assert.ok(
+      node.answer.includes('## Answer\n\nFenced example text that must not be treated as a boundary.'),
+      'the fenced heading survives verbatim as body content',
+    );
   });
 });
 
@@ -383,95 +405,5 @@ describe('read.mjs CLI', () => {
     const graph = JSON.parse(stdout);
     assert.equal(graph.nodes.length, 8);
     assert.equal(graph.module, 'example.test');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// ratify.mjs
-// ---------------------------------------------------------------------------
-
-describe('ratify.mjs', () => {
-  test('stamps a proposal as ratified, leaves the rest of the file untouched, then refuses a second ratify', async () => {
-    const dir = await makeTmpCopy();
-    const id = 'example.test/main/root-a';
-    const filePath = path.join(dir, 'main/root-a.md');
-    const before = await readFile(filePath, 'utf8');
-
-    const result = await ratify(id, dir);
-    assert.equal(result.stamp.class, 'ratified');
-    assert.match(result.stamp.date, /^\d{4}-\d{2}-\d{2}$/);
-    assert.ok(result.stamp.by.length > 0);
-    assert.equal(result.canonicalId, id);
-
-    const after = await readFile(filePath, 'utf8');
-    assert.notEqual(after, before);
-    assert.ok(after.includes('class: ratified'));
-    assert.ok(after.includes(`by: ${result.stamp.by}`));
-    // everything else in the file is byte-identical
-    assert.ok(after.includes('question: Why does the fixture graph exist?'));
-    assert.ok(after.includes('form: assumption'));
-    assert.ok(after.includes('defines:\n  - fixture'));
-    assert.ok(after.includes('## Answer\n\nTo exercise the reader against a small, hand-checkable graph.'));
-
-    const graph = await readGraph(dir);
-    const node = graph.nodes.find((n) => n.id === id);
-    assert.equal(node.status, 'ratified');
-    assert.equal(node.authority.by, result.stamp.by);
-    assert.equal(node.authority.date, result.stamp.date);
-
-    await assert.rejects(ratify(id, dir), /already ratified/);
-  });
-
-  test('refuses to ratify a node with no Answer section', async () => {
-    const dir = await makeTmpCopy();
-    await assert.rejects(ratify('example.test/main/child-a1', dir), /no '## Answer' section/);
-  });
-
-  test('accepts a target-prefixed id and resolves it to the local form', async () => {
-    const dir = await makeTmpCopy();
-    const result = await ratify('pub.example/pub/note', dir);
-    assert.equal(result.canonicalId, 'example.test/pub/note');
-  });
-
-  test('inserts a fresh authority block when none exists yet (no prior stamp)', async () => {
-    const dir = await makeTmpCopy();
-    // child-a2 has an Answer and no authority key at all yet.
-    const result = await ratify('example.test/main/child-a2', dir);
-    assert.equal(result.stamp.class, 'ratified');
-    const text = await readFile(path.join(dir, 'main/child-a2.md'), 'utf8');
-    assert.ok(text.includes('form: target\nauthority:\n  class: ratified'));
-  });
-
-  test('rolls back and restores original bytes when a sibling file is already broken', async () => {
-    const dir = await makeTmpCopy();
-    const brokenPath = path.join(dir, 'main/child-a2.md');
-    const original = await readFile(brokenPath, 'utf8');
-    assert.ok(original.includes('form: target'));
-    await writeFile(brokenPath, original.replace('form: target', 'form: target\nbogus: yes'), 'utf8');
-
-    const targetPath = path.join(dir, 'main/root-a.md');
-    const before = await readFile(targetPath);
-
-    await assert.rejects(ratify('example.test/main/root-a', dir), /rolled back/);
-
-    const after = await readFile(targetPath);
-    assert.ok(before.equals(after), 'the ratified file must be restored byte-for-byte');
-  });
-
-  test('CLI --no-commit stamps the file and exits 0 with no git repository present', async () => {
-    const dir = await makeTmpCopy(); // a plain directory, not a git repository
-    const { stdout, status } = runCli(RATIFY_MJS, ['example.test/main/child-a2', '--no-commit', dir]);
-    assert.equal(status, 0);
-    assert.match(stdout, /ratified example\.test\/main\/child-a2/);
-    const text = await readFile(path.join(dir, 'main/child-a2.md'), 'utf8');
-    assert.ok(text.includes('class: ratified'));
-    const graph = await readGraph(dir);
-    assert.equal(graph.nodes.find((n) => n.id === 'example.test/main/child-a2').status, 'ratified');
-  });
-
-  test('CLI without an id prints usage and exits 1', () => {
-    const { status, stderr } = runCli(RATIFY_MJS, []);
-    assert.equal(status, 1);
-    assert.match(stderr, /usage:/);
   });
 });

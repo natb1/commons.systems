@@ -59,7 +59,7 @@ function check(graph) {
     if (seen.has(n.id)) throw new Error(`duplicate node id ${n.id}`);
     seen.add(n.id);
     if (typeof n.question !== "string" || !n.question) warn.push(`${n.id}: no question`);
-    if (!graph.graphs[n.graph]) warn.push(`${n.id}: graph "${n.graph}" is not in graphs`);
+    if (!(n.graph in graph.graphs)) warn.push(`${n.id}: graph "${n.graph}" is not in graphs`);
     if (typeof n.rank !== "number" || !(n.rank > 0) || n.rank > 1) warn.push(`${n.id}: rank ${n.rank} is not in (0,1]`);
     if (!n.status) warn.push(`${n.id}: no status`);
     if (!Array.isArray(n.children)) warn.push(`${n.id}: children is not an array`);
@@ -99,7 +99,7 @@ export async function project(opts) {
   return { out, html, graph, warnings };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const opts = parseArgs(process.argv.slice(2));
   const { out, html, graph, warnings } = await project(opts);
   for (const w of warnings) process.stderr.write(`contract: ${w}\n`);
