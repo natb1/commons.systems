@@ -1,5 +1,6 @@
 ---
 question: Where does the record live, and how does a write land?
+stage: review
 form: rule
 authority:
   class: deferred
@@ -18,3 +19,11 @@ On a ref of its own, named `disposition`, in the repository whose disposition it
 ## Rationale
 
 The author's rejection of pull-request landing for the graph, 2026-09-02, on the grounds that review was redundant with the interview and a shared ref queued graph writes behind implementation checks. Traditions to record as readings: optimistic concurrency control (Kung and Robinson, 1981); resource versions in Kubernetes.
+
+## Proposal
+
+### Recording of 2026-09-03
+
+Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
+
+Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.

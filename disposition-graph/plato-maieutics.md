@@ -1,5 +1,6 @@
 ---
 question: Does Plato's midwifery ground the maieutic conduct of the interview?
+stage: review
 form: reading
 authority:
   class: deferred
@@ -17,3 +18,11 @@ Yes, for the conduct in which the answer lives in the author, unrecorded. Socrat
 ## Rationale
 
 Adopted as the name and the ground of the maieutic conduct. The divergence to keep in view: the AI is not barren; it drafts, and the draft can lead. That is why the draft must be visible and refusable, and why the periagogic conduct runs first when the ground is already recorded.
+
+## Proposal
+
+### Recording of 2026-09-03
+
+Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
+
+Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.

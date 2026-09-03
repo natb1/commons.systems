@@ -1,5 +1,6 @@
 ---
 question: How is materialized implementation reviewed before it lands?
+stage: review
 form: rule
 authority:
   class: deferred
@@ -31,3 +32,9 @@ The author's ruling of 2026-09-02 that every bootstrap landing requires shimmed 
 ## Proposal
 
 For the author at ratification: whether the review cap and effort tiers stay stated here or derive from the class of the contract the landing serves, which is what the legacy exit doctrine proposed; and whether the interview suffices as the review of a graph landing once landings arrive from many sessions.
+
+### Recording of 2026-09-03
+
+Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
+
+Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.

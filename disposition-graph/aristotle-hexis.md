@@ -1,5 +1,6 @@
 ---
 question: Does Aristotle's hexis support reading this record as a projection of its author's dispositions?
+stage: review
 form: reading
 authority:
   class: deferred
@@ -17,3 +18,11 @@ Supports, and refines the hypothesis. A hexis is a settled disposition acquired 
 ## Rationale
 
 The legacy record ratified the hexis reading of its root layer on 2026-07-13, in a reading program on its kind-virtue node; that ratification is evidence for this reading, not authority over it. Validated by the AI on 2026-09-02 from its own knowledge of the loci; deferred until the author reads them.
+
+## Proposal
+
+### Recording of 2026-09-03
+
+Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
+
+Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.

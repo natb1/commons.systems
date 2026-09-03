@@ -1,5 +1,6 @@
 ---
 question: How is a design or a proposal evaluated?
+stage: review
 form: rule
 authority:
   class: deferred
@@ -19,3 +20,11 @@ Against the full solution frontier. Nothing is sacred: no doctrine is implied by
 ## Rationale
 
 The author's rulings in the legacy bootstrap of 2026-08-31 to 2026-09-02, given again to this bootstrap as the standing rule for the AI's evaluations: reference the incumbent for principles, never as authority. The legacy rule projection on `main` and the ratified clarifications behind it are the evidence. The overrule rules are the authority node's attenuation seen from the evaluator's side. Traditions to record as readings: the Pareto frontier of multi-objective choice, adopted for the sense of "frontier"; Chesterton's fence (The Thing, 1929), diverged from in part, since here the record, not the fence, carries the reason, and a fence without a recorded reason is a prune-by-default proposal. The clean-context review is the author's disposition of 2026-09-03, recorded on the recording node under growth.
+
+## Proposal
+
+### Recording of 2026-09-03
+
+Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
+
+Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.

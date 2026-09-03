@@ -1,5 +1,6 @@
 ---
 question: In what order is a landing validated?
+stage: review
 form: rule
 authority:
   class: deferred
@@ -18,3 +19,11 @@ Functional before non-functional. A criterion is functional when it is specific 
 ## Rationale
 
 The author's ruling of 2026-09-02 and the legacy record it points to: the criteria-class axis and the staged ordering ratified 2026-09-01 on the legacy node `strategy-graph-native-dispatch`, marked author-required there, "non-functional assessment production gates on a passing functional assessment, so no cycles are spent polishing non-working code", with the staged order named the between-class damper after one change thrashed sixteen review rounds with no fixed point. The legacy instrument's implement, qa, review order was the interim embodiment; here the order is a rule on the frontier, not a phase. Traditions the legacy record cites, owed as readings: the maxim make it work, make it right, make it fast, commonly attributed to Kent Beck, adopted; over-processing as one of the seven wastes (Ohno, Toyota Production System, 1978), adopted; the separation of functional suitability from the other quality characteristics in ISO/IEC 25010, adopted for the class axis; Deming, Out of the Crisis (1986), point 3, diverged from in keeping adversarial review, as recorded on the review node.
+
+## Proposal
+
+### Recording of 2026-09-03
+
+Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
+
+Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.

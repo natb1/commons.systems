@@ -1,5 +1,6 @@
 ---
 question: Does Plato's turning of the soul ground the periagogic conduct of the interview?
+stage: review
 form: reading
 authority:
   class: deferred
@@ -17,3 +18,11 @@ Yes, for the conduct in which the record is authoritative and the author is turn
 ## Rationale
 
 Adopted as the name and the ground of the periagogic conduct. The divergence to keep in view: Plato's turning is toward the forms, while here it is toward a record the author wrote or accepted, so the authority that the turning appeals to is the author's own past decision, not a truth above the author.
+
+## Proposal
+
+### Recording of 2026-09-03
+
+Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
+
+Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.

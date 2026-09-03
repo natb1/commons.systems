@@ -1,5 +1,6 @@
 ---
 question: Who is the origin of what is done in my name?
+stage: review
 form: arche
 authority:
   class: deferred
@@ -32,3 +33,11 @@ The modal content is the point: capacity, not exercise. Being unable to recover 
 - *Forced detachment*: dogma, and dogma needs power to maintain.
 
 Stub note: drafted by the AI under the bootstrap grant from the author's rulings of 2026-09-02 and the author's own legacy text. Deferred until the author ratifies it. Pending readings to add under this node: Sen on capability, Hirschman on exit and voice, Korsgaard on authorship.
+
+## Proposal
+
+### Recording of 2026-09-03
+
+Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
+
+Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.

@@ -1,5 +1,6 @@
 ---
 question: How is a disposition confirmed and recorded?
+stage: review
 form: rule
 authority:
   class: deferred
@@ -24,3 +25,11 @@ The author's disposition of 2026-09-03: "incumbent graph describes subagent, cle
 Why a second reader with no context: the session that ran the dialogue shares the author's framing and its own, and the defects that survive a dialogue are the ones both parties stopped seeing, a ruling paraphrased rather than quoted, a contradiction with a node neither re-read, a sentence that reads one way to the two of them and another way to an executor. A reader given only the record sees what the record says. Why before the confirmation: the author rules better with the strongest case against in front of them, and a review after confirmation would either second-guess a ruling or review a draft the author has not yet seen changed. Why per disposition and non-blocking: a batch is one reading of the record, which is the expensive part, but a verdict that held one disposition hostage to another would turn the review into a gate. Why the reviewer recommends and never writes: authority attenuates and nothing writes up; the session holds the dialogue and answers for the record. Rejected: a fixed checklist as the reviewer's brief, because the findings that matter are the ones no list anticipated, so the brief states what the review judges and leaves how to the reviewer; a steelman on every item whether or not one was found, because a manufactured objection is paper doubt and costs the author's attention; the incumbent's mechanics, its gate script and its workflow, because they were built for a record with phases and tactics, which this record does not have.
 
 Traditions, owed as readings: the office of the promotor fidei (Sixtus V, 1587; reformed 1983), adopted for a standing adversary to every candidate and diverged from in that the adversary here cannot stall, only send back or object on the record; blinded peer review, adopted for the independence of the reader's context; the four-eyes principle of financial control, adopted for a second reader before every write to the record; Peirce on paper doubt, adopted for the optional steelman. The evaluation node's rule that adversarial review of one's own output is part of producing it still holds; this node adds the reader who did not produce it.
+
+## Proposal
+
+### Recording of 2026-09-03
+
+Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
+
+Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.
