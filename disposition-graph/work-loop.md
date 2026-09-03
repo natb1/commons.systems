@@ -1,6 +1,6 @@
 ---
 question: How does work happen?
-stage: ruling
+stage: maieutic
 recommendation:
   class: ratified
   boldness: moderate
@@ -28,6 +28,16 @@ shims:
     liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record
     declared: 2026-09-03
 ---
+## Disposition
+
+The author, 2026-09-03, in the evening, on the transition to new bootstrap operations:
+> Prepare for compaction. After compaction we will confirm the steps to be ready to transition to new bootstrap operations (described before compaction). The expectation is that after checking out the greenfield ref and launching new claude sessions from there:
+> - I can use the alignment skill and alignment artifact to begin marking dispositions as answered
+> - In the meantime the shim reconciliation skill (only a skill during bootstrap) would exist with no work because there are no nodes with authority (they are all unanswered)
+> - Once the answered frontier exists, the reconciliation will begin taking bites of the frontier. The skill will execute one iteration to select and reconcile a bite.
+> - The reconciliation shim will prioritize bites in rank order.
+> - Summarize the other requirements I gave for the reconciliation shim.
+
 ## Answer
 
 By reconciliation in both directions. The frontier is derived, never stored: every answer whose instrument fails is on it, ranked by the node's rank. In the first direction a session claims a frontier item, takes a bite, materializes what the disposition requires, records evidence, and the instrument reads the result. In the second direction any materialized artifact with no supporting disposition, code, a skill, a rule, the README, or a node of the legacy record, is itself a frontier item: the reconciler proposes a disposition that would support it, citing the artifact as evidence, or proposes pruning it, and the author rules at review. Coverage ranks that direction: an artifact no disposition cites or instruments is a prune-by-default proposal. A bite on materialized implementation passes through implementation, functional validation, non-functional validation, landing on the main branch, and validation in use there, each a reconciliation of the criteria the node carries and never a phase of a dispatcher: the frontier re-derives after every landing, and what the instruments still fail is the next bite. Sessions divide by ref: an alignment session writes the graph; a reconciliation session writes the implementation ref, and writes the graph only to record an un-aligned disposition when a divergence needs the author, or to remove a shim declaration whose condition it has met, each in a commit of that file alone. Un-aligned dispositions are alignment's work, never reconciliation's.
@@ -64,3 +74,7 @@ On the three facts: Generic template, and it omits the reconciliation shim, whic
 Strongest counter-argument (strong): The second direction — every unsupported artifact is a frontier item, pruned by default unless a disposition is written for it — is the mechanism that decides the fate of the entire incumbent repository at the swap, and it exists only as prose. Coverage's survey found twelve recorded functions, four outside the purpose as worded, plus about twenty libraries and the author's host configuration; nothing derives that list onto the frontier, nothing ranks it, and this node's own shim batches to exit the validation that would catch a mistake. A rule whose failure mode is the silent deletion of years of work, with no instrument and no derivation, is the largest unguarded surface in the record — and it is ranked third under model, below projection and growth.
 
 The session's reply: The counter-argument is right that nothing derives the second direction yet, and the answer stands because the swap is gated on what it protects: materialization's shim liquidates only after the coverage ruling and after everything that is to survive has been reconciled under a supporting disposition, and the exit list is a declared liquidation condition the frontier reads, not a checklist. Accepted: the rationale now says that the derivation of unsupported artifacts onto the frontier is owed and that the coverage node's survey is the list until then; the shim is named among the facts with its condition. The delegation conflict stands as the delegation node's own review left it, for the author.
+
+### Words of 2026-09-03, evening
+
+The author's words above are recorded the turn they were said, as the checkpoint node requires. Two of them change the shim as declared and as written: one iteration per invocation, one bite selected and reconciled, where the skill as written repeats until the frontier holds nothing it can take; and bites only from the answered frontier, nodes with a ratified or delegated stamp, which the skill states as a skip of every node with a stage, and which today leaves it no work, every node being unanswered. Rank order and the skill's existence as a shim during bootstrap the words confirm. The shim's text, the declaration above, and the answer's account of a session's loop are to be redrafted to them after that evening's compaction, together with the summary of the author's earlier requirements for the shim the author asked for, and the node stands at the maieutic stage until the redraft goes to the batch review.
