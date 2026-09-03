@@ -446,28 +446,23 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
 
   // review: the state of the clean-context review of the draft. Same
   // single-message-on-any-shape-problem style as recommendation above.
-  // `siblings` is a fifth, optional key -- which other drafts the reviewer
-  // was given -- whose own shape (a list of id strings) is checked here;
-  // that each id actually resolves needs the whole graph and is checked by
-  // readGraph, like 'under'/'after'/'order'.
+  // Exactly four keys; an unknown key (the former `siblings`, the other
+  // drafts a per-node reviewer was given -- gone now that every review is a
+  // batch over the whole frontier and needs no such field) fails this check
+  // like any other malformed shape.
   let review = null;
   if (!isAbsent(fm.review)) {
     const r = fm.review;
-    const hasSiblings = isPlainObject(r) && !isAbsent(r.siblings);
-    const siblingsOk = !hasSiblings
-      || (Array.isArray(r.siblings) && r.siblings.every((x) => typeof x === 'string' && x.length > 0));
-    const keyCount = isPlainObject(r) ? Object.keys(r).length : -1;
     const ok = isPlainObject(r)
-      && (keyCount === 4 || (keyCount === 5 && hasSiblings))
+      && Object.keys(r).length === 4
       && REVIEW_VERDICTS.has(r.verdict)
       && REVIEW_STRENGTHS.has(r.strength)
       && typeof r.date === 'string' && isValidDate(r.date)
-      && typeof r.of === 'string' && HASH_RE.test(r.of)
-      && siblingsOk;
+      && typeof r.of === 'string' && HASH_RE.test(r.of);
     if (!ok) {
       problems.push("'review' must be {verdict: forward|kickback, strength: strong|moderate|weak|none, date: YYYY-MM-DD, of: <sha1>}");
     } else {
-      review = { verdict: r.verdict, strength: r.strength, date: r.date, of: r.of, siblings: hasSiblings ? r.siblings : [] };
+      review = { verdict: r.verdict, strength: r.strength, date: r.date, of: r.of };
     }
   }
 
@@ -837,9 +832,6 @@ export async function readGraph(rootDir) {
     node.after = node.after.map((refId) => canonicalizeId(refId, manifest));
     node.cites = node.cites.map((c) => ({ ...c, id: canonicalizeId(c.id, manifest) }));
     node.order = node.order.map((step) => step.map((refId) => canonicalizeId(refId, manifest)));
-    if (node.review) {
-      node.review = { ...node.review, siblings: node.review.siblings.map((refId) => canonicalizeId(refId, manifest)) };
-    }
   }
 
   // referential integrity: every 'under' entry must resolve within this
@@ -847,9 +839,7 @@ export async function readGraph(rootDir) {
   // double that parent's rank contribution and duplicate the child in
   // `children`); a resolved 'under' parent must itself carry an
   // '## Answer' -- an un-aligned disposition has no children; every
-  // 'after' entry must also resolve within this graph; every
-  // 'review.siblings' entry -- the other drafts a reviewer was given --
-  // must resolve too.
+  // 'after' entry must also resolve within this graph.
   const nodesById = new Map(parsed.map((n) => [n.id, n]));
   const idSet = new Set(nodesById.keys());
   for (const node of parsed) {
@@ -868,11 +858,6 @@ export async function readGraph(rootDir) {
     for (const a of node.after) {
       if (!idSet.has(a)) {
         problems.push(`${node.path}: unresolved after reference: ${a}`);
-      }
-    }
-    for (const sib of node.review ? node.review.siblings : []) {
-      if (!idSet.has(sib)) {
-        problems.push(`${node.path}: 'review.siblings' names ${sib}, which is not a node`);
       }
     }
   }

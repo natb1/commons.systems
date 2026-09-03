@@ -14,8 +14,6 @@ review:
   strength: strong
   date: 2026-09-03
   of: b4f02bdb272a870592237e9f33b6b9b81b6a40ec
-  siblings:
-    - example.test/main/review-node
 ---
 
 ## Disposition

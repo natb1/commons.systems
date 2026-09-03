@@ -332,10 +332,7 @@ export function renderFrontier(graph) {
     }
     if (node.review) {
       const stale = node.reviewStale ? ", draft changed since the review" : "";
-      const siblings = node.review.siblings && node.review.siblings.length > 0
-        ? `; read ${node.review.siblings.length} other drafts`
-        : "";
-      lines.push(`  review: ${node.review.verdict} (${node.review.strength}, ${node.review.date})${stale}${siblings}`);
+      lines.push(`  review: ${node.review.verdict} (${node.review.strength}, ${node.review.date})${stale}`);
     }
     if (node.draft) lines.push("  draft: yes");
     if (node.answer == null) lines.push(`  under: ${(node.under || []).join(", ")}`);

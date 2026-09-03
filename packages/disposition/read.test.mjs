@@ -422,7 +422,11 @@ describe('readGraph: invalid fixtures', () => {
     // dialogue fields: recommendation, review, and '## Draft' (dialogue.md).
     ['invalid-recommendation-shape', /'recommendation' must be \{class: ratified\|delegated, boldness: low\|moderate\|high\}/],
     ['invalid-review-shape', /'review' must be \{verdict: forward\|kickback, strength: strong\|moderate\|weak\|none, date: YYYY-MM-DD, of: <sha1>\}/],
-    ['invalid-review-siblings-unresolved', /'review\.siblings' names example\.test\/main\/does-not-exist, which is not a node/],
+    // `siblings` (the other drafts a per-node reviewer once read) is no
+    // longer part of the review schema now that every review is a batch
+    // over the whole frontier; this fixture's extra 'siblings' key fails
+    // the same generic shape check invalid-review-shape does.
+    ['invalid-review-siblings-unresolved', /'review' must be \{verdict: forward\|kickback, strength: strong\|moderate\|weak\|none, date: YYYY-MM-DD, of: <sha1>\}/],
     ['invalid-dialogue-without-stage', /'recommendation', 'review', and '## Draft' are parts of the dialogue and require stage/],
     ['invalid-draft-not-fenced', /'## Draft' must hold exactly one fenced markdown block/],
     ['invalid-draft-parse-error', /'## Draft' does not parse as a node: /],
@@ -602,13 +606,13 @@ describe('readGraph: valid-dialogue fixture', () => {
     return node;
   }
 
-  test('a node at ruling carries recommendation, a forward review whose "of" matches the draft hash, siblings, and a parsed Draft', async () => {
+  test('a node at ruling carries recommendation, a forward review whose "of" matches the draft hash, and a parsed Draft', async () => {
     const node = await byId('ruling-node');
     assert.equal(node.status, 'unanswered');
     assert.equal(node.stage, 'ruling');
     assert.deepEqual(node.recommendation, { class: 'ratified', boldness: 'moderate' });
     assert.equal(node.review.verdict, 'forward');
-    assert.deepEqual(node.review.siblings, ['example.test/main/review-node']);
+    assert.deepEqual(Object.keys(node.review).sort(), ['date', 'of', 'strength', 'verdict'], "no 'siblings' key");
     assert.equal(node.review.of, node.draftHash, "the fixture's review.of is kept in step with the draft hash");
     assert.equal(node.reviewStale, false);
     assert.ok(node.draft, 'the node carries a parsed Draft');

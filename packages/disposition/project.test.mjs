@@ -426,7 +426,7 @@ test("renderFrontier's first line reads '<id> — <status> — <class> (<by>, <d
   );
 });
 
-test("renderFrontier prints recommendation/review/draft lines after the stage line, review carrying staleness and sibling count", async () => {
+test("renderFrontier prints recommendation/review/draft lines after the stage line, review carrying staleness", async () => {
   const graph = await readGraph(resolve(HERE, "fixtures/valid-dialogue"));
   const listing = renderFrontier(graph);
   const blockFor = (slug) => {
@@ -444,10 +444,7 @@ test("renderFrontier prints recommendation/review/draft lines after the stage li
   const draftAt = rulingBlock.indexOf("  draft:");
   assert.ok(stageAt >= 0 && stageAt < recAt && recAt < reviewAt && reviewAt < draftAt, "recommendation, then review, then draft, all after stage");
   assert.ok(rulingBlock.includes(`  recommendation: ${ruling.recommendation.class}, boldness ${ruling.recommendation.boldness}`));
-  assert.ok(
-    rulingBlock.includes(`  review: forward (strong, 2026-09-03); read 1 other drafts`),
-    "not stale (of matches) but names its one sibling",
-  );
+  assert.ok(rulingBlock.includes(`  review: forward (strong, 2026-09-03)`), "not stale (of matches)");
   assert.ok(!rulingBlock.includes("draft changed since the review"));
   assert.ok(rulingBlock.includes("  draft: yes"));
 
@@ -457,7 +454,7 @@ test("renderFrontier prints recommendation/review/draft lines after the stage li
   assert.ok(!reviewOnlyBlock.includes("  draft:"));
 });
 
-test("renderFrontier appends ', draft changed since the review' when reviewStale, and omits the sibling clause when there are none", async () => {
+test("renderFrontier appends ', draft changed since the review' when reviewStale", async () => {
   const dir = await freshTmpDir("project-frontier-stale-");
   await mkdir(join(dir, "main"), { recursive: true });
   await writeFile(join(dir, "disposition.yaml"), "module: example.test\ngraphs:\n  main:\n    about: fixture\n");
@@ -468,7 +465,6 @@ test("renderFrontier appends ', draft changed since the review' when reviewStale
   const graph = await readGraph(dir);
   const listing = renderFrontier(graph);
   assert.ok(listing.includes("  review: forward (none, 2026-01-01), draft changed since the review"));
-  assert.ok(!listing.includes("other drafts"), "no siblings recorded, so no sibling clause");
 });
 
 /* ------------------------------------------------------- page constraints */
@@ -862,7 +858,7 @@ test("frontmatterEdits compares authority as a whole and ignores the dialogue's 
     defines: [],
     stage: "ruling",
     recommendation: { class: "ratified", boldness: "low" },
-    review: { verdict: "forward", strength: "none", date: "2026-09-03", of: "a", siblings: [] },
+    review: { verdict: "forward", strength: "none", date: "2026-09-03", of: "a" },
   };
   const draft = {
     frontmatter: {
