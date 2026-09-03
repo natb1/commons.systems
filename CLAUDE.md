@@ -96,9 +96,10 @@ Commands, from this worktree:
   interview, in the author's name with the ruling quoted (L32); no command
 - tests: `node --test packages/disposition/*.test.mjs`
 - review page: `node bootstrap/review/build.mjs`, then publish the html it
-  writes under `bootstrap/review/` with the `db` capability; read the
-  author's responses with the artifact tool's `read_db` action on the
-  `responses` collection (L40)
+  writes under `bootstrap/review/` with the `db` capability; the purpose
+  sitting's page is https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678
+  (republish by that URL); read the author's responses with the artifact
+  tool's `read_db` action on the `responses` collection (L40)
 - land the graph: from `disposition/`, `git commit` and `git push origin
   disposition`; no pull request
 - land implementation: on this ref, after code review (below), `git push
@@ -255,9 +256,10 @@ rounds review the delta from the last reviewed commit.
   ancestry projection (`--ancestry`, exercised in tests only); 75 tests
   pass; browser republished. The review page is built by
   `bootstrap/review/build.mjs` (7 recorded, 25 items, 12 questions; the
-  html is generated and gitignored) and published once its fidelity read
-  returns; its address is then recorded on `growth`'s second shim and in
-  the commands above. Owed to the author: the report the previous entry
+  html is generated and gitignored), read for fidelity by a unit (clean),
+  and published with the `db` capability at
+  https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678, recorded on
+  `growth`'s second shim and in the commands above. Owed to the author: the report the previous entry
   listed (rulings with their three facts, q10 to q16, routing, delegation,
   the boosts, the page link).
 - **Queue (2026-09-03; the bootstrap shim of the un-aligned queue, L45,
