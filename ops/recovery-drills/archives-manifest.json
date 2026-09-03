@@ -1,0 +1,16 @@
+{
+  "repo": "natb1/commons.systems",
+  "exported_at": "20260716T040733Z",
+  "archive_dir": "archives/20260716T040733Z",
+  "note": "Raw JSON archive is gitignored (ops/recovery-drills/archives/). Secrets are a known non-exportable gap — workflow file names are exported, secret values cannot be read back through the API by design.",
+  "counts": {
+    "issues": 0,
+    "issue_comments": 6343,
+    "pull_requests": 1312,
+    "releases": 0,
+    "workflows": 16,
+    "sub_issue_edges": 0,
+    "blocked_by_edges": 0,
+    "blocking_edges": 0
+  }
+}

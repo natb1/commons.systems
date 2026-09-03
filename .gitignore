@@ -58,6 +58,10 @@ result
 
 # dispatch-review-erosion temp dirs (cleaned up by trap, but excluded if SIGKILL)
 .erosion-baseline.*
+
+# recovery-drill raw JSON archives (ops/recovery-drills/github-export.sh) — large
+# per-run API dumps; only the summary archives-manifest.json is committed.
+ops/recovery-drills/archives/
 .erosion-jscpd-head.*
 .erosion-jscpd-base.*
 
