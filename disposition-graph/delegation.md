@@ -5,6 +5,7 @@ authority:
   class: deferred
   by: claude
   date: 2026-09-03
+tier: global
 under:
   - commons.systems/disposition-graph/growth
 defines:
