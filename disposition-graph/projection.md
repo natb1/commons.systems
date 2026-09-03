@@ -18,4 +18,4 @@ Through projections, never by opening node files, except in alignment sessions. 
 
 ## Rationale
 
-The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree. It keeps context focused, keeps legacy vocabulary out of working sessions, and makes the graph commit a session read from a pinned fact. The browser is recorded as a node before bootstrap exit, and its published address is recorded on that node. Ledger L05, L12, L18, L21, L23.
+The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree. It keeps context focused, keeps legacy vocabulary out of working sessions, and makes the graph commit a session read from a pinned fact. The browser is recorded as a node before bootstrap exit, and its published address is recorded on that node; during bootstrap it is published as the private page https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, regenerated from the record each round. Ledger L05, L12, L18, L21, L23.

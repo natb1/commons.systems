@@ -375,7 +375,9 @@ be clearly called out with appropriate layout."
 **Content.** Stubbed: the `defines` frontmatter field names the terms a node
 defines; the browser links every occurrence of a defined term to its defining
 node, offers a vocabulary view, and renders readings as a distinct block with
-source locus and relation. "disposition" is defined by `model`; "ratified",
+source locus and relation. First published 2026-09-02 as the private page
+https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933 (28
+nodes); republished to the same address each round. "disposition" is defined by `model`; "ratified",
 "doctrine" by `authority`; "archē" by `public/agency`.
 
 ## L23 token-efficiency rule for bootstrap sessions
