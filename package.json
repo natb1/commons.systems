@@ -1,0 +1,7 @@
+{
+  "name": "commons.systems",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "scripts": { "test": "node --test packages/*/*.test.mjs" }
+}

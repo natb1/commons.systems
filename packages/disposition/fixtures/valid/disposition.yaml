@@ -1,0 +1,8 @@
+module: example.test
+ref: disposition
+graphs:
+  main:
+    about: primary graph for fixtures
+  pub:
+    about: public-facing graph for fixtures
+    target: pub.example/pub
