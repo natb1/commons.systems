@@ -1,19 +1,14 @@
 ---
 question: Who may change an answer?
-stage: maieutic
+stage: review
 recommendation:
   class: ratified
   boldness: moderate
-review:
-  verdict: kickback
-  strength: moderate
-  date: 2026-09-03
-  of: f2be954ef2e4e325c6e1a96a367f8ebfaea506eb
 form: rule
 authority:
   class: deferred
   by: claude
-  date: 2026-09-02
+  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/model
 tier: global
@@ -24,6 +19,7 @@ defines:
   - deferred
   - doctrine
   - author
+  - proposal
 shims:
   - artifact: bootstrap authority, an explicit grant from the author by which an alignment session may reconcile an unanswered node — writing an answer, an overrule, or an amendment onto a node whose dialectic has not concluded, and landing the materialized implementation that follows — which the scope rule of this node otherwise reserves to the dialectic
     for: the scope rule of this node during bootstrap, when nothing is ratified and so no answer has a ratified ancestor to be answered under
@@ -52,50 +48,15 @@ The author, 2026-09-03, on the sitting of dialogue, on what grounds work while a
 
 ## Answer
 
-Every answer carries a stamp: who holds it, with what class, and since when. Ratified means the author decided, in the alignment interview after its dialectic, and wants to be asked before it changes. The session that ran the interview writes that stamp in the author's name and quotes the author's ruling, with its date, in the node; a ratified stamp whose ruling is not in the record is invalid. Ratification happens only through the alignment dialogue; transcribing the author's words from any other record confers nothing, and no command does: a script that stamps on request is a rubber stamp, and the guard against rubber stamps is the dialectic itself, whose steps the round accounts for. Delegated means the author handed that class of decision to the AI and does not want to be asked again. Deferred means the AI decided within the author's rules and owes the author a review; until the author rules, a deferred answer is unanswered, as the unanswered node says, and carries the stage of the dialogue owed on it. Doctrine is the ratified answers taken together. The AI exercises authority within scope: it may answer under a ratified ancestor, may change delegated answers at will, and records anything that would contradict doctrine or exceed its scope as a proposal, which has no authority and acts on nothing until the author rules. A proposal that contradicts doctrine also triggers review of the delegated disposition it was made under.
+Every answer carries a stamp: who holds it, with what class, and since when. A node without a stamp is unanswered, as the unanswered node says. Ratified means the author decided, in the alignment dialogue after its dialectic, and wants to be asked before it changes. Ratification happens only through that dialogue: the session that ran the sitting writes the stamp in the author's name, and the ruling that earned it is quoted in the node with its date; a ratified stamp whose ruling is not in the record is invalid; transcribing the author's words from any other record confers nothing, and no command does, since a script that stamps on request is a rubber stamp and the guard against rubber stamps is the dialectic itself, whose steps the round accounts for. Delegated means the author handed that class of decision to the AI and does not want to be asked again. Deferred means the AI decided within the author's rules and owes the author a review; until the author rules, a deferred answer is unanswered, as the unanswered node says, and carries the stage of the dialogue owed on it. Doctrine is the ratified answers taken together. A standing answer of any class keeps its full authority while an alternative to it is pending, until the author confirms an alternative. A proposal is technical vocabulary and is not overloaded: a conflicting answer that arises outside alignment, from evidence, a signal, an instrument, a criterion, or a conflict identified in reconciliation. It has no authority and acts on nothing; it is recorded on the node it conflicts with as an alternative whose source names the instrument or the node that raised it, and it opens the dialogue on that node at the periagogic stage, as the dialogue node says. A conflicting answer that arises in alignment is not a proposal; it is an alternative in the dialogue state, with its source, and is recorded as the dialogue node says. The AI exercises authority within scope: it may answer under a ratified ancestor, may change delegated answers at will, and records anything that would contradict doctrine or exceed its scope as an alternative on the node it conflicts with, a proposal when it arose outside alignment, which acts on nothing until the author rules. Such an alternative also triggers review of the delegated disposition it was made under.
 
 ## Rationale
 
-Attenuation: authority only narrows as it is handed down, never widens, so a breakout would have to be written up the tree, and nothing writes up. Rejected: recording out-of-scope answers as deferred, because deferred still acts. Rejected, 2026-09-02: a ratify command run by the author as the act of ratification. The author: "Ratification is not a rubber stamp. I don't see the function of a ratification script and it can probably be liquidated with updated disposition/doctrine." The command guaranteed nothing, since it stamped under the same version-control identity every session commits with, and it made the act a keystroke instead of a decision; it is liquidated. Traditions to record as readings: ultra vires and enabling acts; delegation containment in cgroup v2; attenuation in object-capability systems; corrigibility and approval-directed agents in the alignment literature.
+Attenuation: authority only narrows as it is handed down, never widens, so a breakout would have to be written up the tree, and nothing writes up. Rejected: recording out-of-scope answers as deferred, because deferred still acts. Rejected, 2026-09-02: a ratify command run by the author as the act of ratification. The author: "Ratification is not a rubber stamp. I don't see the function of a ratification script and it can probably be liquidated with updated disposition/doctrine." The command guaranteed nothing, since it stamped under the same version-control identity every session commits with, and it made the act a keystroke instead of a decision; it is liquidated. Rejected: proposal as an authority class, because a class with no authority is a review-queue label and the deferred stamp already is that queue. Traditions to record as readings: ultra vires and enabling acts; delegation containment in cgroup v2; attenuation in object-capability systems; corrigibility and approval-directed agents in the alignment literature.
 
 The author, 2026-09-03, on the bootstrap ledger: "The ledger is a shim, it shouldn't receive standing disposition. Ratified as a shim. The standing disposition (ratified) is that ratification happens only through alignment dialogue." And later that day: "The ledger is expected to be sunset and encoded as deferred dispositions. I am concerned that it has not been, I am concerned about drift between the ledger and the greenfield graph." The ledger shim declared here on 2026-09-02 was liquidated on 2026-09-03: every entry was sorted, by the survey `bootstrap/ledger-migration-survey-2026-09-03.md` on the implementation ref and by the session for the entries after it, into a node amendment, a shim declaration, an un-aligned disposition, or nothing, and the file was deleted. While it stood no stamp was ratified, and none is yet; the first ratified stamps are those the sitting on purpose writes.
 
-
-## Draft
-
-```markdown
----
-question: Who may change an answer?
-form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
-under:
-  - commons.systems/disposition-graph/model
-tier: global
-defines:
-  - authority
-  - ratified
-  - delegated
-  - deferred
-  - doctrine
-  - author
-  - proposal
-shims:
-  - artifact: bootstrap authority, an explicit grant from the author by which an alignment session may reconcile an unanswered node — writing an answer, an overrule, or an amendment onto a node whose dialectic has not concluded, and landing the materialized implementation that follows — which the scope rule of this node otherwise reserves to the dialectic
-    for: the scope rule of this node during bootstrap, when nothing is ratified and so no answer has a ratified ancestor to be answered under
-    liquidation: bootstrap exit, at the swap of the implementation ref with the main branch, after which the grant expires and an unanswered node is reconciled only through the dialectic
-    declared: 2026-09-03
----
-## Answer
-
-Every answer carries a stamp: who holds it, with what class, and since when. A node without a stamp is unanswered, as the unanswered node says. Ratified means the author decided, in the alignment dialogue after its dialectic, and wants to be asked before it changes. Ratification happens only through that dialogue: the session that ran the sitting writes the stamp in the author's name, and the ruling that earned it is quoted in the node with its date; transcribing the author's words from any other record confers nothing, and no command does, since a script that stamps on request is a rubber stamp and the guard against rubber stamps is the dialectic itself. Delegated means the author handed that class of decision to the AI and does not want to be asked again. Deferred means the AI decided within the author's rules and owes the author a review; until the author rules, a deferred answer is unanswered, as the unanswered node says, and carries the stage of the dialogue owed on it. Doctrine is the ratified answers taken together. A proposal is content, never a class: a candidate answer, an amendment, or a finding with no authority, recorded in a stamped node or in a sitting's record for the author's ruling, where it becomes an answer, a rejected alternative, or nothing. The AI exercises authority within scope: it may answer under a ratified ancestor, may change delegated answers at will, and records anything that would contradict doctrine or exceed its scope as a proposal, which acts on nothing until the author rules. A proposal that contradicts doctrine also triggers review of the delegated disposition it was made under.
-
-## Rationale
-
-Attenuation: authority only narrows as it is handed down, never widens, so a breakout would have to be written up the tree, and nothing writes up. Rejected: recording out-of-scope answers as deferred, because deferred still acts; a ratify command run by the author as the act of ratification, because it guaranteed nothing, stamped under the same version-control identity every session commits with, and made the act a keystroke instead of a decision; proposal as an authority class, because a class with no authority is a review-queue label and the deferred stamp already is that queue.
-```
+The author, 2026-09-03, in the sitting on the dialogue node, quoted above, narrowed the word proposal: the draft of this node had defined it as any candidate answer, amendment, or finding with no authority, recorded in a stamped node or in a sitting's record, and the author ruled that the term is technical vocabulary for a conflicting answer arising outside alignment, that it must not be overloaded, and that conflicting answers evaluated in alignment are recorded differently, as alternatives in the dialogue state. The same day the author ruled that a standing answer of any class, ratified, delegated, or deferred, keeps its full authority while an alternative is pending, and that a proposal from outside alignment opens the dialogue on its node. This answer was written from the draft under the author's bootstrap grant on the dialogue node, folding the draft's text into the standing answer with the narrowing; the ratified stamp the draft carried is what a confirmation confers and is not written before it. Rejected: proposal as any recorded candidate, the draft's definition, since it overloaded a term the author reserves for the outside-alignment case and would have named the AI's own account and every alternative in a sitting with one word.
 
 ## Proposal
 

@@ -29,7 +29,7 @@ The rule struck here was an inference from a premise the author denies. `transie
 
 Two further facts made the rule weaker than it looked. It keyed on the absence of an `## Answer` section rather than on the unanswered status, so nodes carrying a deferred answer — every stamped node in this graph — could already have children; the author's model was already the record's model everywhere but this one shape. And the rule was enforced by a machine check that hard-failed, which gave a deferred answer the force of a ratified one and removed in practice the overrule `evaluation` grants in principle; that instrument is removed on the implementation ref in the same landing.
 
-Rejected: keeping the rule and requiring a reading owed to an open question to be parked on the question's parent, which is what happened to `npm-committed-lockfile` on 2026-09-03 and which misplaces a reading for the life of the question. Rejected: keeping the rule but softening the instrument to a warning, which leaves a struck inference standing in the record as a rule nobody enforces. Not decided here, and left as a proposal on `instruments`: whether a machine check should ever hard-fail an answer that is not ratified.
+Rejected: keeping the rule and requiring a reading owed to an open question to be parked on the question's parent, which is what happened to `npm-committed-lockfile` on 2026-09-03 and which misplaces a reading for the life of the question. Rejected: keeping the rule but softening the instrument to a warning, which leaves a struck inference standing in the record as a rule nobody enforces. Not decided here, and left open on `instruments`, an alternative for its dialogue: whether a machine check should ever hard-fail an answer that is not ratified.
 
 ## Proposal
 
