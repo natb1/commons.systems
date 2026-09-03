@@ -46,7 +46,7 @@ The author, 2026-09-02:
 
 ## Answer
 
-One question and its standing answer. The question is one line someone could ask the author. The answer is the current position in one of five forms, a target (something that should become true), a rule (something that must stay true while working), an assumption (something about the world the answer relies on), an archē (a first principle held, never derived), or a reading (what a tradition says about the answer above it). The rationale says why, and which alternatives were rejected. A node may also carry a proposal, a candidate answer with no authority, recorded for the author's review. A node with a question and no answer is an un-aligned disposition, the author's stated disposition or the AI's proposal on which the alignment dialogue has not concluded; it carries the author's words, the AI's account, and the stage of the dialogue, as the transience node says, and it has no children. If a text answers two questions, it is two nodes. If a new answer replaces an old one, the node holds the new answer and version control holds the old.
+One question and its standing answer. The question is one line someone could ask the author. The answer is the current position in one of five forms, a target (something that should become true), a rule (something that must stay true while working), an assumption (something about the world the answer relies on), an archē (a first principle held, never derived), or a reading (what a tradition says about the answer above it). The rationale says why, and which alternatives were rejected. A node may also carry a proposal, a candidate answer with no authority, recorded for the author's review. A node with a question and no answer is an un-aligned disposition, the author's stated disposition or the AI's proposal on which the alignment dialogue has not concluded; it carries the author's words, the AI's account, and the stage of the dialogue, as the transience node says. It is a node like any other and may be refined by children; what it lacks is authority, not standing. If a text answers two questions, it is two nodes. If a new answer replaces an old one, the node holds the new answer and version control holds the old.
 
 ## Rationale
 
@@ -85,6 +85,12 @@ One question per node makes "same scope" decidable: two texts share a node only 
 ```
 
 ## Proposal
+
+### Amended with the transience overrule, 2026-09-03
+
+The clause "and it has no children" is struck from the answer above and replaced, following the overrule recorded on `transience` on the author's ruling of 2026-09-03 that an unanswered disposition is a disposition plus dialogue state. This node restated the rule; `transience` defines the shape and carries the reasoning. The two frontier findings of 2026-09-03 recorded below, which asked that this sentence be kept because it was the schema node's only statement of the no-children rule, are answered by the rule being struck rather than by the sentence being kept: what they were protecting was the record's only statement of a rule that no longer holds.
+
+The stamp stays deferred, as `evaluation` provides for an overruled deferred answer, and the answer changed after its review, so the review is owed again on the changed text.
 
 ### Sitting on purpose, 2026-09-03
 

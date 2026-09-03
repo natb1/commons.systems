@@ -1,6 +1,14 @@
 ---
 question: May an un-aligned disposition have children?
-stage: periagogic
+stage: review
+recommendation:
+  class: ratified
+  boldness: low
+form: rule
+authority:
+  class: deferred
+  by: claude
+  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/transience
 ---
@@ -8,6 +16,20 @@ under:
 
 The author, 2026-09-03:
 > Why do unaligned dispositions have no children? My expectation is that an unaligned/unanswered disposition is just a disposition + alignment dialogue state. Unanswered is expected to just be a class of disposition that is registered for alignment dialogue and has no authority for reconciliation (unless bootstrap authority is explicitly granted)
+
+## Answer
+
+Yes. An unanswered disposition is a disposition plus the dialogue state on it: a node like any other, registered for the alignment dialogue, which may be refined by children exactly as an answered node may. What an unanswered disposition lacks is authority, not standing. It carries none for reconciliation, and work may not be grounded in it, unless the author grants bootstrap authority explicitly, as the author did on 2026-09-03 for this ruling and for the lockfile. A reading, a refinement, or any other node may therefore sit under an open question, and does not have to wait for the question to be answered or be parked on the question's parent.
+
+## Rationale
+
+The author's ruling of 2026-09-03: "you have bootstrap authority to reconcile the model of unanswered disposition as disposition + dialogue state", and, stating the model on the same day, "My expectation is that an unaligned/unanswered disposition is just a disposition + alignment dialogue state. Unanswered is expected to just be a class of disposition that is registered for alignment dialogue and has no authority for reconciliation (unless bootstrap authority is explicitly granted)."
+
+The rule struck here was an inference from a premise the author denies. `transience` held that an un-aligned disposition becomes "an answer, an amendment quoted into the node it refines, or nothing", and a thing that may become nothing cannot be a parent without orphaning its children; the rationale priced that from the legacy tactic node, whose measured costs were durable content stranded on a vanishing node and edges left dangling. On the author's model nothing vanishes: the node is durable and the dialogue resolves into it. The legacy failure stands as a failure of the legacy tactic, a completable unit removed on completion, which this shape is not.
+
+Two further facts made the rule weaker than it looked. It keyed on the absence of an `## Answer` section rather than on the unanswered status, so nodes carrying a deferred answer — every stamped node in this graph — could already have children; the author's model was already the record's model everywhere but this one shape. And the rule was enforced by a machine check that hard-failed, which gave a deferred answer the force of a ratified one and removed in practice the overrule `evaluation` grants in principle; that instrument is removed on the implementation ref in the same landing.
+
+Rejected: keeping the rule and requiring a reading owed to an open question to be parked on the question's parent, which is what happened to `npm-committed-lockfile` on 2026-09-03 and which misplaces a reading for the life of the question. Rejected: keeping the rule but softening the instrument to a warning, which leaves a struck inference standing in the record as a rule nobody enforces. Not decided here, and left as a proposal on `instruments`: whether a machine check should ever hard-fail an answer that is not ratified.
 
 ## Proposal
 
@@ -45,3 +67,11 @@ Authority none: an un-aligned disposition in the author's words, recorded at the
 The movement owed is periagogic and has not been run: what `transience` means by the un-aligned disposition becoming "nothing", and whether the author holds that shape at all, is the author's to articulate against the text.
 
 Also named: `commons.systems/disposition-graph/node`, `commons.systems/disposition-graph/unanswered`, `commons.systems/disposition-graph/authority`, `commons.systems/disposition-graph/lockfile`.
+
+### Answered on the author's ruling, 2026-09-03
+
+The question is answered under the bootstrap authority the author granted the same day, and the stamp is deferred, not ratified: `authority` holds that ratification comes only from the dialectic, whose periagogic and maieutic movements have not run on this node, and that a ratified stamp whose ruling is not in the record is invalid. `evaluation` provides for exactly this case — an overruled deferred answer stays deferred and enters the author's review — so the node stands at the review stage with the clean-context review owed before the author rules.
+
+The account above, written while the rule was thought binding, is left as it stands. It records that the AI treated a deferred answer as fixed, framed the author's challenge inside that frame, and parked a reading on the wrong parent rather than exercising the overrule the record already granted. `fidelity` cites this node as an instance of intention misread under perfect coverage.
+
+One consequence is now due and is not taken here: `npm-committed-lockfile` was placed under `materialization` only because this rule blocked its proper parent. With the rule struck it belongs under `lockfile`, the question it bears on. Moving it is a graph edit that changes what the reading is a reading of, so it is put to the author rather than done silently.

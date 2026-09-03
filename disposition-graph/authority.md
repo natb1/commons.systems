@@ -29,6 +29,10 @@ shims:
     for: the scope rule of this node before any answer is ratified
     liquidation: the root and the purpose node are ratified, after which every deferred answer stands under a ratified ancestor
     declared: 2026-09-02
+  - artifact: bootstrap authority, an explicit grant from the author by which an alignment session may reconcile an unanswered node — writing an answer, an overrule, or an amendment onto a node whose dialectic has not concluded, and landing the materialized implementation that follows — which the scope rule of this node otherwise reserves to the dialectic
+    for: the scope rule of this node during bootstrap, when nothing is ratified and so no answer has a ratified ancestor to be answered under
+    liquidation: bootstrap exit, at the swap of the implementation ref with the main branch, after which the grant expires and an unanswered node is reconciled only through the dialectic
+    declared: 2026-09-03
 ---
 ## Disposition
 
@@ -92,6 +96,21 @@ Attenuation: authority only narrows as it is handed down, never widens, so a bre
 ```
 
 ## Proposal
+
+### Bootstrap authority declared as a shim, 2026-09-03
+
+The author, 2026-09-03:
+> also record the concept of bootstrap authority as an alignment shim - unanswered nodes may be reconciled by alignment with explicit bootstrap authority, but that authority expires on bootstrap exit
+
+Declared as the second shim above, beside the bootstrap grant already on this node and not merged with it, because the two differ in both scope and expiry. The existing grant covers the AI stubbing nodes and implementation with deferred stamps where no ratified ancestor exists, and liquidates when the root and the purpose node are ratified. This one covers something the scope rule otherwise reserves: an alignment session writing an answer, an overrule, or an amendment onto a node whose dialectic has not concluded, and landing the implementation that follows. It expires later, at bootstrap exit, because the condition that makes it necessary — that nothing is ratified, so nothing can be answered under a ratified ancestor — persists until the swap.
+
+Three properties the author's words fix, and the record should not soften. The grant is **explicit**: it is given in the author's words for a named reconciliation and is never assumed, never inferred from a prior grant, and never standing. It is **alignment's**: it lets the alignment session cross into what the dialectic would otherwise decide, and, as exercised on 2026-09-03, into the implementation ref that `work-loop` divides away from this skill. And it **expires**: at bootstrap exit the grant is gone, and an unanswered node is thereafter reconciled only through the dialectic, which is what this node's answer already says.
+
+Exercised on 2026-09-03, and the exercises are the evidence for the shim: the lockfile committed to the implementation ref before its question was answered; the model of the unanswered disposition reconciled on `transience`, `node` and `un-aligned-children`, with the no-children rule struck and its instrument removed; `dialogue` reconciled to the three requirements the author set; and the alignment skill reconciled to the result. Each carries the author's words on the node it changed.
+
+A finding on the shim vocabulary, not decided here. `evaluation` holds that "a shim declared on the record is applied by default; a prompt is required only to bypass it." This shim inverts that: it is a permission that does nothing until the author invokes it, and applying it by default would be precisely the capture it guards against. Either the shim vocabulary covers two kinds — a stopgap artifact standing in for a projection, and a standing permission exercised on demand — or bootstrap authority is not a shim but a second class of authority alongside ratified, delegated and deferred, which this node defines. The author's words name it a shim and it is recorded as one; the tension is put to `evaluation` and to this node's own answer as a proposal.
+
+This node stands at the review stage with a kickback verdict of 2026-09-03, so the work that kickback names is owed independently of this shim, and the node's text has changed since that review.
 
 ### Sitting on purpose, 2026-09-03
 
