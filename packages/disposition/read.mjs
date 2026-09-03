@@ -23,15 +23,15 @@ import {
 
 const FRONTMATTER_KEYS = new Set([
   'question', 'form', 'authority', 'under', 'tier', 'boost', 'cites',
-  'instrument', 'after', 'source', 'relation', 'defines', 'ledger',
+  'instrument', 'after', 'source', 'relation', 'defines', 'shims',
 ]);
 const FORMS = new Set(['target', 'rule', 'assumption', 'arche', 'reading']);
 const AUTHORITY_CLASSES = new Set(['ratified', 'delegated', 'deferred']);
 const RELATIONS = new Set(['adopted', 'diverged', 'chosen-over']);
 const INSTRUMENT_KINDS = new Set(['check', 'assessment']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const LEDGER_RE = /^L\d{2}$/;
 const HASH_RE = /^[0-9a-f]{40}$/;
+const SHIM_KEYS = new Set(['artifact', 'liquidation', 'declared', 'for']);
 const SECTION_ORDER = ['Answer', 'Rationale', 'Proposal'];
 
 function isPlainObject(value) {
@@ -335,13 +335,48 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     }
   }
 
-  // ledger
-  let ledger = null;
-  if (!isAbsent(fm.ledger)) {
-    if (typeof fm.ledger !== 'string' || !LEDGER_RE.test(fm.ledger)) {
-      problems.push("'ledger' must match L\\d{2}");
+  // shims: a list of {artifact, liquidation, declared, and optional for}
+  let shims = [];
+  if (!isAbsent(fm.shims)) {
+    if (!Array.isArray(fm.shims)) {
+      problems.push("'shims' must be a list of {artifact, liquidation, declared, and optional for}");
     } else {
-      ledger = fm.ledger;
+      shims = fm.shims
+        .map((entry, i) => {
+          if (!isPlainObject(entry)) {
+            problems.push(`'shims[${i}]' must be a mapping with artifact, liquidation, declared`);
+            return null;
+          }
+          for (const k of Object.keys(entry)) {
+            if (!SHIM_KEYS.has(k)) problems.push(`unknown key 'shims[${i}].${k}'`);
+          }
+          let entryOk = true;
+          if (typeof entry.artifact !== 'string' || entry.artifact.trim().length === 0) {
+            problems.push(`'shims[${i}].artifact' is required and must be a non-empty string`);
+            entryOk = false;
+          }
+          if (typeof entry.liquidation !== 'string' || entry.liquidation.trim().length === 0) {
+            problems.push(`'shims[${i}].liquidation' is required and must be a non-empty string`);
+            entryOk = false;
+          }
+          if (typeof entry.declared !== 'string' || !isValidDate(entry.declared)) {
+            problems.push(`'shims[${i}].declared' must be a YYYY-MM-DD date string`);
+            entryOk = false;
+          }
+          if (!isAbsent(entry.for) && (typeof entry.for !== 'string' || entry.for.trim().length === 0)) {
+            problems.push(`'shims[${i}].for' must be a non-empty string`);
+            entryOk = false;
+          }
+          return entryOk
+            ? {
+              artifact: entry.artifact,
+              liquidation: entry.liquidation,
+              declared: entry.declared,
+              for: isAbsent(entry.for) ? null : entry.for,
+            }
+            : null;
+        })
+        .filter((x) => x !== null);
     }
   }
 
@@ -354,9 +389,6 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   }
   if (authority !== null && !hasAnswer) {
     problems.push("'authority' requires an '## Answer' section");
-  }
-  if (boost !== null && !(authority !== null && authority.class === 'ratified')) {
-    problems.push("'boost' is only allowed when authority.class is 'ratified'");
   }
 
   if (problems.length > 0) {
@@ -381,7 +413,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     source,
     relation,
     defines,
-    ledger,
+    shims,
     answer: sections.Answer,
     rationale: sections.Rationale,
     proposal: sections.Proposal,

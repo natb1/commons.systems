@@ -7,7 +7,6 @@ authority:
   date: 2026-01-01
 boost: 2
 tier: global
-ledger: L01
 instrument:
   kind: check
   ref: tools/validate.mjs

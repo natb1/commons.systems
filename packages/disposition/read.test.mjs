@@ -138,6 +138,7 @@ describe('parseNode', () => {
     assert.equal(node.form, null);
     assert.deepEqual(node.under, []);
     assert.deepEqual(node.cites, []);
+    assert.deepEqual(node.shims, []);
   });
 
   test('rejects a file with no frontmatter delimiter', () => {
@@ -291,7 +292,6 @@ describe('readGraph: invalid fixtures', () => {
   const cases = [
     ['invalid-unknown-key', /unknown frontmatter key 'bogus'/],
     ['invalid-reading-without-source', /'source' is required.*form: reading/],
-    ['invalid-boost-without-ratified', /'boost' is only allowed when authority\.class is 'ratified'/],
     ['invalid-unresolved-under', /unresolved 'under' reference: example\.test\/main\/does-not-exist/],
     ['invalid-cycle', /cycle in 'under'/],
     ['invalid-stamp-without-answer', /'authority' requires an '## Answer' section/],
@@ -301,6 +301,10 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-duplicate-under', /duplicate under reference: example\.test\/main\/root/],
     // validator rule: an 'after' reference must resolve like 'under' does.
     ['invalid-unresolved-after', /unresolved after reference: example\.test\/main\/does-not-exist/],
+    // ledger is no longer a field: a 'ledger:' key is just another unknown key.
+    ['invalid-ledger-key', /unknown frontmatter key 'ledger'/],
+    ['invalid-shim-missing-liquidation', /'shims\[0\]\.liquidation' is required/],
+    ['invalid-shim-unknown-key', /unknown key 'shims\[0\]\.bogus'/],
   ];
 
   for (const [dirName, pattern] of cases) {
@@ -361,6 +365,50 @@ describe('readGraph: fenced-body fixture', () => {
       node.answer.includes('## Answer\n\nFenced example text that must not be treated as a boundary.'),
       'the fenced heading survives verbatim as body content',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readGraph: deferred-boost fixture
+// ---------------------------------------------------------------------------
+
+describe('readGraph: deferred-boost fixture', () => {
+  // covers the removal of the old "'boost' is only allowed when
+  // authority.class is 'ratified'" rule: a boost is the author's act
+  // whatever the answer's stamp (an allocation only the author may ratify),
+  // so a node stamped deferred may carry one too.
+  test('a deferred node with a positive boost parses', async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-deferred-boost'));
+    assert.equal(graph.nodes.length, 1);
+    const node = graph.nodes[0];
+    assert.equal(node.authority.class, 'deferred');
+    assert.equal(node.boost, 2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readGraph: shims fixture
+// ---------------------------------------------------------------------------
+
+describe('readGraph: shims fixture', () => {
+  test('a node with two shims parses with both entries in order', async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-shims'));
+    assert.equal(graph.nodes.length, 1);
+    const node = graph.nodes[0];
+    assert.deepEqual(node.shims, [
+      {
+        artifact: "packages/disposition/read.mjs's ledger field",
+        liquidation: 'when the ledger field is fully removed from the schema',
+        declared: '2026-09-01',
+        for: null,
+      },
+      {
+        artifact: "packages/disposition/browser-template.html's mount notes",
+        liquidation: 'when the namespaces node declares the mount as its own shim',
+        declared: '2026-09-02',
+        for: "the namespaces node's target metadata",
+      },
+    ]);
   });
 });
 

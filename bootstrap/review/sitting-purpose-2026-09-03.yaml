@@ -127,7 +127,7 @@ recorded:
     facts: {authority: deferred; ratified if the author rules so, boldness: low, persistence: standing}
   - id: r-priority
     title: Priority is rank; harness rules second
-    ruling: "While maintaining ratification of the alignment disposition (persistent doctrine driving the alignment shim and eventually the materialized alignment skill), let's set the second priority to materialization of harness rules (CLAUDE.md if any, .claude/rules, and CLAUDE.local.md for workspace context) and shimming of the rules (bootstrap in lieu of reconciliation) so that we can formalize context management in the harness." "priotity is encoded as rank"
+    ruling: "While maintaining ratification of the alignment disposition (persistent doctrine driving the alignment shim and eventually the materialized alignment skill), let's set the second priority to materialization of harness rules (CLAUDE.md if any, .claude/rules, and CLAUDE.local.md for workspace context) and shimming of the rules (bootstrap in lieu of reconciliation) so that we can formalize context management in the harness.\" \"priotity is encoded as rank"
     recorded: >-
       Boosts in the author's name: model first among the children of purpose,
       growth first and projection second among the children of model,

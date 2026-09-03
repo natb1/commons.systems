@@ -25,7 +25,8 @@ with `main` at bootstrap exit. Its tree:
   (L27). `packages/disposition/` holds the graph reader, validator, ratify
   command, and browser projector (L26).
 - `.claude/skills/align/SKILL.md` — the `/align` shim (L15).
-- `.claude/rules/` — hand-materialized projections of global-tier nodes (L30).
+- `.claude/rules/` — projected from the global-tier nodes by
+  `project.mjs --rules`; never edited by hand (L30, liquidated 2026-09-03).
 - `bootstrap/` — evidence gathered during bootstrap (surveys, the revision-2
   model page) and `bootstrap/review/`, the record of each sitting's review
   items and the builder of its review page; deleted with the ledger.
@@ -86,6 +87,8 @@ comes next is a boost ratification (L13).
 Commands, from this worktree:
 
 - validate: `node packages/disposition/validate.mjs disposition`
+- rules: `node packages/disposition/project.mjs disposition --rules .claude/rules`
+  (regenerate after any change to a global-tier node)
 - project: `node packages/disposition/project.mjs disposition --out dist/browser/index.html`,
   then publish `dist/browser/index.html` to the recorded address
   https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933
@@ -245,29 +248,28 @@ rounds review the delta from the last reviewed commit.
   disposition is the materialization of harness rules, and the projector now
   writes `.claude/rules/` (`--rules`) and the ancestry projection
   (`--ancestry`).
-- **In flight (2026-09-03, written to survive compaction; this log wins
-  over any summary).** Two units running: the review-page builder, which
-  writes `bootstrap/review/build.mjs` and
-  `bootstrap/review/sitting-purpose-2026-09-03.html` from the YAML beside
-  them, and the projector unit, which adds `--rules <dir>` and
-  `--ancestry <id> --local <file>` to `project.mjs`, removes the validator
-  rule that boost needs a ratified stamp, and regenerates `.claude/rules/`
-  (authority, session-context, evaluation, delegation). When both report:
-  set the boosts (`model` 8, `growth` 4, `projection` 3, `session-context`
-  2; script `edit-boosts-0903.py` in the job's tmp dir, trivially
-  re-creatable), validate, project and republish the browser by its URL,
-  run `node bootstrap/review/build.mjs` and publish the html as a new
-  private artifact with `capabilities: {db: {}}`, record its address on
-  `growth`'s second shim and in the commands above, commit `packages/` and
-  `.claude/rules/` on greenfield and the boosts and `delegation`'s tier on
-  disposition, push both, then report to the author: the recorded rulings
-  with their three facts, the evaluations q10 (quotes: no new schema, the
-  ruling verbatim in the landing commit), q11 (sunset: yes, after the
-  `delegation` node closed the survey's one blocker; survey section D), q12
-  (review-item context), q13 (the page, responses read with `read_db`),
-  q14 to q16, the routing test result, the delegation rule, the priority
-  boosts, and the review page link. The greenfield commit before this
-  paragraph holds everything the units are not writing.
+- **Landed 2026-09-03, afternoon.** Both units reported. Boosts set
+  (`model` 8, `growth` 4, `projection` 3, `session-context` 2) and landed
+  with the liquidation of the `evaluation` rule shim (disposition
+  `9bab2d46`); the projector writes `.claude/rules/` (`--rules`) and the
+  ancestry projection (`--ancestry`, exercised in tests only); 75 tests
+  pass; browser republished. The review page is built by
+  `bootstrap/review/build.mjs` (7 recorded, 25 items, 12 questions; the
+  html is generated and gitignored) and published once its fidelity read
+  returns; its address is then recorded on `growth`'s second shim and in
+  the commands above. Owed to the author: the report the previous entry
+  listed (rulings with their three facts, q10 to q16, routing, delegation,
+  the boosts, the page link).
+- **Queue (2026-09-03; the bootstrap shim of the un-aligned queue, L45,
+  until the author rules on its mechanism).** Dispositions the author has
+  stated that have not survived a sitting, in the author's order:
+  1. The purpose sitting's rulings on the review page (L39 to L41): open.
+  2. L44, frontier metrics on the browser's graph headings: sitting open,
+     probe one pending.
+  3. L45, the queue of un-aligned dispositions: recommendation presented,
+     ruling pending.
+  Each entry's words are in the ledger section named; a ruling moves the
+  entry to a node and strikes it here.
 - **Review log.** Each landing on this ref: commit range, out-dir tag,
   rounds, verdict.
   - Tooling, `684ac70f..6912c361`, tag `r0-tooling`, round one at high:

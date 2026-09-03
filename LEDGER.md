@@ -59,6 +59,8 @@ exists · `ratified` the node is ratified and the entry closes · `rejected`.
 | L41 | rationale and the under edge, tier as scope, rejected alternatives as structure (q14 to q16); every node has an address, the reader's place kept (recorded) | recorded / open | author + proposal | `projection`, `web-routing`; the review page |
 | L42 | verbose investigation (debugging, driving a browser, logs) is subagent work, never the main thread's | stubbed | author | `disposition-graph/delegation`; `CLAUDE.md`; the shim |
 | L43 | priority is rank: alignment disposition first, harness-rule materialization second; rules, `CLAUDE.local.md`, `CLAUDE.md` projected by the projector, shimmed in bootstrap | recorded | author | boosts on `model`, `growth`, `projection`, `session-context`; `project.mjs --rules`, `--ancestry` |
+| L44 | the browser's graph headings carry frontier metrics, each an instrument of a disposition and linked to it | open: sitting in progress, probe one pending | author | `projection` and the nodes the metrics instrument |
+| L45 | recursive disposition statements are supported usage; each is queued in state that survives compaction; un-aligned dispositions | open: recommendation presented | author | `growth`, `transience`, `attention`; the shim; the round log's queue |
 | L29 | shimmed code review for every bootstrap landing; review doctrine before exit | stubbed | author | `disposition-graph/review`; the incumbent detached review instrument as shim |
 
 ## L01 archē is the root answer form
@@ -990,3 +992,55 @@ on the ledger migration (q11), after which the projector generates it from
 `purpose` and `projection` and the operations residue moves where the
 survey recommends. `delegation` is marked global so that it reaches every
 session now.
+
+## L44 frontier metrics on the browser's graph headings
+
+**Source.** Author, 2026-09-03, invoking `/align` with the note "(first,
+confirm we are loading the align shim skill from the greenfield graph, not
+the legacy align skill)": "the graph sections in the left aligned navigation
+bar of the browser should display some high level metric summarizing the
+breadth of the frontier for that graph - how many nodes in the graph, how
+many deferred to give some sense of the depth of the office-hours queue.
+Perhaps some measure of capture, but number of delegated nodes would be too
+fine of a metric and not very useful. Recommend metrics, but whatever you
+recommend maintain a clear functional justication for each - don't just
+dump raw data. In theory, these metrics are signals/instruments/criteria of
+some disposition. Each metric should hyperlink to that disposition."
+
+**Content.** A sitting on a disposition; it would amend `projection` and put
+criteria on the nodes the metrics instrument (`work-loop`, `authority`,
+`transience`, `instruments`, `attention`, `public/agency`). Conduct
+periagogic first; probe one, on the record's two derived queues (the
+frontier, `work-loop`; the review owed, `authority` and `transience`) against
+the disposition's single "frontier", is open. The harness resolved `/align`
+to the legacy skill because the session was started in the main checkout;
+the shim was followed by reading it (`CLAUDE.md`, skill discovery).
+
+## L45 recursive disposition statements and the queue of un-aligned dispositions
+
+**Source.** Author, 2026-09-03, during the sitting of L44: "we expect that
+alignment dialogues like this one (which is mixed in with ad-hoc
+reconciliation during bootstrap) will trigger recursive disposition
+statements from the author. This is supported usage of the alignment skill.
+The expected behavior of the skill is to queue each disposition (newly
+stated or via node_id) in some state that persists across alignment context
+compaction. Are these new un-aligned dispositions - dispositions that
+aren't just unratified/unreviewed, but haven't even survived the alignment
+dialog yet. earlier in this session I asked you to retain a list of "review
+items" so that we could work through them while reconciling and also
+recording new dispositions. (confirm you still have this record) This new
+queue is like that." And: "Are the new un-aligned dispositions new
+primitives in the graph? Is the review artifact materialized from those
+un-aligned dispositions?"
+
+**Content.** Doctrine in the author's words: a disposition stated during a
+sitting is supported usage, and the skill queues it, new or by node id, in
+state that survives compaction. Recommendation presented, not recorded: no
+new primitive; an un-aligned disposition is an open-question node carrying
+the author's words, dated, as evidence and no answer, placed under the node
+it would refine and landed at once, so the queue is derived (unanswered
+nodes with author evidence, ranked; the author's "next" is a boost) and the
+review page is projected from it together with the deferred answers, which
+is the liquidation condition already declared on `growth`. During bootstrap
+the queue's shim is this ledger, the round log's queue entry in `CLAUDE.md`,
+and the sitting record under `bootstrap/review/`.
