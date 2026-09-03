@@ -580,8 +580,8 @@ function linkTextNode(node, used, selfId) {
 
 var FORM_WORD = { target: "target", rule: "rule", assumption: "assumption", arche: "archē", reading: "reading" };
 var FORM_MARK = { target: "tgt", rule: "rule", assumption: "asm", arche: "arch", reading: "rdg" };
-var STATUS_CLASS = { ratified: "rat", delegated: "del", deferred: "def", proposal: "pro", question: "none" };
-var STATUS_WORD = { ratified: "ratified", delegated: "delegated", deferred: "deferred", proposal: "proposal", question: "unanswered" };
+var STATUS_CLASS = { ratified: "rat", delegated: "del", deferred: "def", proposal: "pro", unaligned: "none" };
+var STATUS_WORD = { ratified: "ratified", delegated: "delegated", deferred: "deferred", proposal: "proposal", unaligned: "un-aligned" };
 
 function formWord(f) { return FORM_WORD[f] || (f ? String(f) : "unanswered"); }
 function formMark(f) { return FORM_MARK[f] || "··"; }

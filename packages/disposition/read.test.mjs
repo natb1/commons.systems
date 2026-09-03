@@ -116,11 +116,11 @@ describe('derive.mjs', () => {
     assert.equal(deriveCeiling('unrelated-root', nodesById), null);
   });
 
-  test('deriveStatus reads the stamp, then answer-without-stamp, then question', () => {
+  test('deriveStatus reads the stamp, then answer-without-stamp, then unaligned', () => {
     assert.equal(deriveStatus({ authority: { class: 'ratified' }, answer: 'x' }), 'ratified');
     assert.equal(deriveStatus({ authority: { class: 'deferred' }, answer: null }), 'deferred');
     assert.equal(deriveStatus({ authority: null, answer: 'x' }), 'proposal');
-    assert.equal(deriveStatus({ authority: null, answer: null }), 'question');
+    assert.equal(deriveStatus({ authority: null, answer: null }), 'unaligned');
   });
 });
 
@@ -131,11 +131,13 @@ describe('derive.mjs', () => {
 describe('parseNode', () => {
   const loc = { id: 'm/g/s', graph: 'g', slug: 's', path: 'g/s.md' };
 
-  test('parses a minimal unanswered question', () => {
-    const node = parseNode('---\nquestion: What?\n---\n', loc);
+  test('parses a minimal unanswered (un-aligned) question', () => {
+    const node = parseNode('---\nquestion: What?\nstage: periagogic\n---\n\n## Disposition\n\nOpen for now.\n', loc);
     assert.equal(node.question, 'What?');
     assert.equal(node.answer, null);
     assert.equal(node.form, null);
+    assert.equal(node.stage, 'periagogic');
+    assert.equal(node.disposition, 'Open for now.');
     assert.deepEqual(node.under, []);
     assert.deepEqual(node.cites, []);
     assert.deepEqual(node.shims, []);
@@ -166,6 +168,44 @@ describe('parseNode', () => {
       assert.ok(lines.every((l) => l.startsWith('g/s.md: ')));
       return true;
     });
+  });
+
+  // ---- order: per-file shape checks (graph-level scope/existence checks
+  // need the whole graph and are covered by the fixtures below instead). ----
+
+  test('order: a bare string step and a tied-list step both normalize to arrays of ids', () => {
+    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\norder:\n  - [a, b]\n  - c\n---\n\n## Answer\n\nx\n';
+    const node = parseNode(text, loc);
+    assert.deepEqual(node.order, [['a', 'b'], ['c']]);
+  });
+
+  test('order: absent field normalizes to an empty array', () => {
+    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\n---\n\n## Answer\n\nx\n';
+    assert.deepEqual(parseNode(text, loc).order, []);
+  });
+
+  test('order: rejects a non-list value and a step that is neither a string nor a list', () => {
+    assert.throws(
+      () => parseNode('---\nquestion: Q?\nstage: periagogic\norder: not-a-list\n---\n\n## Disposition\n\nx\n', loc),
+      /'order' must be a list of steps, each a node id or a list of node ids/,
+    );
+    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\norder:\n  - 5\n---\n\n## Answer\n\nx\n';
+    assert.throws(() => parseNode(text, loc), /'order' must be a list of steps, each a node id or a list of node ids/);
+  });
+
+  test('order: an empty-list step is reported by number, one-based', () => {
+    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\norder:\n  - a\n  - []\n---\n\n## Answer\n\nx\n';
+    assert.throws(() => parseNode(text, loc), /'order' step 2 is empty/);
+  });
+
+  test('order: an id repeated across steps is reported once per repeat', () => {
+    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\norder:\n  - a\n  - [a, b]\n---\n\n## Answer\n\nx\n';
+    assert.throws(() => parseNode(text, loc), /'order' names a twice/);
+  });
+
+  test("order requires an '## Answer' section", () => {
+    const text = '---\nquestion: Q?\nstage: periagogic\norder:\n  - a\n---\n\n## Disposition\n\nOpen.\n';
+    assert.throws(() => parseNode(text, loc), /'order' requires an '## Answer' section/);
   });
 });
 
@@ -232,7 +272,7 @@ describe('readGraph: valid fixture', () => {
   test('status', async () => {
     assert.equal((await byId('example.test/main/root-a')).status, 'proposal');
     assert.equal((await byId('example.test/main/root-b')).status, 'ratified');
-    assert.equal((await byId('example.test/main/child-a1')).status, 'question');
+    assert.equal((await byId('example.test/main/child-a1')).status, 'proposal');
     assert.equal((await byId('example.test/main/child-a2')).status, 'proposal');
     assert.equal((await byId('example.test/main/multi')).status, 'proposal');
     assert.equal((await byId('example.test/main/reading')).status, 'proposal');
@@ -305,6 +345,23 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-ledger-key', /unknown frontmatter key 'ledger'/],
     ['invalid-shim-missing-liquidation', /'shims\[0\]\.liquidation' is required/],
     ['invalid-shim-unknown-key', /unknown key 'shims\[0\]\.bogus'/],
+    // stage / un-aligned-disposition rules (session-context: an un-aligned
+    // disposition is a node with no '## Answer').
+    ['invalid-unaligned-without-stage', /a node without an '## Answer' section is an un-aligned disposition and must carry 'stage'/],
+    ['invalid-stage-without-dialogue', /'stage' requires a '## Disposition' or a '## Proposal' section/],
+    ['invalid-disposition-without-stage', /'## Disposition' requires 'stage'/],
+    // graph-level rule: an un-aligned disposition (no answer) has no children.
+    ['invalid-unaligned-with-child', /'under' names example\.test\/main\/unaligned, which has no '## Answer'; an un-aligned disposition has no children/],
+    ['invalid-stage-value', /'stage' must be one of: periagogic, maieutic, ruling, review/],
+    ['invalid-unaligned-tier', /'tier' requires an '## Answer' section/],
+    ['invalid-section-order', /'## Disposition' heading is out of order/],
+    // order rule (i): the boosts of b and c contradict the recorded step order.
+    ['invalid-order-violated', /'order' step 2 names example\.test\/main\/b \(rank 0\.0090\), which does not outrank example\.test\/main\/c \(rank 0\.0901\) of step 3/],
+    // order rule (ii): d is an unrelated (not ancestor) sibling that outranks
+    // a's first (and only) step.
+    ['invalid-order-head', /'order' puts example\.test\/main\/a in its first step, but example\.test\/main\/d \(rank 0\.9901\) outranks it and is not its ancestor/],
+    ['invalid-order-unresolved', /'order' names example\.test\/main\/does-not-exist, which is not a node/],
+    ['invalid-order-no-answer', /'order' requires an '## Answer' section/],
   ];
 
   for (const [dirName, pattern] of cases) {
@@ -409,6 +466,63 @@ describe('readGraph: shims fixture', () => {
         for: "the namespaces node's target metadata",
       },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readGraph: valid-unaligned fixture
+// ---------------------------------------------------------------------------
+
+describe('readGraph: valid-unaligned fixture', () => {
+  test('an un-aligned node reads with stage/disposition populated and status "unaligned"; a mid-dialogue node with an answer stays aligned', async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-unaligned'));
+    const byId = (slug) => graph.nodes.find((n) => n.id === `example.test/main/${slug}`);
+
+    const root = byId('root');
+    assert.equal(root.status, 'deferred');
+    assert.equal(root.stage, null);
+
+    const unaligned = byId('child-unaligned');
+    assert.equal(unaligned.status, 'unaligned');
+    assert.equal(unaligned.stage, 'periagogic');
+    assert.equal(unaligned.disposition, 'The author has not yet ruled on this branch.');
+    assert.equal(unaligned.answer, null);
+
+    // a node with '## Disposition', '## Answer', '## Rationale', and
+    // '## Proposal' all together: still mid-dialogue (carries a stage), but
+    // an '## Answer' means it is not an un-aligned disposition.
+    const ruling = byId('child-ruling');
+    assert.equal(ruling.status, 'deferred');
+    assert.equal(ruling.stage, 'ruling');
+    assert.ok(ruling.disposition && ruling.answer && ruling.rationale && ruling.proposal);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readGraph: valid-order fixture
+// ---------------------------------------------------------------------------
+
+describe('readGraph: valid-order fixture', () => {
+  // order-node's order ties itself with leaf-a (deeper, under the sibling
+  // hub) ahead of leaf-b; hub outranks leaf-a but is excepted as its
+  // ancestor; solo-child (leaf-a's lone child) ties leaf-a's rank exactly
+  // but is excepted as its descendant.
+  test('loads without throwing, and order normalizes to canonical ids', async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-order'));
+    const byId = (slug) => graph.nodes.find((n) => n.id === `example.test/main/${slug}`);
+
+    const orderNode = byId('order-node');
+    assert.deepEqual(orderNode.order, [
+      ['example.test/main/order-node', 'example.test/main/leaf-a'],
+      ['example.test/main/leaf-b'],
+    ]);
+
+    // the depths and the ancestor/descendant exceptions this fixture exists
+    // to cover, stated as ranks so a future change to the rule notices them.
+    assert.ok(orderNode.rank > byId('leaf-a').rank, 'order-node outranks leaf-a (its step-1 partner)');
+    assert.ok(byId('leaf-a').rank > byId('leaf-b').rank, 'leaf-a (step 1) outranks leaf-b (step 2)');
+    assert.ok(byId('hub').rank > byId('leaf-a').rank, "hub outranks leaf-a but is leaf-a's ancestor");
+    assert.equal(byId('solo-child').rank, byId('leaf-a').rank, "leaf-a's lone child ties its rank exactly");
   });
 });
 

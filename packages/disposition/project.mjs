@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 // Project a disposition graph into one self-contained HTML page, and/or into
-// the two harness-context projections named by session-context: `--rules
-// <dir>` (one file per `tier: global` node) and `--ancestry <node id>
-// --local <file>` (one node's ancestry, pinned by blob hash).
+// the harness-context projections named by session-context: `--rules <dir>`
+// (one file per `tier: global` node), `--ancestry <node id> --local <file>`
+// (one node's ancestry, pinned by blob hash), `--frontier <file>` (every
+// node in rank order, `-` for stdout) -- the un-aligned-dispositions listing
+// the browser itself excludes -- and `--alignment <file>` (`-` for stdout):
+// the open dialogue the author rules on, one page, every node carrying a
+// `stage`.
 //
 // Usage:
 //   node packages/disposition/project.mjs [rootDir] [--input nodes.json] \
-//     [--out browser/index.html] [--rules dir] [--ancestry nodeId --local file]
+//     [--out browser/index.html] [--rules dir] [--ancestry nodeId --local file] \
+//     [--frontier file] [--alignment file]
 //
 // Without --input the graph is read with readGraph(rootDir) from ./read.mjs.
 // Each output is independent and only runs when its own flag is given. For
@@ -22,8 +27,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const MARKER = "<!--DG:GRAPH-->";
 
 function parseArgs(argv) {
-  const opts = { rootDir: null, input: null, out: null, rules: null, ancestry: null, local: null };
-  const valueFlags = { "--input": "input", "--out": "out", "--rules": "rules", "--ancestry": "ancestry", "--local": "local" };
+  const opts = { rootDir: null, input: null, out: null, rules: null, ancestry: null, local: null, frontier: null, alignment: null };
+  const valueFlags = { "--input": "input", "--out": "out", "--rules": "rules", "--ancestry": "ancestry", "--local": "local", "--frontier": "frontier", "--alignment": "alignment" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a in valueFlags) {
@@ -186,8 +191,9 @@ function ancestorChain(nodeId, nodesById) {
  * title, a notice line that pins the node and every ancestor (nearest first,
  * up every `under` chain to the roots, no duplicates) to its exact blob
  * hash, then one `## <question>` section per node in that same list giving
- * its id, its authority class (or "open question" when it has none), and
- * its `## Answer` text verbatim.
+ * its id, its authority class (or, with no stamp, "proposal" when it has an
+ * `## Answer` and "un-aligned" when it does not), and its `## Answer` text
+ * verbatim.
  *
  * A `tier: global` node is pinned like any other ancestor -- its hash still
  * lets a bite detect that a rule moved under it -- but gets no section of
@@ -214,7 +220,13 @@ export async function writeAncestry(graph, nodeId, file) {
   for (const id of chain) {
     const node = nodesById.get(id);
     if (node.tier === "global") continue;
-    lines.push(`## ${node.question}`, "", `${node.id} (${node.authority ? node.authority.class : "open question"})`);
+    // Mirrors derive.mjs's deriveStatus (stamp, then answer-without-stamp,
+    // then un-aligned) without importing it: this file is sometimes copied
+    // standalone (see project.test.mjs's space-in-path CLI test), so it
+    // must not pick up a static sibling-module dependency.
+    const hasAnswer = typeof node.answer === "string" && node.answer.length > 0;
+    const label = node.authority ? node.authority.class : hasAnswer ? "proposal" : "un-aligned";
+    lines.push(`## ${node.question}`, "", `${node.id} (${label})`);
     if (typeof node.answer === "string" && node.answer.length > 0) {
       lines.push("", node.answer);
     }
@@ -229,6 +241,41 @@ export async function writeAncestry(graph, nodeId, file) {
   return { file: filePath, content };
 }
 
+/**
+ * Drop every node whose status is "unaligned" (an un-aligned disposition
+ * that has not survived the alignment dialogue) from the data the browser
+ * receives: it renders no page, appears in no nav tree or search, and
+ * defines no term, simply by being absent from `nodes`. Any surviving
+ * node's `cites` entries and `children` list that point at a dropped id are
+ * removed too, since the cited/child node no longer exists in this
+ * projection; nothing else about a node changes. A graph with nothing to
+ * drop is returned unchanged, and a node that names no dropped id in either
+ * field is returned unchanged as well.
+ *
+ * This runs after `check()`, not before: `check()` validates the reader's
+ * full contract, and a citation or child reference into a node this
+ * function is about to drop is not a contract violation.
+ *
+ * @param {{nodes: object[]}} graph
+ * @returns {{nodes: object[]}}
+ */
+export function excludeUnaligned(graph) {
+  const dropped = new Set(graph.nodes.filter((n) => n.status === "unaligned").map((n) => n.id));
+  if (dropped.size === 0) return graph;
+  const nodes = graph.nodes
+    .filter((n) => !dropped.has(n.id))
+    .map((n) => {
+      const citesHit = (n.cites || []).some((c) => dropped.has(c.id));
+      const childrenHit = (n.children || []).some((id) => dropped.has(id));
+      if (!citesHit && !childrenHit) return n;
+      const next = { ...n };
+      if (citesHit) next.cites = n.cites.filter((c) => !dropped.has(c.id));
+      if (childrenHit) next.children = n.children.filter((id) => !dropped.has(id));
+      return next;
+    });
+  return { ...graph, nodes };
+}
+
 export function build(template, graph) {
   if (!template.includes(MARKER)) throw new Error(`template has no ${MARKER} marker`);
   // "<" only ever occurs inside a JSON string, so escaping it keeps the
@@ -238,15 +285,330 @@ export function build(template, graph) {
   return template.replace(MARKER, () => block);
 }
 
+/**
+ * Render every node in the graph as a flat markdown listing, descending by
+ * `rank` (ties broken by id) -- the frontier of un-aligned dispositions (and
+ * everything else) that `excludeUnaligned` hides from the browser. Pure and
+ * deterministic: nothing but the graph's own data, no dates or timestamps.
+ *
+ * @param {{module: string, nodes: object[]}} graph
+ * @returns {string} markdown, newline-terminated
+ */
+export function renderFrontier(graph) {
+  const nodes = [...graph.nodes].sort((a, b) => {
+    if (b.rank !== a.rank) return b.rank - a.rank;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
+  const lines = [`# Frontier of ${graph.module}`];
+  for (const node of nodes) {
+    const head = [
+      node.id,
+      node.authority ? `${node.status} (${node.authority.by}, ${node.authority.date})` : node.status,
+      `rank ${node.rank.toFixed(4)}`,
+    ];
+    if (node.tier === "global") head.push("tier global");
+    if (node.boost != null) head.push(`boost ${node.boost}`);
+    lines.push(`- ${head.join(" — ")}`);
+
+    if (node.order && node.order.length > 0) {
+      const stepsText = node.order.map((step) => step.join(" = ")).join(" > ");
+      lines.push(`  order: ${stepsText}`);
+    }
+    if (node.stage) lines.push(`  stage: ${node.stage}`);
+    if (node.status === "unaligned") lines.push(`  under: ${(node.under || []).join(", ")}`);
+    if (node.instrument) {
+      const note = node.instrument.note ? ` — ${node.instrument.note}` : "";
+      lines.push(`  instrument: ${node.instrument.kind}: ${node.instrument.ref}${note}`);
+    } else {
+      lines.push("  instrument: none");
+    }
+    for (const s of node.shims || []) {
+      lines.push(`  shim (${s.declared}): ${s.artifact} — for: ${s.for || "unstated"} — liquidation: ${s.liquidation}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+/* ------------------------------------------------------------------ *
+ * the alignment page: every node carrying a `stage` -- an un-aligned
+ * disposition, or an answered node whose sitting is open -- rendered as one
+ * flat, at-rest page the author rules on. Unlike the browser, every item is
+ * rendered to HTML here, in Node, at build time: there is no per-node route
+ * to click through, so the file itself already holds everything a reader
+ * (or a test) will ever see. alignment-template.html's own <script> is
+ * untouched by this function; it only carries what has to run in a
+ * browser -- the theme toggle, reading and writing the author's responses,
+ * and the "copy all" digest.
+ * ------------------------------------------------------------------ */
+
+const ALIGNMENT_MARKER = "<!--DG:ITEMS-->";
+const ALIGNMENT_STAGES = ["ruling", "review", "maieutic", "periagogic"];
+const ALIGNMENT_STAGE_LABEL = { ruling: "Ruling", review: "Review", maieutic: "Maieutic", periagogic: "Periagogic" };
+const RATIFY_OPTIONS = ["Ratify as shown", "Ratify with edits", "Defer", "Overrule"];
+
+function alignEsc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&quot;"));
+}
+
+// Every markdown link renders as plain text: the alignment page is a flat,
+// at-rest document with no per-node route to send a reader to, and almost
+// every link this record writes is `[text](#some/node/id)` -- an address
+// the browser resolves and this page cannot.
+function alignMarks(t) {
+  t = t.replace(/\[([^\]]+)\]\([^)\s]*\)/g, "$1");
+  t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  t = t.replace(/(^|[\s(["])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
+  t = t.replace(/(^|[\s(["])_([^_\s][^_]*)_/g, "$1<em>$2</em>");
+  return t;
+}
+
+function alignInline(s) {
+  return String(s == null ? "" : s).split(/(`[^`]*`)/g).map((p) => {
+    if (p.length > 1 && p.charAt(0) === "`" && p.charAt(p.length - 1) === "`") {
+      return `<code>${alignEsc(p.slice(1, -1))}</code>`;
+    }
+    return alignMarks(alignEsc(p));
+  }).join("");
+}
+
+const ALIGN_RE_BULLET = /^\s*([-*+])\s+(.*)$/;
+const ALIGN_RE_ORDER = /^\s*(\d+)[.)]\s+(.*)$/;
+const ALIGN_RE_BREAK = /^\s*(?:#{1,6}\s|```|>|[-*+]\s|\d+[.)]\s)/;
+const ALIGN_RE_RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+
+/**
+ * Port of the browser template's `mdBlocks`, adapted to keep a fenced
+ * block's info string as `lang` so `renderProposal` can single out a
+ * fenced ```markdown block -- a draft quoted from the sitting -- for its
+ * own label; no other caller reads `lang`.
+ *
+ * @param {string} src
+ * @returns {{type: string, lang?: string, html: string}[]}
+ */
+function alignBlocks(src) {
+  const out = [];
+  if (src == null || String(src).trim() === "") return out;
+  const lines = String(src).replace(/\r\n?/g, "\n").split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+    const fence = line.match(/^\s*```(\S*)\s*$/);
+    if (fence) {
+      const code = [];
+      i++;
+      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) { code.push(lines[i]); i++; }
+      i++;
+      out.push({ type: "code", lang: fence[1] || "", html: `<pre><code>${alignEsc(code.join("\n"))}</code></pre>` });
+      continue;
+    }
+    if (ALIGN_RE_RULE.test(line)) { out.push({ type: "rule", html: "<hr>" }); i++; continue; }
+    const head = line.match(/^\s*(#{1,6})\s+(.*)$/);
+    if (head) {
+      const lvl = Math.max(3, Math.min(6, head[1].length));
+      const text = head[2].trim().replace(/\s+#+\s*$/, "");
+      out.push({ type: "heading", html: `<h${lvl}>${alignInline(text)}</h${lvl}>` });
+      i++;
+      continue;
+    }
+    if (/^\s*>/.test(line)) {
+      const quoted = [];
+      while (i < lines.length && /^\s*>/.test(lines[i])) { quoted.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
+      out.push({ type: "quote", html: `<blockquote>${alignHtml(quoted.join("\n"))}</blockquote>` });
+      continue;
+    }
+    if (ALIGN_RE_BULLET.test(line) || ALIGN_RE_ORDER.test(line)) {
+      const ordered = !ALIGN_RE_BULLET.test(line);
+      const re = ordered ? ALIGN_RE_ORDER : ALIGN_RE_BULLET;
+      const items = [];
+      while (i < lines.length) {
+        const m = lines[i].match(re);
+        if (m) { items.push(m[2]); i++; }
+        else if (items.length && lines[i].trim() && /^\s{2,}\S/.test(lines[i])) { items[items.length - 1] += ` ${lines[i].trim()}`; i++; }
+        else break;
+      }
+      const tag = ordered ? "ol" : "ul";
+      out.push({ type: "list", html: `<${tag}>${items.map((t) => `<li>${alignInline(t)}</li>`).join("")}</${tag}>` });
+      continue;
+    }
+    const para = [];
+    while (i < lines.length && lines[i].trim() && !ALIGN_RE_BREAK.test(lines[i]) && !ALIGN_RE_RULE.test(lines[i])) {
+      para.push(lines[i].trim());
+      i++;
+    }
+    if (!para.length) { i++; continue; }
+    out.push({ type: "para", html: `<p>${alignInline(para.join(" "))}</p>` });
+  }
+  return out;
+}
+
+function alignHtml(src) {
+  return alignBlocks(src).map((b) => b.html).join("");
+}
+
+/**
+ * `## Proposal`, with a fenced ```markdown block -- a draft quoted from the
+ * sitting -- called out in its own labelled block so it is never mistaken
+ * for "The node as it stands".
+ *
+ * @param {string} src
+ * @returns {string}
+ */
+function renderProposal(src) {
+  return alignBlocks(src).map((b) => {
+    if (b.type === "code" && b.lang === "markdown") {
+      return `<div class="draft"><p class="blk-label">Drafted at the sitting; the node above is current</p>${b.html}</div>`;
+    }
+    return b.html;
+  }).join("");
+}
+
+// Doc ids may not contain '/'; a node id always does.
+function alignDocId(nodeId) {
+  return String(nodeId).replace(/\//g, ":");
+}
+
+function alignSection(label, bodyHtml, cls) {
+  return `<section${cls ? ` class="${cls}"` : ""}><p class="lbl">${alignEsc(label)}</p><div class="mdbody">${bodyHtml}</div></section>`;
+}
+
+// For a ruling-stage item that already has an answer, the ratify options act
+// on the AI's account (the proposal above), not on the node as it currently
+// stands -- this caption says so, right above the controls it describes.
+const RULING_WITH_ANSWER_CAPTION =
+  "The options rule on the AI's account above; 'as shown' means the draft in it. The node as it stands is what remains if you overrule.";
+
+/** The response controls for one item, by stage (contract section 2). */
+function alignControls(n, hasAnswer) {
+  const doc = alignDocId(n.id);
+  if (n.stage === "review") {
+    return '<div class="controls" data-role="none"><p class="controls-note">In clean-context review; nothing to answer yet.</p></div>';
+  }
+  if (n.stage === "ruling") {
+    const caption = hasAnswer ? `<p class="controls-note">${RULING_WITH_ANSWER_CAPTION}</p>` : "";
+    const radios = RATIFY_OPTIONS.map(
+      (label) => `<label class="opt"><input type="radio" name="opt:${alignEsc(doc)}" value="${alignEsc(label)}" data-option> ${alignEsc(label)}</label>`
+    ).join("");
+    return `${caption}<fieldset class="controls" data-role="ruling"><legend class="note-lbl">Your response</legend>${radios}<label class="note-lbl">Note<textarea class="note" data-field="note" rows="2"></textarea></label></fieldset>`;
+  }
+  // maieutic and periagogic: the dialogue is drawn out in the author's own words.
+  return '<div class="controls" data-role="words"><label class="note-lbl">Your words<textarea class="note" data-field="note" rows="3"></textarea></label></div>';
+}
+
+function renderAlignmentItem(n) {
+  const hasAnswer = typeof n.answer === "string" && n.answer.length > 0;
+  const under = n.under || [];
+  const doc = alignDocId(n.id);
+
+  let html = `<article class="item" id="item-${alignEsc(doc)}" data-item data-id="${alignEsc(n.id)}" data-doc="${alignEsc(doc)}" data-stage="${alignEsc(n.stage)}">`;
+  html += `<h2 class="iq">${alignEsc(n.question || n.id)}</h2>`;
+  html += `<p class="idv mono">${alignEsc(n.id)}</p>`;
+  html += `<p class="eyebrow"><span class="pill stage-${alignEsc(n.stage)}">${alignEsc(ALIGNMENT_STAGE_LABEL[n.stage] || n.stage)}</span><span class="parents">under ${alignEsc(under.length ? under.join(", ") : "none")}</span></p>`;
+
+  if (n.disposition) html += alignSection("The author's words", alignHtml(n.disposition), "disposition");
+  if (hasAnswer) {
+    const body = alignHtml(n.answer) + (n.rationale ? alignHtml(n.rationale) : "");
+    html += alignSection("The node as it stands", body, "stands");
+  }
+  if (n.proposal) html += alignSection("The AI's account", renderProposal(n.proposal), "account");
+
+  html += alignControls(n, hasAnswer);
+  html += "</article>";
+  return html;
+}
+
+/**
+ * Group every node carrying a `stage` into the four movements, in the fixed
+ * order `ruling`, `review`, `maieutic`, `periagogic`; within a group, rank
+ * order (descending, ties by id).
+ *
+ * @param {object[]} nodes
+ * @returns {{stage: string, label: string, items: object[]}[]}
+ */
+export function groupAlignmentItems(nodes) {
+  return ALIGNMENT_STAGES.map((stage) => ({
+    stage,
+    label: ALIGNMENT_STAGE_LABEL[stage],
+    items: nodes
+      .filter((n) => n.stage === stage)
+      .sort((a, b) => (b.rank !== a.rank ? b.rank - a.rank : (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))),
+  }));
+}
+
+function alignmentPageHtml(graph, groups) {
+  const total = groups.reduce((sum, g) => sum + g.items.length, 0);
+  const countsHtml = groups.map((g) => `<div><dt>${alignEsc(g.label)}</dt><dd class="num">${g.items.length}</dd></div>`).join("");
+  const present = groups.filter((g) => g.items.length > 0);
+  const railHtml = present.map((g) => {
+    const rows = g.items.map((n) => `<li><a href="#item-${alignEsc(alignDocId(n.id))}">${alignEsc(n.question || n.id)}</a></li>`).join("");
+    return `<section class="grp"><p class="grp-h">${alignEsc(g.label)} (${g.items.length})</p><ul class="tree">${rows}</ul></section>`;
+  }).join("");
+  const itemsHtml = present.map((g) => {
+    return `<section class="stagegrp" id="stage-${alignEsc(g.stage)}"><h2 class="stageh">${alignEsc(g.label)}</h2>${g.items.map(renderAlignmentItem).join("")}</section>`;
+  }).join("");
+  const emptyHtml = total === 0 ? '<p class="empty">Nothing is open. Every disposition has survived the dialogue.</p>' : "";
+  const refline = alignEsc([graph.module, graph.ref].filter(Boolean).join(" · "));
+
+  return `<header class="mast">
+  <div class="mast-in">
+    <div class="brand">
+      <span class="wordmark">Alignment</span>
+      <span class="refline">${refline}</span>
+      <span id="module-name" hidden>${alignEsc(graph.module || "")}</span>
+    </div>
+    <nav class="tools" aria-label="Actions">
+      <button type="button" class="tbtn" id="btn-copy">Copy all responses</button>
+      <button type="button" class="tbtn" id="btn-theme">Theme: auto</button>
+    </nav>
+  </div>
+</header>
+<div class="shell">
+  <nav class="nav" id="nav" aria-label="Open items">
+    <dl class="counts">${countsHtml}</dl>
+    <div id="tree">${railHtml}</div>
+  </nav>
+  <main id="main">
+    <p class="lede">Every item is an open dialogue with the author, recorded as a node that carries its stage. Rulings and words written here are read back by the alignment session.</p>
+    <p class="notice" id="notice" hidden></p>
+    ${itemsHtml}
+    ${emptyHtml}
+  </main>
+</div>
+<footer class="foot"><span>${alignEsc(graph.module || "")}</span><span>${total} open item${total === 1 ? "" : "s"}</span></footer>`;
+}
+
+/**
+ * Render every node carrying a `stage` into
+ * `packages/disposition/alignment-template.html`: the open dialogue the
+ * author rules on, one flat page, grouped by stage in the fixed order
+ * ruling/review/maieutic/periagogic and ranked within each group. See the
+ * section comment above for why this renders to HTML in Node rather than
+ * inlining JSON for a client-side router, unlike `build()`.
+ *
+ * @param {string} template
+ * @param {{module?: string, ref?: string|null, nodes: object[]}} graph
+ * @returns {string}
+ */
+export function buildAlignment(template, graph) {
+  if (!template.includes(ALIGNMENT_MARKER)) throw new Error(`template has no ${ALIGNMENT_MARKER} marker`);
+  const nodes = (graph.nodes || []).filter((n) => n.stage);
+  const groups = groupAlignmentItems(nodes);
+  const block = alignmentPageHtml(graph, groups);
+  return template.replace(ALIGNMENT_MARKER, () => block);
+}
+
 // Builds the browser page only when opts.out is given -- --rules and
 // --ancestry are independent outputs that do not need it (see writeRules,
 // writeAncestry), and check() only makes sense against the page's contract.
+// check() runs against the full graph; excludeUnaligned() is applied only to
+// what build() actually receives (see excludeUnaligned's own doc comment).
 export async function project(opts) {
   const graph = await loadGraph(opts);
   if (!opts.out) return { out: null, html: null, graph, warnings: [] };
   const warnings = check(graph);
   const template = await readFile(resolve(HERE, "browser-template.html"), "utf8");
-  const html = build(template, graph);
+  const html = build(template, excludeUnaligned(graph));
   const out = resolve(opts.out);
   await mkdir(dirname(out), { recursive: true });
   await writeFile(out, html);
@@ -268,6 +630,31 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     process.stdout.write(`wrote ${result.file}\n`);
   }
 
+  if (opts.frontier) {
+    const listing = renderFrontier(graph);
+    if (opts.frontier === "-") {
+      process.stdout.write(listing);
+    } else {
+      const filePath = resolve(opts.frontier);
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, listing);
+      process.stdout.write(`wrote ${filePath}\n`);
+    }
+  }
+
+  if (opts.alignment) {
+    const alignmentTemplate = await readFile(resolve(HERE, "alignment-template.html"), "utf8");
+    const alignmentHtml = buildAlignment(alignmentTemplate, graph);
+    if (opts.alignment === "-") {
+      process.stdout.write(alignmentHtml);
+    } else {
+      const filePath = resolve(opts.alignment);
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, alignmentHtml);
+      process.stdout.write(`wrote ${filePath} (${Buffer.byteLength(alignmentHtml)} bytes)\n`);
+    }
+  }
+
   if (out) {
     for (const w of warnings) process.stderr.write(`contract: ${w}\n`);
     process.stdout.write(
@@ -275,8 +662,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     );
   }
 
-  if (!out && !opts.rules && !opts.ancestry) {
-    process.stderr.write("nothing to do: pass --out, --rules, or --ancestry (with --local)\n");
+  if (!out && !opts.rules && !opts.ancestry && !opts.frontier && !opts.alignment) {
+    process.stderr.write("nothing to do: pass --out, --rules, --ancestry (with --local), --frontier, or --alignment\n");
     process.exitCode = 1;
   }
 }

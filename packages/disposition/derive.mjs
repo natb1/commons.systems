@@ -201,13 +201,65 @@ export function deriveCeiling(nodeId, nodesById) {
 
 /**
  * A node's status: the stamp's class when it has one; `proposal` when it
- * has an `## Answer` but no stamp; `question` when it has no `## Answer`.
+ * has an `## Answer` but no stamp; `unaligned` when it has no `## Answer` --
+ * an un-aligned disposition that has not yet survived the alignment
+ * dialogue.
  *
  * @param {{authority: Authority|null, answer: string|null}} node
- * @returns {'ratified'|'delegated'|'deferred'|'proposal'|'question'}
+ * @returns {'ratified'|'delegated'|'deferred'|'proposal'|'unaligned'}
  */
 export function deriveStatus(node) {
   if (node.authority) return node.authority.class;
   if (node.answer !== null && node.answer !== undefined) return 'proposal';
-  return 'question';
+  return 'unaligned';
+}
+
+/**
+ * Every strict descendant of the given parent ids: everything reachable by
+ * following `children` downward from them any number of times. The parent
+ * ids themselves are never included unless also reachable as a descendant
+ * of another parent id in the list. Cycle-safe: an id already in the result
+ * is not re-expanded.
+ *
+ * @param {string[]} parentIds
+ * @param {Map<string, string[]>} childrenMap - as returned by deriveChildren
+ *   (or any map with the same shape; a missing key is treated as childless).
+ * @returns {Set<string>}
+ */
+export function deriveDescendants(parentIds, childrenMap) {
+  const result = new Set();
+  const queue = [...parentIds];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    for (const child of childrenMap.get(id) ?? []) {
+      if (!result.has(child)) {
+        result.add(child);
+        queue.push(child);
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Every strict ancestor of one node: everything reachable by following
+ * `under` upward from it any number of times. The node itself is never
+ * included. Cycle-safe: an id already in the result is not re-expanded.
+ *
+ * @param {string} nodeId
+ * @param {Map<string, DeriveNode>} nodesById
+ * @returns {Set<string>}
+ */
+export function deriveAncestors(nodeId, nodesById) {
+  const result = new Set();
+  const queue = [...(nodesById.get(nodeId)?.under ?? [])];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    if (result.has(id)) continue;
+    result.add(id);
+    for (const parent of nodesById.get(id)?.under ?? []) {
+      if (!result.has(parent)) queue.push(parent);
+    }
+  }
+  return result;
 }

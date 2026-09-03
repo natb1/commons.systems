@@ -1,5 +1,6 @@
 ---
 question: What shims does this node carry?
+stage: periagogic
 shims:
   - artifact: packages/disposition/read.mjs's ledger field
     liquidation: when the ledger field is fully removed from the schema
@@ -9,3 +10,7 @@ shims:
     liquidation: when the namespaces node declares the mount as its own shim
     declared: 2026-09-02
 ---
+
+## Disposition
+
+Still open.

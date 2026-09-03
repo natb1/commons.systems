@@ -12,11 +12,12 @@ import os from "node:os";
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { build, project, writeRules, writeAncestry } from "./project.mjs";
+import { build, project, writeRules, writeAncestry, excludeUnaligned, renderFrontier, buildAlignment, groupAlignmentItems } from "./project.mjs";
 import { readGraph } from "./read.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE = await readFile(resolve(HERE, "browser-template.html"), "utf8");
+const ALIGNMENT_TEMPLATE = await readFile(resolve(HERE, "alignment-template.html"), "utf8");
 const FIXTURE = JSON.parse(await readFile(resolve(HERE, "fixtures/browser/nodes.json"), "utf8"));
 const VALID_GRAPH = await readGraph(resolve(HERE, "fixtures/valid"));
 
@@ -42,7 +43,7 @@ after(async () => {
 function loadRenderer() {
   const m = TEMPLATE.match(/<script>\n([\s\S]*?)\n<\/script>/);
   assert.ok(m, "template has a plain <script> block");
-  const api = "esc inline mdHtml mdBlocks groupRejected plain firstSentence termIndex termRegex fmtPct formWord safeHref truncate shimsHtml chooseRoute savePlace loadPlace PLACE_KEY";
+  const api = "esc inline mdHtml mdBlocks groupRejected plain firstSentence termIndex termRegex fmtPct formWord safeHref truncate shimsHtml chooseRoute savePlace loadPlace PLACE_KEY STATUS_WORD";
   return new Function(`${m[1]}\nreturn { ${api.split(" ").join(", ")} };`)();
 }
 const R = loadRenderer();
@@ -160,6 +161,26 @@ test("writeRules overwrites a same-slug file, deletes only its own stale output,
   await assert.rejects(readFile(join(dir, "stale.md"), "utf8"), "the stale generated file is deleted");
 });
 
+// covers rule 1d (an un-aligned node is never tier: global, so it is never a
+// candidate here) with an explicit mixed graph, rather than relying on the
+// valid fixture -- which, once every node in it has an '## Answer', no
+// longer has any un-aligned node to mix in.
+test("writeRules still projects a global-tier node when the graph also has an un-aligned node", async () => {
+  const dir = await freshTmpDir("project-rules-unaligned-");
+  const graph = {
+    nodes: [
+      {
+        id: "example.test/main/g", slug: "g", question: "G?", tier: "global",
+        authority: { class: "ratified", by: "Fixture Author", date: "2026-01-01" },
+        answer: "Global answer.", status: "ratified",
+      },
+      { id: "example.test/main/u", slug: "u", question: "U?", tier: null, authority: null, answer: null, status: "unaligned" },
+    ],
+  };
+  const { written } = await writeRules(graph, dir);
+  assert.deepEqual(written, [join(dir, "g.md")]);
+});
+
 /* ----------------------------------------------------------- writeAncestry */
 
 test("writeAncestry lists the node then its ancestors nearest-first, pins every one by hash, and omits global-tier sections", async () => {
@@ -191,12 +212,34 @@ test("writeAncestry lists the node then its ancestors nearest-first, pins every 
   assert.ok(!content.includes(`## ${rootB.question}`), "no section for the global-tier ancestor");
   assert.ok(!content.includes(rootB.answer), "its answer is not repeated either");
 
-  // child-a1 has no '## Answer' of its own: it still gets an "open question"
-  // line, just no answer paragraph
-  assert.ok(content.includes(`${id("child-a1")} (open question)`));
+  // child-a1 carries an answer but no authority stamp, like root-a: a plain,
+  // unstamped proposal.
+  assert.ok(content.includes(`${id("child-a1")} (proposal)`));
 
   const rootA = nodesById.get(id("root-a"));
   assert.ok(content.includes(rootA.answer), "an ancestor's answer is reproduced verbatim");
+});
+
+test("writeAncestry labels an authority-less ancestor 'proposal' when it has an answer and 'un-aligned' when it has none", async () => {
+  const dir = await freshTmpDir("project-ancestry-labels-");
+  const graph = {
+    nodes: [
+      { id: "root", slug: "root", question: "Root?", under: [], tier: null, authority: null, answer: "Answer root.", hash: "hash-root" },
+      { id: "leaf", slug: "leaf", question: "Leaf?", under: ["root"], tier: null, authority: null, answer: null, hash: "hash-leaf" },
+    ],
+  };
+  const { content } = await writeAncestry(graph, "leaf", join(dir, "CLAUDE.local.md"));
+  assert.ok(content.includes("leaf (un-aligned)"), "no answer, no stamp: un-aligned");
+  assert.ok(content.includes("root (proposal)"), "an answer with no stamp: proposal");
+});
+
+test("writeAncestry on an un-aligned node targeted directly prints 'un-aligned' for itself", async () => {
+  const dir = await freshTmpDir("project-ancestry-unaligned-");
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-unaligned"));
+  const unaligned = graph.nodes.find((n) => n.status === "unaligned");
+  assert.ok(unaligned, "fixture has an un-aligned node");
+  const { content } = await writeAncestry(graph, unaligned.id, join(dir, "CLAUDE.local.md"));
+  assert.ok(content.includes(`${unaligned.id} (un-aligned)`));
 });
 
 test("writeAncestry deduplicates an ancestor reachable by two paths, keeping it at its nearest depth", async () => {
@@ -224,6 +267,133 @@ test("writeAncestry rejects an unknown node id", async () => {
     writeAncestry(VALID_GRAPH, "example.test/main/does-not-exist", join(dir, "CLAUDE.local.md")),
     /no node with id/,
   );
+});
+
+/* --------------------------------------------------- un-aligned dispositions */
+
+test("--out drops an un-aligned node: absent from nodes and from every cite; other nodes survive", async () => {
+  const dir = await freshTmpDir("project-unaligned-out-");
+  const out = join(dir, "index.html");
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-unaligned"));
+  const unaligned = graph.nodes.find((n) => n.status === "unaligned");
+  const others = graph.nodes.filter((n) => n.status !== "unaligned");
+  assert.ok(unaligned && others.length === graph.nodes.length - 1);
+
+  const { html } = await project({ rootDir: resolve(HERE, "fixtures/valid-unaligned"), out });
+  const m = html.match(/<script type="application\/json" id="graph">([\s\S]*?)<\/script>/);
+  const embedded = JSON.parse(m[1]);
+
+  assert.ok(!embedded.nodes.some((n) => n.id === unaligned.id), "no page for the un-aligned node");
+  for (const n of embedded.nodes) {
+    assert.ok(!(n.cites || []).some((c) => c.id === unaligned.id), `${n.id}'s cites do not name the un-aligned node`);
+  }
+  for (const n of others) {
+    assert.ok(embedded.nodes.some((x) => x.id === n.id), `${n.id} is still in the page`);
+  }
+});
+
+test("excludeUnaligned drops the node and any cite pointing at it, leaving everything else untouched", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-unaligned"));
+  const root = graph.nodes.find((n) => n.slug === "root");
+  assert.ok(root.cites.some((c) => c.id.endsWith("child-unaligned")), "fixture root cites the un-aligned node");
+
+  const filtered = excludeUnaligned(graph);
+  assert.equal(filtered.nodes.length, graph.nodes.length - 1);
+  assert.ok(!filtered.nodes.some((n) => n.status === "unaligned"));
+  const filteredRoot = filtered.nodes.find((n) => n.slug === "root");
+  assert.deepEqual(filteredRoot.cites, [], "the dangling cite is dropped");
+});
+
+test("excludeUnaligned returns the graph unchanged when nothing is un-aligned", () => {
+  assert.equal(excludeUnaligned(VALID_GRAPH), VALID_GRAPH);
+});
+
+// covers a live-graph defect: the `projection` node's derived `children`
+// named `frontier-metrics` (un-aligned, dropped from the page) even though
+// `cites` was already filtered -- the browser's embedded JSON still pointed
+// at a node with no page. `root`'s children here mirror that shape: one
+// dropped (child-unaligned) and one kept (child-ruling) sibling.
+test("excludeUnaligned also drops the id from every remaining node's children, and leaves --alignment untouched", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-unaligned"));
+  const root = graph.nodes.find((n) => n.slug === "root");
+  const unaligned = graph.nodes.find((n) => n.status === "unaligned");
+  const ruling = graph.nodes.find((n) => n.slug === "child-ruling");
+  assert.ok(root.children.includes(unaligned.id), "fixture root's children includes the un-aligned node before filtering");
+  assert.ok(root.children.includes(ruling.id), "fixture root's children includes the surviving sibling before filtering");
+
+  const filtered = excludeUnaligned(graph);
+  const filteredRoot = filtered.nodes.find((n) => n.slug === "root");
+  assert.ok(!filteredRoot.children.includes(unaligned.id), "children no longer names the dropped id");
+  assert.ok(filteredRoot.children.includes(ruling.id), "the surviving sibling is still named");
+
+  const untouchedRuling = filtered.nodes.find((n) => n.slug === "child-ruling");
+  assert.equal(untouchedRuling, graph.nodes.find((n) => n.slug === "child-ruling"), "a node naming no dropped id is returned unchanged");
+
+  // --alignment does not call excludeUnaligned -- it renders every staged
+  // node, aligned or not -- so the fix above must not change its output.
+  const alignmentHtml = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  assert.ok(alignmentHtml.includes(unaligned.id), "the un-aligned node is still present in the alignment output");
+});
+
+test("renderFrontier lists every node in descending rank order with stage/under/instrument/shim lines", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-unaligned"));
+  const listing = renderFrontier(graph);
+  assert.ok(listing.startsWith(`# Frontier of ${graph.module}\n`));
+
+  const root = graph.nodes.find((n) => n.slug === "root");
+  const unaligned = graph.nodes.find((n) => n.slug === "child-unaligned");
+  const ruling = graph.nodes.find((n) => n.slug === "child-ruling");
+
+  // rank order, descending: root (1.0) > child-unaligned (0.75) > child-ruling (0.25)
+  const at = (id) => listing.indexOf(`- ${id}`);
+  assert.ok(at(root.id) >= 0 && at(unaligned.id) >= 0 && at(ruling.id) >= 0);
+  assert.ok(at(root.id) < at(unaligned.id));
+  assert.ok(at(unaligned.id) < at(ruling.id));
+
+  // child-unaligned and child-ruling share the identical parent (root), so
+  // their lines are compared within each node's own block, not by a global
+  // substring search that the shared 'under' text would satisfy either way.
+  const blockFor = (id) => {
+    const start = listing.indexOf(`- ${id}`);
+    const next = listing.indexOf("\n- ", start + 1);
+    return listing.slice(start, next === -1 ? listing.length : next);
+  };
+
+  const unalignedBlock = blockFor(unaligned.id);
+  assert.ok(unalignedBlock.includes(`  stage: ${unaligned.stage}`));
+  assert.ok(unalignedBlock.includes(`  under: ${unaligned.under.join(", ")}`), "under: lists an un-aligned node's parents");
+  assert.ok(unalignedBlock.includes("  instrument: none"));
+
+  const rulingBlock = blockFor(ruling.id);
+  assert.ok(rulingBlock.includes(`  stage: ${ruling.stage}`));
+  assert.ok(!rulingBlock.includes("  under:"), "under: is only for un-aligned nodes");
+  assert.ok(
+    rulingBlock.includes(`shim (${ruling.shims[0].declared}): ${ruling.shims[0].artifact} — for: unstated — liquidation: ${ruling.shims[0].liquidation}`),
+    "a shim with no 'for' prints 'unstated'",
+  );
+
+  const rootBlock = blockFor(root.id);
+  assert.ok(rootBlock.includes(`instrument: ${root.instrument.kind}: ${root.instrument.ref}`), "a real instrument renders");
+  assert.ok(!rootBlock.includes("  stage:"), "root has no stage");
+});
+
+test("renderFrontier prints an 'order:' line, right after the stamp line, for a node carrying order", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-order"));
+  const listing = renderFrontier(graph);
+  const orderNode = graph.nodes.find((n) => n.slug === "order-node");
+
+  const stampAt = listing.indexOf(`- ${orderNode.id}`);
+  assert.ok(stampAt >= 0, "the stamp line is present");
+  const nextLine = listing.slice(stampAt).split("\n")[1];
+  assert.equal(
+    nextLine,
+    "  order: example.test/main/order-node = example.test/main/leaf-a > example.test/main/leaf-b",
+    "steps join with ' = ' within a step and ' > ' between steps",
+  );
+
+  const other = graph.nodes.find((n) => n.slug === "hub");
+  const otherBlock = listing.slice(listing.indexOf(`- ${other.id}`));
+  assert.ok(!otherBlock.slice(0, otherBlock.indexOf("\n- ", 1)).includes("  order:"), "a node with no order gets no order line");
 });
 
 /* ------------------------------------------------------- page constraints */
@@ -323,6 +493,14 @@ test("rank prints as a percentage and archē keeps its macron", () => {
   assert.equal(R.truncate("abcdefghij", 6), "abcde…");
 });
 
+// the browser never receives an un-aligned node (excludeUnaligned drops it
+// before build()), but the status-word map must not lie about one if it
+// ever did: 'question' is retired in favor of 'unaligned' -> "un-aligned".
+test("STATUS_WORD carries 'unaligned' -> 'un-aligned' and no longer has a 'question' key", () => {
+  assert.equal(R.STATUS_WORD.unaligned, "un-aligned");
+  assert.equal(R.STATUS_WORD.question, undefined);
+});
+
 /* ------------------------------------------------------------------ shims */
 
 // covers the ledger-badge replacement: the fixture's purpose node declares
@@ -408,4 +586,199 @@ test("chooseRoute treats the retired vocabulary and bootstrap hashes as empty", 
 test("chooseRoute reports missing with no default and nothing stored", () => {
   const hasNode = () => false;
   assert.deepEqual(R.chooseRoute("", null, hasNode, null), { kind: "missing", id: "" });
+});
+
+/* ------------------------------------------------------------- alignment */
+
+const ALIGNMENT_GRAPH = await readGraph(resolve(HERE, "fixtures/valid-unaligned"));
+
+test("buildAlignment refuses a template with no marker", () => {
+  assert.throws(() => buildAlignment("<title>x</title>", ALIGNMENT_GRAPH), /DG:ITEMS/);
+});
+
+test("groupAlignmentItems groups in the fixed stage order and ranks descending within a group", () => {
+  const groups = groupAlignmentItems(ALIGNMENT_GRAPH.nodes.filter((n) => n.stage));
+  assert.deepEqual(groups.map((g) => g.stage), ["ruling", "review", "maieutic", "periagogic"]);
+  const ruling = groups.find((g) => g.stage === "ruling");
+  const periagogic = groups.find((g) => g.stage === "periagogic");
+  assert.equal(ruling.items.length, 1);
+  assert.equal(ruling.items[0].slug, "child-ruling");
+  assert.equal(periagogic.items.length, 1);
+  assert.equal(periagogic.items[0].slug, "child-unaligned");
+  assert.equal(groups.find((g) => g.stage === "maieutic").items.length, 0);
+  assert.equal(groups.find((g) => g.stage === "review").items.length, 0);
+});
+
+test("--alignment output holds both items grouped under their stage headings in order, and no node without a stage", () => {
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
+  const ruling = ALIGNMENT_GRAPH.nodes.find((n) => n.slug === "child-ruling");
+  const unaligned = ALIGNMENT_GRAPH.nodes.find((n) => n.slug === "child-unaligned");
+  const root = ALIGNMENT_GRAPH.nodes.find((n) => n.slug === "root");
+  assert.equal(root.stage, null, "fixture root carries no stage");
+
+  assert.ok(html.includes(ruling.id) && html.includes(ruling.question), "the ruling item is present");
+  assert.ok(html.includes(unaligned.id) && html.includes(unaligned.question), "the periagogic (un-aligned) item is present");
+  assert.ok(!html.includes(root.question), "the node without a stage is absent");
+
+  // grouped under their stage headings, in the required order: the
+  // "Ruling" stage heading precedes the ruling item, which precedes the
+  // "Periagogic" heading, which precedes the periagogic item.
+  const atRulingHeading = html.indexOf('id="stage-ruling"');
+  const atRulingItem = html.indexOf(ruling.id);
+  const atPeriagogicHeading = html.indexOf('id="stage-periagogic"');
+  const atPeriagogicItem = html.indexOf(unaligned.id);
+  assert.ok(atRulingHeading >= 0 && atRulingHeading < atRulingItem);
+  assert.ok(atRulingItem < atPeriagogicHeading);
+  assert.ok(atPeriagogicHeading < atPeriagogicItem);
+});
+
+test("--alignment output carries the author's words, the current answer, and the AI's account, correctly labelled", () => {
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
+  const ruling = ALIGNMENT_GRAPH.nodes.find((n) => n.slug === "child-ruling");
+  const unaligned = ALIGNMENT_GRAPH.nodes.find((n) => n.slug === "child-unaligned");
+
+  assert.ok(html.includes("The author's words"), "the Disposition label is present");
+  assert.ok(html.includes(unaligned.disposition), "the un-aligned node's author's-words text is present");
+  assert.ok(html.includes("The node as it stands"), "the answered-node label is present");
+  assert.ok(html.includes(ruling.answer), "the current answer text is present");
+  assert.ok(html.includes(ruling.rationale), "the rationale text is present");
+  assert.ok(html.includes("The AI's account"), "the Proposal label is present");
+  assert.ok(html.includes(ruling.proposal), "the proposal text is present");
+
+  // the un-aligned node has no '## Answer': its section must not appear at all.
+  const unalignedBlock = html.slice(html.indexOf(unaligned.id));
+  assert.ok(!unalignedBlock.slice(0, unalignedBlock.indexOf("</article>")).includes("The node as it stands"));
+});
+
+test("--alignment renders the ruling options and the periagogic/maieutic free-text field, and no controls for review", () => {
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
+  for (const label of ["Ratify as shown", "Ratify with edits", "Defer", "Overrule"]) {
+    assert.ok(html.includes(label), `option "${label}" is present`);
+  }
+  assert.ok(html.includes("Your words"), "the periagogic/maieutic free-text label is present");
+
+  const graph = {
+    module: "example.test", ref: null, graphs: { main: {} },
+    nodes: [{
+      id: "example.test/main/r", slug: "r", question: "Reviewed?", graph: "main", stage: "review",
+      under: [], rank: 1, status: "proposal", answer: "An answer under review.", proposal: "A proposal.",
+    }],
+  };
+  const reviewHtml = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  assert.ok(reviewHtml.includes("In clean-context review; nothing to answer yet."));
+  assert.ok(!reviewHtml.includes("Ratify as shown"), "a review item gets no ruling controls");
+  assert.ok(!reviewHtml.includes("Your words"), "a review item gets no free-text field");
+});
+
+test("a ruling-stage item with an answer carries the account/as-shown caption above its controls; one with no answer does not", () => {
+  const withAnswer = ALIGNMENT_GRAPH.nodes.find((n) => n.slug === "child-ruling");
+  assert.ok(withAnswer.stage === "ruling" && withAnswer.answer, "fixture precondition: ruling stage with an answer");
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
+  const caption = "The options rule on the AI's account above; 'as shown' means the draft in it. The node as it stands is what remains if you overrule.";
+  assert.ok(html.includes(caption), "the caption is present");
+
+  const start = html.indexOf(`data-id="${withAnswer.id}"`);
+  const article = html.slice(start, html.indexOf("</article>", start));
+  assert.ok(article.indexOf(caption) < article.indexOf('data-role="ruling"'), "the caption sits above the response controls");
+
+  const noAnswerGraph = {
+    module: "example.test", ref: null, graphs: { main: {} },
+    nodes: [{
+      id: "example.test/main/r2", slug: "r2", question: "Unanswered ruling?", graph: "main", stage: "ruling",
+      under: [], rank: 1, status: "unaligned", disposition: "Still open.", answer: null,
+    }],
+  };
+  const noAnswerHtml = buildAlignment(ALIGNMENT_TEMPLATE, noAnswerGraph);
+  assert.ok(noAnswerHtml.includes("Ratify as shown"), "still a ruling item with the usual options");
+  assert.ok(!noAnswerHtml.includes(caption), "no answer to point 'as shown' at, so no caption");
+});
+
+test("the doc id in --alignment output replaces '/' with ':'", () => {
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
+  const ruling = ALIGNMENT_GRAPH.nodes.find((n) => n.slug === "child-ruling");
+  const doc = ruling.id.replace(/\//g, ":");
+  assert.ok(!doc.includes("/"));
+  assert.ok(html.includes(`data-doc="${doc}"`));
+  assert.ok(html.includes(`id="item-${doc}"`), "the item's anchor id uses the same transform");
+});
+
+test("a fenced ```markdown block inside a Proposal renders as a labelled draft, apart from the rest of the account", () => {
+  const graph = {
+    module: "example.test", ref: null, graphs: { main: {} },
+    nodes: [{
+      id: "example.test/main/d", slug: "d", question: "Drafted?", graph: "main", stage: "ruling",
+      under: [], rank: 1, status: "proposal", answer: "Current answer.",
+      proposal: "Ordinary account prose.\n\n```markdown\n## Answer\n\nA quoted earlier draft.\n```\n\nMore prose after.",
+    }],
+  };
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  assert.ok(html.includes("Drafted at the sitting; the node above is current"));
+  assert.ok(html.includes("A quoted earlier draft."));
+  assert.ok(html.includes("Ordinary account prose.") && html.includes("More prose after."));
+  // the draft is preformatted, not parsed as markdown itself
+  assert.ok(html.includes("<pre><code>## Answer"));
+});
+
+test("--alignment escapes HTML in node content", () => {
+  const graph = {
+    module: "example.test", ref: null, graphs: { main: {} },
+    nodes: [{
+      id: "example.test/main/x", slug: "x", question: "<script>alert(1)</script>", graph: "main", stage: "periagogic",
+      under: [], rank: 1, status: "unaligned", disposition: "<img src=x onerror=alert(1)>",
+    }],
+  };
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  assert.ok(!html.includes("<script>alert(1)</script>"));
+  assert.ok(!html.includes("<img src=x"));
+  assert.ok(html.includes("&lt;script&gt;") && html.includes("&lt;img"));
+});
+
+test("--alignment renders a markdown link as plain text", () => {
+  const graph = {
+    module: "example.test", ref: null, graphs: { main: {} },
+    nodes: [{
+      id: "example.test/main/l", slug: "l", question: "Linked?", graph: "main", stage: "maieutic",
+      under: [], rank: 1, status: "unaligned", disposition: "See [growth](#commons.systems/disposition-graph/growth) for context.",
+    }],
+  };
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  // scoped to the item's own article: the left rail legitimately links to it
+  // with a real <a href="#item-..."> anchor, which must not count against
+  // this check.
+  const start = html.indexOf('data-id="example.test/main/l"');
+  const article = html.slice(start, html.indexOf("</article>", start));
+  assert.ok(article.includes("See growth for context."), "the link renders as its label, no anchor");
+  assert.ok(!article.includes("<a "), "no anchor tag is produced inside the item");
+});
+
+test("the alignment header carries the title, module, per-stage counts, the intro paragraph, and a copy-all button", () => {
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
+  assert.ok(html.includes(">Alignment<"));
+  assert.ok(html.includes(ALIGNMENT_GRAPH.module));
+  assert.ok(html.includes("Every item is an open dialogue with the author, recorded as a node that carries its stage. Rulings and words written here are read back by the alignment session."));
+  assert.ok(html.includes("Copy all responses"));
+  assert.ok(html.includes(">Ruling<") && html.includes(">Review<") && html.includes(">Maieutic<") && html.includes(">Periagogic<"));
+});
+
+test("the alignment template obeys the artifact skeleton and CSP", () => {
+  assert.ok(!/<!doctype|<html[\s>]|<head[\s>]|<body[\s>]/i.test(ALIGNMENT_TEMPLATE), "no skeleton tags");
+  assert.ok(ALIGNMENT_TEMPLATE.slice(0, 8192).includes("<title>Alignment</title>"), "title in the first 8KB");
+  const hosts = new Set([...ALIGNMENT_TEMPLATE.matchAll(/https?:\/\/([^\/"'\s)]+)/g)].map((m) => m[1]));
+  assert.deepEqual([...hosts], ["fonts.googleapis.com"], "the only external host is the font stylesheet");
+});
+
+test("the alignment template defines all three theme states with an explicit body background", () => {
+  assert.match(ALIGNMENT_TEMPLATE, /:root \{[^}]*--paper:/);
+  assert.match(ALIGNMENT_TEMPLATE, /@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme="light"\]\)/);
+  assert.match(ALIGNMENT_TEMPLATE, /:root\[data-theme="dark"\] \{/);
+  assert.match(ALIGNMENT_TEMPLATE, /body \{[\s\S]*?background: var\(--paper\)/);
+});
+
+test("project({ rootDir }) with no --out still returns the graph --alignment needs", async () => {
+  const { out, html, graph } = await project({ rootDir: resolve(HERE, "fixtures/valid-unaligned") });
+  assert.equal(out, null);
+  assert.equal(html, null);
+  assert.ok(Array.isArray(graph.nodes) && graph.nodes.length > 0);
+  const alignmentHtml = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  assert.ok(alignmentHtml.includes(graph.module));
 });

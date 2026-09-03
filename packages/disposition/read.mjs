@@ -5,7 +5,7 @@
 // plus one markdown file per node) into a plain object tree.
 //
 // `yaml` resolves from this repo's ancestor node_modules (there is none
-// inside this worktree) -- bootstrap shim, see LEDGER.md L04/L14.
+// inside this worktree) -- the bootstrap shim declared on materialization.
 import YAML from 'yaml';
 
 import { readFile, readdir, stat } from 'node:fs/promises';
@@ -15,24 +15,28 @@ import { fileURLToPath } from 'node:url';
 import {
   blobSha1,
   canonicalizeId,
+  deriveAncestors,
   deriveCeiling,
   deriveChildren,
+  deriveDescendants,
   deriveRank,
   deriveStatus,
 } from './derive.mjs';
 
 const FRONTMATTER_KEYS = new Set([
   'question', 'form', 'authority', 'under', 'tier', 'boost', 'cites',
-  'instrument', 'after', 'source', 'relation', 'defines', 'shims',
+  'instrument', 'after', 'source', 'relation', 'defines', 'shims', 'stage',
+  'order',
 ]);
 const FORMS = new Set(['target', 'rule', 'assumption', 'arche', 'reading']);
 const AUTHORITY_CLASSES = new Set(['ratified', 'delegated', 'deferred']);
 const RELATIONS = new Set(['adopted', 'diverged', 'chosen-over']);
 const INSTRUMENT_KINDS = new Set(['check', 'assessment']);
+const STAGES = new Set(['periagogic', 'maieutic', 'ruling', 'review']);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HASH_RE = /^[0-9a-f]{40}$/;
 const SHIM_KEYS = new Set(['artifact', 'liquidation', 'declared', 'for']);
-const SECTION_ORDER = ['Answer', 'Rationale', 'Proposal'];
+const SECTION_ORDER = ['Disposition', 'Answer', 'Rationale', 'Proposal'];
 
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -50,13 +54,14 @@ function isValidDate(s) {
 }
 
 /**
- * Split a body into its `## Answer` / `## Rationale` / `## Proposal`
- * sections. `###`+ headings are content, not section boundaries. Pushes one
- * message per problem (without file-path prefix) onto `problems`.
+ * Split a body into its `## Disposition` / `## Answer` / `## Rationale` /
+ * `## Proposal` sections. `###`+ headings are content, not section
+ * boundaries. Pushes one message per problem (without file-path prefix)
+ * onto `problems`.
  *
  * @param {string} bodyText
  * @param {string[]} problems
- * @returns {{Answer: string|null, Rationale: string|null, Proposal: string|null}}
+ * @returns {{Disposition: string|null, Answer: string|null, Rationale: string|null, Proposal: string|null}}
  */
 function parseBody(bodyText, problems) {
   const lines = bodyText.split('\n');
@@ -87,14 +92,14 @@ function parseBody(bodyText, problems) {
     problems.push(`body has text before the first '##' heading: ${snippet}`);
   }
 
-  const sections = { Answer: null, Rationale: null, Proposal: null };
+  const sections = { Disposition: null, Answer: null, Rationale: null, Proposal: null };
   let lastOrder = -1;
   boundaries.forEach((boundary, idx) => {
     const end = idx + 1 < boundaries.length ? boundaries[idx + 1].index : lines.length;
     const raw = lines.slice(boundary.index + 1, end).join('\n').trim();
 
     if (!SECTION_ORDER.includes(boundary.name)) {
-      problems.push(`unexpected '## ${boundary.name}' heading (only Answer, Rationale, Proposal are allowed)`);
+      problems.push(`unexpected '## ${boundary.name}' heading (only ${SECTION_ORDER.join(', ')} are allowed)`);
       return;
     }
     if (sections[boundary.name] !== null) {
@@ -103,7 +108,7 @@ function parseBody(bodyText, problems) {
     }
     const order = SECTION_ORDER.indexOf(boundary.name);
     if (order < lastOrder) {
-      problems.push(`'## ${boundary.name}' heading is out of order (must follow Answer, Rationale, Proposal order)`);
+      problems.push(`'## ${boundary.name}' heading is out of order (must follow ${SECTION_ORDER.join(', ')} order)`);
     }
     lastOrder = Math.max(lastOrder, order);
     sections[boundary.name] = raw;
@@ -120,6 +125,44 @@ function readIdList(fm, key, problems) {
     return [];
   }
   return list;
+}
+
+/**
+ * Parse and validate the `order` frontmatter field's own shape: a list of
+ * steps, each step one node id or a non-empty list of node ids (ids that
+ * are equal in the order). This only knows about the one file, so it
+ * catches a malformed step, an empty step, and an id repeated within this
+ * field -- but not whether a named id exists or is in scope, which needs
+ * the whole graph and is checked by readGraph.
+ *
+ * @param {*} raw - fm.order, or undefined/null when absent.
+ * @param {string[]} problems
+ * @returns {string[][]} each step normalized to an array of id strings
+ *   (single ids wrapped in a one-element array); empty overall when `raw`
+ *   is absent or malformed.
+ */
+function readOrder(raw, problems) {
+  if (isAbsent(raw)) return [];
+  const stepShapeOk = (step) =>
+    (typeof step === 'string' && step.length > 0) ||
+    (Array.isArray(step) && step.every((x) => typeof x === 'string' && x.length > 0));
+  if (!Array.isArray(raw) || !raw.every(stepShapeOk)) {
+    problems.push("'order' must be a list of steps, each a node id or a list of node ids");
+    return [];
+  }
+  const steps = raw.map((step, i) => {
+    const ids = typeof step === 'string' ? [step] : step;
+    if (ids.length === 0) problems.push(`'order' step ${i + 1} is empty`);
+    return ids;
+  });
+  const seen = new Set();
+  for (const ids of steps) {
+    for (const id of ids) {
+      if (seen.has(id)) problems.push(`'order' names ${id} twice`);
+      seen.add(id);
+    }
+  }
+  return steps;
 }
 
 function fail(relPath, problemList) {
@@ -234,6 +277,16 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
       problems.push("'tier' may only be 'global'");
     } else {
       tier = 'global';
+    }
+  }
+
+  // stage: the next movement of the alignment dialogue owed on this node.
+  let stage = null;
+  if (!isAbsent(fm.stage)) {
+    if (typeof fm.stage !== 'string' || !STAGES.has(fm.stage)) {
+      problems.push(`'stage' must be one of: ${[...STAGES].join(', ')}`);
+    } else {
+      stage = fm.stage;
     }
   }
 
@@ -380,15 +433,37 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     }
   }
 
+  // order: a high-level order recorded once, as data (see scope.md's
+  // Answer/Rationale). Its own shape is checked regardless of whether this
+  // node has an '## Answer'; the requirement that it have one is checked
+  // below, once hasAnswer is known, alongside authority/tier.
+  const order = readOrder(fm.order, problems);
+
   // body
   const sections = parseBody(bodyText, problems);
   const hasAnswer = sections.Answer !== null;
+  const hasDisposition = sections.Disposition !== null;
 
   if (hasAnswer && form === null) {
     problems.push("'form' is required when the body has an '## Answer' section");
   }
   if (authority !== null && !hasAnswer) {
     problems.push("'authority' requires an '## Answer' section");
+  }
+  if (tier !== null && !hasAnswer) {
+    problems.push("'tier' requires an '## Answer' section");
+  }
+  if (order.length > 0 && !hasAnswer) {
+    problems.push("'order' requires an '## Answer' section");
+  }
+  if (stage !== null && !hasDisposition && sections.Proposal === null) {
+    problems.push("'stage' requires a '## Disposition' or a '## Proposal' section");
+  }
+  if (hasDisposition && stage === null) {
+    problems.push("'## Disposition' requires 'stage'");
+  }
+  if (!hasAnswer && stage === null) {
+    problems.push("a node without an '## Answer' section is an un-aligned disposition and must carry 'stage'");
   }
 
   if (problems.length > 0) {
@@ -414,9 +489,12 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     relation,
     defines,
     shims,
+    stage,
+    order,
     answer: sections.Answer,
     rationale: sections.Rationale,
     proposal: sections.Proposal,
+    disposition: sections.Disposition,
   };
 }
 
@@ -531,18 +609,24 @@ export async function readGraph(rootDir) {
     node.under = node.under.map((refId) => canonicalizeId(refId, manifest));
     node.after = node.after.map((refId) => canonicalizeId(refId, manifest));
     node.cites = node.cites.map((c) => ({ ...c, id: canonicalizeId(c.id, manifest) }));
+    node.order = node.order.map((step) => step.map((refId) => canonicalizeId(refId, manifest)));
   }
 
   // referential integrity: every 'under' entry must resolve within this
   // graph and must not repeat the same parent twice (a repeated id would
   // double that parent's rank contribution and duplicate the child in
-  // `children`); every 'after' entry must also resolve within this graph.
-  const idSet = new Set(parsed.map((n) => n.id));
+  // `children`); a resolved 'under' parent must itself carry an
+  // '## Answer' -- an un-aligned disposition has no children; every
+  // 'after' entry must also resolve within this graph.
+  const nodesById = new Map(parsed.map((n) => [n.id, n]));
+  const idSet = new Set(nodesById.keys());
   for (const node of parsed) {
     const seenUnder = new Set();
     for (const u of node.under) {
       if (!idSet.has(u)) {
         problems.push(`${node.path}: unresolved 'under' reference: ${u}`);
+      } else if (nodesById.get(u).answer === null) {
+        problems.push(`${node.path}: 'under' names ${u}, which has no '## Answer'; an un-aligned disposition has no children`);
       }
       if (seenUnder.has(u)) {
         problems.push(`${node.path}: duplicate under reference: ${u}`);
@@ -556,13 +640,38 @@ export async function readGraph(rootDir) {
     }
   }
 
+  // order: every named id must exist, and -- unless this order node is a
+  // root, which may name any node -- must be this node's own id or a
+  // descendant of one of its parents. Built from a lenient children map
+  // (an unresolved 'under' elsewhere is already reported above, and must
+  // not throw here before every problem has been collected).
+  const lenientChildren = new Map(parsed.map((n) => [n.id, []]));
+  for (const node of parsed) {
+    for (const u of node.under) {
+      if (idSet.has(u)) lenientChildren.get(u).push(node.id);
+    }
+  }
+  for (const node of parsed) {
+    if (node.order.length === 0) continue;
+    const isRoot = node.under.length === 0;
+    const scope = isRoot ? null : deriveDescendants(node.under, lenientChildren);
+    for (const step of node.order) {
+      for (const id of step) {
+        if (!idSet.has(id)) {
+          problems.push(`${node.path}: 'order' names ${id}, which is not a node`);
+        } else if (id !== node.id && !isRoot && !scope.has(id)) {
+          problems.push(`${node.path}: 'order' names ${id}, which is neither this node nor a descendant of one of its parents`);
+        }
+      }
+    }
+  }
+
   if (problems.length > 0) {
     throw new Error(problems.join('\n'));
   }
 
   // structural derivation: only reached once every file and every reference
   // is individually valid, so a thrown error here can only be a cycle.
-  const nodesById = new Map(parsed.map((n) => [n.id, n]));
   let rankMap;
   try {
     rankMap = deriveRank(parsed);
@@ -571,6 +680,53 @@ export async function readGraph(rootDir) {
     throw new Error((byPath.length > 0 ? byPath : [err.message]).join('\n'));
   }
   const childrenMap = deriveChildren(parsed);
+
+  // the order rule: only reached once every order-named id is confirmed to
+  // exist and be in scope (above), so every rank lookup below resolves.
+  // (i) every member of step k outranks every member of every later step.
+  // (ii) every member of the first step is outranked by nothing in scope
+  // except its own ancestors, its own descendants (a lone child shares its
+  // parent's rank exactly), and the other members of the same step; a tie
+  // (rank equal, not just greater) counts as outranking here, since the
+  // walk would otherwise fall to the id sort.
+  const orderProblems = [];
+  for (const node of parsed) {
+    if (node.order.length === 0) continue;
+    const rankOf = (id) => rankMap.get(id);
+
+    for (let k = 0; k < node.order.length; k += 1) {
+      for (let k2 = k + 1; k2 < node.order.length; k2 += 1) {
+        for (const id of node.order[k]) {
+          for (const id2 of node.order[k2]) {
+            if (!(rankOf(id) > rankOf(id2))) {
+              orderProblems.push(
+                `${node.path}: 'order' step ${k + 1} names ${id} (rank ${rankOf(id).toFixed(4)}), which does not outrank ${id2} (rank ${rankOf(id2).toFixed(4)}) of step ${k2 + 1}`,
+              );
+            }
+          }
+        }
+      }
+    }
+
+    const isRoot = node.under.length === 0;
+    const scope = isRoot ? new Set(nodesById.keys()) : deriveDescendants(node.under, childrenMap);
+    const firstStep = new Set(node.order[0]);
+    for (const id of firstStep) {
+      const idAncestors = deriveAncestors(id, nodesById);
+      const idDescendants = deriveDescendants([id], childrenMap);
+      for (const x of scope) {
+        if (x === id || firstStep.has(x) || idAncestors.has(x) || idDescendants.has(x)) continue;
+        if (rankOf(x) >= rankOf(id)) {
+          orderProblems.push(
+            `${node.path}: 'order' puts ${id} in its first step, but ${x} (rank ${rankOf(x).toFixed(4)}) outranks it and is not its ancestor`,
+          );
+        }
+      }
+    }
+  }
+  if (orderProblems.length > 0) {
+    throw new Error(orderProblems.join('\n'));
+  }
 
   const nodes = parsed
     .map((node) => ({
