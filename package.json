@@ -22,6 +22,7 @@
     "packages/htmlutil",
     "packages/idbutil",
     "packages/intentionsutil",
+    "packages/sync-reader",
     "landing",
     "packages/local-first",
     "packages/mediautil",
