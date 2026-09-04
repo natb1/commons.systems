@@ -1128,3 +1128,193 @@ rendering is missing.
 projector writes the node's full id and then, on the next line, the graph
 name. The rail row carries no id, so the author's reason holds of the eyebrow
 and not of the rail, and the two are treated differently below.
+
+### Evaluated twice: the tradition pass, 2026-09-04
+
+Run as `evaluation` requires, on the six decisions the disposition makes.
+Twenty traditions were surfaced. Each becomes a reading node under this one
+with its `bears` entries, which is reconciliation work and not recorded here;
+what is recorded here is what the pass changed.
+
+**Four of the record's recent moves are rediscoveries, and should say so.**
+The disposition's own form, every fact listed, every option under it, each
+with the AI's case for recommending or passing it over, answered one by one
+before the determination, is the scholastic *articulus*: Abelard's `Sic et
+Non` and the structure of Aquinas's article, where every objection is stated
+at full strength by the party who will answer it and none is skipped because
+the determination is confident. The form was abandoned for cost, in a writer's
+hours, and not for error, which is exactly the class `evaluation` asks the
+second pass to look for. The relation-per-option change the author made on
+2026-09-04 is IBIS's central structural claim, that an argument attaches to a
+position and never to the issue (Kunz and Rittel, 1970). The rule that
+structure must not be re-encoded in prose is Codd's update anomaly, and the
+record has already suffered one: the hand-maintained enumeration on
+`stub-traditions` was found short by three nodes and long by one. And the
+two-level form, a summary line with the detail one step under it, is
+Hansard's standard of completeness with respect to the argument rather than
+literal completeness. Three of these are owed as readings already, named in
+prose on `node` and `viable-options` and never minted.
+
+**Informed consent is the strongest support and it names the fold rule's
+fault exactly.** The duty of disclosure in `Montgomery` is to make the
+decider aware of the material risks "and of any reasonable alternative or
+variant treatments", and its materiality test is what the decider would
+attach significance to, not what the recommender judges worth raising. That
+is the express rejection of the professional-custom standard, and the fold
+rule is that standard: the AI's own measure of its own warrant setting the
+scope of what the author is shown.
+
+**The fold rule is domination under a tradition this record already holds at
+its root.** `commons.systems/public/pettit-non-domination` is adopted under
+the public archē for freedom as the absence of a capacity to interfere
+arbitrarily, exercised or not. A recommender who decides which of its own
+decisions the ruler is permitted to see holds that capacity. Bentham's
+publicity says the same from the other side. The disposition removes it, and
+that is the argument to put first.
+
+**The finding that ranks first, and the one the disposition as stated does
+not answer: the fold survives one level down.** The author closed the fold at
+the fact level. It reappears intact at the option level, because
+`viable-options` says an option the AI no longer holds viable leaves the list
+and version control holds what left. The same actor exercises the same
+discretion over the same page, and the reader is not shown that anything
+departed; a note on a surviving option about a departed one is not the
+alignment page. The measurement above reaches the same place from the other
+end: thirty-two nodes carry about a hundred and forty rejected candidates in
+prose that no `options` list holds. The two findings are one finding, and the
+answer below takes it.
+
+**The strongest tradition-grounded argument against the disposition is
+anchoring, and it is sharpened rather than answered by the change.** The
+counter-argument recorded twice on `plato-maieutics`, at strong strength and
+never answered except by the reply that a draft is refusable, is that the AI
+drafts first and the author reacts, so the visible draft is an anchor. Under
+the fold rule the AI's low-boldness decisions were invisible and unruled;
+under this disposition all of them are shown with the AI's recommendation
+marked. On legitimacy that is strictly better. On fidelity it converts silent
+AI decisions into anchored author decisions and multiplies by four the
+surface an anchor works on, while the record's only guard, in `authority`'s
+words, is the dialectic itself. The scholastic form supplies the mitigation
+and it costs one line: the case against the recommended option, written by
+the AI at full strength, at the first level and not in the drill-down. That
+is the one amendment this pass proposes to the author's own words.
+
+**Two refusals are being carried by one row.** *Non liquet*, the third
+disposition of the Roman judge, is a statement about the decider's own
+ground: it is not clear to me. The author's kick-back is a statement about
+the options: none of these is acceptable. The first calls for the periagogic
+movement, where the author's account is taken; the second for the maieutic,
+where options are drafted, which is the destination the author named. The
+record already distinguishes both and `recording` already classifies a denial
+to the movement its words call for, so no second control is owed; what is
+owed is saying that the row is typed to the maieutic movement and that
+feedback showing the ground itself is at issue is classified further back by
+`recording`, as it already is.
+
+**Tradition splits on where the kick-back sits.** Robert's Rules makes Commit
+or Refer a subsidiary motion of its own rank, decided before the main
+question; Nielsen's third heuristic asks that an exit be marked as an exit.
+The one tradition that puts the rejection in the list is the none-of-the-above
+ballot, whose two major implementations are advisory and therefore theatre.
+The author's affordance reason holds and the row stays in the group; what the
+two traditions win is its marking, separated and captioned with what it does
+to the node rather than with a summary of an option it is not. The record is
+stronger than the ballot tradition here, because this kick-back is
+dispositive.
+
+**Not proven is the empirical argument against a standing third option**, and
+it is a divergence rather than a defect. Removing the verdict from Scottish
+mock juries moved jurors toward conviction rather than toward acquittal: an
+always-available third disposition absorbs finely balanced decisions. The
+author pays that cost in later sittings. It is recordable as an instrument:
+kick-backs per node and per sitting is a signal of a recorded disposition and
+meets the standard `frontier-metrics` sets.
+
+**The rationale field's optionality is a divergence from every tradition of
+reasoned decision.** `Chenery` holds that an action stands on the reason its
+decider gave at the time, which is what `authority` already enforces on the
+author's words, and the APA duty makes the reason a condition of validity.
+Against it, forced open-ended fields produce filler. The author's ground, that
+the ruler here is the principal and not an agent under review, partly fails:
+the record exists so that agents act on it later, so the author is
+accountable to a reader. Recorded as a divergence with that counter attached.
+
+**`progressive-disclosure`'s recorded divergence is falsified and must be
+redrawn, not re-pointed.** Three of its four paragraphs defend a
+boldness-based split of decisions, and the author has withdrawn the split.
+The tradition never asked for it: progressive disclosure defers detail within
+a task to a reachable second level and does not remove a decision from the
+ask, so the incumbent fold rule was a silent default and not disclosure at
+all. The reading returns to plain adoption on a different object, the
+drill-down's two levels, which is what the tradition was always about. Left
+alone it would leave the record asserting a tradition relation the ruling has
+voided.
+
+**One gap the pass found in the record's own vocabulary.** `readings` allows
+`adopted` and `diverged` and nothing between, and two of these traditions
+support a decision in general while failing their own conditions here, or
+support one half of a decision and contradict the other. Recorded as an
+option on `readings` rather than forced into a relation.
+
+### What the projector does, and one correction, 2026-09-04
+
+Read from the code rather than from the record's prose.
+
+**A correction to the measurement above.** The claim that the page leads an
+option row with its name and folds the sentence away was true when the author
+made the finding of 2026-09-04 and is no longer true: the reconciliation under
+that day's grant fixed it, and `renderChoice` now leads with the option's own
+first sentences and demotes the name to a small handle beside them, falling
+back to the bare name only where an option has no prose. The 130 options on the
+non-answer facts are covered by a hardcoded sentence per reserved choice. So
+the bare identifiers the author read are fixed, and the complaint recorded in
+this sitting is a different one.
+
+**What is unclear about the list of facts is the fold, and it is measurable.**
+Of 137 facts across the frontier, 110 are asked and **27 are folded on 15
+nodes**, rendered not as decisions but as one line reading "Folded in, low
+boldness". So on a fifth of the nodes the list of decisions the page shows is
+not the list the ruling asks, and nothing on the page says which is missing or
+what it decided. That is the disposition's target, and removing the fold rule
+removes it exactly.
+
+**The one hard consequence of liquidating the ruling on the whole, confirmed in
+the code.** The response value `edit`, which is `unanswered`'s confirmation
+with edits, is staged by the whole-node control and by nothing else: the
+per-fact reader produces only `confirm` and `deny`. Delete the control as it
+stands and that response becomes unreachable. It is recoverable without a new
+value, and the answer below takes that route: the author's per-option text box
+carries the edits as well as the reason, the response stages `confirm` with
+text, and the session classifies it as `recording` already classifies every
+other prose response. Nothing else the control stages is lost: `confirm` and
+`deny` are both produced per fact, and the persisted schema never stored `deny`
+at all, since a denial is a kickback and not a ruling.
+
+**The review section cannot be merged, and the reason is not the one expected.**
+What it renders is `verdict`, `strength`, the review date, the survey date, the
+staleness of each pin, and whether the node is ready to rule. Every one of those
+is node-level in the schema as well as in the template: `review` is a single
+frontmatter field on the node, and neither the fact nor the option keys carry
+one. The counter-argument's text and the session's reply are not fields at all
+and are not rendered; they are prose in the account. So the section as it stands
+is a readiness gate and has no per-option content to merge, and the answer moves
+it to the stage chip, which is already the node-level status object and already
+carries the two controls that open a dialogue. What the author is reaching for is
+the part the section does not render: the review's counter-argument against the
+option it argues against, which is an addition to the option and not a move.
+
+**The tradition relation is already per-option and already rendered, one level
+too deep.** Thirteen reading nodes carry fourteen `bears` entries, every one of
+them naming a fact and an option, thirteen adopted and one diverged; the page
+emits a relation badge and the reading's id inside the option's drill-down.
+Moving it onto the row is the whole of that part of the disposition.
+
+**The eyebrow's graph is its first element and the id sits on the line above
+it.** The rail row carries no id, so the graph there is not redundant and stays.
+Two adjacent findings: the per-graph `label` and `about` the projector computes
+for the rail are read nowhere, and the doc comment above `renderAsk` describes a
+stage-dependent reordering of the column that the function does not do, with a
+second comment below it saying there is no reason to reorder. Both are
+unsupported implementation.
+
+**The suite is green**: 303 tests pass, 20 of them titled for the alignment page.
