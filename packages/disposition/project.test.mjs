@@ -941,40 +941,39 @@ test("buildAlignment refuses a template with no marker", () => {
   assert.throws(() => buildAlignment("<title>x</title>", ALIGNMENT_GRAPH), /DG:ITEMS/);
 });
 
-test("orderAlignmentItems keeps the manifest's graph order, and orders within a graph by ruling order (settles, then rank)", () => {
-  const groups = orderAlignmentItems(TWO_GRAPHS);
-  assert.deepEqual(groups.map((g) => g.graph), ["first", "second"], "manifest order, not ruling order");
-  assert.deepEqual(groups.map((g) => g.about), [
+test("orderAlignmentItems returns one flat ruling order across every graph (settles, then rank, then id), with the manifest's per-graph about text and counts as metadata", () => {
+  const { items, graphs } = orderAlignmentItems(TWO_GRAPHS);
+  // the second graph's root settles two leaves of the first graph (each
+  // stands under it) and so leads the flat order, even though the
+  // manifest names "first" before "second" -- a graph is a label here,
+  // never a precedence.
+  assert.equal(items[0].settles, 2, "fixture precondition: root settles both leaves");
+  assert.deepEqual(items.map((n) => n.slug), ["root", "leaf-a", "leaf-b"], "settles descending; the tied leaves then break by id");
+
+  assert.deepEqual(graphs.map((g) => g.graph), ["first", "second"], "graphs metadata still follows the manifest's own order");
+  assert.deepEqual(graphs.map((g) => g.about), [
     "the graph the manifest names first",
     "the graph the manifest names second",
   ]);
-  // neither leaf carries any alternatives or dependants of its own, so
-  // settles ties at 0 and the tie falls through to rank, then id.
-  assert.equal(groups[0].items[0].settles, groups[0].items[1].settles, "fixture precondition: a settles tie");
-  assert.deepEqual(groups[0].items.map((n) => n.slug), ["leaf-a", "leaf-b"], "settles tie, rank tie, broken by id");
-  assert.deepEqual(groups[1].items.map((n) => n.slug), ["root"]);
-  // the second graph's single item outranks both of the first graph's, and
-  // still comes after them: ruling order orders within a graph, never
-  // between graphs, which stays the manifest's own grouping.
-  assert.ok(groups[1].items[0].rank > groups[0].items[0].rank);
+  assert.deepEqual(graphs.map((g) => g.count), [2, 1], "each graph's open-item count");
 
   const one = orderAlignmentItems(ALIGNMENT_GRAPH);
-  assert.deepEqual(one.map((g) => g.graph), ["main"]);
-  assert.equal(one[0].items[0].settles, one[0].items[1].settles, "fixture precondition: both leaves settle nothing of their own");
-  assert.deepEqual(one[0].items.map((n) => n.slug), ["child-unaligned", "child-ruling"]);
-  assert.ok(one[0].items[0].rank > one[0].items[1].rank, "settles ties, so the higher-ranked item comes first");
+  assert.deepEqual(one.graphs.map((g) => g.graph), ["main"]);
+  assert.equal(one.items[0].settles, one.items[1].settles, "fixture precondition: both leaves settle nothing of their own");
+  assert.deepEqual(one.items.map((n) => n.slug), ["child-unaligned", "child-ruling"]);
+  assert.ok(one.items[0].rank > one.items[1].rank, "settles ties, so the higher-ranked item comes first");
 });
 
-test("orderAlignmentItems takes only nodes carrying a stage, appends an undeclared graph rather than dropping it, and settles outranks rank within a group", () => {
-  const groups = orderAlignmentItems(DIALOGUE_GRAPH);
-  const slugs = groups.flatMap((g) => g.items.map((n) => n.slug));
+test("orderAlignmentItems takes only nodes carrying a stage, appends an undeclared graph's metadata rather than dropping it, and settles outranks rank", () => {
+  const { items } = orderAlignmentItems(DIALOGUE_GRAPH);
+  const slugs = items.map((n) => n.slug);
   assert.ok(!slugs.includes("answered-no-stage"), "a node with no stage is not an item");
 
-  // settles outranks rank within a group. Three same-graph items, ranks
-  // tied: ruling-node settles 1 -- a real dependant elsewhere, not its own
-  // alternatives, which it also carries but which no longer count toward
-  // settles (deriveSettles) -- and so leads even though answered-with-stage
-  // and review-node (settles 0 apiece) tie it on rank.
+  // settles outranks rank. Three items, ranks tied: ruling-node settles 1
+  // -- a real dependant elsewhere, not its own alternatives, which it also
+  // carries but which no longer count toward settles (deriveSettles) --
+  // and so leads even though answered-with-stage and review-node (settles
+  // 0 apiece) tie it on rank.
   const ordered = orderAlignmentItems({
     graphs: { main: {} },
     nodes: [
@@ -983,11 +982,11 @@ test("orderAlignmentItems takes only nodes carrying a stage, appends an undeclar
       { id: "example.test/main/ruling-node", slug: "ruling-node", graph: "main", stage: "ruling", rank: 0.25, settles: 1, alternatives: [{ name: "whole-node" }] },
     ],
   });
-  const item = (slug) => ordered.flatMap((g) => g.items).find((n) => n.slug === slug);
+  const item = (slug) => ordered.items.find((n) => n.slug === slug);
   assert.equal(item("ruling-node").settles, 1);
   assert.equal(item("answered-with-stage").settles, 0);
   assert.equal(item("review-node").settles, 0);
-  assert.deepEqual(ordered[0].items.map((n) => n.slug), ["ruling-node", "answered-with-stage", "review-node"], "settles 1 leads settles 0, whatever the ranks");
+  assert.deepEqual(ordered.items.map((n) => n.slug), ["ruling-node", "answered-with-stage", "review-node"], "settles 1 leads settles 0, whatever the ranks");
 
   const stray = orderAlignmentItems({
     graphs: { main: { about: "declared" } },
@@ -996,21 +995,30 @@ test("orderAlignmentItems takes only nodes carrying a stage, appends an undeclar
       { id: "example.test/other/b", slug: "b", graph: "other", stage: "ruling", rank: 1 },
     ],
   });
-  assert.deepEqual(stray.map((g) => g.graph), ["main", "other"]);
-  assert.equal(stray[1].about, null);
-  assert.deepEqual(stray[1].items.map((n) => n.slug), ["b"]);
+  assert.deepEqual(stray.graphs.map((g) => g.graph), ["main", "other"]);
+  assert.equal(stray.graphs[1].about, null);
+  assert.deepEqual(stray.items.map((n) => n.slug), ["a", "b"]);
 });
 
-test("--alignment lays the page out graph by graph then by rank, and leaves out a node with no stage", () => {
+test("--alignment lays the page out in one flat ruling order, with each graph's about line and count printed once near the top, and leaves out a node with no stage", () => {
   const html = buildAlignment(ALIGNMENT_TEMPLATE, TWO_GRAPHS);
-  const first = html.indexOf('id="graph-first"');
-  const second = html.indexOf('id="graph-second"');
-  assert.ok(first >= 0 && second > first, "the manifest's first graph heads the page");
-  assert.ok(html.includes("the graph the manifest names first"), "the about line is the section's subtitle");
+  // the graphs' about lines appear once each, as page-header metadata, not
+  // once per item and not as a section heading over a run of items.
+  assert.ok(html.includes("the graph the manifest names first"));
+  assert.ok(html.includes("the graph the manifest names second"));
+  assert.equal(html.split("the graph the manifest names first").length - 1, 1, "printed once, not once per item");
+  assert.ok(html.includes(">first (2)<"), "the first graph's open-item count");
+  assert.ok(html.includes(">second (1)<"), "the second graph's open-item count");
+  assert.ok(!html.includes('id="graph-first"'), "no per-graph item section remains");
+  assert.ok(!html.includes('id="graph-second"'));
+
   const leafA = html.indexOf('data-id="example.test/first/leaf-a"');
   const leafB = html.indexOf('data-id="example.test/first/leaf-b"');
   const root = html.indexOf('data-id="example.test/second/root"');
-  assert.ok(first < leafA && leafA < leafB && leafB < second && second < root);
+  // root settles both leaves and so leads the flat order, ahead of the
+  // graph the manifest names first (see the cross-graph precedence test
+  // below for the property this buys).
+  assert.ok(root >= 0 && root < leafA && leafA < leafB);
 
   const dialogue = buildAlignment(ALIGNMENT_TEMPLATE, DIALOGUE_GRAPH);
   const noStage = nodeBySlug(DIALOGUE_GRAPH, "answered-no-stage");
@@ -1019,16 +1027,44 @@ test("--alignment lays the page out graph by graph then by rank, and leaves out 
   assert.ok(!dialogue.includes(`data-id="${noStage.id}"`));
 });
 
-test("--alignment heads each item with its id, settles, rank, stage pill, stamp and parents", () => {
+test("--alignment orders across graphs by settles, not by the manifest's declaration order: a node of the graph declared second still renders first when it settles more", () => {
+  const graph = {
+    module: "example.test", ref: null,
+    graphs: {
+      "declared-first": { about: "declared first in the manifest" },
+      "declared-second": { about: "declared second in the manifest" },
+    },
+    nodes: [
+      {
+        id: "example.test/declared-first/a", slug: "a", graph: "declared-first", question: "A?",
+        form: "rule", under: [], rank: 0.9, status: "unanswered", stage: "ruling", settles: 1,
+      },
+      {
+        id: "example.test/declared-second/b", slug: "b", graph: "declared-second", question: "B?",
+        form: "rule", under: [], rank: 0.1, status: "unanswered", stage: "ruling", settles: 5,
+      },
+    ],
+  };
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  const aAt = html.indexOf('data-id="example.test/declared-first/a"');
+  const bAt = html.indexOf('data-id="example.test/declared-second/b"');
+  assert.ok(aAt >= 0 && bAt >= 0);
+  assert.ok(bAt < aAt, "the graph declared second settles the most and renders first, ahead of the graph declared first");
+});
+
+test("--alignment heads each item with its id, graph label, settles, rank, stage pill, stamp and parents", () => {
   const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
   const ruling = nodeBySlug(ALIGNMENT_GRAPH, "child-ruling");
   const article = itemHtml(html, ruling.id);
   assert.ok(article.includes(`>${ruling.id}<`), "the id is printed");
   assert.equal(typeof ruling.settles, "number", "fixture precondition: readGraph computed a settles count");
   assert.ok(article.includes(`class="meta mono num">settles ${ruling.settles}<`), "settles, right before rank");
+  assert.ok(article.includes(`<span class="meta mono">${ruling.graph}</span>`), "the item's graph, as a label");
+  const stageAt = article.indexOf('class="pill stage-ruling"');
+  const graphAt = article.indexOf(`<span class="meta mono">${ruling.graph}</span>`);
   const settlesAt = article.indexOf(`settles ${ruling.settles}`);
   const rankAt = article.indexOf(`rank ${ruling.rank.toFixed(4)}`);
-  assert.ok(settlesAt >= 0 && settlesAt < rankAt, "settles sits before the rank span");
+  assert.ok(stageAt >= 0 && stageAt < graphAt && graphAt < settlesAt && settlesAt < rankAt, "stage pill, then the graph label, then settles, then rank");
   assert.ok(article.includes(`rank ${ruling.rank.toFixed(4)}`), "the rank to four decimals");
   assert.ok(article.includes('class="pill stage-ruling">ruling<'), "the stage pill");
   assert.ok(article.includes("deferred · Fixture Author · 2026-01-01"), "the stamp");
@@ -1460,7 +1496,7 @@ test("the alignment header carries the title, the module, the counts per stage, 
   const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
   assert.ok(html.includes(">Alignment<"));
   assert.ok(html.includes(ALIGNMENT_GRAPH.module));
-  assert.ok(html.includes("Every node is unanswered until the author confirms it, here or in prose. Listed in ruling order, the ruling that settles the most first, the purpose node's graph before the public graph. Respond to any subset and submit; the alignment session reads the responses back."));
+  assert.ok(html.includes("Every node is unanswered until the author confirms it, here or in prose. Listed in one ruling order across both graphs, the ruling that settles the most first. Respond to any subset and submit; the alignment session reads the responses back."));
   assert.ok(html.includes("Copy all responses"));
   for (const stage of ["ruling", "review", "maieutic", "periagogic"]) {
     assert.ok(html.includes(`<dt>${stage}</dt>`), `the count for ${stage}`);

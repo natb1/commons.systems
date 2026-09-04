@@ -404,16 +404,16 @@ export function renderFrontier(graph) {
 /* ------------------------------------------------------------------ *
  * the alignment page: every node carrying a `stage` -- an unanswered
  * node, or an answered node whose ratification is under review -- rendered
- * as one flat, at-rest page the author rules on, in the order the
- * unanswered node fixes: graph by graph in the manifest's order, by rank
- * within a graph, so the purpose node comes first. Unlike the browser,
- * every item is rendered to HTML here, in Node, at build time: there is no
- * per-node route to click through, so the file itself already holds
- * everything a reader (or a test) will ever see, the edit between the node
- * and its draft included. alignment-template.html's own <script> is
- * untouched by this function; it only carries what has to run in a
- * browser -- the theme toggle, staging the author's responses, submitting
- * them, and the "copy all" digest.
+ * as one flat, at-rest page the author rules on, in one ruling order
+ * across every graph the manifest names (see `orderAlignmentItems`): a
+ * graph is a label on each item, never a precedence, since the frontier's
+ * dependencies cross graphs. Unlike the browser, every item is rendered to
+ * HTML here, in Node, at build time: there is no per-node route to click
+ * through, so the file itself already holds everything a reader (or a
+ * test) will ever see, the edit between the node and its draft included.
+ * alignment-template.html's own <script> is untouched by this function; it
+ * only carries what has to run in a browser -- the theme toggle, staging
+ * the author's responses, submitting them, and the "copy all" digest.
  * ------------------------------------------------------------------ */
 
 const ALIGNMENT_MARKER = "<!--DG:ITEMS-->";
@@ -445,7 +445,7 @@ const PRUNE_CAPTION = "Confirm prunes the node; the node as it stands is what re
 const ADOPTED_MARK = "the recommendation adopts this";
 const PRUNE_MARK = "prune";
 const LEDE =
-  "Every node is unanswered until the author confirms it, here or in prose. Listed in ruling order, the ruling that settles the most first, the purpose node's graph before the public graph. Respond to any subset and submit; the alignment session reads the responses back.";
+  "Every node is unanswered until the author confirms it, here or in prose. Listed in one ruling order across both graphs, the ruling that settles the most first. Respond to any subset and submit; the alignment session reads the responses back.";
 
 function alignEsc(s) {
   return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&quot;"));
@@ -943,6 +943,7 @@ function renderAlignmentItem(n, allNodes) {
   html += `<p class="idv mono">${alignEsc(n.id)}</p>`;
   html += '<p class="eyebrow">'
     + `<span class="pill stage-${alignEsc(n.stage)}">${alignEsc(n.stage)}</span>`
+    + `<span class="meta mono">${alignEsc(n.graph)}</span>`
     + (typeof n.settles === "number" ? `<span class="meta mono num">settles ${alignEsc(n.settles)}</span>` : "")
     + (n.alternatives && n.alternatives.length > 0
       ? `<span class="meta mono num">${alignEsc(n.alternatives.length)} alternative${n.alternatives.length === 1 ? "" : "s"}</span>`
@@ -968,73 +969,74 @@ function renderAlignmentItem(n, allNodes) {
 }
 
 /**
- * Every node carrying a `stage`, in the order the unanswered node fixes:
- * one section per graph in the manifest's own order (`disposition-graph`,
- * then `public`) -- this grouping is untouched by the ruling order below;
- * it is still the manifest's own order, and a graph a node names but the
- * manifest does not declare is still appended after the declared ones
- * rather than dropped, so no open dialogue can go missing from the page --
- * and within a graph by ruling order: `settles` descending, then rank
- * descending, ties by id. The purpose node still comes first in practice,
- * since almost nothing settles more than it does, but it is the ruling
- * that settles the most driving the order now, not the rank alone.
+ * Every node carrying a `stage`, in one flat ruling order across every
+ * graph the manifest names: `settles` descending, then `rank` descending,
+ * then id. The alignment frontier's dependencies cross graphs --
+ * `commons.systems/public/agency` is the sole root and every
+ * `disposition-graph` node hangs under it -- so a graph is a label on a
+ * node here, never a precedence; ordering graph by graph would put a
+ * descendant's ruling ahead of its own ancestor's, exactly what the ruling
+ * order exists to prevent.
  *
- * Every declared graph is returned, empty or not; the page renders only
- * the ones with items.
+ * The manifest's per-graph `about` text is still surfaced, for the page's
+ * header rather than as a grouping: `graphs` lists every declared graph in
+ * the manifest's own order, its `about` text, and how many of `items`
+ * belong to it, with a graph a node names but the manifest does not
+ * declare appended after the declared ones rather than dropped, so no open
+ * dialogue's graph can go missing from the page.
  *
  * @param {{graphs?: object, nodes?: object[]}} graph
- * @returns {{graph: string, label: string, about: string|null, items: object[]}[]}
+ * @returns {{items: object[], graphs: {graph: string, label: string, about: string|null, count: number}[]}}
  */
 export function orderAlignmentItems(graph) {
-  const items = (graph.nodes || []).filter((n) => n.stage);
+  const items = (graph.nodes || []).filter((n) => n.stage).sort((a, b) => {
+    const bs = b.settles ?? 0;
+    const as = a.settles ?? 0;
+    if (bs !== as) return bs - as;
+    return b.rank !== a.rank ? b.rank - a.rank : (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  });
+
   const declared = graph.graphs && typeof graph.graphs === "object" ? Object.keys(graph.graphs) : [];
   const names = [...declared];
   for (const n of items) if (!names.includes(n.graph)) names.push(n.graph);
-  return names.map((name) => {
+
+  const graphs = names.map((name) => {
     const entry = (graph.graphs && graph.graphs[name]) || {};
     return {
       graph: name,
       label: name,
       about: typeof entry.about === "string" ? entry.about : null,
-      items: items
-        .filter((n) => n.graph === name)
-        .sort((a, b) => {
-          const bs = b.settles ?? 0;
-          const as = a.settles ?? 0;
-          if (bs !== as) return bs - as;
-          return b.rank !== a.rank ? b.rank - a.rank : (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-        }),
+      count: items.filter((n) => n.graph === name).length,
     };
   });
+
+  return { items, graphs };
 }
 
-function alignmentPageHtml(graph, groups) {
-  const all = groups.reduce((acc, g) => acc.concat(g.items), []);
-  const total = all.length;
-  const present = groups.filter((g) => g.items.length > 0);
+function alignmentPageHtml(graph, items, graphs) {
+  const total = items.length;
+  const present = graphs.filter((g) => g.count > 0);
 
   const countsHtml = ALIGNMENT_STAGES.map((stage) => (
-    `<div><dt>${alignEsc(stage)}</dt><dd class="num">${all.filter((n) => n.stage === stage).length}</dd></div>`
+    `<div><dt>${alignEsc(stage)}</dt><dd class="num">${items.filter((n) => n.stage === stage).length}</dd></div>`
   )).join("") + `<div><dt>items</dt><dd class="num">${total}</dd></div>`;
 
-  const railHtml = present.map((g) => {
-    const rows = g.items.map((n) => {
-      const doc = alignDocId(n.id);
-      return `<li><a href="#item-${alignEsc(doc)}" data-rail data-doc="${alignEsc(doc)}">`
-        + `<span class="dot stage-${alignEsc(n.stage)}" aria-hidden="true"></span>`
-        + `<span class="rq">${alignEsc(n.question || n.id)}</span>`
-        + '<span class="mark" data-mark></span></a></li>';
-    }).join("");
-    return `<section class="grp"><p class="grp-h">${alignEsc(g.label)} (${g.items.length})</p><ul class="tree">${rows}</ul></section>`;
-  }).join("");
+  const railHtml = `<ul class="tree">${items.map((n) => {
+    const doc = alignDocId(n.id);
+    return `<li><a href="#item-${alignEsc(doc)}" data-rail data-doc="${alignEsc(doc)}">`
+      + `<span class="dot stage-${alignEsc(n.stage)}" aria-hidden="true"></span>`
+      + `<span class="rq">${alignEsc(n.question || n.id)}</span>`
+      + '<span class="mark" data-mark></span></a></li>';
+  }).join("")}</ul>`;
 
-  const itemsHtml = present.map((g) => (
-    `<section class="graphgrp" id="graph-${alignEsc(g.graph)}">`
-    + `<h2 class="graphh">${alignEsc(g.label)}</h2>`
+  const graphsHtml = present.map((g) => (
+    `<div class="graphgrp">`
+    + `<p class="graphh">${alignEsc(g.label)} (${g.count})</p>`
     + (g.about ? `<p class="graphsub">${alignInline(g.about)}</p>` : "")
-    + g.items.map((n) => renderAlignmentItem(n, graph.nodes)).join("")
-    + "</section>"
+    + "</div>"
   )).join("");
+
+  const itemsHtml = items.map((n) => renderAlignmentItem(n, graph.nodes)).join("");
 
   const emptyHtml = total === 0
     ? '<p class="empty">Nothing is unanswered. Every disposition has been confirmed by the author.</p>'
@@ -1062,6 +1064,7 @@ function alignmentPageHtml(graph, groups) {
     <div class="pagehead">
       <dl class="counts">${countsHtml}</dl>
       <p class="lede">${alignEsc(LEDE)}</p>
+      ${graphsHtml}
     </div>
     <p class="notice" id="notice" hidden></p>
     ${itemsHtml}
@@ -1080,8 +1083,8 @@ function alignmentPageHtml(graph, groups) {
 /**
  * Render every node carrying a `stage` into
  * `packages/disposition/alignment-template.html`: the open dialogue the
- * author rules on, one flat page, graph by graph in the manifest's order
- * and by rank within a graph. See the section comment above for why this
+ * author rules on, one flat page, in one ruling order across every graph
+ * (see `orderAlignmentItems`). See the section comment above for why this
  * renders to HTML in Node rather than inlining JSON for a client-side
  * router, unlike `build()`.
  *
@@ -1091,8 +1094,8 @@ function alignmentPageHtml(graph, groups) {
  */
 export function buildAlignment(template, graph) {
   if (!template.includes(ALIGNMENT_MARKER)) throw new Error(`template has no ${ALIGNMENT_MARKER} marker`);
-  const groups = orderAlignmentItems(graph);
-  const block = alignmentPageHtml(graph, groups);
+  const { items, graphs } = orderAlignmentItems(graph);
+  const block = alignmentPageHtml(graph, items, graphs);
   return template.replace(ALIGNMENT_MARKER, () => block);
 }
 

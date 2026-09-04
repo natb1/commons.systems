@@ -120,8 +120,9 @@ skill only when the session starts in the checkout that carries it.
      reply, or kicks it back to stage 2 or 3 with findings; a finding
      across nodes kicks back each node it names.
   5. Ruling. The node is put on the alignment page, which lists every
-     unanswered node in the ruling order, this project's graph before the
-     public graph and so the purpose node first, each item carrying the
+     unanswered node in the ruling order, one order across the manifest's
+     graphs with each node's graph shown as a label on it, each item
+     carrying the
      node's question, its stage, its settling count, the author's words it
      rests on with their dates, the node as it stands, the alternatives
      pending on it with their sources and, where leaves record a
@@ -233,7 +234,9 @@ skill only when the session starts in the checkout that carries it.
   whose ruling settles the most; an ancestor comes before its descendants
   because its unanswered subtree contains theirs and the descendant
   besides, so the order does not have to force it; rank breaks ties and
-  orders nothing else on this frontier. The projector
+  orders nothing else on this frontier, and no graph precedes another,
+  since the public graph carries the root this project's graph hangs
+  under and a graph precedence would put a descendant's ruling first. The projector
   computes it and nothing else does: `--frontier -` prints it as the
   `## Ruling order` section and the alignment page pages in it. Rank stays
   what `attention` says it is for the reconciliation frontier and the
@@ -241,8 +244,10 @@ skill only when the session starts in the checkout that carries it.
   (`/align-review`); a sitting records one the turn the author's words
   show it, and lands it like any other checkpoint.
 - No argument (`alignment-target`, `alignment-order`): take the first
-  unanswered node of the frontier in the ruling order, this project's
-  graph before the public graph, and
+  unanswered node of the frontier in the ruling order, which is one order
+  across the manifest's graphs, since the frontier's dependencies cross
+  them and the graph a node belongs to is a label and never a precedence
+  over another node's ground, and
   run the sitting from the node's stage, repeating no movement behind it,
   up to the author's confirmation, asked for in the interview when the
   author is present and read from the page otherwise. One node at a time;
