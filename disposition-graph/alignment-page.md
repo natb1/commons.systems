@@ -1004,3 +1004,33 @@ it is capped.
 The one thing not treated as a defect is the font stylesheet from
 fonts.googleapis.com: it is on the artifact host's allowlist, every face has a
 fallback stack, and the page renders correctly without it.
+
+### A dead affordance the gate created, 2026-09-04
+
+Found by the unit that reconciled the tests to the input gate, reported rather
+than worked around, and verified before it was acted on.
+
+The gate bakes `disabled` onto each input at render time on every node off the
+ruling stage. The page's existing "change a recorded response" flow disables
+and re-enables the whole `<fieldset>` instead, which worked while no input
+carried the attribute itself. An element's own `disabled` is never lifted by an
+ancestor fieldset, so the two do not compose: a node ruled at the ruling stage,
+recorded, and then sent back to an earlier stage by a denial keeps its response
+document, still shows "Submitted ... change", and clicking change now opens the
+fieldset over inputs that stay inert.
+
+The fix is not to re-enable them. Under the author's ruling that node takes no
+response at all, so the inputs are right to stay shut and what is wrong is
+offering a control that cannot work. The change button is not rendered there;
+the state line says instead that the response was recorded when the node was at
+the ruling stage and that the node has moved back since, so the record is
+visible and the reason it cannot be edited here is on the page rather than left
+to be inferred from a button that does nothing. The click handler guards the
+same condition, since a control that is merely absent from one render is not a
+rule.
+
+Recorded because it is the second defect of this shape today: a rule that
+holds in the record and lapses where two mechanisms meet. The first was the
+whole-node radio reading a decision's; both were latent, both were found by
+building rather than by reading, and neither would have shown up until the
+author used the page.
