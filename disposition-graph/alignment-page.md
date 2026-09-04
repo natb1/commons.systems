@@ -1862,3 +1862,40 @@ the ruling and a wrong figure there misleads the ruling; what the sitting
 claimed and why it was wrong is recorded on `commons.systems/disposition-graph/purpose`
 with the correction itself. Five more options carry `source: author` with a
 graph commit and no date, and are named there for the survey.
+
+### The four design drafts recorded, and what the reviews are owed on, 2026-09-04
+
+The four maieutic units the sitting delegated all reported and their drafts are
+on the record, each read adversarially on the main thread before it was copied
+over its node, each with a `### Recorded at the review stage` section saying
+what the reading checked and what it changed.
+`commons.systems/disposition-graph/prose-and-structure` answers its kickback's
+ten findings; `commons.systems/disposition-graph/recording` and
+`commons.systems/disposition-graph/dialogue` each recommend a composed option,
+`per-fact-after-two-readings` and `every-part-in-the-record`;
+`commons.systems/disposition-graph/viable-options` and
+`commons.systems/disposition-graph/rejected` recommend the passed-over pair.
+Fourteen readings from the review sitting's tradition passes entered the graph
+under `commons.systems/disposition-graph/review-model` and
+`commons.systems/disposition-graph/review-skills`, and seven `bears` entries
+the four sittings left owed were written onto readings the graph already held.
+
+What the reviews are owed on, measured at graph commit 58bdb157: eleven nodes
+need the review of a draft, being the five above, the two of the review sitting,
+`commons.systems/disposition-graph/clean-context-review` and
+`commons.systems/disposition-graph/decomposition`, amended under the grant,
+`commons.systems/disposition-graph/progressive-disclosure`, which has never had
+one, and this node. Thirty-nine nodes in all read as moved since their review
+and forty-eight await the survey, which is the migration's cost recorded above
+and is the survey's to judge rather than thirty-nine draft readings' — the
+question the option `moved-draft-re-read-by-the-survey` on
+`clean-context-review` puts to the author.
+
+The order that remains: the unit reconciling the browser, the frontier and the
+review scripts lands; the unit splitting the review into two skills follows it,
+because both write the same files and because this node's sibling
+`review-skills` already declares shims on two artifacts that do not exist until
+that unit lands, which a reviewer would rightly find; then the eleven briefs are
+written in one pass, the eleven readings run on the model
+`commons.systems/disposition-graph/review-model` decides, and the survey runs
+after them.
