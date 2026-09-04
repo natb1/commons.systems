@@ -2,7 +2,7 @@
 question: Review-stage node with a low-boldness recommendation -- what does it answer?
 form: rule
 under:
-  - align-review.test/main/answered-ratified
+  - clean-context-review.test/main/answered-ratified
 stage: review
 facts:
   - name: answer
@@ -29,7 +29,7 @@ Open question, drafted and awaiting review, at low boldness.
 ## Answer
 
 A plain answer at low boldness: nothing here reaches beyond the node itself,
-and align-review.test/main/ruling-a is the node it names.
+and clean-context-review.test/main/ruling-a is the node it names.
 
 ## Rationale
 

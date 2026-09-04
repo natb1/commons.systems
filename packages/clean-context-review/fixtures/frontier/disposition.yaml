@@ -1,4 +1,4 @@
-module: align-review.test
+module: clean-context-review.test
 graphs:
   main:
     about: fixture graph for brief.mjs/apply.mjs's whole-frontier batch

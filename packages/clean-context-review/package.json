@@ -1,0 +1,12 @@
+{
+  "name": "@commons.systems/clean-context-review",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The mechanics of the clean-context review's two readings: the brief generator, the apply script, and the two brief templates the skills /align-review and /align-survey run",
+  "scripts": { "test": "node --test *.test.mjs" },
+  "dependencies": {
+    "@commons.systems/disposition": "*",
+    "yaml": "^2"
+  }
+}

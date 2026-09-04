@@ -1,7 +1,7 @@
-// node --test .claude/skills/align-review/apply.test.mjs
+// node --test packages/clean-context-review/apply.test.mjs
 //
 // Exercises apply.mjs against copies of two fixture graphs -- never against
-// the live disposition/ graph (see SKILL.md: "Never edit disposition/"):
+// the live disposition/ graph (both skills forbid it):
 // packages/disposition/fixtures/valid-dialogue/ for the review of one draft,
 // and fixtures/frontier/ beside this file for the survey of the frontier,
 // which clean-context-review.md and frontier-consistency.md divide the
@@ -17,11 +17,11 @@ import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { applyReviews } from "./apply.mjs";
-import { parseNode, readGraph, surveyJudges } from "../../../packages/disposition/read.mjs";
-import { deriveClass, deriveRecommendationHash } from "../../../packages/disposition/derive.mjs";
+import { parseNode, readGraph, surveyJudges } from "@commons.systems/disposition/read.mjs";
+import { deriveClass, deriveRecommendationHash } from "@commons.systems/disposition/derive.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(HERE, "../../..");
+const REPO_ROOT = path.resolve(HERE, "../..");
 const FIXTURE_SRC = path.join(REPO_ROOT, "packages/disposition/fixtures/valid-dialogue");
 const FRONTIER_FIXTURE_SRC = path.join(HERE, "fixtures/frontier");
 const APPLY_MJS = path.join(HERE, "apply.mjs");
@@ -36,7 +36,7 @@ function escapeRe(s) {
 }
 
 async function scratch(prefix) {
-  const dir = await mkdtemp(path.join(os.tmpdir(), `align-review-${prefix}`));
+  const dir = await mkdtemp(path.join(os.tmpdir(), `clean-context-review-${prefix}`));
   tmpDirs.push(dir);
   return dir;
 }
@@ -204,7 +204,7 @@ describe("apply.mjs: draft, forward", () => {
     const rootDir = await freshFrontierFixture("draft-keeps-survey-");
     const file = path.join(rootDir, "main/survey-pinned.md");
     const before = await readFile(file, "utf8");
-    const parsedBefore = parseNode(before, { id: "align-review.test/main/survey-pinned", graph: "main", slug: "survey-pinned", path: file });
+    const parsedBefore = parseNode(before, { id: "clean-context-review.test/main/survey-pinned", graph: "main", slug: "survey-pinned", path: file });
     assert.equal(parsedBefore.review.verdict, null, "fixture precondition: the survey has pinned it and no draft review has run");
     assert.equal(parsedBefore.review.survey.date, "2026-08-02");
 
@@ -212,7 +212,7 @@ describe("apply.mjs: draft, forward", () => {
       rootDir,
       input: {
         scope: "draft",
-        id: "align-review.test/main/survey-pinned",
+        id: "clean-context-review.test/main/survey-pinned",
         verdict: "forward",
         findings: ["Answer: sound as drafted."],
         counter_argument: null,
@@ -225,7 +225,7 @@ describe("apply.mjs: draft, forward", () => {
     assert.ok(result.report[0].includes("survey pin kept"), `report does not say the survey pin was kept: ${result.report.join(" | ")}`);
 
     const after = await readFile(file, "utf8");
-    const parsed = parseNode(after, { id: "align-review.test/main/survey-pinned", graph: "main", slug: "survey-pinned", path: file });
+    const parsed = parseNode(after, { id: "clean-context-review.test/main/survey-pinned", graph: "main", slug: "survey-pinned", path: file });
     assert.equal(parsed.stage, "ruling");
     assert.equal(parsed.review.verdict, "forward");
     assert.equal(parsed.review.date, "2026-09-04");
@@ -502,20 +502,20 @@ describe("apply.mjs: draft --dry and the CLI", () => {
 
 // --------------------------------------------------------------------------
 // apply.mjs: the survey (clean-context-review.md, frontier-consistency.md,
-// SKILL.md §4). Its judged set and its serialization both come from the pins
+// review-skills.md). Its judged set and its serialization both come from the pins
 // sidecar brief.mjs wrote: a judged node whose recommendation still matches
 // its pin is applied, one that has moved receives nothing, and a finding
 // naming any node that has moved is discarded.
 // --------------------------------------------------------------------------
 
-const MAIEUTIC_NODE = "align-review.test/main/maieutic-node";
-const PERIAGOGIC_NODE = "align-review.test/main/periagogic-node";
-const REVIEW_A = "align-review.test/main/review-a";
-const REVIEW_B = "align-review.test/main/review-b";
-const REVIEW_LOW = "align-review.test/main/review-low";
-const RULING_A = "align-review.test/main/ruling-a";
-const ANSWERED_NODE = "align-review.test/main/answered-ratified";
-const SURVEY_PINNED = "align-review.test/main/survey-pinned";
+const MAIEUTIC_NODE = "clean-context-review.test/main/maieutic-node";
+const PERIAGOGIC_NODE = "clean-context-review.test/main/periagogic-node";
+const REVIEW_A = "clean-context-review.test/main/review-a";
+const REVIEW_B = "clean-context-review.test/main/review-b";
+const REVIEW_LOW = "clean-context-review.test/main/review-low";
+const RULING_A = "clean-context-review.test/main/ruling-a";
+const ANSWERED_NODE = "clean-context-review.test/main/answered-ratified";
+const SURVEY_PINNED = "clean-context-review.test/main/survey-pinned";
 const SURVEY_DATE = "2026-09-03";
 const COMMIT = "1111111111111111111111111111111111111111";
 
@@ -738,8 +738,8 @@ describe("apply.mjs: survey", () => {
       new RegExp(`${escapeRe(REVIEW_A)}: strength 'strong' requires a reply`),
     );
     await assert.rejects(
-      () => applyReviews({ rootDir, pins, input: surveyInput({ nodes: [{ id: "align-review.test/main/nope", findings: [] }] }), replies: {} }),
-      /'nodes' names align-review\.test\/main\/nope, which is not a node/,
+      () => applyReviews({ rootDir, pins, input: surveyInput({ nodes: [{ id: "clean-context-review.test/main/nope", findings: [] }] }), replies: {} }),
+      /'nodes' names clean-context-review\.test\/main\/nope, which is not a node/,
     );
     assert.equal(await readFile(nodePath(rootDir, "review-a"), "utf8"), before, "nothing written on any refusal");
   });
@@ -1078,7 +1078,7 @@ describe("apply.mjs: a merge finding is recorded as an option on the answer fact
 });
 
 // --------------------------------------------------------------------------
-// apply.mjs: subtree_divergences (SKILL.md §4, frontier-consistency.md
+// apply.mjs: subtree_divergences (frontier-consistency.md
 // validation 13, alignment-order): a tangle between two unruled subtrees
 // standing under different options of one ancestor's answer fact, written on
 // the leaves and never on the ancestor.

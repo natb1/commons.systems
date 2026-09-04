@@ -1,4 +1,4 @@
-// node --test .claude/skills/align-review/brief.test.mjs
+// node --test packages/clean-context-review/brief.test.mjs
 //
 // Exercises brief.mjs -- the two readings the review divides into, the review
 // of one draft (`--node <id>`) and the survey of the frontier (`--survey`) --
@@ -14,13 +14,13 @@ import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-  writeDraftBrief, writeSurveyBrief, frontierOrderIds, reviewerModel,
+  writeDraftBrief, writeSurveyBrief, frontierOrderIds,
   reviewLine, graphCommit, parseArgs, draftNeighbourhood,
 } from "./brief.mjs";
-import { readGraph } from "../../../packages/disposition/read.mjs";
+import { readGraph } from "@commons.systems/disposition/read.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(HERE, "../../..");
+const REPO_ROOT = path.resolve(HERE, "../..");
 const FRONTIER_FIXTURE_SRC = path.join(HERE, "fixtures/frontier");
 const BRIEF_MJS = path.join(HERE, "brief.mjs");
 
@@ -30,23 +30,23 @@ after(async () => {
 });
 
 async function freshFrontierFixture(prefix) {
-  const dir = await mkdtemp(path.join(os.tmpdir(), `align-review-${prefix}`));
+  const dir = await mkdtemp(path.join(os.tmpdir(), `clean-context-review-${prefix}`));
   tmpDirs.push(dir);
   await cp(FRONTIER_FIXTURE_SRC, dir, { recursive: true });
   return dir;
 }
 
-const MAIEUTIC_NODE = "align-review.test/main/maieutic-node";
-const PERIAGOGIC_NODE = "align-review.test/main/periagogic-node";
-const REVIEW_A = "align-review.test/main/review-a";
-const REVIEW_B = "align-review.test/main/review-b";
-const REVIEW_GLOBAL = "align-review.test/main/review-global";
-const REVIEW_LOW = "align-review.test/main/review-low";
-const REVIEW_SETTLES = "align-review.test/main/review-settles";
-const RULING_A = "align-review.test/main/ruling-a";
-const ANSWERED = "align-review.test/main/answered-ratified";
-const SIBLING = "align-review.test/main/sibling-node";
-const SURVEY_PINNED = "align-review.test/main/survey-pinned";
+const MAIEUTIC_NODE = "clean-context-review.test/main/maieutic-node";
+const PERIAGOGIC_NODE = "clean-context-review.test/main/periagogic-node";
+const REVIEW_A = "clean-context-review.test/main/review-a";
+const REVIEW_B = "clean-context-review.test/main/review-b";
+const REVIEW_GLOBAL = "clean-context-review.test/main/review-global";
+const REVIEW_LOW = "clean-context-review.test/main/review-low";
+const REVIEW_SETTLES = "clean-context-review.test/main/review-settles";
+const RULING_A = "clean-context-review.test/main/ruling-a";
+const ANSWERED = "clean-context-review.test/main/answered-ratified";
+const SIBLING = "clean-context-review.test/main/sibling-node";
+const SURVEY_PINNED = "clean-context-review.test/main/survey-pinned";
 
 // The class the reader derives for a node no ruling reaches, as a brief
 // prints it: there is no stamp any more, so this is what stands in its place
@@ -97,9 +97,9 @@ describe("brief.mjs: the two readings", () => {
     const rootDir = await freshFrontierFixture("node-stage-");
     const cwd = path.dirname(rootDir);
 
-    const missing = runCliExpectingFailure(["--node", "align-review.test/main/nope", rootDir, "--dry"], cwd);
+    const missing = runCliExpectingFailure(["--node", "clean-context-review.test/main/nope", rootDir, "--dry"], cwd);
     assert.equal(missing.status, 2);
-    assert.match(missing.stderr, /no node 'align-review\.test\/main\/nope'/);
+    assert.match(missing.stderr, /no node 'clean-context-review\.test\/main\/nope'/);
 
     const wrongStage = runCliExpectingFailure(["--node", MAIEUTIC_NODE, rootDir, "--dry"], cwd);
     assert.equal(wrongStage.status, 2);
@@ -120,7 +120,7 @@ describe("writeDraftBrief", () => {
 
     const brief = await readFile(result.briefPath, "utf8");
     assert.ok(!brief.includes("{{"), `unfilled placeholder left in brief:\n${brief.slice(0, 2000)}`);
-    assert.ok(brief.startsWith("# Clean-context review of a draft, 2026-09-04: `align-review.test/main/review-low`"));
+    assert.ok(brief.startsWith("# Clean-context review of a draft, 2026-09-04: `clean-context-review.test/main/review-low`"));
     assert.ok(brief.includes("tmp/review/draft-review-low.json"), "the literal {{out}} path, regardless of the scratch reviewDir");
 
     // The node itself goes in whole, its '## Account' included: a draft's
@@ -191,61 +191,41 @@ describe("writeDraftBrief", () => {
       "the only global-tier node is the node under review itself, so its ancestry is empty");
   });
 
-  test("the reviewer's model is read from the node: opus on a low-boldness, non-global leaf, fable on each of the three conditions", async () => {
-    const rootDir = await freshFrontierFixture("draft-model-");
+  test("no model is computed and none is printed: the model is review-model's, not this script's", async () => {
+    const rootDir = await freshFrontierFixture("draft-silent-");
     const reviewDir = path.join(rootDir, "_review");
-    const graph = await readGraph(rootDir);
-    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
 
-    // the one shape that takes the smaller model
-    assert.equal(byId.get(REVIEW_LOW).answerFact.boldness, "low");
-    assert.equal(byId.get(REVIEW_LOW).tier, null);
-    assert.equal(byId.get(REVIEW_LOW).settles, 0);
-    assert.equal(reviewerModel(byId.get(REVIEW_LOW)), "opus");
-
-    // boldness not low
-    assert.equal(byId.get(REVIEW_A).answerFact.boldness, "moderate");
-    assert.equal(reviewerModel(byId.get(REVIEW_A)), "fable");
-    assert.equal(byId.get(REVIEW_B).answerFact.boldness, "high");
-    assert.equal(reviewerModel(byId.get(REVIEW_B)), "fable");
-
-    // global tier, at low boldness
-    assert.equal(byId.get(REVIEW_GLOBAL).answerFact.boldness, "low");
-    assert.equal(byId.get(REVIEW_GLOBAL).tier, "global");
-    assert.equal(reviewerModel(byId.get(REVIEW_GLOBAL)), "fable");
-
-    // a ruling on it would settle other nodes, at low boldness and no tier
-    assert.equal(byId.get(REVIEW_SETTLES).answerFact.boldness, "low");
-    assert.equal(byId.get(REVIEW_SETTLES).tier, null);
-    assert.ok(byId.get(REVIEW_SETTLES).settles > 0);
-    assert.equal(reviewerModel(byId.get(REVIEW_SETTLES)), "fable");
-
-    for (const [id, model] of [[REVIEW_LOW, "opus"], [REVIEW_A, "fable"], [REVIEW_GLOBAL, "fable"], [REVIEW_SETTLES, "fable"]]) {
+    // the four shapes the superseded rule read off the node -- low boldness on
+    // a plain leaf, boldness not low, global tier, a ruling that settles
+    // others -- all return the same result shape, with no model in it
+    // (`review-model`: "brief.mjs computes no model and prints none").
+    for (const id of [REVIEW_LOW, REVIEW_A, REVIEW_GLOBAL, REVIEW_SETTLES]) {
       const r = await writeDraftBrief({ rootDir, reviewDir, id, date: "2026-09-04" });
-      assert.equal(r.model, model, `${id} takes ${model}`);
+      assert.ok(!("model" in r), `${id}: the result names no model`);
     }
+    const s = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-04" });
+    assert.ok(!("model" in s), "the survey's result names no model either");
   });
 
-  test("CLI: --node prints the model on stdout, in --dry too, and --dry writes nothing", async () => {
+  test("CLI: --node prints the brief, the counts and the output file, and no model; --dry writes nothing", async () => {
     const rootDir = await freshFrontierFixture("draft-cli-");
     const cwd = path.dirname(rootDir);
 
     const dry = runCli(["--node", REVIEW_LOW, rootDir, "--date", "2026-09-04", "--dry"], cwd);
-    assert.match(dry, /^reviewer model: opus\n/);
+    assert.doesNotMatch(dry, /model/i, "the script prints no model: it computes none");
     assert.match(dry, /\(dry run: nothing written\)/);
-    assert.match(dry, /draft: align-review\.test\/main\/review-low; ancestry 2, siblings 1, cited 1, index \d+; \d+ lines/);
+    assert.match(dry, /draft: clean-context-review\.test\/main\/review-low; ancestry 2, siblings 1, cited 1, index \d+; \d+ lines/);
     assert.match(dry, /the reviewer's output file: tmp\/review\/draft-review-low\.json/);
     await assert.rejects(readFile(path.join(cwd, "tmp/review/draft-review-low.brief.md")), { code: "ENOENT" });
 
     const bold = runCli(["--node", REVIEW_A, rootDir, "--date", "2026-09-04", "--dry"], cwd);
-    assert.match(bold, /^reviewer model: fable\n/);
+    assert.doesNotMatch(bold, /model/i, "and prints none whatever the node's boldness");
   });
 
   test("--dry (dry: true) writes no brief at all", async () => {
     const rootDir = await freshFrontierFixture("draft-dry-");
     const reviewDir = path.join(rootDir, "_review");
     const result = await writeDraftBrief({ rootDir, reviewDir, id: REVIEW_A, date: "2026-09-04", dry: true });
-    assert.equal(result.model, "fable");
     await assert.rejects(readFile(result.briefPath), { code: "ENOENT" });
   });
 
@@ -272,7 +252,6 @@ describe("writeSurveyBrief", () => {
     const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-04" });
     assert.equal(result.briefPath, path.join(reviewDir, "survey.brief.md"));
     assert.equal(result.outFile, "tmp/review/survey.json");
-    assert.equal(result.model, "opus");
     assert.equal(result.batchCount, 6, "the six nodes at review or ruling owed a survey");
     assert.equal(result.contextCount, graph.nodes.length - 6);
 
@@ -348,11 +327,11 @@ describe("writeSurveyBrief", () => {
     assert.equal(typeof live.dirty, "boolean");
   });
 
-  test("CLI: --survey prints the model, the counts, the commit and the sidecar; --dry writes nothing", async () => {
+  test("CLI: --survey prints the counts, the commit and the sidecar, and no model; --dry writes nothing", async () => {
     const rootDir = await freshFrontierFixture("survey-cli-");
     const cwd = path.dirname(rootDir);
     const dry = runCli(["--survey", rootDir, "--date", "2026-09-04", "--dry"], cwd);
-    assert.match(dry, /^reviewer model: opus\n/);
+    assert.doesNotMatch(dry, /model/i, "the script prints no model: it computes none");
     assert.match(dry, /survey: 6 node\(s\) judged; context: 5 node\(s\); \d+ lines; graph commit \(unknown/);
     assert.match(dry, /the pins sidecar: .*survey\.pins\.json \(dry run: nothing written\)/);
     await assert.rejects(readFile(path.join(cwd, "tmp/review/survey.brief.md")), { code: "ENOENT" });

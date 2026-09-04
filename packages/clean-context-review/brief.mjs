@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// .claude/skills/align-review/brief.mjs
+// packages/clean-context-review/brief.mjs
 //
 // Writes one reviewer's brief for one clean-context reading, in the two
-// readings the review divides into by their object (SKILL.md §1 and §2;
-// clean-context-review.md, "running two reviews divided by their object";
-// frontier-consistency.md, which divides the fifteen validations between
-// them).
+// readings the review divides into by their object (clean-context-review.md,
+// "running two reviews divided by their object"; frontier-consistency.md,
+// which divides the fifteen validations between them; review-skills.md, which
+// makes the two readings two skills over this one package).
 //
 //   --node <id>  the review of one draft. Its object is that node's
 //                recommendation, and it runs the moment the recommendation is
@@ -15,9 +15,11 @@
 //                ancestry and the rules that bind everywhere, its siblings
 //                under the same parent, the nodes it names, and the index of
 //                every other question the record asks. Validations 1 to 6 and
-//                15. Writes tmp/review/draft-<slug>.brief.md, names
-//                tmp/review/draft-<slug>.json, and prints the reviewer's
-//                model, read from the node (§3).
+//                15. Writes tmp/review/draft-<slug>.brief.md and names
+//                tmp/review/draft-<slug>.json. It computes no model: the
+//                model and the effort both readings run on are the
+//                review-model node's, fixed there and stated by the skill at
+//                the launch.
 //
 //   --survey     the survey of the frontier. Its object is the frontier's
 //                consistency with itself: the whole graph in one context,
@@ -48,12 +50,21 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { readGraph, surveyJudges } from "../../../packages/disposition/read.mjs";
-import { renderFrontier } from "../../../packages/disposition/project.mjs";
+import { readGraph, surveyJudges } from "@commons.systems/disposition/read.mjs";
+import { renderFrontier } from "@commons.systems/disposition/project.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRAFT_TEMPLATE_PATH = path.join(HERE, "brief-draft.md");
 const SURVEY_TEMPLATE_PATH = path.join(HERE, "brief-survey.md");
+
+// The two fragments the templates share, filled into both at `{{bounds}}` and
+// `{{record}}` so that the text common to the two briefs exists in one file
+// (`review-skills`): the reader's bounds, which state the model and the
+// effort `review-model` fixes for both readings, and the primer on the
+// record's encoding. Only the essential common text is factored; what merely
+// looks the same in the two templates stays in each of them.
+const BOUNDS_FRAGMENT_PATH = path.join(HERE, "brief-bounds.md");
+const RECORD_FRAGMENT_PATH = path.join(HERE, "brief-record.md");
 
 // The paths the brief names to its reader, repo-relative and literal: the
 // reviewer works in the repository, whatever scratch directory this run
@@ -146,30 +157,6 @@ function indexLine(node) {
 
 function contextIndexLine(node) {
   return `- ${node.id} | ${node.status} | stage ${node.stage || "none"} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | ${classText(node)} | ${nodeFile(node)}`;
-}
-
-/**
- * The reviewer's model for the review of one draft, read from the node and
- * never argued in the brief (`clean-context-review`, `decomposition`;
- * SKILL.md §3): the most capable model when the recommendation's boldness is
- * not low, when the node is global-tier, or when a ruling on it would settle
- * other nodes -- a reader weaker than the writer finds what the writer
- * already saw -- and otherwise the smaller one, since the most capable model
- * on every simple draft is the cost `delegation`'s rule exists to avoid.
- *
- * Boldness is the answer fact's: a node with no answer fact, or one
- * recommending nothing, has no low boldness to read and takes the capable
- * model.
- *
- * @param {object} node
- * @returns {"fable"|"opus"}
- */
-export function reviewerModel(node) {
-  const boldness = node.answerFact ? node.answerFact.boldness : null;
-  if (boldness !== "low") return "fable";
-  if (node.tier === "global") return "fable";
-  if (typeof node.settles === "number" && node.settles > 0) return "fable";
-  return "opus";
 }
 
 /**
@@ -499,6 +486,26 @@ function fill(template, values) {
   return out;
 }
 
+/**
+ * Read a template and fill the two shared fragments into it, before anything
+ * else is filled: the fragments carry placeholders of their own (`{{repo}}`),
+ * and a fragment substituted after them would leave them standing. A template
+ * that names neither fragment is filled unchanged, and a fragment is trimmed
+ * of its trailing newline so that the blank line around the placeholder is
+ * the template's and not the fragment's.
+ *
+ * @param {string} templatePath
+ * @returns {Promise<string>}
+ */
+async function readTemplate(templatePath) {
+  const [template, bounds, record] = await Promise.all([
+    readFile(templatePath, "utf8"),
+    readFile(BOUNDS_FRAGMENT_PATH, "utf8"),
+    readFile(RECORD_FRAGMENT_PATH, "utf8"),
+  ]);
+  return fill(template, { bounds: bounds.trimEnd(), record: record.trimEnd() });
+}
+
 // --------------------------------------------------------- the graph commit
 //
 // The survey's findings name the graph commit they read
@@ -594,12 +601,12 @@ function renderNodeList(nodes, empty, options) {
 }
 
 /**
- * Write the brief for the review of one draft, and report the model this
- * skill read from the node. Refuses (letting the reader's own message
- * through) on a graph that does not validate, and refuses with an exit-2
- * error on a node that does not exist or does not stand at the review stage.
+ * Write the brief for the review of one draft. Refuses (letting the reader's
+ * own message through) on a graph that does not validate, and refuses with an
+ * exit-2 error on a node that does not exist or does not stand at the review
+ * stage.
  *
- * @returns {Promise<{briefPath: string, outFile: string, model: string,
+ * @returns {Promise<{briefPath: string, outFile: string,
  *   ancestryCount: number, siblingCount: number, citedCount: number,
  *   indexCount: number, lines: number}>}
  */
@@ -622,7 +629,7 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
   const outFile = draftOutFile(node.slug);
   const briefPath = path.join(reviewDir, `draft-${node.slug}.brief.md`);
 
-  const template = await readFile(DRAFT_TEMPLATE_PATH, "utf8");
+  const template = await readTemplate(DRAFT_TEMPLATE_PATH);
   const withoutNav = fill(template, {
     date: effectiveDate,
     repo: path.resolve(rootDir, ".."),
@@ -641,7 +648,6 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
   const result = {
     briefPath,
     outFile,
-    model: reviewerModel(node),
     ancestryCount: ancestry.length,
     siblingCount: siblings.length,
     citedCount: cited.length,
@@ -683,7 +689,7 @@ export function surveyPins({ graph, judged, date, commit, dirty }) {
  * node, in the frontier's order. No account goes into either.
  *
  * @returns {Promise<{briefPath: string, pinsPath: string, outFile: string,
- *   model: string, batchCount: number, contextCount: number, lines: number,
+ *   batchCount: number, contextCount: number, lines: number,
  *   commit: string|null, dirty: boolean}>}
  */
 export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = false }) {
@@ -701,7 +707,7 @@ export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = 
   const briefPath = path.join(reviewDir, "survey.brief.md");
   const pinsPath = path.join(reviewDir, "survey.pins.json");
 
-  const template = await readFile(SURVEY_TEMPLATE_PATH, "utf8");
+  const template = await readTemplate(SURVEY_TEMPLATE_PATH);
   const withoutNav = fill(template, {
     date: effectiveDate,
     repo: path.resolve(rootDir, ".."),
@@ -729,7 +735,6 @@ export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = 
     briefPath,
     pinsPath,
     outFile: SURVEY_OUT_FILE,
-    model: "opus",
     batchCount: judged.length,
     contextCount: contextNodes.length,
     lines,
@@ -763,7 +768,6 @@ if (isMain) {
     try {
       if (opts.node !== null) {
         const r = await writeDraftBrief({ rootDir, reviewDir, id: opts.node, date: opts.date, dry: opts.dry });
-        console.log(`reviewer model: ${r.model}`);
         console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
         console.log(`draft: ${opts.node}; ancestry ${r.ancestryCount}, siblings ${r.siblingCount}, cited ${r.citedCount}, index ${r.indexCount}; ${r.lines} lines`);
         console.log(`the reviewer's output file: ${r.outFile}`);
@@ -772,7 +776,6 @@ if (isMain) {
         }
       } else {
         const r = await writeSurveyBrief({ rootDir, reviewDir, date: opts.date, dry: opts.dry });
-        console.log(`reviewer model: ${r.model}`);
         console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
         console.log(`survey: ${r.batchCount} node(s) judged; context: ${r.contextCount} node(s); ${r.lines} lines; graph commit ${commitText({ commit: r.commit, dirty: r.dirty })}`);
         console.log(opts.dry ? `the pins sidecar: ${r.pinsPath} (dry run: nothing written)` : `the pins sidecar: ${r.pinsPath}`);

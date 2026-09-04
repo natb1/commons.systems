@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// .claude/skills/align-review/apply.mjs
+// packages/clean-context-review/apply.mjs
 //
-// Applies what one clean-context reading found (SKILL.md §4, and the
+// Applies what one clean-context reading found (the apply step of both
+// skills, /align-review and /align-survey, and the
 // disposition-graph nodes clean-context-review/frontier-consistency/
 // recording/dialogue/viable-options/alignment-order) to node files: appends
 // the reading's account to '## Account', records a proposed merge or split as
@@ -50,7 +51,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
-import { readGraph, parseNode } from "../../../packages/disposition/read.mjs";
+import { readGraph, parseNode } from "@commons.systems/disposition/read.mjs";
 
 const STAGE_ORDER = ["periagogic", "maieutic", "review", "ruling"];
 // the two stages a reading may send a node back to: the ground, or the draft

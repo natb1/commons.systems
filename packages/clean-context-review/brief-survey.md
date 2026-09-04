@@ -1,6 +1,6 @@
 # Frontier survey, {{date}}: the nodes whose recommendation has moved since the survey last pinned them, judged against the whole graph
 
-You start with no context but the record, on purpose: read only this brief and what the record itself points you to. Work only in `{{repo}}` (absolute `cd` per Bash call; the sandbox refuses `git -C`, loops, redirections, and heredocs mentioning git; prefer the Read tool for files). Never run state-changing git. Write only the one output file named below. Never edit anything under `disposition/`, `packages/`, `.claude/`, or `CLAUDE.md`.
+{{bounds}}
 
 {{nav}}
 
@@ -16,31 +16,7 @@ No `## Account` is carried here, for the judged set or the context: the accounts
 
 The survey **forwards nothing**. Only the review of a draft gives a verdict; your findings kick back what must change.
 
-## The record
-
-The disposition graph is at `disposition/` (manifest `disposition/disposition.yaml`; a node `commons.systems/<graph>/<slug>` is the file `disposition/<graph>/<slug>.md`). A node is one question and its standing answer, with frontmatter (`question`, `form`, `under` parents, `defines`, `shims`, `instrument`, `order`, `boost`, `cites`, `tier`, `source` and `bears` on a reading, and, while a dialogue is open on it, `stage`, `review`, `depends`, whose entries are either a node id or a node id and an option on that node's answer fact written `<id>#<option>`) and sections in this order:
-
-- `## Disposition` — the author's words, verbatim and dated.
-- `## Answer` — the text that stands: the confirmed choice on a ruled node, and on any other the draft as it stands.
-- `## Rationale` — why, with the reasoning behind what stands.
-- `## Facts` — one `### <fact>` subsection per fact, in the frontmatter's order, opening with the reason for what that fact recommends. Every option of every fact carries a sentence saying what it would answer and why it is on the table: as a `#### <option>` subsection under `### answer` and under `### persistence`, whose options are written per node; and, on the facts whose choices are the record's own vocabulary, on the node that defines the fact, whose `defines` carries the term as a `{term, gloss}` pair — `ratified`, `delegated` and `deferred` on `authority`, `keep` and `prune` on `dialogue` — so that no projection supplies a sentence of its own. The option named by `stands` omits its subsection, because its sentence is the first sentences of `## Answer`.
-- `## Recommendation` — one fenced ```markdown block holding the whole recommended node, present exactly when the answer fact recommends an option other than the one that stands (or nothing stands yet).
-- `## Account` — the AI's account in prose, left out of this brief.
-
-**There is no stamp.** Every decision on a node is a **fact** with a list of the **options** the AI considered, each shown as viable or as passed over, and the node's class is read off the **rulings** recorded on those options, never stored (`viable-options`). Each `facts` entry is `{name, options, recommends, boldness, against?, stands?}`:
-
-- `name` is one of exactly `answer` (its options are the candidate answers to this node's question, and it comes first), `authority` (the class a ruling confers: `ratified`, `delegated`, or `deferred`), `existence` (keep or prune, where a proposal to prune the node lives), and `persistence` (present only where the recommendation would change the node's shape). A decision the author would rule on separately that is none of those is a question, and a question is a node under this one. **Every node that carries a stage and carries facts carries an `authority` fact**, since that fact is how a ruling confers a class other than ratified; a node carrying no fact at all is one at the periagogic or maieutic stage, where nothing is proposed yet.
-- each option is `{name, source, ref, status?, reason?, ruling?}`. On the answer fact `source` and `ref` are required: `author`, `ai`, `review` (raised by a reading like this one), or the id of the node, or the name of the instrument, that raised it; `ref` is a date, a graph commit, or what raised it. `status`, where it is present, is exactly `passed`, and then `reason` is required and says why the option was passed over: **a passed option is one the AI holds dominated**, never the recommendation and never the one that stands, carrying no ruling, and it stays on the list, because every candidate the AI considered and can name is an option carrying its status and a candidate never silently leaves the list; the author may rule for it all the same, and the recording then clears the status. Deleting the node is never an answer option: it is the `existence` fact.
-- `recommends` names the one option the AI recommends, with its `boldness` (`low`, `moderate`, `high`); boldness runs from the AI's own knowledge against the record, so **high boldness is low confidence**.
-- `against`, beside `recommends` and optional, is the AI's own case against the option it recommends: the strongest argument against the recommendation, on record from the AI that made it, beside the recommendation itself rather than folded into some other option's passed-over reason.
-- `stands`, on the answer fact, names the option whose full text `## Answer` holds. A `## Recommendation` fence is present exactly when `recommends` is set and is not `stands` (or nothing stands yet).
-- `ruling`, on at most one option per fact, is the author's own act: `{response: confirm|edit, date, of, reason?}`, where `of` pins the hash of the recommendation the ruling answered and `reason` is the author's own reason for the ruling, in their words, optional and never the AI's. Only the author rules.
-
-The class follows: **ratified** when the answer fact carries a ruling; **delegated** or **deferred** when the authority fact carries that ruling; conferred by the nearest ancestor whose authority fact carries one where this node has none; **unanswered** when no ruling reaches it, and then nothing on the node acts. This brief prints each node's class and where it comes from.
-
-`review` is the state of the two readings the clean-context review divides into: `verdict`, `strength`, `date`, `of`, and an optional `against` — that review's own strongest counter-argument, on record beside its `strength`, distinct from a fact's own `against` above, which is the AI's case at the time it recommended — are the review of one draft, and `survey: {date, of}` is this reading. Each `of` pins the node's recommendation hash, so each goes stale by itself; a node is ready for the author's ruling only when both pin the recommendation as it stands.
-
-`stage` names the next movement owed: `periagogic` (the author's account not yet elicited), `maieutic` (the answer not yet drafted), `review` (the review of the draft), `ruling` (the author's confirmation owed).
+{{record}}
 
 Read first, in full: `disposition/disposition-graph/frontier-consistency.md` (the validations you run), `clean-context-review.md` (the two readings and how this one is pinned), `alignment-order.md` (how a tangle and a divergence are recorded), `recording.md`, `viable-options.md`, `authority.md`, `unanswered.md`, `dialogue.md`, `node.md`, and the global-tier rules `evaluation.md`, `materialization.md`, `session-context.md`, `delegation.md`; then the manifest. Then this brief's judged set, whole, all of it before you write any finding, since the survey compares nodes.
 

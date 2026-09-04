@@ -70,9 +70,13 @@ reason for choosing it.
   bootstrap (the shim declared on `materialization`; swapped with `main` at
   exit). `packages/disposition/` is the graph's reader, validator, and
   projector; `.claude/skills/align/` and `.claude/skills/reconcile/` are the
-  two operating skills, both declared shims; `.claude/rules/` is projected
-  from the global-tier nodes and never edited by hand; `bootstrap/` holds
-  evidence cited by nodes; `dist/` and `tmp/` are gitignored output.
+  two operating skills, both declared shims; `.claude/skills/align-review/`
+  and `.claude/skills/align-survey/` are the clean-context review's two
+  readings, declared shims too, over the one package
+  `packages/clean-context-review/` that holds their mechanics;
+  `.claude/rules/` is projected from the global-tier nodes and never edited
+  by hand; `bootstrap/` holds evidence cited by nodes; `dist/` and `tmp/`
+  are gitignored output.
 - **The projections the author reads**: the graph browser, published at
   https://claude.ai/code/artifact/502111c1-a7fb-4108-a9cb-ebb7b2a44933, and
   the alignment page, at
