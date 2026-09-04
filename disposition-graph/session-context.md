@@ -5,8 +5,8 @@ recommendation:
   adopts: standing
   class: ratified
   boldness: low
-  amends: "5022100045d3fec87a66697115d238de6eead5cc"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+  amends: "fc0acbfe47326951c44a94172df883ddae557aad"
+  at: "92b5423bde90a0d3031d176acbcfeb8956a7557e"
 review:
   verdict: forward
   strength: strong
@@ -30,7 +30,7 @@ authority:
   class: deferred
   by: claude
   date: 2026-09-02
-boost: 6
+boost: 7
 under:
   - commons.systems/disposition-graph/projection
 tier: global
@@ -198,3 +198,8 @@ Also named: commons.systems/disposition-graph/materialization, commons.systems/d
 Proposed: Transience is the survivor of the shim rule and is unruled; nothing in its text need change for this finding. Session-context's shim either names an artifact that exists — `.claude/settings.local.json`, with its exclusion from the ref as part of the liquidation — or the author writes `.claude/settings.json` and the shim stands as it reads, which is a change to the world and not to the record; the alternative below carries the record branch, and either way CLAUDE.md's claim about the file should be checked before the next session relies on it. Materialization's already-pending `strike-met-yaml-shim` is confirmed by this reading and should be taken rather than left as an option: the condition is met and the declaration is a frontier item by transience's own rule. Transience's `instrument-note-as-a-declared-shim` alternative is what would make both visible, since the note recording that a met condition is not flagged is itself the stand-in transience calls a shim.
 
 Recorded as a pending alternative on this node: `shim-names-an-existing-artifact` (source review, 2026-09-03).
+
+### Boost raised to hold the author's order, 2026-09-03
+
+The boost was raised from six to seven when `alignment-page` was minted under `projection` at the author's direction: the new sibling divided `projection`'s rank one more way and dropped this node to exactly `work-loop`'s rank, which the `order` field on `scope` forbids and the validator refuses. Nothing in the answer, the rationale, or the dialogue changed, and the recommendation is re-pinned to the amended standing text; the earlier review's pin is left as it was, so the frontier flags this node's text as changed since that review, which is true of its frontmatter and of nothing else.
+
