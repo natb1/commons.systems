@@ -37,6 +37,17 @@ after(async () => {
   await Promise.all(tmpDirs.map((d) => rm(d, { recursive: true, force: true })));
 });
 
+// Mirrors project.mjs's private settlesBreakdown: the counted terms
+// (under, depends) first, then -- only when the node carries at least one
+// alternative -- a semicolon clause naming the alternatives count
+// "uncounted", since a node's own alternatives are not summed into
+// `settles` (deriveSettles).
+function settlesBreakdown(node) {
+  const s = node.settledBy;
+  const alt = s.alternatives > 0 ? `; ${s.alternatives} alternatives, uncounted` : "";
+  return `${node.settles} (${s.under} under, ${s.depends} depends${alt})`;
+}
+
 /* The template's script is written so that every top-level statement is a
    declaration and the one call is guarded on `document`. That lets the whole
    renderer be loaded here, without a DOM, and called directly. */
@@ -365,7 +376,7 @@ test("renderFrontier lists every node in descending rank order with stage/settle
 
   const unalignedBlock = blockFor(unaligned.id);
   assert.ok(unalignedBlock.includes(`  stage: ${unaligned.stage}`));
-  assert.ok(unalignedBlock.includes(`  settles: ${unaligned.settles} (${unaligned.settledBy.under} under, ${unaligned.settledBy.alternatives} alternatives, ${unaligned.settledBy.depends} depends)`), "the settles line, right after stage");
+  assert.ok(unalignedBlock.includes(`  settles: ${settlesBreakdown(unaligned)}`), "the settles line, right after stage");
   assert.ok(unalignedBlock.includes(`  under: ${unaligned.under.join(", ")}`), "under: lists an un-aligned node's parents");
   assert.ok(unalignedBlock.includes("  instrument: none"));
 
@@ -400,7 +411,7 @@ test("renderFrontier's '## Ruling order' lists only the alignment frontier, sort
   const ids = [...rulingSection.matchAll(/^\d+\. (\S+) —/gm)].map((m) => m[1]);
   assert.deepEqual(ids, [unaligned.id, ruling.id]);
   assert.ok(
-    rulingSection.includes(`1. ${unaligned.id} — settles ${unaligned.settles} (${unaligned.settledBy.under} under, ${unaligned.settledBy.alternatives} alternatives, ${unaligned.settledBy.depends} depends) — rank ${unaligned.rank.toFixed(4)} — stage ${unaligned.stage}`),
+    rulingSection.includes(`1. ${unaligned.id} — settles ${settlesBreakdown(unaligned)} — rank ${unaligned.rank.toFixed(4)} — stage ${unaligned.stage}`),
   );
 
   const emptyListing = renderFrontier({ module: "example.test", nodes: [{ id: "example.test/main/x", stage: null, rank: 1, settles: 0, settledBy: { under: 0, alternatives: 0, depends: 0 }, status: "answered", authority: null }] });
@@ -408,15 +419,17 @@ test("renderFrontier's '## Ruling order' lists only the alignment frontier, sort
   assert.ok(emptyRulingSection.includes("_none_"));
 });
 
-test("renderFrontier's ruling order sorts by settles descending before rank, and a node's own alternatives count toward it", () => {
+test("renderFrontier's ruling order sorts by settles descending before rank, and a node's own alternatives do not count toward it", () => {
   const mk = (id, stage, rank, settles, settledBy) => ({
     id, stage, rank, settles, settledBy, status: "unanswered", authority: null,
   });
   const graph = {
     module: "example.test",
     nodes: [
-      mk("example.test/main/a", "review", 0.1, 5, { under: 3, alternatives: 1, depends: 1 }),
-      mk("example.test/main/b", "ruling", 0.9, 5, { under: 5, alternatives: 0, depends: 0 }),
+      // a's settledBy sums to 4 (3 under + 1 depends); its one alternative
+      // is carried on settledBy.alternatives but is not part of that sum.
+      mk("example.test/main/a", "review", 0.1, 4, { under: 3, alternatives: 1, depends: 1 }),
+      mk("example.test/main/b", "ruling", 0.9, 4, { under: 4, alternatives: 0, depends: 0 }),
       mk("example.test/main/c", "periagogic", 0.5, 9, { under: 9, alternatives: 0, depends: 0 }),
       mk("example.test/main/d", null, 0.99, 0, { under: 0, alternatives: 0, depends: 0 }),
     ],
@@ -426,7 +439,7 @@ test("renderFrontier's ruling order sorts by settles descending before rank, and
   const ids = [...rulingSection.matchAll(/^\d+\. (\S+) —/gm)].map((m) => m[1]);
   assert.deepEqual(ids, [
     "example.test/main/c", // settles 9, the outright highest
-    "example.test/main/b", // ties a on settles (5); rank 0.9 beats a's 0.1
+    "example.test/main/b", // ties a on settles (4); rank 0.9 beats a's 0.1
     "example.test/main/a",
   ]);
   assert.ok(!ids.includes("example.test/main/d"), "no stage, so not in the ruling order at all");
@@ -956,14 +969,25 @@ test("orderAlignmentItems takes only nodes carrying a stage, appends an undeclar
   const groups = orderAlignmentItems(DIALOGUE_GRAPH);
   const slugs = groups.flatMap((g) => g.items.map((n) => n.slug));
   assert.ok(!slugs.includes("answered-no-stage"), "a node with no stage is not an item");
-  // ruling-node carries one alternative (settles 1) and so leads even
-  // though answered-with-stage and review-node (settles 0 apiece) outrank
-  // it -- the ruling-order change this test exists to cover.
-  const item = (slug) => groups.flatMap((g) => g.items).find((n) => n.slug === slug);
+
+  // settles outranks rank within a group. Three same-graph items, ranks
+  // tied: ruling-node settles 1 -- a real dependant elsewhere, not its own
+  // alternatives, which it also carries but which no longer count toward
+  // settles (deriveSettles) -- and so leads even though answered-with-stage
+  // and review-node (settles 0 apiece) tie it on rank.
+  const ordered = orderAlignmentItems({
+    graphs: { main: {} },
+    nodes: [
+      { id: "example.test/main/answered-with-stage", slug: "answered-with-stage", graph: "main", stage: "review", rank: 0.25, settles: 0 },
+      { id: "example.test/main/review-node", slug: "review-node", graph: "main", stage: "review", rank: 0.25, settles: 0 },
+      { id: "example.test/main/ruling-node", slug: "ruling-node", graph: "main", stage: "ruling", rank: 0.25, settles: 1, alternatives: [{ name: "whole-node" }] },
+    ],
+  });
+  const item = (slug) => ordered.flatMap((g) => g.items).find((n) => n.slug === slug);
   assert.equal(item("ruling-node").settles, 1);
   assert.equal(item("answered-with-stage").settles, 0);
   assert.equal(item("review-node").settles, 0);
-  assert.deepEqual(slugs, ["ruling-node", "answered-with-stage", "review-node"], "settles 1 leads settles 0, whatever the ranks");
+  assert.deepEqual(ordered[0].items.map((n) => n.slug), ["ruling-node", "answered-with-stage", "review-node"], "settles 1 leads settles 0, whatever the ranks");
 
   const stray = orderAlignmentItems({
     graphs: { main: { about: "declared" } },
@@ -1166,6 +1190,30 @@ test("--alignment lists the alternatives after the node as it stands, marking th
   // a node with nothing on the table renders no section at all
   const plain = itemHtml(html, nodeBySlug(graph, "stale-node").id);
   assert.ok(!plain.includes("The alternatives"));
+});
+
+test("--alignment's eyebrow carries the alternatives count right after settles, plural or singular, and omits it entirely for a node with none", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-alternatives"));
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+
+  const fresh = nodeBySlug(graph, "fresh-node");
+  assert.equal(fresh.alternatives.length, 3, "fixture precondition: three alternatives on the table");
+  const freshArticle = itemHtml(html, fresh.id);
+  assert.ok(freshArticle.includes('<span class="meta mono num">3 alternatives</span>'), "plural, and named 3");
+  const settlesAt = freshArticle.indexOf(`settles ${fresh.settles}`);
+  const altsAt = freshArticle.indexOf('3 alternatives');
+  const rankAt = freshArticle.indexOf(`rank ${fresh.rank.toFixed(4)}`);
+  assert.ok(settlesAt >= 0 && settlesAt < altsAt && altsAt < rankAt, "right after settles, before rank");
+
+  const prune = nodeBySlug(graph, "prune-node");
+  assert.equal(prune.alternatives.length, 1, "fixture precondition: one alternative on the table");
+  const pruneArticle = itemHtml(html, prune.id);
+  assert.ok(pruneArticle.includes('<span class="meta mono num">1 alternative</span>'), "singular for exactly one");
+
+  const stale = nodeBySlug(graph, "stale-node");
+  assert.equal((stale.alternatives || []).length, 0, "fixture precondition: no alternatives");
+  const staleArticle = itemHtml(html, stale.id);
+  assert.ok(!staleArticle.includes("alternative"), "nothing rendered for a node with none");
 });
 
 test("--alignment inverts a divergence onto the ancestor's alternatives: what a ruling for each keeps and discards", () => {

@@ -6,9 +6,10 @@ description: Record or revise one node of the disposition graph by interview wit
 
 > **Shim notice (2026-09-02, revised 2026-09-03, reconciled to the
 > dialogue-state encoding the same day under the author's bootstrap grant
-> on `dialogue`, and to the ruling order the same day under the author's
-> grant on `alignment-order`, whose recommendation is unanswered and whose
-> clean-context review and ruling are both still owed).** Hand-materialized from
+> on `dialogue`, and to the ruling order the same day under two grants on
+> `alignment-order`, the second for its amended count, whose recommendation
+> is unanswered still and whose clean-context review and ruling are both
+> owed).** Hand-materialized from
 > the nodes `growth`, `recording`, `unanswered`, `dialogue`,
 > `clean-context-review`, `frontier-consistency`, `checkpoint`,
 > `alignment-target`, `alignment-order`, `authority`, `node`, `under`,
@@ -223,10 +224,16 @@ skill only when the session starts in the checkout that carries it.
   the ancestor, showing beside each alternative the nodes a ruling for it
   keeps and the nodes it discards. A ruling settles a node when it makes
   that node mechanically decidable: every unanswered node under the ruled
-  node, every alternative the ruling closes, and every node naming it in
-  `depends`. The order puts first the node whose ruling settles the most,
-  ancestors ahead of descendants by that count and not by hand, rank
-  breaking ties and ordering nothing else on this frontier. The projector
+  node, and every node naming it in `depends`. What a ruling closes on the
+  node it rules, the alternatives pending there, is the ruling's own
+  content and settles nothing elsewhere; an alternative that bears on
+  another node bears on it through that node's `depends`, where it is
+  already counted, and the alternatives pending on a node are shown beside
+  its settling count and order nothing. The order puts first the node
+  whose ruling settles the most; an ancestor comes before its descendants
+  because its unanswered subtree contains theirs and the descendant
+  besides, so the order does not have to force it; rank breaks ties and
+  orders nothing else on this frontier. The projector
   computes it and nothing else does: `--frontier -` prints it as the
   `## Ruling order` section and the alignment page pages in it. Rank stays
   what `attention` says it is for the reconciliation frontier and the

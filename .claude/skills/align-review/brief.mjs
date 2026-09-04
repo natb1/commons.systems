@@ -113,10 +113,11 @@ function frontierOrderIds(graph) {
 /**
  * The batch's *ruling order* (`alignment-order`): settling count
  * descending -- a node whose ruling would settle more of the graph (more of
- * it standing under the node itself, depending on it, or riding on one of
- * its own pending alternatives; `deriveSettles`) is ruled on first -- then
- * rank descending, then id ascending to break what settling count alone does
- * not. This is deliberately not the frontier's own order
+ * it standing under the node itself, or depending on it; `deriveSettles`)
+ * is ruled on first -- then rank descending, then id ascending to break
+ * what settling count alone does not. A node's own pending alternatives are
+ * its own ruling's content, not reach elsewhere, and do not count toward
+ * this. This is deliberately not the frontier's own order
  * (`frontierOrderIds`): rank alone ranks by boost and shape, not by how much
  * of the graph a ruling settles, so the two orders can and do differ.
  *

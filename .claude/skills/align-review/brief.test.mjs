@@ -57,11 +57,12 @@ describe("writeFrontierBrief", () => {
     // {{batch_index}}: one line per review-stage node, in the given format.
     // Every node in this fixture is a root with the default boost, so all
     // six tie at rank 0.1667, and none carries an authority stamp except
-    // the answered one. review-a has no alternatives and settles nothing;
-    // review-b has one pending alternative ('narrower'), so it settles 1.
+    // the answered one. Neither review-a nor review-b has any descendant or
+    // dependant of its own, so both settle nothing; review-b's pending
+    // alternative ('narrower') is its own content and does not count.
     for (const line of [
       `- ${REVIEW_A} | stage review | rank 0.1667 | settles 0 | no stamp | disposition/main/review-a.md`,
-      `- ${REVIEW_B} | stage review | rank 0.1667 | settles 1 | no stamp | disposition/main/review-b.md`,
+      `- ${REVIEW_B} | stage review | rank 0.1667 | settles 0 | no stamp | disposition/main/review-b.md`,
     ]) {
       assert.ok(brief.includes(line), `missing batch index line:\n${line}`);
     }
@@ -182,14 +183,29 @@ describe("writeFrontierBrief", () => {
   test("the batch index is the ruling order (settles descending, then rank descending, then id ascending), not the frontier's rank order", async () => {
     const rootDir = await freshFrontierFixture("brief-ruling-order-");
     const reviewDir = path.join(rootDir, "_review");
+
+    // review-b's own pending alternative no longer counts toward `settles`
+    // (deriveSettles), so the fixture needs a real dependant to keep the
+    // ruling order and the rank order apart: give periagogic-node (context,
+    // outside the batch, already at a stage so `depends` is legal on it) a
+    // `depends` on review-b. That is one open node waiting on review-b's
+    // ruling -- one more than review-a settles -- while both still tie on
+    // rank, so a test that happened to pass under rank order too would not
+    // catch a regression to it.
+    const periagogicFile = path.join(rootDir, "main", "periagogic-node.md");
+    await writeFile(
+      periagogicFile,
+      (await readFile(periagogicFile, "utf8")).replace(
+        "stage: periagogic\n",
+        `stage: periagogic\ndepends:\n  - ${REVIEW_B}\n`,
+      ),
+    );
+
     const graph = await readGraph(rootDir);
     const byId = new Map(graph.nodes.map((n) => [n.id, n]));
 
-    // Precondition: review-b settles more than review-a (it carries one
-    // pending alternative, review-a carries none), while both tie on rank --
-    // so the ruling order and the rank order actually differ in this
-    // fixture, and a test that happened to pass under rank order too would
-    // not catch a regression to it.
+    // Precondition: review-b settles more than review-a (periagogic-node
+    // depends on it, review-a has no dependant), while both tie on rank.
     assert.ok(byId.get(REVIEW_B).settles > byId.get(REVIEW_A).settles, "fixture precondition: review-b settles more than review-a");
     const rankOrder = [REVIEW_A, REVIEW_B].sort((a, b) => (a < b ? -1 : 1)); // both rank 0.1667: id order
     const rulingOrder = [REVIEW_B, REVIEW_A]; // settles 1 before settles 0

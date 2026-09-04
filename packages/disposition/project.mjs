@@ -306,7 +306,8 @@ function formatDependsEntry(d) {
 // punctuation (inline prose there, a "key: value" detail line here).
 function settlesBreakdown(node) {
   const s = node.settledBy;
-  return `${node.settles} (${s.under} under, ${s.alternatives} alternatives, ${s.depends} depends)`;
+  const alt = s.alternatives > 0 ? `; ${s.alternatives} alternatives, uncounted` : "";
+  return `${node.settles} (${s.under} under, ${s.depends} depends${alt})`;
 }
 
 /**
@@ -943,6 +944,9 @@ function renderAlignmentItem(n, allNodes) {
   html += '<p class="eyebrow">'
     + `<span class="pill stage-${alignEsc(n.stage)}">${alignEsc(n.stage)}</span>`
     + (typeof n.settles === "number" ? `<span class="meta mono num">settles ${alignEsc(n.settles)}</span>` : "")
+    + (n.alternatives && n.alternatives.length > 0
+      ? `<span class="meta mono num">${alignEsc(n.alternatives.length)} alternative${n.alternatives.length === 1 ? "" : "s"}</span>`
+      : "")
     + `<span class="meta mono num">rank ${alignEsc(rank)}</span>`
     + `<span class="meta mono">${alignEsc(stamp)}</span>`
     + `<span class="meta mono parents">${under.length ? `under ${alignEsc(under.join(", "))}` : "a root"}</span>`

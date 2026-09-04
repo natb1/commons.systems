@@ -330,8 +330,9 @@ export function deriveDescendants(parentIds, childrenMap) {
 
 /**
  * The settling count for the alignment frontier: how many other open
- * decisions a ruling on this node settles, on top of the node itself. Three
- * components, named on the returned record:
+ * decisions a ruling on this node settles, on top of the node itself. Two
+ * components go into `settles`, plus a third carried alongside it but not
+ * summed in:
  *
  * - `under`: the node's strict descendants (`deriveDescendants`, following
  *   `children` transitively) whose status (`deriveStatus`) is unanswered --
@@ -341,12 +342,17 @@ export function deriveDescendants(parentIds, childrenMap) {
  *   (qualified by an alternative or not), except one already counted under
  *   `under` -- a dependant elsewhere in the graph is waiting on this
  *   node's ruling just as surely as a descendant is.
- * - `alternatives`: the node's own `alternatives` count -- an answer on the
- *   table is itself a decision this node's ruling settles, whether or not
- *   any other node stands under it yet.
+ * - `alternatives`: the node's own `alternatives` count. It is not summed
+ *   into `settles`: an alternative pending on this node is this node's own
+ *   ruling, not a separate decision elsewhere that ruling reaches, so it
+ *   settles nothing beyond the node itself and orders nothing against it.
+ *   It is carried on the record because it tells a reader how much a
+ *   sitting on this node will cost -- how many alternatives the dialogue
+ *   has to work through -- even though it makes no other node decidable.
  *
- * `settles` is the sum of the three. Computed for every node, pure and
- * deterministic: nothing here is randomized or depends on wall-clock time.
+ * `settles` is `under + depends`, reach only. Computed for every node,
+ * pure and deterministic: nothing here is randomized or depends on
+ * wall-clock time.
  *
  * @param {DeriveNode[]} nodes - each also carrying `alternatives`
  *   (`{name: string}[]`, or absent) and `depends`
@@ -370,7 +376,7 @@ export function deriveSettles(nodes, childrenMap) {
     }
     const alternatives = (node.alternatives ?? []).length;
     result.set(node.id, {
-      settles: under.size + dependants.size + alternatives,
+      settles: under.size + dependants.size,
       under: under.size,
       alternatives,
       depends: dependants.size,

@@ -17,6 +17,7 @@ import {
   deriveChildren,
   deriveDraftHash,
   deriveRank,
+  deriveSettles,
   deriveStandingHash,
   deriveStatus,
 } from './derive.mjs';
@@ -104,6 +105,23 @@ describe('derive.mjs', () => {
     assert.equal(rank.get('root'), 1);
     assert.equal(rank.get('heavy'), 0.75);
     assert.equal(rank.get('light'), 0.25);
+  });
+
+  test('deriveSettles: settles is under + depends only -- a node\'s own alternatives are carried but not summed in, so a parent settles strictly more than its unanswered child even when the child carries more alternatives', () => {
+    const nodes = [
+      { id: 'parent', under: [], alternatives: [] },
+      { id: 'child', under: ['parent'], alternatives: [{ name: 'a' }, { name: 'b' }, { name: 'c' }] },
+    ];
+    const children = deriveChildren(nodes);
+    const settled = deriveSettles(nodes, children);
+    const parent = settled.get('parent');
+    const child = settled.get('child');
+
+    assert.equal(parent.settles, 1, 'parent settles its one unanswered child');
+    assert.equal(parent.alternatives, 0);
+    assert.equal(child.settles, 0, 'child has no descendant or dependant of its own');
+    assert.equal(child.alternatives, 3, "carried on the record even though it settles nothing else");
+    assert.ok(parent.settles > child.settles, 'the parent settles strictly more than the child, despite carrying fewer alternatives');
   });
 
   test('deriveCeiling finds the nearest ratified ancestor, breadth first, ties by id', () => {
