@@ -155,9 +155,14 @@ and the ruling are both owed on the recommendation as it now stands.
 The reconciliation drops the alignment page's grouping by graph from its
 ordering: the page pages in one ruling order across the manifest's graphs
 and shows each node's graph as a label beside it, and the alignment skill's
-no-argument rule loses "this project's graph before the public graph". The
-implementation commit on `greenfield` names this grant and the graph commit
-it reconciles to.
+no-argument rule loses "this project's graph before the public graph". It
+landed on `greenfield` as 7801286e873b6340b1af5b94ddc26a1cc6483c31 against
+this node at graph commit cee9a117f2e1713f90df3fe7b820cee63ad5232a. The page
+now opens with `commons.systems/public/agency`, then
+`commons.systems/disposition-graph/purpose`, then
+`commons.systems/disposition-graph/model`, which is the frontier's ruling
+order exactly; the two graphs survive on the page as a header naming each
+with its count of open items, and on each node as a label.
 
 ### The page's graph grouping contradicted the order, 2026-09-03
 
