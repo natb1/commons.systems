@@ -500,3 +500,20 @@ The redraft answers a kickback, so the node stands at the review stage and the
 `review` block still carries that kickback with the pin of the draft it read.
 The frontier shows the recommendation as moved since, and the review of this
 draft is owed before the author rules.
+### The readings this sitting owed, 2026-09-04
+
+Discharged, by the readings unit of the alignment sitting of 2026-09-04 under
+the author's bootstrap grant of that day. One new reading,
+`commons.systems/disposition-graph/self-contained-specification`, the
+tradition on the other side of this answer, recorded as a divergence on
+`prose-argues-structure-records` with the counter the record makes to it, that
+a node file is read alone in a diff, in a one-file review, and by a subagent
+given one node. The other three the account named are entries on readings the
+graph already holds rather than nodes of their own, since a second reading of
+one body of sources is the anomaly this answer forbids: the knowledge-not-text
+qualification on `commons.systems/disposition-graph/dry-single-source-of-truth`,
+the derived read model on
+`commons.systems/disposition-graph/event-sourcing-derived-view`, and the second
+entry the account asks for on
+`commons.systems/disposition-graph/madr-decision-records`. Codd's entry here
+already existed and was not owed.

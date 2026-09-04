@@ -436,3 +436,13 @@ their reasons, `defines` gains "rejected alternative", and the standing answer
 and rationale are unchanged, as is the account before this section. The node
 moves to the review stage with its 2026-09-03 kickback still pinned to the
 draft it read, so the frontier shows the recommendation as moved since.
+### The readings owed for the pair, 2026-09-04
+
+Discharged with `viable-options`', by the readings unit of the alignment
+sitting of 2026-09-04 under the author's bootstrap grant of that day. The three
+this node records as owed for the pair,
+`commons.systems/disposition-graph/file-drawer-and-pre-registration`,
+`commons.systems/disposition-graph/deprecation-not-deletion` and
+`commons.systems/disposition-graph/chestertons-fence`, are filed under
+`viable-options` and each carries a second `bears` entry on
+`passed-over-stays-listed` here.

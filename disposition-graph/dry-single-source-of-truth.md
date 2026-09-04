@@ -25,6 +25,10 @@ bears:
   - fact: answer
     option: two-skills-one-package
     relation: adopted
+  - node: commons.systems/disposition-graph/prose-and-structure
+    fact: answer
+    option: prose-argues-structure-records
+    relation: adopted
 ---
 ## Answer
 
@@ -60,3 +64,17 @@ take.
 ## Account
 
 Minted at the recording of `review-skills`' recommendation on 2026-09-04, under the author's bootstrap grant of that day to progress the adversarial-review dispositions through the maieutic movement and reconcile them immediately, from the tradition survey of the review sitting and the pass with reference to tradition that read it, which names this reading among the eight owed under that node. Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
+### A relation added, 2026-09-04
+
+A `bears` entry on `commons.systems/disposition-graph/prose-and-structure`'s
+`prose-argues-structure-records`, adopted, added by the readings unit of the
+alignment sitting of 2026-09-04 under the author's bootstrap grant of that
+day. The account of that node's maieutic movement asks for the tradition "as
+Hunt and Thomas state it, that every piece of knowledge has one unambiguous
+authoritative representation in a system, which supplies the qualification
+this answer needs and Codd does not, that what may not be repeated is
+knowledge and not text", and calls it owed as a reading under that node. It is
+recorded as an entry here rather than as a second reading because this reading
+already holds those sources, and a second node reading them would be the
+duplication the option it now bears on forbids. The qualification the node
+asks for is the answer's own first sentence.

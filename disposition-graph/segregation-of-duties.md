@@ -28,6 +28,10 @@ bears:
   - fact: answer
     option: conditional-by-boldness
     relation: diverged
+  - node: commons.systems/disposition-graph/recording
+    fact: answer
+    option: per-fact-after-two-readings
+    relation: adopted
 ---
 ## Answer
 
@@ -63,3 +67,14 @@ take.
 ## Account
 
 Minted at the recording of `review-model`'s recommendation on 2026-09-04, under the author's bootstrap grant of that day to progress the adversarial-review dispositions through the maieutic movement and reconcile them immediately, from the tradition survey of the review sitting and the pass with reference to tradition that read it, which names this reading among the six owed under that node. Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
+### A relation added, 2026-09-04
+
+A `bears` entry on `commons.systems/disposition-graph/recording`'s
+`per-fact-after-two-readings`, adopted, added by the readings unit of the
+alignment sitting of 2026-09-04 under the author's bootstrap grant of that
+day. That node's account asks for "the four-eyes principle of financial
+control, for a second reader before a write to the record", and its facts
+prose calls it "the second pair of eyes before a write to the record". Four
+eyes is the control this reading already holds, from internal control and the
+two-person concept, and the answer names it in as many words, so a second node
+would read one doctrine twice.

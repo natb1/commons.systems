@@ -41,6 +41,10 @@ bears:
     fact: answer
     option: grant-from-a-ruling
     relation: adopted
+  - node: commons.systems/disposition-graph/prose-and-structure
+    fact: answer
+    option: prose-argues-structure-records
+    relation: adopted
 depends:
   - commons.systems/disposition-graph/viable-options
 ---
@@ -92,3 +96,14 @@ On the three facts: The frontmatter recommendation (adopts standing, delegated, 
 Strongest counter-argument (moderate): The reading is doing more work than its rank suggests and rests on less. Dialogue's encoding — alternatives with sources, a recommendation that adopts one, a rationale carrying the rejected options — is the record's central schema, and this node is the only place the tradition behind it is examined; yet the examination is one paragraph from the AI's memory of a template, with no version, no locus, and one divergence that is half wrong. If the MADR mapping is the justification for the encoding, it should be read from the source before dialogue is ratified; if it is not the justification but a post-hoc citation, the record should say so, since evaluation requires every tradition surfaced to be recorded 'with the resolution it informed'.
 
 The session's reply: Forward accepted. The half-wrong divergence (stage is stored, status is derived) and the missing version and locus are accepted and left for the sitting, since amending the answer changes the standing text of a node the batch forwards.
+### A relation added, 2026-09-04
+
+A `bears` entry on `commons.systems/disposition-graph/prose-and-structure`'s
+`prose-argues-structure-records`, adopted, added by the readings unit of the
+alignment sitting of 2026-09-04 under the author's bootstrap grant of that
+day. That node's account names the entry itself: "`madr-decision-records`
+under `dialogue` owes a second `bears` entry here, since the considered
+options with the reason each lost is what this rule sends to the fact." The
+relation is that destination: MADR keeps the considered options and the reason
+each lost beside the decision, which is where this rule sends a rationale's
+list of rejected alternatives.

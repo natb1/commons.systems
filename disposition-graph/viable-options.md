@@ -1237,3 +1237,20 @@ reading five sittings. The second `bears` entry owed from
 is written in this landing. The three traditions the unit surfaced, Chesterton's
 fence, the file-drawer problem with pre-registration, and deprecation rather
 than deletion, are owed as readings under this node and are not drafted here.
+### The readings this sitting owed, 2026-09-04
+
+Discharged, by the readings unit of the alignment sitting of 2026-09-04 under
+the author's bootstrap grant of that day. Three new readings under this node,
+each adopted on `passed-over-options-stay` and each carrying a second entry on
+`commons.systems/disposition-graph/rejected`'s `passed-over-stays-listed`,
+since that node records the three as owed for the pair:
+`commons.systems/disposition-graph/file-drawer-and-pre-registration`,
+`commons.systems/disposition-graph/deprecation-not-deletion`, and
+`commons.systems/disposition-graph/chestertons-fence`. Where this node says in
+one section that they are owed under `stub-traditions` and in a later section
+of the same day that they are owed as readings under this node, the later
+governs, and that is where they are filed. Chesterton's fence carries no entry
+on `commons.systems/disposition-graph/evaluation`, whose rationale diverges
+from it in part and for a different question; the reading names that relation
+as owed when that node's options settle, following `pareto-frontier`'s
+precedent.

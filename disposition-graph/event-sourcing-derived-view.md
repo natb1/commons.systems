@@ -26,6 +26,10 @@ bears:
     fact: answer
     option: grant-from-a-ruling
     relation: adopted
+  - node: commons.systems/disposition-graph/prose-and-structure
+    fact: answer
+    option: prose-argues-structure-records
+    relation: adopted
 ---
 ## Answer
 
@@ -59,3 +63,17 @@ take.
 ## Account
 
 Minted at reconciliation on 2026-09-04 under the author's bootstrap grant of that day, from the paragraph of `viable-options`' rationale that names eight traditions in prose, which under `prose-and-structure` becomes readings with `bears` entries: "event sourcing and the derived view, adopted for the class as a projection of recorded rulings, with the warning that every reader must derive it the same way". Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
+### A relation added, 2026-09-04
+
+A `bears` entry on `commons.systems/disposition-graph/prose-and-structure`'s
+`prose-argues-structure-records`, adopted, added by the readings unit of the
+alignment sitting of 2026-09-04 under the author's bootstrap grant of that
+day. That node's account asks for "denormalization and the derived read
+model, the tradition that says when a second copy is legitimate, which is
+exactly when it is generated and never hand-maintained, and which is what
+makes the rules directory, the browser and the alignment page projections
+rather than breaches of this rule", and names the overlap with this reading
+itself. The overlap is what makes it an entry: the derived view that is a fold
+over the record and never the source of truth is already read here, and the
+generated-copy half of the same argument is on
+`commons.systems/disposition-graph/dry-single-source-of-truth`.

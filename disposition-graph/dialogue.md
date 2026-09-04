@@ -1902,3 +1902,24 @@ entry for this node moves to `every-part-in-the-record`, and its entry for
 `per-fact-after-two-readings`. Both clauses they named survive as options on
 their facts, so nothing is lost by the move and the pointer now names what the
 page's ruling actually waits on.
+### The readings this sitting owed, 2026-09-04
+
+Discharged, by the readings unit of the alignment sitting of 2026-09-04 under
+the author's bootstrap grant of that day. Six new readings under this node:
+`commons.systems/disposition-graph/special-verdict-form`, adopted on
+`authority-fact-on-every-node`;
+`commons.systems/disposition-graph/legislative-amendment-in-context`, adopted
+on `edit-led-against-a-named-ground`;
+`commons.systems/disposition-graph/single-subject-rule`, diverged on
+`every-part-in-the-record`, which is the case against composing the clauses
+into one option, as the fence's rationale gives it; and the three the standing
+rationale names in prose, `commons.systems/disposition-graph/rfc-pep-status-field`,
+`commons.systems/disposition-graph/review-approval-pinned-to-a-revision` and
+`commons.systems/disposition-graph/change-reviewed-as-a-diff`, each adopted on
+`facts-carry-options`. Chenery's two entries and Codd's already existed. The
+two traditions this account calls shelved by pre-agent constraints, a rationale
+per option and an objection stated on every recommendation, are not drafted:
+neither carries an author, a work or a date here, so a `source` line would have
+to be invented, and both existing readings already bear on
+`every-part-in-the-record`. MADR's pros-and-cons is the nearest citable home
+for the first if the author wants it read.

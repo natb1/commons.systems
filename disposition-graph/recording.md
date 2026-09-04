@@ -734,3 +734,16 @@ Owed and not written here, since a design unit writes one node: two options on
 on a fact and that an edit-ruling is recorded before the re-review, the second
 against that node's standing sentence; and `bears` entries from the two
 readings named above onto the recommended option.
+### The readings this sitting owed, 2026-09-04
+
+Discharged, by the readings unit of the alignment sitting of 2026-09-04 under
+the author's bootstrap grant of that day. Three new readings under this node,
+each adopted on `per-fact-after-two-readings`:
+`commons.systems/disposition-graph/promotor-fidei`,
+`commons.systems/disposition-graph/peirce-paper-doubt`, and
+`commons.systems/disposition-graph/notarial-minute`, which takes the minute and
+the shelved reading-back as two loci of one tradition. The two the account named
+that the graph already reads are entries and not nodes: blinded peer review on
+`commons.systems/disposition-graph/scholarly-peer-review`, and the four-eyes
+principle on `commons.systems/disposition-graph/segregation-of-duties`, both
+adopted on the same option. Chenery's entry and `non-liquet`'s already existed.

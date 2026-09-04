@@ -25,6 +25,10 @@ bears:
   - fact: answer
     option: fable-for-both-readings
     relation: adopted
+  - node: commons.systems/disposition-graph/recording
+    fact: answer
+    option: per-fact-after-two-readings
+    relation: adopted
 ---
 ## Answer
 
@@ -61,3 +65,14 @@ take.
 ## Account
 
 Minted at the recording of `review-model`'s recommendation on 2026-09-04, under the author's bootstrap grant of that day to progress the adversarial-review dispositions through the maieutic movement and reconcile them immediately, from the tradition survey of the review sitting and the pass with reference to tradition that read it, which names this reading among the six owed under that node. Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
+### A relation added, 2026-09-04
+
+A `bears` entry on `commons.systems/disposition-graph/recording`'s
+`per-fact-after-two-readings`, adopted, added by the readings unit of the
+alignment sitting of 2026-09-04 under the author's bootstrap grant of that
+day. That node's account asks for "blinded peer review, for the independence
+of the reader's context rather than of the record it reads", and its facts
+prose names the debt in the same terms, "the reader whose context is
+independent of the writer's". Blinding is part of the practice this reading
+already holds, so it is an entry and not a second reading of the referee
+system, which is the idiom this reading's own facts section sets.
