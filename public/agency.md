@@ -56,8 +56,6 @@ The word chosen for this node is agency, the state of being that origin. Authors
 
 The modal content is the point: capacity, not exercise. Being unable to recover is capture even if the delegatee never misbehaves; freedom is the capability to act, not the acting; exit and voice are the two recovery moves.
 
-Stub note: drafted by the AI under the bootstrap grant from the author's rulings of 2026-09-02 and the author's own legacy text. Deferred until the author ratifies it. Pending readings to add under this node: Sen on capability, Hirschman on exit and voice, Korsgaard on authorship.
-
 ## Facts
 
 ### answer
@@ -201,3 +199,17 @@ the node back to the periagogic stage for this and nothing else, and the
 movement it named is still owed: the author's own account of who is the origin
 of what is done in their name, in their words, before the two readings under
 this node are re-read.
+
+### The stub note struck, 2026-09-04
+
+The rationale's closing paragraph, a stub note saying the answer was drafted
+by the AI under the bootstrap grant from the author's rulings of 2026-09-02
+and the author's own legacy text, that it was deferred until the author
+ratifies it, and that readings were pending under this node, was struck under
+the author's grant of 2026-09-04 for the alignment-page sitting, as the
+clean-context review of 2026-09-03 found: it was dialogue state carried in
+prose, which the record now carries as data, the class read off the rulings
+and the stage on the node, and the account carries what remains of it. The
+readings it named are still owed under this node: Sen on capability,
+Hirschman on exit and voice, Korsgaard on authorship. The provenance it stated
+is in the recording section above.
