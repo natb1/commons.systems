@@ -46,6 +46,19 @@ facts:
 form: rule
 under:
   - commons.systems/disposition-graph/clean-context-review
+shims:
+  - artifact: "`.claude/skills/align-review/SKILL.md` on the implementation ref, the review of a draft, hand-written from the clean-context-review node, the recording node and this node"
+    for: the projection of the review of a draft as a skill of its own
+    liquidation: the projector materializes the skill from ratified nodes and the hand-written file is deleted
+    declared: 2026-09-04
+  - artifact: "`.claude/skills/align-survey/SKILL.md` on the implementation ref, the survey, hand-written from the clean-context-review node, the frontier-consistency node and this node"
+    for: the projection of the survey as a skill of its own
+    liquidation: the projector materializes the skill from ratified nodes and the hand-written file is deleted
+    declared: 2026-09-04
+  - artifact: "the brief templates `brief-draft.md` and `brief-survey.md` and the fragments `brief-bounds.md` and `brief-record.md` under `packages/clean-context-review/` on the implementation ref, hand-written from the nodes each summarizes"
+    for: the briefs the two skills write for their readers, whose common text is one fragment filled into both
+    liquidation: the brief generator fills a brief's common and reading-specific text from the nodes' answers and the hand-written templates and fragments are deleted
+    declared: 2026-09-04
 depends:
   - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey
   - commons.systems/disposition-graph/frontier-consistency#split-survey-from-per-draft
@@ -517,3 +530,51 @@ paragraph carries was done before the split by the unit reconciling the
 review scripts to the new encodings, so the move carries it already done.
 
 At the second compaction of 2026-09-04 the reconciliation unit was briefed at the job's tmp/briefs/unit-split-review-skills.md and not launched, waiting on the unit reconciling the review scripts to the new encodings, since both write the same files; the readings unit for both nodes was running, to tmp/review-sitting/readings/; and the order that remains is on alignment-page's account.
+### Reconciled, 2026-09-04
+
+Landed at `a1ddc6e6` on the implementation ref under the author's bootstrap
+grant of 2026-09-04, before any ruling on this node, which is unanswered and
+whose recommendation acts on nothing. Created:
+`.claude/skills/align-survey/SKILL.md`;
+`packages/clean-context-review/package.json`, `brief-bounds.md` and
+`brief-record.md`. Moved into the package with the sibling reconciliation's
+versions intact: `brief.mjs`, `apply.mjs`, `brief-draft.md`,
+`brief-survey.md`, `brief.test.mjs`, `apply.test.mjs` and
+`fixtures/frontier/`, with the fixture manifest's module renamed, `REPO_ROOT`
+re-anchored, and the citations of a section of `SKILL.md` inside the moved
+files replaced by the names of the nodes they cite, there being no longer one
+`SKILL.md` beside them. Rewritten: `.claude/skills/align-review/SKILL.md`, to
+the review of a draft alone; `/align`'s first and fifth sections, its section
+on model and delegation, and its shim notice; and one bullet of `CLAUDE.md`.
+`apply.mjs` needed no change on the reading: it already reads `draft` or
+`survey` from the input's own `scope` and carries no flag. `brief.mjs` no
+longer computes or prints a reader's model, and fills `{{bounds}}` and
+`{{record}}` from the fragments before the value fill, so a `{{repo}}` inside
+a fragment still substitutes. Tests: `packages/disposition` 339, this package
+60, the root 399, all passing; `validate` ok. The three shims this node's
+recommendation declares are now declared on its standing frontmatter as well,
+since the artifacts have come into being and the transience node's rule
+declares a shim where that happens, whatever the author rules on the question
+itself.
+
+Two conflicts between this node's recommended text and `review-model`'s were
+found at the reconciliation and resolved toward `review-model`, and each is
+worth a survey finding. First, the paragraph here on `/align-review` says the
+brief step "prints the reader's model", where `review-model`'s recommendation
+says `brief.mjs` computes no model and prints none; `review-model` was
+followed, since this node says the model is "not decided here, cited to
+`review-model`". Second, `review-model`'s recommendation expects "its section
+on model and delegation" on the review skill, in the singular, while this node
+forbids a sentence both skills must keep true; each skill now carries a short
+**Model and delegation** section that states nothing of its own and cites
+`review-model`.
+
+One divergence from this node's answer, recorded rather than resolved. The
+answer says the two skills' shared instruction text is the parent node's and
+that the briefs' common text is one fragment; the two `## The record` sections
+of the existing templates were not in fact identical, eleven of some
+twenty-seven lines differing, all of them the draft reading's elaborations and
+its sentences on the per-reading account, review and stage. `brief-record.md`
+is the neutral union of the two, correct for both readings, and each template
+keeps its own "Read first, in full" paragraph after `{{record}}`, that
+paragraph being specific to its reading.

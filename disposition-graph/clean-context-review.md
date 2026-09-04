@@ -76,11 +76,6 @@ facts:
 form: rule
 under:
   - commons.systems/disposition-graph/recording
-shims:
-  - artifact: "`.claude/skills/align-review/SKILL.md` on the implementation ref, with the reviewer's briefs and the scripts `brief.mjs` and `apply.mjs` beside it, hand-written from this node and the recording node"
-    for: the projection of this node as the review skill
-    liquidation: the projector materializes the skill from ratified nodes and the hand-written files are deleted
-    declared: 2026-09-03
 ---
 ## Disposition
 
@@ -208,11 +203,6 @@ question: How is the clean-context review run?
 form: rule
 under:
   - commons.systems/disposition-graph/recording
-shims:
-  - artifact: "`.claude/skills/align-review/SKILL.md` on the implementation ref, with the reviewer's briefs and the scripts `brief.mjs` and `apply.mjs` beside it, hand-written from this node and the recording node"
-    for: the projection of this node as the review skill
-    liquidation: the projector materializes the skill from ratified nodes and the hand-written files are deleted
-    declared: 2026-09-03
 ---
 ## Answer
 
@@ -375,3 +365,22 @@ and the batch review for the author to rule on. No option was recorded here
 for the first sentence, though the review-skills draft anticipated one,
 because the recommended text and the artifact it names must agree once the
 reconciliation lands and the standing text already holds the alternative.
+
+### The shim struck, 2026-09-04
+
+The two skills and the package landed at `a1ddc6e6` on the implementation
+ref, under the author's bootstrap grant of that day, and the shim declared
+here on 2026-09-03 is struck, which is what the persistence fact recommends
+and what the note above says would happen when they landed. The artifact it
+named, one skill directory with the reviewer's briefs and the scripts beside
+it, no longer exists in that shape: the review of a draft and the survey are
+`.claude/skills/align-review/SKILL.md` and
+`.claude/skills/align-survey/SKILL.md`, and the scripts, the templates and
+the fragments are `packages/clean-context-review/`. Those three artifacts are
+declared as shims on `commons.systems/disposition-graph/review-skills`, where
+the transience node's rule puts them, at the node whose answer brought them
+into being. The recommended text's frontmatter, which the persistence fact's
+prose already said carried no shim, in fact still carried the struck one; it
+is removed here, so the recommendation and its own account agree. Both edits
+move the pins, and the review of this draft and the survey were owed on it
+already.

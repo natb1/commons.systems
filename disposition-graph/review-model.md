@@ -509,3 +509,21 @@ options are the frontier the traditions and the record give, and the
 boldness is right for what rests on the AI.
 
 At the second compaction of 2026-09-04 the reconciliation unit was briefed at the job's tmp/briefs/unit-split-review-skills.md and not launched, waiting on the unit reconciling the review scripts to the new encodings, since both write the same files; the readings unit for both nodes was running, to tmp/review-sitting/readings/; and the order that remains is on alignment-page's account.
+### Reconciled, 2026-09-04
+
+Landed at `a1ddc6e6` on the implementation ref with the split, under the
+author's bootstrap grant of 2026-09-04 and before any ruling on this node,
+which is unanswered and whose recommendation acts on nothing. `brief.mjs` no
+longer computes a reader's model: `reviewerModel`, the `model` field of both
+results, both places the command line printed it, and the shapes in the
+JSDoc are gone, and one test now pins that no model is returned and none
+printed, in place of the test on the old formula. Each skill states the model
+and the effort at the launch, in a short **Model and delegation** section that
+cites this node and states no rule of its own; `/align`'s three sentences on
+the reader's model, in its first and fifth sections and its section on model
+and delegation, now say fable at high effort for both readings and cite this
+node in place of the formula that sized the reader to the drafter's model and
+the recommendation's boldness. Where `review-skills`' recommended text still
+said the brief step prints the reader's model, this node's recommendation was
+followed, as that node itself defers the model here; the conflict is recorded
+on `review-skills` for the survey.
