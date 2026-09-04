@@ -1,13 +1,15 @@
 ---
 question: Which of the recorded functions fall within the purpose?
 stage: periagogic
-alternatives:
-  - name: audiences-served-through-primary
-    source: ai
-    ref: "2026-09-03"
-  - name: name-excluded-audiences
-    source: ai
-    ref: "2026-09-03"
+facts:
+  - name: answer
+    options:
+      - name: audiences-served-through-primary
+        source: ai
+        ref: "2026-09-03"
+      - name: name-excluded-audiences
+        source: ai
+        ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/purpose
 ---
@@ -19,13 +21,15 @@ The author, 2026-09-02, on coverage:
 The author, 2026-09-02:
 > "Who is this repository for?" to the extent this needs to be recorded right now it is handled by the purpose node already. It can be pruned. We might fold some of this in from the incumbent graph later.
 
-## Alternatives
+## Facts
 
-### audiences-served-through-primary
+### answer
+
+#### audiences-served-through-primary
 
 One of the two candidate answers to the audience part of this question, moved here when the audience node was recommended for pruning. The purpose node's one audience covers the other four the evidence names — practitioners forking the harness, the author alone, prospective consulting clients, the general public downloading a stand-alone plugin, and an unspecified future collaborator — because each is served through the primary audience's tooling, and no surface is excluded on that ground.
 
-### name-excluded-audiences
+#### name-excluded-audiences
 
 The alternative to the above, also moved here from the audience node's account: the audiences outside the purpose are named as excluded, and the surfaces built for them — the public site's About page, the plugin listing, the fork template and separability audit, the morning brief — become unsupported implementation at the swap of the implementation ref with main. It is the same choice the twelve-function survey poses for functions nine to twelve, applied to readers rather than to functions.
 

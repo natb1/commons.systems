@@ -1,17 +1,24 @@
 ---
 question: What preserves the author's intention while the dialogue rationalizes it?
 stage: periagogic
-alternatives:
-  - name: fidelity-check-in-review
-    source: ai
-  - name: periagoge-across-sittings
-    source: ai
-  - name: signal-measure-on-frontier
-    source: ai
-  - name: compacted-account
-    source: ai
-  - name: no-mechanism
-    source: ai
+facts:
+  - name: answer
+    options:
+      - name: fidelity-check-in-review
+        source: ai
+        ref: "2026-09-03"
+      - name: periagoge-across-sittings
+        source: ai
+        ref: "2026-09-03"
+      - name: signal-measure-on-frontier
+        source: ai
+        ref: "2026-09-03"
+      - name: compacted-account
+        source: ai
+        ref: "2026-09-03"
+      - name: no-mechanism
+        source: ai
+        ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/growth
 ---
@@ -20,25 +27,27 @@ under:
 The author, 2026-09-03:
 > we also require (unanswered) disposition about how the dialogue phases avoid the loss of author intention prior to confirmation. Confirmation is a gate that prevents misclassified authority of disposition, but what preserves the signal of author intention while the dialogue is rationalizing the unanswered frontier (like in this session).
 
-## Alternatives
+## Facts
 
-### fidelity-check-in-review
+### answer
+
+#### fidelity-check-in-review
 
 A fidelity check in the clean-context review, separate from coverage: the reviewer reads the author's verbatim words and the draft, and nothing else, and judges whether the draft is what the author meant. The clean-context review already runs a fresh context; this asks it a different question with a narrower brief, and would add a validation to the frontier-consistency list.
 
-### periagoge-across-sittings
+#### periagoge-across-sittings
 
 The periagogic conduct extended across sittings rather than within one: on re-entry to a node the author is turned back to their own prior words before the AI's accumulated account, so the frame is re-grounded at every return. This amends growth's conduct rather than adding a check.
 
-### signal-measure-on-frontier
+#### signal-measure-on-frontier
 
 A signal measure on the frontier, whatever the right one is, surfaced beside rank, so that a node whose author-signal has thinned is visible without being read in full. The byte ratio measured here, 6.2 per cent across the graph and falling to about 4 per cent from the second review round on, is offered as a symptom rather than as the measure; naming the right measure is part of what this question asks, and the measure would join attention's rank.
 
-### compacted-account
+#### compacted-account
 
 Compaction of the account: superseded review sections collapse at each recording, so that the node's account does not grow without bound while the author's words stay fixed. This bounds the dilution at its source rather than measuring or checking it, and would change what a node carries, which is dialogue's question.
 
-### no-mechanism
+#### no-mechanism
 
 Nothing, on the argument that the author's verbatim words are always present in the node and the author always rules on the whole node, so no further mechanism is owed. The node's own evidence against it is that two of the three losses it records were caught only because the author was reading closely, which is the attention the record exists to conserve.
 

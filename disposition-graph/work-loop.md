@@ -1,41 +1,39 @@
 ---
 question: How does work happen?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "76ee45c91d469c6861239859fa0b66083a0b3dd1"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
-  of: 76ee45c91d469c6861239859fa0b66083a0b3dd1
-alternatives:
-  - name: split-the-shim
-    source: review
-    ref: "2026-09-03"
-  - name: no-persisted-state
-    source: ai
-    ref: "2026-09-03"
-  - name: say-instrument-not-criterion
-    source: review
-    ref: "2026-09-03"
-  - name: reconciliation-writes-options
-    source: author
-    ref: "2026-09-04"
+  of: de8ecfc26b94e3610a8e35f9740f5a59cab8d479
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: split-the-shim
+        source: review
+        ref: "2026-09-03"
+      - name: no-persisted-state
+        source: ai
+        ref: "2026-09-03"
+      - name: say-instrument-not-criterion
+        source: review
+        ref: "2026-09-03"
+      - name: reconciliation-writes-options
+        source: author
+        ref: "2026-09-04"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 boost: 3
 under:
   - commons.systems/disposition-graph/model
@@ -86,21 +84,23 @@ The author, 2026-09-03, on bootstrap operations: "I will check out the greenfiel
 
 Evaluated adversarially before recording, 2026-09-03. One rank, two orders: the record had one rank serving onboarding, and reconciliation in rank order needs the same rank to serve the author's bite order; the boosts now transcribe that order (attention), and a walk that meets projection before growth costs onboarding nothing. A browser node is not needed for rank, since a child's rank is a share of its parent's: the browser bite ranks first through projection's boost, and the browser node is owed by projection's own shim at its sitting. Batching validation to exit lets defects surface late; the mitigation is that tests and use still gate every landing, that the exit list is the liquidation condition of a declared shim, derived onto the frontier and never a checklist, and that the alignment sessions exercise the alignment skill every day it is used. Two sessions on one checkout: the graph and the implementation are separate refs with separate worktrees and indexes, so an alignment session and a reconciliation session collide only when both write the graph, which the reconciliation session does for one file at a time, committed by pathspec and pushed at once. On the model: selecting a bite and writing its unit's contract from prose criteria is judgment, so the shim runs on the larger model and its units on the smaller until every frontier node carries an executable check and each kind of bite has a skill, the last bite in the author's order; a skill's model field holds only for the turn that invokes it, and the loop runs within that turn. Rejected: a stored bite list or plan for the shim, forbidden by the transience node; a worktree of the shim's own, because its landings go straight to the ref and a worktree would only add a merge. The derivation of unsupported artifacts onto the frontier, the second direction, is not yet materialized; until it is, the coverage node's survey is the list, and the swap waits on the coverage ruling, as materialization's shim says.
 
-## Alternatives
+## Facts
 
-### split-the-shim
+### answer
+
+#### split-the-shim
 
 The reconciliation shim's single liquidation condition, now eleven clauses covering all batched validation together with the bootstrap exit criteria, is split into separate shims, or reduced to the clauses the frontier can actually derive. Two clean-context reviews raised it and the session decided neither way, replying that the split is put to the author. The node as it stands keeps one declaration whose met clauses no projection reads, which is the case transience's shim exemption is being tested by.
 
-### no-persisted-state
+#### no-persisted-state
 
 Reconciliation persists nothing of its own between invocations and re-derives the frontier from the graph and the implementation each time, which is what the shim does today. The answer's own recommendation is the opposite, that such state lives on the implementation ref as committed files a disposition justifies, and the answer names the question as open after the author observed that a session which cannot write the graph may need other metadata. The rationale's rejection of a stored bite list under transience is the argument for this alternative.
 
-### say-instrument-not-criterion
+#### say-instrument-not-criterion
 
 The answer's phrase, each stage a reconciliation of the criteria the node carries, says instrument instead, the term the instruments node actually defines, or discloses that the term arrives with instruments until instruments is ruled. The vocabulary finding of 2026-09-03 verified that criterion is defined by no node outside instruments' own draft and is not a schema key, while four ruling-stage answers depend on the word. Raised on commons.systems/disposition-graph/instruments.
 
-### reconciliation-writes-options
+#### reconciliation-writes-options
 
 The sentence that a reconciliation session never writes the graph is incomplete, by the author's words of 2026-09-04 amending their ruling of 2026-09-03 quoted above: operational state stays outside the graph, and decision state goes in. A reconciliation session may record a viable option on a fact and move its recommendation, within the node's scope, and may never rule, edit a ruling, or edit the author's words. A divergence that needs the author is then recorded as an option on the node it conflicts with, which is what returns a ratified node to the author, and the path on which it is reported and stays on the derived frontier until alignment records it goes. The open question of reconciliation's own state between invocations is unchanged. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 

@@ -1,39 +1,40 @@
 ---
 question: Does Plato's midwifery ground the maieutic conduct of the interview?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: high
-  amends: "14b35991f614846973e8e1b3ce3a4c1cb929aabe"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
-  of: 14b35991f614846973e8e1b3ce3a4c1cb929aabe
-alternatives:
-  - name: relation-diverged
-    source: review
-    ref: "2026-09-03"
-  - name: propose-and-critique
-    source: review
-    ref: "2026-09-03"
+  of: 4ebb5b6e5e722eb32986b93723f7c618e8adbca0
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: relation-diverged
+        source: review
+        ref: "2026-09-03"
+      - name: propose-and-critique
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: high
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: high
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/growth
 source: Plato, Theaetetus 148e to 151d (Socrates practises his mother's art of midwifery on souls, is himself barren of wisdom, and delivers what the other carries) and 151e, 157d, 160e to 161a (the offspring is tested, and a wind-egg is exposed and set aside).
-relation: adopted
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
 ---
 ## Answer
 
@@ -43,13 +44,15 @@ Yes, for the conduct in which the answer lives in the author, unrecorded. Socrat
 
 Adopted as the name and the ground of the maieutic conduct. The divergence to keep in view: the AI is not barren; it drafts, and the draft can lead. That is why the draft must be visible and refusable, and why the periagogic conduct runs first when the ground is already recorded.
 
-## Alternatives
+## Facts
 
-### relation-diverged
+### answer
+
+#### relation-diverged
 
 Both readings found the divergence named in the rationale, that the AI is not barren but drafts and the draft can lead, standing under a relation of adopted, which evaluation calls an unrecorded conflict with a cited tradition. The session's reply says in terms that the author may rule the relation diverged while the session keeps adopted with the divergence named. This alternative is the reading with relation diverged, the answer otherwise unchanged.
 
-### propose-and-critique
+#### propose-and-critique
 
 The strong counter-argument, twice recorded: Socrates' midwifery rests on his being barren, and the AI is the opposite, drafting first while the author reacts, so the visible refusable draft is an anchor and what is delivered is the drafter's. On this reading the interview's actual method is a propose-and-critique loop, and calling it maieutic imports a guarantee about whose answer emerges that the mechanism does not provide. The alternative answers the question with a qualified no: the tradition names the test of the offspring and not the conduct, and the conduct is described in its own terms, which growth compounds by making the maieutic stage the one where the ruling is taken.
 

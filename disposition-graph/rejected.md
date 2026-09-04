@@ -1,41 +1,39 @@
 ---
 question: How are rejected alternatives recorded?
 stage: maieutic
-recommendation:
-  adopts: rejected-list-on-node
-  boldness: moderate
-  amends: "a690b78059fc71af0d30081475052a0b71ce3460"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: kickback
   strength: moderate
   date: 2026-09-03
-  of: 49695a1a3eaf51d5cce89877c5e18c25eaa9b29d
-alternatives:
-  - name: rejected-list-on-node
-    source: ai
-    ref: "2026-09-03"
-  - name: rejected-nodes
-    source: ai
-    ref: "2026-09-03"
-  - name: prose-in-rationale
-    source: ai
-    ref: "2026-09-03"
-  - name: authors-rejected-section-question
-    source: author
-    ref: "2026-09-02"
-  - name: record-rejected-dispositions
-    source: author
-    ref: "2026-09-03"
-  - name: non-chosen-viable-options
-    source: author
-    ref: "2026-09-04"
+  of: 30fbaa7140576becf743ee5c7e094e1b980037d0
 facts:
+  - name: answer
+    options:
+      - name: rejected-list-on-node
+        source: ai
+        ref: "2026-09-03"
+      - name: rejected-nodes
+        source: ai
+        ref: "2026-09-03"
+      - name: prose-in-rationale
+        source: ai
+        ref: "2026-09-03"
+      - name: authors-rejected-section-question
+        source: author
+        ref: "2026-09-02"
+      - name: record-rejected-dispositions
+        source: author
+        ref: "2026-09-03"
+      - name: non-chosen-viable-options
+        source: author
+        ref: "2026-09-04"
+    recommends: rejected-list-on-node
+    boldness: moderate
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 under:
   - commons.systems/disposition-graph/node
@@ -47,29 +45,31 @@ depends:
 The author, 2026-09-03:
 > The under edge disposition lists 'rejected' as prose under 'rationale' - it may make sense to record rejected dispositions, but this seems too ad-hoc.
 
-## Alternatives
+## Facts
 
-### rejected-list-on-node
+### answer
+
+#### rejected-list-on-node
 
 A rejected list on the node, each entry one alternative answer and why it lost, projected in the authority section, with the rationale keeping only why the standing answer stands. It is a schema change, and adopting it means rewriting the rejected prose of purpose, authority, node, instruments, readings, namespaces, projection and model before any of them is recorded. The reviews ask it to say what an entry contains, whether an entry is versioned if the alternative is later adopted, and that a rationale may cite its rejected entries, since several rationales argue by elimination.
 
-### rejected-nodes
+#### rejected-nodes
 
 Rejected alternatives become nodes of their own carrying a rejected class. It is the boldest of the three options and is neither recommended nor withdrawn.
 
-### prose-in-rationale
+#### prose-in-rationale
 
 Rejected alternatives stay prose in the rationale, as now, with the browser's heading match documented as the contract rather than left as an accident of the template. The second review established that the projector already renders a rejected section from a rationale heading, so the projection the author asked for needs no schema change, and the session's reply says this materially favours the third option at zero cost.
 
-### authors-rejected-section-question
+#### authors-rejected-section-question
 
 The author's words of 2026-09-02 asking what the rejected section is a projection of, and proposing an authority section with notes on pending ratification in its place, are the question rejected answers, and they are carried on node rather than on rejected. Rejected's own Disposition carries different words, those of 2026-09-03 on the under edge listing rejected as prose. It stands at the ruling stage recommending ratified, so the ground of its ruling should be on it. (Raised on commons.systems/disposition-graph/node.)
 
-### record-rejected-dispositions
+#### record-rejected-dispositions
 
 The author's words carried here say that listing rejected alternatives as prose under the rationale is too ad hoc and that recording rejected dispositions may make sense. Rejected carries the same words and its recommended option is the structured list, but its second review established that the browser already renders a rejected section from rationale prose, which materially favours keeping the prose. (Raised on commons.systems/disposition-graph/under.)
 
-### non-chosen-viable-options
+#### non-chosen-viable-options
 
 A rejected alternative is a viable option the author did not choose, kept on the fact beside the confirmed choice with the reason it was not taken and the traditions bearing on it; the projector reads the structure and the rationale cites it. It is `rejected-list-on-node` generalised to every fact, and the fact the second review established, that the projector already reads a rationale heading, no longer decides the question, since the structure exists for regression and for the browser's drill-down and not for the projector alone. The author's objection carried above, that prose under the rationale seems too ad hoc, is what the structure answers. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
@@ -79,10 +79,6 @@ A rejected alternative is a viable option the author did not choose, kept on the
 ---
 question: How are rejected alternatives recorded?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/node
 defines:

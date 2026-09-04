@@ -1,44 +1,42 @@
 ---
 question: Does the same record serve as a knowledge store?
 stage: ruling
-recommendation:
-  adopts: criterion-draft
-  boldness: low
-  amends: "cdf3ee5e6bebfb505979e42af0b6e66490192646"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 63f8868521dce9a63a56f93322b410a250560618
-alternatives:
-  - name: criterion-draft
-    source: ai
-    ref: "2026-09-03"
-  - name: keep-the-hedge
-    source: review
-    ref: "2026-09-03"
-  - name: unguarded-and-said-so
-    source: ai
-    ref: "2026-09-03"
-  - name: define-hexis
-    source: review
-    ref: "2026-09-03"
-  - name: cite-forms
-    source: review
-    ref: "2026-09-03"
+  of: a732769a2b6a19dcb71bc0e2b117756564425968
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: criterion-draft
+        source: ai
+        ref: "2026-09-03"
+      - name: keep-the-hedge
+        source: review
+        ref: "2026-09-03"
+      - name: unguarded-and-said-so
+        source: ai
+        ref: "2026-09-03"
+      - name: define-hexis
+        source: review
+        ref: "2026-09-03"
+      - name: cite-forms
+        source: review
+        ref: "2026-09-03"
+    recommends: criterion-draft
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
 form: assumption
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/purpose
 ---
@@ -55,25 +53,27 @@ Yes. A record of a person's standing answers, with their rationale and the alter
 
 The author's hypothesis, 2026-09-02. What would fail it: the record proving useful only while work is in flight, or its answers needing a second store to be findable or trusted. The reading under this node tests the hexis framing against Aristotle. An instrument is owed.
 
-## Alternatives
+## Facts
 
-### criterion-draft
+### answer
+
+#### criterion-draft
 
 The draft keeps the answer and the assumption form but moves the failure condition out of the rationale into a criterion, an assessment made by the author at each sitting on this node, and drops the ledger reference. It also drops the hedge, saying the record is a projection of its author's hexis where the standing answer says something like a projection. Its criteria frontmatter key is not in the schema, so the drafted node could not land as written.
 
-### keep-the-hedge
+#### keep-the-hedge
 
 Both reviews found that the draft strengthens a hypothesis while keeping it a hypothesis, and that the strengthened claim is the one hexis asks the author to rule on. This alternative keeps 'something like a projection of its author's hexis' until hexis is ruled. The session replied that the dropped hedge is the wording the hexis option recommends and that the author rules hexis first, so the two rulings are coupled.
 
-### unguarded-and-said-so
+#### unguarded-and-said-so
 
 The session's own reply offers this to the author: the answer stands unguarded and says so, as purpose-criteria's now-recommended answer does for the parent. The reviewers' counter-argument is the ground, that a failure condition not observable on any timescale a sitting can reach cannot fail and therefore cannot guard, so the criterion buys nothing operational and an assumption whose failure sends the question back to the author is what this node already is.
 
-### define-hexis
+#### define-hexis
 
 Both reviews of hexis find that no node's defines carries the term, verified against the parsed graph's eighty-eight defined terms, while projection's draft requires every defined term to link to the node that defines it, so the first Greek word a newcomer meets in purpose is one the browser cannot link. They propose adding hexis to knowledge-store's defines in the same landing, since that is where the sentence carrying it lives; knowledge-store has no defines field today and carries no record of this proposal. (Raised on commons.systems/disposition-graph/hexis.)
 
-### cite-forms
+#### cite-forms
 
 The coverage finding of 2026-09-03 verified that the author's form question, 'Is this correctly encoded as form: assumption vs form: disposition with unvalidated instrumentation? Is assumption a form at all?', is carried verbatim on knowledge-store, capture and purpose, and that forms is the node that answers it; it is one of the two genuine double answers among the four duplicated quotations. The finding proposes all three cite forms rather than each carry the quote. On this node the words would be replaced by a citation of forms for the form decision, keeping the hypothesis itself, so that one disposition is answered by one node. Raised on commons.systems/disposition-graph/scope, commons.systems/disposition-graph/audience.
 
@@ -83,10 +83,6 @@ The coverage finding of 2026-09-03 verified that the author's form question, 'Is
 ---
 question: Does the same record serve as a knowledge store?
 form: assumption
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/purpose
 criteria:

@@ -1,10 +1,12 @@
 ---
 question: Does the control-loop tradition support the factory as reconciliation of disposition with implementation?
 stage: maieutic
-alternatives:
-  - name: two-way-reconciliation-loop
-    source: ai
-    ref: "2026-09-03"
+facts:
+  - name: answer
+    options:
+      - name: two-way-reconciliation-loop
+        source: ai
+        ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/work-loop
 ---
@@ -13,9 +15,11 @@ under:
 The author, 2026-09-02:
 > the factory is the reconciliation of disposition with implementation (wordsmith this and validate against tradition).
 
-## Alternatives
+## Facts
 
-### two-way-reconciliation-loop
+### answer
+
+#### two-way-reconciliation-loop
 
 A reading under work-loop on declarative desired state with a reconciliation loop, taking Kubernetes controllers and Burgess's convergent configuration of 1998, adopted with a two-way divergence, since here the loop also runs from unsupported implementation back to disposition. The sitting proposes the node and its facts, authority deferred until the author reads the sources and boldness moderate, but the text is not written and the node records the proposal as pending. Work-loop's rationale also names one-piece flow as a tradition owed, which this sketch does not carry.
 

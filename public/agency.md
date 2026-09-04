@@ -5,19 +5,21 @@ review:
   verdict: kickback
   strength: moderate
   date: 2026-09-03
-  of: 605bc6201b77362b6a671e4b887fd58660ced997
-alternatives:
-  - name: structural-test
-    source: review
-    ref: "2026-09-03"
-  - name: authors-own-arche
-    source: review
-    ref: "2026-09-03"
+  of: b33788c35f071c2873d8b1bb6d951a3f0c89bbed
+facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: structural-test
+        source: review
+        ref: "2026-09-03"
+      - name: authors-own-arche
+        source: review
+        ref: "2026-09-03"
+    stands: standing
 form: arche
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 defines:
   - archē
   - agency
@@ -46,13 +48,15 @@ The modal content is the point: capacity, not exercise. Being unable to recover 
 
 Stub note: drafted by the AI under the bootstrap grant from the author's rulings of 2026-09-02 and the author's own legacy text. Deferred until the author ratifies it. Pending readings to add under this node: Sen on capability, Hirschman on exit and voice, Korsgaard on authorship.
 
-## Alternatives
+## Facts
 
-### structural-test
+### answer
+
+#### structural-test
 
 The review's strongest counter-argument is that the answer's 'capacity, not exercise' makes the archē unfalsifiable: no observable state of the world contradicts it, an author who had in fact been captured would read the same answer and find nothing failing, and the node's only instrument is a re-grasp on events that carries no date and records no judgment. Pettit is adopted as support, but Pettit's test is structural — does another hold arbitrary power over you — and the record records no structural test of its own. The alternative is an archē stated so that something could fail it, which is what the reading under this node already supplies.
 
-### authors-own-arche
+#### authors-own-arche
 
 Agency is at the periagogic stage after a kickback with no Disposition section and no author words anywhere, and its answer is written in the author's first person by the AI, while every node at the review or ruling stage descends from it. The finding proposes nothing be ruled before the author's own account of who is the origin of what is done in their name is in the record, the next sitting being a periagogic one on agency whose product is a Disposition section in the author's words, after which the two readings under it are re-read. (Raised on commons.systems/public/pettit-non-domination.)
 

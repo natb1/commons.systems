@@ -1,37 +1,36 @@
 ---
 question: How is intent recorded here?
 stage: ruling
-recommendation:
-  adopts: draft
-  boldness: moderate
-  amends: "194966b07144904d820896a7cf3428680b9fe4f3"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 1b8850f024aaefd700cf2af9fb42aa5f6c971cdb
-alternatives:
-  - name: draft
-    source: ai
-  - name: alignment-acts-first
-    source: review
-    ref: "2026-09-03"
-  - name: primer-node
-    source: ai
-    ref: "2026-09-03"
+  of: 04b24674220938c0568577b2df45eae56c0415ba
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: draft
+        source: ai
+        ref: "2026-09-03"
+      - name: alignment-acts-first
+        source: review
+        ref: "2026-09-03"
+      - name: primer-node
+        source: ai
+        ref: "2026-09-03"
+    recommends: draft
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 boost: 8
 under:
   - commons.systems/disposition-graph/purpose
@@ -53,17 +52,19 @@ As a disposition graph. A disposition is one standing answer to one question, he
 
 The refinements of this node define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, instruments, readings, the work loop, materialized implementation, and the standing of the legacy record. Each is ratified in onboarding order.
 
-## Alternatives
+## Facts
 
-### draft
+### answer
+
+#### draft
 
 The draft rewrites the answer for a reader arriving from purpose who needs to use the alignment skill rather than look up the schema: disposition and the three stamp classes, the under edge and how rank follows it, readings with their relations, criteria as check, assessment or assumption, and the sitting, in that order. The standing answer is the terse schema statement the author found too reference-shaped, and its list of refinements moves to the draft's rationale, which also rejects a separate primer node. The draft presumes the instruments vocabulary, which no node's defines carries today, and keeps a deferred stamp with a placeholder date the recording is to replace.
 
-### alignment-acts-first
+#### alignment-acts-first
 
 Model's recommended rationale says growth is first among model's children because the sitting is the first thing a newcomer does, which second-stop's amendment withdrew and which attention's recorded boosts and the frontier's ranks contradict, projection standing at 5 and growth at 4. The alternative strikes that sentence and says at most that alignment is where the newcomer acts first, asserting no rank, which second-stop's amended option permits and which the contradiction finding of 2026-09-03 proposes as the form the claim may take. Raised on commons.systems/disposition-graph/attention.
 
-### primer-node
+#### primer-node
 
 Model carries the primer-node option as an alternative of its own, a new node between purpose and model introducing the graph primitives, with model's answer left as it stands, and second-stop is folded away. Under the new encoding an option-node whose whole content is a choice between two answers to a sibling's question is that sibling's alternatives list, which is what the redundancy finding of 2026-09-03 offers as the alternative to keeping the option-node. (Raised on commons.systems/disposition-graph/second-stop.)
 
@@ -73,10 +74,6 @@ Model carries the primer-node option as an alternative of its own, a new node be
 ---
 question: How is intent recorded here?
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/purpose
 defines:

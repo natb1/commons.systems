@@ -1,24 +1,22 @@
 ---
 question: What orders the unanswered frontier for alignment?
 stage: maieutic
-recommendation:
-  adopts: settle-counts-nodes-only
-  boldness: moderate
-  amends: "4fa0c9e7b71f62087b2953d6a5ba212e3cc3368a"
-  at: "919cea3b"
-alternatives:
-  - name: draft
-    source: ai
-    ref: "2026-09-03"
-  - name: settle-counts-nodes-only
-    source: ai
-    ref: "2026-09-03"
 facts:
+  - name: answer
+    options:
+      - name: draft
+        source: ai
+        ref: "2026-09-03"
+      - name: settle-counts-nodes-only
+        source: ai
+        ref: "2026-09-03"
+    recommends: settle-counts-nodes-only
+    boldness: moderate
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 under:
   - commons.systems/disposition-graph/alignment-target
@@ -90,13 +88,15 @@ The author, 2026-09-04, on whether a node's unanswered children belong among the
 
 The words in full are on `commons.systems/disposition-graph/alignment-page`.
 
-## Alternatives
+## Facts
 
-### draft
+### answer
+
+#### draft
 
 The recommended text answers the question with the ruling order in place of rank: tangles between unanswered nodes recorded as alternatives on the earlier-recorded survivor, divergences between subtrees recorded on the leaves in `depends` and derived at the ancestor, a ruling settling every node it makes mechanically decidable, and the order putting first the node whose ruling settles the most, rank breaking ties. The node as it stands has no answer, so there is no standing text to adopt. Its distinguishing term, once `settle-counts-nodes-only` was raised beside it, is that it counts the alternatives pending on the ruled node into the settling count; the recommendation no longer adopts it, for the reasons the account of 2026-09-03 gives.
 
-### settle-counts-nodes-only
+#### settle-counts-nodes-only
 
 The draft, with one change, and the alternative the recommendation adopts as of 2026-09-03: a ruling's settling count is the
 count of nodes it makes mechanically decidable and nothing else, the
@@ -134,10 +134,6 @@ tells the author how much a sitting will cost, and orders nothing.
 ---
 question: What orders the unanswered frontier for alignment?
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/alignment-target
   - commons.systems/disposition-graph/attention

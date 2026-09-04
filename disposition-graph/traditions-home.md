@@ -1,54 +1,54 @@
 ---
 question: Where does a tradition node live?
 stage: ruling
-recommendation:
-  adopts: one-traditions-graph
-  boldness: moderate
-  amends: "848aff5b9ecff9467e39717cc2fdb272394a3233"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: edf82b1e7f8640877cffe37a106d44b293a0a850
-alternatives:
-  - name: one-traditions-graph
-    source: ai
-    ref: "2026-09-03"
-  - name: graph-per-tradition
-    source: ai
-    ref: "2026-09-03"
-  - name: nodes-inside-disposition-graph
-    source: ai
-    ref: "2026-09-03"
-  - name: show-the-manifest-entry
-    source: review
-    ref: "2026-09-03"
+  of: 73b6cca4bf27149632172b5149277d71128f98f3
 facts:
+  - name: answer
+    options:
+      - name: one-traditions-graph
+        source: ai
+        ref: "2026-09-03"
+      - name: graph-per-tradition
+        source: ai
+        ref: "2026-09-03"
+      - name: nodes-inside-disposition-graph
+        source: ai
+        ref: "2026-09-03"
+      - name: show-the-manifest-entry
+        source: review
+        ref: "2026-09-03"
+    recommends: one-traditions-graph
+    boldness: moderate
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 under:
   - commons.systems/disposition-graph/readings
 ---
-## Alternatives
+## Facts
 
-### one-traditions-graph
+### answer
+
+#### one-traditions-graph
 
 The recommended option: one traditions graph on this ref, with one root node per tradition, added to the manifest beside the disposition graph and the public graph. A tradition root carries what any node carries, a question, an answer, a form and a stamp, and enters as an un-aligned disposition; the manifest entry declares no move, so unlike the public graph it carries no target and no liquidation condition. If a tradition later outgrows it, the record pays a directory move and a prefix rewrite with redirects.
 
-### graph-per-tradition
+#### graph-per-tradition
 
 One graph per tradition, which the review's strongest counter-argument prefers because it matches the author's own model exactly: a mount that could be represented by its own graph with its own archē and its own references. A tradition that later acquires its own repository needs no migration because it already is one, where the recommended option needs the same liquidation the public graph carries and that web-routing's adopted principle is uneasy with. Its cost is many near-empty manifests, which the reviewer calls real but cheap.
 
-### nodes-inside-disposition-graph
+#### nodes-inside-disposition-graph
 
 Tradition nodes inside the disposition graph itself, with no new graph and no manifest edit, at low boldness. It is the cheapest option and the one the sitting ranks last; against it, stub-traditions proposes about thirty tradition roots, which would enter the disposition graph's rank order and the author's alignment queue directly rather than as a graph of their own.
 
-### show-the-manifest-entry
+#### show-the-manifest-entry
 
 Two readings of namespaces found that its draft creates a traditions graph the manifest does not carry, verified against disposition.yaml, and that the manifest edit is part of what the author would be confirming and is shown nowhere; the session's reply moved that obligation here, since traditions-home is ruled first. The placement finding of 2026-09-03 asks the same: rule traditions-home before readings and namespaces, and show on it the manifest entry the author is creating, with whatever target and liquidation the traditions graph needs. (Raised on commons.systems/disposition-graph/namespaces.) Also raised on commons.systems/disposition-graph/under.
 
@@ -58,10 +58,6 @@ Two readings of namespaces found that its draft creates a traditions graph the m
 ---
 question: Where does a tradition node live?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/readings
 ---

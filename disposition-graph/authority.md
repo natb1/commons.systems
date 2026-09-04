@@ -1,41 +1,39 @@
 ---
 question: Who may change an answer?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "0a273ae3449272b35acc7d47e266cf3cb1b3c571"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 0a273ae3449272b35acc7d47e266cf3cb1b3c571
-alternatives:
-  - name: bootstrap-authority-as-class
-    source: ai
-    ref: "2026-09-03"
-  - name: clause-level-ratification
-    source: review
-    ref: "2026-09-03"
-  - name: ceiling-moves-here
-    source: review
-    ref: "2026-09-03"
-  - name: authority-derived
-    source: author
-    ref: "2026-09-04"
+  of: b67a1bb9cc90a7fa5c3d0cac98405295122fd786
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: bootstrap-authority-as-class
+        source: ai
+        ref: "2026-09-03"
+      - name: clause-level-ratification
+        source: review
+        ref: "2026-09-03"
+      - name: ceiling-moves-here
+        source: review
+        ref: "2026-09-03"
+      - name: authority-derived
+        source: author
+        ref: "2026-09-04"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/model
 tier: global
@@ -87,21 +85,23 @@ The author, 2026-09-03, on the bootstrap ledger: "The ledger is a shim, it shoul
 
 The author, 2026-09-03, in the sitting on the dialogue node, quoted above, narrowed the word proposal: the draft of this node had defined it as any candidate answer, amendment, or finding with no authority, recorded in a stamped node or in a sitting's record, and the author ruled that the term is technical vocabulary for a conflicting answer arising outside alignment, that it must not be overloaded, and that conflicting answers evaluated in alignment are recorded differently, as alternatives in the dialogue state. The same day the author ruled that a standing answer of any class, ratified, delegated, or deferred, keeps its full authority while an alternative is pending, and that a proposal from outside alignment opens the dialogue on its node. This answer was written from the draft under the author's bootstrap grant on the dialogue node, folding the draft's text into the standing answer with the narrowing; the ratified stamp the draft carried is what a confirmation confers and is not written before it. Rejected: proposal as any recorded candidate, the draft's definition, since it overloaded a term the author reserves for the outside-alignment case and would have named the AI's own account and every alternative in a sitting with one word.
 
-## Alternatives
+## Facts
 
-### bootstrap-authority-as-class
+### answer
+
+#### bootstrap-authority-as-class
 
 Recorded on the node as a tension the sitting did not decide. Bootstrap authority is declared here as a shim, but it is a standing permission exercised only when the author invokes it, not a stopgap artifact applied by default, which is what evaluation's shim rule describes. Either the shim vocabulary covers two kinds, or bootstrap authority is a second class of authority beside ratified, delegated and deferred, which this node's answer would then have to define. The author's words name it a shim and it is recorded as one, so what is pending is the class.
 
-### clause-level-ratification
+#### clause-level-ratification
 
 A frontier finding carried on this node observes that the author ruled clause by clause on growth — 'Ratified on the rule. Ratified on the shim.' — while the record gives a node one stamp, so a ruling the author has given is recorded nowhere and the author will be asked for it again. The finding says that whether a clause can be ratified separately is a question for this node and should be minted here. The alternative is an answer that lets a stamp attach to a named clause rather than to the whole node. Also raised on commons.systems/disposition-graph/growth.
 
-### ceiling-moves-here
+#### ceiling-moves-here
 
 The decomposition finding proposes that under survive as the edge alone and that three of the four terms it defines move to the nodes that answer them, rank to attention, context to session-context, and ceiling to authority, whose answer already carries the scope rule the term names: that a node's ceiling is its nearest ratified ancestor and nothing recorded under it may contradict it. Verified: under's defines carries ceiling and authority's does not, and authority is not among the nodes the finding names, so the proposed change to its defines is recorded nowhere on it. The cross-reference finding adds that ceiling and up-to-the-roots are two different rules for the reviewer's world, coinciding today only because nothing is ratified. Raised on commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/attention, commons.systems/disposition-graph/under.
 
-### authority-derived
+#### authority-derived
 
 The class is read off the rulings recorded on the node's facts and no stamp is written beside them: ratified where the answer fact carries a ruling, delegated or deferred where the authority fact does, unanswered where none does, and a class the AI writes for itself is not a grant. Deferred becomes a class the author confers, a third choice on the authority fact. The explicit grant for reconciling an unanswered node becomes a standing rule of this node and not a shim, which decides `bootstrap-authority-as-class` in favour of the rule and strikes the shim's expiry at bootstrap exit, against the author's words of 2026-09-03 quoted above. A proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source; the periagogic re-opening this answer prescribes gives way to the recording node's classification of where the dialogue resumes. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 

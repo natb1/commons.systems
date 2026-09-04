@@ -1,39 +1,40 @@
 ---
 question: Does spec-driven development support this repository's purpose?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: high
-  amends: "3d9e3b26cabec954290ca3c081d8c118bfbad14c"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 3d9e3b26cabec954290ca3c081d8c118bfbad14c
-alternatives:
-  - name: chosen-over
-    source: review
-    ref: "2026-09-03"
-  - name: split-sources
-    source: review
-    ref: "2026-09-03"
+  of: fc50b724ed00bf5f9eb4828284f5f7e561bba20b
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: chosen-over
+        source: review
+        ref: "2026-09-03"
+      - name: split-sources
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: high
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: high
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/purpose
 source: Spec-driven development as practised in AI coding tools from 2025, AWS Kiro (July 2025, with requirements, design, and task documents) and GitHub Spec Kit (September 2025, with a constitution, specification, plan, and tasks). Lineage, Knuth, "Literate Programming" (1984); Meyer, Design by Contract (1986); Adzic, Specification by Example (2011).
-relation: adopted
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
 ---
 ## Answer
 
@@ -43,13 +44,15 @@ Supports, with a recorded divergence. Adopted: the specification, not the prompt
 
 The term is current and dominant in AI coding practice of 2025 and 2026, which makes it the audience's own vocabulary and a discovery term. Its older lineage is the tradition that the description of the program is the source of truth. Validated by the AI on 2026-09-02 from its own knowledge, not from primary reading; deferred until the author reads the sources.
 
-## Alternatives
+## Facts
 
-### chosen-over
+### answer
+
+#### chosen-over
 
 Both reviews' strongest counter-argument is that the recorded divergence is the whole of the practice: what makes spec-driven development work in the 2025 tools is exactly the per-feature requirements, design and task documents this reading rejects, and replacing them with a graph of standing answers keeps the name and drops the mechanism. On the thing the tradition is for, the relation is nearer to 'chosen over' than to 'adopted', and calling it adopted lets the audience's expectation of the term do work the record has not earned, which purpose leans on in its first paragraph. The session's reply hands the choice to the author: whether the specification reconciliation derives from the answers counts as adopting the tradition or choosing over it.
 
-### split-sources
+#### split-sources
 
 Both reviews find that the `source` field bundles two 2025 products, AWS Kiro and GitHub Spec Kit, with a three-item lineage, Knuth 1984, Meyer 1986 and Adzic 2011, under one `relation: adopted`, while the lineage is a different tradition from the tooling and would divide differently on the divergence recorded. Readings' rule is one tradition per reading. The session's reply records the split as owed at the sitting rather than made, so the alternative is a node whose source is the tooling alone, with the lineage read separately.
 

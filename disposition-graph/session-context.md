@@ -1,41 +1,39 @@
 ---
 question: What does a session load, and where does it come from?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: low
-  amends: "fc0acbfe47326951c44a94172df883ddae557aad"
-  at: "92b5423bde90a0d3031d176acbcfeb8956a7557e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: 5022100045d3fec87a66697115d238de6eead5cc
-alternatives:
-  - name: commit-settings-json
-    source: review
-    ref: "2026-09-03"
-  - name: context-moves-here
-    source: review
-    ref: "2026-09-03"
-  - name: strike-ledger-sunset-dependency
-    source: review
-    ref: "2026-09-03"
-  - name: shim-names-an-existing-artifact
-    source: review
-    ref: "2026-09-03"
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: commit-settings-json
+        source: review
+        ref: "2026-09-03"
+      - name: context-moves-here
+        source: review
+        ref: "2026-09-03"
+      - name: strike-ledger-sunset-dependency
+        source: review
+        ref: "2026-09-03"
+      - name: shim-names-an-existing-artifact
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 boost: 7
 under:
   - commons.systems/disposition-graph/projection
@@ -66,21 +64,23 @@ From three projections and nothing else. Rules, one file per global-tier node un
 
 The author's ruling of 2026-09-02 that `CLAUDE.md` must be justified and materialized by disposition like rules and `CLAUDE.local.md`, with the question whether it serves any function rules do not. Evaluated against the harness: rules and `CLAUDE.md` are both always-loaded instructions; rules are scoped to the project root and may be scoped to paths, `CLAUDE.md` is scoped to the working directory and its ancestors and may import files; skills load on invocation; memory is private to one account and one path, so it can carry nothing the record needs. The functions that had accumulated in the bootstrap `CLAUDE.md` map as follows: the token-efficiency rule and the loop to the growth node and the skill; the code-review recipe to the review node's instrument; environment traps to evidence on the node whose instrument they qualify; the round log and the decisions list to git history. Rejected: deleting `CLAUDE.md` outright, because the arriving-session function is real for the audience and costs one projected page; keeping operating rules in it, because the projector cannot see them there. Traditions to record as readings: the Unix `README` and `INSTALL` convention, adopted, orientation kept apart from rules; twelve-factor configuration, one home per fact, adopted. The exit conditions this shim carried until 2026-09-03 are the liquidation condition of the reconciliation shim on the work-loop node, where the bootstrap operations now live.
 
-## Alternatives
+## Facts
 
-### commit-settings-json
+### answer
+
+#### commit-settings-json
 
 The shim coverage finding verified that this node's declared shim named a settings file on the implementation ref that is not tracked there at all, so the shim named an artifact that does not exist. It gave two fixes: commit `.claude/settings.json` to the ref, which is what the shim said, or restate the artifact as harness configuration held outside the ref with that as part of the liquidation condition. The session took the restatement and the shim now reads that way, so the alternative pending for the author is the first: the harness configuration becomes a projected, committed artifact rather than a file in the author's checkout. It bears on what a session loads, since the settings decide the permissions and the worktree base a session runs with. Raised on commons.systems/disposition-graph/transience.
 
-### context-moves-here
+#### context-moves-here
 
 The decomposition finding on `under` proposes that the term 'context' move from under's `defines` to this node's, since session-context already answers what a session loads and where it comes from while under answers four questions at once. Verified: under's defines carries under, rank, ceiling and context, and this node's carries session context and rules. Adopting it adds one entry to the frontmatter and lets under be drafted as the edge alone. Raised on commons.systems/disposition-graph/attention, commons.systems/disposition-graph/under.
 
-### strike-ledger-sunset-dependency
+#### strike-ledger-sunset-dependency
 
 Session-context's account carries 'Depends on: ledger-sunset', which names no node; the ledger was liquidated on 2026-09-03, so the dependency is met. The finding proposes striking it, as growth's own two dangling dependencies were struck, since a question that lives only on a page beside the record is what transience rejects. (Raised on commons.systems/disposition-graph/growth.)
 
-### shim-names-an-existing-artifact
+#### shim-names-an-existing-artifact
 
 The harness-configuration shim names an artifact that exists. Verified on 2026-09-03 that `.claude/settings.json` is in neither the implementation ref nor the author's checkout, so the shim as restated names nothing a reader or the frontier can reach, while `.claude/settings.local.json` is present and gitignored. On this alternative the shim's artifact becomes the settings file that exists, with its exclusion from the ref stated as part of the liquidation condition, and CLAUDE.md's sentence about `worktree.baseRef` is reconciled to whatever file actually carries it. The alternative to it is that the author writes the file the shim names, which changes no text; the choice is the author's because it decides whether the harness configuration is a projected artifact of the record or a fact of the author's machine.
 

@@ -2,27 +2,25 @@
 question: How does a ruling made on the page reach the record?
 form: rule
 stage: maieutic
-recommendation:
-  adopts: instruction-canonical-buffer-optional
-  boldness: moderate
-  amends: "8527737243f938338dd9839cd220e54d100eed60"
-  at: "e9ff8a94"
-alternatives:
-  - name: stateful-artifact-record
-    source: ai
-    ref: "2026-09-04"
-  - name: stateless-instruction-only
-    source: ai
-    ref: "2026-09-04"
-  - name: instruction-canonical-buffer-optional
-    source: ai
-    ref: "2026-09-04"
 facts:
+  - name: answer
+    options:
+      - name: stateful-artifact-record
+        source: ai
+        ref: "2026-09-04"
+      - name: stateless-instruction-only
+        source: ai
+        ref: "2026-09-04"
+      - name: instruction-canonical-buffer-optional
+        source: ai
+        ref: "2026-09-04"
+    recommends: instruction-canonical-buffer-optional
+    boldness: moderate
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: moderate
 shims:
   - artifact: "the session launch control on the alignment page and on every stage chip, `https://claude.ai/code?prompt=<the instruction>&repositories=natb1/commons.systems`, stubbed in the user interface and in the implementation: it is rendered and it is marked a stub, and no part of the flow depends on it"
@@ -43,9 +41,11 @@ The author, 2026-09-04, on reading the comparison:
 
 > claude.ai/code session initialization can be kept as a stub out shim (in ui and implementation). Author will rely on incstruction copy for now. You have bootstrap authority to reconcile.
 
-## Alternatives
+## Facts
 
-### stateful-artifact-record
+### answer
+
+#### stateful-artifact-record
 
 What the page does today. A ruling is staged in the browser and submitted into
 the artifact's database as one document per node in the collection
@@ -74,7 +74,7 @@ seeded from a `claude.ai/code` link has that tool is precisely the case this
 refinement is about. And nothing deletes it: a landed response stays in the
 collection and the record carries no rule for when it goes.
 
-### stateless-instruction-only
+#### stateless-instruction-only
 
 The page holds no server state at all. A ruling leaves as an instruction: a
 seed link, `https://claude.ai/code?prompt=...&repositories=...`, which
@@ -94,7 +94,7 @@ rules must be the device that pastes. And a seed link has a length limit that
 a sitting does not fit; `prompt_url` answers that by hosting the prompt
 somewhere, which is another store under another name.
 
-### instruction-canonical-buffer-optional
+#### instruction-canonical-buffer-optional
 
 The instruction is the transport and the database is an optional buffer.
 
@@ -114,8 +114,6 @@ badly. Making the instruction canonical settles the design without settling
 the open question, and the open question then decides only whether the buffer
 is worth keeping.
 
-## Facts
-
 ### authority
 
 Delegated: this is how one projection carries a ruling to the record, under an
@@ -130,10 +128,6 @@ which none of the three alternatives does.
 ---
 question: How does a ruling made on the page reach the record?
 form: rule
-authority:
-  class: delegated
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/alignment-page
 ---

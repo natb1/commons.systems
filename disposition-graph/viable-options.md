@@ -1,27 +1,25 @@
 ---
 question: Is authority a projection of the state of a node's viable options?
 stage: review
-recommendation:
-  adopts: grant-from-a-ruling
-  boldness: moderate
-  amends: "5fbba085c9eee209f9164ba08987100ccb28dc1d"
-  at: "4ad06dab"
-alternatives:
-  - name: authority-derived
-    source: author
-    ref: "2026-09-04"
-  - name: grant-from-a-ruling
-    source: ai
-    ref: "2026-09-04"
-  - name: grant-from-a-recommendation
-    source: ai
-    ref: "2026-09-04"
 facts:
+  - name: answer
+    options:
+      - name: authority-derived
+        source: author
+        ref: "2026-09-04"
+      - name: grant-from-a-ruling
+        source: ai
+        ref: "2026-09-04"
+      - name: grant-from-a-recommendation
+        source: ai
+        ref: "2026-09-04"
+    recommends: grant-from-a-ruling
+    boldness: moderate
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 depends:
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
@@ -52,9 +50,11 @@ The author, 2026-09-04, after compaction, giving the grant announced above:
 
 > bootstrap authority granted - delegate to subagents with righ-sized models and effort level (opus, sonnet) when it would result in token efficiency
 
-## Alternatives
+## Facts
 
-### authority-derived
+### answer
+
+#### authority-derived
 
 The model as the author's words state it, put on the table by them on
 2026-09-04: every fact on a node carries a list of viable options, each with
@@ -70,7 +70,7 @@ grants a class, whether "after" is a matter of clock or content, and what
 two readings of the first of those; a ruling for this one as stated leaves it
 open.
 
-### grant-from-a-ruling
+#### grant-from-a-ruling
 
 The model with the grant traced to the author's ruling. A class follows from a
 ruling recorded on the node's facts, on the node itself or on an ancestor whose
@@ -84,7 +84,7 @@ out in the fence, with the pin by content, the delegated node held off the
 alignment frontier on a move within its scope, and re-confirmation resuming at
 the movement the recording node's classification calls for.
 
-### grant-from-a-recommendation
+#### grant-from-a-recommendation
 
 The model with the grant read off the recommendation. A reviewed
 recommendation acts as deferred by default, the author's review owed on it,
@@ -99,8 +99,6 @@ which is the state the author reclassified the whole record into on
 2026-09-03; the authority node holds that no command confers a class, and a
 review that stamps is a command.
 
-## Facts
-
 ### authority
 
 Ratified. The answer redefines what authority is in this record and opens a
@@ -114,10 +112,6 @@ decision would be a delegation of the definition of delegation.
 ---
 question: Is authority a projection of the state of a node's viable options?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/authority
   - commons.systems/disposition-graph/dialogue

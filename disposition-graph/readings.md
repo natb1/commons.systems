@@ -1,43 +1,42 @@
 ---
 question: How are references to tradition recorded?
 stage: ruling
-recommendation:
-  adopts: draft
-  boldness: moderate
-  amends: "8029e1b5968e7e2801b1396b631c2e23d3e52adf"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 8f46214fa1e80836a43e46c4d643f0e223cad9ce
-alternatives:
-  - name: draft
-    source: ai
-  - name: incomplete-enumeration-in-facts
-    source: review
-    ref: "2026-09-03"
-  - name: one-ruling-for-the-reading-class
-    source: review
-    ref: "2026-09-03"
-  - name: hold-for-traditions-home
-    source: review
-    ref: "2026-09-03"
-  - name: relation-per-option
-    source: author
-    ref: "2026-09-04"
+  of: 77a032beb8bd7a2d247f694cd986e1cd64df5403
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: draft
+        source: ai
+        ref: "2026-09-03"
+      - name: incomplete-enumeration-in-facts
+        source: review
+        ref: "2026-09-03"
+      - name: one-ruling-for-the-reading-class
+        source: review
+        ref: "2026-09-03"
+      - name: hold-for-traditions-home
+        source: review
+        ref: "2026-09-03"
+      - name: relation-per-option
+        source: author
+        ref: "2026-09-04"
+    recommends: draft
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/model
 defines:
@@ -68,25 +67,27 @@ As readings, which are nodes. A reading answers the question what a tradition sa
 
 The author's ruling of 2026-09-02 that tradition references carry authority classes. Making them nodes rather than field entries buys four things: one reading of a shared source is stored once and refined under each node it grounds; readings nest, which is what recursion needs; a reading has its own hash and pin, so a changed reading is distinguishable from a changed answer; and there is one write path, one queue, and one stamp vocabulary. The alternative, stamped entries in a field with a derived reading frontier, is workable and was the author's framing; the difference is parsimony of mechanism against parsimony of files.
 
-## Alternatives
+## Facts
 
-### draft
+### answer
+
+#### draft
 
 The Draft distinguishes tradition from reading where the standing answer runs them together: a tradition is a mount, one root node in a traditions graph until it has a graph of its own, carrying the name it defines and its primary references, and a reading is a node under the disposition it bears on, naming the tradition it reads with its source, locus and relation. It adds that many questions reading one tradition are many readings naming one tradition, that the tradition's page shows every reading citing it, that prose reaches a tradition through the name it defines, and that a rationale never repeats its readings. Its own reviews record that ratifying it makes fourteen existing rationales non-conforming at once, that the ten reading nodes name no tradition and no traditions graph exists in the manifest, and that no migration is named.
 
-### incomplete-enumeration-in-facts
+#### incomplete-enumeration-in-facts
 
 The same finding proposes that readings' facts say the remedy's enumeration is incomplete, so the author knows the size of what ratifying the rule puts on the frontier; readings' draft rests its rule that a rationale never repeats its readings on that enumeration being the remedy. (Raised on commons.systems/disposition-graph/audience.)
 
-### one-ruling-for-the-reading-class
+#### one-ruling-for-the-reading-class
 
 Readings' answer says that the class rule it states governs every reading node without each carrying its own alternative for it. Verified that all four nodes still carrying a `delegated-not-ratified` alternative — software-factories, spec-driven-development, srs-introduction, web-routing — already recommend delegated, so those four entries stand for a change the record has made and would put a settled question in front of the author four times. On this alternative the four entries are struck as discharged and readings' answer says that a reading's class follows from whether the author has read the source, so no reading needs an alternative to say it; it is on the table because the record currently carries four pending rulings on a rule it has already applied.
 
-### hold-for-traditions-home
+#### hold-for-traditions-home
 
 Readings says on the node that its tradition-as-mount rule rests on traditions-home, which is unruled, and is not confirmed before it. Verified that readings stands at the ruling stage while traditions-home stands at review with two pending alternatives under which readings' sentence 'a tradition is a mount, one root node in a traditions graph until it has a graph of its own' would be false, and that the manifest carries no traditions graph for it to name. It is on the table because frontier-consistency requires a node not to rest silently on unruled ground and because the placement finding of 2026-09-03 proposed exactly this for readings and recorded an alternative on every other node it named but this one.
 
-### relation-per-option
+#### relation-per-option
 
 A reading stays a node under the disposition it bears on, with its own stamp, and its relation attaches to the options of the fact it bears on rather than to the answer: adopted on the options the tradition supports, diverged on those it contradicts, so that "chosen over" becomes a tradition adopted on an option not chosen. The tradition's page still shows every reading that cites it, and the projections show on each option what tradition says. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
@@ -96,10 +97,6 @@ A reading stays a node under the disposition it bears on, with its own stamp, an
 ---
 question: How are references to tradition recorded?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/model
 defines:

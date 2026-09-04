@@ -1,34 +1,33 @@
 ---
 question: How is the clean-context review run?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "ed187b8bb3bc8ec9a6fe41a12722dab24a6f82c5"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
-  of: ed187b8bb3bc8ec9a6fe41a12722dab24a6f82c5
-alternatives:
-  - name: per-node-context
-    source: review
-    ref: "2026-09-03"
-  - name: rerun-earlier-reviews
-    source: ai
+  of: 744e77e302f5a76885ced23983c0b6a8dfe94132
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: per-node-context
+        source: review
+        ref: "2026-09-03"
+      - name: rerun-earlier-reviews
+        source: ai
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/recording
 shims:
@@ -65,13 +64,15 @@ The author, 2026-09-03: "alignment adversarial review is materialized as a skill
 
 The author, later on 2026-09-03: "This superceded existing unanswered dispositions about the adversarial review skill (case in point). EVERY invocation of the adversarial alignment review skill is a batch operation that evaluates the full unanswered frontier (without isolating any context by disposition)." The per-node isolation the morning's words asked for, and the sibling drafts the second reading added to it, were the answer to a narrower question, how one draft is judged; the author's later words ask how the frontier is kept consistent, and a reading of one node, however many siblings it is handed, cannot see drift between nodes it was not handed. The clean context stays, since the independence the recording node argues for is of framing; the isolation by node goes, since the object of the review is now the frontier. The case in point is this node: its answer of the morning stood at the review stage, twice read and twice forwarded, while the frontier it belonged to drifted from it. Divergence, recorded: the two readings of this node on 2026-09-03 ran under the superseded answer, each in a context of its own, and their subsections below are kept as the record of that; the batches of the same day, read in one context each before the skill existed, turn out to have had the shape the author's later words prescribe, though without the survey.
 
-## Alternatives
+## Facts
 
-### per-node-context
+### answer
+
+#### per-node-context
 
 The superseded per-node answer, kept live by the review's strong counter-argument: each draft is read in a context of its own, holding the record and the round's other drafts, so that no verdict is formed by a reader carrying sixty-odd drafts' framing. The standing answer buys the survey of the frontier at the cost of the independence the per-node reading bought, and nothing replaces that independence. The author's later words rule that every invocation is one batch over the whole frontier, so this alternative stands against them; it is listed because the review judged the cost worth the author's sight rather than a line in the account.
 
-### rerun-earlier-reviews
+#### rerun-earlier-reviews
 
 The account holds open, as wholly the AI's, that the two review batches of 2026-09-03 stand as the reviews of that day rather than being re-run under this answer. The alternative is that they do not stand: every node whose only review was read in one of those batches goes back through the skill before the author rules on it. The author may take it simply by invoking the review, which the node itself says.
 

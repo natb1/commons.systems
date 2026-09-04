@@ -1,18 +1,20 @@
 ---
 question: What does a node refine?
 stage: maieutic
-alternatives:
-  - name: the-edge-alone
-    source: review
-    ref: "2026-09-03"
-  - name: draft-after-three-rulings
-    source: review
-    ref: "2026-09-03"
+facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: the-edge-alone
+        source: review
+        ref: "2026-09-03"
+      - name: draft-after-three-rulings
+        source: review
+        ref: "2026-09-03"
+    stands: standing
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/model
 defines:
@@ -40,13 +42,15 @@ The question or questions named in its `under` field. This is the only hierarchi
 
 Ask "why does this question exist?"; the answer names its parent. Never choose a parent to change priority; that is what boost is for, and boost is the author's alone. Rejected: separate edges for attention, context, and containment, each of which turned out to be a reading of the same fact; a second reference kind for cousins, which differs from `under` by exactly one bit, motivation, and is kept as `cites`.
 
-## Alternatives
+## Facts
 
-### the-edge-alone
+### answer
+
+#### the-edge-alone
 
 The decomposition finding holds that this node answers four questions at once, what the edge means, how rank is computed, what a ceiling is and how context loads, and defines all four terms, while standing at the maieutic stage with no drafted text and with its own account saying it cannot be drafted until three other questions are ruled. Three of the four are answered in full elsewhere, so under survives as the edge alone: what a node refines, that it is the only hierarchical edge, and that a node may refine more than one question. Rank moves to attention, context to session-context and ceiling to authority, after which under can be drafted without waiting on rationale-edge and tier. Raised on commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/attention.
 
-### draft-after-three-rulings
+#### draft-after-three-rulings
 
 The same finding proposes that under be drafted from the outcomes of rationale-edge and a re-answered tier, and simplified as the decomposition finding proposes, since under's own account plans a draft after three rulings and one of them, tier, was kicked back with its recommendation withdrawn, so under cannot be drafted as planned. (Raised on commons.systems/disposition-graph/traditions-home.)
 

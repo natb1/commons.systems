@@ -1,37 +1,36 @@
 ---
 question: Does the same discipline help manage capture of the author's intention by institutions generally?
 stage: maieutic
-recommendation:
-  adopts: draft
-  boldness: low
-  amends: "07c0229c90e260f37e184cde73afaf1add1e6aa1"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
   date: 2026-09-03
   of: 3c9b0a7059869f3446083b9871b81c51c828ae8d
-alternatives:
-  - name: draft
-    source: ai
-  - name: restate-as-record-not-capacity
-    source: review
-    ref: "2026-09-03"
-  - name: cite-forms
-    source: review
-    ref: "2026-09-03"
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: draft
+        source: ai
+        ref: "2026-09-03"
+      - name: restate-as-record-not-capacity
+        source: review
+        ref: "2026-09-03"
+      - name: cite-forms
+        source: review
+        ref: "2026-09-03"
+    recommends: draft
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
 form: assumption
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/purpose
 ---
@@ -48,17 +47,19 @@ Yes. The ways an institution comes to set a person's problems for them recur acr
 
 The author's hypothesis, 2026-09-02. The archē this graph rests on already names capture as the thing that must remain recoverable; this node asks whether the same record that guards against capture by delegated software guards against capture by other institutions. The traditions that would ground it are gathered as an open question under this node, for the author to choose from.
 
-## Alternatives
+## Facts
 
-### draft
+### answer
+
+#### draft
 
 The Draft keeps form assumption and adds an assessment criterion made by the author at a sitting on this node, failing if a capture of the author's intention by an institution other than delegated software is neither noticed nor recoverable through the record. Its answer says criteria rather than instruments and states the hypothesis explicitly, so that a failure returns the purpose above to the author. Its frontmatter uses a criteria key the schema does not carry, which the session says arrives with the instruments ruling.
 
-### restate-as-record-not-capacity
+#### restate-as-record-not-capacity
 
 The redundancy finding holds that public/agency, this node's root, already makes the general claim, naming capture without restricting it to software and grounding it in general readings, and that capture's own counter-argument concedes it may be a restatement of its root. The alternative keeps capture a hypothesis but rewrites it to state only what agency does not: that the record, and not merely the capacity, is the instrument of noticing capture and recovering from it, and that this is untested outside delegated software. Capture's answer would cite agency rather than restate it, and 'a general defence' become 'a general instrument for noticing capture and recovering from it', the archē's own wording. The session accepted this as the question for the sitting after agency, so it is owed and not written. Raised on commons.systems/public/agency.
 
-### cite-forms
+#### cite-forms
 
 The coverage finding of 2026-09-03: the author's form-versus-assumption question, whether this is correctly encoded as form assumption against form disposition with unvalidated instrumentation and whether assumption is a form at all, is carried verbatim here, on knowledge-store and on purpose, and forms is the node that answers it. The finding proposes this node cite forms instead of carrying the quotation, so that one disposition is answered by one node. Raised on commons.systems/disposition-graph/scope, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/knowledge-store.
 
@@ -68,10 +69,6 @@ The coverage finding of 2026-09-03: the author's form-versus-assumption question
 ---
 question: Does the same discipline help manage capture of the author's intention by institutions generally?
 form: assumption
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/purpose
 criteria:

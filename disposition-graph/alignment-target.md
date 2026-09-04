@@ -1,32 +1,30 @@
 ---
 question: What does the alignment session take up when given nothing?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "cf7380d981f78d72c48354ded418402738858428"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: cf7380d981f78d72c48354ded418402738858428
-alternatives:
-  - name: ruling-order-not-rank
-    source: author
-    ref: "2026-09-03"
+  of: 1c5395eea68a14452e88040c5894830533188fdf
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: ruling-order-not-rank
+        source: author
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/growth
 ---
@@ -43,9 +41,11 @@ The highest-ranked unanswered disposition, and it progresses that one node throu
 
 The author's ruling of 2026-09-03, quoted above. Rank is the order of the author's attention, and the unanswered nodes are the queue of the dialogue; a session given nothing has one question to answer, which item of that queue comes first, and rank answers it without the session's judgment entering. Progressing from the stage rather than from the beginning is what the stored stage is for: it exists, the transience node says, so that what the dialogue has done survives the session that did it. Up to confirmation and not beyond: the confirmation is the author's act, and the session's work on a node ends when it has put the node before the author with everything the ruling needs, the draft, the three facts, and the review's counter-argument; where the author is in the interview, the session asks for the ruling there, and where the author rules on the page, the session reads the ruling back at its next sitting. Replaced: the earlier no-argument usage of the alignment skill, an onboarding walk from the purpose node to a question in the author's words, which presumed a record with nothing unanswered to take up; while any node is unanswered, the first unanswered node is that walk. Rejected: choosing by the oldest stage, or by the fewest movements owed, since either substitutes a heuristic for the rank the record already carries; asking the author which node to take, since the author's answer would be a boost, which they can set without being asked.
 
-## Alternatives
+## Facts
 
-### ruling-order-not-rank
+### answer
+
+#### ruling-order-not-rank
 
 The alignment-order draft answers that a session given nothing takes the first node of the ruling order, derived from the tangle the record carries, and not the highest-ranked unanswered node; rank breaks ties only. The author's words there: rank was "the only order the record had to hand" when this node was ruled, and every statement applying it to alignment is reconsidered, since the alignment frontier has no confirmed authority and a greedy rank order is not necessarily optimal for untangling it. The alternative amends this answer's first sentence and its rejected heuristics, whose rejection rested on rank already being the order. It amends the clause "this project's graph before the public graph" as well: the ruling order is one order over the whole alignment frontier, the manifest's graphs together, since the dependencies cross them and the public graph carries the root that this project's graph hangs under, so a graph precedence would put a descendant's ruling before its ancestor's. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 

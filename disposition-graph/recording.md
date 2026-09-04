@@ -1,57 +1,55 @@
 ---
 question: How is a disposition confirmed and recorded?
 stage: maieutic
-recommendation:
-  adopts: responses-classified-per-decision
-  boldness: low
-  amends: "75336fcff7555274971f7db32a861b19c5651f4e"
-  at: "919cea3b"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: 75336fcff7555274971f7db32a861b19c5651f4e
-alternatives:
-  - name: move-the-quotations-into-a-disposition-section
-    source: review
-    ref: "2026-09-03"
-  - name: deferred-rather-than-ratified
-    source: review
-    ref: "2026-09-03"
-  - name: mechanical-checks-instead-of-a-full-reading
-    source: review
-    ref: "2026-09-03"
-  - name: cite-reviewers-world
-    source: review
-    ref: "2026-09-03"
-  - name: cite-unanswered-responses
-    source: review
-    ref: "2026-09-03"
-  - name: responses-classified-per-decision
-    source: ai
-    ref: "2026-09-04"
-  - name: stage-per-decision
-    source: ai
-    ref: "2026-09-04"
-  - name: options-persist-at-the-recording
-    source: author
-    ref: "2026-09-04"
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: move-the-quotations-into-a-disposition-section
+        source: review
+        ref: "2026-09-03"
+      - name: deferred-rather-than-ratified
+        source: review
+        ref: "2026-09-03"
+      - name: mechanical-checks-instead-of-a-full-reading
+        source: review
+        ref: "2026-09-03"
+      - name: cite-reviewers-world
+        source: review
+        ref: "2026-09-03"
+      - name: cite-unanswered-responses
+        source: review
+        ref: "2026-09-03"
+      - name: responses-classified-per-decision
+        source: ai
+        ref: "2026-09-04"
+      - name: stage-per-decision
+        source: ai
+        ref: "2026-09-04"
+      - name: options-persist-at-the-recording
+        source: author
+        ref: "2026-09-04"
+    recommends: responses-classified-per-decision
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
 depends:
   - commons.systems/disposition-graph/unanswered
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
   - commons.systems/disposition-graph/viable-options
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/growth
 defines:
@@ -72,37 +70,39 @@ Why a second reader with no context: the session that ran the dialogue shares th
 
 Traditions, owed as readings: the office of the promotor fidei (Sixtus V, 1587; reformed 1983), adopted for a standing adversary to every candidate and diverged from in that the adversary here cannot stall, only send back or object on the record; blinded peer review, adopted for the independence of the reader's context; the four-eyes principle of financial control, adopted for a second reader before every write to the record; Peirce on paper doubt, adopted for the optional steelman. The evaluation node's rule that adversarial review of one's own output is part of producing it still holds; this node adds the reader who did not produce it.
 
-## Alternatives
+## Facts
 
-### move-the-quotations-into-a-disposition-section
+### answer
+
+#### move-the-quotations-into-a-disposition-section
 
 The placement finding verified that this node carries no Disposition section although its rationale quotes the author three times with dates, and that authority makes a ratified stamp invalid without the ruling in the record. This alternative moves those quotations into a Disposition section before any stamp is written, which also makes the alignment page show them, since the page renders the author's words only from that section.
 
-### deferred-rather-than-ratified
+#### deferred-rather-than-ratified
 
 The same finding offers the other branch: if the quotations are not moved, the recommendation changes from ratified to deferred, on the ground that a ratified stamp the node cannot support is worse than an honest deferral. It bears on this node as one of the twenty-two carrying no Disposition section while recommending ratification.
 
-### mechanical-checks-instead-of-a-full-reading
+#### mechanical-checks-instead-of-a-full-reading
 
 Both reviews' strongest counter-argument is that a mandatory, unbounded second reading of the record before every confirmation buys what a check would catch: the node's own failure modes are mechanical, a ruling is quoted with its date or it is not, a shim's artifact exists or it does not, a cited command runs or it does not. The alternative answer is that the review is a set of checks over the frontier plus a narrower reading, rather than a whole reading per batch. The session replied that the checks become instruments as the reader grows but that the whole reading stays by the author's ruling, so the alternative is live and unruled.
 
-### cite-reviewers-world
+#### cite-reviewers-world
 
 The frontier finding of 2026-09-03 records that recording describes the reviewer's world as the nodes a draft joins up to its ceiling while clean-context-review describes it as the answered nodes they join up to the roots; the two rules coincide only while nothing is ratified, and ceiling is defined by under, which is itself at the maieutic stage. Clean-context-review is the survivor. Recording's sentence cites it instead of restating the input set, which also removes the only use of ceiling outside the under node. (Raised on commons.systems/disposition-graph/clean-context-review.)
 
-### cite-unanswered-responses
+#### cite-unanswered-responses
 
 The contradiction finding carried on unanswered proposes that recording cite unanswered for the author's three responses rather than restating four outcomes of its own, and recast its second step as the classification of each of the three: a deferral being a node left unconfirmed, an overrule being a denial with feedback. Three response vocabularies are live for one act and the page implements only unanswered's three. (Raised on commons.systems/disposition-graph/unanswered.) Also raised on commons.systems/disposition-graph/growth.
 
-### responses-classified-per-decision
+#### responses-classified-per-decision
 
 The classification step takes a response given on one of the decisions a node's ruling asks as well as one given on the node: it moves the whole node, since a node has one stage, and the responses on the node's other decisions are written onto them as rulings and survive the kickback. The recording step takes the stamp's class from the ruling on the node's authority fact rather than from the recommendation, which no longer carries one, and records a prune ruling before the node is deleted. A ruling given while the node's parent is open is recorded like any other, with a contradicting parent's ruling later recorded as an alternative on the child. Adopted by the recommendation, and set out in the fence.
 
-### stage-per-decision
+#### stage-per-decision
 
 Each decision carries its own stage, so a kickback on one leaves the others where they were and the author is not shown a node returned wholesale to the maieutic stage over one row. Against it: the dialogue node makes the stage the node's, the single next movement owed on it, and a node carrying four stages cannot answer what is owed; the ruling order and the frontier both read one stage per node, and the alignment page's rail shows one. The answer keeps one stage and gets the same benefit by keeping the other decisions' rulings.
 
-### options-persist-at-the-recording
+#### options-persist-at-the-recording
 
 The third step removes the dialogue and not the facts: the stage, the review, depends and the account go, and the facts stay with their options, their recommendation, their readings, and the rulings the author gave, so that a later session meets what was considered and why. The stamp is read from those rulings rather than written. A ruling given on the page is recorded on the option chosen, with the pin of the recommendation it answered. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
@@ -112,10 +112,6 @@ The third step removes the dialogue and not the facts: the stage, the review, de
 ---
 question: How is a disposition confirmed and recorded?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/growth
 defines:

@@ -1,38 +1,36 @@
 ---
 question: What is the legacy record to this graph?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "85155207f04a45efdc5963068dc021e1285d1dac"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 85155207f04a45efdc5963068dc021e1285d1dac
-alternatives:
-  - name: add-a-disposition-section
-    source: review
-    ref: "2026-09-03"
-  - name: deferred-rather-than-ratified
-    source: review
-    ref: "2026-09-03"
-  - name: drain-as-an-exit-criterion
-    source: ai
-    ref: "2026-09-03"
+  of: 6f0617ffb66143e3b524d06ba416e9c27bda7d43
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: add-a-disposition-section
+        source: review
+        ref: "2026-09-03"
+      - name: deferred-rather-than-ratified
+        source: review
+        ref: "2026-09-03"
+      - name: drain-as-an-exit-criterion
+        source: ai
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/model
 defines:
@@ -48,17 +46,19 @@ The author's ruling of 2026-09-02 that this session was over-bound by legacy dis
 
 Evidence for the claim that the legacy record neither matched its own specification nor served long-horizon dispatch: the two transient-disposition surveys on the implementation ref, `bootstrap/transient-disposition-graph-survey.md` and `bootstrap/transient-disposition-transcript-survey.md`, which the transience node cites. The rejected-alternative mechanism is unexercised until a legacy doctrine is overruled.
 
-## Alternatives
+## Facts
 
-### add-a-disposition-section
+### answer
+
+#### add-a-disposition-section
 
 Both reviews found that the node has no Disposition section and that its ground, the author's ruling of 2026-09-02 that the session was over-bound by legacy disposition and that incumbent code is context and never doctrine, is paraphrased rather than quoted. Authority makes a ratified stamp whose ruling is not in the record invalid, so this alternative adds the section with the ruling and its date before any stamp is written.
 
-### deferred-rather-than-ratified
+#### deferred-rather-than-ratified
 
 The placement finding's other branch, for each of the twenty-two nodes with no Disposition section: if the ruling is not brought into the node, the recommendation changes from ratified to deferred, since a ratified stamp the node cannot support is worse than an honest deferral.
 
-### drain-as-an-exit-criterion
+#### drain-as-an-exit-criterion
 
 The reviewers' surviving counter-argument is that the drain of the legacy record has no owner and no rank, so it will be done at exit under time pressure or not at all: reading a legacy node when a question needs it is the only path in, and nothing derives which knowledge a question needs. The session replied that the author's words after compaction make the drain an exit criterion, on the exit list rather than on a rank, with the exit as its owner. That answer is in the reply and not in the node's answer, so it stands as a candidate edit.
 

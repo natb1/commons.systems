@@ -1,50 +1,48 @@
 ---
 question: What criteria guard the purpose node?
 stage: ruling
-recommendation:
-  adopts: unguarded
-  boldness: low
-  amends: "344adc6d0c702185eb7c60d50d6523d171c5a3a6"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 23758b0c5affc8dfab4abf370ea5ba7b22321807
-alternatives:
-  - name: unguarded
-    source: ai
-    ref: "2026-09-03"
-  - name: drafted-criteria
-    source: ai
-    ref: "2026-09-03"
+  of: 8a450005c1e68f597936f2f11260bcf98629d261
 facts:
+  - name: answer
+    options:
+      - name: unguarded
+        source: ai
+        ref: "2026-09-03"
+      - name: drafted-criteria
+        source: ai
+        ref: "2026-09-03"
+    recommends: unguarded
+    boldness: low
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
   - name: existence
-    choices:
-      - keep
-      - prune
-    adopts: keep
+    options:
+      - name: keep
+      - name: prune
+    recommends: keep
     boldness: low
 under:
   - commons.systems/disposition-graph/purpose
 ---
-## Alternatives
+## Facts
 
-### unguarded
+### answer
+
+#### unguarded
 
 Criteria are deferred to a later sitting and purpose shows as unguarded, the record saying so, with the two criteria re-proposed when the reconciliation harness exists, the check written against it and the assessment given a threshold. This is what the session's reply adopted after the counter-argument, and what the frontmatter recommendation already states at low boldness. Instruments' text makes unguarded a legible state the record announces rather than a defect it hides.
 
-### drafted-criteria
+#### drafted-criteria
 
 Purpose carries the two criteria as drafted: a check that every unit of work the harness dispatches cites the node it serves, and an assessment that work done in the author's name since the last sitting traces to a recorded disposition. The session withdrew it after the review, on the ground that the check names a harness that does not exist and the assessment has no failure condition, so it cannot fail and cannot guard; the Options block nevertheless still lists it. It remains on the table as the option the author may take.
-
-## Facts
 
 ### existence
 
@@ -56,10 +54,6 @@ Prune: The redundancy finding holds that this node decides a clause purpose's ow
 ---
 question: What criteria guard the purpose node?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/purpose
 ---

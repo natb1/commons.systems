@@ -1,52 +1,51 @@
 ---
 question: How is the record read?
 stage: ruling
-recommendation:
-  adopts: draft
-  boldness: moderate
-  amends: "cf07e99b282ef5c28b81af1f8865ee1ae2d366ca"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 64c03a8de00a6cd31d538eeb97f5f35ec612f9ea
-alternatives:
-  - name: draft
-    source: ai
-  - name: narrowing-disclosed
-    source: review
-    ref: "2026-09-03"
-  - name: hold-for-self-documentation
-    source: review
-    ref: "2026-09-03"
-  - name: hyperlink-traditions-in-prose
-    source: author
-    ref: "2026-09-02"
-  - name: name-what-it-does-not-settle
-    source: review
-    ref: "2026-09-03"
-  - name: strike-the-field-link-clause
-    source: review
-    ref: "2026-09-03"
-  - name: absorb-self-documentation
-    source: ai
-    ref: "2026-09-03"
-  - name: shim-carries-framed-viewer
-    source: review
-    ref: "2026-09-03"
+  of: 5a1158c3c67eaa7e81097e7faeb737b46aeb8ede
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: draft
+        source: ai
+        ref: "2026-09-03"
+      - name: narrowing-disclosed
+        source: review
+        ref: "2026-09-03"
+      - name: hold-for-self-documentation
+        source: review
+        ref: "2026-09-03"
+      - name: hyperlink-traditions-in-prose
+        source: author
+        ref: "2026-09-02"
+      - name: name-what-it-does-not-settle
+        source: review
+        ref: "2026-09-03"
+      - name: strike-the-field-link-clause
+        source: review
+        ref: "2026-09-03"
+      - name: absorb-self-documentation
+        source: ai
+        ref: "2026-09-03"
+      - name: shim-carries-framed-viewer
+        source: review
+        ref: "2026-09-03"
+    recommends: draft
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 boost: 5
 under:
   - commons.systems/disposition-graph/model
@@ -90,37 +89,39 @@ Through projections, never by opening node files, except in alignment sessions. 
 
 The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree. It keeps context focused, keeps legacy vocabulary out of working sessions, and makes the graph commit a session read from a pinned fact. The address rule was recorded at the author's direction on 2026-09-03, after the address was seen not to change on navigation in the framed viewer; the routing tradition is the reading under this node. The author, 2026-09-03: "The url in the artifact is not updated on navigation between nodes. This could cause navigation confusion. Record reference to web app routing tradition for disposition. Edit the browser shim to reconcile the disposition." And, the same day, that unanswered nodes are hidden from the browser and listed by the alignment page, quoted on the transience node. A hosted README cannot embed a live page, so the README renders the purpose page statically or links the browser at the purpose node; that bite on the main branch is unbuilt work, not a disposition.
 
-## Alternatives
+## Facts
 
-### draft
+### answer
+
+#### draft
 
 The draft rewrites the answer so that the browser states nothing of its own: every page shows the question, the answer, the criteria or the word unguarded, the readings set apart from the answer they ground, the nodes it cites and the nodes that cite it, and an authority section projected from the stamp, the ruling behind it, the alternatives the rationale rejected, and what is pending for a deferred node. The standing answer carries none of that page structure. The draft also narrows the README, the repository description and the discovery tags to projections of the purpose node alone, which presumes the audience prune, and its rationale records the rejection of a how-to-read page, a vocabulary page and a rejected-alternatives section separate from authority. Three of its four projection promises, the criteria, the word unguarded, and the authority section, are unmaterialized in the browser today and are owed by the browser shim.
 
-### narrowing-disclosed
+#### narrowing-disclosed
 
 The answer keeps the amended sentence, that only a node with no answer is hidden from the browser, and adds one clause saying plainly that this narrows the author's earlier words, quoted on transience, that unanswered nodes are hidden from the browser and listed by the alignment page, words the author's later reclassification of every disposition as unanswered would otherwise empty. Three reviews in a row and the supersession finding asked that the author be shown this as a change to what they said rather than as a restatement of it; it is what projection's own counter-argument asks for, and the facts line still does not say so. Raised on commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/transience.
 
-### hold-for-self-documentation
+#### hold-for-self-documentation
 
 Projection is not ruled at all until self-documentation is answered, because that answer decides whether projection is the self-documentation section and scope's order field already encodes the mapping. The finding's sequence is self-documentation first, then scope and projection ruled together, then the periagogic sittings on frontier-metrics and vocabulary-view against a settled projection node.
 
-### hyperlink-traditions-in-prose
+#### hyperlink-traditions-in-prose
 
 The author's words that references to tradition in the projected documentation should hyperlink to the tradition node, keeping the hyperlinking of target dispositions, are carried on readings and on no other node; projection's Disposition carries seven other quotations and not this one. The redundancy finding recorded here makes projection the survivor of the linking rule, whose draft already says every defined term and every tradition's name links to the node that defines it. The candidate is that projection carry these words as the ground of that rule. (Raised on commons.systems/disposition-graph/readings.)
 
-### name-what-it-does-not-settle
+#### name-what-it-does-not-settle
 
 The answer gains one clause naming which questions it does not settle, since three of projection's children stand at the periagogic or maieutic stage holding author words this answer partly answers: vocabulary-view on repository vocabulary and the layout of tradition references, frontier-metrics on heading metrics, and self-documentation on its placement as a section equal with scope. Projection's recommended text answers half of vocabulary-view's author words, so ruling it settles parts of three dialogues before they have run. The coverage finding offers this against holding projection until self-documentation is answered. Raised on commons.systems/disposition-graph/frontier-metrics, commons.systems/disposition-graph/vocabulary-view.
 
-### strike-the-field-link-clause
+#### strike-the-field-link-clause
 
 The contradiction finding holds that projection's draft carries a clause the record has since withdrawn: that every field name and value on a page links to the node that defines it, which was this node's recommended option and was withdrawn with it. It is verified unmeetable, at least fifteen field names and sub-keys in use being named by no node's defines. Projection strikes the clause and keeps the defined-term and tradition-name links, which are the author's own request and are implemented; the field-link rule returns whenever tier is answered. (Raised on commons.systems/disposition-graph/tier.)
 
-### absorb-self-documentation
+#### absorb-self-documentation
 
 If the mapping stands, projection is the self-documentation section of the author's order and this node is pruned into it, which makes projection the survivor of the question how the repository documents itself. The coverage finding carried on both nodes proposes projection either be ruled with one clause saying which of self-documentation's, vocabulary-view's and frontier-metrics' questions it does not settle, or be held until self-documentation is answered, since that answer decides whether projection is the section at all. (Raised on commons.systems/disposition-graph/self-documentation.)
 
-### shim-carries-framed-viewer
+#### shim-carries-framed-viewer
 
 Projection's browser shim gains the framed viewer's divergence in its liquidation condition: until the browser is published from the implementation ref, the page keeps the reader's place itself and shows the address of the node in view. The finding is that this stand-in currently lives as a clause in web-routing's answer, where the frontier cannot read it, and the parent's shim is where transience puts a stand-in for an unmade materialization. (Raised on commons.systems/disposition-graph/web-routing.)
 
@@ -130,10 +131,6 @@ Projection's browser shim gains the framed viewer's divergence in its liquidatio
 ---
 question: How is the record read?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/model
 defines:

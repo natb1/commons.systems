@@ -1,16 +1,18 @@
 ---
 question: Which traditions does the record already read without a node?
 stage: maieutic
-alternatives:
-  - name: traditions-graph-stubs
-    source: ai
-    ref: "2026-09-03"
-  - name: regenerate-enumeration
-    source: review
-    ref: "2026-09-03"
-  - name: one-ruling-for-the-prose-lists
-    source: review
-    ref: "2026-09-03"
+facts:
+  - name: answer
+    options:
+      - name: traditions-graph-stubs
+        source: ai
+        ref: "2026-09-03"
+      - name: regenerate-enumeration
+        source: review
+        ref: "2026-09-03"
+      - name: one-ruling-for-the-prose-lists
+        source: review
+        ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/readings
 ---
@@ -19,17 +21,19 @@ under:
 The author, 2026-09-02:
 > do not replicate tradition references in the rationale section. There is already a tradition section.
 
-## Alternatives
+## Facts
 
-### traditions-graph-stubs
+### answer
+
+#### traditions-graph-stubs
 
 Every list of traditions to record as readings in a rationale becomes root nodes in the traditions graph, each an open question until read, and the list leaves the rationale; about thirty stub nodes, written by a unit after the traditions-home ruling. The proposal enumerates the rationales it would drain and rejects leaving the lists in place until each tradition is read, on the ground that the author ruled rationales do not carry tradition references and an unread tradition is an open question, which is a node. Its own text says the proposed node is pending, and it depends on traditions-home.
 
-### regenerate-enumeration
+#### regenerate-enumeration
 
 The cross-reference finding verifies by grep that fourteen nodes carry prose tradition lists and that the enumeration here misses three of them, dialogue, recording and scope, while naming instruments, which carries its traditions without the marker phrase. It proposes that the enumeration be regenerated from the record rather than maintained by hand, the same class of drift the scope node's order field was introduced to prevent, and that until then the three missing nodes be added. Raised on commons.systems/disposition-graph/audience.
 
-### one-ruling-for-the-prose-lists
+#### one-ruling-for-the-prose-lists
 
 Stub-traditions' answer says that the ruling on where prose tradition lists go settles it for every rationale that carries one, so the `traditions-to-readings` alternatives pending on materialization, validation-order, instruments and evaluation are consequences of this ruling rather than four separate ones. Verified that fourteen rationales carry such lists while this node's enumeration names twelve and misses dialogue, recording and scope, which is why the node's own `regenerate-enumeration` alternative asks that the enumeration be derived from the record instead of maintained by hand. On this alternative the two are taken together: the enumeration is derived, and the derived list is what the ruling drains, so no rationale needs its own pending alternative to say the same thing.
 

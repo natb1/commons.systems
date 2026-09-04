@@ -1,38 +1,39 @@
 ---
 question: Is the rationale the prose of the under edge?
 stage: ruling
-recommendation:
-  adopts: rationale-stays-with-node
-  boldness: moderate
-  amends: "04432816cb452ea70552fab00ede5f8a21071c1f"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: 4028e2c02834b9114514f5f378a78859e8cc323b
-alternatives:
-  - name: rationale-stays-with-node
-    source: ai
-  - name: because-clause-on-edge
-    source: ai
-  - name: rationale-on-edge
-    source: ai
-  - name: drop-convention-clause
-    source: review
-    ref: "2026-09-03"
-  - name: disclose-unanswered-parent
-    source: review
-    ref: "2026-09-03"
-  - name: rationale-as-the-edge-prose
-    source: author
-    ref: "2026-09-03"
+  of: dcef237c051b8b1ca92ca7e6baf8189f0b0983a0
 facts:
+  - name: answer
+    options:
+      - name: rationale-stays-with-node
+        source: ai
+        ref: "2026-09-03"
+      - name: because-clause-on-edge
+        source: ai
+        ref: "2026-09-03"
+      - name: rationale-on-edge
+        source: ai
+        ref: "2026-09-03"
+      - name: drop-convention-clause
+        source: review
+        ref: "2026-09-03"
+      - name: disclose-unanswered-parent
+        source: review
+        ref: "2026-09-03"
+      - name: rationale-as-the-edge-prose
+        source: author
+        ref: "2026-09-03"
+    recommends: rationale-stays-with-node
+    boldness: moderate
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 under:
   - commons.systems/disposition-graph/under
@@ -42,29 +43,31 @@ under:
 The author, 2026-09-03:
 > 'Rationale' states that the node rationale stems from the node this node is under. Evaluate: would that always be the case? The disposition for the under edge seems to state this 'Ask "why does this question exist?"; the answer names its parent.' If so, does it make sense to make the 'rationale' the prose property of the under edge?
 
-## Alternatives
+## Facts
 
-### rationale-stays-with-node
+### answer
+
+#### rationale-stays-with-node
 
 The recommended option keeps the rationale as the node's own, why this answer stands, with the under edge carrying no prose; where a refinement is not evident from the two questions side by side, the rationale's first sentence says so. It rests on the separation of the warrant of an inference from the backing of a claim, on the observation that several rationales do not stem from the parent at all, and on the fact that a node with two parents would need two edge rationales but has one answer. It is the only option that is not a schema change.
 
-### because-clause-on-edge
+#### because-clause-on-edge
 
 Give each under entry a because clause and reserve the rationale for the answer, a schema change. The reviews' counter-argument backs it: it puts the refinement in structure exactly where the two questions do not show it, which is the case the recommended option leaves to a convention, so the projector can show why a node hangs where it does. Against it, a clause on every edge will be filled with restatements of the two questions in the common case, which is the drift the record resists elsewhere.
 
-### rationale-on-edge
+#### rationale-on-edge
 
 Move the whole rationale onto the under edge, making it the prose property of the edge as the author's question asks, a schema change of high boldness. It is the strongest reading of the author's words and the one the node's own analysis argues against, since why this question exists and why this answer stands are two justifications and only the first belongs to the edge.
 
-### drop-convention-clause
+#### drop-convention-clause
 
 Both reviews find the recommended option's second clause, that where a refinement is not evident the rationale's first sentence says so, to be a convention with no criterion and nothing to check it, and the finding is recorded as unchanged since the previous review. The candidate is the recommended option with that clause dropped, or with it made a validator rule so that it can fail.
 
-### disclose-unanswered-parent
+#### disclose-unanswered-parent
 
 The placement finding of 2026-09-03: rationale-edge stands at the ruling stage under the `under` node, which is at the maieutic stage with no draft and whose own account says its text is drafted only after tier and two other questions are ruled, one of which was kicked back with its recommendation withdrawn. This alternative adds one clause saying its parent is unanswered, which frontier-consistency requires be said, so that a ruling-stage node does not silently rest on maieutic ground; the finding also asks that rationale-edge be ruled before under is drafted. Raised on commons.systems/disposition-graph/namespaces, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/under.
 
-### rationale-as-the-edge-prose
+#### rationale-as-the-edge-prose
 
 The author's words carried here ask whether the rationale should be the prose property of the under edge, on the ground that under already says a parent is found by asking why the question exists. Rationale-edge carries the same words and offers three options, but its recommendation adopts the opposite, keeping the rationale as the node's own with no prose on the edge; the author's own leaning corresponds to its second and third options. (Raised on commons.systems/disposition-graph/under.)
 
@@ -74,10 +77,6 @@ The author's words carried here ask whether the rationale should be the prose pr
 ---
 question: Is the rationale the prose of the under edge?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/under
 ---

@@ -1,34 +1,33 @@
 ---
 question: Who is this repository for?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: low
-  amends: "7e0658e014ebf7b9b751a068f9e930037a776ca4"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: 7e0658e014ebf7b9b751a068f9e930037a776ca4
+  of: 976f4e45cbef5225580dbdc4431b57f47978e215
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+    recommends: standing
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
   - name: existence
-    choices:
-      - keep
-      - prune
-    adopts: prune
+    options:
+      - name: keep
+      - name: prune
+    recommends: prune
     boldness: low
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/purpose
 ---

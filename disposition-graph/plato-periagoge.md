@@ -1,39 +1,40 @@
 ---
 question: Does Plato's turning of the soul ground the periagogic conduct of the interview?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: high
-  amends: "0f30a15c1ff956bcde006cef7e51516c58570a67"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
-  of: 0f30a15c1ff956bcde006cef7e51516c58570a67
-alternatives:
-  - name: relation-diverged
-    source: review
-    ref: "2026-09-03"
-  - name: citation-once
-    source: review
-    ref: "2026-09-03"
+  of: b53f30941ddb339dc719cd8f186cb9eab6dd36fb
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: relation-diverged
+        source: review
+        ref: "2026-09-03"
+      - name: citation-once
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: high
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: high
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/growth
 source: Plato, Republic VII, 518b to 518d (education is not putting sight into blind eyes but turning the whole soul, the art of the turning, periagōgē) and 521c (the turning from what becomes to what is); also 515c to 516a, the prisoner turned toward the fire.
-relation: adopted
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
 ---
 ## Answer
 
@@ -43,13 +44,15 @@ Yes, for the conduct in which the record is authoritative and the author is turn
 
 Adopted as the name and the ground of the periagogic conduct. The divergence to keep in view: Plato's turning is toward the forms, while here it is toward a record the author wrote or accepted, so the authority that the turning appeals to is the author's own past decision, not a truth above the author.
 
-## Alternatives
+## Facts
 
-### relation-diverged
+### answer
+
+#### relation-diverged
 
 The reading's relation becomes diverged rather than adopted, recording what the rationale already names: Plato's turning is toward the forms, while here the turning is toward a record the author wrote or accepted, so the authority appealed to is the author's own past decision and not a truth above the author. Two reviews found the divergence stated in prose under a relation of adopted, which readings provides diverged for, and the session's reply says the author may rule the relation diverged.
 
-### citation-once
+#### citation-once
 
 The Republic loci are stated once, on this reading, and growth cites the reading instead of restating them. Growth's answer cites 518b to d while this node's source adds 521c and 515c to 516a, so the record gives the same conduct two citations and growth's periagogic movement requires probes cited by locus.
 

@@ -1,34 +1,33 @@
 ---
 question: How are nodes named across graphs?
 stage: ruling
-recommendation:
-  adopts: draft
-  boldness: moderate
-  amends: "75b18577aced0fec1e9425504e2d9e25328ef48c"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: 449e4fcc45ce1367ba23ed90fecc4d8bcf8a512c
-alternatives:
-  - name: draft
-    source: ai
-  - name: traditions-graph-declares-move
-    source: review
-    ref: "2026-09-03"
+  of: 472901e1a470cbb9d515cdff48d575e4d05da26a
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: draft
+        source: ai
+        ref: "2026-09-03"
+      - name: traditions-graph-declares-move
+        source: review
+        ref: "2026-09-03"
+    recommends: draft
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/model
 defines:
@@ -54,13 +53,15 @@ By import path, as Go names packages. A repository is a module named by its path
 
 The author's ruling of 2026-09-02. Traditions to record as readings: Go modules, whose `replace` directive is the shim's model; Unix mount namespaces, which map a path prefix to another tree.
 
-## Alternatives
+## Facts
 
-### draft
+### answer
+
+#### draft
 
 The draft adds to the standing answer one sentence creating the traditions graph: a graph may be a mount of what is not this project's own disposition, the traditions graph holding one root node per tradition the record reads, with a tradition that comes to have a graph of its own reached by the same path. It carries the same public-graph mount shim, now with the redirect obligation web-routing adopts, and a rationale naming the model of a tradition as a mount. It presumes traditions-home's recommended option, which is unruled, and the manifest entry that would create the graph is shown on traditions-home rather than here.
 
-### traditions-graph-declares-move
+#### traditions-graph-declares-move
 
 The counter-argument, twice recorded: the traditions graph inherits the manifest's shape for graphs that move, a target and a liquidation, and has neither, so the manifest would carry a graph of a third kind with no declared future, while the author's own model is that a tradition could be represented by its own graph, a move this entry does not anticipate and which web-routing's adopted principle would make owe redirects. This alternative gives the traditions graph a declared target and liquidation like the public graph's, one line in the manifest entry, so that every graph in the manifest declares its future.
 
@@ -70,10 +71,6 @@ The counter-argument, twice recorded: the traditions graph inherits the manifest
 ---
 question: How are nodes named across graphs?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/model
 defines:

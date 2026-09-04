@@ -1,36 +1,37 @@
 ---
 question: Do architecture decision records in the MADR form support encoding the dialogue state as alternatives with a recommendation among them?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: high
-  amends: "67e9eb68c573831ea8445c23e1e3069c4ce9b056"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 67e9eb68c573831ea8445c23e1e3069c4ce9b056
+  of: c38c74c977c5f7b56fe67c30fc32ef2a4180f413
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: divergence-narrows
+        source: ai
+        ref: "2026-09-04"
+    recommends: standing
+    boldness: high
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: high
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/dialogue
 source: Markdown Architectural Decision Records (MADR), the template at adr.github.io/madr, version 4 (Context and Problem Statement, Decision Drivers, Considered Options, Decision Outcome with its chosen option, consequences, and confirmation, Pros and Cons of the Options, More Information; a status of proposed, rejected, accepted, deprecated, or superseded by another record; decision-makers, consulted, and informed), descending from Michael Nygard's architecture decision records of 2011 (Context, Decision, Status, Consequences).
-relation: adopted
-alternatives:
-  - name: divergence-narrows
-    source: ai
-    ref: "2026-09-04"
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
 depends:
   - commons.systems/disposition-graph/viable-options
 ---
@@ -42,9 +43,11 @@ Supports it, and the dialogue state adopts its form. A MADR record lists the con
 
 Surfaced in the sitting on the dialogue node on 2026-09-03, when the author asked for the unanswered frontier to be encoded as a recommendation with dialogue state and a list of alternatives, and recorded under that node's rationale as the tradition the encoding adopts. Validated by the AI from its own knowledge of the template; deferred until the author reads it. Divergence recorded: the status is derived, not stored.
 
-## Alternatives
+## Facts
 
-### divergence-narrows
+### answer
+
+#### divergence-narrows
 
 Under the viable-options model the considered options persist after the decision as MADR keeps them, with the reasons each was not taken, so the recorded divergence narrows to what is stored: the stage is stored and the status is derived from the rulings on the facts, where MADR stores the status. The review's finding that the divergence as written was half wrong is met by the same narrowing. Raised on commons.systems/disposition-graph/viable-options.
 

@@ -1,13 +1,15 @@
 ---
 question: How are vocabulary and traditions laid out on the onboarding path?
 stage: periagogic
-alternatives:
-  - name: links-and-readings-block-suffice
-    source: ai
-    ref: "2026-09-03"
-  - name: vocabulary-page-projected
-    source: ai
-    ref: "2026-09-03"
+facts:
+  - name: answer
+    options:
+      - name: links-and-readings-block-suffice
+        source: ai
+        ref: "2026-09-03"
+      - name: vocabulary-page-projected
+        source: ai
+        ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/projection
 ---
@@ -17,13 +19,15 @@ The author, 2026-09-02:
 
 > Before bootstrap exit technical repo vocabulary like 'disposition', 'ratified', 'doctine' will need to be recorded on the onboarding path of the graph and clearly identified with appropriate layout in the documentation projection. References to tradition also need to be clearly called out with appropriate layout.
 
-## Alternatives
+## Facts
 
-### links-and-readings-block-suffice
+### answer
+
+#### links-and-readings-block-suffice
 
 One of the two candidates the account holds open for the sitting: the `defines` field and the browser as published already satisfy the author's disposition, because the browser links every occurrence of a defined term to the node that defines it and renders readings as a block set apart with source, locus and relation. On this reading nothing further is owed but a statement of where on the onboarding path vocabulary is met.
 
-### vocabulary-page-projected
+#### vocabulary-page-projected
 
 The alternative: a vocabulary page projected from the `defines` fields is owed, restoring in projected form what the first browser carried as a hand-written vocabulary page and what the author removed on 2026-09-03 because the browser states nothing of its own. It would place vocabulary and the calling-out of traditions explicitly on the onboarding path rather than leaving them to inline links.
 

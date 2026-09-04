@@ -1,45 +1,43 @@
 ---
 question: When is a disposition answered?
 stage: maieutic
-recommendation:
-  adopts: responses-on-decisions-and-children
-  boldness: low
-  amends: "b5717e656b723368acf1ad6f3609c7ab85c6a1a3"
-  at: "919cea3b"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: b5717e656b723368acf1ad6f3609c7ab85c6a1a3
-alternatives:
-  - name: page-in-ruling-order
-    source: author
-    ref: "2026-09-03"
-  - name: responses-on-decisions-and-children
-    source: ai
-    ref: "2026-09-04"
-  - name: child-ruling-held-until-the-parent
-    source: ai
-    ref: "2026-09-04"
-  - name: unanswered-is-no-ruling
-    source: author
-    ref: "2026-09-04"
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: page-in-ruling-order
+        source: author
+        ref: "2026-09-03"
+      - name: responses-on-decisions-and-children
+        source: ai
+        ref: "2026-09-04"
+      - name: child-ruling-held-until-the-parent
+        source: ai
+        ref: "2026-09-04"
+      - name: unanswered-is-no-ruling
+        source: author
+        ref: "2026-09-04"
+    recommends: responses-on-decisions-and-children
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
 depends:
   - commons.systems/disposition-graph/alignment-page
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
   - commons.systems/disposition-graph/viable-options
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/growth
 defines:
@@ -93,21 +91,23 @@ The author's ruling of 2026-09-03, quoted above. The bootstrap wrote its answers
 
 Why a confirmation ratifies: the recording node makes the confirmation the last movement before the stamp, and the three responses the author asked for are the ruling's three outcomes as that node classifies them, recorded, refined, or kicked back; a fourth response, defer, is not needed, because leaving a node unconfirmed is the deferral. Why the purpose node first: rank alone puts the public graph's root above this project's, since the purpose node stands under it, while the author's order recorded on the scope node begins at purpose; listing each graph in the manifest's order, by rank within it, gives the author's order without touching a rank. Rejected: reading the earlier ruling that unanswered nodes are hidden from the browser as covering every unanswered node, which would empty the browser of the record it documents; that ruling was made of nodes with no answer and is kept for them. Rejected: a fourth authority class, or a field, for unanswered, since the status is derived from the stamp and the answer and a stored copy would drift; marking an answered node unanswered while an alternative is pending, the author's own first suggestion of 2026-09-03, retracted by the author the same day, since a pending alternative is dialogue state beside the answer and the answer's authority does not lapse until one is confirmed, as the author ruled that day, quoted above. Rejected: leaving the deferred answers without a stage, which would keep the queue a reading of the stamps instead of a dialogue the page lists. Not adopted from the incumbent record: review-item nodes and a curriculum, since the queue is the unanswered nodes themselves.
 
-## Alternatives
+## Facts
 
-### page-in-ruling-order
+### answer
+
+#### page-in-ruling-order
 
 This answer lists every unanswered node on the alignment page in rank order, the purpose node first. The alignment-order draft orders the alignment frontier by the ruling order, the node whose ruling settles the most first, with rank as tie-break; the alternative amends the page order accordingly, and amends "the purpose node first" with it: on the amended count, which counts what a ruling makes decidable elsewhere and not the alternatives it closes on itself, the first node is commons.systems/public/agency, the sole root, whose unanswered subtree is every other node in the record, and the purpose node is second, its only child. The page pages in one order across the manifest's graphs, the graph shown as a label on each node, since a graph precedence would put a descendant's ruling before its ancestor's. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 
-### responses-on-decisions-and-children
+#### responses-on-decisions-and-children
 
 The description of the alignment page leaves this answer for the node that asks the page's question, which subsumes `page-in-ruling-order`, and the three responses gain two rules the record did not have. A response may be given on one of the decisions a node's ruling asks, the reserved facts the dialogue node names, and a denial on one decision is a kickback on that decision while the responses on the others are kept. And a response on a node stands whether or not its parent has been ruled, with a later parent's ruling that contradicts it recorded as an alternative on the child and put to the author rather than applied over their stamp. Adopted by the recommendation, and set out in the fence.
 
-### child-ruling-held-until-the-parent
+#### child-ruling-held-until-the-parent
 
 A confirmation on a child given while the parent is open is held and recorded when the parent is ruled, by analogy with the confirmation held until the review runs. Against it: the review is a step in producing the draft the author is confirming, so a confirmation before it confirms something unfinished, while a parent's ruling is no part of producing the child's draft. Holding a ruling the author gave would make their ratification wait on a question they did not ask about, and the alignment-order node is explicit that the author's choice of what comes next is their own order.
 
-### unanswered-is-no-ruling
+#### unanswered-is-no-ruling
 
 Unanswered is the state of a node no ruling grants: nothing on it acts, and it is reconciled only on an explicit grant. Deferred is not that state but a class the author confers on the authority fact, beside ratified and delegated, under which the recommendation acts and the node stays on the alignment frontier; the answer's ground for rejecting a fourth response, that leaving a node unconfirmed is the deferral, no longer holds, and no fourth response is needed, since the deferral is a choice on a fact. The alignment frontier becomes every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling. The three responses and the status derived rather than stored are unchanged. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
@@ -117,10 +117,6 @@ Unanswered is the state of a node no ruling grants: nothing on it acts, and it i
 ---
 question: When is a disposition answered?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/growth
 defines:

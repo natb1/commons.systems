@@ -1,38 +1,40 @@
 ---
 question: Does the requirements-specification tradition support opening with purpose, then scope, then references?
 stage: ruling
-recommendation:
-  adopts: draft
-  boldness: moderate
-  amends: "686388606159b2b7c10aacf520c592e38d170982"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: 52a05465b7b4abe375d21c72131b254b97f59a1e
-alternatives:
-  - name: draft
-    source: ai
-  - name: record-overview-divergence
-    source: review
-    ref: "2026-09-03"
+  of: acffe2489b0ad9c7c0eb93bb1444595d6a9d31f4
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: draft
+        source: ai
+        ref: "2026-09-03"
+      - name: record-overview-divergence
+        source: review
+        ref: "2026-09-03"
+    recommends: draft
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: moderate
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/purpose
 source: IEEE Std 830-1998, Recommended Practice for Software Requirements Specifications, section 1 (Purpose, Scope, Definitions, References, Overview); ISO/IEC/IEEE 29148:2018, section 9, the SRS outline (purpose, scope, product overview, definitions).
-relation: adopted
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
 ---
 ## Disposition
 
@@ -47,13 +49,15 @@ Supports. The tradition opens a specification with purpose, then scope, then the
 
 Validated by the AI from its own knowledge of the standards on 2026-09-02; deferred until the author reads the sections. The one divergence to record: an SRS is a document about one product release, while this graph is a standing record, so "scope" here is a node that can be re-answered rather than a section that is rewritten.
 
-## Alternatives
+## Facts
 
-### draft
+### answer
+
+#### draft
 
 The draft re-orients the reading on the author's words of 2026-09-02. Where the standing answer says the tradition opens with purpose, then scope, then the intended audience and definitions, and adopts purpose, scope, audience and the vocabulary-defining nodes, the draft states the standard's own order, purpose, scope, definitions, references, overview, and adopts only the first two: definitions are met through the terms each node defines, the overview is left to projections shaped like an introduction, and the intended readers are stated inside purpose. It also drops the standing answer's settling of scope against purpose as a starting place. The rationale records the re-orientation and keeps the one divergence, that a specification is about one release while this graph is a standing record.
 
-### record-overview-divergence
+#### record-overview-divergence
 
 Both readings found a second divergence the draft's rationale does not record: the standard has an Overview section and this graph defers the overview to projections rather than to a node, which evaluation calls an unrecorded conflict with a cited tradition. The session's reply left it owed at the sitting. This alternative is the draft with both divergences recorded, the handling of definitions through links and the deferral of the overview, and the relation stated against them.
 
@@ -63,10 +67,6 @@ Both readings found a second divergence the draft's rationale does not record: t
 ---
 question: Does the requirements-specification tradition support opening with purpose, then scope, then references?
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/purpose
 source: IEEE Std 830-1998, Recommended Practice for Software Requirements Specifications, section 1 (Purpose, Scope, Definitions, References, Overview); ISO/IEC/IEEE 29148:2018, section 9, the SRS outline (purpose, scope, product overview, definitions).

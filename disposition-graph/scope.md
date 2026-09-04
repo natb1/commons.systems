@@ -1,39 +1,39 @@
 ---
 question: What does this repository cover, and in what order?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "261ffa74ad0d8e02d42c421649e8996036cace9c"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 261ffa74ad0d8e02d42c421649e8996036cace9c
-alternatives:
-  - name: derived-boosts
-    source: ai
-  - name: check-instrument
-    source: ai
-  - name: say-instrument-not-criterion
-    source: review
-    ref: "2026-09-03"
-  - name: order-names-self-documentation
-    source: ai
-    ref: "2026-09-03"
+  of: 33d06c42cce07aa1778d00c2c928ebb9fd4479e0
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: derived-boosts
+        source: ai
+        ref: "2026-09-03"
+      - name: check-instrument
+        source: ai
+        ref: "2026-09-03"
+      - name: say-instrument-not-criterion
+        source: review
+        ref: "2026-09-03"
+      - name: order-names-self-documentation
+        source: ai
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 boost: 9
 order:
   - [commons.systems/disposition-graph/scope, commons.systems/disposition-graph/projection]
@@ -80,21 +80,23 @@ The boosts of 2026-09-03 realize the order: this node 9 under purpose, above mod
 
 How high-level rank is materialized from this node, the recommendation. The order is recorded on this node as data, the field `order`, an ordered list of steps, each step one node or several that are equal, and the validator refuses a graph whose derived ranks do not realize it: every member of a step outranks every member of every later step, and the members of the first step are outranked by nothing under this node's parent but their own ancestors and descendants. The boosts remain the one mechanism of rank and the frontier and browser keep showing them; the order is recorded once; and since every landing on the graph is validated first, a boost that contradicts the order cannot land, which is what avoiding drift requires. This is the way the record already keeps its other invariants that span nodes, acyclicity and resolved parents. Considered and not recommended: deriving the boosts of the named nodes from the order, which needs a solver that must lift ancestors to lift a descendant, cannot make ranks at different depths equal, and fails in exactly the cases the validation rule reports, while hiding the boosts the projections display; a check instrument on this node, since an instrument measures the implementation against the record and turns a failure into work for the reconciliation loop, whereas an order the ranks contradict is an inconsistency of the record that must not land at all; moving the ordered nodes under this one so that the order becomes sibling order, which would make the tree carry priority, the conflation the attention node rejects; and leaving the boosts as the only record, which is the drift. This node defines the field, and the validator has held the ranks to it since 2026-09-03; the hand-set boosts declared as a shim that day were liquidated the same day.
 
-## Alternatives
+## Facts
 
-### derived-boosts
+### answer
+
+#### derived-boosts
 
 Instead of validating the boosts against the order, derive them from it: a solver reads the order field and writes the boosts of the named nodes, so the order is the only hand-written record of high-level rank. The rationale considered and did not recommend it, because the solver must lift ancestors to lift a descendant, cannot make ranks equal at different depths, and hides the boosts the projections display; the Proposal nonetheless puts the mechanism to the author against the three alternatives it names.
 
-### check-instrument
+#### check-instrument
 
 Instead of a validator rule, hang a check instrument on this node that measures the ranks against the order and reports a failure as work for the reconciliation loop. The rationale prefers the validator on the ground that an order the ranks contradict is an inconsistency of the record that must not land at all, rather than a gap between record and implementation; the author may prefer the instrument, which lets a contradicting boost land and be reconciled.
 
-### say-instrument-not-criterion
+#### say-instrument-not-criterion
 
 The vocabulary finding makes instruments the survivor of criterion and holds that it must be ruled before the nodes that use the word. Until then scope's answer says instrument, the term instruments actually defines, or discloses that the term arrives with instruments. (Raised on commons.systems/disposition-graph/instruments.)
 
-### order-names-self-documentation
+#### order-names-self-documentation
 
 Scope's order field substitutes the projection node for the author's own item, self documentation via the graph browser, and its validator rule materializes that substitution. If self-documentation becomes a node of its own the first step of the order must name it instead, so the alternative is that scope's answer say the mapping stands only until self-documentation is ruled, and that the substitution is the one item the AI changed in the author's list. (Raised on commons.systems/disposition-graph/self-documentation.)
 

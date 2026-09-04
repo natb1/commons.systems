@@ -1,38 +1,36 @@
 ---
 question: In what order is a landing validated?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "8cefe40587eca1be05c749fcf976173d4f6e7016"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 8cefe40587eca1be05c749fcf976173d4f6e7016
-alternatives:
-  - name: deferred-until-ruling-quoted
-    source: review
-    ref: "2026-09-03"
-  - name: traditions-to-readings
-    source: review
-    ref: "2026-09-03"
-  - name: smaller-contract-instead-of-ordering
-    source: review
-    ref: "2026-09-03"
+  of: b9ff1d01658ddd46ef76c3368e4112e75a6ef80b
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: deferred-until-ruling-quoted
+        source: review
+        ref: "2026-09-03"
+      - name: traditions-to-readings
+        source: review
+        ref: "2026-09-03"
+      - name: smaller-contract-instead-of-ordering
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/work-loop
 defines:
@@ -47,17 +45,19 @@ Functional before non-functional. A criterion is functional when it is specific 
 
 The author's ruling of 2026-09-02 and the legacy record it points to: the criteria-class axis and the staged ordering ratified 2026-09-01 on the legacy node `strategy-graph-native-dispatch`, marked author-required there, "non-functional assessment production gates on a passing functional assessment, so no cycles are spent polishing non-working code", with the staged order named the between-class damper after one change thrashed sixteen review rounds with no fixed point. The legacy instrument's implement, qa, review order was the interim embodiment; here the order is a rule on the frontier, not a phase. Traditions the legacy record cites, owed as readings: the maxim make it work, make it right, make it fast, commonly attributed to Kent Beck, adopted; over-processing as one of the seven wastes (Ohno, Toyota Production System, 1978), adopted; the separation of functional suitability from the other quality characteristics in ISO/IEC 25010, adopted for the class axis; Deming, Out of the Crisis (1986), point 3, diverged from in keeping adversarial review, as recorded on the review node.
 
-## Alternatives
+## Facts
 
-### deferred-until-ruling-quoted
+### answer
+
+#### deferred-until-ruling-quoted
 
 The node carries no Disposition section, and its only quotation is from a legacy node whose ratification legacy and evaluation both forbid from carrying authority here. The alternative is that the author's 2026-09-02 ruling be quoted with its date under Disposition and the legacy node cited as evidence only, or, failing that, that the recommendation change from ratified to deferred.
 
-### traditions-to-readings
+#### traditions-to-readings
 
 The rationale carries a four-item prose tradition list, make it work make it right make it fast, Ohno's seven wastes, ISO/IEC 25010 and Deming, which readings' recommended text forbids and which stub-traditions names this node among. The alternative strikes the list and mints the four as readings under this node when the readings rule is ruled.
 
-### smaller-contract-instead-of-ordering
+#### smaller-contract-instead-of-ordering
 
 The reviewer's counter-argument, twice: the two classes are not separable, since type safety and test integrity condition a functional assessment being meaningful rather than polish after it passes, and a security defect found after a landing costs more than the ordering saves. The evidence for the rule is one thrash of sixteen rounds, which the review node explains by a growing diff rather than by class ordering, so the alternative answers the question with a bound on the size of a landing's contract instead of a schedule between the classes. ISO/IEC 25010, adopted here for the class axis, separates the characteristics without ordering their assessment.
 

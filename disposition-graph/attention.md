@@ -1,38 +1,36 @@
 ---
 question: How is attention allocated?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "989b0c57e87d5795bcd6082b62f46d37144ab633"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
-  of: 989b0c57e87d5795bcd6082b62f46d37144ab633
-alternatives:
-  - name: author-states-the-order
-    source: review
-    ref: "2026-09-03"
-  - name: rank-moves-here
-    source: review
-    ref: "2026-09-03"
-  - name: rank-orders-reconciliation-only
-    source: author
-    ref: "2026-09-03"
+  of: b5cab25eecbb77967324bc260ea5a2d68db896e3
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: author-states-the-order
+        source: review
+        ref: "2026-09-03"
+      - name: rank-moves-here
+        source: review
+        ref: "2026-09-03"
+      - name: rank-orders-reconciliation-only
+        source: author
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/model
 defines:
@@ -55,17 +53,19 @@ By rank, which is one fact with three readings. Rank is computed from the `under
 
 The author's ruling of 2026-09-02 that ranking serves onboarding. Prerequisites come from `under` and importance from rank, so a pedagogical order and a priority order do not fight: the walk descends the tree and orders siblings by rank. Rejected: choosing a parent to change priority. The author, 2026-09-03, quoted above: priority is encoded as rank, and the shim bites the frontier in rank order, purpose and the browser first, then the alignment skill, then the harness context, then the non-shim reconciliation harness. The boosts of 2026-09-03 transcribe that order among the children of model, projection above growth above the work loop, with values the AI chose and the author has not ratified; the earlier boost of the same day, model first under purpose, stands. Later on 2026-09-03 the author recorded the high-level order on the scope node, and the boosts of the nodes it names were reset to realize it: the scope node 9 under purpose and session-context 6 under projection, raised from 2 because at 2 it ranked below the work loop; the validator holds the ranks to that order since 2026-09-03. A browser node was not added for rank: a child's rank is a share of its parent's, so the browser bite ranks first through projection's boost, and a browser node is owed by projection's shim at its sitting.
 
-## Alternatives
+## Facts
 
-### author-states-the-order
+### answer
+
+#### author-states-the-order
 
 The reviewer's strongest counter-argument, made twice: one scalar cannot carry a teaching order, a work order and a compaction floor, and this node records the proof, since session-context at boost 2 ranked below the work loop against the author's order of the same day, and the fix was a hand-raised boost and then a whole new order field on scope. The alternative the answer never considers is to let the author state the order and derive nothing, with the recorded order as the mechanism and boost as at most a tie-break. It would make scope's order field the rule rather than a constraint on a derived rank.
 
-### rank-moves-here
+#### rank-moves-here
 
 The decomposition finding proposes that 'rank' move from under's `defines` to attention's, since attention already answers how rank is computed and read, leaving under as the edge alone. Under answers four questions at once and stands at the maieutic stage with no drafted text, while four ruling-stage nodes rest on the term. Verified: under's defines carries rank and attention's carries only boost and the onboarding path. The session accepted the substance and left the ruling to under's sitting. Raised on commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/under.
 
-### rank-orders-reconciliation-only
+#### rank-orders-reconciliation-only
 
 The author's words on alignment-order, 2026-09-03: attention's second reading of rank, "where work goes first", originally referred to the reconciliation frontier and predates the alignment frontier. The alternative amends the second reading to say so: rank orders the reconciliation frontier and the onboarding path, and the alignment frontier is ordered by the ruling order the alignment-order node defines, with rank as its tie-break. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 

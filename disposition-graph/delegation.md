@@ -1,28 +1,30 @@
 ---
 question: How is work divided between the main thread and subagents?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: low
-  amends: "f502a72fb724801305671c884e3c090573471853"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: f502a72fb724801305671c884e3c090573471853
+  of: bf56eead33b7920c7b53f80973bf2531a753e69b
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: reconciliation-session-writes-options
+        source: author
+        ref: "2026-09-04"
+    recommends: standing
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 tier: global
 under:
   - commons.systems/disposition-graph/growth
@@ -30,10 +32,6 @@ defines:
   - main thread
   - unit
   - subagent
-alternatives:
-  - name: reconciliation-session-writes-options
-    source: author
-    ref: "2026-09-04"
 depends:
   - commons.systems/disposition-graph/viable-options
 ---
@@ -50,9 +48,11 @@ The main thread is the session that holds the interview and the record: it inter
 
 The author's rulings of 2026-09-02, that implementation is delegated by unit, model, and effort, and of 2026-09-03: "new disposition (should affect both alignment and bootstrap/reconciliation shims): debugging activities like those are prime candidates for subagents - driving a browser with max effort fable is very expensive. Debugging context can be verbose and pollute the main thread." The rule binds the alignment session and the reconciliation sessions alike; during bootstrap it is projected into the operations document and the alignment skill. Rejected: a fixed model for every task, because the cost is set by the most capable model at full effort and most units do not need it; letting the main thread investigate when a question seems small, because the size of a debugging context is unknown until it has been read.
 
-## Alternatives
+## Facts
 
-### reconciliation-session-writes-options
+### answer
+
+#### reconciliation-session-writes-options
 
 The sentence binding a reconciliation session never to write the graph is amended as work-loop's is: the session's main thread may record a viable option on a fact and move its recommendation, within scope, and never rules, edits a ruling, or edits the author's words. A subagent still never edits a node. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 

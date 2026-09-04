@@ -1,16 +1,17 @@
 ---
 question: How does this repository document itself?
 stage: maieutic
-alternatives:
-  - name: section-of-its-own
-    source: author
-    ref: "2026-09-03"
 facts:
+  - name: answer
+    options:
+      - name: section-of-its-own
+        source: author
+        ref: "2026-09-03"
   - name: existence
-    choices:
-      - keep
-      - prune
-    adopts: keep
+    options:
+      - name: keep
+      - name: prune
+    recommends: keep
     boldness: moderate
 under:
   - commons.systems/disposition-graph/purpose
@@ -20,13 +21,13 @@ under:
 The author, 2026-09-03, in the high-level order recorded on the scope node:
 > purpose -> [scope, self documentation (via the graph browser)] (equal) -> alignment -> harness context management -> reconciliation -> rsi
 
-## Alternatives
+## Facts
 
-### section-of-its-own
+### answer
+
+#### section-of-its-own
 
 Self-documentation is a section of its own, this node under purpose, answering that the record is its own documentation, read through the graph browser in rank order, with a boost equal to scope's so that the equality the author stated is exact and scope's order field names this node in its first step. The browser's own disposition, owed by projection's shim, would then live under it. This is what the author's own words place in the high-level order, self documentation via the graph browser, equal with scope; the session also noted the author's remark that the browser may need a high-ranking disposition of its own.
-
-## Facts
 
 ### existence
 

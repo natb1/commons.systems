@@ -1,40 +1,39 @@
 ---
 question: What is a node?
 stage: maieutic
-recommendation:
-  adopts: four-form-draft
-  boldness: moderate
-  amends: "7f819037912b5f0a31a839f35624b060e4ba9c6a"
-  at: "9e3a66240872d3512a3acf085f3154b9004028a2"
 review:
   verdict: kickback
   strength: strong
   date: 2026-09-03
   of: 50b9ea4f40a07e8facf86b081e6183c2381cce21
-alternatives:
-  - name: four-form-draft
-    source: ai
-  - name: five-forms-restored
-    source: review
-    ref: "2026-09-03"
-  - name: un-aligned-disposition-not-open-question
-    source: review
-    ref: "2026-09-03"
-  - name: absorb-form-vocabulary
-    source: review
-    ref: "2026-09-03"
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: four-form-draft
+        source: ai
+        ref: "2026-09-03"
+      - name: five-forms-restored
+        source: review
+        ref: "2026-09-03"
+      - name: un-aligned-disposition-not-open-question
+        source: review
+        ref: "2026-09-03"
+      - name: absorb-form-vocabulary
+        source: review
+        ref: "2026-09-03"
+    recommends: four-form-draft
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/model
 defines:
@@ -72,21 +71,23 @@ One question and its standing answer. The question is one line someone could ask
 
 One question per node makes "same scope" decidable: two texts share a node only if one replaced the other. Rejected: the node as a topic, which mixes authority in one text; the node as a cluster around a default scope; history kept inside the node. Traditions to record as readings: issues as questions (Kunz and Rittel, IBIS, 1970); the answer as an accumulated restatement (the common-law restatement); store once and derive the rest (Codd). An archē is held, never derived, so nothing ranks above one: Metaphysics V.1 on the senses of archē, Posterior Analytics I.3 on the regress of demonstration, Nicomachean Ethics I.4 on beginning from what is known to us, each owed as a reading.
 
-## Alternatives
+## Facts
 
-### four-form-draft
+### answer
+
+#### four-form-draft
 
 The Draft this node carries collapses the five forms to four: target and rule merge as disposition, with achieve or maintain carried by the criteria; archē and reading stay; tradition is added as a form. It also replaces the un-aligned-disposition sentence with a stamp rule, that every node carries a stamp or is an open question, and moves assumption out of the forms into a criterion kind. Its frontmatter uses a criteria key the schema does not have and drops instrument from defines while the node still carries an instrument block, so it could not land as written.
 
-### five-forms-restored
+#### five-forms-restored
 
 The second review kicked the node back and the contradiction finding, which makes forms the survivor, proposes the recommended text revert to five forms and its summary be rewritten, since it still states the four-form merge and the assumption-is-a-criterion clause that forms' own reply withdrew, and no criterion in the record carries the achieve-or-maintain marker the merge rested on. It also restores the sentence that a node with a question and no answer is an un-aligned disposition, which is the schema node's only statement of the term the validator's message quotes, and leaves whether a tradition carries a form of its own to traditions-home. Node's reply accepts all of this and defers the redraft to the sitting, so it is owed and the text still carries the merge. Raised on commons.systems/disposition-graph/instruments.
 
-### un-aligned-disposition-not-open-question
+#### un-aligned-disposition-not-open-question
 
 The vocabulary finding holds that transience is the survivor of the term: un-aligned disposition is defined there and open question is defined by no node while fifteen use it. Node's recommended text still says 'Every node carries a stamp, or it is an open question awaiting its answer', and node's own statement of the rule was struck. The finding proposes node take the defined term instead, restoring 'a node with a question and no answer is an un-aligned disposition', which is the sentence the validator's message quotes. Raised on commons.systems/disposition-graph/transience, commons.systems/disposition-graph/growth.
 
-### absorb-form-vocabulary
+#### absorb-form-vocabulary
 
 The redundancy finding makes projection and readings the survivors of the linking rules and proposes that this node be folded into node's rationale as a rejected alternative and pruned. Node already carries the author's quotation verbatim, so the fold costs no words; what it adds to node is the recorded rejection of one node per form, on the ground that each such node would restate the definition its owning node already carries. (Raised on commons.systems/disposition-graph/form-vocabulary.) Also raised on commons.systems/disposition-graph/projection.
 
@@ -96,10 +97,6 @@ The redundancy finding makes projection and readings the survivors of the linkin
 ---
 question: What is a node?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/model
 defines:

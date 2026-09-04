@@ -1,40 +1,39 @@
 ---
 question: How is the unanswered frontier kept consistent with itself?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "a870b3a1ce42036ac4ddc5422ca46bb8176838f0"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: a870b3a1ce42036ac4ddc5422ca46bb8176838f0
-alternatives:
-  - name: new-question-or-new-answer
-    source: author
-    ref: "2026-09-03"
-  - name: split-survey-from-per-draft
-    source: review
-    ref: "2026-09-03"
-  - name: cite-run-mechanics
-    source: ai
-  - name: placement-feeds-the-order
-    source: author
-    ref: "2026-09-03"
+  of: 97906aa77d607f1befdb4d4d1a613eedaabfdc34
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: new-question-or-new-answer
+        source: author
+        ref: "2026-09-03"
+      - name: split-survey-from-per-draft
+        source: review
+        ref: "2026-09-03"
+      - name: cite-run-mechanics
+        source: ai
+        ref: "2026-09-03"
+      - name: placement-feeds-the-order
+        source: author
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/clean-context-review
 defines:
@@ -94,21 +93,23 @@ Drift between unanswered nodes is invisible to any reading of one node: the seco
 
 The merge validation and the batch scope were added on 2026-09-03 under the author's bootstrap grant, quoted above, when the frontier was re-encoded with the merge analysis the author's words ask for: the batch is the nodes at the review stage, the context is the full graph, and the author's earlier words that every invocation evaluates the full unanswered frontier are kept as the context read and narrowed as to what is judged. Rejected: a review of each node in a context of its own, the previous answer of the clean-context-review node, which sees only the round's drafts named for it and never the frontier's drift; a validator rule for consistency, since a validator holds ids, edges, ranks, and shapes, and whether two answers disagree is judgment; a survey at reconciliation time, which is too late, the implementation being built by then on inconsistent drafts. Kept from the previous answer: the clean context, a fresh subagent that is never a fork, since the review must be independent of the sitting's framing even while it reads everything the sitting wrote.
 
-## Alternatives
+## Facts
 
-### new-question-or-new-answer
+### answer
+
+#### new-question-or-new-answer
 
 The author's words on the sitting of dialogue name the analysis of whether a disposition is a new question or a new answer to a question already recorded as performed by periagoge and by the adversarial review. Validation 15 now carries it for the review; the standing answer's periagogic sentence covers a draft's inconsistency with the answered graph and not this analysis. This alternative is the answer with the analysis named as belonging to the periagogic stage as well as to the review, so that a sitting checks it before a draft exists and not only when the batch is read.
 
-### split-survey-from-per-draft
+#### split-survey-from-per-draft
 
 The review's counter-argument, which the session's reply left standing as a proposal a sitting may put: validations one to six duplicate what the recording node already requires of every draft review, so every batch pays twice for the per-node pass. The alternative splits the two: the survey, validations seven to fourteen, runs over the whole frontier at every invocation, while the per-draft review runs only on drafts that changed since their last reading. It keeps the author's requirement that inconsistency within the frontier be surfaced and bounds the cost of an unbounded reading over sixty-odd nodes.
 
-### cite-run-mechanics
+#### cite-run-mechanics
 
 Both nodes state the same two run rules in full: that every invocation is one batch over the whole frontier read in one context, and that one review runs at a time by the invoking session's discipline until a lock exists. Clean-context-review is the survivor of the run mechanics, since its question is how the review is run and it is the node the skill implements. Frontier-consistency cites it for the batch scope and the serialization and keeps what is its own, the fifteen validations and the kickback flow, so that drift between the two restatements cannot open. (Raised on commons.systems/disposition-graph/clean-context-review.)
 
-### placement-feeds-the-order
+#### placement-feeds-the-order
 
 Validation 13, placement and order, has the review recommend the order in which the author rules, and nothing consumed the recommendation of 2026-09-03. The alignment-order draft gives it a consumer: the review's findings of contradiction, supersession, and redundancy between unanswered nodes are recorded as alternatives on the earlier-recorded survivor, and its findings of divergence between subtrees as `depends` on the leaves, and the ruling order is derived from that data rather than recommended in prose. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 

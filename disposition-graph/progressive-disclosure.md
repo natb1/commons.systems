@@ -1,27 +1,29 @@
 ---
 question: What does progressive disclosure say about which decisions the page asks and which it folds?
 stage: maieutic
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "fc0f9325998248c689c8b084cf094597e50f7edb"
-  at: "919cea3b"
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-04"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: moderate
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-04
 under:
   - commons.systems/disposition-graph/alignment-page
 source: Nielsen, Usability Engineering (1993), chapter 5 on minimalist design, and "Progressive Disclosure" (Nielsen Norman Group, 2006); Carroll, The Nurnberg Funnel (1990), the minimalist instruction programme it descends from; Krug, Don't Make Me Think (2000).
-relation: adopted
+bears:
+  - fact: answer
+    option: three-column-ruling-screen
+    relation: adopted
 ---
 ## Answer
 

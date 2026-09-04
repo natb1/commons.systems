@@ -1,42 +1,43 @@
 ---
 question: Does the web-routing tradition support addressing every node of the browser?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "74904a88c15edb6ed067605b3ee2c0fe1f5216de"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 74904a88c15edb6ed067605b3ee2c0fe1f5216de
-alternatives:
-  - name: narrow-fielding-citation
-    source: review
-    ref: "2026-09-03"
-  - name: split-the-sources
-    source: review
-    ref: "2026-09-03"
-  - name: divergence-as-shim
-    source: review
-    ref: "2026-09-03"
+  of: b2f24269ce14ca0e05593e53ba7d04ca2a21807f
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: narrow-fielding-citation
+        source: review
+        ref: "2026-09-03"
+      - name: split-the-sources
+        source: review
+        ref: "2026-09-03"
+      - name: divergence-as-shim
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: moderate
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/projection
 source: Fielding, Architectural Styles and the Design of Network-based Software Architectures (2000), chapter 5, identification of resources by URI; Berners-Lee, "Cool URIs don't change" (1998); the HTML Living Standard, the History interface (pushState, replaceState, popstate) and fragment navigation; Nielsen, "URL as UI" (1999).
-relation: adopted
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
 ---
 ## Disposition
 
@@ -51,17 +52,19 @@ Supports. The tradition holds that everything a reader can reach has an address,
 
 Recorded at the author's direction on 2026-09-03 after the address was seen not to change on navigation in the framed viewer, and tested the same day: the viewer neither passes a fragment in nor reflects one out. Validated by the AI from its own knowledge of the sources; deferred until the author reads them.
 
-## Alternatives
+## Facts
 
-### narrow-fielding-citation
+### answer
+
+#### narrow-fielding-citation
 
 The source field is rewritten so that Fielding chapter 5 is cited for the principle of identification by address only, and the fragment mechanism is cited to the HTML Living Standard's History interface and fragment navigation. A fragment is resolved client-side and is never seen by a server, so citing Fielding for a fragment scheme is loose. The session accepted the narrowing twice and the frontmatter still lists Fielding first among four sources unchanged.
 
-### split-the-sources
+#### split-the-sources
 
 The node's four sources under one relation of adopted are split into separate readings, or the answer states that the single relation covers the group. Readings speaks of a reading's source, locus and relation in the singular, so if one of the four were later diverged from, one relation could not say so.
 
-### divergence-as-shim
+#### divergence-as-shim
 
 The host's divergence, that a framed page can neither show nor receive its address so the page keeps the reader's place itself, leaves this answer and becomes part of projection's browser shim with a liquidation condition. As a clause in an answer it is a stand-in for an unmade materialization that the frontier cannot read, which transience makes a shim.
 

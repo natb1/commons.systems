@@ -1,27 +1,29 @@
 ---
 question: Does the master-detail tradition support ruling one node at a time from the rail?
 stage: maieutic
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "454a29622e5eac6b87849147545d0c51f987bae2"
-  at: "919cea3b"
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-04"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: moderate
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-04
 under:
   - commons.systems/disposition-graph/alignment-page
 source: Tidwell, Designing Interfaces (2nd edition, 2011), the Two-Panel Selector pattern, also given there as master-detail; Microsoft, The Windows Interface Guidelines for Software Design (1995), the explorer and master-detail window styles; Apple, Human Interface Guidelines, split views and source lists.
-relation: adopted
+bears:
+  - fact: answer
+    option: three-column-ruling-screen
+    relation: adopted
 ---
 ## Answer
 

@@ -1,68 +1,66 @@
 ---
 question: How does the graph grow?
 stage: maieutic
-recommendation:
-  adopts: boldness-reversed
-  boldness: low
-  amends: "2f75c4a5f319a25611a615e86d33499292c12b6e"
-  at: "919cea3b"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: ba115e9727a9c3000ba85a9dca2cb63d7b1ebd70
-alternatives:
-  - name: split-presentation-and-movements
-    source: review
-    ref: "2026-09-03"
-  - name: define-sitting
-    source: review
-    ref: "2026-09-03"
-  - name: cite-unanswered-for-responses
-    source: review
-    ref: "2026-09-03"
-  - name: facts-from-recommendation-field
-    source: review
-    ref: "2026-09-03"
-  - name: partial-ratification
-    source: review
-    ref: "2026-09-03"
-  - name: strike-phantom-depends
-    source: review
-    ref: "2026-09-03"
-  - name: cite-the-reading
-    source: review
-    ref: "2026-09-03"
-  - name: queue-in-ruling-order
-    source: author
-    ref: "2026-09-03"
-  - name: boldness-reversed
-    source: review
-    ref: "2026-09-03"
-  - name: boldness-left-and-dialogue-corrected
-    source: ai
-    ref: "2026-09-04"
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: split-presentation-and-movements
+        source: review
+        ref: "2026-09-03"
+      - name: define-sitting
+        source: review
+        ref: "2026-09-03"
+      - name: cite-unanswered-for-responses
+        source: review
+        ref: "2026-09-03"
+      - name: facts-from-recommendation-field
+        source: review
+        ref: "2026-09-03"
+      - name: partial-ratification
+        source: review
+        ref: "2026-09-03"
+      - name: strike-phantom-depends
+        source: review
+        ref: "2026-09-03"
+      - name: cite-the-reading
+        source: review
+        ref: "2026-09-03"
+      - name: queue-in-ruling-order
+        source: author
+        ref: "2026-09-03"
+      - name: boldness-reversed
+        source: review
+        ref: "2026-09-03"
+      - name: boldness-left-and-dialogue-corrected
+        source: ai
+        ref: "2026-09-04"
+    recommends: boldness-reversed
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
   - name: persistence
-    choices:
-      - both shims kept
-      - the page's shim moved out
-    adopts: the page's shim moved out
+    options:
+      - name: both shims kept
+      - name: the page's shim moved out
+    recommends: the page's shim moved out
     boldness: low
 depends:
   - commons.systems/disposition-graph/alignment-page
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 boost: 4
 under:
   - commons.systems/disposition-graph/model
@@ -123,49 +121,49 @@ By a loop of three moves. Draft: the AI writes a node, or an amendment, in the r
 
 The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost. The author, 2026-09-03, on the presentation of recommendations: "recommended disposition are always presented for review before recording and always include the authority, boldness AND if it is a persistent or some transient form of disposition (eg. shim) ... This way I know if I am approving some transient stop-gap or something that will persist in the graph." The author, 2026-09-03, on the two-stage rule and the skill shim: "Ratified on the rule. Ratified on the shim." The author, 2026-09-03, on dispositions stated mid-sitting: "we expect that alignment dialogues like this one (which is mixed in with ad-hoc reconciliation during bootstrap) will trigger recursive disposition statements from the author. This is supported usage of the alignment skill. The expected behavior of the skill is to queue each disposition (newly stated or via node_id) in some state that persists across alignment context compaction. Are these new un-aligned dispositions - dispositions that aren't just unratified/unreviewed, but haven't even survived the alignment dialog yet." And later that day: "Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact). The alignment artifacts outputs are consumed by the greenfield/shimmed alignment skill." Kept in force from the incumbent alignment skill, as principles and never as mechanics: fable as the default model, landing location never asked of the author, the mechanical floor, one question per node, whole-node amendment, doctrine currency before a round; rejected from it: issue trackers, tactics, phases, the router and its gates, born-parked review, placement gates, the curriculum, and the skill's own text as authority (evidence: `bootstrap/align-survey.md` on the implementation ref).
 
-## Alternatives
+## Facts
 
-### split-presentation-and-movements
+### answer
+
+#### split-presentation-and-movements
 
 Growth's answer is one paragraph answering at least seven separable questions, against node's rule that a text answering two questions is two nodes. This alternative splits the three-fact presentation rule into a child node asking what a recommendation must state before it is recorded, carrying the three facts, the persistence list and the ban on transient dispositions, and splits the movements of a sitting into a child node carrying the periagogic and maieutic objects; growth survives as the loop of three moves and the three usages of the skill, citing both. The reviewer proposed it twice and the session declined twice, referring the split to the author. Recording, delegation, alignment-target and checkpoint are the precedent for a part of growth becoming a node of its own.
 
-### define-sitting
+#### define-sitting
 
 Growth adds 'sitting' to its defines and one sentence saying what a sitting is: one run of the dialogue on one node, from its stage to the author's ruling. The word names the record's central act and is used by growth, recording, dialogue, transience and alignment-target and in about twenty account headings, yet no node defines it, so it is the one word the browser cannot link. Nothing else in the answer changes. Also raised on commons.systems/disposition-graph/dialogue. Also raised on commons.systems/disposition-graph/recording.
 
-### cite-unanswered-for-responses
+#### cite-unanswered-for-responses
 
 Growth stops restating the alignment page's three responses and cites the unanswered node, which defines them and which the page implements. Three response vocabularies are live for one act across unanswered, recording and growth, and every restatement is a place they can drift; the response-vocabulary contradiction finding makes unanswered the survivor, so one node defines what the author may answer and the page implements that one list. The rest of the answer is untouched. Raised on commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/recording.
 
-### facts-from-recommendation-field
+#### facts-from-recommendation-field
 
 Growth's presentation rule says explicitly that the three facts are presented from the node's recommendation field and its declared shims, never from a prose line in the account. The coverage finding verified that sixteen nodes still carry a generic prose Facts line contradicting their own recommendation field, and the page renders both, so the author is shown two accounts of one stamp on a quarter of the frontier. Growth's answer states the presentation rule without naming where the facts are read from; this closes the duplication at its source instead of node by node. Raised on commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/recording.
 
-### partial-ratification
+#### partial-ratification
 
 The author already ruled 'Ratified on the rule. Ratified on the shim.' in a sitting, and growth still carries a deferred stamp and is offered for a fresh ruling on the whole node. This alternative has growth's account state which clauses the author already ratified, the two-stage rule in both usages and the alignment-skill shim, and the recommendation cover only the rest, so the author is not asked twice for a ruling they gave. Growth's own reply accepts this and defers it to its sitting, so the change is owed rather than made. It raises the question whether a clause can carry a stamp separately from its node, which belongs to authority. Raised on commons.systems/disposition-graph/authority.
 
-### strike-phantom-depends
+#### strike-phantom-depends
 
 The cross-reference finding carried on session-context proposes that growth's two dependencies naming no node — review-context and review-artifact — be struck as superseded in substance by clean-context-review and growth's own alignment-page shim, or minted as un-aligned dispositions, since a question that lives only on a page is the ledger the record asked to sunset. (Raised on commons.systems/disposition-graph/session-context.)
 
-### cite-the-reading
+#### cite-the-reading
 
 Growth's answer drops its own Republic citation for the periagogic movement and cites this reading instead, so the loci are stated in one place. The review of 2026-09-03 found the two citations disagreeing in extent, growth naming 518b to d while the reading names 518b to 518d plus 521c and 515c to 516a. (Raised on commons.systems/disposition-graph/plato-periagoge.)
 
-### queue-in-ruling-order
+#### queue-in-ruling-order
 
 This node's queue, the set of unanswered nodes in rank order, and its list of what the alignment page carries, every unanswered node in rank order, are amended by the alignment-order draft to the ruling order, with rank as tie-break; the author's choice of what comes next remains `/align <node id>` and needs no boost. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 
-### boldness-reversed
+#### boldness-reversed
 
 This node's definition sentence is reversed, so that boldness is how much of a recommendation rests on the AI's own knowledge against the record and the author's words, which is how the dialogue node words it, how the author worded it on 2026-09-03, and how every boldness stamp in the record was written. Two consequences of rulings on other nodes ride with it in the fence, because this node was restating questions that are not its own: the description of the alignment page leaves, with the shim that names the artifact, for the node that asks the page's question; and the clause placing the recommendation at the intention movement is loosened to say that the recommendation is put to the author there while it may be recorded at any stage, which is the author's revision of 2026-09-04 recorded on the dialogue node. Adopted by the recommendation, and set out in the fence.
 
-### boldness-left-and-dialogue-corrected
+#### boldness-left-and-dialogue-corrected
 
 The inverse repair: this node's definition stands and the dialogue node, the alignment skill, and every boldness stamp in the record are corrected to match it. Against it: the author's own words give the direction, "I want to know how much rests on the AI's own knowledge against the record", so the correction would be against the author; and the stamps were written under the usage, so it would silently reverse the meaning of every one of them.
-
-## Facts
 
 ### persistence
 
@@ -177,10 +175,6 @@ The recommendation drops one of this node's two shims: the alignment page, which
 ---
 question: How does the graph grow?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 boost: 4
 under:
   - commons.systems/disposition-graph/model

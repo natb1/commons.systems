@@ -1,38 +1,36 @@
 ---
 question: When is the dialogue's state written to the record?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: low
-  amends: "5f7995b74efc284666ec9eb8ea218e1b6eb3977b"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 5f7995b74efc284666ec9eb8ea218e1b6eb3977b
-alternatives:
-  - name: words-only-checkpoint
-    source: review
-    ref: "2026-09-03"
-  - name: unlanded-write-as-criterion
-    source: review
-    ref: "2026-09-03"
-  - name: drop-unpinned-evidence
-    source: review
-    ref: "2026-09-03"
+  of: 622143928b6827a2708f340e7d789fc8961ed13b
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: words-only-checkpoint
+        source: review
+        ref: "2026-09-03"
+      - name: unlanded-write-as-criterion
+        source: review
+        ref: "2026-09-03"
+      - name: drop-unpinned-evidence
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/dialogue
 ---
@@ -49,17 +47,19 @@ At every transition of a node's stage, before the next movement begins. The sess
 
 The author, 2026-09-03: "alignment skill must have an instruction to checkpoint/persist every unanswered question at each dialogue phase transition (periagoge -> mieutic -> adversarial review -> confirmation) to survive compaction". A stage transition is the checkpoint because the stage is the record of what the dialogue has done, as the alignment-target node says, and what each stage carries is fixed by the dialogue node: a finer grain would checkpoint half-states, and a coarser grain would lose a movement. The words-first rule follows from what can be re-derived: a draft can be redrafted from the words and a review re-run, but words held only in a context are lost with it, and the periagogic account is the most expensive thing to elicit again. Evidence: the bootstrap session of 2026-09-03 kept a resume note in scratch space in place of this rule and survived a compaction that afternoon by it; the rule moves the checkpoint into the record, where a successor session and the projector can read it and a scratch file is invisible to both. Rejected: checkpointing to a file outside the record, for that reason; checkpointing only at the ruling, which loses the earlier stages; a checkpoint on every edit, which lands half-states and turns the record's history into a keystroke log.
 
-## Alternatives
+## Facts
 
-### words-only-checkpoint
+### answer
+
+#### words-only-checkpoint
 
 The reviewer's counter-argument: the rule lands a graph commit at every stage transition of every node, roughly two hundred and fifty landings for a sixty-two-node frontier moving through four stages, and three of the four things it checkpoints, the recommended text, the recommendation's facts and the review's state, are re-derivable by re-running the movement that produced them. The author's instruction was to survive compaction, which the author's words alone achieve. The alternative checkpoints the author's words the turn they are said and nothing else, letting the rest be written when the node lands.
 
-### unlanded-write-as-criterion
+#### unlanded-write-as-criterion
 
 The clause covering a graph that cannot validate at a transition is the one operational failure mode with no instrument: nothing detects a node written to a worktree and never landed. The session took the first branch of the reviewer's suggestion and made the unlanded write reportable to the author in the same turn; the second branch, carrying it as a criterion on this node so the failure is measured rather than reported by convention, is still open.
 
-### drop-unpinned-evidence
+#### drop-unpinned-evidence
 
 The rationale cites as evidence a resume note kept in scratch space during the bootstrap session of 2026-09-03, which transience requires to be cited with a pin of what was read; the note is gone and the claim cannot be checked. The alternative strikes the evidence sentence, or replaces it with a citation of the transcript, which the session left to the sitting.
 

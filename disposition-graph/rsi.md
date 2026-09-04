@@ -1,19 +1,21 @@
 ---
 question: How does this system improve its own loop?
 stage: maieutic
-alternatives:
-  - name: rsi-as-section
-    source: ai
-    ref: "2026-09-03"
-  - name: rsi-as-loop-on-itself
-    source: ai
-    ref: "2026-09-03"
-  - name: bound-by-ratification
-    source: ai
-    ref: "2026-09-03"
-  - name: loop-writes-options
-    source: author
-    ref: "2026-09-04"
+facts:
+  - name: answer
+    options:
+      - name: rsi-as-section
+        source: ai
+        ref: "2026-09-03"
+      - name: rsi-as-loop-on-itself
+        source: ai
+        ref: "2026-09-03"
+      - name: bound-by-ratification
+        source: ai
+        ref: "2026-09-03"
+      - name: loop-writes-options
+        source: author
+        ref: "2026-09-04"
 under:
   - commons.systems/disposition-graph/model
 depends:
@@ -24,21 +26,23 @@ depends:
 The author, 2026-09-03, naming the last section of the high-level order recorded on the scope node:
 > purpose -> [scope, self documentation (via the graph browser)] (equal) -> alignment -> harness context management -> reconciliation -> rsi
 
-## Alternatives
+## Facts
 
-### rsi-as-section
+### answer
+
+#### rsi-as-section
 
 Recursive self-improvement is a section of the record with dispositions of its own, a peer of alignment and reconciliation under the model node where the author's order puts it, ranked last. This is one of the two readings the account puts to the author and neither is recommended.
 
-### rsi-as-loop-on-itself
+#### rsi-as-loop-on-itself
 
 Recursive self-improvement is not a section but the name of what the loop already does when the frontier bites the loop's own nodes: the work loop applied to the work loop, its instruments read against itself, its improvements landed through the same dialogue and reconciliation as any other change. This is the second reading the account puts to the author, and on it no new dispositions are needed beyond those the loop already has.
 
-### bound-by-ratification
+#### bound-by-ratification
 
 Whichever reading stands, a bound is owed: every change to a node the loop uses to change itself requires the author's ratification. The account raises this as the question of what bounds the term here, and records no recommendation on it.
 
-### loop-writes-options
+#### loop-writes-options
 
 The loop on itself has the same authority over the record as reconciliation, to record viable options and move recommendations, within scope. On a ratified loop node a moved recommendation acts on nothing until the author re-confirms it, which is the bound `bound-by-ratification` asks for; on a delegated one it acts within the delegation. This reads rsi as `rsi-as-loop-on-itself`. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 

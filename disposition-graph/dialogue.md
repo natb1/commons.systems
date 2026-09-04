@@ -1,59 +1,57 @@
 ---
 question: What does an unanswered node carry?
 stage: maieutic
-recommendation:
-  adopts: aspects-are-nodes
-  boldness: low
-  amends: "163f5ee5130f88f160523f95c72381f26751e96d"
-  at: "e228e67e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: 163f5ee5130f88f160523f95c72381f26751e96d
-alternatives:
-  - name: minimal-dialogue-state
-    source: review
-    ref: "2026-09-03"
-  - name: freeze-standing-under-recommendation
-    source: ai
-    ref: "2026-09-03"
-  - name: depends-migration-named
-    source: review
-    ref: "2026-09-03"
-  - name: depends-names-an-alternative
-    source: author
-    ref: "2026-09-03"
-  - name: first-answer-is-not-an-amendment
-    source: ai
-    ref: "2026-09-03"
-  - name: caption-only
-    source: review
-    ref: "2026-09-03"
-  - name: ranges-on-whole-node-alternatives
-    source: review
-    ref: "2026-09-03"
-  - name: aspects-compose-the-answer
-    source: ai
-    ref: "2026-09-03"
-  - name: aspects-are-nodes
-    source: review
-    ref: "2026-09-03"
-  - name: facts-carry-options
-    source: author
-    ref: "2026-09-04"
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: minimal-dialogue-state
+        source: review
+        ref: "2026-09-03"
+      - name: freeze-standing-under-recommendation
+        source: ai
+        ref: "2026-09-03"
+      - name: depends-migration-named
+        source: review
+        ref: "2026-09-03"
+      - name: depends-names-an-alternative
+        source: author
+        ref: "2026-09-03"
+      - name: first-answer-is-not-an-amendment
+        source: ai
+        ref: "2026-09-03"
+      - name: caption-only
+        source: review
+        ref: "2026-09-03"
+      - name: ranges-on-whole-node-alternatives
+        source: review
+        ref: "2026-09-03"
+      - name: aspects-compose-the-answer
+        source: ai
+        ref: "2026-09-03"
+      - name: aspects-are-nodes
+        source: review
+        ref: "2026-09-03"
+      - name: facts-carry-options
+        source: author
+        ref: "2026-09-04"
+    recommends: aspects-are-nodes
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/unanswered
 defines:
@@ -176,25 +174,27 @@ The re-answer's decisions. The flip of an answered node to unanswered while an a
 
 Rejected: the state as prose only, since the page would keep guessing; a date per movement, since it duplicates history; a separate draft file per node, since a node is one file and the draft is parseable inside it; a stored diff, since it is derived from the draft and the node; persistence as a stored fact, since a node is always standing and its shims are declared; a validator that refuses a draft changed since the review, since the session decides whether a change is substance, as the recording node says, and the flag gives it the fact; a status field or a fourth class for a node with pending alternatives, the retracted flip; alternatives as prose only in the account, since the page could not show them beside the answer; a node per alternative, since an alternative is a candidate answer to this question and not a question of its own. Traditions, recorded as readings under this node or owed under the stub-traditions ruling: architecture decision records in the MADR form, the reading under this node, whose considered options with their sources, chosen option, and status this encoding adopts, with the status derived here where MADR stores it; the RFC and PEP processes, a status field on a prose document with a fixed order of states; review approvals pinned to a revision in code review, where a new revision marks the approval stale; and the review of a change as a diff against what stands.
 
-## Alternatives
+## Facts
 
-### minimal-dialogue-state
+### answer
+
+#### minimal-dialogue-state
 
 The clean-context review's strongest counter-argument, twice recorded as strong, holds that the node's own test for storing anything is what re-derivation cannot reconstruct, and that three of the parts fail it: the recommendation's class and boldness are judgments a session would make again from the same node, the review's verdict and strength are re-derivable by re-running the review, and the draft is a copy of the node inside the file that holds it. The candidate answer is that the dialogue carries only the author's words, the stage, and the AI's prose account, and that everything else is derived at each reading. The session replied that the record stores the results of judgments as it stores a stamp or a boost, and the author has not ruled on it.
 
-### freeze-standing-under-recommendation
+#### freeze-standing-under-recommendation
 
 The finding that the review pin covers only the draft and not the standing answer names three answers and adopts none: pin both texts, pin the whole node, or hold that a node's standing answer may not be amended at all while a recommendation on it stands. The author's maieutic ruling took the pinning route, adding the standing hash and the graph commit, so what is still open is the third: forbid the amendment rather than flag it. The finding was explicitly left for the ruling rather than decided in the sitting.
 
-### depends-migration-named
+#### depends-migration-named
 
 The answer names the migration that `depends` orders and drops the claim that the frontier shows the gap. Verified that zero nodes carry the field, twenty-three carry the `Depends on:` prose it replaces, the projector reads it nowhere, and the frontier prints nothing about it, so a confirmation today ratifies a seventh part of the dialogue state that no node uses and no projection reads. On this alternative the answer says that the field is defined and not yet carried, that the prose conventions stand until the migration lands, and that the migration is part of what the confirmation orders — which is what dialogue's own account calls 'a reconciliation with the author's ruling on each' rather than a landing inside one sitting.
 
-### depends-names-an-alternative
+#### depends-names-an-alternative
 
 The alignment-order draft records a divergence between subtrees on the leaves: each node the review finds to stand under one side names, in `depends`, the ancestor and the alternative on it that it stands under, and the page derives the divergence at the ancestor by inversion. `depends` as this node defines it carries node ids only; the alternative extends its target to an alternative on the named node, keeping the inverse derived and never stored. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 
-### first-answer-is-not-an-amendment
+#### first-answer-is-not-an-amendment
 
 This node's answer says how a recommendation is encoded and how the page
 derives an edit from it, and says nothing about the difference between a ruling
@@ -218,7 +218,7 @@ as it stands, on every node: the author ruled on 2026-09-03, on
 and not standing, and an earlier draft of this finding that proposed to take
 the name away from unstamped nodes contradicted that ruling and was withdrawn.
 
-### caption-only
+#### caption-only
 
 The clean-context validation of 2026-09-03 raised this as the case against
 touching the encoding at all. The record already carries the fact that
@@ -237,7 +237,7 @@ distinction: a later projector, or the projected alignment skill, would be free
 to caption a first answer as an amendment again and would contradict no
 disposition in doing it.
 
-### ranges-on-whole-node-alternatives
+#### ranges-on-whole-node-alternatives
 
 Raised by the clean-context validation of 2026-09-03 as the case against
 replacing the encoding. The author's page can be reached without `aspects` at
@@ -261,7 +261,7 @@ no alternative was ever recorded, the authority class the author named first
 among them, has no row of its own and no boldness of its own, since boldness
 here stays a property of an alternative and not of a decision.
 
-### aspects-compose-the-answer
+#### aspects-compose-the-answer
 
 The sitting's recommendation after the author's greenfield instruction of
 2026-09-03. A node's answer is composed of its decisions rather than carved
@@ -293,7 +293,7 @@ incoherent, which `excludes` handles and nothing checks; every node migrates as
 one aspect and splits as sittings touch it; and nothing yet checks that the
 derived answer reads as prose.
 
-### aspects-are-nodes
+#### aspects-are-nodes
 
 Raised by the greenfield validation of 2026-09-03 as the design that beats every
 other on the table, and adopted by the sitting as its recommendation.
@@ -339,7 +339,7 @@ nodes, and the page must render a subtree as one disposition. Settling counts
 grow, which the ruling order already absorbs, since an ancestor's unanswered
 subtree contains its descendants' by construction.
 
-### facts-carry-options
+#### facts-carry-options
 
 Alternatives and facts become one structure: every decision on a node is a fact with viable options, the answer among them, its options the candidate answers this answer lists as alternatives. The node-level recommendation field goes, each fact carrying its recommended option with why and boldness; each option carries its source, its reference, the readings bearing on it, and a ruling once the author has given one. The options persist after the recording, which amends the sentence that confirmed dialogue state folds and unconfirmed state survives only in version control: what folds is the dialogue, the stage, the review, depends and the account, and what persists is the facts with their options. `aspects-are-nodes` stands: the facts are the answer and the reserved three, and any other decision is a child. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
@@ -349,10 +349,6 @@ Alternatives and facts become one structure: every decision on a node is a fact 
 ---
 question: What does an unanswered node carry?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/unanswered
 defines:

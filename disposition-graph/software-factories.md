@@ -1,39 +1,40 @@
 ---
 question: Does the software-factory tradition support this repository's purpose?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "b0e69687251e57fc7db912dde66beb28e1515ef5"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: b0e69687251e57fc7db912dde66beb28e1515ef5
-alternatives:
-  - name: divided-sources
-    source: review
-    ref: "2026-09-03"
-  - name: divergence-of-ownership
-    source: review
-    ref: "2026-09-03"
+  of: 3acfddb64b51b8ebf6ef6d02d22ad85e89fec15c
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: divided-sources
+        source: review
+        ref: "2026-09-03"
+      - name: divergence-of-ownership
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: moderate
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/purpose
 source: Cusumano, Japan's Software Factories (1991), on Hitachi, Toshiba, NEC, and Fujitsu from 1969 onward; Greenfield and Short, Software Factories (2004); the contemporary "AI software factory", agent pipelines that turn specifications into shipped software (usage of 2025 and 2026).
-relation: diverged
+bears:
+  - fact: answer
+    option: standing
+    relation: diverged
 ---
 ## Answer
 
@@ -43,13 +44,15 @@ Supports the audience's framing and marks the divergence that defines this repos
 
 The Japanese factories of the 1970s and 1980s and the model-driven factories of the 2000s both answered "how do we produce software reliably at scale"; the agentic factories of 2025 answer it again with agents. None answers "how does the owner stay the origin of what the factory makes", which is the question above this one. Validated by the AI on 2026-09-02 from its own knowledge; deferred until the author reads the sources.
 
-## Alternatives
+## Facts
 
-### divided-sources
+### answer
+
+#### divided-sources
 
 Both readings found that the source field bundles three distinct traditions under one relation, Cusumano's Japanese software factories, Greenfield and Short's model-driven factories, and the contemporary AI software factory of 2025 and 2026, which has no primary text at all, so the condition on which a deferred or delegated class rests cannot be met for the third. The session accepted the division as owed at the sitting. This alternative divides the reading, one relation per tradition with the contemporary usage held as usage rather than as a source, and replaces the sentence restating the archē's argument with a citation of commons.systems/public/aristotle-arche-of-action.
 
-### divergence-of-ownership
+#### divergence-of-ownership
 
 The counter-argument, twice recorded: the divergence claimed, that factory literature is about the factory's own process while this record is about the owner's intent, is the divergence every specification method claims, and Greenfield and Short's factories are organised around a product-line specification playing much the role this record plays. This alternative recasts the divergence as one of ownership and authority rather than of subject matter, which puts it in Pettit's territory rather than Cusumano's; its limit case is that the phrase is a discovery term borrowed for the audience, diverging on nothing load-bearing, which purpose already concedes when it calls it the audience's own vocabulary.
 

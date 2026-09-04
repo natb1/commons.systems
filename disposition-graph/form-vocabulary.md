@@ -1,16 +1,17 @@
 ---
 question: Does each form need a defining node of its own?
 stage: maieutic
-alternatives:
-  - name: vocabulary-stays-with-the-owning-nodes
-    source: ai
-    ref: "2026-09-03"
 facts:
+  - name: answer
+    options:
+      - name: vocabulary-stays-with-the-owning-nodes
+        source: ai
+        ref: "2026-09-03"
   - name: existence
-    choices:
-      - keep
-      - prune
-    adopts: keep
+    options:
+      - name: keep
+      - name: prune
+    recommends: keep
     boldness: moderate
 under:
   - commons.systems/disposition-graph/node
@@ -20,13 +21,13 @@ under:
 The author, 2026-09-02:
 > "assumption" deserves a target disposition, along with "tradition" and "disposition" (if target is renamed to disposition). This is how vocabulary is recorded, not with something bolted on that will drift. Recommend how hyperlinks will avoid drift.
 
-## Alternatives
+## Facts
 
-### vocabulary-stays-with-the-owning-nodes
+### answer
+
+#### vocabulary-stays-with-the-owning-nodes
 
 The sitting's proposed answer, never stamped and still open for the ruling: no new nodes, each term defined by the node that owns it through the defines field, disposition by model, arche by agency, reading and tradition by readings, criterion and assumption by instruments. The term index links every use in prose to that node, and a term no node defines is not linked, which is how drift shows.
-
-## Facts
 
 ### existence
 

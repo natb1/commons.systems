@@ -1,50 +1,48 @@
 ---
 question: What does a newcomer read after purpose?
 stage: ruling
-recommendation:
-  adopts: rewrite-model
-  boldness: moderate
-  amends: "b5c872a03ea888a605ea0ed45211099a5205ec47"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 5d643fd48d86795d5400b9dbc87049a848202efe
-alternatives:
-  - name: rewrite-model
-    source: ai
-    ref: "2026-09-03"
-  - name: primer-node
-    source: ai
-    ref: "2026-09-03"
+  of: fd543d8b56a6a8724a9eaf03ac0f6ba8d7b3391f
 facts:
+  - name: answer
+    options:
+      - name: rewrite-model
+        source: ai
+        ref: "2026-09-03"
+      - name: primer-node
+        source: ai
+        ref: "2026-09-03"
+    recommends: rewrite-model
+    boldness: moderate
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
   - name: existence
-    choices:
-      - keep
-      - prune
-    adopts: keep
+    options:
+      - name: keep
+      - name: prune
+    recommends: keep
     boldness: moderate
 under:
   - commons.systems/disposition-graph/model
 ---
-## Alternatives
+## Facts
 
-### rewrite-model
+### answer
+
+#### rewrite-model
 
 The model node's answer is rewritten for the reader arriving from purpose, without changing rank: projection stays first among model's children, since the high-level order the author recorded on scope on 2026-09-03 puts self-documentation through the browser before alignment, and the model node may say that alignment is where the newcomer acts first. This is the recommended option as amended after the review, the boost half having been withdrawn; model's draft is the rewrite it names.
 
-### primer-node
+#### primer-node
 
 A new primer node sits between purpose and model, introducing the graph primitives, and model's answer is left as it stands. Model's draft rationale rejects this on the ground that such a node would answer no question model does not.
-
-## Facts
 
 ### existence
 
@@ -56,10 +54,6 @@ Prune: This node is pruned and its two options are carried on model as alternati
 ---
 question: What does a newcomer read after purpose?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/model
 ---

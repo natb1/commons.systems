@@ -1,38 +1,36 @@
 ---
 question: What is materialized implementation, and where does it live?
 stage: review
-recommendation:
-  adopts: standing
-  boldness: low
-  amends: "3761c42b60b37303531ba6485d8d648a081885b5"
-  at: "ec82504388014303d7a1b889d42d02e8814abd25"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: 0826bba52cd81cceefb22d57298511ed3e173c38
-alternatives:
-  - name: facts-carry-each-shim-liquidation
-    source: review
-    ref: "2026-09-03"
-  - name: disclose-that-sessions-run-under-this-rule
-    source: review
-    ref: "2026-09-03"
-  - name: traditions-to-readings
-    source: review
-    ref: "2026-09-03"
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: facts-carry-each-shim-liquidation
+        source: review
+        ref: "2026-09-03"
+      - name: disclose-that-sessions-run-under-this-rule
+        source: review
+        ref: "2026-09-03"
+      - name: traditions-to-readings
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/model
 tier: global
@@ -59,17 +57,19 @@ Everything written to a repository other than the graph itself: code, skills, ru
 
 The author's rulings of 2026-09-02, and of 2026-09-03 that all materialized implementation, the browser included, is a projection of the graph and that anything the graph does not justify is liquidated through reconciliation. Keeping the disposition ref to the graph alone keeps its writes small, its history legible, and its readers simple; tooling changes never land as graph changes. The monorepo convention is the tradition of Lerna (2015), Yarn workspaces (2017), and npm workspaces (npm 7, 2020), themselves descendants of the single-repository practice described by Potvin and Levenberg (2016); a reading is owed. The incumbent repository already uses `packages/`, which is evidence, not authority. The third ref has one consequence to keep in view: whatever on `main` is to survive the swap must be reconciled into `greenfield` under a supporting disposition before exit, or it is pruned by the swap. The author, 2026-09-03: "general disposition is that all materialized implementation (including the browser) is a projection of the graph - anything not justified by the graph is subject to liquidation through reconciliation. 'implementation unit' kind of makes it sound like we are recording transient dispositions - ensure that we are not." This node binds every session that writes to the implementation ref, subagents included, so it is projected as a rule.
 
-## Alternatives
+## Facts
 
-### facts-carry-each-shim-liquidation
+### answer
+
+#### facts-carry-each-shim-liquidation
 
 Both reviews found that the prose facts line says only 'persistence standing; two shims' and does not carry each shim's liquidation condition, which growth's presentation rule requires. It matters here because the greenfield shim's liquidation is a swap that prunes whatever no disposition supports, so without the condition the author cannot see that confirming this node arms a deletion. The alternative states both conditions in the facts.
 
-### disclose-that-sessions-run-under-this-rule
+#### disclose-that-sessions-run-under-this-rule
 
 The second review asked the account to say that a kickback or an overrule here changes what sessions are running under today, since the rules directory now holds this node's projection as one of the five global-tier rules. The session's reply promised it at the sitting and the text does not say it.
 
-### traditions-to-readings
+#### traditions-to-readings
 
 The rationale names Lerna, Yarn workspaces, npm workspaces and Potvin and Levenberg in prose as the monorepo tradition, which readings' draft forbids and which stub-traditions names this node for. The alternative moves the reference to a reading before landing and leaves the rationale with the argument.
 

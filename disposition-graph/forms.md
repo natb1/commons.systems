@@ -1,59 +1,61 @@
 ---
 question: Which forms may an answer take?
 stage: ruling
-recommendation:
-  adopts: rule-beside-disposition
-  boldness: moderate
-  amends: "2443bdd51f8aad4c8b45db6d5276e12aceebd5e5"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 8acb547a2b064c400bc3d86e9d32ff7ca2ad97fa
-alternatives:
-  - name: rule-beside-disposition
-    source: ai
-  - name: all-five-forms
-    source: ai
-  - name: mint-assumption-question
-    source: review
-    ref: "2026-09-03"
-  - name: authors-form-questions
-    source: author
-    ref: "2026-09-02"
-  - name: assumption-is-instrumentation
-    source: author
-    ref: "2026-09-02"
+  of: 52159a4998c58c1bfd23568bddb5537f47afe196
 facts:
+  - name: answer
+    options:
+      - name: rule-beside-disposition
+        source: ai
+        ref: "2026-09-03"
+      - name: all-five-forms
+        source: ai
+        ref: "2026-09-03"
+      - name: mint-assumption-question
+        source: review
+        ref: "2026-09-03"
+      - name: authors-form-questions
+        source: author
+        ref: "2026-09-02"
+      - name: assumption-is-instrumentation
+        source: author
+        ref: "2026-09-02"
+    recommends: rule-beside-disposition
+    boldness: moderate
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 under:
   - commons.systems/disposition-graph/node
 ---
-## Alternatives
+## Facts
 
-### rule-beside-disposition
+### answer
+
+#### rule-beside-disposition
 
 Keep rule as a form beside disposition and migrate nothing, which is where the recommendation moved after the first review's strong counter-argument. The merge it replaced rested on a carrier no criterion has: nothing in the graph says whether an answer is to be achieved or maintained, almost every node is unguarded, and instruments' operational reading of a failure as work or as a variance would lose its class. Nothing migrates under it, which the second review verified is the strongest fact in its favour.
 
-### all-five-forms
+#### all-five-forms
 
 Keep all five forms, target, rule, assumption, archē and reading, of low boldness. The second review's counter-argument argues for it: the author asked three separate questions and the recommended option answers only the second, while assumption as a form is still doing work, two nodes carrying form assumption today and their drafts keeping it, so the recommended option leaves the record with assumption as a form and instruments' draft calling it a criterion kind.
 
-### mint-assumption-question
+#### mint-assumption-question
 
 Take the recommended option and mint the author's unanswered question, whether assumption is a form at all, as its own question under this node rather than letting instruments' draft carry it. The session's reply offers this to the author beside the third option, and the contradiction finding recorded here proposes the same.
 
-### authors-form-questions
+#### authors-form-questions
 
 Three of the five author quotations carried on node are the ground of forms' whole sitting, which paraphrases them as the author asking whether target is synonymous with disposition, what rule adds, and whether assumption is a form at all. The last, whether this is correctly encoded as form assumption against form disposition with unvalidated instrumentation, is carried verbatim on capture, knowledge-store and purpose and on no node that answers it, while forms carries no Disposition section of its own and stands at the ruling stage recommending ratified, which authority makes invalid without the ruling in the record. The candidate is that forms carry these words as its ground, node keeping them as context on the part it answers. Raised on commons.systems/disposition-graph/node, commons.systems/disposition-graph/capture.
 
-### assumption-is-instrumentation
+#### assumption-is-instrumentation
 
 The author's words carried on instruments state that assumption is not a form but instrumentation, the condition under which an answer stays valid. Forms' option that carried this was withdrawn after its review, and its surviving recommendation, keeping rule beside disposition, leaves the question the author asked unanswered, as forms' own reply and the contradiction finding both say. The author's leaning is therefore a candidate answer with no option representing it. (Raised on commons.systems/disposition-graph/instruments.) Also raised on commons.systems/disposition-graph/purpose.
 
@@ -63,10 +65,6 @@ The author's words carried on instruments state that assumption is not a form bu
 ---
 question: Which forms may an answer take?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/node
 ---

@@ -1,16 +1,20 @@
 ---
 question: Which traditions ground the capture hypothesis?
-alternatives:
-  - name: ai-candidate-readings
-    source: ai
-    ref: "2026-09-02"
+facts:
+  - name: answer
+    options:
+      - name: ai-candidate-readings
+        source: ai
+        ref: "2026-09-02"
 under:
   - commons.systems/disposition-graph/capture
 stage: maieutic
 ---
-## Alternatives
+## Facts
 
-### ai-candidate-readings
+### answer
+
+#### ai-candidate-readings
 
 The node's only content is a list of eight candidates proposed by the AI from its own knowledge, each to become a reading under capture once the author chooses, and none carrying authority: Stigler on regulatory capture, Jensen and Meckling with Ross on agency costs, Hirschman on exit and voice, Illich on counterproductive institutions, Simon and Wu on attention as the scarce resource, Zuboff on platforms that model and steer intention, Frankfurt on acting from desires one does not endorse, and Pettit on domination. Two of them, Hirschman and Pettit, are already readings under the arche, which narrows what a ruling here would add.
 

@@ -1,10 +1,12 @@
 ---
 question: What does the harness-engineering tradition hold?
 stage: maieutic
-alternatives:
-  - name: harness-engineering-tradition-and-reading
-    source: ai
-    ref: "2026-09-03"
+facts:
+  - name: answer
+    options:
+      - name: harness-engineering-tradition-and-reading
+        source: ai
+        ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/purpose
 ---
@@ -16,9 +18,11 @@ The author, 2026-09-02:
 The author, 2026-09-02:
 > Also reference harnesses as a tradition.
 
-## Alternatives
+## Facts
 
-### harness-engineering-tradition-and-reading
+### answer
+
+#### harness-engineering-tradition-and-reading
 
 One root node for harness engineering in the traditions graph, written from the four sources the incumbent README cites, Böckeler 2026, Anthropic 2025 and 2026, and OpenAI 2026, and one reading under purpose: adopted, with the divergence that the durable state here is a graph carrying authority rather than a task list or a prompt. The text is not drafted, since where tradition nodes live is traditions-home's ruling and this node waits behind it. Nothing else answers what the harness-engineering tradition holds; stub-traditions' enumeration of about thirty roots does not name it.
 

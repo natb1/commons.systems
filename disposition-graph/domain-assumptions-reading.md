@@ -1,10 +1,12 @@
 ---
 question: Does the requirements tradition support assumption as a criterion rather than a form?
 stage: maieutic
-alternatives:
-  - name: assumption-as-criterion
-    source: ai
-    ref: "2026-09-03"
+facts:
+  - name: answer
+    options:
+      - name: assumption-as-criterion
+        source: ai
+        ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/instruments
 ---
@@ -13,9 +15,11 @@ under:
 The author, 2026-09-02:
 > I think the concept of an assumption started as instrumentation. Something like "this answer is valid so long as this assumption holds".
 
-## Alternatives
+## Facts
 
-### assumption-as-criterion
+### answer
+
+#### assumption-as-criterion
 
 A reading under instruments on domain assumptions, taking Zave and Jackson 1997 and goal-oriented requirements from van Lamsweerde 2001, adopted: the specification holds under recorded assumptions about the world, and achieve and maintain are properties of the goal's criterion rather than kinds of goal. The sitting proposes the node and its facts, authority deferred until the author reads the sources and boldness moderate, and marks the text pending. Forms' first option, which would make assumption a criterion kind rather than a form, rests on this reading and was itself withdrawn after review.
 

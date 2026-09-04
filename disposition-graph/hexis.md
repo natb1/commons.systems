@@ -1,55 +1,55 @@
 ---
 question: In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?
 stage: ruling
-recommendation:
-  adopts: hexis-first
-  boldness: moderate
-  amends: "08108baa5fb010e1a2baf2d430b7a75af73de656"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: f2a079438ae6050a78c25d420df4100e45b61a08
-alternatives:
-  - name: hexis-first
-    source: ai
-  - name: knowledge-store-first
-    source: ai
-  - name: sub-ruling-of-purpose
-    source: review
-    ref: "2026-09-03"
+  of: 99d93a890181feb0a8ae23d834505b07cb0bcc9a
 facts:
+  - name: answer
+    options:
+      - name: hexis-first
+        source: ai
+        ref: "2026-09-03"
+      - name: knowledge-store-first
+        source: ai
+        ref: "2026-09-03"
+      - name: sub-ruling-of-purpose
+        source: review
+        ref: "2026-09-03"
+    recommends: hexis-first
+    boldness: moderate
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
   - name: existence
-    choices:
-      - keep
-      - prune
-    adopts: keep
+    options:
+      - name: keep
+      - name: prune
+    recommends: keep
     boldness: moderate
 under:
   - commons.systems/disposition-graph/purpose
 ---
-## Alternatives
+## Facts
 
-### hexis-first
+### answer
+
+#### hexis-first
 
 State the hexis claim first in the purpose answer with the knowledge store as its gloss, so that the record is a projection of its author's hexis, which is what a knowledge store would hold. Aristotle makes hexis the settled state itself and the record the projection of it, and a store is what would hold that projection. The wording is already in purpose's draft, and the reading that grounds it is delegated rather than ratified because the author has not read the loci.
 
-### knowledge-store-first
+#### knowledge-store-first
 
 Keep the order the page had, a knowledge store, a projection of its author's hexis, of low boldness. The reviews' counter-argument backs it: purpose is the onboarding entry point and the README's source, no node's defines carries hexis so the browser cannot link it, and the apposition teaches the term instead of assuming it, the philosophical precision belonging on knowledge-store where the hypothesis and its reading live.
 
-### sub-ruling-of-purpose
+#### sub-ruling-of-purpose
 
 Hexis decides a clause purpose's recommended text already contains, that the record is a projection of its author's hexis, which is what a knowledge store would hold. The finding proposes hexis carry one line saying it is a sub-ruling of purpose's text and must be ruled first, or be folded into purpose's account as an alternative, since confirming purpose as shown would decide hexis by that act. (Raised on commons.systems/disposition-graph/purpose.)
-
-## Facts
 
 ### existence
 
@@ -61,10 +61,6 @@ Prune: The redundancy finding notes that this node decides a clause purpose's dr
 ---
 question: In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/purpose
 ---

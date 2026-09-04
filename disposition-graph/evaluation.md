@@ -1,44 +1,42 @@
 ---
 question: How is a design or a proposal evaluated?
 stage: maieutic
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: "54fcdf876c5d7d56c3911d0ea0e0ee80df17052e"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: 6d87ee51ffab4195c5465354a36d4a2bc1f4fa1e
-alternatives:
-  - name: deferred-until-ruling-quoted
-    source: review
-    ref: "2026-09-03"
-  - name: two-kinds-of-shim
-    source: ai
-    ref: "2026-09-03"
-  - name: traditions-to-readings
-    source: review
-    ref: "2026-09-03"
-  - name: bounded-overrule
-    source: review
-    ref: "2026-09-03"
-  - name: overrule-by-class
-    source: author
-    ref: "2026-09-04"
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: deferred-until-ruling-quoted
+        source: review
+        ref: "2026-09-03"
+      - name: two-kinds-of-shim
+        source: ai
+        ref: "2026-09-03"
+      - name: traditions-to-readings
+        source: review
+        ref: "2026-09-03"
+      - name: bounded-overrule
+        source: review
+        ref: "2026-09-03"
+      - name: overrule-by-class
+        source: author
+        ref: "2026-09-04"
+    recommends: standing
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/growth
 tier: global
@@ -64,25 +62,27 @@ Against the full solution frontier. Nothing is sacred: no doctrine is implied by
 
 The author's rulings in the legacy bootstrap of 2026-08-31 to 2026-09-02, given again to this bootstrap as the standing rule for the AI's evaluations: reference the incumbent for principles, never as authority. The legacy rule projection on `main` and the ratified clarifications behind it are the evidence. The overrule rules are the authority node's attenuation seen from the evaluator's side. Traditions to record as readings: the Pareto frontier of multi-objective choice, adopted for the sense of "frontier"; Chesterton's fence (The Thing, 1929), diverged from in part, since here the record, not the fence, carries the reason, and a fence without a recorded reason is a prune-by-default proposal. The clean-context review is the author's disposition of 2026-09-03, recorded on the recording node under growth.
 
-## Alternatives
+## Facts
 
-### deferred-until-ruling-quoted
+### answer
+
+#### deferred-until-ruling-quoted
 
 Evaluation carries no Disposition section and quotes no ruling of any date, resting its whole answer on the author's rulings in the legacy bootstrap, which legacy and this node itself make evidence and never authority. Authority's rule is that a ratified stamp whose ruling is not in the record is invalid. The alternative is that the recommendation change from ratified to deferred until a dated ruling is quoted in the node, since a ratified stamp the record cannot support is worse than an honest deferral.
 
-### two-kinds-of-shim
+#### two-kinds-of-shim
 
 Evaluation holds that a shim declared on the record is applied by default and a prompt is required only to bypass it, while the bootstrap-authority shim declared on authority is a permission that does nothing until the author invokes it, so applying it by default would be the capture it guards against. The alternative amends this answer to cover two kinds of shim, a stopgap artifact standing in for a projection and a standing permission exercised on demand; the other branch is that bootstrap authority is not a shim at all but a second class of authority, which authority would define. The tension was put to this node from authority's sitting, whose account says so explicitly, and is undecided. Raised on commons.systems/disposition-graph/authority.
 
-### traditions-to-readings
+#### traditions-to-readings
 
 This node's own rule is that every tradition surfaced is recorded as a reading with the resolution it informed, and its rationale carries a prose tradition list, the Pareto frontier and Chesterton's fence, which readings' recommended text forbids. The alternative strikes the list from the rationale and mints the two as readings, which is the remedy stub-traditions holds and which the session deferred to the readings ruling. Fourteen rationales are in the same position.
 
-### bounded-overrule
+#### bounded-overrule
 
 The answer lets the AI overrule delegated and deferred answers on its best judgment without limit, and since nothing is ratified that is the whole record between two sittings. The brake the session named, that an overrule at the ruling stage sends the node back to review and shows on the frontier, is real but covers only that stage; an overrule at the review or maieutic stage leaves no review state to go stale. The alternative bounds the rule so that an overrule of any unanswered node re-opens its dialogue at the stage the change touches, which is also what the amendment review asked authority to add.
 
-### overrule-by-class
+#### overrule-by-class
 
 What an overrule does is read from the node's class rather than stated as one rule. On a ratified node the confirmed choice keeps its full authority and the node returns to the author for re-confirmation. On a deferred node the recommendation acts and the node is on the alignment frontier already. On a delegated node the recommendation moves freely within the delegation's scope and the node stays off the alignment frontier, since the author asked not to be asked again; a move that would leave the scope is an option, not a recommendation, and returns the node to the author with its class intact. This replaces "a delegated answer overruled becoming deferred", keeps it for the one case it was for, and gives `bounded-overrule` its bound. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 

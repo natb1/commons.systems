@@ -1,41 +1,39 @@
 ---
 question: How is materialized implementation reviewed before it lands?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: high
-  amends: "dab5283611f8c4500c3aaef7eb48e3a1338b922c"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: dab5283611f8c4500c3aaef7eb48e3a1338b922c
-alternatives:
-  - name: cap-from-contract-class
-    source: ai
-    ref: "2026-09-03"
-  - name: graph-landing-instrument
-    source: ai
-    ref: "2026-09-03"
-  - name: shrink-the-contract
-    source: review
-    ref: "2026-09-03"
-  - name: deferred-not-ratified
-    source: review
-    ref: "2026-09-03"
+  of: 22037e32720f81b7338a43529fb37e442c0c867c
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: cap-from-contract-class
+        source: ai
+        ref: "2026-09-03"
+      - name: graph-landing-instrument
+        source: ai
+        ref: "2026-09-03"
+      - name: shrink-the-contract
+        source: review
+        ref: "2026-09-03"
+      - name: deferred-not-ratified
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: high
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: high
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/work-loop
 defines:
@@ -59,21 +57,23 @@ By an adversarial review of each landing's diff before it lands, producing an as
 
 The author's ruling of 2026-09-02 that every bootstrap landing requires shimmed code review, adopted from the rules the legacy bootstrap recorded after measurement: one change thrashed sixteen rounds and fifty-six findings when review settled on zero findings, another went fourteen rounds and twenty-three commits because its diff grew between rounds, and a full assessment costs thirteen to fifteen minutes of wall clock at high effort and about seven at medium. Hence a severity gate that prose findings cannot move, a hard cap with no design-surface exemption, batching, a frozen scope, and a frontier channel for everything the gate excludes. Review is part of reconciliation in both directions: it checks the landing against the disposition it serves, and every excluded finding is a candidate disposition. The bootstrap ordering is the author's ruling of 2026-09-02: "The code review is expensive ... during bootstrap code review is only required after ratification. This is analogous to the recorded greenfield doctrine in the legacy graph that the reconciliation frontier should first validate functionality, and only spend cycles on cross-cutting non-functional validation after that." The graph landing is excluded because its review is the interview itself; the legacy attempt reviewed graph landings by self-review and an audit skill instead of the code instrument, and that asymmetry is settled here rather than carried. Traditions to record as readings: Deming, Out of the Crisis (1986), point 3, cease dependence on inspection, diverged from in keeping adversarial review; content-addressed incremental builds (Bazel, Nix), adopted for pinning what an assessment read so that an unrelated change does not expire it.
 
-## Alternatives
+## Facts
 
-### cap-from-contract-class
+### answer
+
+#### cap-from-contract-class
 
 The review cap and the effort tiers are not stated on this node but derived from the class of the contract the landing serves, which is what the legacy exit doctrine proposed. The node's own account puts this to the author at ratification, and a clean-context review asked that it be minted as its own question or folded into the ruling's options so the author can answer it.
 
-### graph-landing-instrument
+#### graph-landing-instrument
 
 Once landings arrive from many sessions the interview and the clean-context review no longer suffice as the review of a graph landing, and a graph landing gets an instrument of its own. The answer as it stands excludes graph landings from this instrument outright, and the node's account puts the sufficiency question to the author at ratification.
 
-### shrink-the-contract
+#### shrink-the-contract
 
 The two-round cap and its consequence, that a blocking finding still open at the cap parks the landing and nothing lands over it, are dropped in favour of shrinking the unit's contract so a review can finish. The counter-argument notes that the node's own evidence blames a diff that grew between rounds, which is a scope defect rather than a review defect, and that delegation already requires one deliverable per unit. The session replied that delegation's rule is the floor and the cap remains for a contract that still thrashes, and left it to the author whether both stand.
 
-### deferred-not-ratified
+#### deferred-not-ratified
 
 The recommendation changes from ratified to deferred, since this node carries no Disposition section and therefore no quoted ruling, which authority makes a ratified stamp invalid without. The placement finding of 2026-09-03 names review among twenty-two such nodes and offers the alternative of adding a Disposition section carrying the ruling it rests on with its date.
 

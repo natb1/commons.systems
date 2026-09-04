@@ -1,41 +1,43 @@
 ---
 question: What is this repository for?
 stage: ruling
-recommendation:
-  adopts: draft
-  boldness: moderate
-  amends: "2266ff6ab8146396366abd0d87850c26a4db9d08"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: b677169ab7ce29fe858f0d62ada887eb1bc86265
-alternatives:
-  - name: draft
-    source: ai
-    ref: "2026-09-03"
-  - name: fold-option-nodes
-    source: review
-    ref: "2026-09-03"
-  - name: disclose-unstated-arche
-    source: review
-    ref: "2026-09-03"
-  - name: cite-forms
-    source: review
-    ref: "2026-09-03"
-  - name: say-instrument-not-criterion
-    source: review
-    ref: "2026-09-03"
-  - name: keep-the-authors-words
-    source: review
-    ref: "2026-09-03"
+  of: 5d11c3a38fbd5b02874305367c2b21e7183c28c7
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: author
+        ref: "2026-09-02"
+      - name: draft
+        source: ai
+        ref: "2026-09-03"
+      - name: fold-option-nodes
+        source: review
+        ref: "2026-09-03"
+      - name: disclose-unstated-arche
+        source: review
+        ref: "2026-09-03"
+      - name: cite-forms
+        source: review
+        ref: "2026-09-03"
+      - name: say-instrument-not-criterion
+        source: review
+        ref: "2026-09-03"
+      - name: keep-the-authors-words
+        source: review
+        ref: "2026-09-03"
+    recommends: draft
+    boldness: moderate
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 form: target
 under:
@@ -90,29 +92,31 @@ Drafted by the AI from the record, for the author to confirm or strike at ratifi
 - *Intent carried in prompts, chat, or memory.* Not durable, not reviewable, not rankable; it is the tacit form this repository exists to replace.
 - *Issue trackers as the record of intent.* Tried here at length; they record work, not dispositions, and cannot carry authority or rank.
 
-## Alternatives
+## Facts
 
-### draft
+### answer
+
+#### draft
 
 The recommended text rewrites the mechanism sentence in the author's own terms, that dialogue with an AI maintains the dispositions as a graph through the alignment skill and a harness then directs long-horizon work on it, strikes 'explicit' from 'explicit intent', and defines the factory as the reconciliation of the standing answers with implementation in both directions. It drops the ledger reference, restates the two hypotheses with the hexis claim first and without storing the children's validation state, and folds the rejected alternatives into the rationale, adding one the node does not carry: the incumbent's framing of the graph as a data structure the harness consumes, rejected because it makes the harness the origin. It also drops the '### Rejected' heading and carries no Disposition section, so the nine dated quotations are not in it. The criteria block it once carried was struck after purpose-criteria's reply.
 
-### fold-option-nodes
+#### fold-option-nodes
 
 Three option-nodes decide clauses a parent's recommended text already contains: hexis on whether the hexis claim comes first, purpose-criteria on whether purpose carries criteria, second-stop on the model rewrite. The finding's second branch folds each option into its parent's account as an explicit alternative rather than keeping it a node, which is what this re-encoding makes structural; its first branch keeps the option-nodes and has each say it is a sub-ruling that must be ruled first. Either way purpose's account names the option-nodes its text presumes, which it does not today.
 
-### disclose-unstated-arche
+#### disclose-unstated-arche
 
 Purpose's parent, public/agency, is at the periagogic stage with no author words anywhere on it and an answer written in the author's first person by the AI, and every node at the review or ruling stage descends from it. The placement finding proposes purpose add one clause saying it rests on an archē the author has not yet stated, which frontier-consistency's placement validation requires of any node ruling on periagogic ground. Raised on commons.systems/public/aristotle-arche-of-action, commons.systems/public/agency.
 
-### cite-forms
+#### cite-forms
 
 The author's question whether assumption is a form at all, and whether it is correctly encoded as form assumption against form disposition with unvalidated instrumentation, is carried verbatim on knowledge-store, capture and purpose, and forms is the node that answers it. The coverage finding proposes all three cite forms instead of each carrying the quotation, so that one part of one disposition is answered by one node; purpose keeps the quotations that ground the parts it does answer. Raised on commons.systems/disposition-graph/scope, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/knowledge-store.
 
-### say-instrument-not-criterion
+#### say-instrument-not-criterion
 
 The same finding names purpose's draft, which uses criterion and the criteria frontmatter key that the schema does not hold. Until instruments is ruled the draft says instrument or discloses that the term and the key arrive with instruments. (Raised on commons.systems/disposition-graph/instruments.)
 
-### keep-the-authors-words
+#### keep-the-authors-words
 
 Purpose's recommended text keeps a '## Disposition' section rather than dropping all nine dated quotations, and its account names for each quotation either the sentence of the answer that absorbs it or the node it moves to. Verified that the fence carries no author quotation of any date and that two of the three quotations answered elsewhere — the form question and the tradition instruction — have no '## Disposition' section on their target nodes to move into. It is on the table because quotes' recommended answer permits only a roll-up of what the answer absorbed, quotes is unruled, and this would be the first and largest application of a rule whose shape no node describes; the author may equally rule that the record's highest-ranked page should carry the answer alone, with version control holding the words.
 
@@ -122,10 +126,6 @@ Purpose's recommended text keeps a '## Disposition' section rather than dropping
 ---
 question: What is this repository for?
 form: target
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/public/agency
 ---

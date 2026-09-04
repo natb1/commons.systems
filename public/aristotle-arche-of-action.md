@@ -1,39 +1,40 @@
 ---
 question: Does Aristotle's account of the agent as archē support this root?
 stage: maieutic
-recommendation:
-  adopts: standing
-  boldness: high
-  amends: "0acb85683a8d46d0b6fc7eecea8c602915370b39"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 0acb85683a8d46d0b6fc7eecea8c602915370b39
-alternatives:
-  - name: record-divergence
-    source: review
-    ref: "2026-09-03"
-  - name: disclose-unstated-arche
-    source: review
-    ref: "2026-09-03"
+  of: d8e37f57ecea1ea28331867dccb730aa100663d6
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: record-divergence
+        source: review
+        ref: "2026-09-03"
+      - name: disclose-unstated-arche
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: high
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: high
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/public/agency
 source: Aristotle, Eudemian Ethics II.6, 1222b15 to 1223a20 (a person is an archē of actions as the archai of mathematics are of proofs); Nicomachean Ethics III.3, 1112b31 to 32, and III.5, 1113b17 to 21 (a person is the origin and begetter of actions); Politics I.4, 1253b33 to 1254a1 (instruments that work by themselves); Metaphysics V.1, 1012b34 to 1013a23 (the senses of archē).
-relation: adopted
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
 ---
 ## Answer
 
@@ -43,13 +44,15 @@ Supports, and supplies the identification this graph rests on: the first princip
 
 Metaphysics V.1 gives the word its senses at once, the starting point of a derivation, the origin of motion or action, and rule. Posterior Analytics I.3 makes first principles indemonstrable, which is why an archē in this graph is held by the author and never derived by the AI. Validated by the AI on 2026-09-02 from its own knowledge of the loci; deferred until the author reads them.
 
-## Alternatives
+## Facts
 
-### record-divergence
+### answer
+
+#### record-divergence
 
 Both readings press the same divergence and the session accepted it as owed at the sitting: Politics I.4 introduces the self-working instrument to argue about natural slavery, not to preserve a master's origin-hood through delegation, and Eudemian II.6's analogy between a person and the archai of mathematics is about indemonstrability rather than about authorship surviving through intermediaries. This alternative records that divergence in the node and sets the relation to diverged, against the standing text's relation of adopted with the divergence named nowhere. Evaluation makes an unrecorded conflict with a cited tradition a frontier item deferred to neither side, which is why the choice is the author's.
 
-### disclose-unstated-arche
+#### disclose-unstated-arche
 
 The placement finding of 2026-09-03 records that public/agency stands at the periagogic stage with no author words anywhere on it, while this reading stands at the ruling stage arguing for the AI's draft of the answer it is said to support. This alternative adds one clause saying the reading rests on an archē the author has not yet stated, and holds the reading to be re-read against whatever account the author gives at agency's periagogic sitting before it is ruled. Raised on commons.systems/public/agency.
 

@@ -5,17 +5,19 @@ review:
   verdict: kickback
   strength: strong
   date: 2026-09-03
-  of: b771f61884d089ade840320426bdb133f11fabc8
-alternatives:
-  - name: keep-tier-as-a-stored-flag
-    source: ai
-    ref: "2026-09-03"
-  - name: scope-by-under-alone
-    source: ai
-    ref: "2026-09-03"
-  - name: record-what-makes-a-rule-global
-    source: review
-    ref: "2026-09-03"
+  of: b33788c35f071c2873d8b1bb6d951a3f0c89bbed
+facts:
+  - name: answer
+    options:
+      - name: keep-tier-as-a-stored-flag
+        source: ai
+        ref: "2026-09-03"
+      - name: scope-by-under-alone
+        source: ai
+        ref: "2026-09-03"
+      - name: record-what-makes-a-rule-global
+        source: review
+        ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/under
 ---
@@ -24,17 +26,19 @@ under:
 The author, 2026-09-03:
 > 'Tier' (as in global-tier) needs a disposition. As a disposition references in the projected documentation must be hyperlinked. Is 'tier' even the right primitive? Even cross-cutting non-functional concerns have scope. A static typing convention doesn't apply to the purpose node. Evaluate adversarially and from greenfield perspective whether cross-cutting non-functional concern could be reduced to topology and/or citations.
 
-## Alternatives
+## Facts
 
-### keep-tier-as-a-stored-flag
+### answer
+
+#### keep-tier-as-a-stored-flag
 
 The second option of the sitting: tier stays a stored flag on the node and the rules projection reads it, which is what the record runs on and what the projector implements today. The reviewer's counter-argument favours it, noting that all five global-tier nodes genuinely do bind every session and that no narrower cross-cutting rule has ever been recorded here.
 
-### scope-by-under-alone
+#### scope-by-under-alone
 
 The third option of the sitting: a rule binds the subtree it sits in, and tier is pruned. The sitting's own reasoning rejects it because a rule's home question and its scope differ, evaluation living under growth while binding every evaluation, but the author has not ruled on it.
 
-### record-what-makes-a-rule-global
+#### record-what-makes-a-rule-global
 
 The reviewer's cheaper answer, offered when the recommended option was kicked back: record what makes a rule global and keep the flag as its projection, so tier is derived from a stated property rather than being either an unexplained field or a new citation mechanism. The session accepted the kickback and named this as one of the two readings the maieutic movement must draw out.
 

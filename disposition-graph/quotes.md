@@ -1,75 +1,75 @@
 ---
 question: How are the author's words retained when a ruling is recorded?
 stage: ruling
-recommendation:
-  adopts: ruling-stays-in-node
-  boldness: moderate
-  amends: "6d201558a0f7a7edbc82636c72a3cd4852d90562"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
-  of: 299d5fa43273c4685bf0cfce48fb5b84e7cccb62
-alternatives:
-  - name: ruling-stays-in-node
-    source: ai
-    ref: "2026-09-03"
-  - name: ruling-in-commit-message
-    source: ai
-    ref: "2026-09-03"
-  - name: sittings-graph
-    source: ai
-    ref: "2026-09-03"
-  - name: edited-not-verbatim
-    source: author
-    ref: "2026-09-03"
-  - name: facts-state-the-count
-    source: review
-    ref: "2026-09-03"
-  - name: fence-carries-the-ruling
-    source: review
-    ref: "2026-09-03"
-  - name: one-ruling-for-the-unquoted-stamp
-    source: review
-    ref: "2026-09-03"
+  of: 5597bbeedad00fbb6a4c6197563e1955dd7a3132
 facts:
+  - name: answer
+    options:
+      - name: ruling-stays-in-node
+        source: ai
+        ref: "2026-09-03"
+      - name: ruling-in-commit-message
+        source: ai
+        ref: "2026-09-03"
+      - name: sittings-graph
+        source: ai
+        ref: "2026-09-03"
+      - name: edited-not-verbatim
+        source: author
+        ref: "2026-09-03"
+      - name: facts-state-the-count
+        source: review
+        ref: "2026-09-03"
+      - name: fence-carries-the-ruling
+        source: review
+        ref: "2026-09-03"
+      - name: one-ruling-for-the-unquoted-stamp
+        source: review
+        ref: "2026-09-03"
+    recommends: ruling-stays-in-node
+    boldness: moderate
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
 under:
   - commons.systems/disposition-graph/authority
 ---
-## Alternatives
+## Facts
 
-### ruling-stays-in-node
+### answer
+
+#### ruling-stays-in-node
 
 The author's verbatim ruling stays in the node, under a Disposition section with its date, and is rolled up at the next sitting; the commit message carries it in addition. This is the option the session moved the recommended marker to after the first review's counter-argument, and it is what every node amended on 2026-09-03 already does. It owes a rule for the roll-up, whose shape no node describes.
 
-### ruling-in-commit-message
+#### ruling-in-commit-message
 
 No new schema: the ruling goes verbatim into the message of the commit that lands it, the rationale restates it, and a quote appears inline only where the wording itself is the decision. The session withdrew this after the counter-argument that no projection, validator or clean-context reviewer reads commit messages, which would make authority's invalid-stamp rule uncheckable. The second review still argues it has one virtue worth weighing, that verbatim rulings kept in nodes accumulate to nine quotations on purpose and eight on work-loop that the author reads past on every page.
 
-### sittings-graph
+#### sittings-graph
 
 A sittings graph holds each sitting's record as evidence, cited by the nodes it ruled on, so the verbatim words live in one place and the nodes reach them by citation. It is the highest-boldness of the three options and is neither recommended nor withdrawn.
 
-### edited-not-verbatim
+#### edited-not-verbatim
 
 The author's words carried verbatim on authority state a candidate answer to this node's question: quotes are rarely expected to be recorded as disposition verbatim, the dialogue is expected to edit for clarification and writing quality, and retaining the original quotes as reference is a function that must earn new schema. This node carries those words only as a paraphrase in its account and has no `## Disposition` section of its own, and the option it now recommends — the verbatim ruling stays in the node under Disposition, rolled up at the next sitting — is in tension with the first half of them. (Raised on commons.systems/disposition-graph/authority.)
 
-### facts-state-the-count
+#### facts-state-the-count
 
 The placement finding proposes that quotes be ruled first after agency, since its resolution is a bar on roughly a third of the frontier: twenty-two of the sixty-two nodes carry no Disposition section and so cannot support a ratified stamp under authority's rule. It proposes that quotes' facts state that count, and it finds that quotes' own Options block still marks as recommended the option its session reply withdrew, so an author taking the recommended option would take the withdrawn one; the marker is to be moved before the author rules. Raised on commons.systems/disposition-graph/recording, commons.systems/disposition-graph/evaluation.
 
-### fence-carries-the-ruling
+#### fence-carries-the-ruling
 
 The answer says what a recommendation fence carries of the author's words, not only what a recorded node carries. Verified that the batch is split three ways on this today: three fences carrying `class: ratified` quote a dated ruling (rationale-edge, quotes, rejected) and eight do not (purpose, hexis, namespaces, projection, traditions-home, forms, second-stop, purpose-criteria), with no rule anywhere deciding which is right. On this alternative a fence recommending ratification carries the ruling it rests on, or names the node that carries it, so that a reader of the alignment page sees the ground of the stamp beside the stamp; it is on the table because the recommended answer settles what the recorded node holds and is silent about the text the author actually reads when ruling.
 
-### one-ruling-for-the-unquoted-stamp
+#### one-ruling-for-the-unquoted-stamp
 
 Quotes' answer says what becomes of a node recommending ratification with no ruling quoted in it, and that ruling governs every such node rather than each carrying its own alternative. Verified that the same question is pending under three different names on six nodes — `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, `deferred-not-ratified` on review and persistence — and that twenty-three of sixty-eight nodes carry no '## Disposition' section, so the population is larger than the six that happen to carry an entry. On this alternative quotes' answer states the consequence once, that such a node either gains the ruling it rests on or its recommendation drops to deferred, and the six entries become consequences of it; it is on the table because one question is currently on the author's queue six times under three names, and inconsistently, since seventeen nodes in the same position carry no entry at all.
 
@@ -79,10 +79,6 @@ Quotes' answer says what becomes of a node recommending ratification with no rul
 ---
 question: How are the author's words retained when a ruling is recorded?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/authority
 ---

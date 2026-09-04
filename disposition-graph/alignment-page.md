@@ -1,36 +1,34 @@
 ---
 question: What does the author read to rule?
 stage: maieutic
-recommendation:
-  adopts: three-column-ruling-screen
-  boldness: moderate
-  amends: "58feba8753e69fc8f557f0a318735219940f5272"
-  at: "3d9f617b"
-alternatives:
-  - name: three-column-ruling-screen
-    source: ai
-    ref: "2026-09-04"
-  - name: stage-counts-kept
-    source: ai
-    ref: "2026-09-04"
-  - name: metrics-link-into-the-page
-    source: ai
-    ref: "2026-09-04"
-  - name: decisions-are-the-widest-column
-    source: ai
-    ref: "2026-09-04"
 facts:
+  - name: answer
+    options:
+      - name: three-column-ruling-screen
+        source: ai
+        ref: "2026-09-04"
+      - name: stage-counts-kept
+        source: ai
+        ref: "2026-09-04"
+      - name: metrics-link-into-the-page
+        source: ai
+        ref: "2026-09-04"
+      - name: decisions-are-the-widest-column
+        source: ai
+        ref: "2026-09-04"
+    recommends: three-column-ruling-screen
+    boldness: moderate
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: moderate
   - name: persistence
-    choices:
-      - with the page's shim
-      - without it
-    adopts: with the page's shim
+    options:
+      - name: with the page's shim
+      - name: without it
+    recommends: with the page's shim
     boldness: low
 depends:
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
@@ -107,25 +105,25 @@ The author, 2026-09-04, granting bootstrap authority for that reconciliation:
 
 > You have bootstrap authority to reconcile these dispositions.
 
-## Alternatives
+## Facts
 
-### three-column-ruling-screen
+### answer
+
+#### three-column-ruling-screen
 
 The metrics at the top of the rail with the disposition each instruments named and linked, the rest of the pagehead dropped; one node at a time, selected from the rail, the selection marked there; everything the ruling asks in the middle column, the stage's own ask first, then the decisions with their choices, then the ruling on the whole, then what a ruling here makes decidable, then the review, the author's words and the account; and the rendered disposition alone on the right, re-rendered as choices change. Adopted by the recommendation, and set out in the fence.
 
-### stage-counts-kept
+#### stage-counts-kept
 
 The four stage counts stay among the metrics, on the argument that the author needs to see what is coming, how much sits at the periagogic stage and how much at review, and not only how much can be ruled now. Against it: a stage count instruments no disposition, which is the standard the author set for a metric, and what is coming is already carried by the open count and by the order itself.
 
-### metrics-link-into-the-page
+#### metrics-link-into-the-page
 
 Each metric links to the first node on this page that it counts, keeping the author inside the page, rather than out to the disposition it instruments in the browser. Against it: the author's standard is that the metric hyperlinks to the disposition, and a disposition leaves this page the moment it is answered, so three of the four links would break on the ruling that makes them true.
 
-### decisions-are-the-widest-column
+#### decisions-are-the-widest-column
 
 The decisions take the widest column and the node as it would stand sits in a narrow pane beside them, which is the plainer reading of the author's own phrase, "right aligned context pane". Against it: the reason the author gave for moving the detail there was that the result should be in view while the list is worked, and a whole node's text in a narrow pane is not in view. The answer takes the reason over the noun and lets the pane expand to the whole screen on demand; a ruling for this alternative takes the noun.
-
-## Facts
 
 ### persistence
 
@@ -137,10 +135,6 @@ The recommendation declares a shim on this node that the node does not carry tod
 ---
 question: What does the author read to rule?
 form: rule
-authority:
-  class: ratified
-  by: Nathan Buesgens
-  date: <the date of the ruling>
 under:
   - commons.systems/disposition-graph/projection
 shims:

@@ -1,28 +1,27 @@
 ---
 question: May an un-aligned disposition have children?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: low
-  amends: "2f12ff318a1a0fd5bc4c64e8b2584c88b2672a8c"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 2f12ff318a1a0fd5bc4c64e8b2584c88b2672a8c
+  of: 3c163ef7f2a5f1e78301e90f70c8ffbc30a1e1cd
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: low
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
     boldness: low
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/transience
 ---

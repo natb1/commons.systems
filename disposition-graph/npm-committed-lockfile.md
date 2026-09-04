@@ -1,19 +1,24 @@
 ---
 question: What does the npm standard say a workspace commits?
 stage: periagogic
-alternatives:
-  - name: reparent-under-lockfile
-    source: ai
-    ref: "2026-09-03"
+facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-03"
+      - name: reparent-under-lockfile
+        source: ai
+        ref: "2026-09-03"
+    stands: standing
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 under:
   - commons.systems/disposition-graph/materialization
 source: npm CLI documentation, "package-lock.json" (npm 7 and later), the Description section; "npm ci", the Description section; and "workspaces". The lockfile was introduced in npm 5 (2017); the workspaces model this repository uses arrived in npm 7 (2020).
-relation: adopted
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
 ---
 ## Answer
 
@@ -35,9 +40,11 @@ Where projects do depart, it is normally a published library, whose consumers re
 
 Validated by the AI on 2026-09-03 from its own knowledge of the npm documentation, not from a fetch of the source; deferred until the author reads it. A reading whose verdict changes on re-reading is a re-grasp trigger for the node it grounds.
 
-## Alternatives
+## Facts
 
-### reparent-under-lockfile
+### answer
+
+#### reparent-under-lockfile
 
 The npm reading moves from under materialization to under lockfile, the question it actually grounds. It was placed on the parent only because the struck no-children rule blocked its proper parent; un-aligned-children now answers that a disposition plus dialogue state may be refined by children exactly as an answered node may, naming this very reading as the misplacement the struck rule caused. The node's own account says the move is a graph edit that changes what the reading is a reading of, so it is put to the author rather than done silently. It still sits under materialization in the record. Raised on commons.systems/disposition-graph/un-aligned-children, commons.systems/disposition-graph/lockfile.
 

@@ -1,42 +1,43 @@
 ---
 question: Does freedom as non-domination support the modal reading of this root?
 stage: maieutic
-recommendation:
-  adopts: standing
-  boldness: high
-  amends: "d8e9b465fe722085ad7a3c570357d87947718e5b"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: d8e9b465fe722085ad7a3c570357d87947718e5b
-alternatives:
-  - name: record-the-divergence
-    source: review
-    ref: "2026-09-03"
-  - name: sen-capability-loss
-    source: review
-    ref: "2026-09-03"
-  - name: disclose-unstated-arche
-    source: review
-    ref: "2026-09-03"
+  of: 793d76498e1c7f2d0b8f07d16ff8d13a395e9895
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: record-the-divergence
+        source: review
+        ref: "2026-09-03"
+      - name: sen-capability-loss
+        source: review
+        ref: "2026-09-03"
+      - name: disclose-unstated-arche
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: high
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: high
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/public/agency
 source: Pettit, Republicanism, A Theory of Freedom and Government (1997), chapter 2, "Liberty as non-domination"; Skinner, Liberty before Liberalism (1998).
-relation: adopted
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
 ---
 ## Answer
 
@@ -46,17 +47,19 @@ Supports. Unfreedom is another's capacity to interfere arbitrarily, whether or n
 
 Sen's capability approach says the same of freedom in general, freedom as what one is able to do rather than what one does; a separate reading is owed for it. Validated by the AI on 2026-09-02 from its own knowledge; deferred until the author reads the chapter.
 
-## Alternatives
+## Facts
 
-### record-the-divergence
+### answer
+
+#### record-the-divergence
 
 The frontmatter records the relation as adopted with no divergence, although the transposition is large: non-domination is a status between persons under institutions, applied here to a person's relation to their own tools. Evaluation requires the divergence to be recorded or it is a frontier item deferred to neither side. The alternative records the transposition as a divergence on this reading, which the session accepted as owed at the sitting and which has not been written.
 
-### sen-capability-loss
+#### sen-capability-loss
 
 The reviewer's counter-argument, twice: a dominus with arbitrary power is a relation under institutions one cannot exit, and a tool the author can switch off either dominates the way any dependency does or does not dominate at all, so the analogy proves too much or too little. The failure the record actually fears is capture through atrophy, which is Sen's capability loss and not Pettit's mechanism. The alternative grounds the archē on the Sen reading this node's rationale defers and has never written, with Pettit demoted to a supporting reading or recorded as diverged.
 
-### disclose-unstated-arche
+#### disclose-unstated-arche
 
 The parent, public/agency, is at the periagogic stage with no author words anywhere on it, and this reading stands at the ruling stage arguing for an answer the author has never given. The alternative adds one clause saying the reading rests on an archē the author has not yet stated, and holds the reading to be re-read against the account the author gives at agency's sitting. The counter-argument on agency also observes that Pettit's structural test is adopted as support without the record carrying any structural test of its own. Raised on commons.systems/public/aristotle-arche-of-action, commons.systems/public/agency.
 

@@ -1,42 +1,43 @@
 ---
 question: Does Aristotle's hexis support reading this record as a projection of its author's dispositions?
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: high
-  amends: "2b2f43f9f4df2093a9f0a8182145295cd84f71f9"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 2b2f43f9f4df2093a9f0a8182145295cd84f71f9
-alternatives:
-  - name: drop-the-diathesis-mapping
-    source: review
-    ref: "2026-09-03"
-  - name: logos-not-hexis
-    source: review
-    ref: "2026-09-03"
-  - name: hold-for-knowledge-store
-    source: review
-    ref: "2026-09-03"
+  of: 7dac080d201b955ceaf38e358b50b5cdd7ad1c29
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-09-02"
+      - name: drop-the-diathesis-mapping
+        source: review
+        ref: "2026-09-03"
+      - name: logos-not-hexis
+        source: review
+        ref: "2026-09-03"
+      - name: hold-for-knowledge-store
+        source: review
+        ref: "2026-09-03"
+    recommends: standing
+    boldness: high
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: high
 form: reading
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-02
 under:
   - commons.systems/disposition-graph/knowledge-store
 source: Aristotle, Nicomachean Ethics II.5, 1105b19 to 1106a13 (virtue is a hexis, a settled state, acquired by habituation, neither a feeling nor a capacity); Categories 8, 8b26 to 9a13 (a hexis is stable and hard to change, a diathesis is easily changed).
-relation: adopted
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
 ---
 ## Answer
 
@@ -46,17 +47,19 @@ Supports, and refines the hypothesis. A hexis is a settled disposition acquired 
 
 The legacy record ratified the hexis reading of its root layer on 2026-07-13, in a reading program on its kind-virtue node; that ratification is evidence for this reading, not authority over it. Validated by the AI on 2026-09-02 from its own knowledge of the loci; deferred until the author reads them.
 
-## Alternatives
+## Facts
 
-### drop-the-diathesis-mapping
+### answer
+
+#### drop-the-diathesis-mapping
 
 The answer maps Categories 8 onto the record, a ratified answer being a hexis and a delegated or deferred answer a diathesis. Under the unanswered node a deferred answer is not a weaker kind of answer but no answer at all, so the gradation no longer maps onto the record it describes. The alternative drops the mapping, or re-reads it against the derived status and records the divergence; the session accepted this as owed at the sitting and it has not been written.
 
-### logos-not-hexis
+#### logos-not-hexis
 
 The reviewer's counter-argument, twice: a hexis in Nicomachean Ethics II.5 is acquired by acting and is precisely not a set of propositions one holds, so a written record of standing answers is nearer to a logos of one's dispositions than to the hexis itself. The node's move, that the record is both a projection of the hexis and part of how it is formed, is the strongest form of the claim and the point where it stops being Aristotle's. The alternative answers that the reading supports the weaker claim only, which leaves knowledge-store's hypothesis without this ground.
 
-### hold-for-knowledge-store
+#### hold-for-knowledge-store
 
 The parent, knowledge-store, is an unruled hypothesis at the ruling stage, and a third node, hexis, decides the same clause of purpose's text, so this reading grounds a claim the author has not yet made. The alternative says on the node that the reading cannot be confirmed before knowledge-store is, and orders the two rulings accordingly.
 
