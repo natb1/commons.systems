@@ -54,7 +54,7 @@ function settlesBreakdown(node) {
 function loadRenderer() {
   const m = TEMPLATE.match(/<script>\n([\s\S]*?)\n<\/script>/);
   assert.ok(m, "template has a plain <script> block");
-  const api = "esc inline mdHtml mdBlocks groupRejected plain firstSentence termIndex termRegex fmtPct formWord safeHref truncate shimsHtml chooseRoute savePlace loadPlace PLACE_KEY STATUS_WORD STATUS_CLASS pill stampPill unansweredPill draftNoteHtml alternativesHtml authorityHtml rowHtml";
+  const api = "esc inline mdHtml mdBlocks groupRejected plain firstSentence termIndex termRegex fmtPct formWord safeHref truncate shimsHtml chooseRoute savePlace loadPlace PLACE_KEY STATUS_WORD STATUS_CLASS pill stampPill unansweredPill draftNoteHtml alternativesHtml factsHtml authorityHtml rowHtml";
   return new Function(`${m[1]}\nreturn { ${api.split(" ").join(", ")} };`)();
 }
 const R = loadRenderer();
@@ -459,7 +459,7 @@ test("renderFrontier gains a 'depends:' line, placed after 'alternatives:' when 
   );
   await writeFile(
     join(dir, "main", "qualified.md"),
-    "---\nquestion: Qualified?\nform: target\nalternatives:\n  - name: own-alt\n    source: author\n    ref: 2026-01-01\ndepends:\n  - example.test/main/root#split-it\nstage: review\nrecommendation:\n  adopts: standing\n  class: delegated\n  boldness: low\n  amends: " + "a".repeat(40) + "\n  at: a1b2c3d\n---\n\n## Answer\n\nAns.\n\n## Alternatives\n\n### own-alt\n\nAn alternative of its own.\n",
+    "---\nquestion: Qualified?\nform: target\nalternatives:\n  - name: own-alt\n    source: author\n    ref: 2026-01-01\ndepends:\n  - example.test/main/root#split-it\nstage: review\nrecommendation:\n  adopts: standing\n  boldness: low\n  amends: " + "a".repeat(40) + "\n  at: a1b2c3d\n---\n\n## Answer\n\nAns.\n\n## Alternatives\n\n### own-alt\n\nAn alternative of its own.\n",
   );
   const graph = await readGraph(dir);
   const listing = renderFrontier(graph);
@@ -563,14 +563,14 @@ test("renderFrontier prints recommendation/review/draft lines after the stage li
   const draftAt = rulingBlock.indexOf("  draft:");
   assert.ok(stageAt >= 0 && stageAt < recAt && recAt < reviewAt && reviewAt < draftAt, "recommendation, then review, then draft, all after stage");
   assert.ok(rulingBlock.includes(
-    `  recommendation: adopts ${ruling.recommendation.adopts}, ${ruling.recommendation.class}, boldness ${ruling.recommendation.boldness}`,
+    `  recommendation: adopts ${ruling.recommendation.adopts}, boldness ${ruling.recommendation.boldness}`,
   ));
   assert.ok(rulingBlock.includes(`  review: forward (strong, 2026-09-03)`), "not stale (of matches)");
   assert.ok(!rulingBlock.includes("draft changed since the review"));
   assert.ok(rulingBlock.includes("  draft: yes"));
 
   const reviewOnlyBlock = blockFor("review-node");
-  assert.ok(reviewOnlyBlock.includes("  recommendation: adopts standing, delegated, boldness high"));
+  assert.ok(reviewOnlyBlock.includes("  recommendation: adopts standing, boldness high"));
   assert.ok(!reviewOnlyBlock.includes("  review:"), "no review yet at the review stage");
   assert.ok(!reviewOnlyBlock.includes("  draft:"));
 });
@@ -581,14 +581,14 @@ test("renderFrontier appends ', draft changed since the review' when reviewStale
   await writeFile(join(dir, "disposition.yaml"), "module: example.test\ngraphs:\n  main:\n    about: fixture\n");
   await writeFile(
     join(dir, "main", "stale.md"),
-    "---\nquestion: Stale?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\nstage: ruling\nrecommendation:\n  adopts: standing\n  class: ratified\n  boldness: low\n  amends: " + "b".repeat(40) + "\n  at: a1b2c3d\nreview:\n  verdict: forward\n  strength: none\n  date: 2026-01-01\n  of: " + "a".repeat(40) + "\n---\n\n## Answer\n\nAns.\n",
+    "---\nquestion: Stale?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\nstage: ruling\nrecommendation:\n  adopts: standing\n  boldness: low\n  amends: " + "b".repeat(40) + "\n  at: a1b2c3d\nreview:\n  verdict: forward\n  strength: none\n  date: 2026-01-01\n  of: " + "a".repeat(40) + "\n---\n\n## Answer\n\nAns.\n",
   );
   const graph = await readGraph(dir);
   const listing = renderFrontier(graph);
   assert.ok(listing.includes("  review: forward (none, 2026-01-01), draft changed since the review"));
 });
 
-test("renderFrontier names what the recommendation adopts, marks a prune, and marks a stale recommendation", async () => {
+test("renderFrontier names what the recommendation adopts, lists the facts, and marks a stale recommendation", async () => {
   const graph = await readGraph(resolve(HERE, "fixtures/valid-alternatives"));
   const listing = renderFrontier(graph);
   const blockFor = (slug) => {
@@ -600,8 +600,9 @@ test("renderFrontier names what the recommendation adopts, marks a prune, and ma
   };
 
   const fresh = blockFor("fresh-node");
-  assert.ok(fresh.includes("  recommendation: adopts split-the-node, ratified, boldness high"));
-  assert.ok(!fresh.includes("(prune)"), "the adopted alternative is not a prune");
+  assert.ok(fresh.includes("  recommendation: adopts split-the-node, boldness high"),
+    "the class left the recommendation: it is the authority fact");
+  assert.ok(!fresh.includes(", ratified,"), "no class on the recommendation line");
   assert.ok(!fresh.includes("standing text changed since the recommendation"));
   assert.ok(fresh.includes("  draft: yes"));
   assert.ok(fresh.includes(
@@ -611,14 +612,25 @@ test("renderFrontier names what the recommendation adopts, marks a prune, and ma
   const altsAt = fresh.indexOf("  alternatives:");
   assert.ok(draftAt >= 0 && draftAt < altsAt, "the alternatives line comes last of the dialogue lines");
 
+  // Pruning is the `existence` fact, never an alternative: the
+  // recommendation adopts the node as it stands and the fact carries the
+  // proposal to delete it (commons.systems/disposition-graph/dialogue).
   const prune = blockFor("prune-node");
-  assert.ok(prune.includes("  recommendation: adopts fold-into-the-parent (prune), delegated, boldness moderate"));
-  assert.ok(!prune.includes("  draft:"), "a prune quotes no fence");
-  assert.ok(prune.includes("  alternatives: 1 (fold-into-the-parent:review)"));
+  assert.ok(prune.includes("  recommendation: adopts standing, boldness moderate"));
+  assert.ok(!prune.includes("  draft:"), "adopting the standing text quotes no fence");
+  assert.ok(!prune.includes("  alternatives:"), "the prune alternative is gone");
+  assert.ok(
+    prune.includes("  facts: authority: delegated of ratified|delegated (boldness moderate); existence: prune of keep|prune (boldness moderate)"),
+    "the facts line names each fact, its adopted choice, its choice set, and its boldness, in the reserved order",
+  );
+  assert.ok(
+    fresh.includes("  facts: authority: ratified of ratified|delegated (boldness high)"),
+    "a node with only the authority fact still prints one",
+  );
 
   const stale = blockFor("stale-node");
   assert.ok(stale.includes(
-    "  recommendation: adopts standing, delegated, boldness low, standing text changed since the recommendation",
+    "  recommendation: adopts standing, boldness low, standing text changed since the recommendation",
   ));
   assert.ok(!stale.includes("  alternatives:"), "no alternatives line when there are none");
 });
@@ -755,26 +767,28 @@ test("draftNoteHtml points to the alignment page only when the node carries a Re
 test("alternativesHtml lists each pending alternative with its source, ref and prose, and says the standing answer still holds", () => {
   const html = R.alternativesHtml({
     alternatives: [
-      { name: "keep-standing", source: "author", ref: "2026-09-01", prune: false },
-      { name: "fold-into-the-parent", source: "review", ref: "2026-09-02", prune: true },
-      { name: "follow-the-instrument", source: "proposal", ref: "node --test x.mjs", prune: false },
+      { name: "keep-standing", source: "author", ref: "2026-09-01" },
+      { name: "split-the-node", source: "review", ref: "2026-09-02" },
+      { name: "follow-the-instrument", source: "proposal", ref: "node --test x.mjs" },
     ],
     alternativesText: {
       "keep-standing": "Leave the node as it stands.",
-      "fold-into-the-parent": "Delete the node; the one sentence that survives moves up.",
+      "split-the-node": "The question is two questions.",
       "follow-the-instrument": "The instrument contradicts the standing answer.",
     },
   });
   assert.ok(html.includes("Pending alternatives"));
-  for (const name of ["keep-standing", "fold-into-the-parent", "follow-the-instrument"]) {
+  for (const name of ["keep-standing", "split-the-node", "follow-the-instrument"]) {
     assert.ok(html.includes(`>${name}</span>`), `${name} is named`);
   }
   assert.ok(html.includes("author · 2026-09-01"), "the source and the ref that dates it");
   assert.ok(html.includes("proposal · node --test x.mjs"), "the ref that names the instrument");
   assert.ok(html.includes("Leave the node as it stands."), "each alternative's prose");
-  assert.ok(html.includes("Delete the node; the one sentence that survives moves up."));
-  assert.ok(html.includes('<span class="pill sm prune">prune</span>'), "the prune is marked");
-  assert.equal(html.split('class="pill sm prune"').length - 1, 1, "and only the prune is");
+  assert.ok(html.includes("The question is two questions."));
+  // Deleting the node is the `existence` fact and never an alternative, so
+  // no alternative is ever marked a prune here
+  // (commons.systems/disposition-graph/dialogue).
+  assert.ok(!html.includes("prune"), "no alternative carries a prune mark any more");
   assert.ok(
     html.includes("The standing answer keeps its authority until the author confirms one of these."),
     "the line that says what the list does not do",
@@ -794,9 +808,16 @@ test("the browser's node page carries the pending alternatives beside the stamp"
   assert.ok(html.includes("the question is two questions"), "the alternative's prose");
   assert.ok(!html.includes("prune"), "no prune among these three");
 
-  const pruned = R.alternativesHtml(graph.nodes.find((n) => n.slug === "prune-node"));
-  assert.ok(pruned.includes(">fold-into-the-parent</span>"));
-  assert.ok(pruned.includes('<span class="pill sm prune">prune</span>'), "a prune alternative is marked as one");
+  // The node whose deletion is proposed carries no alternative at all: the
+  // proposal is its `existence` fact, which factsHtml renders.
+  const pruneNode = graph.nodes.find((n) => n.slug === "prune-node");
+  assert.equal(R.alternativesHtml(pruneNode), "", "no alternatives on it to list");
+  const facts = R.factsHtml(pruneNode);
+  assert.ok(facts.includes("The decisions this ruling asks"));
+  assert.ok(facts.includes(">existence</span>"), "the existence fact is named");
+  assert.ok(facts.includes("<strong class=\"mono\">prune</strong>"), "and its adopted choice is marked");
+  assert.ok(facts.includes(">authority</span>"), "the authority fact beside it");
+  assert.equal(R.factsHtml({ facts: [] }), "", "nothing for a node with no facts");
 
   // and the browser keeps every node of this fixture: each has an answer
   const kept = excludeUnaligned(graph).nodes.map((n) => n.slug).sort();
@@ -1000,17 +1021,18 @@ test("orderAlignmentItems takes only nodes carrying a stage, appends an undeclar
   assert.deepEqual(stray.items.map((n) => n.slug), ["a", "b"]);
 });
 
-test("--alignment lays the page out in one flat ruling order, with each graph's about line and count printed once near the top, and leaves out a node with no stage", () => {
+test("--alignment lays the page out in one flat ruling order, the graph a label on each rail row, and leaves out a node with no stage", () => {
   const html = buildAlignment(ALIGNMENT_TEMPLATE, TWO_GRAPHS);
-  // the graphs' about lines appear once each, as page-header metadata, not
-  // once per item and not as a section heading over a run of items.
-  assert.ok(html.includes("the graph the manifest names first"));
-  assert.ok(html.includes("the graph the manifest names second"));
-  assert.equal(html.split("the graph the manifest names first").length - 1, 1, "printed once, not once per item");
-  assert.ok(html.includes(">first (2)<"), "the first graph's open-item count");
-  assert.ok(html.includes(">second (1)<"), "the second graph's open-item count");
+  // The pagehead is gone: it liquidated without a disposition, on the
+  // author's ruling of 2026-09-03 (commons.systems/disposition-graph/alignment-page).
+  assert.ok(!html.includes("the graph the manifest names first"), "no per-graph about line");
+  assert.ok(!html.includes('class="pagehead"'), "no pagehead");
+  assert.ok(!html.includes('<dl class="counts">'), "no stage counts: a stage count instruments no disposition");
+  assert.ok(!html.includes("Every node is unanswered until the author confirms it, here or in prose"), "no lede");
   assert.ok(!html.includes('id="graph-first"'), "no per-graph item section remains");
   assert.ok(!html.includes('id="graph-second"'));
+  // The graph is a label on the rail row, never a division of the order.
+  assert.ok(html.includes("&#183; first</span>") || html.includes("· first</span>"), "the first graph labels its rows");
 
   const leafA = html.indexOf('data-id="example.test/first/leaf-a"');
   const leafB = html.indexOf('data-id="example.test/first/leaf-b"');
@@ -1079,20 +1101,28 @@ test("--alignment carries the author's words, the node as it stands, and the no-
   const ruling = nodeBySlug(ALIGNMENT_GRAPH, "child-ruling");
   const unaligned = nodeBySlug(ALIGNMENT_GRAPH, "child-unaligned");
 
+  // All three sit in the right-hand column, the author's words and the
+  // account behind a drill-down beneath the node as it would stand.
   const rulingItem = itemHtml(html, ruling.id);
   assert.ok(rulingItem.includes("The author's words"));
-  assert.ok(rulingItem.includes("The node as it stands"));
+  assert.ok(rulingItem.includes("The node as it would stand"));
   assert.ok(rulingItem.includes(ruling.answer), "the current answer text");
   assert.ok(rulingItem.includes(ruling.rationale), "the rationale text");
   assert.ok(rulingItem.includes("The AI's account"));
   assert.ok(rulingItem.includes(ruling.account), "the account text");
+  assert.ok(rulingItem.includes('<aside class="col-pane">'), "the pane is its own column");
+  assert.ok(rulingItem.includes('<div class="col-ask">'), "and the decisions are the other");
 
   const unalignedItem = itemHtml(html, unaligned.id);
   assert.equal(unaligned.answer, null, "fixture precondition: no answer");
-  assert.ok(unalignedItem.includes("The node as it stands"), "the section is still there");
+  assert.ok(unalignedItem.includes("The node as it would stand"), "the section is still there");
   assert.ok(
     unalignedItem.includes("No answer yet: this node is the author's disposition awaiting its answer."),
     "with the no-answer line in place of an answer",
+  );
+  assert.ok(
+    unalignedItem.includes("No answer is drafted yet"),
+    "and the caption that says there is nothing yet to confirm",
   );
 });
 
@@ -1102,9 +1132,14 @@ test("--alignment shows the draft, the changed frontmatter field, and a word-lev
   assert.ok(drafted.draft, "fixture precondition: the node carries a '## Draft'");
   const article = itemHtml(html, drafted.id);
 
-  assert.ok(article.includes("The draft"), "the draft's own label");
+  assert.ok(article.includes("The node as it would stand"), "the pane's label");
   assert.ok(article.includes("Yes: a draft is a whole proposed node"), "the draft's answer, rendered as prose");
   assert.ok(article.includes("The edit"), "the edit's label");
+  assert.ok(article.includes("The node it would leave"), "and the whole beneath the edit");
+  // A stamp of any class confers authority to amend, so this pane leads
+  // with the edit rather than with the first-answer caption
+  // (commons.systems/disposition-graph/dialogue, first-answer-is-not-an-amendment).
+  assert.ok(!article.includes("This ruling gives the node its first answer"));
 
   // the frontmatter half: authority is the one field that moved, compared
   // as a whole and printed old -> new.
@@ -1121,10 +1156,16 @@ test("--alignment shows the draft, the changed frontmatter field, and a word-lev
   assert.ok(article.includes("Confirm ratifies the draft as the node."), "the edit's caption");
   assert.ok(article.includes("The node as it stands is what remains if you deny."));
 
-  // a node with no draft gets neither the draft section nor the caption
+  // A node with no fence gets no edit and no edit caption. review-node
+  // carries no stamp, so its pane leads with the whole and says what a
+  // denial actually leaves.
   const plain = itemHtml(html, nodeBySlug(DIALOGUE_GRAPH, "review-node").id);
   assert.ok(!plain.includes("The edit"));
   assert.ok(!plain.includes("Confirm ratifies the draft as the node."));
+  assert.ok(
+    plain.includes("deny and the question stays open, with nothing behind it that holds"),
+    "a first answer says what a denial leaves",
+  );
 });
 
 test("frontmatterEdits compares authority as a whole and ignores the dialogue's own keys", () => {
@@ -1180,6 +1221,9 @@ test("wordDiff matches off the shared head and tail, and returns null past the t
     nodes: [{
       id: "example.test/main/long", slug: "long", question: "Long?", graph: "main", stage: "ruling",
       under: [], rank: 1, status: "unanswered", answer: long, rationale: null,
+      // a stamp of any class confers authority to amend, so the pane leads
+      // with the edit and the diff is rendered at all
+      authority: { class: "deferred", by: "claude", date: "2026-09-03" },
       draft: { frontmatter: {}, sections: { Answer: `${long} more`, Rationale: null } },
     }],
   };
@@ -1188,20 +1232,22 @@ test("wordDiff matches off the shared head and tail, and returns null past the t
   assert.ok(!/too long to diff/i.test(html));
 });
 
-test("--alignment lists the alternatives after the node as it stands, marking the adopted one and any prune", async () => {
+test("--alignment puts the alternatives on the answer decision as its choices, with the standing text first and the adopted one marked", async () => {
   const graph = await readGraph(resolve(HERE, "fixtures/valid-alternatives"));
   const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
   const fresh = nodeBySlug(graph, "fresh-node");
   const article = itemHtml(html, fresh.id);
 
-  assert.ok(article.includes("The alternatives"), "the section's label");
-  const standsAt = article.indexOf("The node as it stands");
-  const altsAt = article.indexOf("The alternatives");
-  const recAt = article.indexOf("The recommendation");
-  assert.ok(standsAt >= 0 && standsAt < altsAt && altsAt < recAt, "after the node, before the recommendation");
+  assert.ok(article.includes("What this ruling asks"), "the decisions' label");
+  assert.ok(article.includes('data-decision="answer"'), "the answer is one of the decisions");
+  assert.ok(article.includes("The answer"), "and it is labelled");
 
+  // the node as it stands is always a candidate and is the first choice
+  assert.ok(article.includes('value="standing"'), "the standing text is a choice");
+  const standingAt = article.indexOf('value="standing"');
   for (const name of ["keep-standing", "split-the-node", "follow-the-instrument"]) {
-    assert.ok(article.includes(`<span class="mono">${name}</span>`), `${name} is named`);
+    assert.ok(article.includes(`value="${name}"`), `${name} is a choice`);
+    assert.ok(standingAt < article.indexOf(`value="${name}"`), "the standing text leads");
   }
   assert.ok(article.includes('<span class="pill alt-src">author</span>'), "each alternative's source");
   assert.ok(article.includes('<span class="pill alt-src">proposal</span>'));
@@ -1209,23 +1255,35 @@ test("--alignment lists the alternatives after the node as it stands, marking th
     article.includes('<span class="pill alt-ref mono">node --test packages/disposition/read.test.mjs</span>'),
     "the ref the proposal names",
   );
+  // the prose is drill-down beneath the row, not the row itself
+  assert.ok(article.includes("<summary>What this would answer</summary>"), "the drill-down");
   assert.ok(article.includes("leave the node as it stands and close the dialogue"), "the prose of an alternative");
   assert.ok(article.includes("the question is two questions"));
 
-  assert.equal(
-    article.split("the recommendation adopts this").length - 1, 1,
-    "exactly one alternative is marked as adopted",
+  // every decision marks the choice its recommendation adopts, so scope
+  // the count to the answer's own fieldset
+  const answerFs = article.slice(
+    article.indexOf('data-decision="answer"'),
+    article.indexOf("</fieldset>", article.indexOf('data-decision="answer"')),
   );
-  const adoptedAt = article.indexOf("the recommendation adopts this");
-  const splitAt = article.indexOf('<span class="mono">split-the-node</span>');
-  const followAt = article.indexOf('<span class="mono">follow-the-instrument</span>');
+  assert.equal(
+    answerFs.split("the recommendation adopts this").length - 1, 1,
+    "exactly one choice of the answer is marked as adopted",
+  );
+  const adoptedAt = answerFs.indexOf("the recommendation adopts this");
+  const splitAt = answerFs.indexOf('value="split-the-node"');
+  const followAt = answerFs.indexOf('value="follow-the-instrument"');
   assert.ok(splitAt < adoptedAt && adoptedAt < followAt, "and it is the one the recommendation names");
-  assert.ok(article.includes('class="alt adopted"'), "the adopted entry is marked on its own element too");
+  assert.ok(article.includes('class="choice adopted"'), "the adopted row is marked on its own element too");
   assert.ok(!article.includes('class="divergence"'), "no leaf depends on this fixture's node, so no divergence paragraph");
 
-  // a node with nothing on the table renders no section at all
+  // the last row of every decision rejects all of its choices with feedback
+  assert.ok(article.includes('value="__reject"'), "a rejection row");
+  assert.ok(article.includes("Reject all of these, with feedback"));
+
+  // a node with nothing on the table asks no answer decision
   const plain = itemHtml(html, nodeBySlug(graph, "stale-node").id);
-  assert.ok(!plain.includes("The alternatives"));
+  assert.ok(!plain.includes('data-decision="answer"'));
 });
 
 test("--alignment's eyebrow carries the alternatives count right after settles, plural or singular, and omits it entirely for a node with none", async () => {
@@ -1240,11 +1298,6 @@ test("--alignment's eyebrow carries the alternatives count right after settles, 
   const altsAt = freshArticle.indexOf('3 alternatives');
   const rankAt = freshArticle.indexOf(`rank ${fresh.rank.toFixed(4)}`);
   assert.ok(settlesAt >= 0 && settlesAt < altsAt && altsAt < rankAt, "right after settles, before rank");
-
-  const prune = nodeBySlug(graph, "prune-node");
-  assert.equal(prune.alternatives.length, 1, "fixture precondition: one alternative on the table");
-  const pruneArticle = itemHtml(html, prune.id);
-  assert.ok(pruneArticle.includes('<span class="meta mono num">1 alternative</span>'), "singular for exactly one");
 
   const stale = nodeBySlug(graph, "stale-node");
   assert.equal((stale.alternatives || []).length, 0, "fixture precondition: no alternatives");
@@ -1289,9 +1342,9 @@ test("--alignment inverts a divergence onto the ancestor's alternatives: what a 
   const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
   const article = itemHtml(html, "example.test/main/anc");
 
-  const altAAt = article.indexOf('<span class="mono">alt-a</span>');
-  const altBAt = article.indexOf('<span class="mono">alt-b</span>');
-  const altCAt = article.indexOf('<span class="mono">alt-c</span>');
+  const altAAt = article.indexOf('value="alt-a"');
+  const altBAt = article.indexOf('value="alt-b"');
+  const altCAt = article.indexOf('value="alt-c"');
   assert.ok(altAAt >= 0 && altAAt < altBAt && altBAt < altCAt, "the three alternatives, in the list's own order");
   const blockA = article.slice(altAAt, altBAt);
   const blockB = article.slice(altBAt, altCAt);
@@ -1315,26 +1368,32 @@ test("--alignment inverts a divergence onto the ancestor's alternatives: what a 
   assert.ok(!blockC.includes("It discards"), "nothing to discard when nothing is kept");
 });
 
-test("--alignment marks a prune alternative and captions what confirming it does", async () => {
+test("--alignment asks the prune as the existence fact, not as an alternative or a caption", async () => {
   const graph = await readGraph(resolve(HERE, "fixtures/valid-alternatives"));
   const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
   const prune = nodeBySlug(graph, "prune-node");
-  assert.equal(prune.alternatives[0].prune, true, "fixture precondition: the alternative prunes the node");
-  assert.equal(prune.draft, null, "fixture precondition: a prune quotes no fence");
+  assert.equal((prune.alternatives || []).length, 0, "fixture precondition: no alternative proposes the deletion");
+  assert.equal(prune.facts.find((f) => f.name === "existence").adopts, "prune",
+    "fixture precondition: the existence fact proposes it");
+  assert.equal(prune.draft, null, "fixture precondition: adopting the standing text quotes no fence");
   const article = itemHtml(html, prune.id);
 
-  assert.ok(article.includes('<span class="pill alt-prune">prune</span>'), "the entry is marked a prune");
-  assert.ok(article.includes("the recommendation adopts this"));
-  assert.ok(article.includes("adopts: fold-into-the-parent"), "the recommendation names it");
-  assert.ok(
-    article.includes("Confirm prunes the node; the node as it stands is what remains if you deny."),
-    "the prune's own caption",
+  assert.ok(article.includes('data-decision="existence"'), "the prune is a decision of its own");
+  assert.ok(article.includes("Whether the node exists"), "labelled in the words the author reads it by");
+  const existenceFs = article.slice(
+    article.indexOf('data-decision="existence"'),
+    article.indexOf("</fieldset>", article.indexOf('data-decision="existence"')),
   );
-  assert.ok(!article.includes("Confirm ratifies the draft as the node."), "not the edit's caption");
-  assert.ok(!article.includes("The edit"), "and no edit, since there is no recommended text");
+  assert.ok(existenceFs.includes('value="keep"') && existenceFs.includes('value="prune"'), "both choices");
+  assert.ok(existenceFs.includes("the recommendation adopts this"), "with the recommended one marked");
+  assert.ok(existenceFs.includes("Nothing here survives as a node of its own"), "the fact's prose under its legend");
+  assert.ok(!article.includes('class="pill alt-prune"'), "no prune pill: it is not an alternative");
+  assert.ok(!article.includes("Confirm prunes the node"), "and no caption of its own");
+  assert.ok(!article.includes("The edit"), "no edit, since the recommendation adopts the standing text");
+  assert.ok(article.includes("Confirm ratifies the node as it stands."), "the pane's caption for a standing adoption");
 
   const fresh = itemHtml(html, nodeBySlug(graph, "fresh-node").id);
-  assert.ok(!fresh.includes("Confirm prunes the node"), "a recommendation that rewrites gets the edit's caption");
+  assert.ok(!fresh.includes('data-decision="existence"'), "a node nobody proposes to delete asks no existence decision");
   assert.ok(fresh.includes("Confirm ratifies the draft as the node."));
 });
 
@@ -1346,7 +1405,11 @@ test("--alignment shows what the recommendation adopts and pills a stale one", a
   assert.equal(stale.recommendationStale, true, "fixture precondition: the standing text moved");
   const staleItem = itemHtml(html, stale.id);
   assert.ok(staleItem.includes("adopts: standing"), "adopts is shown even for the node as it stands");
-  assert.ok(staleItem.includes("class: delegated") && staleItem.includes("boldness: low"));
+  assert.ok(staleItem.includes("boldness: low"));
+  assert.ok(!staleItem.includes("class: delegated"),
+    "the recommendation carries no class: it is the authority fact");
+  assert.ok(staleItem.includes('data-decision="authority"') || staleItem.includes("delegated"),
+    "and the class is asked or folded as that fact");
   assert.ok(staleItem.includes("standing text changed since the recommendation"), "the staleness pill");
 
   const fresh = nodeBySlug(graph, "fresh-node");
@@ -1360,8 +1423,9 @@ test("--alignment renders the recommendation's pills and persistence line, or sa
   const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
   const ruling = nodeBySlug(ALIGNMENT_GRAPH, "child-ruling");
   const article = itemHtml(html, ruling.id);
-  assert.ok(article.includes("The recommendation"));
-  assert.ok(article.includes("class: ratified"), "the class pill");
+  assert.ok(article.includes("adopts: "), "what it adopts");
+  assert.ok(!article.includes("class: ratified"), "no class pill: the class is the authority fact");
+  assert.ok(article.includes("The class a confirmation confers"), "which the decisions carry instead");
   assert.ok(article.includes("boldness: moderate"), "the boldness pill");
   assert.ok(article.includes("Persistence: standing, with 1 shim:"), "the shim count");
   assert.ok(article.includes("this fixture's ruling stage"), "each shim's artifact");
@@ -1370,7 +1434,7 @@ test("--alignment renders the recommendation's pills and persistence line, or sa
   assert.ok(plain.includes("No recommendation yet."));
 
   const delegated = itemHtml(buildAlignment(ALIGNMENT_TEMPLATE, DIALOGUE_GRAPH), nodeBySlug(DIALOGUE_GRAPH, "review-node").id);
-  assert.ok(delegated.includes("class: delegated") && delegated.includes("boldness: high"));
+  assert.ok(delegated.includes("boldness: high"));
   assert.ok(delegated.includes("Persistence: standing."), "no shims, so the bare line");
 });
 
@@ -1412,7 +1476,10 @@ test("--alignment offers the three responses on every item, with the stage's hin
   assert.ok(periagogic.includes('placeholder="Your words: your account of the ground, or your intention"'));
 
   const ruling = itemHtml(html, nodeBySlug(ALIGNMENT_GRAPH, "child-ruling").id);
-  assert.ok(!ruling.includes("placeholder="), "a ruling item asks for a response, not for the author's words");
+  assert.ok(
+    !ruling.includes('placeholder="Your words'),
+    "a ruling item asks for a response, not for the author's words",
+  );
   assert.ok(!ruling.includes("In review."), "the ruling stage carries no hint beyond the edit's caption");
   assert.ok(!ruling.includes("The answer is not yet drafted"));
   assert.ok(!ruling.includes("The dialogue owes your account"));
@@ -1492,16 +1559,77 @@ test("--alignment renders a markdown link as plain text", () => {
   assert.ok(!article.includes("<a "), "no anchor tag is produced inside the item");
 });
 
-test("the alignment header carries the title, the module, the counts per stage, and the lede", () => {
+test("the alignment header carries the title and the module, and the rail's metrics each name and link the disposition they instrument", () => {
   const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
   assert.ok(html.includes(">Alignment<"));
   assert.ok(html.includes(ALIGNMENT_GRAPH.module));
-  assert.ok(html.includes("Every node is unanswered until the author confirms it, here or in prose. Listed in one ruling order across both graphs, the ruling that settles the most first. Respond to any subset and submit; the alignment session reads the responses back."));
   assert.ok(html.includes("Copy all responses"));
+  assert.ok(html.includes("Widen the node"), "the pane can take the whole screen");
+
+  // The stage counts and the lede are gone: a stage count instruments no
+  // disposition, which is the standard the author set on frontier-metrics,
+  // and the lede liquidated without one
+  // (commons.systems/disposition-graph/alignment-page).
   for (const stage of ["ruling", "review", "maieutic", "periagogic"]) {
-    assert.ok(html.includes(`<dt>${stage}</dt>`), `the count for ${stage}`);
+    assert.ok(!html.includes(`<dt>${stage}</dt>`), `no raw count for ${stage}`);
   }
-  assert.ok(html.includes("<dt>items</dt><dd class=\"num\">2</dd>"), "the item total");
+  assert.ok(!html.includes("<dt>items</dt>"), "no item total");
+
+  // Four metrics, each a signal of a recorded disposition, in the rail.
+  assert.ok(html.includes('<dl class="metrics">'), "the metrics sit at the top of the rail");
+  const instruments = [
+    ["open", "commons.systems/disposition-graph/unanswered"],
+    ["ruleable", "commons.systems/disposition-graph/clean-context-review"],
+    ["next settles", "commons.systems/disposition-graph/alignment-order"],
+    ["stale", "commons.systems/disposition-graph/frontier-consistency"],
+  ];
+  for (const [key, of] of instruments) {
+    assert.ok(html.includes(`<dt>${key}</dt>`), `the ${key} metric`);
+    assert.ok(html.includes(`Instruments ${of}.`), `${key} names the disposition it instruments`);
+  }
+  assert.equal(html.split('class="metric"').length - 1, 4, "four and no more");
+
+  // With no shim naming the browser there is nowhere to link, and a metric
+  // renders unlinked rather than pointing nowhere.
+  assert.ok(html.includes('<div class="metric"'), "a div, not an anchor, with no browser shim");
+  assert.ok(!html.includes('<a class="metric"'));
+
+  // With one, each metric links out to that disposition's page there: the
+  // browser addresses every node by its id and this page addresses none.
+  const withBrowser = buildAlignment(ALIGNMENT_TEMPLATE, {
+    ...ALIGNMENT_GRAPH,
+    nodes: ALIGNMENT_GRAPH.nodes.map((n, i) => (i === 0 ? {
+      ...n,
+      shims: [{
+        artifact: "the graph browser, published as https://example.test/artifact/abc123def",
+        for: "the record's documentation",
+        liquidation: "published from the implementation ref",
+        declared: "2026-09-03",
+      }],
+    } : n)),
+  });
+  assert.equal(withBrowser.split('<a class="metric"').length - 1, 4, "all four link");
+  for (const [, of] of instruments) {
+    assert.ok(
+      withBrowser.includes(`href="https://example.test/artifact/abc123def#${of}"`),
+      `${of} is addressed by its id in the browser`,
+    );
+  }
+});
+
+test("only the selected node is shown, and the [hidden] rule beats the item's own display", () => {
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
+  // Every item renders hidden; the rail's selection is what shows one
+  // (commons.systems/disposition-graph/alignment-page).
+  const items = html.split('<article class="item"').length - 1;
+  assert.ok(items > 1, "fixture precondition: more than one item");
+  assert.equal(html.split('data-stage="').length - 1, items, "one data-stage per item");
+  assert.equal((html.match(/<article class="item"[^>]*hidden>/g) || []).length, items, "all of them hidden at rest");
+  assert.ok(
+    /\[hidden\]\s*\{\s*display:\s*none\s*!important/.test(html),
+    "and `display: grid` on .item does not beat it",
+  );
+  assert.ok(html.includes('aria-current="false"'), "the rail marks which one is current");
 });
 
 test("the page carries the staging footer at rest and a rail row, with its stage dot, per item", () => {
@@ -1575,7 +1703,11 @@ function alStubDom({ items, db }) {
     addEventListener() {},
     appendChild(c) { this.children.push(c); return c; },
     focus() {},
+    scrollIntoView() {},
+    classList: { toggle() {} },
+    parentNode: null,
     querySelector(sel) { return this.desc.find((n) => alStubMatches(n, sel)) || null; },
+    querySelectorAll(sel) { return this.desc.filter((n) => alStubMatches(n, sel)); },
   });
 
   const built = items.map((spec) => {
@@ -1588,11 +1720,24 @@ function alStubDom({ items, db }) {
     const note = el("textarea", { "data-field": "text" });
     const label = el("label", { "data-note-lbl": "" });
     const state = el("p", { "data-state": "" });
-    item.desc = [...radios, note, label, controls, state];
+    // one decision fieldset, so the per-decision path is exercised too
+    // (commons.systems/disposition-graph/unanswered: the three responses
+    // are open on a node or on one of the decisions its ruling asks)
+    const decision = el("fieldset", { "data-decision": "authority" });
+    const decRadios = ["ratified", "delegated", "__reject"].map((v) => Object.assign(
+      el("input", { type: "radio", value: v }),
+      { value: v },
+    ));
+    const decNote = el("textarea", { "data-decision-text": "" });
+    decision.desc = [...decRadios, decNote];
+    decision.radios = decRadios;
+    decision.note = decNote;
+    item.desc = [...radios, note, label, controls, state, decision];
     item.radios = radios;
     item.note = note;
     item.state = state;
     item.controls = controls;
+    item.decision = decision;
     return item;
   });
 
@@ -1601,6 +1746,7 @@ function alStubDom({ items, db }) {
     const a = el("a", { "data-rail": "", "data-doc": spec.doc });
     a.desc = [mark];
     a.mark = mark;
+    mark.parentNode = a;
     return a;
   });
 
@@ -1608,6 +1754,8 @@ function alStubDom({ items, db }) {
     "module-name": Object.assign(el("span", {}), { textContent: "example.test" }),
     "btn-theme": el("button", {}),
     "btn-copy": el("button", {}),
+    "btn-wide": el("button", {}),
+    main: el("main", {}),
     "btn-submit": el("button", {}),
     "staged-count": el("span", {}),
     notice: el("p", {}),
@@ -1618,6 +1766,10 @@ function alStubDom({ items, db }) {
     documentElement: { setAttribute() {}, removeAttribute() {} },
     getElementById: (id) => byId[id] || null,
     createElement: (tag) => el(tag, {}),
+    querySelector(sel) {
+      if (sel === ".shell") return el("div", {});
+      throw new Error(`the stand-in DOM does not know the selector ${sel}`);
+    },
     querySelectorAll(sel) {
       if (sel === "[data-item]") return built;
       if (sel === "[data-rail]") return rails;
@@ -1630,6 +1782,9 @@ function alStubDom({ items, db }) {
       setItem: (k, v) => { storage[k] = String(v); },
     },
     setTimeout: () => {},
+    addEventListener() {},
+    location: { hash: "" },
+    history: { replaceState() {} },
     claude: db === undefined ? undefined : { use: async () => db },
   };
   return { document, window, navigator: {}, items: built, rails, byId, storage };
@@ -1642,7 +1797,7 @@ function alStubMatches(node, sel) {
     const want = sel.match(/value="([^"]*)"/)[1];
     return node.tag === "input" && node.getAttribute("value") === want;
   }
-  for (const attr of ["data-note-lbl", "data-state", "data-controls", "data-mark"]) {
+  for (const attr of ["data-note-lbl", "data-state", "data-controls", "data-mark", "data-decision", "data-decision-text"]) {
     if (sel === `[${attr}]`) return node.hasAttribute(attr);
   }
   throw new Error(`the stand-in DOM does not know the selector ${sel}`);
@@ -1706,11 +1861,12 @@ test("the page stages a response locally and submits it as one document per node
   await page.alSubmit();
 
   const written = db.writes.get("responses/example.test:main:a");
-  assert.deepEqual(Object.keys(written).sort(), ["node", "ruling", "stage", "text", "updated"]);
+  assert.deepEqual(Object.keys(written).sort(), ["decisions", "node", "ruling", "stage", "text", "updated"]);
   assert.equal(written.node, "example.test/main/a");
   assert.equal(written.stage, "ruling");
   assert.equal(written.ruling, "confirm");
   assert.equal(written.text, "Confirmed, with a note.");
+  assert.deepEqual(written.decisions, {}, "no decision answered, so the map is empty");
   assert.match(written.updated, /^\d{4}-\d{2}-\d{2}T/);
 
   const words = db.writes.get("responses/example.test:main:b");
@@ -1727,6 +1883,43 @@ test("the page stages a response locally and submits it as one document per node
   assert.ok(a.state.textContent.startsWith("Submitted "), "the item says when it was submitted");
   assert.equal(a.controls.disabled, true, "and locks until the author asks to change it");
   assert.equal(env.rails[0].mark.textContent, "✓", "the rail marks a submitted item");
+});
+
+test("a response on one of the decisions a ruling asks is staged and submitted beside the node's own", async () => {
+  const db = alStubDb();
+  const env = alStubDom({ items: SCRIPT_ITEMS, db });
+  const page = await loadAlignmentScript(env);
+
+  // the author answers one decision and nothing on the node as a whole
+  const [a, b] = env.items;
+  a.decision.radios[0].checked = true;
+  page.alStage(a);
+  assert.equal(env.byId["staged-count"].textContent, "1 response staged",
+    "a decision alone is a response");
+
+  // and a rejection of every choice on one decision, with feedback
+  b.decision.radios[2].checked = true;
+  b.decision.note.value = "None of these; here is why.";
+  page.alStage(b);
+
+  await page.alSubmit();
+
+  const first = db.writes.get("responses/example.test:main:a");
+  assert.equal(first.ruling, null, "the node as a whole was not ruled on");
+  assert.deepEqual(first.decisions, {
+    authority: { ruling: "confirm", choice: "ratified", text: "" },
+  }, "the decision carries its own ruling and the choice confirmed");
+
+  const second = db.writes.get("responses/example.test:main:b");
+  assert.deepEqual(second.decisions, {
+    authority: { ruling: "deny", choice: null, text: "None of these; here is why." },
+  }, "the last row of a decision denies every choice, with feedback");
+
+  // and it reads back onto the page, so a reload does not lose it
+  const env2 = alStubDom({ items: SCRIPT_ITEMS, db });
+  await loadAlignmentScript(env2);
+  assert.equal(env2.items[0].decision.radios[0].checked, true, "the confirmed choice comes back");
+  assert.equal(env2.items[1].decision.note.value, "None of these; here is why.", "and the feedback with it");
 });
 
 test("with no db the page keeps responses in this browser and says so on the footer", async () => {

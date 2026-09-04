@@ -7,13 +7,16 @@ description: Record or revise one node of the disposition graph by interview wit
 > **Shim notice (2026-09-02, revised 2026-09-03, reconciled to the
 > dialogue-state encoding the same day under the author's bootstrap grant
 > on `dialogue`, and to the ruling order the same day under two grants on
-> `alignment-order`, the second for its amended count, whose recommendation
-> is unanswered still and whose clean-context review and ruling are both
-> owed).** Hand-materialized from
+> `alignment-order`, the second for its amended count; reconciled again on
+> 2026-09-04 under the author's grant for the alignment-page sitting, to
+> the `facts` encoding, the reversed direction of boldness, and the
+> alignment page's own node. Every recommendation this reconciliation
+> wrote is unanswered, and the clean-context review of the batch is owed
+> before the author rules on any of it.)** Hand-materialized from
 > the nodes `growth`, `recording`, `unanswered`, `dialogue`,
 > `clean-context-review`, `frontier-consistency`, `checkpoint`,
-> `alignment-target`, `alignment-order`, `authority`, `node`, `under`,
-> `projection`,
+> `alignment-target`, `alignment-order`, `alignment-page`, `authority`,
+> `node`, `under`, `projection`,
 > `un-aligned-children`, `fidelity`,
 > `persistence`, `readings`, `review`, `evaluation`, `attention`,
 > `delegation`, and `transience` of `commons.systems/disposition-graph`,
@@ -119,20 +122,18 @@ skill only when the session starts in the checkout that carries it.
      strongest counter-argument when it found one and the session's
      reply, or kicks it back to stage 2 or 3 with findings; a finding
      across nodes kicks back each node it names.
-  5. Ruling. The node is put on the alignment page, which lists every
-     unanswered node in the ruling order, one order across the manifest's
-     graphs with each node's graph shown as a label on it, each item
-     carrying the
-     node's question, its stage, its settling count, the author's words it
-     rests on with their dates, the node as it stands, the alternatives
-     pending on it with their sources and, where leaves record a
-     divergence under this node, what a ruling for each alternative keeps
-     and what it discards, the recommendation naming the one it adopts with
-     its class, boldness, and pin, the draft and the edit it makes when
-     the recommendation adopts an alternative, the review's counter-argument and
-     the reply when there is one, and the three responses open on any
-     subset at once: confirm, confirm with edits, deny with feedback
-     (`unanswered`). The author rules there or in prose.
+  5. Ruling. The node is put on the alignment page, whose shape is the
+     `alignment-page` node's question and is not restated here: one node
+     at a time, selected from a rail that carries the metrics and every
+     unanswered node in the ruling order; the decisions that ruling asks
+     in the middle, each with its choices, the recommendation among them
+     and its boldness, drill-down beneath a row, and a last row rejecting
+     every choice with feedback; and the node as it would stand on the
+     right, with its unanswered children beneath it as indications and a
+     rejection of the whole under that. The three responses, confirm,
+     confirm with edits, deny with feedback, are open on any subset at
+     once, on nodes and on the decisions within one (`unanswered`). The
+     author rules there or in prose.
   6. Recording. The response is classified (§5): a confirmation is
      stamped and landed; a confirmation with edits is applied, reviewed
      again when the edits change substance, and stamped; a denial is
@@ -178,13 +179,24 @@ skill only when the session starts in the checkout that carries it.
   answer that arose outside alignment, as `authority` defines it), and a
   `ref` (the date of the words or the review, or the instrument or node
   that raised the proposal), with `## Alternatives` holding one `###`
-  subsection per name saying what it would answer; `recommendation`,
+  subsection per name saying what it would answer; `facts`, the decisions
+  about the answer that are not questions under it, each with a `name`
+  drawn from the three reserved names and no others, `authority`, the
+  class a confirmation would confer, `existence`, keep or prune, where a
+  proposal to prune the node lives, and `persistence`, present only where
+  the recommendation would change the node's shape, and each with its
+  `choices`, the one it `adopts`, its `boldness`, and its `ruling` once
+  the author has given one, with `## Facts` holding one `###` subsection
+  per fact whose choices need explaining and omitting the rest; a decision
+  the author would rule on separately that is not one of those three is a
+  question, and a question is a node under this one (`dialogue`,
+  `aspects-are-nodes`); `recommendation`, recordable at any stage and
   required from the review stage on, with `adopts`, the alternative it
-  adopts or `standing` for the node as it stands, the `class` a
-  confirmation confers, the `boldness`, and its pin, `amends`, the hash
-  of the standing text it amends, and `at`, the graph commit it was
-  drafted at, which the frontier flags when the standing text has moved
-  since; `## Recommendation`, one fenced markdown block holding the whole
+  adopts or `standing` for the node as it stands, the `boldness`, and its
+  pin, `amends`, the hash of the standing text it amends, and `at`, the
+  graph commit it was drafted at, which the frontier flags when the
+  standing text has moved since; the class a confirmation confers is the
+  `authority` fact and never a field of the recommendation; `## Recommendation`, one fenced markdown block holding the whole
   proposed node, present exactly when the recommendation adopts an
   alternative; `review`, the clean-context review's `verdict`, `strength`,
   `date`, and `of`, the hash of the recommended text it read, the fence
@@ -273,10 +285,14 @@ skill only when the session starts in the checkout that carries it.
 - Open matters are prose turns, the reply captured as it is. Bounded
   choices are numbered options with the recommendation first, answered by
   number or "go".
-- Every recommendation is presented before anything is recorded, and
+- Every recommendation is presented before anything is recorded, though
+  the recommendation may be recorded on the node at any stage of the
+  dialogue (the author's revision of 2026-09-04 on `dialogue`), and
   carries the authority class under which it would be accepted (ratified,
-  delegated, deferred), a boldness assessment (how much rests on the graph
-  and the author's words against the AI's own knowledge), its persistence
+  delegated, deferred), a boldness assessment (how much of it rests on the
+  AI's own knowledge against the record and the author's words, so that
+  high boldness is low confidence, the direction `dialogue` and the author
+  use and the one the page's fold rule runs on), its persistence
   class (standing, shim with its liquidation condition, proposal,
   un-aligned disposition, evidence, or not recorded; a transient
   disposition is a contradiction in terms, see `transience`), and genuine
@@ -418,16 +434,29 @@ rule projections are regenerated by the next reconciliation run, not here.
   confirmation. Leaving a node unconfirmed is the deferral; an overrule is
   drafted as what the author said stands, reviewed, and put back for
   confirmation. A confirmation on a node whose review has not run is held
-  until the review runs and recorded when it forwards.
-- **Record.** Write the stamp (`ratified`, `by: <the author's name>`,
-  dated, with the ruling quoted and dated in the rationale; a ratified
-  stamp whose ruling is not in the record is invalid; or `delegated`),
-  copy the recommended text into the node when the recommendation adopts
-  an alternative, fold the alternatives into the rationale as rejected
-  lines with the ruling quoted, remove `stage`, `alternatives`,
-  `recommendation`, `review`, `depends`, `## Alternatives`,
+  until the review runs and recorded when it forwards. A response given on
+  one of the decisions a node's ruling asks is classified the same way and
+  moves the whole node, since a node has one stage and one next movement
+  owed on it; the responses given on the node's other decisions are
+  written onto them as their `ruling` and survive the kickback, so the
+  author answers each decision once. A ruling given on a node while its
+  parent is still open is recorded like any other, and if a later ruling
+  on the parent contradicts it, the contradiction is recorded as an
+  alternative on the child with the parent's ruling as its source and put
+  to the author, never applied over their stamp.
+- **Record.** Write the stamp in the class the ruling on the node's
+  `authority` fact confers (`ratified`, `by: <the author's name>`, dated,
+  with the ruling quoted and dated in the rationale; a ratified stamp
+  whose ruling is not in the record is invalid; or `delegated`), copy the
+  recommended text into the node when the recommendation adopts an
+  alternative, fold the alternatives into the rationale as rejected lines
+  with the ruling quoted, remove `stage`, `alternatives`, `facts`,
+  `recommendation`, `review`, `depends`, `## Alternatives`, `## Facts`,
   `## Recommendation`, `## Account`, and `## Disposition`, validate, and
-  land.
+  land. A ruling that the node not exist, on its `existence` fact, is
+  recorded before the node is deleted, on the node that proposed the prune
+  where one did and otherwise on the parent, so the record keeps the
+  reason a question was closed instead of losing it with the file.
 - Steer: amend the node; the steer enters the rationale as a rejected
   alternative or an amendment; project again.
 - The author's choice of the next node is their own order and needs no

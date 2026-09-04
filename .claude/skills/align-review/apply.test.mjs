@@ -119,7 +119,8 @@ describe("apply.mjs: forward", () => {
 
     // Frontmatter: stage flips, recommendation untouched, review block new.
     assert.equal(fieldValue(afterText, "stage"), "ruling");
-    assert.ok(afterText.includes("recommendation:\n  adopts: standing\n  class: delegated\n  boldness: high\n"), "recommendation kept byte for byte");
+    assert.ok(afterText.includes("recommendation:\n  adopts: standing\n  boldness: high\n"), "recommendation kept byte for byte");
+    assert.ok(afterText.includes("facts:\n  - name: authority\n"), "and the facts with it: the class a confirmation confers is one of them");
     const block = reviewBlockOf(afterText);
     assert.ok(block, "review block present");
     assert.equal(fieldValue(block, "verdict"), "forward");

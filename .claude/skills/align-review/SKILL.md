@@ -7,8 +7,11 @@ description: Clean-context adversarial review of the batch of nodes at the revie
 > **Shim notice (2026-09-03, revised three times the same day: for the
 > batch scope, the fifteenth validation, the dialogue-state encoding, and
 > the ruling order, the last under the author's bootstrap grant on
-> `alignment-order`, whose recommendation is unanswered and whose review
-> and ruling are both still owed).**
+> `alignment-order`; revised again on 2026-09-04 under the author's grant
+> for the alignment-page sitting, for the `facts` encoding, the class
+> leaving the recommendation, and the reversed direction of boldness. The
+> recommendations that reconciliation wrote are unanswered, and this
+> review is what is owed on them.)**
 > Hand-written from the nodes `clean-context-review`,
 > `frontier-consistency`, `recording`, `dialogue`, `unanswered`,
 > `checkpoint`, `alignment-order`, and `delegation` of

@@ -4,7 +4,6 @@ form: rule
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: low
   amends: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   at: a1b2c3d
@@ -15,6 +14,13 @@ review:
   of: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   siblings:
     - example.test/main/does-not-exist
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 ---
 
 ## Disposition

@@ -651,9 +651,10 @@ function draftNoteHtml(n) {
    the stamp with the one line that says what they do and do not do: the
    standing answer keeps its authority until the author confirms one of
    them. Each carries its name, where it came from (`source`, and the `ref`
-   that dates it or names the instrument that raised it), whether it would
-   prune the node rather than rewrite it, and its prose from the node's
-   `## Alternatives` section. Nothing is rendered for a node with none. */
+   that dates it or names the instrument that raised it), and its prose
+   from the node's `## Alternatives` section. Deleting the node is never
+   one of these: it is the `existence` fact, rendered by `factsHtml`.
+   Nothing is rendered for a node with none. */
 function alternativesHtml(n) {
   var alts = n.alternatives || [];
   if (!alts.length) return "";
@@ -663,7 +664,6 @@ function alternativesHtml(n) {
     if (a.ref) meta.push(a.ref);
     return "<li>" +
       '<p class="altname"><span class="mono">' + esc(a.name) + "</span>" +
-      (a.prune ? '<span class="pill sm prune">prune</span>' : "") +
       '<span class="altmeta">' + esc(meta.join(" · ")) + "</span></p>" +
       (text[a.name] ? '<div class="mdbody">' + mdHtml(text[a.name]) + "</div>" : "") +
       "</li>";
@@ -673,6 +673,45 @@ function alternativesHtml(n) {
     '<p class="altnote">' +
     "The standing answer keeps its authority until the author confirms one of these." +
     "</p></div>";
+}
+
+/* The decisions about the answer that are not questions under it: the class
+   a confirmation would confer, whether the node exists, and what its shape
+   would become where the recommendation would change it. A decision the
+   author would rule on separately that is none of those three is a
+   question, and a question is a node under this one
+   (commons.systems/disposition-graph/dialogue). Nothing is rendered for a
+   node with none. */
+var FACT_TITLES = {
+  authority: "The class a confirmation confers",
+  existence: "Whether the node exists",
+  persistence: "What the node's shape would become"
+};
+
+function factsHtml(n) {
+  var facts = n.facts || [];
+  if (!facts.length) return "";
+  var text = n.factsText || {};
+  var items = facts.map(function (f) {
+    var choices = f.choices.map(function (c) {
+      return c === f.adopts
+        ? '<strong class="mono">' + esc(c) + "</strong>"
+        : '<span class="mono">' + esc(c) + "</span>";
+    }).join(" · ");
+    var ruled = f.ruling
+      ? '<p class="altmeta">Ruled ' + esc(f.ruling.response) + " on " +
+        esc(f.ruling.choice) + ", " + esc(f.ruling.date) + ".</p>"
+      : "";
+    return "<li>" +
+      '<p class="altname"><span class="mono">' + esc(f.name) + "</span>" +
+      '<span class="altmeta">' + esc(FACT_TITLES[f.name] || "") +
+      " · boldness " + esc(f.boldness) + "</span></p>" +
+      '<p class="altmeta">' + choices + "</p>" + ruled +
+      (text[f.name] ? '<div class="mdbody">' + mdHtml(text[f.name]) + "</div>" : "") +
+      "</li>";
+  }).join("");
+  return '<div class="alts"><p class="blk-label">The decisions this ruling asks</p>' +
+    '<ul class="altlist">' + items + "</ul></div>";
 }
 
 /* ------------------------------------------------------------------ *
@@ -876,7 +915,8 @@ function nodeHeader(n) {
     "<h1 tabindex=\"-1\" id=\"nodetitle\">" + esc(n.question || n.id) + "</h1>" +
     '<dl class="facts">' + items.join("") + "</dl>" +
     draftNoteHtml(n) +
-    alternativesHtml(n);
+    alternativesHtml(n) +
+    factsHtml(n);
 }
 
 /* A reading's own page has to carry the citation it is a reading of. */

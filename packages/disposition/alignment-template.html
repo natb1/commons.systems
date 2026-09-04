@@ -318,6 +318,79 @@
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
   }
+
+  /* ================= the ruling screen =================================
+   * commons.systems/disposition-graph/alignment-page: one node at a time,
+   * three columns, the node as it would stand the widest of them.
+   */
+  .shell { max-width: 1680px; }
+  @media (min-width: 940px) { .shell { grid-template-columns: minmax(230px, 288px) minmax(0, 1fr); gap: 0 36px; } }
+
+  /* ---------- the metrics, at the top of the rail ---------- */
+  .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 0 0 20px; padding: 0 0 16px; border-bottom: 1px solid var(--line); }
+  .metric { display: block; padding: 6px 8px 7px; margin: 0; border-radius: 3px; text-decoration: none; color: inherit; }
+  a.metric:hover { background: var(--paper-2); }
+  .metric dt { font-family: var(--mono); font-size: 10px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 1px; }
+  .metric dd { margin: 0; font-size: 19px; line-height: 1.1; color: var(--ink); }
+  a.metric dt { text-decoration: underline dotted var(--line); text-underline-offset: 3px; }
+
+  /* ---------- the rail ---------- */
+  .tree { list-style: none; margin: 0; padding: 0; counter-reset: none; }
+  .tree a { grid-template-columns: 10px minmax(0, 1fr) 14px; row-gap: 1px; }
+  .tree a[aria-current="true"] { background: var(--accent-soft, var(--paper-3)); color: var(--ink); box-shadow: inset 2px 0 0 var(--accent-ink); }
+  .rmeta { grid-column: 2; font-size: 10.5px; letter-spacing: .04em; color: var(--ink-3); }
+
+  /* ---------- one node, two columns ---------- */
+  .item { border-top: 0; padding: 22px 0 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 36px; align-items: start; }
+  @media (min-width: 1240px) {
+    .item { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); }
+  }
+  .shell.wide .item { grid-template-columns: minmax(0, 1fr); }
+  .shell.wide .col-ask { display: none; }
+  .col-ask, .col-pane { min-width: 0; }
+  .col-pane { position: relative; }
+  @media (min-width: 1240px) {
+    .col-pane { position: sticky; top: calc(var(--mast-h) + 14px); max-height: calc(100vh - var(--mast-h) - 90px); overflow-y: auto; overscroll-behavior: contain; padding-right: 6px; }
+  }
+  .col-pane section { max-width: none; }
+  .col-ask section { max-width: none; }
+
+  /* ---------- the decisions ---------- */
+  .decisions { margin: 20px 0 0; }
+  .decision { border: 1px solid var(--line); border-radius: 5px; padding: 12px 14px 10px; margin: 0 0 14px; }
+  .declbl { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); padding: 0 6px; }
+  .declbl .pill { margin-left: 8px; }
+  .choices { list-style: none; margin: 6px 0 0; padding: 0; }
+  .choice { margin: 0 0 4px; padding: 5px 6px; border-radius: 3px; }
+  .choice.adopted { background: var(--paper-2); }
+  .choice.reject { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 9px; }
+  .choicelbl { display: inline-flex; align-items: baseline; gap: 7px; cursor: pointer; }
+  .choicename { font-size: 13.5px; color: var(--ink); overflow-wrap: anywhere; }
+  .drill { margin: 4px 0 0 22px; }
+  .drill summary { font-size: 12px; color: var(--ink-3); cursor: pointer; }
+  .drill summary:hover { color: var(--ink-2); }
+  .drill .mdbody { font-size: 13.5px; }
+  .recline { margin: 10px 0 0; }
+  .recline.none { color: var(--ink-3); font-size: 13px; }
+  .pill.rec-bold-none { background: var(--paper-3); color: var(--ink-3); }
+  .decwhy { font-size: 13px; color: var(--ink-2); margin: 6px 0 2px; }
+  .dec-note { width: 100%; margin: 8px 0 2px; }
+  .folded { font-size: 12.5px; color: var(--ink-3); margin: 10px 0 0; }
+  .ruled { font-size: 12.5px; color: var(--ink-2); margin: 4px 0 0; }
+
+  /* ---------- the indications ---------- */
+  .indications { margin: 22px 0 0; }
+  .indlist { list-style: none; margin: 8px 0 0; padding: 0; }
+  .indlist li { display: grid; gap: 1px; padding: 6px 0; border-top: 1px solid var(--line); }
+  .indq { font-size: 13.5px; color: var(--ink-2); }
+  .indid { font-size: 10.5px; color: var(--ink-3); overflow-wrap: anywhere; }
+
+  /* `display: grid` on .item beats the browser's own `[hidden]` rule, so
+     the unselected nodes would stay visible without this. */
+  [hidden] { display: none !important; }
+
+  /* the pagehead is gone: it liquidated without a disposition */
+  .pagehead, .counts, .lede, .graphgrp { display: none !important; }
 </style>
 
 <a class="skip" href="#main">Skip to the items</a>
@@ -327,7 +400,7 @@
 <script>
 "use strict";
 
-var AL = { theme: "auto", db: null, staged: {}, submitted: {}, changing: {}, total: 0, rail: {} };
+var AL = { theme: "auto", db: null, staged: {}, submitted: {}, changing: {}, total: 0, rail: {}, selected: null, wide: false };
 
 /* ------------------------------------------------------------- theme */
 
@@ -410,12 +483,97 @@ function alSyncNoteLabel(el) {
     : "A note, edits, or feedback";
 }
 
+// A response counts when the author ruled on the whole node or on any one
+// of the decisions it asks (commons.systems/disposition-graph/unanswered:
+// the three responses are open on any subset at once).
 function alHasResponse(r) {
-  return !!(r && (r.ruling || (typeof r.text === "string" && r.text.trim())));
+  if (!r) return false;
+  if (r.ruling || (typeof r.text === "string" && r.text.trim())) return true;
+  return !!(r.decisions && Object.keys(r.decisions).length > 0);
 }
 
 function alWhen(iso) {
   try { return new Date(iso).toLocaleString(); } catch (e) { return String(iso || ""); }
+}
+
+
+/* ---------------------------------------------------- one at a time */
+
+// The rail is the selector: one node is shown, the selection is marked
+// there, and the address names it, so the author's place survives a reload
+// (commons.systems/disposition-graph/alignment-page).
+function alSelect(doc, push) {
+  var items = alItemEls();
+  var found = null;
+  items.forEach(function (el) {
+    var mine = el.getAttribute("data-doc") === doc;
+    el.hidden = !mine;
+    if (mine) found = el;
+  });
+  if (!found && items.length > 0) {
+    found = items[0];
+    doc = found.getAttribute("data-doc");
+    found.hidden = false;
+  }
+  AL.selected = doc;
+  Object.keys(AL.rail).forEach(function (d) {
+    var a = AL.rail[d] ? AL.rail[d].parentNode : null;
+    if (a) a.setAttribute("aria-current", d === doc ? "true" : "false");
+  });
+  if (push && doc) {
+    try { history.replaceState(null, "", "#item-" + doc); } catch (e) { /* framed */ }
+  }
+  var main = document.getElementById("main");
+  if (main && main.scrollIntoView) main.scrollIntoView({ block: "start" });
+}
+
+function alDocFromHash() {
+  var h = String(window.location.hash || "");
+  return h.indexOf("#item-") === 0 ? h.slice(6) : null;
+}
+
+/* ------------------------------------------- the per-decision rows */
+
+function alReadDecisions(el) {
+  var out = {};
+  Array.prototype.slice.call(el.querySelectorAll("[data-decision]")).forEach(function (f) {
+    var name = f.getAttribute("data-decision");
+    var radio = f.querySelector('input[type="radio"]:checked');
+    var note = f.querySelector("[data-decision-text]");
+    var text = note ? note.value : "";
+    if (!radio && !String(text).trim()) return;
+    var value = radio ? radio.value : null;
+    out[name] = value === "__reject"
+      ? { ruling: "deny", choice: null, text: text }
+      : { ruling: "confirm", choice: value, text: text };
+  });
+  return out;
+}
+
+function alApplyDecisions(el, decisions) {
+  if (!decisions) return;
+  Array.prototype.slice.call(el.querySelectorAll("[data-decision]")).forEach(function (f) {
+    var d = decisions[f.getAttribute("data-decision")];
+    if (!d) return;
+    var value = d.ruling === "deny" ? "__reject" : d.choice;
+    if (value) {
+      var radio = f.querySelector('input[type="radio"][value="' + String(value).replace(/["\\]/g, "\\$&") + '"]');
+      if (radio) radio.checked = true;
+    }
+    var note = f.querySelector("[data-decision-text]");
+    if (note && typeof d.text === "string") note.value = d.text;
+  });
+}
+
+// A rejection asks for feedback, so its box opens; a confirmation does not.
+function alSyncDecisionNotes(el) {
+  Array.prototype.slice.call(el.querySelectorAll("[data-decision]")).forEach(function (f) {
+    var radio = f.querySelector('input[type="radio"]:checked');
+    var note = f.querySelector("[data-decision-text]");
+    if (!note) return;
+    var wants = !!radio && radio.value === "__reject";
+    note.hidden = !wants && !String(note.value).trim();
+  });
 }
 
 /* ---------------------------------------------------------- rendering */
@@ -471,12 +629,15 @@ function alStage(el) {
   var doc = el.getAttribute("data-doc");
   var reading = alReadControl(el);
   alSyncNoteLabel(el);
+  alSyncDecisionNotes(el);
+  reading.decisions = alReadDecisions(el);
   if (!alHasResponse(reading)) delete AL.staged[doc];
   else AL.staged[doc] = {
     node: el.getAttribute("data-id"),
     stage: el.getAttribute("data-stage"),
     ruling: reading.ruling,
     text: reading.text,
+    decisions: reading.decisions,
     updated: new Date().toISOString()
   };
   alWriteJson(alStagedKey(), AL.staged);
@@ -543,6 +704,13 @@ function alCopyAll() {
     );
     var text = (r.text || "").trim();
     if (text) lines.push(text);
+    var decisions = r.decisions || {};
+    Object.keys(decisions).forEach(function (name) {
+      var d = decisions[name] || {};
+      lines.push("  " + name + ": " + (d.ruling || "no ruling")
+        + (d.choice ? " " + d.choice : "")
+        + (String(d.text || "").trim() ? " -- " + String(d.text).trim() : ""));
+    });
     lines.push("");
   });
   var text = lines.length ? lines.join("\n") : "No responses yet.";
@@ -601,7 +769,9 @@ async function alBoot() {
     // A staged response is the later of the two, and stands whole: it is
     // what the author has written since the last submission.
     alApplyControl(el, AL.staged[doc] || AL.submitted[doc]);
+    alApplyDecisions(el, (AL.staged[doc] || AL.submitted[doc] || {}).decisions);
     alSyncNoteLabel(el);
+    alSyncDecisionNotes(el);
     el.addEventListener("change", function () { alStage(el); });
     el.addEventListener("input", function () { alStage(el); });
     el.addEventListener("click", function (ev) {
@@ -627,6 +797,30 @@ async function alBoot() {
   var copyBtn = document.getElementById("btn-copy");
   if (copyBtn) copyBtn.addEventListener("click", alCopyAll);
 
+  // The rail selects; the node in view takes the whole screen on demand,
+  // because a whole node's text in a third of a screen is skimmed and the
+  // author rules on what they read.
+  Array.prototype.slice.call(document.querySelectorAll("[data-rail]")).forEach(function (a) {
+    a.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      alSelect(a.getAttribute("data-doc"), true);
+    });
+  });
+  window.addEventListener("hashchange", function () {
+    var d = alDocFromHash();
+    if (d && d !== AL.selected) alSelect(d, false);
+  });
+
+  var wideBtn = document.getElementById("btn-wide");
+  if (wideBtn) wideBtn.addEventListener("click", function () {
+    AL.wide = !AL.wide;
+    var shell = document.querySelector(".shell");
+    if (shell) shell.classList.toggle("wide", AL.wide);
+    wideBtn.setAttribute("aria-pressed", AL.wide ? "true" : "false");
+    wideBtn.textContent = AL.wide ? "Show what it asks" : "Widen the node";
+  });
+
+  alSelect(alDocFromHash() || (items[0] ? items[0].getAttribute("data-doc") : null), false);
   alRender();
 }
 

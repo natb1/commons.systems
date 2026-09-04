@@ -231,7 +231,7 @@ export function deriveStatus(node) {
  * @returns {string}
  */
 function stripDialogueFrontmatterLines(fmText) {
-  const removedKeyRe = /^(stage|recommendation|review|alternatives|depends):/;
+  const removedKeyRe = /^(stage|recommendation|review|alternatives|facts|depends):/;
   let skipping = false;
   return fmText
     .split('\n')

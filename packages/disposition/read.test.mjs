@@ -539,7 +539,7 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-order-no-answer', /'order' requires an '## Answer' section/],
     // dialogue fields: alternatives, recommendation, review, and the
     // '## Alternatives' / '## Recommendation' / '## Account' sections.
-    ['invalid-recommendation-shape', /'recommendation' must be \{adopts: standing\|<alternative name>, class: ratified\|delegated, boldness: low\|moderate\|high, amends: <sha1>, at: <7-40 hex commit>\}/],
+    ['invalid-recommendation-shape', /'recommendation' must be \{adopts: standing\|<alternative name>, boldness: low\|moderate\|high, amends: <sha1>, at: <7-40 hex commit>\}/],
     ['invalid-recommendation-missing-amends', /'recommendation' must be \{adopts: .*amends: <sha1>, at: <7-40 hex commit>\}/],
     ['invalid-review-shape', /'review' must be \{verdict: forward\|kickback, strength: strong\|moderate\|weak\|none, date: YYYY-MM-DD, of: <sha1>\}/],
     // `siblings` (the other drafts a per-node reviewer once read) is no
@@ -547,8 +547,10 @@ describe('readGraph: invalid fixtures', () => {
     // over the whole frontier; this fixture's extra 'siblings' key fails
     // the same generic shape check invalid-review-shape does.
     ['invalid-review-siblings-unresolved', /'review' must be \{verdict: forward\|kickback, strength: strong\|moderate\|weak\|none, date: YYYY-MM-DD, of: <sha1>\}/],
-    ['invalid-dialogue-without-stage', /'alternatives', 'recommendation', 'review', 'depends', '## Alternatives', '## Recommendation', and '## Account' are parts of the dialogue and require stage/],
-    ['invalid-account-without-stage', /'alternatives', 'recommendation', 'review', 'depends', '## Alternatives', '## Recommendation', and '## Account' are parts of the dialogue and require stage/],
+    ['invalid-dialogue-without-stage', /'alternatives', 'facts', 'recommendation', 'review', 'depends', '## Alternatives', '## Facts', '## Recommendation', and '## Account' are parts of the dialogue and require stage/],
+    ['invalid-account-without-stage', /'alternatives', 'facts', 'recommendation', 'review', 'depends', '## Alternatives', '## Facts', '## Recommendation', and '## Account' are parts of the dialogue and require stage/],
+    // a node whose only dialogue-carrying field is 'facts' needs stage too.
+    ['invalid-facts-without-stage', /'alternatives', 'facts', 'recommendation', 'review', 'depends', '## Alternatives', '## Facts', '## Recommendation', and '## Account' are parts of the dialogue and require stage/],
     ['invalid-draft-not-fenced', /'## Recommendation' must hold exactly one fenced markdown block/],
     ['invalid-draft-parse-error', /'## Recommendation' does not parse as a node: /],
     ['invalid-draft-wrong-question', /'## Recommendation' answers a different question/],
@@ -556,8 +558,8 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-stage-ruling-needs-forward-review', /stage ruling requires a 'review' with verdict forward/],
     // the 'alternatives' list: its own shape, its unique names, and the
     // name 'standing', which belongs to the node as it stands.
-    ['invalid-alternatives-shape', /'alternatives' must be a list of \{name: <lowercase slug>, source: author\|ai\|review\|proposal, ref: <non-empty string, required when source is proposal>, prune: <optional boolean>\}/],
-    ['invalid-alternatives-proposal-without-ref', /'alternatives' must be a list of \{name: <lowercase slug>, source: author\|ai\|review\|proposal, ref: <non-empty string, required when source is proposal>, prune: <optional boolean>\}/],
+    ['invalid-alternatives-shape', /'alternatives' must be a list of \{name: <lowercase slug>, source: author\|ai\|review\|proposal, ref: <non-empty string, required when source is proposal>\}/],
+    ['invalid-alternatives-proposal-without-ref', /'alternatives' must be a list of \{name: <lowercase slug>, source: author\|ai\|review\|proposal, ref: <non-empty string, required when source is proposal>\}/],
     ['invalid-alternatives-duplicate-name', /'alternatives' names same twice/],
     ['invalid-alternatives-standing-name', /'alternatives' names an alternative 'standing', which is reserved for the node as it stands/],
     // '## Alternatives' stands with the list: present iff it is non-empty,
@@ -571,12 +573,22 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-adopts-standing-without-answer', /'recommendation\.adopts' is 'standing', which requires an '## Answer' section/],
     ['invalid-adopts-standing-with-fence', /'recommendation\.adopts' is 'standing', so the node carries no '## Recommendation' section/],
     ['invalid-adopts-alternative-without-fence', /'recommendation\.adopts' names the alternative 'the-other-way', which requires a '## Recommendation' section/],
-    // a prune alternative deletes the node, so it proposes no text and
-    // carries no fence (the amendment of 2026-09-03).
-    ['invalid-adopts-prune-with-fence', /'recommendation\.adopts' names the prune alternative 'delete-it', so the node carries no '## Recommendation' section/],
+    // pruning is the 'existence' fact now, never an alternative, so there is
+    // no such thing as a "prune alternative" recommendation any more --
+    // every recommendation that adopts an alternative requires a fence, with
+    // no exception (the amendment of 2026-09-03).
     // the two retired headings are now just unknown headings.
-    ['invalid-proposal-heading', /unexpected '## Proposal' heading \(only Disposition, Answer, Rationale, Alternatives, Recommendation, Account are allowed\)/],
-    ['invalid-draft-heading', /unexpected '## Draft' heading \(only Disposition, Answer, Rationale, Alternatives, Recommendation, Account are allowed\)/],
+    ['invalid-proposal-heading', /unexpected '## Proposal' heading \(only Disposition, Answer, Rationale, Alternatives, Facts, Recommendation, Account are allowed\)/],
+    ['invalid-draft-heading', /unexpected '## Draft' heading \(only Disposition, Answer, Rationale, Alternatives, Facts, Recommendation, Account are allowed\)/],
+    // facts: the reserved name vocabulary, the authority fact's restricted
+    // choice set, adopts/ruling coherence against the entry's own choices,
+    // and the '## Facts' section's subsequence correspondence with the list.
+    ['invalid-fact-unknown-name', /'facts' must be a list of \{name: authority\|existence\|persistence, choices: <two or more distinct non-empty strings>, adopts: <one of them>, boldness: low\|moderate\|high, ruling: <optional \{response: confirm\|edit\|deny, choice: <one of them>, date: YYYY-MM-DD, of: <sha1>\}>\}/],
+    ['invalid-fact-authority-class', /fact 'authority' may only choose among the classes a confirmation confers: ratified, delegated/],
+    ['invalid-fact-adopts-unlisted-choice', /fact 'existence' adopts 'delete', which is not one of its own choices/],
+    ['invalid-fact-ruling-shape', /fact 'existence' has a ruling on 'delete', which is not one of its own choices/],
+    ['invalid-facts-heading-mismatch', /'## Facts' has '### mysterious', which is not a fact on this node \(facts: existence\)/],
+    ['invalid-facts-section-without-list', /'## Facts' requires a non-empty 'facts' list/],
   ];
 
   for (const [dirName, pattern] of cases) {
@@ -733,7 +745,6 @@ describe('readGraph: valid-unaligned fixture', () => {
     assert.equal(ruling.stage, 'ruling');
     assert.deepEqual(ruling.recommendation, {
       adopts: 'standing',
-      class: 'ratified',
       boldness: 'moderate',
       amends: ruling.standingHash,
       at: 'a1b2c3d',
@@ -801,13 +812,12 @@ describe('readGraph: valid-dialogue fixture', () => {
     assert.equal(node.stage, 'ruling');
     assert.deepEqual(node.recommendation, {
       adopts: 'whole-node',
-      class: 'ratified',
       boldness: 'moderate',
       amends: node.standingHash,
       at: 'a1b2c3d',
     });
     assert.equal(node.recommendationStale, false);
-    assert.deepEqual(node.alternatives, [{ name: 'whole-node', source: 'ai', ref: '2026-09-03', prune: false }]);
+    assert.deepEqual(node.alternatives, [{ name: 'whole-node', source: 'ai', ref: '2026-09-03' }]);
     assert.ok(node.alternativesText['whole-node'].startsWith('Read the fence as a whole proposed node'));
     assert.ok(node.account.startsWith('Ratify the alternative above'), "the account replaces the old '## Proposal'");
     assert.equal(node.review.verdict, 'forward');
@@ -826,7 +836,6 @@ describe('readGraph: valid-dialogue fixture', () => {
     assert.equal(node.stage, 'review');
     assert.deepEqual(node.recommendation, {
       adopts: 'standing',
-      class: 'delegated',
       boldness: 'high',
       amends: node.standingHash,
       at: 'a1b2c3d',
@@ -855,11 +864,51 @@ describe('readGraph: valid-dialogue fixture', () => {
     assert.ok(node.answer, 'only an Answer section supports the stage here');
     assert.deepEqual(node.recommendation, {
       adopts: 'standing',
-      class: 'ratified',
       boldness: 'low',
       amends: node.standingHash,
       at: 'a1b2c3d',
     });
+  });
+
+  // ---- facts: the decisions about the answer that stay on the node rather
+  // than becoming children (dialogue state, like alternatives -- present
+  // beside the standing answer, and invisible to the standing hash). ----
+
+  test('facts parse in the reserved order (authority, existence, persistence), whatever order the frontmatter lists them in', async () => {
+    const node = await byId('facts-node');
+    assert.deepEqual(node.facts.map((f) => f.name), ['authority', 'existence', 'persistence']);
+  });
+
+  test('a fact with no ruling parses as ruling: null; one with a ruling parses it whole', async () => {
+    const node = await byId('facts-node');
+    const authority = node.facts.find((f) => f.name === 'authority');
+    const existence = node.facts.find((f) => f.name === 'existence');
+    const persistence = node.facts.find((f) => f.name === 'persistence');
+    assert.equal(authority.ruling, null);
+    assert.equal(existence.ruling, null);
+    assert.deepEqual(persistence.ruling, {
+      response: 'confirm',
+      choice: 'present',
+      date: '2026-09-03',
+      of: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    });
+  });
+
+  test("factsText carries the prose of a '## Facts' subsection; a fact with no subsection is still valid", async () => {
+    const node = await byId('facts-node');
+    assert.deepEqual(Object.keys(node.factsText), ['persistence'], 'only the fact that needs explaining gets a subsection');
+    assert.ok(node.factsText.persistence.startsWith('Present, because'));
+    assert.equal(node.factsText.authority, undefined, "authority has no '### ' subsection, and the node is still valid");
+    assert.equal(node.factsText.existence, undefined, "existence has no '### ' subsection either");
+  });
+
+  test('adding or changing a facts entry does not change the standing hash -- facts is stripped like stage, alternatives, recommendation, review, and depends', async () => {
+    const original = await byId('facts-node');
+    const changed = await byId('facts-node-changed');
+    assert.equal(original.facts.length, 3);
+    assert.equal(changed.facts.length, 2);
+    assert.notEqual(original.facts.find((f) => f.name === 'authority').adopts, changed.facts.find((f) => f.name === 'authority').adopts, 'the fixture pair genuinely differs in their facts, not just in name');
+    assert.equal(original.standingHash, changed.standingHash, "the two fixtures' frontmatter differs only in 'facts', and their Answer/Rationale text is identical");
   });
 });
 
@@ -943,10 +992,10 @@ describe('readGraph: valid-alternatives fixture', () => {
     assert.equal(node.status, 'unanswered', 'a deferred stamp is still unanswered');
     assert.equal(node.authority.class, 'deferred');
     assert.deepEqual(node.alternatives, [
-      { name: 'keep-standing', source: 'author', ref: '2026-09-01', prune: false },
-      { name: 'split-the-node', source: 'review', ref: '2026-09-02', prune: false },
-      { name: 'follow-the-instrument', source: 'proposal', ref: 'node --test packages/disposition/read.test.mjs', prune: false },
-    ], "an entry with no 'prune' key reads as prune: false");
+      { name: 'keep-standing', source: 'author', ref: '2026-09-01' },
+      { name: 'split-the-node', source: 'review', ref: '2026-09-02' },
+      { name: 'follow-the-instrument', source: 'proposal', ref: 'node --test packages/disposition/read.test.mjs' },
+    ], 'each entry is exactly {name, source, ref} -- there is no prune key any more');
   });
 
   test('alternativesText maps each listed name to its trimmed subsection prose', async () => {
@@ -962,8 +1011,12 @@ describe('readGraph: valid-alternatives fixture', () => {
   test('a recommendation adopting an alternative carries the fence, and both hashes pin what they name', async () => {
     const node = await byId('fresh-node');
     assert.equal(node.recommendation.adopts, 'split-the-node');
-    assert.equal(node.recommendation.class, 'ratified');
     assert.equal(node.recommendation.boldness, 'high');
+    assert.equal(
+      node.facts.find((f) => f.name === 'authority').adopts,
+      'ratified',
+      "the class a confirmation would confer is now the 'authority' fact, not recommendation.class",
+    );
     assert.ok(node.draft, "adopting an alternative means a '## Recommendation' fence");
     assert.equal(node.draft.question, node.question);
     assert.ok(node.draft.sections.Answer.startsWith('Split the node'));
@@ -974,21 +1027,29 @@ describe('readGraph: valid-alternatives fixture', () => {
     assert.notEqual(node.standingHash, node.draftHash);
   });
 
-  test('a recommendation adopting a prune alternative carries no fence, and the node still stands', async () => {
+  // dialogue.md's amendment of 2026-09-03: pruning the node is the
+  // 'existence' fact now, never an alternative -- an alternative is a
+  // candidate answer to this node's question, and deleting the node answers
+  // nothing. So a recommendation to prune still just adopts the node as it
+  // stands (there is no alternative naming the deletion to adopt instead),
+  // and carries no fence for the same reason 'standing' never does.
+  test("pruning is the 'existence' fact, not an alternative: the recommendation still adopts standing and carries no fence", async () => {
     const node = await byId('prune-node');
     assert.equal(node.status, 'unanswered');
-    assert.deepEqual(node.alternatives, [
-      { name: 'fold-into-the-parent', source: 'review', ref: '2026-09-02', prune: true },
-    ]);
-    assert.equal(node.recommendation.adopts, 'fold-into-the-parent');
-    assert.equal(node.draft, null, 'a deleted node has no text, so there is no fence to parse');
+    assert.deepEqual(node.alternatives, [], 'pruning is the existence fact now, never an alternative');
+    assert.equal(node.recommendation.adopts, 'standing');
+    assert.equal(node.draft, null, "adopts: standing means there is no '## Recommendation' fence");
     assert.equal(node.draftHash, node.standingHash, 'with no fence the draft hash is the standing hash');
     assert.equal(node.review.of, node.draftHash);
     assert.equal(node.reviewStale, false);
     assert.equal(node.recommendation.amends, node.standingHash);
     assert.equal(node.recommendationStale, false);
     assert.ok(node.answer, 'the node as it stands is what remains if the author denies the prune');
-    assert.ok(node.alternativesText['fold-into-the-parent'].startsWith('Prune the node'));
+    const existence = node.facts.find((f) => f.name === 'existence');
+    assert.ok(existence, 'the proposal to prune is recorded as the existence fact');
+    assert.deepEqual(existence.choices, ['keep', 'prune']);
+    assert.equal(existence.adopts, 'prune');
+    assert.ok(node.factsText.existence.startsWith('Prune the node'));
   });
 
   test('recommendationStale is true when amends no longer matches the standing hash', async () => {

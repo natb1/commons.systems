@@ -4,10 +4,16 @@ form: rule
 stage: review
 recommendation:
   adopts: standing
-  class: delegated
   boldness: high
   amends: 449c83285411a299a771375d1354f4f11d622613
   at: a1b2c3d
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: high
 ---
 
 ## Disposition

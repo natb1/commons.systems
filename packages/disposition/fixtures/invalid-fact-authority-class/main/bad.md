@@ -1,15 +1,14 @@
 ---
-question: Does a malformed recommendation fail?
+question: May an authority fact offer deferred among its choices?
 stage: periagogic
-recommendation:
-  boldness: high
 facts:
   - name: authority
     choices:
       - ratified
       - delegated
-    adopts: bogus
-    boldness: high
+      - deferred
+    adopts: ratified
+    boldness: low
 ---
 
 ## Disposition

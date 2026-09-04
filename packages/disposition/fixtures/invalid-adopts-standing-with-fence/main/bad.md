@@ -4,10 +4,16 @@ form: rule
 stage: periagogic
 recommendation:
   adopts: standing
-  class: ratified
   boldness: low
   amends: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   at: a1b2c3d
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 ---
 
 ## Answer

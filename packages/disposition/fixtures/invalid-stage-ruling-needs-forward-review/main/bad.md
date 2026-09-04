@@ -4,10 +4,16 @@ form: rule
 stage: ruling
 recommendation:
   adopts: standing
-  class: delegated
   boldness: moderate
   amends: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   at: a1b2c3d
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: moderate
 ---
 
 ## Disposition

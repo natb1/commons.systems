@@ -106,7 +106,12 @@ describe("writeFrontierBrief", () => {
 
     // Each batch node whole: its recommendation with its staleness, its
     // alternatives with their prose, its account.
-    assert.ok(batchSection.includes("- Recommendation: adopts standing, delegated, boldness moderate, amends b38cdaaa0f936057e0cb5edddba6f28fa983ab8c, at 0000000"));
+    assert.ok(batchSection.includes("- Recommendation: adopts standing, boldness moderate, amends b38cdaaa0f936057e0cb5edddba6f28fa983ab8c, at 0000000"));
+    // The class a confirmation would confer left the recommendation for
+    // the `authority` fact, so the reviewer reads it on its own line
+    // (commons.systems/disposition-graph/dialogue).
+    assert.ok(batchSection.includes("- Facts: authority: adopts delegated of ratified|delegated, boldness moderate"),
+      "the facts line names each fact, its adopted choice, its choice set and its boldness");
     assert.ok(batchSection.includes("- Alternatives on the table: 1 (narrower:ai)"), "review-b's pending alternative is summarised");
     assert.ok(batchSection.includes("##### narrower (source ai)"), "and carried with its prose");
     assert.ok(batchSection.includes("Answer B only for the case the author named"), "alternativesText is rendered");

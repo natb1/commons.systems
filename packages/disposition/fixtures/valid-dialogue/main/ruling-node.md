@@ -12,7 +12,6 @@ alternatives:
     ref: 2026-09-03
 recommendation:
   adopts: whole-node
-  class: ratified
   boldness: moderate
   amends: 13cdc41935194afcf1bc1eeeaca6f5962bd55393
   at: a1b2c3d
@@ -21,6 +20,13 @@ review:
   strength: strong
   date: 2026-09-03
   of: b4f02bdb272a870592237e9f33b6b9b81b6a40ec
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 ---
 
 ## Disposition

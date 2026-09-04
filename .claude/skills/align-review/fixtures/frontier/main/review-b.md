@@ -4,13 +4,19 @@ form: rule
 stage: review
 recommendation:
   adopts: standing
-  class: delegated
   boldness: high
   amends: "d58e6358f3bc43963b9bc702b27727c9009733ac"
   at: "0000000"
 alternatives:
   - name: narrower
     source: ai
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: high
 ---
 
 ## Disposition

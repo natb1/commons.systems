@@ -18,7 +18,6 @@ alternatives:
     ref: node --test packages/disposition/read.test.mjs
 recommendation:
   adopts: split-the-node
-  class: ratified
   boldness: high
   amends: 3118dac75b519f41c6ecaae2e39f544ecd9c7ba2
   at: a1b2c3d
@@ -27,6 +26,13 @@ review:
   strength: strong
   date: 2026-09-03
   of: 76e4340370168652ee9a4b08958916d763ccb9ff
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: high
 ---
 
 ## Disposition

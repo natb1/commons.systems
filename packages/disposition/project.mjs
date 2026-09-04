@@ -372,10 +372,15 @@ export function renderFrontier(graph) {
     }
     if (node.recommendation) {
       const rec = node.recommendation;
-      const adopted = (node.alternatives || []).find((a) => a.name === rec.adopts);
-      const prune = adopted && adopted.prune ? " (prune)" : "";
       const stale = node.recommendationStale ? ", standing text changed since the recommendation" : "";
-      lines.push(`  recommendation: adopts ${rec.adopts}${prune}, ${rec.class}, boldness ${rec.boldness}${stale}`);
+      lines.push(`  recommendation: adopts ${rec.adopts}, boldness ${rec.boldness}${stale}`);
+    }
+    if ((node.facts || []).length > 0) {
+      const facts = node.facts.map((f) => {
+        const ruled = f.ruling ? `, ruled ${f.ruling.response} on ${f.ruling.choice} ${f.ruling.date}` : "";
+        return `${f.name}: ${f.adopts} of ${f.choices.join("|")} (boldness ${f.boldness}${ruled})`;
+      });
+      lines.push(`  facts: ${facts.join("; ")}`);
     }
     if (node.review) {
       const stale = node.reviewStale ? ", draft changed since the review" : "";
@@ -441,11 +446,32 @@ const WORDS_PLACEHOLDER = "Your words: your account of the ground, or your inten
 
 const NO_ANSWER_LINE = "No answer yet: this node is the author's disposition awaiting its answer.";
 const EDIT_CAPTION = "Confirm ratifies the draft as the node. The node as it stands is what remains if you deny.";
-const PRUNE_CAPTION = "Confirm prunes the node; the node as it stands is what remains if you deny.";
 const ADOPTED_MARK = "the recommendation adopts this";
-const PRUNE_MARK = "prune";
-const LEDE =
-  "Every node is unanswered until the author confirms it, here or in prose. Listed in one ruling order across both graphs, the ruling that settles the most first. Respond to any subset and submit; the alignment session reads the responses back.";
+// The captions the first-answer rule requires: where a stamp confers
+// authority to amend, of any class, the pane leads with the edit and says
+// what a denial leaves standing; where there is none, it leads with the
+// whole and says the denial leaves the question open, with nothing behind
+// it that holds (commons.systems/disposition-graph/dialogue).
+const FIRST_ANSWER_CAPTION = "This ruling gives the node its first answer. Confirm and the recommended text becomes the node; deny and the question stays open, with nothing behind it that holds.";
+const STANDING_CAPTION = "Confirm ratifies the node as it stands. Nothing else is proposed.";
+const OPEN_QUESTION_CAPTION = "No answer is drafted yet. The dialogue owes the next movement before there is anything to confirm.";
+const STANDING_CHOICE = "standing";
+const REJECT_CHOICE = "__reject";
+const REJECT_LABEL = "Reject all of these, with feedback";
+const DECISION_NOTE_PLACEHOLDER = "Why, or what instead";
+const DECISIONS_LBL = "What this ruling asks";
+const NOTHING_ASKED = "Nothing on this node needs confirming on its own. The ruling is the node as a whole, on the right.";
+const FOLDED_LEAD = "Folded in, low boldness:";
+const PANE_LBL = "The node as it would stand";
+const WHOLE_RESPONSE_LBL = "Your ruling on the whole";
+const INDICATIONS_LBL = "What a ruling here makes decidable";
+const INDICATIONS_HINT = "Context, not rows: each is a node of its own and is ruled from the rail in its own turn in the order.";
+// The three reserved facts, in the words the author reads them by.
+const FACT_LABELS = {
+  authority: "The class a confirmation confers",
+  existence: "Whether the node exists",
+  persistence: "What the node's shape would become",
+};
 
 function alignEsc(s) {
   return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&quot;"));
@@ -744,26 +770,6 @@ function renderSectionDiff(label, before, after) {
   return `<p class="difflbl">${alignEsc(label)}</p>${body}`;
 }
 
-/**
- * "The draft" and "The edit": the draft's own answer and rationale
- * rendered as prose, then what changes -- the frontmatter field by field,
- * the answer and the rationale word by word -- and the caption saying what
- * a confirmation does to it.
- */
-function renderDraft(n) {
-  const d = n.draft;
-  const body = alignHtml(d.sections.Answer) + alignHtml(d.sections.Rationale);
-  const fm = frontmatterEdits(n, d);
-  const fmHtml = fm.length === 0
-    ? '<p class="none">No frontmatter field changes.</p>'
-    : `<ul class="fmdiff">${fm.map((e) => `<li><code>${alignEsc(e.field)}</code>: <span class="was">${alignEsc(e.before)}</span> <span class="arrow">&rarr;</span> <span class="now">${alignEsc(e.after)}</span></li>`).join("")}</ul>`;
-  const diffs = renderSectionDiff("Answer", n.answer, d.sections.Answer)
-    + renderSectionDiff("Rationale", n.rationale, d.sections.Rationale);
-  return `<section class="draftsec"><p class="lbl">The draft</p><div class="mdbody">${body}</div>`
-    + `<p class="lbl edit-lbl">The edit</p><div class="edit">${fmHtml}${diffs}</div>`
-    + `<p class="caption">${alignEsc(EDIT_CAPTION)}</p></section>`;
-}
-
 /* --------------------------------------------- the alternatives ----- */
 
 /**
@@ -799,7 +805,7 @@ function divergenceFor(n, alternativeName, allNodes) {
 }
 
 // The one extra paragraph a divergence adds to an alternative's block (see
-// renderAlternatives): what a ruling for this alternative keeps of the
+// renderDecision): what a ruling for this alternative keeps of the
 // leaves standing under it, and, unless there are none, what it discards
 // of the leaves standing under a different alternative of the same node.
 function renderDivergenceParagraph(keeps, discards) {
@@ -811,6 +817,29 @@ function renderDivergenceParagraph(keeps, discards) {
     html += ` It discards: <em>${discards.map(alignEsc).join(", ")}</em>.`;
   }
   return `${html}</p>`;
+}
+
+// What the recommendation itself carries, beneath the node it proposes: the
+// alternative it adopts, its boldness, whether its pin has gone stale under
+// it, and the persistence a confirmation would leave. It carries no class:
+// the class a confirmation confers is the `authority` fact
+// (commons.systems/disposition-graph/dialogue).
+function renderRecommendation(n) {
+  if (!n.recommendation) {
+    return '<p class="recline none">No recommendation yet.</p>';
+  }
+  const rec = n.recommendation;
+  let pills = `<span class="pill rec-adopts">adopts: ${alignEsc(rec.adopts)}</span>`
+    + `<span class="pill rec-bold-${alignEsc(rec.boldness)}">boldness: ${alignEsc(rec.boldness)}</span>`;
+  if (n.recommendationStale) {
+    pills += '<span class="pill rec-stale">standing text changed since the recommendation</span>';
+  }
+  const shims = persistenceShims(n);
+  const persistence = shims.length === 0
+    ? '<p class="persist">Persistence: standing.</p>'
+    : `<p class="persist">Persistence: standing, with ${shims.length} shim${shims.length === 1 ? "" : "s"}:</p>`
+      + `<ul class="shims">${shims.map((s) => `<li>${alignInline(s.artifact)}</li>`).join("")}</ul>`;
+  return `<p class="pills recline">${pills}</p>${persistence}`;
 }
 
 /**
@@ -838,27 +867,6 @@ function renderDivergenceParagraph(keeps, discards) {
  *   divergence inversion.
  * @returns {string}
  */
-function renderAlternatives(n, allNodes) {
-  const alts = Array.isArray(n.alternatives) ? n.alternatives : [];
-  if (alts.length === 0) return "";
-  const adopts = n.recommendation ? n.recommendation.adopts : null;
-  const text = n.alternativesText || {};
-  const divergences = alts.map((a) => divergenceFor(n, a.name, allNodes));
-  const showDivergence = divergences.some((d) => d.keeps.length > 0);
-  const items = alts.map((a, i) => {
-    const pills = [`<span class="pill alt-src">${alignEsc(a.source)}</span>`];
-    if (a.ref) pills.push(`<span class="pill alt-ref mono">${alignEsc(a.ref)}</span>`);
-    if (a.prune) pills.push(`<span class="pill alt-prune">${alignEsc(PRUNE_MARK)}</span>`);
-    if (a.name === adopts) pills.push(`<span class="pill alt-adopted">${alignEsc(ADOPTED_MARK)}</span>`);
-    const body = text[a.name] ? `<div class="mdbody">${alignHtml(text[a.name])}</div>` : "";
-    const divergence = showDivergence ? renderDivergenceParagraph(divergences[i].keeps, divergences[i].discards) : "";
-    return `<li class="alt${a.name === adopts ? " adopted" : ""}">`
-      + `<p class="altname"><span class="mono">${alignEsc(a.name)}</span>${pills.join("")}</p>`
-      + `${body}${divergence}</li>`;
-  }).join("");
-  return `<section class="alts"><p class="lbl">The alternatives</p><ul class="altlist">${items}</ul></section>`;
-}
-
 /* ------------------------- the recommendation and the review --------- */
 
 // The shims a confirmation would leave standing: the draft's when the node
@@ -867,33 +875,6 @@ function persistenceShims(n) {
   const draftShims = n.draft && n.draft.frontmatter ? n.draft.frontmatter.shims : null;
   if (Array.isArray(draftShims) && draftShims.length > 0) return draftShims;
   return Array.isArray(n.shims) ? n.shims : [];
-}
-
-function renderRecommendation(n) {
-  if (!n.recommendation) {
-    return '<section class="rec"><p class="lbl">The recommendation</p><p class="none">No recommendation yet.</p></section>';
-  }
-  const rec = n.recommendation;
-  const adopted = (n.alternatives || []).find((a) => a.name === rec.adopts);
-  let pills = `<span class="pill rec-adopts">adopts: ${alignEsc(rec.adopts)}</span>`;
-  if (adopted && adopted.prune) pills += `<span class="pill alt-prune">${alignEsc(PRUNE_MARK)}</span>`;
-  pills += `<span class="pill rec-class-${alignEsc(rec.class)}">class: ${alignEsc(rec.class)}</span>`
-    + `<span class="pill rec-bold-${alignEsc(rec.boldness)}">boldness: ${alignEsc(rec.boldness)}</span>`;
-  if (n.recommendationStale) {
-    pills += '<span class="pill rec-stale">standing text changed since the recommendation</span>';
-  }
-  const shims = persistenceShims(n);
-  const persistence = shims.length === 0
-    ? '<p class="persist">Persistence: standing.</p>'
-    : `<p class="persist">Persistence: standing, with ${shims.length} shim${shims.length === 1 ? "" : "s"}:</p>`
-      + `<ul class="shims">${shims.map((s) => `<li>${alignInline(s.artifact)}</li>`).join("")}</ul>`;
-  // A prune quotes no `## Recommendation` fence -- a deleted node has no
-  // text -- so its caption cannot sit under an edit the way EDIT_CAPTION
-  // does; it says what a confirmation would do right here instead.
-  const caption = adopted && adopted.prune
-    ? `<p class="caption">${alignEsc(PRUNE_CAPTION)}</p>`
-    : "";
-  return `<section class="rec"><p class="lbl">The recommendation</p><p class="pills">${pills}</p>${persistence}${caption}</section>`;
 }
 
 function renderReview(n) {
@@ -908,10 +889,278 @@ function renderReview(n) {
   return `<section class="rev"><p class="lbl">The review</p><p class="pills">${pills}</p></section>`;
 }
 
-/* ------------------------------------------- the response controls --- */
+/* --------------------------- the ruling screen ------------------------
+ *
+ * commons.systems/disposition-graph/alignment-page: one node at a time, on
+ * a three-column screen, in the ruling order. The rail carries the metrics
+ * and every unanswered node; the middle column carries the decisions this
+ * ruling asks; the right-hand column carries the node as it would stand,
+ * with its unanswered children beneath it as indications and never as rows.
+ */
 
-function renderResponse(n) {
+// The browser's published address, read out of the record rather than
+// written here: the shim that names it is declared on
+// commons.systems/disposition-graph/projection. A metric links to the
+// disposition it instruments at that address, since this page addresses no
+// node of its own. Null when no shim names it, and then a metric renders
+// unlinked rather than pointing nowhere.
+function browserAddress(graph) {
+  for (const n of graph.nodes || []) {
+    for (const s of n.shims || []) {
+      const text = String(s.artifact || "");
+      if (!/browser/i.test(text)) continue;
+      const m = text.match(/https:\/\/\S*?artifact\/[0-9a-f-]+/i);
+      if (m) return m[0];
+    }
+  }
+  return null;
+}
+
+// The four metrics, each a signal of a recorded disposition and never a
+// count for its own sake, as this page's answer requires. `of` names the
+// node the metric instruments; the rail links to it.
+function alignmentMetrics(items) {
+  const first = items[0] || null;
+  return [
+    {
+      key: "open",
+      value: items.length,
+      of: "commons.systems/disposition-graph/unanswered",
+      why: "Nodes the author has not confirmed. Every node is unanswered until they do, so this is the outstanding authority.",
+    },
+    {
+      key: "ruleable",
+      value: items.filter((n) => n.stage === "ruling").length,
+      of: "commons.systems/disposition-graph/clean-context-review",
+      why: "Nodes whose clean-context review is behind them. The review is what stands between a draft and the author, so this is what can be ruled now.",
+    },
+    {
+      key: "next settles",
+      value: first && typeof first.settles === "number" ? first.settles : 0,
+      of: "commons.systems/disposition-graph/alignment-order",
+      why: "What a ruling on the first node in the order would make decidable. The order puts the ruling that settles the most first, so this is what one ruling buys.",
+    },
+    {
+      key: "stale",
+      value: items.filter((n) => n.recommendationStale || n.reviewStale).length,
+      of: "commons.systems/disposition-graph/frontier-consistency",
+      why: "Nodes whose recommendation or review pin no longer matches the text it read. This is how much of what looks ruleable rests on a reading of text that has moved.",
+    },
+  ];
+}
+
+function renderMetrics(items, browser) {
+  const cells = alignmentMetrics(items).map((m) => {
+    const inner = `<dt>${alignEsc(m.key)}</dt><dd class="num">${alignEsc(m.value)}</dd>`;
+    const title = `${m.why} Instruments ${m.of}.`;
+    return browser === null
+      ? `<div class="metric" title="${alignEsc(title)}">${inner}</div>`
+      : `<a class="metric" href="${alignEsc(browser)}#${alignEsc(m.of)}" target="_blank" rel="noopener" title="${alignEsc(title)}">${inner}</a>`;
+  }).join("");
+  return `<dl class="metrics">${cells}</dl>`;
+}
+
+/* ------------------------- the decisions this ruling asks ------------- */
+
+// The decisions a ruling on this node asks: its own answer, where
+// alternatives are pending on it, and its asking facts. A decision is asked
+// whenever its boldness is anything but low and folds unasked into the
+// right-hand column when its boldness is low -- and because boldness runs
+// from the AI's own knowledge against the record, high boldness is low
+// confidence, so the fold is on `low` and never on `high`.
+function decisionsFor(n, allNodes) {
+  const out = [];
+  const alts = Array.isArray(n.alternatives) ? n.alternatives : [];
+  const rec = n.recommendation || null;
+  if (alts.length > 0) {
+    const text = n.alternativesText || {};
+    const divergences = alts.map((a) => divergenceFor(n, a.name, allNodes));
+    const showDivergence = divergences.some((d) => d.keeps.length > 0);
+    const choices = [
+      {
+        value: STANDING_CHOICE,
+        label: STANDING_CHOICE,
+        pills: [{ cls: "alt-src", text: "the node as it stands" }],
+        prose: "",
+        divergence: "",
+      },
+      ...alts.map((a, i) => ({
+        value: a.name,
+        label: a.name,
+        pills: [
+          { cls: "alt-src", text: a.source },
+          ...(a.ref ? [{ cls: "alt-ref mono", text: a.ref }] : []),
+        ],
+        prose: text[a.name] || "",
+        divergence: showDivergence
+          ? renderDivergenceParagraph(divergences[i].keeps, divergences[i].discards)
+          : "",
+      })),
+    ];
+    out.push({
+      name: "answer",
+      label: "The answer",
+      // With no recommendation yet there is no boldness to fold on, and a
+      // decision nobody has recommended is asked, never folded away.
+      boldness: rec ? rec.boldness : null,
+      adopts: rec ? rec.adopts : null,
+      choices,
+    });
+  }
+  const factText = n.factsText || {};
+  for (const f of n.facts || []) {
+    out.push({
+      name: f.name,
+      label: FACT_LABELS[f.name] || f.name,
+      boldness: f.boldness,
+      adopts: f.adopts,
+      ruling: f.ruling || null,
+      // The '## Facts' subsection explains the fact's choices as a set, so
+      // it sits under the legend and not on any one row.
+      prose: factText[f.name] || "",
+      choices: f.choices.map((c) => ({
+        value: c, label: c, pills: [], prose: "", divergence: "",
+      })),
+    });
+  }
+  return out;
+}
+
+function renderDecision(doc, d) {
+  const rows = d.choices.map((c) => {
+    const adopted = c.value === d.adopts;
+    const pills = c.pills.map((p) => `<span class="pill ${p.cls}">${alignEsc(p.text)}</span>`).join("")
+      + (adopted ? `<span class="pill alt-adopted">${alignEsc(ADOPTED_MARK)}</span>` : "");
+    const drill = c.prose || c.divergence
+      ? `<details class="drill"><summary>What this would answer</summary>`
+        + (c.prose ? `<div class="mdbody">${alignHtml(c.prose)}</div>` : "")
+        + c.divergence
+        + "</details>"
+      : "";
+    return `<li class="choice${adopted ? " adopted" : ""}">`
+      + `<label class="choicelbl"><input type="radio" name="dec:${alignEsc(doc)}:${alignEsc(d.name)}" value="${alignEsc(c.value)}" data-choice>`
+      + `<span class="choicename mono">${alignEsc(c.label)}</span></label>${pills}${drill}</li>`;
+  }).join("");
+  const reject = `<li class="choice reject">`
+    + `<label class="choicelbl"><input type="radio" name="dec:${alignEsc(doc)}:${alignEsc(d.name)}" value="${alignEsc(REJECT_CHOICE)}" data-choice>`
+    + `<span class="choicename">${alignEsc(REJECT_LABEL)}</span></label></li>`;
+  const ruled = d.ruling
+    ? `<p class="ruled">Ruled ${alignEsc(d.ruling.response)} on <span class="mono">${alignEsc(d.ruling.choice)}</span>, ${alignEsc(d.ruling.date)}.</p>`
+    : "";
+  const why = d.prose ? `<div class="mdbody decwhy">${alignHtml(d.prose)}</div>` : "";
+  const bold = d.boldness
+    ? `<span class="pill rec-bold-${alignEsc(d.boldness)}">boldness: ${alignEsc(d.boldness)}</span>`
+    : '<span class="pill rec-bold-none">no recommendation yet</span>';
+  return `<fieldset class="decision" data-decision="${alignEsc(d.name)}">`
+    + `<legend class="declbl">${alignEsc(d.label)}${bold}</legend>`
+    + ruled
+    + why
+    + `<ul class="choices">${rows}${reject}</ul>`
+    + `<textarea class="note dec-note" data-decision-text rows="2" placeholder="${alignEsc(DECISION_NOTE_PLACEHOLDER)}" hidden></textarea>`
+    + "</fieldset>";
+}
+
+function renderDecisions(n, allNodes) {
   const doc = alignDocId(n.id);
+  const decisions = decisionsFor(n, allNodes);
+  const asked = decisions.filter((d) => d.boldness !== "low");
+  const folded = decisions.filter((d) => d.boldness === "low");
+  const body = asked.length === 0
+    ? `<p class="none">${alignEsc(NOTHING_ASKED)}</p>`
+    : asked.map((d) => renderDecision(doc, d)).join("");
+  const foldline = folded.length === 0
+    ? ""
+    : `<p class="folded">${alignEsc(FOLDED_LEAD)} `
+      + folded.map((d) => `<span class="mono">${alignEsc(d.label)}: ${alignEsc(d.adopts)}</span>`).join(", ")
+      + ".</p>";
+  return `<section class="decisions"><p class="lbl">${alignEsc(DECISIONS_LBL)}</p>${body}${foldline}</section>`;
+}
+
+/* ------------------------- the node as it would stand ----------------- */
+
+// The unanswered children of this node, and the open questions that name it
+// in `depends`: indications of what a ruling here makes decidable, shown
+// beneath the node and never as rows to rule from, since every node is
+// ruled from the rail in its own turn in the one order.
+function paneIndications(n, allNodes) {
+  const children = allNodes
+    .filter((o) => o.stage && (o.under || []).includes(n.id))
+    .map((o) => ({ id: o.id, question: o.question, how: "under it" }));
+  const waiting = allNodes
+    .filter((o) => o.stage && (o.depends || []).some((d) => d.id === n.id))
+    .map((o) => ({
+      id: o.id,
+      question: o.question,
+      how: (o.depends.find((d) => d.id === n.id).alternative
+        ? `waits on ${o.depends.find((d) => d.id === n.id).alternative}`
+        : "waits on this ruling"),
+    }));
+  const seen = new Set();
+  const all = [...children, ...waiting].filter((x) => (seen.has(x.id) ? false : seen.add(x.id)));
+  if (all.length === 0) return "";
+  const items = all.map((x) => (
+    `<li><span class="indq">${alignEsc(x.question || x.id)}</span>`
+    + `<span class="meta mono">${alignEsc(x.how)}</span>`
+    + `<span class="indid mono">${alignEsc(x.id)}</span></li>`
+  )).join("");
+  return `<section class="indications"><p class="lbl">${alignEsc(INDICATIONS_LBL)} (${all.length})</p>`
+    + `<p class="hint">${alignEsc(INDICATIONS_HINT)}</p><ul class="indlist">${items}</ul></section>`;
+}
+
+function renderPane(n, allNodes) {
+  const doc = alignDocId(n.id);
+  const hasAnswer = typeof n.answer === "string" && n.answer.length > 0;
+  const stamped = n.authority !== null && n.authority !== undefined;
+  let body;
+  let caption;
+  if (n.draft) {
+    const d = n.draft;
+    const whole = `<div class="mdbody">${alignHtml(d.sections.Answer)}${alignHtml(d.sections.Rationale)}</div>`;
+    if (stamped) {
+      const fm = frontmatterEdits(n, d);
+      const fmHtml = fm.length === 0
+        ? '<p class="none">No frontmatter field changes.</p>'
+        : `<ul class="fmdiff">${fm.map((e) => `<li><code>${alignEsc(e.field)}</code>: <span class="was">${alignEsc(e.before)}</span> <span class="arrow">&rarr;</span> <span class="now">${alignEsc(e.after)}</span></li>`).join("")}</ul>`;
+      const diffs = renderSectionDiff("Answer", n.answer, d.sections.Answer)
+        + renderSectionDiff("Rationale", n.rationale, d.sections.Rationale);
+      body = `<p class="lbl edit-lbl">The edit</p><div class="edit">${fmHtml}${diffs}</div>`
+        + `<p class="lbl edit-lbl">The node it would leave</p>${whole}`;
+      caption = EDIT_CAPTION;
+    } else {
+      body = whole;
+      caption = FIRST_ANSWER_CAPTION;
+    }
+  } else if (hasAnswer) {
+    body = `<div class="mdbody">${alignHtml(n.answer)}${n.rationale ? alignHtml(n.rationale) : ""}</div>`;
+    caption = stamped ? STANDING_CAPTION : FIRST_ANSWER_CAPTION;
+  } else {
+    body = `<p class="none">${alignEsc(NO_ANSWER_LINE)}</p>`;
+    caption = OPEN_QUESTION_CAPTION;
+  }
+  const words = n.disposition
+    ? `<details class="drill words"><summary>The author's words</summary><div class="mdbody">${alignHtml(n.disposition)}</div></details>`
+    : "";
+  const account = n.account
+    ? `<details class="drill"><summary>The AI's account</summary><div class="mdbody">${renderAccount(n.account)}</div></details>`
+    : "";
+  return '<aside class="col-pane">'
+    + `<section class="stands"><p class="lbl">${alignEsc(PANE_LBL)}</p>${body}`
+    + `<p class="caption">${alignEsc(caption)}</p>${renderRecommendation(n)}</section>`
+    // Beneath the node, what a ruling here makes decidable; then the
+    // review's reading of it, the author's words and the AI's account as
+    // drill-downs; then the rejection of the whole, last
+    // (commons.systems/disposition-graph/alignment-page).
+    + paneIndications(n, allNodes)
+    + renderReview(n)
+    + words
+    + account
+    + renderWholeResponse(n, doc)
+    + "</aside>";
+}
+
+// The whole-node response, beneath the node as it would stand: the three
+// responses the unanswered node opens, and this page adds none.
+function renderWholeResponse(n, doc) {
   const hint = STAGE_HINT[n.stage];
   const placeholder = n.stage === "periagogic" || n.stage === "maieutic" ? WORDS_PLACEHOLDER : "";
   const opts = RESPONSE_CHOICES.map((c) => (
@@ -920,7 +1169,7 @@ function renderResponse(n) {
   return '<div class="response">'
     + (hint ? `<p class="hint">${alignEsc(hint)}</p>` : "")
     + '<fieldset class="controls" data-controls>'
-    + '<legend class="lbl">Your response</legend>'
+    + `<legend class="lbl">${alignEsc(WHOLE_RESPONSE_LBL)}</legend>`
     + `<div class="seg">${opts}</div>`
     + `<label class="note-lbl" data-note-lbl for="note-${alignEsc(doc)}">A note, edits, or feedback</label>`
     + `<textarea class="note" id="note-${alignEsc(doc)}" data-field="text" rows="3"${placeholder ? ` placeholder="${alignEsc(placeholder)}"` : ""}></textarea>`
@@ -930,7 +1179,6 @@ function renderResponse(n) {
 }
 
 function renderAlignmentItem(n, allNodes) {
-  const hasAnswer = typeof n.answer === "string" && n.answer.length > 0;
   const under = n.under || [];
   const doc = alignDocId(n.id);
   const stamp = n.authority
@@ -938,13 +1186,17 @@ function renderAlignmentItem(n, allNodes) {
     : "no stamp";
   const rank = typeof n.rank === "number" ? n.rank.toFixed(4) : "—";
 
-  let html = `<article class="item" id="item-${alignEsc(doc)}" data-item data-id="${alignEsc(n.id)}" data-doc="${alignEsc(doc)}" data-stage="${alignEsc(n.stage)}">`;
+  let html = `<article class="item" id="item-${alignEsc(doc)}" data-item data-id="${alignEsc(n.id)}" data-doc="${alignEsc(doc)}" data-stage="${alignEsc(n.stage)}" hidden>`;
+  html += '<div class="col-ask">';
   html += `<h2 class="iq">${alignEsc(n.question || n.id)}</h2>`;
   html += `<p class="idv mono">${alignEsc(n.id)}</p>`;
   html += '<p class="eyebrow">'
     + `<span class="pill stage-${alignEsc(n.stage)}">${alignEsc(n.stage)}</span>`
     + `<span class="meta mono">${alignEsc(n.graph)}</span>`
     + (typeof n.settles === "number" ? `<span class="meta mono num">settles ${alignEsc(n.settles)}</span>` : "")
+    // The alternatives pending on a node are shown beside its settling
+    // count: they are what tells the author what a sitting will cost, and
+    // they order nothing (commons.systems/disposition-graph/alignment-order).
     + (n.alternatives && n.alternatives.length > 0
       ? `<span class="meta mono num">${alignEsc(n.alternatives.length)} alternative${n.alternatives.length === 1 ? "" : "s"}</span>`
       : "")
@@ -952,18 +1204,9 @@ function renderAlignmentItem(n, allNodes) {
     + `<span class="meta mono">${alignEsc(stamp)}</span>`
     + `<span class="meta mono parents">${under.length ? `under ${alignEsc(under.join(", "))}` : "a root"}</span>`
     + "</p>";
-
-  if (n.disposition) html += alignSection("The author's words", alignHtml(n.disposition), "disposition");
-  const stands = hasAnswer
-    ? alignHtml(n.answer) + (n.rationale ? alignHtml(n.rationale) : "")
-    : `<p class="none">${alignEsc(NO_ANSWER_LINE)}</p>`;
-  html += alignSection("The node as it stands", stands, "stands");
-  html += renderAlternatives(n, allNodes);
-  if (n.draft) html += renderDraft(n);
-  html += renderRecommendation(n);
-  html += renderReview(n);
-  if (n.account) html += alignSection("The AI's account", renderAccount(n.account), "account");
-  html += renderResponse(n);
+  html += renderDecisions(n, allNodes);
+  html += "</div>";
+  html += renderPane(n, allNodes);
   html += "</article>";
   return html;
 }
@@ -978,12 +1221,14 @@ function renderAlignmentItem(n, allNodes) {
  * descendant's ruling ahead of its own ancestor's, exactly what the ruling
  * order exists to prevent.
  *
- * The manifest's per-graph `about` text is still surfaced, for the page's
- * header rather than as a grouping: `graphs` lists every declared graph in
- * the manifest's own order, its `about` text, and how many of `items`
- * belong to it, with a graph a node names but the manifest does not
- * declare appended after the declared ones rather than dropped, so no open
- * dialogue's graph can go missing from the page.
+ * `graphs` lists every declared graph in the manifest's own order, its
+ * `about` text, and how many of `items` belong to it, with a graph a node
+ * names but the manifest does not declare appended after the declared ones
+ * rather than dropped, so no open dialogue's graph can go missing. The page
+ * renders only the label, on each rail row: the pagehead that carried the
+ * `about` lines and the per-stage counts liquidated without a disposition,
+ * on the author's ruling of 2026-09-03
+ * (commons.systems/disposition-graph/alignment-page).
  *
  * @param {{graphs?: object, nodes?: object[]}} graph
  * @returns {{items: object[], graphs: {graph: string, label: string, about: string|null, count: number}[]}}
@@ -1015,26 +1260,22 @@ export function orderAlignmentItems(graph) {
 
 function alignmentPageHtml(graph, items, graphs) {
   const total = items.length;
-  const present = graphs.filter((g) => g.count > 0);
+  const browser = browserAddress(graph);
+  const graphOf = new Map(graphs.map((g) => [g.graph, g.label]));
 
-  const countsHtml = ALIGNMENT_STAGES.map((stage) => (
-    `<div><dt>${alignEsc(stage)}</dt><dd class="num">${items.filter((n) => n.stage === stage).length}</dd></div>`
-  )).join("") + `<div><dt>items</dt><dd class="num">${total}</dd></div>`;
-
-  const railHtml = `<ul class="tree">${items.map((n) => {
+  // The rail is the only view of the whole frontier once one node is shown
+  // at a time, which is why the metrics sit at its top and why it lists
+  // every node, filtering and paging nothing.
+  const railHtml = `<ol class="tree">${items.map((n, i) => {
     const doc = alignDocId(n.id);
-    return `<li><a href="#item-${alignEsc(doc)}" data-rail data-doc="${alignEsc(doc)}">`
+    const settles = typeof n.settles === "number" ? n.settles : 0;
+    return `<li><a href="#item-${alignEsc(doc)}" data-rail data-doc="${alignEsc(doc)}" aria-current="false">`
       + `<span class="dot stage-${alignEsc(n.stage)}" aria-hidden="true"></span>`
       + `<span class="rq">${alignEsc(n.question || n.id)}</span>`
+      + `<span class="rmeta mono">${alignEsc(i + 1)} · settles ${alignEsc(settles)}`
+      + ` · ${alignEsc(graphOf.get(n.graph) || n.graph)}</span>`
       + '<span class="mark" data-mark></span></a></li>';
-  }).join("")}</ul>`;
-
-  const graphsHtml = present.map((g) => (
-    `<div class="graphgrp">`
-    + `<p class="graphh">${alignEsc(g.label)} (${g.count})</p>`
-    + (g.about ? `<p class="graphsub">${alignInline(g.about)}</p>` : "")
-    + "</div>"
-  )).join("");
+  }).join("")}</ol>`;
 
   const itemsHtml = items.map((n) => renderAlignmentItem(n, graph.nodes)).join("");
 
@@ -1051,21 +1292,18 @@ function alignmentPageHtml(graph, items, graphs) {
       <span id="module-name" hidden>${alignEsc(graph.module || "")}</span>
     </div>
     <nav class="tools" aria-label="Actions">
+      <button type="button" class="tbtn" id="btn-wide" aria-pressed="false">Widen the node</button>
       <button type="button" class="tbtn" id="btn-copy">Copy all responses</button>
       <button type="button" class="tbtn" id="btn-theme">Theme: auto</button>
     </nav>
   </div>
 </header>
 <div class="shell">
-  <nav class="nav" id="nav" aria-label="The items, in page order">
+  <nav class="nav" id="nav" aria-label="The unanswered frontier, in the ruling order">
+    ${renderMetrics(items, browser)}
     <div id="tree">${railHtml}</div>
   </nav>
   <main id="main">
-    <div class="pagehead">
-      <dl class="counts">${countsHtml}</dl>
-      <p class="lede">${alignEsc(LEDE)}</p>
-      ${graphsHtml}
-    </div>
     <p class="notice" id="notice" hidden></p>
     ${itemsHtml}
     ${emptyHtml}

@@ -136,12 +136,26 @@ function rulingOrderCompare(a, b) {
 function recommendationLine(node) {
   const rec = node.recommendation;
   if (!rec) return "none (this node carries no recommendation)";
-  const adopted = (node.alternatives || []).find((a) => a.name === rec.adopts);
-  const prune = adopted && adopted.prune ? " (prune: the alternative deletes the node)" : "";
   const stale = node.recommendationStale
     ? " — STALE: the standing text has changed since this recommendation was drafted (`recommendationStale`)"
     : "";
-  return `adopts ${rec.adopts}${prune}, ${rec.class}, boldness ${rec.boldness}, amends ${rec.amends}, at ${rec.at}${stale}`;
+  return `adopts ${rec.adopts}, boldness ${rec.boldness}, amends ${rec.amends}, at ${rec.at}${stale}`;
+}
+
+// The decisions on the node that are not questions under it: the class a
+// confirmation would confer, the node's existence, and its persistence
+// where the recommendation would change the node's shape. The class left
+// the recommendation when these arrived
+// (commons.systems/disposition-graph/dialogue).
+function factsLine(node) {
+  const facts = node.facts || [];
+  if (facts.length === 0) return "none (this node's ruling asks no decision of its own)";
+  return facts.map((f) => {
+    const ruled = f.ruling
+      ? `, ruled ${f.ruling.response} on ${f.ruling.choice} (${f.ruling.date})`
+      : "";
+    return `${f.name}: adopts ${f.adopts} of ${f.choices.join("|")}, boldness ${f.boldness}${ruled}`;
+  }).join("; ");
 }
 
 function reviewLine(node) {
@@ -153,7 +167,7 @@ function reviewLine(node) {
 function alternativesSummary(node) {
   const alts = node.alternatives || [];
   if (alts.length === 0) return "none";
-  return `${alts.length} (${alts.map((a) => `${a.name}:${a.source}${a.prune ? ":prune" : ""}`).join(", ")})`;
+  return `${alts.length} (${alts.map((a) => `${a.name}:${a.source}`).join(", ")})`;
 }
 
 function renderAlternatives(node, headingPrefix) {
@@ -163,7 +177,6 @@ function renderAlternatives(node, headingPrefix) {
   for (const alt of alts) {
     const bits = [`source ${alt.source}`];
     if (alt.ref) bits.push(`ref ${alt.ref}`);
-    if (alt.prune) bits.push("prune");
     out.push(`${headingPrefix} ${alt.name} (${bits.join(", ")})`, "");
     out.push((node.alternativesText || {})[alt.name] || "(no prose recorded for this alternative)", "");
   }
@@ -179,6 +192,7 @@ function renderBatchNode(node) {
     `- Question: ${node.question}`,
     `- Stage: ${node.stage} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | status ${node.status} | stamp: ${stampText(node)}`,
     `- Recommendation: ${recommendationLine(node)}`,
+    `- Facts: ${factsLine(node)}`,
     `- Earlier review: ${reviewLine(node)}`,
     `- Alternatives on the table: ${alternativesSummary(node)}`,
     `- Depends: ${(node.depends || []).join(", ") || "none"} | under: ${(node.under || []).join(", ") || "none"}`,
@@ -220,6 +234,7 @@ function renderContextNode(node) {
   const head = [`### ${node.id}`, "", `- File: ${nodeFile(node)}`, `- Question: ${node.question}`];
   head.push(`- Status: ${node.status} | stamp: ${stampText(node)} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | stage: ${node.stage || "none (no dialogue open)"}`);
   if (node.recommendation) head.push(`- Recommendation: ${recommendationLine(node)}`);
+  if ((node.facts || []).length > 0) head.push(`- Facts: ${factsLine(node)}`);
   head.push(`- Alternatives pending: ${alternativesSummary(node)}`);
   head.push("", "#### Answer", "", node.answer || "(no '## Answer' section: this node has no standing answer yet)", "");
   const alts = renderAlternatives(node, "####");

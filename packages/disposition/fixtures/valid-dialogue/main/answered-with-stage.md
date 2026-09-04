@@ -8,10 +8,16 @@ authority:
 stage: review
 recommendation:
   adopts: standing
-  class: ratified
   boldness: low
   amends: a691b80c616eef9b2df5a598cec7fa65c29807a0
   at: a1b2c3d
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 ---
 
 ## Answer

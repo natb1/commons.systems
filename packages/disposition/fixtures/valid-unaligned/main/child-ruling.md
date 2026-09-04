@@ -8,7 +8,6 @@ authority:
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: moderate
   amends: a080c58e0a166c115d471daae9bb6576536d02f0
   at: a1b2c3d
@@ -17,6 +16,13 @@ review:
   strength: weak
   date: 2026-01-01
   of: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 boost: 1
 under:
   - example.test/main/root

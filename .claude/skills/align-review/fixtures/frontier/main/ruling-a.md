@@ -8,7 +8,6 @@ alternatives:
     ref: "2026-08-01"
 recommendation:
   adopts: whole-thing
-  class: ratified
   boldness: low
   amends: "6fa450bd808752b97af1abfdade5dfcff5ba2832"
   at: "0000000"
@@ -17,6 +16,13 @@ review:
   strength: weak
   date: 2026-08-01
   of: 0c79dd25a75caee3b256551263babe34c4313c3c
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 ---
 
 ## Disposition

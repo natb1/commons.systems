@@ -137,7 +137,8 @@ alignment through the report instead of through a node:
   answer found here is a proposal in the sense the `authority` node
   defines, a conflicting answer that arose outside alignment. Report the
   node, the divergence, and a recommendation with its authority class,
-  boldness, and persistence class (`growth`, `transience`), in a form the
+  boldness, which runs from the AI's own knowledge against the record, and
+  persistence class (`growth`, `transience`), in a form the
   author can paste into `/align`, which records it on the node as an
   alternative of source `proposal` naming this report or the instrument
   that raised it and opens the node's dialogue at the periagogic stage
