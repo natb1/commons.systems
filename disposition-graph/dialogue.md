@@ -514,3 +514,194 @@ forward review of 2026-09-03, is superseded by the author's words of the same
 day and is left in place only so that the review pin it carries is not lost. It
 is not what this node now recommends.
 
+### The unit of a ruling: analysis and the data model, 2026-09-03
+
+The author ruled on 2026-09-03 that the record carries a decision per aspect,
+that each aspect may have choices requiring confirmation, and that each aspect
+has a recommendation with its own boldness. What follows is the analysis they
+asked for, of the data model and of the cascade across the alignment frontier.
+It is an account and not yet a recommendation: it goes to a clean-context
+validation before it reaches the author, as they directed.
+
+#### What an aspect is, and the constraint that makes it work
+
+The author also asked that the whole disposition render live and reflect the
+choices made in the confirmation list. That single sentence fixes the model,
+because the session cannot pre-write a render for every combination of choices:
+with five aspects of two choices each there are thirty-two, and the prose of a
+node is not thirty-two texts. The render must therefore be assembled, and
+assembly is only mechanical if each choice owns a bounded piece of the node.
+
+So an aspect is a decision whose choices differ only within one slot of the
+node, and a slot is either one frontmatter field or one named section. A choice
+whose effect ripples outside its slot is not an aspect: it is a whole-text
+candidate, and it belongs to the aspect named `answer`, whose choices are whole
+nodes. That constraint is what makes the live render derivable, and it is also
+the model's degradation path, which matters for the bootstrap: a node with the
+single aspect `answer` carrying whole-node choices is exactly the encoding in
+force today, so every node in the record migrates without loss and gains
+aspects only when a sitting has reason to split one.
+
+#### The encoding
+
+`alternatives` and `## Alternatives` are replaced by `aspects` and `## Aspects`.
+The node-level `recommendation` keeps only its pin. `class` and `boldness`
+leave it: the class a confirmation confers is the adopted choice of the aspect
+named `authority`, and boldness is a field on every aspect, which is what the
+author asked for.
+
+```yaml
+recommendation:
+  amends: <sha1 of the standing text>
+  at: <graph commit the aspects were drafted at>
+aspects:
+  - name: answer
+    slot: "## Answer"
+    boldness: moderate
+    adopts: draft
+    choices:
+      - name: standing
+      - name: draft
+        source: ai
+        ref: "2026-09-03"
+  - name: authority
+    slot: authority
+    boldness: low
+    adopts: ratified
+    choices:
+      - name: ratified
+        source: ai
+        ref: "2026-09-03"
+      - name: delegated
+        source: review
+        ref: "2026-09-03"
+    ruling:
+      response: confirm
+      choice: ratified
+      date: 2026-09-03
+```
+
+Each aspect carries a `name`, unique in the node; a `slot`, the frontmatter
+field or the section its choices write; a `boldness`, low, moderate or high, in
+the meaning the author kept, how much of the recommendation for this aspect
+rests on the AI's own knowledge against the record and the author's words; an
+`adopts` naming one of its own choices; and `choices`, at least one, each with
+a `name`, a `source` and a `ref` exactly as `alternatives` carried them, so the
+provenance the record already keeps is not lost in the move. `## Aspects` holds
+one subsection per aspect, in order, saying what the aspect decides and what
+each choice would answer, which is what `## Alternatives` held.
+
+`ruling` is written on an aspect when the author rules on it: the `response`,
+confirm, edit or deny, the `choice` confirmed, and the date. The author's words
+themselves are not duplicated here; they go into `## Disposition` verbatim and
+dated, as the quotes node requires, and the ruling points at them by date.
+
+`## Recommendation` stops being one fence holding the whole proposed node. Each
+choice carries the text of its own slot, the `answer` aspect's choices carrying
+whole nodes as the fence does today, and the whole render is assembled from the
+adopted choice of every aspect. The assembled node is derived and never stored,
+which is what this node's answer already says of the diff.
+
+#### Which aspects reach the confirmation list
+
+The author asked that very high confidence and default elements be left out of
+the list and simply appear in the render. That is derived and not stored: an
+aspect reaches the list when it has more than one choice, or when its boldness
+is high; an aspect with one choice and low or moderate boldness renders in the
+context pane and asks nothing.
+
+One trap is worth stating plainly, because getting it backwards would invert
+the whole page. Boldness measures how much rests on the AI's own knowledge
+against the record, so high boldness is low confidence. The author's fold rule
+is phrased in confidence, "very high confidence ... can just be included in the
+final render", and the stored fact is its inverse. The page must therefore fold
+on *low* boldness and ask on *high*. This is the sharpest reason the author's
+retraction of the rename was right: confidence is the presentation of the fact,
+boldness is the fact, and only the fact belongs in the record.
+
+#### The stamp, and what partial confirmation confers
+
+A node keeps one stamp. It is written when every aspect has been ruled, dated
+at the last ruling, with every ruling quoted, and its class is the adopted
+choice of the `authority` aspect. Until then the node is unanswered whatever
+subset of its aspects the author has confirmed. So partial confirmation is a
+state of the dialogue and never a state of the answer, which keeps the
+authority node's rule intact, that a ratified stamp whose ruling is not in the
+record is invalid, and avoids inventing a per-aspect stamp that would let a
+node be half doctrine. It also gives the alternative `partial-ratification`,
+raised by the clean-context review on `growth` and unruled, its answer.
+
+#### Persistence
+
+This node's answer says persistence is derived from the node's shape and never
+stored, and the author names it as something that may need confirming. Both
+hold if persistence is an aspect exactly when the recommendation would change
+the node's shape, declaring or liquidating a shim, adding or dropping evidence,
+and its choices are then the shapes. Otherwise it is derived, renders in the
+context pane, and asks nothing.
+
+#### What does not become per-aspect
+
+The review stays per node. The clean-context review reads the whole draft
+against the graph, so its verdict is on the assembled recommended render, with
+`of` pinning that render's hash; a kickback may name the aspects it faults, and
+those go to `## Account` as findings do now. A per-aspect verdict would
+multiply the batch by the aspect count and buy nothing the reviewer does not
+already see. The stage stays per node for the same reason: an aspect has a
+ruling or it does not, and the node has a stage. And the settling count stays
+over nodes, so the ruling order is untouched; aspects are a second granularity
+inside a node and do not enter the order.
+
+#### The cascade
+
+Fourteen nodes carry text this ruling changes. Eight of them are at the ruling
+stage with a clean-context review of 2026-09-03 behind them, and that review is
+spent on each: this is the cost of the ruling and it is the largest single
+thing the author is being asked to accept.
+
+At the ruling stage, and to be kicked back when this is confirmed: `recording`,
+whose response classification must handle a node with some aspects confirmed
+and others denied, and which must say the stamp is written only when every
+aspect is ruled; `authority`, which needs the sentence that a stamp covers the
+whole node so partial confirmation confers nothing; `clean-context-review` and
+`frontier-consistency`, for the review reading an assembled render and for the
+validations the new fields need; `quotes`, since there is now a ruling per
+aspect and all of them are quoted; `checkpoint`, since a ruling on one aspect
+is a transition that lands before the next; `validation-order` and `forms`, for
+the validator's rules and the shape a node must have.
+
+At the review stage: `alignment-order`, for one sentence that the order is over
+nodes and that aspects do not enter it.
+
+At the maieutic stage already, and carrying the author's words: `dialogue`,
+where the encoding lives; `unanswered`, whose answer opens the three responses
+"on any subset of them", meaning the nodes, and must now open them on the
+aspects within one and on the whole render besides; `growth`, whose
+presentation rule states three facts of a recommendation that are now a fact
+per aspect, whose alternative `partial-ratification` is directed by the
+author's words, and whose `defines` keeps boldness, the rename retracted.
+
+Elsewhere: `transience`, one sentence on when persistence becomes an aspect;
+`rejected`, since rejected choices fold into the rationale per aspect;
+`alignment-page`, the projection itself, which is the node in hand; and
+`fidelity`, where a dated ruling per aspect is a stronger hold on the author's
+intention than one whole-node stamp, which is that node's open question.
+
+Those eight are left at the ruling stage for now, and deliberately. Kicking
+back a third of the frontier on an analysis that has not been validated would
+cost more than it protects, and the author is ruling in the dialogue and not on
+the page. The exposure is real and is recorded here: until this is confirmed
+and the kickbacks are made, the frontier shows those eight as ruleable under a
+rule the author has already changed.
+
+#### What this analysis does not settle
+
+Whether an aspect's slot can be a paragraph rather than a whole section, which
+decides how fine the decomposition can go before the prose stops composing.
+Whether a choice may itself carry aspects, which the model as drafted forbids
+and which would be the natural request the first time an answer's choice
+implies an authority class. And what happens to an aspect's `ruling` when a
+later aspect's ruling changes the text its choice was written against, which is
+the staleness problem the pin solves at the node level and which the model as
+drafted does not solve within a node.
+

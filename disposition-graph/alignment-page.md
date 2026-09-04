@@ -153,3 +153,39 @@ render must show a first answer as a first answer.
 The movement owed here is still periagogic: one probe is with the author, and
 the AI's account of what the page should be is held back behind it.
 
+### The probe answered, 2026-09-03
+
+The author ruled that the record carries a decision per aspect, each aspect
+with its choices and its own boldness. The cascade that answer sets off, and
+the data model it needs, are analysed on
+`commons.systems/disposition-graph/dialogue`, under "The unit of a ruling",
+where the encoding lives. Fourteen nodes carry text the ruling changes and
+eight of them are at the ruling stage with a clean-context review of
+2026-09-03 behind them, which the ruling spends.
+
+What the ruling settles for this node, the page itself. List A is the aspects
+of the recommendation that ask a question, which is derived and not stored: an
+aspect reaches the list when it has more than one choice or when its boldness
+is high. List B under each is that aspect's choices, with the AI's
+recommendation among them and its boldness, the author's quotes and the full
+text as drill-down beneath a row, a simple input recording or editing the
+choice, and a last row that rejects every choice on that aspect with feedback.
+The right-hand pane holds the node as it would stand under the choices made so
+far, assembled from the adopted choice of every aspect, with the aspects that
+asked nothing simply present in it, and a rejection of the whole beneath it.
+
+One thing the page must get right and could easily invert. The author kept
+boldness rather than the rename, and boldness measures how much rests on the
+AI's own knowledge against the record, so high boldness is low confidence. The
+page folds an aspect into the render on *low* boldness and asks about it on
+*high*. Reading the author's phrase "very high confidence ... can just be
+included in the final render" straight off the stored field would put every
+question the AI is least sure of into the pane and every question it is surest
+of into the list.
+
+The two vocabulary questions put with the probe are closed. Permanence was
+persistence, which this account had already read that way. The rename of
+boldness to confidence is retracted, and the note above on the fold rule is why
+the retraction was right: confidence is the presentation of the fact, boldness
+is the fact, and the record carries the fact.
+
