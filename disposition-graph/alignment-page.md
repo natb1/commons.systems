@@ -253,3 +253,37 @@ The fold rule is settled the strict way: an aspect folds into the pane only on
 low boldness, and asks otherwise. The per-row quote drill-down gains its data
 path, since a choice now carries the dates of the author's words it rests on.
 
+### The recommendation withdrawn and replaced, 2026-09-03
+
+The greenfield validation returned a design that beats
+`aspects-compose-the-answer`, and the sitting adopted it:
+`aspects-are-nodes`, recorded on `commons.systems/disposition-graph/dialogue`.
+A textual decision the author wants to rule on separately is a question, and a
+question is a node, which `node`, `un-aligned-children` and `under` already
+provide for between them. Only the facts that are not questions of the node's
+subject matter, the authority class, the node's existence, and its persistence
+where its shape would change, stay on the node as a small reserved set.
+
+What this page becomes under it, and it is simpler than either earlier account.
+List A is the node's asking facts together with its unanswered children. List B
+under a child is that child's own alternatives, each with the recommendation
+among them and its boldness, both of which the record already carries per node.
+The right-hand pane is the parent's answer with its subtree rendered in
+`order`: it composes because each child answers its own question in its own
+whole prose, so there is nothing to assemble and no fragment grammar. The
+selection in the left rail selects the parent, and the subtree is the
+disposition the author reads.
+
+Three warnings this account carried are withdrawn, because the design that
+caused them is withdrawn. The quote drill-down needed an anchor rather than a
+date, since a date does not discriminate among eighteen quotations given the
+same day; under this design a child's quotations are its own and the problem
+does not arise. The per-aspect review's promise that any confirmed choice lands
+held only for a single deviation; under this design a child is reviewed as a
+node, which is what the review already does. And the live pane needed no
+assembler, which it now does not have.
+
+What remains open for this node is unchanged and is the page itself: the
+metrics at the top of the rail with their justifications, the single-selection
+rail, and the three columns.
+

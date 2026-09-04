@@ -37,6 +37,9 @@ alternatives:
   - name: aspects-compose-the-answer
     source: ai
     ref: "2026-09-03"
+  - name: aspects-are-nodes
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -274,6 +277,50 @@ self-standing sentence or paragraph that reads in sequence; combinations may be
 incoherent, which `excludes` handles and nothing checks; every node migrates as
 one aspect and splits as sittings touch it; and nothing yet checks that the
 derived answer reads as prose.
+
+### aspects-are-nodes
+
+Raised by the greenfield validation of 2026-09-03 as the design that beats every
+other on the table, and adopted by the sitting as its recommendation.
+
+A textual decision the author wants to rule on separately is a question, and a
+question is a node. The record says so already, twice in the same answer: "If a
+text answers two questions, it is two nodes" (`node`). It already permits the
+child while the parent is open: "A reading, a refinement, or any other node may
+therefore sit under an open question, and does not have to wait for the
+question to be answered" (`un-aligned-children`). And it already makes partial
+ratification legible without inventing anything, since "a node's ceiling is its
+nearest ratified ancestor" (`under`), so a ratified child under an unstamped
+parent is exactly a decision the author has confirmed inside a question they
+have not.
+
+The decisions that are genuinely not questions of the node's own subject
+matter, the authority class a confirmation would confer, the node's existence,
+keep or prune, and its persistence where the recommendation would change its
+shape, are facts about the answer rather than questions under it. Those are a
+small reserved `facts` set on the node, each with its `choices`, the one it
+adopts, its `boldness`, and its `ruling`.
+
+The author's page follows without a new mechanism. List A is the node's asking
+facts together with its unanswered children. List B under a child is that
+child's own alternatives, which are short because the child is small, each with
+the recommendation among them and its boldness, both of which the record
+already carries per node. The right-hand pane is the parent's answer with its
+subtree rendered in `order`, which composes because each child answers its own
+question in its own whole prose, so there is no fragment grammar and nothing to
+assemble. A ruling on an aspect is the child's stamp, dated and quoted where
+`quotes` already requires it. Cross-decision coherence is `depends`, which the
+record already defines as naming a node and an alternative on it.
+
+Nothing about the stamp, `quotes`, `rejected`, the `amends` pin, or the rules
+projection changes, because the answer stays written and stays stored. There is
+no second unit of decision inside the node duplicating the first, no derived
+prose, no `excludes`, and no ruling that is a stamp by another name.
+
+Its cost, stated as a consequence and not as a reason: the graph holds more
+nodes, and the page must render a subtree as one disposition. Settling counts
+grow, which the ruling order already absorbs, since an ancestor's unanswered
+subtree contains its descendants' by construction.
 
 ## Account
 
@@ -984,4 +1031,89 @@ and the author use the term. It is recorded as an alternative and the sitting
 recommends it, and it has not yet had a clean-context review, which it owes
 before the author rules and which the author's standing instruction for this
 sitting stops short of.
+
+#### The recommendation withdrawn, and the error it repeated, 2026-09-03
+
+The greenfield validation the author asked for returned sound with corrections
+on `aspects-compose-the-answer` and produced a design that beats it. The
+sitting withdraws its recommendation and adopts `aspects-are-nodes`. What
+follows is the account of why, including of how the withdrawn design failed,
+since the failure is the same one twice and the record should carry it.
+
+**The counter-argument that decides it.** `aspects-compose-the-answer` rebuilds
+the node model in miniature inside the node. A choice is an alternative. A
+ruling is a stamp. `ruling.of` is `review.of`. `excludes` is `depends`. Every
+rule already written on `authority`, `quotes`, `rejected`, `checkpoint` and
+`clean-context-review` would have to be stated a second time for the inner
+unit. It does that because it treats the size of a node as fixed and asks how
+to subdivide the text inside one, when the record's own answer to "this text
+carries several decisions" is `node`'s: it is several nodes. Taking the
+incumbent node size as a given is a brownfield fact doing the work of a design
+constraint, which is precisely the error the author had just directed be
+recorded on `evaluation` as the error to hunt. The sitting recorded the test
+and then failed it in the next recommendation.
+
+**The analogy is struck, and it is the second of its kind.** The withdrawn
+design argued that "a sentence carried by no aspect is a sentence nobody ruled
+on" is the argument `materialization` makes one level down. It is not.
+`materialization` prescribes tolerance and review: unsupported implementation
+"is on the frontier and liquidated through reconciliation, where pruning is
+proposed and the author rules on it". Applied honestly one level down that
+yields prose written whole with a coverage check that flags uncarried sentences
+for the author to rule on, which is the carving model with a check, not
+composition. The claim is also false on its own terms under whole-node
+confirmation, which rules on every sentence at once; it is true only after
+assuming per-aspect ruling is the only ruling, which is the conclusion. Earlier
+today this sitting made a move of exactly this shape, that the diff is "the
+reconciliation frontier's idiom", and the validation struck it. Two glosses of
+one kind in one sitting is a pattern and not an accident: both took a
+sentence's authority from a node whose answer says something adjacent and
+weaker. The rule to carry forward is that a claim cited to a node is quoted
+from it or it is not made.
+
+**What the validation found in favour, and it is worth keeping.** The
+composition claim survived its empirical test better than expected. Decomposed
+against real answers, `authority` yields about eight aspects with two
+non-decision sentences, `growth` about ten, and `dialogue` the hard case;
+connective tissue runs at roughly a tenth to a seventh of sentences, and the
+derived text reads as a list of rules, which is how these answers already read.
+So composition was not broken. It was beaten.
+
+**The corrections that survive into the adopted design.** The quote drill-down
+was mis-keyed: a choice carrying "the dates of the author's words" selects
+nothing, since this node alone holds eighteen quotation blocks all dated
+2026-09-03; quotations need an anchor, not a date. Per-aspect review does not
+deliver "confirm any reviewed choice and it lands" in general: a reviewer who
+reads each non-adopted choice against the adopted others covers one deviation,
+and two deviations produce an unreviewed render that goes back to review. Under
+`aspects-are-nodes` both dissolve, since a child is reviewed as a node and its
+quotations are its own. `excludes` was insufficient in any case, unable to
+express requirement, n-ary constraint, or wording dependence, and `depends` on
+a node and an alternative already does the work.
+
+**And the flaw that was near fatal.** Under `aspects-compose-the-answer`,
+aspects are dialogue state, and this node's answer says confirmed dialogue
+state folds into the node at the recording and the fields are removed. So an
+answered node's derived `## Answer` would have had no source. It could only be
+saved by making aspects the node's permanent encoding on answered nodes too,
+which is a change to what a node is rather than to the dialogue, and the
+withdrawn design did not say so. `aspects-are-nodes` never raises the question:
+the answer stays written and stays stored, on the parent and on every child.
+
+**The cascade shrinks.** `aspects-compose-the-answer` would have touched every
+node in the record, since a derived answer changes what a node is, and the
+claim that its cascade was "unchanged in membership and in count" was wrong.
+`aspects-are-nodes` touches `dialogue` for the `facts` set, `unanswered` and
+`recording` for a response given on a child while the parent is open,
+`alignment-page` for the page, `growth` for `partial-ratification`, which
+`under` now answers, and `alignment-order` for a sentence on rendering a
+subtree as one disposition. `node`, `quotes`, `rejected`, `transience`,
+`checkpoint`, `forms`, `session-context` and the hashing are untouched, because
+nothing about a node changes.
+
+This recommendation rests on the record rather than on the AI's own knowledge:
+its three load-bearing sentences are quoted from `node`, `un-aligned-children`
+and `under`. Its boldness is low, in the direction the author uses the term.
+The clean-context review is owed on it before the author rules, and the
+author's instruction for this sitting stops short of it.
 
