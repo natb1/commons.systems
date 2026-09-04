@@ -48,7 +48,7 @@ facts:
         source: ai
         ref: "29c11274"
         status: passed
-        reason: "it pays the most capable model on every simple draft, or reviews a bold one in name only"
+        reason: the model is the review-model node's question since 2026-09-04, where the author's words decide it for both readings
       - name: lock-at-launch
         source: ai
         ref: "29c11274"
@@ -67,6 +67,12 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: moderate
+  - name: persistence
+    options:
+      - name: shim kept
+      - name: shim superseded by review-skills
+    recommends: shim superseded by review-skills
+    boldness: low
 form: rule
 under:
   - commons.systems/disposition-graph/recording
@@ -111,7 +117,7 @@ The author, later on 2026-09-03: "This superceded existing unanswered dispositio
 
 ### answer
 
-The recommendation moves from the standing text to `per-draft-and-survey` on the author's "go" of 2026-09-04 on the decomposition node, whose recommendation stands under this option: the review divides by its object, the draft's reading at the moment its recommendation is recorded and the survey's over the whole graph before the author rules, the pin serializing the survey in place of the lock. Boldness moderate: the split and the moment of the draft's review are the author's words, and the reader's neighbourhood, the pin at apply, and the reviewer's model floor are the AI's. The option `per-node-context`, the superseded per-node answer the review kept live for the independence it bought, leaves the list: the recommended text gives the draft's reader a context of its own with the sitting's siblings, which is that independence, and adds the survey that answer lacked.
+The recommendation moves from the standing text to `per-draft-and-survey` on the author's "go" of 2026-09-04 on the decomposition node, whose recommendation stands under this option: the review divides by its object, the draft's reading at the moment its recommendation is recorded and the survey's over the whole graph before the author rules, the pin serializing the survey in place of the lock. Boldness moderate: the split and the moment of the draft's review are the author's words, and the reader's neighbourhood and the pin at apply are the AI's; the reader's model is the review-model node's question, decided there. The option `per-node-context`, the superseded per-node answer the review kept live for the independence it bought, leaves the list: the recommended text gives the draft's reader a context of its own with the sitting's siblings, which is that independence, and adds the survey that answer lacked.
 
 #### rerun-earlier-reviews
 
@@ -155,7 +161,11 @@ exists to catch, and an omission leaves no trace.
 
 Every review runs on one fixed model. It was passed over because that either
 pays the most capable model on every simple draft or reviews a bold one in
-name only.
+name only. On 2026-09-04 the author's words put both readings on one model,
+and the question of the reader's model became the review-model node's, where
+its recommended option fable-for-both-readings is this option decided there;
+it stays passed over on this fact only because the model is no longer this
+node's question.
 
 #### lock-at-launch
 
@@ -166,6 +176,30 @@ recommendation pin serializes.
 #### moved-draft-re-read-by-the-survey
 
 A draft whose recommendation moved after its review by an encoding migration and not by substance is not re-read by a second draft review: the survey, which judges every node whose recommendation moved since it last pinned it, is the second reading readiness requires, and the draft review is re-run only where the session judges the move substance and records that judgment on the node. On the table because two rules of the record conflict on this case. The dialogue node sends a changed recommendation through the review again only when the change is substance, while the recommended text here holds a node ready to rule only when both pins name the recommendation as it stands, so the migration of 2026-09-04, which moved prose lists of rejected candidates into options with the status passed on 34 nodes and touched no substance, moved the answer pin of every node it wrote, newly flagged 17 forwarded drafts as changed since their review, and owes each a re-reading under the second rule and none under the first. Recorded in reconciliation as a conflict found and not as a recommendation; the recommended text stands.
+### persistence
+
+The shim declared here on 2026-09-03 names one directory holding the review
+skill with its briefs and scripts beside it; the review-skills node's
+recommendation divides the review into two skills and one package, and
+declares three shims of its own for them, so this node's shim is superseded
+by that recommendation, which its fence's frontmatter no longer carries. Low
+boldness: the transience node's rule that a shim is declared where its
+artifact comes into being decides the placement, and the artifact this shim
+names ceases to exist in the shape it names when that reconciliation lands.
+
+#### shim kept
+
+The shim stays declared here and is restated to name the two skill files and
+the package's templates, so that the artifacts are described on the node
+whose mechanics they run; its declaration date would then stand for
+artifacts that come into being a day later.
+
+#### shim superseded by review-skills
+
+The shim is struck here when the two skills and the package land, and the
+three shims the review-skills node declares stand for them; this node's
+recommended text names the two skills and cites that node.
+
 ## Recommendation
 
 ```markdown
@@ -182,9 +216,9 @@ shims:
 ---
 ## Answer
 
-As a skill of its own, `/align-review`, running two reviews divided by their object, each in one fresh context that carries nothing of the invoking session and is never a fork, each reading the record and writing nothing to it.
+As two skills, `/align-review` for the review of a draft and `/align-survey` for the survey, divided as the review-skills node decides, running two reviews divided by their object, each in one fresh context that carries nothing of the invoking session and is never a fork, each reading the record and writing nothing to it.
 
-The review of a draft. Its object is one node's recommendation, and it runs the moment that recommendation is recorded or moved in substance, which is the node's transition to the review stage: the sitting invokes it on the node, and the author or a session invokes it on any node at that stage. The reader is given the node whole; the chain of nodes above it; its siblings under the same parent, which the checkpoint has landed; the nodes it names; the rules that bind everywhere; the author's words on each; and the index of every question the record asks, with its class, its stage, its standing answer, and the options on its answer fact, so that a draft answering a question the record already asks is caught at the draft. It runs the first six validations of the frontier-consistency node and the fifteenth, judges whether every option on the node's facts is viable and whether a viable one is missing, and returns as data a verdict, forward or kick back to the stage it names, its findings, its check of the facts, and the strongest counter-argument with its strength. Its model is never smaller than the drafter's, and is the most capable one when the recommendation's boldness is not low, the node is global-tier, or a ruling on the node would settle other nodes; the skill reads that from the node and no brief argues it. Two reviews of drafts never wait on each other. A forward sets the ruling stage and writes the review's state, verdict, strength, date, and the pin of the recommendation read; a kickback sets the stage the reviewer named and writes the same; both append the findings, the facts check, the viability judgment, the counter-argument, and the session's reply to the account.
+The review of a draft. Its object is one node's recommendation, and it runs the moment that recommendation is recorded or moved in substance, which is the node's transition to the review stage: the sitting invokes it on the node, and the author or a session invokes it on any node at that stage. The reader is given the node whole; the chain of nodes above it; its siblings under the same parent, which the checkpoint has landed; the nodes it names; the rules that bind everywhere; the author's words on each; and the index of every question the record asks, with its class, its stage, its standing answer, and the options on its answer fact, so that a draft answering a question the record already asks is caught at the draft. It runs the first six validations of the frontier-consistency node and the fifteenth, judges whether every option on the node's facts is viable and whether a viable one is missing, and returns as data a verdict, forward or kick back to the stage it names, its findings, its check of the facts, and the strongest counter-argument with its strength. Its reader's model, and the survey's, is decided on the review-model node and stated by the skill at the launch; no brief argues it. Two reviews of drafts never wait on each other. A forward sets the ruling stage and writes the review's state, verdict, strength, date, and the pin of the recommendation read; a kickback sets the stage the reviewer named and writes the same; both append the findings, the facts check, the viability judgment, the counter-argument, and the session's reply to the account.
 
 The survey. Its object is the frontier's consistency with itself, and it keeps the shape the author's words of 2026-09-03 give it: the whole graph, answered and unanswered at every stage, read in one context, the accounts left out since they are the dialogue's history and not its text. It judges every node at the review or ruling stage whose recommendation has changed since the survey last pinned it, each against every other node, on validations seven to fifteen of the frontier-consistency node, and its findings name the graph commit they read. It runs before the author rules, when the frontier shows a survey owed, and whenever it is invoked. At apply, a judged node whose recommendation still matches what the survey read receives the survey's pin beside the draft review's, its date and the hash of the recommendation; a node whose recommendation moved since receives nothing and is judged again by the next survey. That pin serializes the survey and no lock is held: two surveys of one frontier find the same, and where the frontier moved between them the stale finding is discarded where it is stale. A frontier finding is applied as the kickback flow says to each node it names, at any stage, with the finding and the proposed edit appended; a merge or a split is an option on the node it would change, never done by the review; a tangle is recorded as the alignment-order node says.
 
@@ -194,7 +228,7 @@ The session that invoked the skill validates every finding against the record be
 
 The author, 2026-09-03: "alignment adversarial review is materialized as a skill. it can be invoked as a clean context subskill when the scope of an alignment dialogue progresses to review, or it can be invoked directly." Later that day, superseding the per-node isolation: "EVERY invocation of the adversarial alignment review skill is a batch operation that evaluates the full unanswered frontier (without isolating any context by disposition)." In the evening: "When adversarial review finishes alignment main thread (this) validated the review findings before applying." And: "Adversarial review evaluates batch of nodes which are at the review dialogue phase against the full graph." The author, 2026-09-04, on the decomposition node, taking the recommendation that raised the option this answer adopts: "go, and bootrap authority granted"; the words that motivate it are quoted there.
 
-Why two reviews: the two objects have different minimal contexts and different moments of worth. A draft is judged against its neighbourhood, and the judgment is worth most the moment the draft is made, while the main thread still holds the node and can answer the counter-argument with it in hand; the frontier is judged against itself, and that judgment is worth most just before the author rules, when the frontier is as it will be ruled on. One reading sized for the second and run at the first's moment paid the whole graph on every sitting, at a size the skill itself asked its reader to report not finishing, and returned a sitting's findings on nodes the main thread had moved on from. The survey keeps the batch because drift between nodes is invisible to any reading of one node, which is what the author's words of 2026-09-03 established and what stands. The review of a draft keeps its siblings because the contradictions a sitting creates are between texts written together, which the second reading of this node found; the reader gets them from the record, since the checkpoint lands them, and never from a set the session names. It keeps the question index because the check whether a draft is a new question or a new answer is worth most before a duplicate is drafted further, which is why the periagogic stage asks it too. The pin replaces the lock because the record already carries the pin: a review attests to the recommendation it read, so a finding whose subject has moved is stale on its face, and the case the lock guarded against, two readings each forwarding what the other kicks back, cannot arise when the survey forwards nothing and each finding is discarded where its node moved. The reviewer's model floor follows from what a review is for: a reader weaker than the writer finds what the writer already saw. Superseded, on the author's words of 2026-09-04: the author's words of 2026-09-03 that nothing is isolated by disposition, kept whole for the survey and narrowed for the review of a draft. The divergences recorded on this node's earlier answers stand as history: the two per-node readings of 2026-09-03 and the batch readings of that day and the next.
+Why two reviews: the two objects have different minimal contexts and different moments of worth. A draft is judged against its neighbourhood, and the judgment is worth most the moment the draft is made, while the main thread still holds the node and can answer the counter-argument with it in hand; the frontier is judged against itself, and that judgment is worth most just before the author rules, when the frontier is as it will be ruled on. One reading sized for the second and run at the first's moment paid the whole graph on every sitting, at a size the skill itself asked its reader to report not finishing, and returned a sitting's findings on nodes the main thread had moved on from. The survey keeps the batch because drift between nodes is invisible to any reading of one node, which is what the author's words of 2026-09-03 established and what stands. The review of a draft keeps its siblings because the contradictions a sitting creates are between texts written together, which the second reading of this node found; the reader gets them from the record, since the checkpoint lands them, and never from a set the session names. It keeps the question index because the check whether a draft is a new question or a new answer is worth most before a duplicate is drafted further, which is why the periagogic stage asks it too. The pin replaces the lock because the record already carries the pin: a review attests to the recommendation it read, so a finding whose subject has moved is stale on its face, and the case the lock guarded against, two readings each forwarding what the other kicks back, cannot arise when the survey forwards nothing and each finding is discarded where its node moved. The reader's model is the review-model node's question and is decided there. Superseded, on the author's words of 2026-09-04: the author's words of 2026-09-03 that nothing is isolated by disposition, kept whole for the survey and narrowed for the review of a draft. The divergences recorded on this node's earlier answers stand as history: the two per-node readings of 2026-09-03 and the batch readings of that day and the next.
 ```
 
 ## Account
@@ -320,3 +354,24 @@ The session's reply: Forward accepted. The lock is now materialized by the skill
 ### Recommendation moved, 2026-09-04
 
 Moved by the alignment session from the standing text to `per-draft-and-survey` on the author's words of 2026-09-04 quoted above, given on the decomposition node, whose account carries the reasoning and the grant. The review of 2026-09-03 pinned the standing text, so this node returns to the review stage and the frontier shows it as changed since its review; the first review of a draft the reconciled skill runs is owed here. What the fence keeps of the standing answer: the skill, the fresh context that is never a fork, the reviewer that writes nothing, the session's validation of every finding on its own thread, the kickback flow, and the survey over the whole graph. What it changes: the review divides by its object, the draft's reading runs when its recommendation is recorded, the survey judges what changed since its pin and runs before the ruling, the pin at apply replaces the lock, and the reviewer's model is read from the node.
+
+### Reconciled under the grant of 2026-09-04 for review-skills and review-model
+
+The author's grant of 2026-09-04 to reconcile the review-skills and
+review-model dispositions immediately after their maieutic movement reaches
+this node's recommended text, which those two nodes amend: its first sentence
+now names the two skills and cites review-skills, and the sentence sizing the
+reader's model to the drafter's, with the rationale sentence that argued it
+and the answer fact's claim that the model floor is the AI's, now cite
+review-model, which decides the model for both readings. The option
+fixed-model-for-every-review keeps its status passed with a new reason, the
+relocation of the question, since the author's words revive a fixed model
+there and not here. A persistence fact is added recommending that the shim
+declared here on 2026-09-03 be superseded by the three the review-skills
+node declares, to be struck when the two skills and the package land. The
+recommended text moved by these amendments, so the review of this draft and
+the survey are owed on it again; the standing text keeps the one-skill form
+and the batch review for the author to rule on. No option was recorded here
+for the first sentence, though the review-skills draft anticipated one,
+because the recommended text and the artifact it names must agree once the
+reconciliation lands and the standing text already holds the alternative.
