@@ -34,6 +34,9 @@ alternatives:
   - name: ranges-on-whole-node-alternatives
     source: review
     ref: "2026-09-03"
+  - name: aspects-compose-the-answer
+    source: ai
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -239,6 +242,38 @@ candidates with a hint, and the page infers the decisions; an aspect on which
 no alternative was ever recorded, the authority class the author named first
 among them, has no row of its own and no boldness of its own, since boldness
 here stays a property of an alternative and not of a decision.
+
+### aspects-compose-the-answer
+
+The sitting's recommendation after the author's greenfield instruction of
+2026-09-03. A node's answer is composed of its decisions rather than carved
+into them. The node carries its question and a set of aspects; an aspect is one
+decision, with its `choices`, the one it `adopts`, its `boldness`, and its
+`ruling` once the author has given one; and `## Answer` is derived by rendering
+the adopted choice of every aspect in order. There is no `## Recommendation`
+fence: the recommendation is the set of adopted choices, and the render the
+author reads is derived from them live.
+
+It differs from the carving model in what is primary. There, an answer is
+written whole and aspects are slots cut into it, so the decomposition must be
+shown to compose. Here nothing is carved, and a sentence belonging to no aspect
+is a sentence no one ruled on.
+
+Reserved aspect names: `answer` while a node has not been split, `authority`
+for the class a confirmation confers, `persistence` where the recommendation
+would change the node's shape, and `existence` with the choices keep and prune,
+which replaces the prune alternative. A choice carries its `name`, `source`,
+`ref`, the dates of the author's words it rests on, the text of its fragment,
+and the choices it `excludes` by aspect and name. The review is per aspect, so
+any reviewed choice the author confirms lands. An aspect folds into the render
+only on low boldness. A `ruling` carries `of`, the hash of the choice text
+ruled.
+
+Its cost: writing an answer becomes writing its decisions, each choice a
+self-standing sentence or paragraph that reads in sequence; combinations may be
+incoherent, which `excludes` handles and nothing checks; every node migrates as
+one aspect and splits as sittings touch it; and nothing yet checks that the
+derived answer reads as prose.
 
 ## Account
 
@@ -853,4 +888,100 @@ both legible. The recommendation is drafted from the corrected analysis, not
 from the analysis, and is not drafted yet: this node still owes the author a
 choice between the corrected aspects model and
 `ranges-on-whole-node-alternatives`.
+
+#### The recommendation, evaluated greenfield, 2026-09-03
+
+The author, 2026-09-03:
+
+> Make recommendation based on best greenfield design - not brownfield cost
+> savings. Nothing is doctrine yet, barely anything is materialized. Does the
+> recommendatino survive?
+
+Taken as the evaluation node requires: no doctrine is implied by what exists,
+least of all by the incumbent implementation. Applied here it strikes a whole
+class of argument from the table, and the answer to the author's question is
+that the recommendation does not survive in the form it was drafted. It is
+replaced by a stronger one, and the rival dies.
+
+**The rival dies first.** Every argument for
+`ranges-on-whole-node-alternatives` was cost: no encoding replaced, no seventy
+files migrated, no clean-context reviews spent. Struck. What is left of it is
+its design, and its design is worse on three counts that have nothing to do
+with cost. It stores the answer and derives the question, when the decision is
+the primary thing and the text is what results from it, so k independent
+decisions are carried as k whole texts the reader must diff to recover them.
+It repeats the whole node in every alternative, so a sentence nobody is
+deciding about going stale stales every alternative at once. And an aspect on
+which no textual rival was ever recorded, the authority class the author named
+first, cannot be a row at all, which fails the author's requirement outright
+rather than marginally. It stays recorded as a rejected line.
+
+**The drafted model does not survive either, and the reason is instructive.**
+Its one serious defect was that prose written whole does not decompose: the
+validation showed four of this node's own six alternatives collapsing into a
+single `answer` aspect under a section-sized slot, and the paragraph-slot
+correction bought the decomposition at the price of requiring prose carved to
+the paragraph to still compose. Greenfield asks why the prose is written whole
+in the first place. It is written whole because that is how the incumbent
+record was written, before there were aspects to write it as. That is a
+brownfield fact and it was doing the work of a design constraint.
+
+**The recommendation: `aspects-compose-the-answer`.** A node's answer is not a
+text that aspects carve up. It is composed of them. A node carries its question
+and a set of aspects; an aspect is one decision, with its choices, the one
+adopted, its boldness, and its ruling once the author has given one; and the
+`## Answer` section is derived by rendering the adopted choice of every aspect
+in aspect order. There is no `## Recommendation` fence, because the
+recommendation is the set of adopted choices, and the whole render the author
+reads on the page is derived from them live, which is exactly what the author
+asked the page to do and what neither other model gives without an assembler
+bolted on.
+
+Why it wins on merit. The decomposition problem dissolves rather than being
+paid for: prose written as decisions never needs decomposing, and the question
+of whether a paragraph-sized carving composes never arises because nothing was
+carved. It applies this repository's own principle one level down, that the
+work is derived from the record of dispositions; here the answer is derived
+from the record of decisions, and a sentence carried by no aspect is a sentence
+nobody ruled on, which is the argument the materialization node already makes
+about implementation no disposition justifies. It carries no redundancy, each
+choice holding only its own fragment. And the aspects with no textual rival,
+authority, persistence, and the existence of the node itself, are first-class
+rows, which is what the author asked for first.
+
+Two of the drafted model's decisions are reversed by it, and the reversals are
+gains. The review becomes per aspect rather than per node: the reviewer judges
+each choice on offer, not only the adopted combination, and that removes the
+defect the validation found, that confirming a choice the recommendation did
+not adopt yields a render the review never pinned and sends it back. Under
+per-aspect review the author may confirm any reviewed choice and it lands. And
+`prune` stops being an alternative of a special shape with no slot; it is the
+aspect `existence`, with the choices keep and prune, which is cleaner than what
+the record does today.
+
+What it costs, stated so the author is not surprised by it. Writing an answer
+becomes writing its decisions, and each choice must be a self-standing sentence
+or paragraph that reads in sequence with its neighbours. Not every combination
+of choices is coherent, so a choice may need to name the choices it excludes,
+by aspect and name. Every node migrates as one aspect and splits as sittings
+touch it. And the derived answer must validate as prose a reader would accept,
+which nothing yet checks.
+
+Which of the validation's corrections still stand against it. The boldness
+direction contradiction on `growth` is independent of the model and still must
+be fixed. The fold rule is settled the strict way: an aspect folds into the
+render only on `low` boldness, so the corner the validation found, one choice
+with moderate boldness folding silently, is closed. A ruling still carries its
+own pin `of`, the hash of the choice text ruled. A choice carries the dates of
+the author's words it rests on, which gives the per-row quote drill-down the
+data path it lacked. The cascade is unchanged in membership and in count,
+seven ruling-stage nodes of thirty-nine. What no longer counts against it is
+everything that was a migration cost.
+
+This recommendation rests more on the AI's own design judgment than on the
+record or the author's words: its boldness is high, in the direction `dialogue`
+and the author use the term. It is recorded as an alternative and the sitting
+recommends it, and it has not yet had a clean-context review, which it owes
+before the author rules and which the author's standing instruction for this
+sitting stops short of.
 

@@ -34,6 +34,10 @@ The author, 2026-09-03, on the two vocabulary questions put with the probe:
 
 > I said permanence but I meant persistence. stick with boldness then, I want to know how much rests on the AI's own knowledge against the record.
 
+The author, 2026-09-03, on how the recommendation is to be evaluated:
+
+> Make recommendation based on best greenfield design - not brownfield cost savings. Nothing is doctrine yet, barely anything is materialized. Does the recommendatino survive?
+
 ## Account
 
 An un-aligned disposition, recorded at the author's direction on 2026-09-03 and not yet answered. The question is the alignment page's own: what the author reads when they rule, what it must show of each unanswered node, in what order, and how their ruling returns to the record. The page exists and the author rules on it daily, and until now no node asked its question. It was recorded only inside other answers: a shim on `growth` naming the artifact, the projector flag that writes it, its published address, and its liquidation; one sentence of `growth`'s answer saying what it lists; one clause of `projection`'s answer and of its recommended text naming it the projection of the open dialogue; and the three responses defined on `unanswered`. So the page would have been ratified incidentally, by clauses inside larger rulings, and never put to the author as a question of its own, where the browser has this node's parent and `self-documentation` beside it.
@@ -223,4 +227,29 @@ the encoding and without spending seven clean-context reviews. This node's
 answer does not depend on which of the two the author takes: list A, list B,
 the pane and the two rejections are the same page either way, and what differs
 is whether the record carries the decisions or the page infers them.
+
+### The recommendation after the greenfield instruction, 2026-09-03
+
+The author struck cost from the table. The rival
+`ranges-on-whole-node-alternatives` died with it, since every argument for it
+was cost, and the drafted aspects model did not survive either: its one serious
+defect, that prose written whole does not decompose, turned out to rest on a
+brownfield fact doing the work of a design constraint. The sitting's
+recommendation is `aspects-compose-the-answer`, recorded on
+`commons.systems/disposition-graph/dialogue`, where a node's answer is composed
+of its decisions rather than carved into them and `## Answer` is derived from
+the adopted choice of every aspect.
+
+Two things it changes for this page, both improvements on what this account
+said before. The right-hand pane no longer needs an assembler bolted onto a
+fenced whole node: the render is the adopted choices in order, which is what
+the pane shows and what it re-renders as the author changes one. And because
+the clean-context review becomes per aspect, a list-B row the recommendation
+did not adopt is a reviewed choice like any other, so confirming it lands
+rather than sending the node back to review. The warning this account carried,
+that every list-B row is potentially a review round, is withdrawn.
+
+The fold rule is settled the strict way: an aspect folds into the pane only on
+low boldness, and asks otherwise. The per-row quote drill-down gains its data
+path, since a choice now carries the dates of the author's words it rests on.
 
