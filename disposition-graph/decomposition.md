@@ -10,6 +10,26 @@ facts:
       - name: pre-review-under-the-batch
         source: ai
         ref: "2026-09-04"
+      - name: main-thread-performs-the-surveys
+        source: ai
+        ref: "2cbf3618"
+        status: passed
+        reason: "the delegation node already rejects it: the size of a survey is unknown until it is read"
+      - name: one-unit-per-disposition
+        source: ai
+        ref: "2cbf3618"
+        status: passed
+        reason: "it hands a subagent the interview"
+      - name: decomposition-by-the-author
+        source: ai
+        ref: "2cbf3618"
+        status: passed
+        reason: "the sitting can propose it and the author need only refuse"
+      - name: reviewer-on-a-fixed-model
+        source: ai
+        ref: "2cbf3618"
+        status: passed
+        reason: "the most capable model on every simple draft is the cost the delegation rule avoids, and a smaller one on a bold draft is a review in name"
     recommends: seams-and-split-review
     boldness: moderate
   - name: authority
@@ -81,6 +101,30 @@ Five seams, the question, the movement, the kind of analysis, the fact, and the 
 
 The same five seams, with the review the author requires added inside the sitting as a pre-review whose findings go into the node's account, while the batch review of the clean-context-review node's standing answer stays the only review of record and the only thing that forwards a node to the ruling stage. Viable if the author holds that no node reaches the ruling stage except through one reading of the whole frontier, which is what their words of 2026-09-03 say; its cost is that validations one to six run twice on every draft, and that the batch still returns its findings on a sitting's children after the sitting has moved on from them.
 
+#### main-thread-performs-the-surveys
+
+The main thread performs the surveys itself rather than delegating them. It
+was passed over because the delegation node already rejects it: the size of a
+survey is unknown until it is read.
+
+#### one-unit-per-disposition
+
+A sitting is decomposed into one unit per disposition. It was passed over
+because it hands a subagent the interview, which is the main thread's.
+
+#### decomposition-by-the-author
+
+The author decides how a complex disposition is decomposed. It was passed over
+because the sitting can propose the decomposition and the author need only
+refuse it.
+
+#### reviewer-on-a-fixed-model
+
+The reviewer is chosen by a fixed model rather than by the draft's boldness.
+It was passed over because the most capable model on every simple draft is the
+cost the delegation node's rule exists to avoid, and a smaller one on a bold
+draft is a review in name.
+
 ### authority
 
 Ratified, at low boldness: the rule binds how every sitting spends the author's tokens and attention and how the adversarial review is run, and a wrong answer here is expensive and compounds across sittings, which is the record's own test for escalating toward ratified.
@@ -114,7 +158,7 @@ Every unit returns its conclusion as data with the commands it ran and writes no
 
 ## Rationale
 
-The author's words of 2026-09-04, quoted on this node: complex dispositions need multi-faceted analysis, to be divided along standard seams among subagents with right-sized models and effort and integrated by the main thread, judged by token and context efficiency and by the management of the AI's attention, with a step after a recommendation is established that passes the complex ones to the most capable model for review. The seams are the record's own and this node only names them as seams: the question seam is the node node's rule that a text answering two questions is two nodes, which the dialogue node applies to a decision the author would rule on separately; the movement seam is the sitting's stages; the analysis seam is the delegation node's rule that a verbose investigation is a unit whatever its size and that the model follows the kind of work; the fact seam is the dialogue node's four reserved facts; the dependency seam is the depends field and the ruling order. What is new is the assignment of each seam to a model and an order, and the rule that a reviewer's model is never smaller than the drafter's, since a review by a weaker reader than the writer catches what the writer already saw. The cost of the design is the fixed cost of a contract per unit and of the main thread's integration turn after each; the lookup exemption on delegation is the floor beneath it, and a disposition that asks one question runs one design unit and one review and no decomposition. Measured on the record of 2026-09-04: the graph is 1.7 megabytes, of which seven tenths is account history, and the last batch brief handed one reviewer 839 kilobytes in one context; a per-draft review reads a draft's neighbourhood, and the survey, which alone needs the whole, reads it without the accounts. Rejected: the main thread performing the surveys itself, which the delegation node already rejects, since the size of a survey is unknown until it is read; one unit per disposition, which hands a subagent the interview; decomposition by the author, which the sitting can propose and the author need only refuse; a reviewer chosen by a fixed model, since the most capable model on every simple draft is the cost the delegation node's rule exists to avoid, and a smaller one on a bold draft is a review in name. Readings owed as nodes under this one: incremental compilation and link-time analysis, the unit checked alone and the whole linked, adopted for the two objects of review; optimistic concurrency by version stamp, adopted for the pin at apply; mission command, already read on transience, for the brief that carries intent and not the scheme; and pair review at the point of writing, shelved while a second reader's time was scarce and affordable now that the reader is an agent, adopted for the per-draft review's timing.
+The author's words of 2026-09-04, quoted on this node: complex dispositions need multi-faceted analysis, to be divided along standard seams among subagents with right-sized models and effort and integrated by the main thread, judged by token and context efficiency and by the management of the AI's attention, with a step after a recommendation is established that passes the complex ones to the most capable model for review. The seams are the record's own and this node only names them as seams: the question seam is the node node's rule that a text answering two questions is two nodes, which the dialogue node applies to a decision the author would rule on separately; the movement seam is the sitting's stages; the analysis seam is the delegation node's rule that a verbose investigation is a unit whatever its size and that the model follows the kind of work; the fact seam is the dialogue node's four reserved facts; the dependency seam is the depends field and the ruling order. What is new is the assignment of each seam to a model and an order, and the rule that a reviewer's model is never smaller than the drafter's, since a review by a weaker reader than the writer catches what the writer already saw. The cost of the design is the fixed cost of a contract per unit and of the main thread's integration turn after each; the lookup exemption on delegation is the floor beneath it, and a disposition that asks one question runs one design unit and one review and no decomposition. Measured on the record of 2026-09-04: the graph is 1.7 megabytes, of which seven tenths is account history, and the last batch brief handed one reviewer 839 kilobytes in one context; a per-draft review reads a draft's neighbourhood, and the survey, which alone needs the whole, reads it without the accounts. Readings owed as nodes under this one: incremental compilation and link-time analysis, the unit checked alone and the whole linked, adopted for the two objects of review; optimistic concurrency by version stamp, adopted for the pin at apply; mission command, already read on transience, for the brief that carries intent and not the scheme; and pair review at the point of writing, shelved while a second reader's time was scarce and affordable now that the reader is an agent, adopted for the per-draft review's timing.
 ```
 
 ## Account

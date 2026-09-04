@@ -27,6 +27,31 @@ facts:
       - name: reduce-un-aligned-paragraph
         source: review
         ref: "2026-09-03"
+      - name: a-transient-kind-of-node
+        source: ai
+        ref: "ee770610"
+        status: passed
+        reason: "the legacy record measured its cost: stranded content, dangling edges and stale migration lists"
+      - name: a-stored-self-liquidating-class
+        source: ai
+        ref: "ee770610"
+        status: passed
+        reason: "expiry stored on a node is exactly the state that drifts, and the legacy record found none needed"
+      - name: shims-declared-in-the-artifact-alone
+        source: ai
+        ref: "ee770610"
+        status: passed
+        reason: "a notice the frontier cannot read is a permanent in disguise"
+      - name: a-stored-transcript-of-the-dialogue
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "the AI's side is re-derived from the record and the author's words"
+      - name: a-queue-kept-outside-the-graph
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "a list beside the record is the ledger the author asked to sunset"
     recommends: standing
     boldness: high
     stands: standing
@@ -83,11 +108,11 @@ Drift is a recorded text that no longer matches what it describes, with nothing 
 
 The author, 2026-09-02, on the bootstrap node: "dispositions must resist decay. They are persistent records, they don't track operational or transient state (like the current bootstrap process)." The author, 2026-09-02, in the legacy bootstrap attempt: "An additional class(es) of transient disposition is fine, but there must not be a 'catch all prose' transient disposition. Evaluate using greenfield-evaluation criteria (nothing is sacred, interview to override doctrine, evaluate from the perspective of greenfield judgement and also reference to tradition). Use the existing corpus of transient disposition (tactics) to form the model. What falls out as 'prone to decay and therefore no longer recorded at all' vs. 'recorded as transient guidance but would be better described as persistent criteria' vs. 'shim'. Consider what kind of output an /align session might produce which doesn't fit any of those categories." The outputs of a sitting each land in one shape: answers, rulings with their rejected alternatives, and boosts are standing; the surveys and measurements a sitting cites are evidence; declared shims are shims; pending items are alternatives in the dialogue state of the node they would answer, proposals when they arose outside alignment; surfaced readings and vocabulary are frontier items derived from the rationale that names them; dispositions the author states during a sitting are un-aligned dispositions; the account the AI holds back during the periagogic stage is not recorded, since it is re-derived from the page at each sitting. No further shape was needed.
 
-Rejected, with the legacy record as evidence: a transient kind of node. The legacy tactic was a completable unit removed on completion, its body the plan, and the legacy record measured its cost: durable content stranded on a node about to vanish unless moved by hand; edges to a completed node left dangling; provenance and position conflated into false defects on 62 of 780 nodes; migration step lists stale by the time they were drained; and, in its own words, "the measured pain of standing tactic nodes (drift, deduplication, constant re-evaluation) is the cost of blending the three lifecycles in one hand-authored object". Its successor doctrine of 2026-09-01 abolished standing decomposition into tactics for a derived frontier and claim-time bites. This node reaches the same conclusion from the evaluation, not from the legacy authority. Also rejected: a stored self-liquidating class, a node that expires on a date or an event, because expiry stored on a node is exactly the state that drifts, and the legacy record found none needed; and shims declared in the artifact alone, because a notice the frontier cannot read is a permanent in disguise.
+The legacy tactic was a completable unit removed on completion, its body the plan, and the legacy record measured its cost: durable content stranded on a node about to vanish unless moved by hand; edges to a completed node left dangling; provenance and position conflated into false defects on 62 of 780 nodes; migration step lists stale by the time they were drained; and, in its own words, "the measured pain of standing tactic nodes (drift, deduplication, constant re-evaluation) is the cost of blending the three lifecycles in one hand-authored object". Its successor doctrine of 2026-09-01 abolished standing decomposition into tactics for a derived frontier and claim-time bites. This node reaches the same conclusion from the evaluation, not from the legacy authority.
 
 Traditions, owed as readings: Aristotle on hexis and kinesis, Nicomachean Ethics X.4 1174a13 to 1174b14 and Metaphysics Θ.6 1048b18 to 35, a state complete at every moment of its holding against a process complete only at its end, which is why a disposition cannot be transient; declarative desired state with a reconciliation loop, Kubernetes controllers and owned objects that nobody edits; feature-toggle lifecycle with owners and expiry (Hodgson, 2017); expand, migrate, contract (Sato, 2014), the contract phase mandatory; the strangler fig (Fowler, 2004), whose named failure is the half-strangled system that lives forever; deprecation as a process with ratcheted prevention of new uses (Winters, Manshreck, and Wright, Software Engineering at Google, 2020, chapter 15); mission command, the record carrying intent, end state, and constraints and never the scheme of manoeuvre (Auftragstaktik; ADP 6-0, 2019).
 
-The author, 2026-09-03, on the un-aligned shape: "Let's go ahead and also record a deferred disposition which use the \"unanswered\" primitives to record \"un-aligned\" dispositions. Consider the unanswered encoding from this perspective - it must encode things like (but not limited to) where in the dialog flow are we on this point, has it survived periogoge, maieutic? Reduce all functions of the unanswered primitive to this - persistence of un-aligned dispositions from the user. eg. the currently labeled \"What does this repository contain, and what does it leave out?\" sounds more like a proposal - \"this evidence contradicts the purpose disposition and so requires author clarification.\" Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact)." Evaluated: a stored stage is the exception to the rule above that a step is derived, made by this ruling and justified because the author's words in a dialogue have no other home; it is bounded, since a stage exists only while a dialogue is open, and the validator refuses a stage with no dialogue text and dialogue text with no stage. Rejected: a stored transcript of the whole dialogue, because the AI's side is re-derived from the record and the author's words; a queue kept outside the graph, because a list beside the record is the ledger the author asked to sunset. The author, 2026-09-03, on shims: "Yes, you can record bootstrap as a shim for reconciliation process if it helps you manage context, or in bootstrap operations (delegating to subagents, etc.) Just make sure there are not redundancies between the function/content of any shims, bootstrap operations document, session memories, and ledger." Evidence: `bootstrap/transient-disposition-graph-survey.md` and `bootstrap/transient-disposition-transcript-survey.md` on the implementation ref, the surveys this answer was drawn from; `bootstrap/ledger-migration-survey-2026-09-03.md`, the redundancy check the second ruling asks for.
+The author, 2026-09-03, on the un-aligned shape: "Let's go ahead and also record a deferred disposition which use the \"unanswered\" primitives to record \"un-aligned\" dispositions. Consider the unanswered encoding from this perspective - it must encode things like (but not limited to) where in the dialog flow are we on this point, has it survived periogoge, maieutic? Reduce all functions of the unanswered primitive to this - persistence of un-aligned dispositions from the user. eg. the currently labeled \"What does this repository contain, and what does it leave out?\" sounds more like a proposal - \"this evidence contradicts the purpose disposition and so requires author clarification.\" Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact)." Evaluated: a stored stage is the exception to the rule above that a step is derived, made by this ruling and justified because the author's words in a dialogue have no other home; it is bounded, since a stage exists only while a dialogue is open, and the validator refuses a stage with no dialogue text and dialogue text with no stage. The author, 2026-09-03, on shims: "Yes, you can record bootstrap as a shim for reconciliation process if it helps you manage context, or in bootstrap operations (delegating to subagents, etc.) Just make sure there are not redundancies between the function/content of any shims, bootstrap operations document, session memories, and ledger." Evidence: `bootstrap/transient-disposition-graph-survey.md` and `bootstrap/transient-disposition-transcript-survey.md` on the implementation ref, the surveys this answer was drawn from; `bootstrap/ledger-migration-survey-2026-09-03.md`, the redundancy check the second ruling asks for.
 
 ## Facts
 
@@ -112,6 +137,38 @@ The vocabulary finding holds that criterion is carried by no node's defines and 
 #### reduce-un-aligned-paragraph
 
 The frontier survey's decomposition finding proposes cutting the un-aligned paragraph down to two sentences: that an un-aligned disposition is a node with a question and no answer, and that it carries the dialogue as the dialogue node defines it. The enumeration of the dialogue's parts would go to dialogue and the status rule to unanswered, which already carry them, since three nodes now carry one list and drift between them is invisible until they are read together. The five-shape taxonomy, which is what this node is for, is untouched. Transience's own session reply accepts the reduction and defers it to its sitting, so it is owed and the text still carries the full enumeration. Raised on commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/unanswered.
+
+#### a-transient-kind-of-node
+
+Transient disposition is recorded as a transient kind of node, a completable
+unit removed on completion, which is what the legacy tactic was. It was passed
+over on the legacy record's own measurement: durable content stranded on a
+vanishing node, edges left dangling, provenance and position conflated into
+false defects on 62 of 780 nodes, and migration lists stale by the time they
+were drained.
+
+#### a-stored-self-liquidating-class
+
+A node carries a stored class that expires on a date or an event. It was
+passed over because expiry stored on a node is exactly the state that drifts,
+and the legacy record found none needed.
+
+#### shims-declared-in-the-artifact-alone
+
+A shim is declared in the artifact it stands in for rather than on a node. It
+was passed over because a notice the frontier cannot read is a permanent in
+disguise.
+
+#### a-stored-transcript-of-the-dialogue
+
+The whole dialogue is stored as a transcript on the node. It was passed over
+because the AI's side is re-derived from the record and the author's words.
+
+#### a-queue-kept-outside-the-graph
+
+The queue of un-aligned dispositions is kept in a list outside the graph. It
+was passed over because a list beside the record is the ledger the author
+asked to sunset.
 
 ## Account
 

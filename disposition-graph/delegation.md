@@ -15,6 +15,16 @@ facts:
       - name: reconciliation-session-writes-options
         source: author
         ref: "2026-09-04"
+      - name: fixed-model-for-every-task
+        source: ai
+        ref: "6e9efb8c"
+        status: passed
+        reason: "the cost is set by the most capable model at full effort and most units do not need it"
+      - name: main-thread-investigates-small-questions
+        source: ai
+        ref: "6e9efb8c"
+        status: passed
+        reason: "the size of a debugging context is unknown until it has been read"
     recommends: reconciliation-session-writes-options
     boldness: moderate
     stands: reconciliation-session-writes-options
@@ -47,7 +57,7 @@ The main thread is the session that holds the interview and the record: it inter
 
 ## Rationale
 
-The author's rulings of 2026-09-02, that implementation is delegated by unit, model, and effort, and of 2026-09-03: "new disposition (should affect both alignment and bootstrap/reconciliation shims): debugging activities like those are prime candidates for subagents - driving a browser with max effort fable is very expensive. Debugging context can be verbose and pollute the main thread." The rule binds the alignment session and the reconciliation sessions alike; during bootstrap it is projected into the operations document and the alignment skill. Rejected: a fixed model for every task, because the cost is set by the most capable model at full effort and most units do not need it; letting the main thread investigate when a question seems small, because the size of a debugging context is unknown until it has been read.
+The author's rulings of 2026-09-02, that implementation is delegated by unit, model, and effort, and of 2026-09-03: "new disposition (should affect both alignment and bootstrap/reconciliation shims): debugging activities like those are prime candidates for subagents - driving a browser with max effort fable is very expensive. Debugging context can be verbose and pollute the main thread." The rule binds the alignment session and the reconciliation sessions alike; during bootstrap it is projected into the operations document and the alignment skill.
 
 Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there amending their ruling of 2026-09-03, quoted on the work-loop node: "the prior statement that 'reconciliation never edits the graph' is incomplete." The bound on the reconciliation session narrows to the write the work-loop node allows and keeps the subagent's bound whole. The answer as it stood is kept as the option `never-writes-the-graph`, and the review of this text is owed.
 
@@ -62,6 +72,18 @@ The answer as it stood from 2026-09-03: the main thread, the unit, the model by 
 #### reconciliation-session-writes-options
 
 The sentence binding a reconciliation session never to write the graph is amended as work-loop's is: the session's main thread may record a viable option on a fact and move its recommendation, within scope, and never rules, edits a ruling, or edits the author's words. A subagent still never edits a node. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
+
+#### fixed-model-for-every-task
+
+Every unit runs on one fixed model. It was passed over because the cost is
+then set by the most capable model at full effort, and most units do not need
+it.
+
+#### main-thread-investigates-small-questions
+
+The main thread investigates itself when a question looks small. It was passed
+over because the size of a debugging context is unknown until it has been
+read.
 
 ## Account
 

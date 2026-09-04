@@ -24,6 +24,21 @@ facts:
       - name: authority-derived
         source: author
         ref: "2026-09-04"
+      - name: out-of-scope-answers-as-deferred
+        source: ai
+        ref: "1920badc"
+        status: passed
+        reason: "deferred still acts, so the record would act on an answer no ruling grants"
+      - name: proposal-as-an-authority-class
+        source: ai
+        ref: "6d21d356"
+        status: passed
+        reason: "a class with no authority is a review-queue label, and the deferred stamp already is that queue"
+      - name: proposal-as-any-recorded-candidate
+        source: author
+        ref: "6d21d356"
+        status: passed
+        reason: "it overloads a term the author reserves for the outside-alignment case"
     recommends: authority-derived
     boldness: moderate
     stands: authority-derived
@@ -40,9 +55,12 @@ under:
 tier: global
 defines:
   - authority
-  - ratified
-  - delegated
-  - deferred
+  - term: ratified
+    gloss: "Ratified means the author ruled on the answer fact, in the alignment dialogue after its dialectic, and wants to be asked before it changes; the confirmed choice acts."
+  - term: delegated
+    gloss: "Delegated means the author ruled delegated on the authority fact: the recommendation acts, the delegation covers the class of decision it names below the node, and the author does not want to be asked again."
+  - term: deferred
+    gloss: "Deferred means the author ruled deferred on the authority fact: the recommendation acts, and the node stays on the alignment frontier until the author returns to it."
   - doctrine
   - author
   - proposal
@@ -75,11 +93,11 @@ Every answer carries its authority in the rulings recorded on its facts, and no 
 
 ## Rationale
 
-Attenuation: authority only narrows as it is handed down, never widens, so a breakout would have to be written up the tree, and nothing writes up. Rejected: recording out-of-scope answers as deferred, because deferred still acts. Rejected, 2026-09-02: a ratify command run by the author as the act of ratification. The author: "Ratification is not a rubber stamp. I don't see the function of a ratification script and it can probably be liquidated with updated disposition/doctrine." The command guaranteed nothing, since it stamped under the same version-control identity every session commits with, and it made the act a keystroke instead of a decision; it is liquidated. Rejected: proposal as an authority class, because a class with no authority is a review-queue label and the deferred stamp already is that queue. Traditions to record as readings: ultra vires and enabling acts; delegation containment in cgroup v2; attenuation in object-capability systems; corrigibility and approval-directed agents in the alignment literature.
+Attenuation: authority only narrows as it is handed down, never widens, so a breakout would have to be written up the tree, and nothing writes up. Rejected, 2026-09-02: a ratify command run by the author as the act of ratification. The author: "Ratification is not a rubber stamp. I don't see the function of a ratification script and it can probably be liquidated with updated disposition/doctrine." The command guaranteed nothing, since it stamped under the same version-control identity every session commits with, and it made the act a keystroke instead of a decision; it is liquidated. Traditions to record as readings: ultra vires and enabling acts; delegation containment in cgroup v2; attenuation in object-capability systems; corrigibility and approval-directed agents in the alignment literature.
 
 The author, 2026-09-03, on the bootstrap ledger: "The ledger is a shim, it shouldn't receive standing disposition. Ratified as a shim. The standing disposition (ratified) is that ratification happens only through alignment dialogue." And later that day: "The ledger is expected to be sunset and encoded as deferred dispositions. I am concerned that it has not been, I am concerned about drift between the ledger and the greenfield graph." The ledger shim declared here on 2026-09-02 was liquidated on 2026-09-03: every entry was sorted, by the survey `bootstrap/ledger-migration-survey-2026-09-03.md` on the implementation ref and by the session for the entries after it, into a node amendment, a shim declaration, an un-aligned disposition, or nothing, and the file was deleted. While it stood no stamp was ratified, and none is yet; the first ratified stamps are those the sitting on purpose writes.
 
-The author, 2026-09-03, in the sitting on the dialogue node, quoted above, narrowed the word proposal: the draft of this node had defined it as any candidate answer, amendment, or finding with no authority, recorded in a stamped node or in a sitting's record, and the author ruled that the term is technical vocabulary for a conflicting answer arising outside alignment, that it must not be overloaded, and that conflicting answers evaluated in alignment are recorded differently, as alternatives in the dialogue state. The same day the author ruled that a standing answer of any class, ratified, delegated, or deferred, keeps its full authority while an alternative is pending, and that a proposal from outside alignment opens the dialogue on its node. This answer was written from the draft under the author's bootstrap grant on the dialogue node, folding the draft's text into the standing answer with the narrowing; the ratified stamp the draft carried is what a confirmation confers and is not written before it. Rejected: proposal as any recorded candidate, the draft's definition, since it overloaded a term the author reserves for the outside-alignment case and would have named the AI's own account and every alternative in a sitting with one word.
+The author, 2026-09-03, in the sitting on the dialogue node, quoted above, narrowed the word proposal: the draft of this node had defined it as any candidate answer, amendment, or finding with no authority, recorded in a stamped node or in a sitting's record, and the author ruled that the term is technical vocabulary for a conflicting answer arising outside alignment, that it must not be overloaded, and that conflicting answers evaluated in alignment are recorded differently, as alternatives in the dialogue state. The same day the author ruled that a standing answer of any class, ratified, delegated, or deferred, keeps its full authority while an alternative is pending, and that a proposal from outside alignment opens the dialogue on its node. This answer was written from the draft under the author's bootstrap grant on the dialogue node, folding the draft's text into the standing answer with the narrowing; the ratified stamp the draft carried is what a confirmation confers and is not written before it.
 
 Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Is 'unanswered' just an authority - as in no authority granted for reconciliation. Or, more precicely, explicit bootstrap authority required for reconciliation - in this way bootstrap authority is not a shim, but a persistent disposition about reconciliation authority." The stamp goes because the record stores the ruling on the fact with its response, date and pin, and a stamp beside it is a copy that drifts, the reason the unanswered node gave for deriving the status; deferred becomes a class the author confers, since every class in this record traces to a ruling and, as this answer already said, no command confers one. The bootstrap-authority shim declared here on 2026-09-03 is liquidated into the standing rule above, which strikes its expiry at bootstrap exit against the author's words of that day quoted above: a rule that reconciles an unanswered node only on the author's explicit word is the right rule at any time and not a bootstrap expedient, and the author may strike this line; `bootstrap-authority-as-class` is thereby decided in favour of the rule. The word proposal keeps the author's narrowing of 2026-09-03, technical and not overloaded, and names a state rather than an origin, the origin being the option's source. The answer as it stood is kept as the option `stamped-classes`, and the review of this text is owed.
 
@@ -106,6 +124,24 @@ The decomposition finding proposes that under survive as the edge alone and that
 #### authority-derived
 
 The class is read off the rulings recorded on the node's facts and no stamp is written beside them: ratified where the answer fact carries a ruling, delegated or deferred where the authority fact does, unanswered where none does, and a class the AI writes for itself is not a grant. Deferred becomes a class the author confers, a third choice on the authority fact. The explicit grant for reconciling an unanswered node becomes a standing rule of this node and not a shim, which decides `bootstrap-authority-as-class` in favour of the rule and strikes the shim's expiry at bootstrap exit, against the author's words of 2026-09-03 quoted above. A proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source; the periagogic re-opening this answer prescribes gives way to the recording node's classification of where the dialogue resumes. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
+
+#### out-of-scope-answers-as-deferred
+
+An answer the AI writes beyond its scope is recorded in the deferred class
+rather than held as an option. It was passed over because deferred still acts.
+
+#### proposal-as-an-authority-class
+
+Proposal is a fourth authority class beside ratified, delegated and deferred.
+It was passed over because a class with no authority is a review-queue label
+and the deferred stamp already is that queue.
+
+#### proposal-as-any-recorded-candidate
+
+Proposal names any candidate answer, amendment or finding with no authority,
+wherever it was recorded, which is what this node's draft defined. The author
+narrowed the word on 2026-09-03; it was passed over because it would have
+named the AI's own account and every alternative in a sitting with one word.
 
 ## Account
 

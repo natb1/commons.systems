@@ -27,6 +27,36 @@ facts:
       - name: confirmation-before-the-ruling-stage-is-invalid
         source: commons.systems/disposition-graph/alignment-page
         ref: "2026-09-04"
+      - name: browser-hides-every-unanswered-node
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "it would empty the browser of the record it documents"
+      - name: fourth-class-or-field-for-unanswered
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "the status is derived from the stamp and the answer, and a stored copy would drift"
+      - name: mark-answered-node-unanswered
+        source: author
+        ref: "32600efe"
+        status: passed
+        reason: "the author retracted it the same day: a pending alternative does not lapse the answer's authority"
+      - name: deferred-answers-without-a-stage
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "it keeps the queue a reading of the stamps instead of a dialogue the page lists"
+      - name: review-item-nodes
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "the queue is the unanswered nodes themselves"
+      - name: a-curriculum
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "the queue is the unanswered nodes themselves"
     recommends: unanswered-is-no-ruling
     boldness: moderate
     stands: unanswered-is-no-ruling
@@ -93,7 +123,7 @@ The author rules on the alignment page or in prose; what that page shows, and in
 
 The author's ruling of 2026-09-03, quoted above. The bootstrap wrote its answers stamped deferred because the dialogue that alone confers a stamp in the author's name did not yet exist, and the author's ruling on the authority node of 2026-09-02, that the first valid ratifications will be the outputs of this first alignment dialogue, already said that none of them was answered. What changed on 2026-09-03 is the classification. The record had two words for two things: "un-aligned disposition" for a node with no answer, hidden from the browser and listed by the alignment page, and the stamp's class for everything else, so that a deferred answer read as an answer in every projection although the author had not ruled on it. Re-evaluated at the author's direction the same day, the encoding needed one status derived from the stamp and the answer, answered or unanswered, and one rule, that an unanswered node carries its stage, so that the review queue is a listed dialogue the validator holds rather than a reading of the stamps. The un-aligned disposition keeps its name and its shape: it is the unanswered node with no answer yet, which the browser hides because it has nothing to show; every other unanswered node shows in the browser as the draft it is, marked with its stage, because the browser is the record's own documentation and the draft the author reads there is the draft the author rules on.
 
-Why a confirmation ratifies: the recording node makes the confirmation the last movement before the stamp, and the three responses the author asked for are the ruling's three outcomes as that node classifies them, recorded, refined, or kicked back; a fourth response, defer, is not needed, because leaving a node unconfirmed is the deferral. Why the purpose node first: rank alone puts the public graph's root above this project's, since the purpose node stands under it, while the author's order recorded on the scope node begins at purpose; listing each graph in the manifest's order, by rank within it, gives the author's order without touching a rank. Rejected: reading the earlier ruling that unanswered nodes are hidden from the browser as covering every unanswered node, which would empty the browser of the record it documents; that ruling was made of nodes with no answer and is kept for them. Rejected: a fourth authority class, or a field, for unanswered, since the status is derived from the stamp and the answer and a stored copy would drift; marking an answered node unanswered while an alternative is pending, the author's own first suggestion of 2026-09-03, retracted by the author the same day, since a pending alternative is dialogue state beside the answer and the answer's authority does not lapse until one is confirmed, as the author ruled that day, quoted above. Rejected: leaving the deferred answers without a stage, which would keep the queue a reading of the stamps instead of a dialogue the page lists. Not adopted from the incumbent record: review-item nodes and a curriculum, since the queue is the unanswered nodes themselves.
+Why a confirmation ratifies: the recording node makes the confirmation the last movement before the stamp, and the three responses the author asked for are the ruling's three outcomes as that node classifies them, recorded, refined, or kicked back; a fourth response, defer, is not needed, because leaving a node unconfirmed is the deferral. Why the purpose node first: rank alone puts the public graph's root above this project's, since the purpose node stands under it, while the author's order recorded on the scope node begins at purpose; listing each graph in the manifest's order, by rank within it, gives the author's order without touching a rank.
 
 Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Is 'unanswered' just an authority - as in no authority granted for reconciliation"; "In this model 'delegated' and 'deferred' authority mean reconciliation authority is granted for AI recommendation without requiring confirmation. Delegated means the node is removed from the alignment frontier and deferred means it remains." Unanswered is the absence of a ruling and deferred a class the author confers, so the ground given above for needing no fourth response, that leaving a node unconfirmed is the deferral, no longer holds and is replaced: the deferral is a choice on the authority fact. The status stays derived, the three responses stand, and the responses per decision of `responses-on-decisions-and-children` are kept, the decisions being the facts. The answer as it stood is kept as the option `answered-by-stamp`, and the review of this text is owed.
 
@@ -124,6 +154,45 @@ Unanswered is the state of a node no ruling grants: nothing on it acts, and it i
 #### confirmation-before-the-ruling-stage-is-invalid
 
 A confirmation given on a node that has not reached the ruling stage, on the page or in prose, is not held and confers nothing: it is recorded as the author's words and the dialogue proceeds from its stage, and the page renders its inputs disabled there. This supersedes the standing sentence that a confirmation given before the review has run is held until the review forwards it, on the author's words of 2026-09-04 recorded on commons.systems/disposition-graph/alignment-page: "Confirmed responses for nodes that are not at the confirmation stage of dialogue are invalid. Show the facts with pending confirmation, and recommendations, but disable to input." Raised by that node's clean-context review of 2026-09-04, which found the supersession recorded nowhere here.
+
+#### browser-hides-every-unanswered-node
+
+The author's ruling that unanswered nodes are hidden from the browser is read
+as covering every unanswered node. It was passed over because it would empty
+the browser of the record it documents; the ruling was made of nodes with no
+answer and is kept for them.
+
+#### fourth-class-or-field-for-unanswered
+
+Unanswered is a fourth authority class, or a field of its own. It was passed
+over because the status is derived from the stamp and the answer, and a stored
+copy would drift.
+
+#### mark-answered-node-unanswered
+
+An answered node is marked unanswered while an alternative is pending, which
+was the author's own first suggestion of 2026-09-03. It was passed over
+because the author retracted it the same day: a pending alternative is
+dialogue state beside the answer, and the answer's authority does not lapse
+until one is confirmed.
+
+#### deferred-answers-without-a-stage
+
+The deferred answers carry no stage. It was passed over because it would keep
+the review queue a reading of the stamps instead of a dialogue the page lists.
+
+#### review-item-nodes
+
+The queue is carried by review-item nodes of its own, as the incumbent record
+had it. It was passed over because the queue is the unanswered nodes
+themselves.
+
+#### a-curriculum
+
+The order of the author's attention is carried by a curriculum, as the
+incumbent record had it. It was passed over because the queue is the
+unanswered nodes themselves.
+
 ## Account
 
 ### Recording of 2026-09-03

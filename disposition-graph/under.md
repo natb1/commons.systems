@@ -13,6 +13,16 @@ facts:
       - name: draft-after-three-rulings
         source: review
         ref: "2026-09-03"
+      - name: separate-edges-per-relation
+        source: ai
+        ref: "1920badc"
+        status: passed
+        reason: "each turned out to be a reading of the same fact"
+      - name: a-second-reference-kind-for-cousins
+        source: ai
+        ref: "1920badc"
+        status: passed
+        reason: "it differs from `under` by exactly one bit, motivation, and is kept as `cites`"
     stands: standing
   - name: authority
     options:
@@ -45,7 +55,7 @@ The question or questions named in its `under` field. This is the only hierarchi
 
 ## Rationale
 
-Ask "why does this question exist?"; the answer names its parent. Never choose a parent to change priority; that is what boost is for, and boost is the author's alone. Rejected: separate edges for attention, context, and containment, each of which turned out to be a reading of the same fact; a second reference kind for cousins, which differs from `under` by exactly one bit, motivation, and is kept as `cites`.
+Ask "why does this question exist?"; the answer names its parent. Never choose a parent to change priority; that is what boost is for, and boost is the author's alone.
 
 ## Facts
 
@@ -58,6 +68,18 @@ The decomposition finding holds that this node answers four questions at once, w
 #### draft-after-three-rulings
 
 The same finding proposes that under be drafted from the outcomes of rationale-edge and a re-answered tier, and simplified as the decomposition finding proposes, since under's own account plans a draft after three rulings and one of them, tier, was kicked back with its recommendation withdrawn, so under cannot be drafted as planned. (Raised on commons.systems/disposition-graph/traditions-home.)
+
+#### separate-edges-per-relation
+
+The record carries separate edges for attention, context and containment. They
+were passed over because each turned out to be a reading of the same fact,
+which `under` already holds.
+
+#### a-second-reference-kind-for-cousins
+
+A second reference kind names cousin nodes beside `under`. It was passed over
+because it differs from `under` by exactly one bit, motivation, and is kept as
+`cites`.
 
 ## Account
 

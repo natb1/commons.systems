@@ -21,6 +21,11 @@ facts:
       - name: rank-orders-reconciliation-only
         source: author
         ref: "2026-09-03"
+      - name: choose-a-parent-to-change-priority
+        source: ai
+        ref: "1920badc"
+        status: passed
+        reason: "no reason recorded in the rationale"
     recommends: standing
     boldness: moderate
     stands: standing
@@ -52,7 +57,7 @@ By rank, which is one fact with three readings. Rank is computed from the `under
 
 ## Rationale
 
-The author's ruling of 2026-09-02 that ranking serves onboarding. Prerequisites come from `under` and importance from rank, so a pedagogical order and a priority order do not fight: the walk descends the tree and orders siblings by rank. Rejected: choosing a parent to change priority. The author, 2026-09-03, quoted above: priority is encoded as rank, and the shim bites the frontier in rank order, purpose and the browser first, then the alignment skill, then the harness context, then the non-shim reconciliation harness. The boosts of 2026-09-03 transcribe that order among the children of model, projection above growth above the work loop, with values the AI chose and the author has not ratified; the earlier boost of the same day, model first under purpose, stands. Later on 2026-09-03 the author recorded the high-level order on the scope node, and the boosts of the nodes it names were reset to realize it: the scope node 9 under purpose and session-context 6 under projection, raised from 2 because at 2 it ranked below the work loop; the validator holds the ranks to that order since 2026-09-03. A browser node was not added for rank: a child's rank is a share of its parent's, so the browser bite ranks first through projection's boost, and a browser node is owed by projection's shim at its sitting.
+The author's ruling of 2026-09-02 that ranking serves onboarding. Prerequisites come from `under` and importance from rank, so a pedagogical order and a priority order do not fight: the walk descends the tree and orders siblings by rank. The author, 2026-09-03, quoted above: priority is encoded as rank, and the shim bites the frontier in rank order, purpose and the browser first, then the alignment skill, then the harness context, then the non-shim reconciliation harness. The boosts of 2026-09-03 transcribe that order among the children of model, projection above growth above the work loop, with values the AI chose and the author has not ratified; the earlier boost of the same day, model first under purpose, stands. Later on 2026-09-03 the author recorded the high-level order on the scope node, and the boosts of the nodes it names were reset to realize it: the scope node 9 under purpose and session-context 6 under projection, raised from 2 because at 2 it ranked below the work loop; the validator holds the ranks to that order since 2026-09-03. A browser node was not added for rank: a child's rank is a share of its parent's, so the browser bite ranks first through projection's boost, and a browser node is owed by projection's shim at its sitting.
 
 ## Facts
 
@@ -69,6 +74,13 @@ The decomposition finding proposes that 'rank' move from under's `defines` to at
 #### rank-orders-reconciliation-only
 
 The author's words on alignment-order, 2026-09-03: attention's second reading of rank, "where work goes first", originally referred to the reconciliation frontier and predates the alignment frontier. The alternative amends the second reading to say so: rank orders the reconciliation frontier and the onboarding path, and the alignment frontier is ordered by the ruling order the alignment-order node defines, with rank as its tie-break. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+
+#### choose-a-parent-to-change-priority
+
+A node's priority is changed by choosing its parent, so that the tree carries
+priority as well as refinement. The rationale records no reason for passing it
+over; it states only the answer's own ground, that prerequisites come from
+`under` and importance from rank.
 
 ## Account
 

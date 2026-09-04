@@ -39,6 +39,14 @@ bears:
   - fact: answer
     option: standing
     relation: adopted
+  - node: commons.systems/disposition-graph/alignment-page
+    fact: answer
+    option: three-column-ruling-screen
+    relation: diverged
+  - node: commons.systems/disposition-graph/alignment-page
+    fact: answer
+    option: every-fact-every-option
+    relation: adopted
 ---
 ## Answer
 

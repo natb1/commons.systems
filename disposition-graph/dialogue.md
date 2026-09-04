@@ -57,6 +57,51 @@ facts:
       - name: edit-led-against-a-named-ground
         source: commons.systems/disposition-graph/alignment-page
         ref: "2026-09-04"
+      - name: state-as-prose-only
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "the page would keep guessing at prose conventions"
+      - name: a-date-per-movement
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "it duplicates history"
+      - name: a-draft-file-per-node
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "a node is one file and the draft is parseable inside it"
+      - name: a-stored-diff
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "it is derived from the draft and the node"
+      - name: persistence-as-a-stored-fact
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "a node is always standing and its shims are declared"
+      - name: validator-refuses-a-changed-draft
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "the session decides whether a change is substance, and the flag gives it the fact"
+      - name: status-field-for-pending-alternatives
+        source: author
+        ref: "32600efe"
+        status: passed
+        reason: "it is the flip the author suggested and retracted on 2026-09-03"
+      - name: alternatives-as-prose-in-the-account
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "the page could not show them beside the answer"
+      - name: a-node-per-alternative
+        source: ai
+        ref: "32600efe"
+        status: passed
+        reason: "an alternative is a candidate answer to this question and not a question of its own"
     recommends: facts-carry-options
     boldness: moderate
     stands: facts-carry-options
@@ -82,6 +127,12 @@ defines:
   - account
   - fact
   - ruling
+  - term: existence
+    gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
+  - term: keep
+    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+  - term: prune
+    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
 depends:
   - commons.systems/disposition-graph/viable-options
 ---
@@ -194,7 +245,7 @@ The author's question of 2026-09-03, quoted above, answered greenfield that day 
 
 The re-answer's decisions. The flip of an answered node to unanswered while an alternative is pending was the author's first suggestion and was retracted by the author on 2026-09-03 as a hack; what the author wants at a functional level, in their words, is to see when reading an answered node whether alternate proposals from outside alignment or alternate answers from within it are pending, which the alternatives list with its sources gives beside the standing answer with no change of status. That a standing answer of any class keeps its full authority while an alternative is pending, and that a proposal from outside alignment opens the dialogue on its node, are the author's rulings of 2026-09-03, quoted above. The pin answers the author's observation that a whole node goes stale as easily as a diff: the hash of the standing text the recommendation amends, checked as the review's hash is, and the graph commit it was drafted at. The vocabulary follows the author's ruling on the authority node the same day: the AI's account loses the name proposal, and a conflicting answer that arises in alignment is an alternative. The encoding was written under the author's bootstrap grant, quoted above, after the periagogic and maieutic movements on this node and before the clean-context review, which runs on what the reconciliation wrote.
 
-Rejected: the state as prose only, since the page would keep guessing; a date per movement, since it duplicates history; a separate draft file per node, since a node is one file and the draft is parseable inside it; a stored diff, since it is derived from the draft and the node; persistence as a stored fact, since a node is always standing and its shims are declared; a validator that refuses a draft changed since the review, since the session decides whether a change is substance, as the recording node says, and the flag gives it the fact; a status field or a fourth class for a node with pending alternatives, the retracted flip; alternatives as prose only in the account, since the page could not show them beside the answer; a node per alternative, since an alternative is a candidate answer to this question and not a question of its own. Traditions, recorded as readings under this node or owed under the stub-traditions ruling: architecture decision records in the MADR form, the reading under this node, whose considered options with their sources, chosen option, and status this encoding adopts, with the status derived here where MADR stores it; the RFC and PEP processes, a status field on a prose document with a fixed order of states; review approvals pinned to a revision in code review, where a new revision marks the approval stale; and the review of a change as a diff against what stands.
+Traditions, recorded as readings under this node or owed under the stub-traditions ruling: architecture decision records in the MADR form, the reading under this node, whose considered options with their sources, chosen option, and status this encoding adopts, with the status derived here where MADR stores it; the RFC and PEP processes, a status field on a prose document with a fixed order of states; review approvals pinned to a revision in code review, where a new revision marks the approval stale; and the review of a change as a diff against what stands.
 
 Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Each fact on a node, regardless of authority, has viable options list (possibly length 1) with a) AI recommendation/why b) support or divergence from tradition for each option and c) (if answered) the confirmed choice and why"; "For each fact, the confirmed choice, the AI recommendation and support divergence from tradition as well as any non-chosen option which is categorized as 'viable' by the AI - these are all is persisted after confirmation to mitigate regression." Alternatives and facts become one structure, since a candidate answer is a choice on the answer and the record had two shapes for one thing; the node-level recommendation goes into each fact, which is where its boldness already sat; the stamp goes, the class being read off the rulings; the sentence that confirmed dialogue state folds and unconfirmed state survives only in version control is amended, since what folds is the dialogue and what persists is the facts, which the minimal-state principle keeps by its own test: what persists is judgment that re-derivation cannot reconstruct, and what dies is the account, which re-running the review reconstructs. `aspects-are-nodes` stands within this answer, its second paragraph. The encoding's field names are the delegated detail the author left to the AI on 2026-09-03 and are decided on the viable-options node. The answer as it stood is kept as the option `alternatives-beside-facts`, and the review of this text is owed.
 
@@ -437,6 +488,56 @@ carries.)
 #### edit-led-against-a-named-ground
 
 The projections lead with the edit wherever an answer stands, ratified or a draft no one has confirmed, and name the ground the edit is against; a node with no answer shows the recommended text whole. This departs from the standing rule that a node with no class leads with the recommended text whole and names the ruling a first answer: the author does need to see what a ruling changes, and what was wrong on `purpose` was the implication that the ground was confirmed, which naming the ground removes. The author's words of 2026-09-03, that nodes "still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed", read at least as easily as an objection to the diff on a first answer as to its caption, which is why this is an option here and not a settled reading. Raised on commons.systems/disposition-graph/alignment-page, whose clean-context review of 2026-09-04 found the departure recorded nowhere on this node.
+
+#### state-as-prose-only
+
+The dialogue's state stays prose conventions inside the account. It was passed
+over because the page would keep guessing, which is what the record's Facts
+lines, proposed-text blocks and review subsections already made it do.
+
+#### a-date-per-movement
+
+Each movement of the dialogue stores its own date beside the stage. It was
+passed over because it duplicates what version control already holds.
+
+#### a-draft-file-per-node
+
+The recommended text lives in a separate draft file beside the node. It was
+passed over because a node is one file and the draft is parseable inside it.
+
+#### a-stored-diff
+
+The node stores the diff between the draft and what stands. It was passed over
+because the diff is derived from the draft and the node.
+
+#### persistence-as-a-stored-fact
+
+Persistence is stored as a fact on the node beside authority and boldness. It
+was passed over because a node is always standing and its shims are declared.
+
+#### validator-refuses-a-changed-draft
+
+The validator refuses a draft that changed after its review. It was passed
+over because the session decides whether a change is substance, as the
+recording node says, and the staleness flag gives it the fact.
+
+#### status-field-for-pending-alternatives
+
+A node with pending alternatives carries a status field, or a fourth class,
+marking it unanswered again. It was passed over because it is the flip the
+author suggested on 2026-09-03 and retracted the same day as a hack.
+
+#### alternatives-as-prose-in-the-account
+
+The alternatives stay prose in the account rather than data. It was passed
+over because the page could not show them beside the answer.
+
+#### a-node-per-alternative
+
+Each alternative becomes a node of its own under the node it answers. It was
+passed over because an alternative is a candidate answer to this question and
+not a question of its own.
+
 ## Account
 
 ### Finding: the review pin does not cover the standing answer, 2026-09-03

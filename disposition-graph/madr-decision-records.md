@@ -36,6 +36,10 @@ bears:
   - fact: answer
     option: alternatives-beside-facts
     relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: grant-from-a-ruling
+    relation: adopted
 depends:
   - commons.systems/disposition-graph/viable-options
 ---

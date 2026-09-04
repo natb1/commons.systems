@@ -18,6 +18,44 @@ facts:
       - name: per-draft-and-survey
         source: commons.systems/disposition-graph/decomposition
         ref: "2026-09-04"
+      - name: forked-skill-as-the-reviewer
+        source: ai
+        ref: "29c11274"
+        status: passed
+        reason: "the harness's fork inherits the session's context"
+      - name: review-applied-by-the-reviewer
+        source: ai
+        ref: "29c11274"
+        status: passed
+        reason: "the reviewer only recommends"
+      - name: one-context-for-a-batch
+        source: ai
+        ref: "29c11274"
+        status: passed
+        reason: "it was the practice until 2026-09-03 and no reason beyond that is recorded"
+      - name: committed-record-only-per-draft
+        source: ai
+        ref: "29c11274"
+        status: passed
+        reason: "it hides the contradictions a sitting creates"
+      - name: sibling-set-named-by-the-session
+        source: ai
+        ref: "29c11274"
+        status: passed
+        reason: "it is chosen by the party whose blind spots the review exists to catch"
+      - name: fixed-model-for-every-review
+        source: ai
+        ref: "29c11274"
+        status: passed
+        reason: "it pays the most capable model on every simple draft, or reviews a bold one in name only"
+      - name: lock-at-launch
+        source: ai
+        ref: "29c11274"
+        status: passed
+        reason: "it is advisory, per checkout, and unneeded once the pin serializes"
+      - name: moved-draft-re-read-by-the-survey
+        source: ai
+        ref: "2026-09-04"
     recommends: per-draft-and-survey
     boldness: moderate
     stands: standing
@@ -64,7 +102,7 @@ As a skill of its own, `/align-review`, and every invocation of it is one batch:
 
 ## Rationale
 
-The author, 2026-09-03: "alignment adversarial review is materialized as a skill. it can be invoked as a clean context subskill when the scope of an alignment dialogue progresses to review, or it can be invoked directly. When invoked by alignment dialogue the review scope is limited to the scope of the alignment dialogue (whatever nodes are discussed as part of the dialogue). When invoked directly it executes adversarial review for all unanswered nodes queued for review. Either way, the context for each node review is isolated using subskills." One skill for both invocations keeps one brief, one output shape, and one applying step, so that a review run by a sitting and a review run over the queue are the same review. Scope follows the invoker because the review judges a draft against the record it joins: the sitting knows which nodes it discussed, and the queue is what the stage field already lists. A context per node is the independence the recording node argues for, carried one step further: a reviewer that has read twenty drafts and their reviews reads the twenty-first with that batch's framing, and a finding on one node leaks into the next; the price is that each reviewer reads the global rules and the ancestry for itself, which is the cost of a fresh reading, paid in tokens and not in the author's attention. The reviewer sees the round's other drafts because the first review of this node showed that the findings that mattered on 2026-09-03 cited sibling drafts by name, and no reader of a single draft could have made them; isolating the framing and isolating the record are two different things. That set is derived from version control rather than named by the session because the second review of this node showed that a session which has stopped seeing a node will not name it, and an input set chosen by the party under review leaves no trace of the omission; the nodes at the review stage and the changed files of the round are what the sitting wrote, whoever remembers them, and the ids recorded in the review's state let anyone reconstruct what the reviewer was given. The reviewer writes nothing because authority attenuates and nothing writes up. The two review batches of 2026-09-03, twenty-seven items in the morning and twenty-four in the afternoon, ran in one context each before this skill existed, each free of the session's framing and each shared across its batch; their verdicts stand as the reviews of that day, the author may re-run them by invoking the skill, and the divergence is recorded here. Amended the same day on the recording node: the reviews of a round are invoked together, each runs in its own context, and the reviewer's world includes the round's other drafts. Rejected: a forked skill as the reviewer, since the harness's fork inherits the session's context; the review applied by the reviewer itself, since the reviewer only recommends; one context for a batch, which was the practice until today; a context per node that sees only the committed record, which the first review of this node showed hides the contradictions a sitting creates; the sibling set named by the session, which the second review showed is chosen by the party whose blind spots the review exists to catch.
+The author, 2026-09-03: "alignment adversarial review is materialized as a skill. it can be invoked as a clean context subskill when the scope of an alignment dialogue progresses to review, or it can be invoked directly. When invoked by alignment dialogue the review scope is limited to the scope of the alignment dialogue (whatever nodes are discussed as part of the dialogue). When invoked directly it executes adversarial review for all unanswered nodes queued for review. Either way, the context for each node review is isolated using subskills." One skill for both invocations keeps one brief, one output shape, and one applying step, so that a review run by a sitting and a review run over the queue are the same review. Scope follows the invoker because the review judges a draft against the record it joins: the sitting knows which nodes it discussed, and the queue is what the stage field already lists. A context per node is the independence the recording node argues for, carried one step further: a reviewer that has read twenty drafts and their reviews reads the twenty-first with that batch's framing, and a finding on one node leaks into the next; the price is that each reviewer reads the global rules and the ancestry for itself, which is the cost of a fresh reading, paid in tokens and not in the author's attention. The reviewer sees the round's other drafts because the first review of this node showed that the findings that mattered on 2026-09-03 cited sibling drafts by name, and no reader of a single draft could have made them; isolating the framing and isolating the record are two different things. That set is derived from version control rather than named by the session because the second review of this node showed that a session which has stopped seeing a node will not name it, and an input set chosen by the party under review leaves no trace of the omission; the nodes at the review stage and the changed files of the round are what the sitting wrote, whoever remembers them, and the ids recorded in the review's state let anyone reconstruct what the reviewer was given. The reviewer writes nothing because authority attenuates and nothing writes up. The two review batches of 2026-09-03, twenty-seven items in the morning and twenty-four in the afternoon, ran in one context each before this skill existed, each free of the session's framing and each shared across its batch; their verdicts stand as the reviews of that day, the author may re-run them by invoking the skill, and the divergence is recorded here. Amended the same day on the recording node: the reviews of a round are invoked together, each runs in its own context, and the reviewer's world includes the round's other drafts.
 
 The author, later on 2026-09-03: "This superceded existing unanswered dispositions about the adversarial review skill (case in point). EVERY invocation of the adversarial alignment review skill is a batch operation that evaluates the full unanswered frontier (without isolating any context by disposition)." The per-node isolation the morning's words asked for, and the sibling drafts the second reading added to it, were the answer to a narrower question, how one draft is judged; the author's later words ask how the frontier is kept consistent, and a reading of one node, however many siblings it is handed, cannot see drift between nodes it was not handed. The clean context stays, since the independence the recording node argues for is of framing; the isolation by node goes, since the object of the review is now the frontier. The case in point is this node: its answer of the morning stood at the review stage, twice read and twice forwarded, while the frontier it belonged to drifted from it. Divergence, recorded: the two readings of this node on 2026-09-03 ran under the superseded answer, each in a context of its own, and their subsections below are kept as the record of that; the batches of the same day, read in one context each before the skill existed, turn out to have had the shape the author's later words prescribe, though without the survey.
 
@@ -82,6 +120,51 @@ The account holds open, as wholly the AI's, that the two review batches of 2026-
 
 The review divides by its object. The review of one draft, validations one to six of the frontier-consistency node with the counter-argument and the viability of its options, runs in clean context the moment the draft's recommendation is recorded, reading the draft, the chain of nodes above it, its siblings under the same parent, the nodes it cites, the rules that bind everywhere, and the index of every question the record asks with its standing answer and options, on a model never smaller than the drafter's and the most capable one when the recommendation's boldness is not low or a ruling on the node would settle others; its forward is what puts the node at the ruling stage, and two such reviews never wait on each other. The survey, validations seven to fifteen, keeps the batch shape the author's words of 2026-09-03 give it, the whole graph read in one context without its accounts, and changes in what it judges and when: it judges the nodes changed since its last pin against the whole graph, it runs before the author rules and on demand rather than at every sitting's review stage, its findings carry the graph commit they read and a finding on a node changed since that commit is discarded at apply, which serializes it in place of the lock, and a node is ready to rule when it carries a forward verdict and a survey pin at or after its last change. Raised on commons.systems/disposition-graph/decomposition, from the author's words of 2026-09-04 recorded there; it takes the side of `split-survey-from-per-draft` on frontier-consistency, and it supersedes in part the author's words of 2026-09-03 that every invocation is one batch with nothing isolated by node, which stay whole for the survey.
 
+#### forked-skill-as-the-reviewer
+
+The review runs as a forked skill rather than a fresh subagent. It was passed
+over because the harness's fork inherits the session's context, which is the
+framing the review exists to be free of.
+
+#### review-applied-by-the-reviewer
+
+The reviewer applies its own findings to the record. It was passed over
+because the reviewer only recommends: authority attenuates and nothing writes
+up.
+
+#### one-context-for-a-batch
+
+One reviewer reads a whole batch of drafts in a single context, which was the
+practice until 2026-09-03. The rationale records it as the superseded practice
+and gives no further reason.
+
+#### committed-record-only-per-draft
+
+The per-draft reader sees only the committed record, without the round's other
+drafts. It was passed over because the first review of this node showed that
+it hides the contradictions a sitting creates.
+
+#### sibling-set-named-by-the-session
+
+The session names which sibling drafts the reviewer is given. It was passed
+over because that set is chosen by the party whose blind spots the review
+exists to catch, and an omission leaves no trace.
+
+#### fixed-model-for-every-review
+
+Every review runs on one fixed model. It was passed over because that either
+pays the most capable model on every simple draft or reviews a bold one in
+name only.
+
+#### lock-at-launch
+
+Concurrent reviews are serialized by a lock taken at launch. It was passed
+over because the lock is advisory, per checkout, and unneeded once the
+recommendation pin serializes.
+
+#### moved-draft-re-read-by-the-survey
+
+A draft whose recommendation moved after its review by an encoding migration and not by substance is not re-read by a second draft review: the survey, which judges every node whose recommendation moved since it last pinned it, is the second reading readiness requires, and the draft review is re-run only where the session judges the move substance and records that judgment on the node. On the table because two rules of the record conflict on this case. The dialogue node sends a changed recommendation through the review again only when the change is substance, while the recommended text here holds a node ready to rule only when both pins name the recommendation as it stands, so the migration of 2026-09-04, which moved prose lists of rejected candidates into options with the status passed on 34 nodes and touched no substance, moved the answer pin of every node it wrote, newly flagged 17 forwarded drafts as changed since their review, and owes each a re-reading under the second rule and none under the first. Recorded in reconciliation as a conflict found and not as a recommendation; the recommended text stands.
 ## Recommendation
 
 ```markdown
@@ -110,7 +193,7 @@ The session that invoked the skill validates every finding against the record be
 
 The author, 2026-09-03: "alignment adversarial review is materialized as a skill. it can be invoked as a clean context subskill when the scope of an alignment dialogue progresses to review, or it can be invoked directly." Later that day, superseding the per-node isolation: "EVERY invocation of the adversarial alignment review skill is a batch operation that evaluates the full unanswered frontier (without isolating any context by disposition)." In the evening: "When adversarial review finishes alignment main thread (this) validated the review findings before applying." And: "Adversarial review evaluates batch of nodes which are at the review dialogue phase against the full graph." The author, 2026-09-04, on the decomposition node, taking the recommendation that raised the option this answer adopts: "go, and bootrap authority granted"; the words that motivate it are quoted there.
 
-Why two reviews: the two objects have different minimal contexts and different moments of worth. A draft is judged against its neighbourhood, and the judgment is worth most the moment the draft is made, while the main thread still holds the node and can answer the counter-argument with it in hand; the frontier is judged against itself, and that judgment is worth most just before the author rules, when the frontier is as it will be ruled on. One reading sized for the second and run at the first's moment paid the whole graph on every sitting, at a size the skill itself asked its reader to report not finishing, and returned a sitting's findings on nodes the main thread had moved on from. The survey keeps the batch because drift between nodes is invisible to any reading of one node, which is what the author's words of 2026-09-03 established and what stands. The review of a draft keeps its siblings because the contradictions a sitting creates are between texts written together, which the second reading of this node found; the reader gets them from the record, since the checkpoint lands them, and never from a set the session names. It keeps the question index because the check whether a draft is a new question or a new answer is worth most before a duplicate is drafted further, which is why the periagogic stage asks it too. The pin replaces the lock because the record already carries the pin: a review attests to the recommendation it read, so a finding whose subject has moved is stale on its face, and the case the lock guarded against, two readings each forwarding what the other kicks back, cannot arise when the survey forwards nothing and each finding is discarded where its node moved. The reviewer's model floor follows from what a review is for: a reader weaker than the writer finds what the writer already saw. Superseded, on the author's words of 2026-09-04: the author's words of 2026-09-03 that nothing is isolated by disposition, kept whole for the survey and narrowed for the review of a draft. The divergences recorded on this node's earlier answers stand as history: the two per-node readings of 2026-09-03 and the batch readings of that day and the next. Rejected: a forked skill as the reviewer, since the harness's fork inherits the session's context; the review applied by the reviewer itself, since the reviewer only recommends; one context for both objects, the practice from 2026-09-03 to 2026-09-04; a per-draft reader that sees only the committed record without the sitting's siblings, which hides what a sitting creates; the sibling set named by the session, chosen by the party whose blind spots the review exists to catch; a fixed model for every review, which pays the most capable model on every simple draft or reviews a bold one in name only; a lock at launch, which is advisory, per checkout, and unneeded once the pin serializes.
+Why two reviews: the two objects have different minimal contexts and different moments of worth. A draft is judged against its neighbourhood, and the judgment is worth most the moment the draft is made, while the main thread still holds the node and can answer the counter-argument with it in hand; the frontier is judged against itself, and that judgment is worth most just before the author rules, when the frontier is as it will be ruled on. One reading sized for the second and run at the first's moment paid the whole graph on every sitting, at a size the skill itself asked its reader to report not finishing, and returned a sitting's findings on nodes the main thread had moved on from. The survey keeps the batch because drift between nodes is invisible to any reading of one node, which is what the author's words of 2026-09-03 established and what stands. The review of a draft keeps its siblings because the contradictions a sitting creates are between texts written together, which the second reading of this node found; the reader gets them from the record, since the checkpoint lands them, and never from a set the session names. It keeps the question index because the check whether a draft is a new question or a new answer is worth most before a duplicate is drafted further, which is why the periagogic stage asks it too. The pin replaces the lock because the record already carries the pin: a review attests to the recommendation it read, so a finding whose subject has moved is stale on its face, and the case the lock guarded against, two readings each forwarding what the other kicks back, cannot arise when the survey forwards nothing and each finding is discarded where its node moved. The reviewer's model floor follows from what a review is for: a reader weaker than the writer finds what the writer already saw. Superseded, on the author's words of 2026-09-04: the author's words of 2026-09-03 that nothing is isolated by disposition, kept whole for the survey and narrowed for the review of a draft. The divergences recorded on this node's earlier answers stand as history: the two per-node readings of 2026-09-03 and the batch readings of that day and the next.
 ```
 
 ## Account

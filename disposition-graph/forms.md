@@ -24,6 +24,11 @@ facts:
       - name: assumption-is-instrumentation
         source: author
         ref: "2026-09-02"
+      - name: four-forms-with-assumption-as-a-criterion
+        source: ai
+        ref: "9e3a6624"
+        status: passed
+        reason: "the distinction it removes has no carrier, and it makes twenty-two nodes non-conforming at once"
     recommends: rule-beside-disposition
     boldness: moderate
   - name: authority
@@ -60,6 +65,13 @@ Three of the five author quotations carried on node are the ground of forms' who
 
 The author's words carried on instruments state that assumption is not a form but instrumentation, the condition under which an answer stays valid. Forms' option that carried this was withdrawn after its review, and its surviving recommendation, keeping rule beside disposition, leaves the question the author asked unanswered, as forms' own reply and the contradiction finding both say. The author's leaning is therefore a candidate answer with no option representing it. (Raised on commons.systems/disposition-graph/instruments.) Also raised on commons.systems/disposition-graph/purpose.
 
+#### four-forms-with-assumption-as-a-criterion
+
+Four forms, with target and rule merged as disposition and assumption made a
+criterion kind. It was passed over because the distinction it removes has no
+carrier in the record, and the migration touches twenty-two nodes and the
+validator.
+
 ## Recommendation
 
 ```markdown
@@ -75,7 +87,7 @@ One of five: a target, something that should become true; a rule, something that
 
 ## Rationale
 
-The author asked what a rule adds that a target does not, and the answer is the reading of its failure: work in the one case, a variance that gates work in the other, which is how the frontier decides what to do next. The merge that would have dissolved the question rests on a carrier the record does not have, and almost every node is unguarded, so the distinction it removes would have nowhere to live. Keeping the names also costs nothing, where the merge would make twenty-two nodes non-conforming at once and change the validator's accepted set. Rejected: four forms with target and rule merged as disposition and assumption made a criterion kind, because the distinction it removes has no carrier and the migration touches twenty-two nodes and the validator; and keeping all five forms as a bare status quo, because it records no reason and leaves the author's question about rule unanswered. The goal-oriented requirements tradition, which carries achieve and maintain on the goal's criterion rather than on its kind, is owed as a reading here.
+The author asked what a rule adds that a target does not, and the answer is the reading of its failure: work in the one case, a variance that gates work in the other, which is how the frontier decides what to do next. The merge that would have dissolved the question rests on a carrier the record does not have, and almost every node is unguarded, so the distinction it removes would have nowhere to live. Keeping the names also costs nothing, where the merge would make twenty-two nodes non-conforming at once and change the validator's accepted set. The goal-oriented requirements tradition, which carries achieve and maintain on the goal's criterion rather than on its kind, is owed as a reading here.
 ```
 
 ## Account

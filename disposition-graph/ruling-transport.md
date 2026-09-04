@@ -14,6 +14,21 @@ facts:
       - name: instruction-canonical-buffer-optional
         source: ai
         ref: "2026-09-04"
+      - name: database-as-the-record-with-a-fallback
+        source: ai
+        ref: "717485e6"
+        status: passed
+        reason: "it inverts which one the graph depends on, and a fallback never exercised does not work"
+      - name: prompt-url-for-a-whole-sitting
+        source: ai
+        ref: "717485e6"
+        status: passed
+        reason: "it answers a length problem by hosting the prompt somewhere, which is the second store under another name"
+      - name: two-copy-controls-one-per-route
+        source: ai
+        ref: "717485e6"
+        status: passed
+        reason: "the routes differ in where the text goes and never in what it says"
     recommends: instruction-canonical-buffer-optional
     boldness: moderate
   - name: authority
@@ -115,6 +130,25 @@ badly. Making the instruction canonical settles the design without settling
 the open question, and the open question then decides only whether the buffer
 is worth keeping.
 
+#### database-as-the-record-with-a-fallback
+
+The artifact's database is the record of a ruling, with the copied instruction
+as a fallback. It was passed over because it inverts which one the graph
+depends on, and a fallback that is never exercised is a fallback that does not
+work.
+
+#### prompt-url-for-a-whole-sitting
+
+A `prompt_url` carries a whole sitting past the length limit of a URL. It was
+passed over because it answers a length problem by hosting the prompt
+somewhere, which is the second store again under another name.
+
+#### two-copy-controls-one-per-route
+
+The page offers two copy controls, one per route. It was passed over because
+the routes differ in where the text goes and never in what it says, so two
+controls emitting one string is one control.
+
 ### authority
 
 Delegated: this is how one projection carries a ruling to the record, under an
@@ -153,12 +187,6 @@ The stateful incumbent buys device independence, an exact structured round trip,
 The stateless flow costs the tab, the device, and the length of a URL, and buys the four back, along with agreement with the shim on `alignment-page`, whose liquidation condition already reads "the alignment skill reads the responses without the artifact tool". The record has already called the database a stand-in.
 
 Neither pure form is taken, because the question that separates them is open and cheap to settle: whether a session seeded from a `claude.ai/code` link can read the artifact's database at all. Making the instruction canonical settles the design without waiting on that, and leaves the buffer as the only thing the answer decides. If the buffer never earns its keep it is deleted and nothing is redesigned, which is what the shim's liquidation asks for and what neither pure alternative gives.
-
-Rejected:
-
-- The database as the record, with the instruction as a fallback. - It inverts which one the graph depends on, and a fallback that is never exercised is a fallback that does not work.
-- `prompt_url` to carry a whole sitting past the URL limit. - It answers a length problem by hosting the prompt somewhere, which is the second store again under another name.
-- Two copy controls, one per route. - The routes differ in where the text goes and never in what it says; two controls emitting one string is one control.
 ```
 
 ## Account

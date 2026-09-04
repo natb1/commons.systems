@@ -15,6 +15,11 @@ facts:
       - name: primer-node
         source: ai
         ref: "2026-09-03"
+      - name: boost-growth-first-among-models-children
+        source: ai
+        ref: "9e3a6624"
+        status: passed
+        reason: "the author's recorded order puts the browser before alignment and two other nodes' rationales rest on it"
     recommends: rewrite-model
     boldness: moderate
   - name: authority
@@ -45,6 +50,12 @@ The model node's answer is rewritten for the reader arriving from purpose, witho
 
 A new primer node sits between purpose and model, introducing the graph primitives, and model's answer is left as it stands. Model's draft rationale rejects this on the ground that such a node would answer no question model does not.
 
+#### boost-growth-first-among-models-children
+
+A boost puts growth first among the model node's children. It was withdrawn
+because the author's own recorded order puts the browser before alignment, and
+two other nodes' rationales rest on that order.
+
 ### existence
 
 Prune: This node is pruned and its two options are carried on model as alternatives in model's own dialogue state, so the author rules once rather than on two screens with no ordering shown. The redundancy finding of 2026-09-03 offers this against keeping the option-node as the survivor of its question, and observes that confirming model's draft as shown decides this question by that act.
@@ -64,7 +75,7 @@ The model node. Its answer is written for the newcomer rather than for a reader 
 
 ## Rationale
 
-The author found the model node's answer too reference-shaped for the second thing a newcomer reads, which is a defect in the writing and not a missing node; a primer would restate the model node's answer in a second place, the drift this record resists everywhere else. Rewriting also costs no rank, so the onboarding walk and the reconciliation order stay one list and rank keeps serving both. Rejected: a new primer node between purpose and model, because it duplicates the model node's answer and adds a page the record must keep in step with it; and the boost that would have put growth first among the model node's children, withdrawn because the author's own recorded order puts the browser before alignment and two other nodes' rationales rest on that order.
+The author found the model node's answer too reference-shaped for the second thing a newcomer reads, which is a defect in the writing and not a missing node; a primer would restate the model node's answer in a second place, the drift this record resists everywhere else. Rewriting also costs no rank, so the onboarding walk and the reconciliation order stay one list and rank keeps serving both.
 ```
 
 ## Account

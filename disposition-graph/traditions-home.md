@@ -68,7 +68,7 @@ In a traditions graph of its own on this ref, one root node per tradition, decla
 
 ## Rationale
 
-A tradition is a mount, and one graph gives every tradition an addressable home today at the cost of one manifest entry, where the alternative pays many near-empty manifests for a migration most traditions will never need. The manifest already carries a second graph, so the shape is proven and the readings and namespaces answers that assume a traditions graph can rest on it. Rejected: a graph per tradition, which matches the author's model that a tradition could be represented by its own graph but multiplies manifests for a case that has not arisen; and tradition nodes inside the disposition graph, because a tradition is not a disposition of this record's own and about thirty roots would enter the graph the author reads as their queue. The move a tradition may later make is the same liquidation the public graph carries, and web-routing's adopted principle makes it owe redirects, which is the price this answer accepts.
+A tradition is a mount, and one graph gives every tradition an addressable home today at the cost of one manifest entry, where the alternative pays many near-empty manifests for a migration most traditions will never need. The manifest already carries a second graph, so the shape is proven and the readings and namespaces answers that assume a traditions graph can rest on it. The move a tradition may later make is the same liquidation the public graph carries, and web-routing's adopted principle makes it owe redirects, which is the price this answer accepts.
 ```
 
 ## Account

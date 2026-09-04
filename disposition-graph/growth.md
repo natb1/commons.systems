@@ -42,6 +42,46 @@ facts:
       - name: boldness-left-and-dialogue-corrected
         source: ai
         ref: "2026-09-04"
+      - name: issue-trackers-as-the-loop
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "no reason recorded in the rationale"
+      - name: tactics-as-the-loop
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "no reason recorded in the rationale"
+      - name: phases-as-the-loop
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "no reason recorded in the rationale"
+      - name: the-router-and-its-gates
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "no reason recorded in the rationale"
+      - name: born-parked-review
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "no reason recorded in the rationale"
+      - name: placement-gates
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "no reason recorded in the rationale"
+      - name: the-curriculum
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "no reason recorded in the rationale"
+      - name: the-skills-own-text-as-authority
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "no reason recorded in the rationale"
     recommends: boldness-reversed
     boldness: low
     stands: standing
@@ -120,7 +160,7 @@ By a loop of three moves. Draft: the AI writes a node, or an amendment, in the r
 
 ## Rationale
 
-The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost. The author, 2026-09-03, on the presentation of recommendations: "recommended disposition are always presented for review before recording and always include the authority, boldness AND if it is a persistent or some transient form of disposition (eg. shim) ... This way I know if I am approving some transient stop-gap or something that will persist in the graph." The author, 2026-09-03, on the two-stage rule and the skill shim: "Ratified on the rule. Ratified on the shim." The author, 2026-09-03, on dispositions stated mid-sitting: "we expect that alignment dialogues like this one (which is mixed in with ad-hoc reconciliation during bootstrap) will trigger recursive disposition statements from the author. This is supported usage of the alignment skill. The expected behavior of the skill is to queue each disposition (newly stated or via node_id) in some state that persists across alignment context compaction. Are these new un-aligned dispositions - dispositions that aren't just unratified/unreviewed, but haven't even survived the alignment dialog yet." And later that day: "Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact). The alignment artifacts outputs are consumed by the greenfield/shimmed alignment skill." Kept in force from the incumbent alignment skill, as principles and never as mechanics: fable as the default model, landing location never asked of the author, the mechanical floor, one question per node, whole-node amendment, doctrine currency before a round; rejected from it: issue trackers, tactics, phases, the router and its gates, born-parked review, placement gates, the curriculum, and the skill's own text as authority (evidence: `bootstrap/align-survey.md` on the implementation ref).
+The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost. The author, 2026-09-03, on the presentation of recommendations: "recommended disposition are always presented for review before recording and always include the authority, boldness AND if it is a persistent or some transient form of disposition (eg. shim) ... This way I know if I am approving some transient stop-gap or something that will persist in the graph." The author, 2026-09-03, on the two-stage rule and the skill shim: "Ratified on the rule. Ratified on the shim." The author, 2026-09-03, on dispositions stated mid-sitting: "we expect that alignment dialogues like this one (which is mixed in with ad-hoc reconciliation during bootstrap) will trigger recursive disposition statements from the author. This is supported usage of the alignment skill. The expected behavior of the skill is to queue each disposition (newly stated or via node_id) in some state that persists across alignment context compaction. Are these new un-aligned dispositions - dispositions that aren't just unratified/unreviewed, but haven't even survived the alignment dialog yet." And later that day: "Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact). The alignment artifacts outputs are consumed by the greenfield/shimmed alignment skill." Kept in force from the incumbent alignment skill, as principles and never as mechanics: fable as the default model, landing location never asked of the author, the mechanical floor, one question per node, whole-node amendment, doctrine currency before a round (evidence: `bootstrap/align-survey.md` on the implementation ref).
 
 ## Facts
 
@@ -166,6 +206,53 @@ This node's definition sentence is reversed, so that boldness is how much of a r
 
 The inverse repair: this node's definition stands and the dialogue node, the alignment skill, and every boldness stamp in the record are corrected to match it. Against it: the author's own words give the direction, "I want to know how much rests on the AI's own knowledge against the record", so the correction would be against the author; and the stamps were written under the usage, so it would silently reverse the meaning of every one of them.
 
+#### issue-trackers-as-the-loop
+
+The loop runs on an issue tracker, as the incumbent alignment skill did. The
+passage lists it among the incumbent's mechanics not kept and records no
+reason; the evidence is `bootstrap/align-survey.md` on the implementation ref.
+
+#### tactics-as-the-loop
+
+The loop decomposes work into standing tactic nodes, as the incumbent
+alignment skill did. The passage lists it among the incumbent's mechanics not
+kept and records no reason.
+
+#### phases-as-the-loop
+
+The loop moves a node through fixed phases, as the incumbent alignment skill
+did. The passage lists it among the incumbent's mechanics not kept and records
+no reason.
+
+#### the-router-and-its-gates
+
+The incumbent's router and its gates select and admit the work of a sitting.
+The passage lists them among the incumbent's mechanics not kept and records no
+reason.
+
+#### born-parked-review
+
+A review is born parked and released by a gate, as the incumbent alignment
+skill had it. The passage lists it among the incumbent's mechanics not kept
+and records no reason.
+
+#### placement-gates
+
+A node's placement in the graph is admitted by a gate. The passage lists it
+among the incumbent's mechanics not kept and records no reason.
+
+#### the-curriculum
+
+The order of the author's attention is a curriculum kept beside the record, as
+the incumbent had it. The passage lists it among the incumbent's mechanics not
+kept and records no reason.
+
+#### the-skills-own-text-as-authority
+
+The alignment skill's own text carries authority over the record. The passage
+lists it among the incumbent's mechanics not kept and records no reason; every
+rule a session works under is a node or a declared shim.
+
 ### persistence
 
 The recommendation drops one of this node's two shims: the alignment page, which moves to `commons.systems/disposition-graph/alignment-page` with its declaration date and its liquidation condition intact. The skill shim stays, because this node is still what the alignment skill projects. Confirming it leaves one shim here; denying it leaves the page described in two places, which is what minting the page's own node was for. The two nodes rule together, and `alignment-page` carries the matching decision.
@@ -207,7 +294,7 @@ By a loop of three moves. Draft: the AI writes a node, or an amendment, in the r
 
 ## Rationale
 
-The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost. The author, 2026-09-03, on the presentation of recommendations: "recommended disposition are always presented for review before recording and always include the authority, boldness AND if it is a persistent or some transient form of disposition (eg. shim) ... This way I know if I am approving some transient stop-gap or something that will persist in the graph." The author, 2026-09-03, on the two-stage rule and the skill shim: "Ratified on the rule. Ratified on the shim." The author, 2026-09-03, on dispositions stated mid-sitting: "we expect that alignment dialogues like this one (which is mixed in with ad-hoc reconciliation during bootstrap) will trigger recursive disposition statements from the author. This is supported usage of the alignment skill. The expected behavior of the skill is to queue each disposition (newly stated or via node_id) in some state that persists across alignment context compaction. Are these new un-aligned dispositions - dispositions that aren't just unratified/unreviewed, but haven't even survived the alignment dialog yet." And later that day: "Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact). The alignment artifacts outputs are consumed by the greenfield/shimmed alignment skill." Kept in force from the incumbent alignment skill, as principles and never as mechanics: fable as the default model, landing location never asked of the author, the mechanical floor, one question per node, whole-node amendment, doctrine currency before a round; rejected from it: issue trackers, tactics, phases, the router and its gates, born-parked review, placement gates, the curriculum, and the skill's own text as authority (evidence: `bootstrap/align-survey.md` on the implementation ref). Two amendments of 2026-09-04, from the sitting on the alignment page: the definition of boldness is reversed, because the dialogue node, the author's own words of 2026-09-03, and every stamp in the record run the other way and this node's sentence was the outlier; and the description of the alignment page leaves this node for the node that asks the page's question, taking with it the shim that names the artifact, because a page described in two places is ratified in two places, which is what minting that node was for.
+The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost. The author, 2026-09-03, on the presentation of recommendations: "recommended disposition are always presented for review before recording and always include the authority, boldness AND if it is a persistent or some transient form of disposition (eg. shim) ... This way I know if I am approving some transient stop-gap or something that will persist in the graph." The author, 2026-09-03, on the two-stage rule and the skill shim: "Ratified on the rule. Ratified on the shim." The author, 2026-09-03, on dispositions stated mid-sitting: "we expect that alignment dialogues like this one (which is mixed in with ad-hoc reconciliation during bootstrap) will trigger recursive disposition statements from the author. This is supported usage of the alignment skill. The expected behavior of the skill is to queue each disposition (newly stated or via node_id) in some state that persists across alignment context compaction. Are these new un-aligned dispositions - dispositions that aren't just unratified/unreviewed, but haven't even survived the alignment dialog yet." And later that day: "Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact). The alignment artifacts outputs are consumed by the greenfield/shimmed alignment skill." Kept in force from the incumbent alignment skill, as principles and never as mechanics: fable as the default model, landing location never asked of the author, the mechanical floor, one question per node, whole-node amendment, doctrine currency before a round (evidence: `bootstrap/align-survey.md` on the implementation ref). Two amendments of 2026-09-04, from the sitting on the alignment page: the definition of boldness is reversed, because the dialogue node, the author's own words of 2026-09-03, and every stamp in the record run the other way and this node's sentence was the outlier; and the description of the alignment page leaves this node for the node that asks the page's question, taking with it the shim that names the artifact, because a page described in two places is ratified in two places, which is what minting that node was for.
 ```
 
 ## Account

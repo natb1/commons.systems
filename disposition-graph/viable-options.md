@@ -19,6 +19,46 @@ facts:
       - name: viable-not-chosen-as-it-stands
         source: review
         ref: "2026-09-04"
+      - name: a-stored-stamp-beside-the-rulings
+        source: ai
+        ref: "2b184f05"
+        status: passed
+        reason: "it is a copy and drifts"
+      - name: a-fourth-response-defer
+        source: ai
+        ref: "2b184f05"
+        status: passed
+        reason: "deferred is a choice on the authority fact and the three responses stand"
+      - name: a-timestamp-as-the-pin
+        source: ai
+        ref: "2b184f05"
+        status: passed
+        reason: "content is what changes, and a clock cannot tell a re-affirmed recommendation from a changed one"
+      - name: report-and-wait-on-a-divergence
+        source: ai
+        ref: "2b184f05"
+        status: passed
+        reason: "it holds a decision outside the record"
+      - name: delegated-node-returned-on-every-move
+        source: ai
+        ref: "2b184f05"
+        status: passed
+        reason: "it un-delegates: the author asked not to be asked again"
+      - name: re-confirmation-from-the-periagogic
+        source: ai
+        ref: "2b184f05"
+        status: passed
+        reason: "the recording node's classification already says where a dialogue resumes, and only the recommendation moved"
+      - name: options-folded-into-the-rationale
+        source: ai
+        ref: "2b184f05"
+        status: passed
+        reason: "the author found the prose ad hoc and the structure is what regression needs"
+      - name: keep-every-option-ever-recorded
+        source: ai
+        ref: "2b184f05"
+        status: passed
+        reason: "the list would grow without a reason and version control holds what left"
     recommends: grant-from-a-ruling
     boldness: moderate
     stands: grant-from-a-ruling
@@ -78,7 +118,7 @@ The author's disposition of 2026-09-04, quoted above: "Is 'unanswered' just an a
 
 Why a projection and not a stamp: the record already stores the ruling on a fact with its response, choice, date, and pin, so a stamp beside it is a copy, and a copy drifts, which is the reason the unanswered node gave for deriving the status; the same reason derives the class. Why the options persist: the author's reason, regression, and the tradition the encoding already adopts, which keeps every considered option beside the decision; what persists is judgment that re-derivation cannot reconstruct, the author's rulings, the AI's recommendations and viability calls, and the readings, while the account, which re-running the review reconstructs, still dies, so the minimal-state principle on the dialogue node is kept by its own test. Why the line on reconciliation falls where it does: the record is the sole carrier, and a divergence found in reconciliation and held on a derived frontier until an alignment session transcribes it is a decision outside the record; as an option it is in the record at once, changes nothing the author confirmed, and returns a ratified node to the author by the same projection that returns any proposal; operational state stays outside the graph, as the author said. Why a delegated node stays off the alignment frontier on a move within scope: delegated means the author does not want to be asked again, and a rule that asks them anyway on every change, as the evaluation node's did, delegates nothing; the bound that rule wanted is the scope, and a move beyond it does return the node. Why the pin is content: a clock cannot tell a recommendation re-affirmed from one changed, and the record pins by hash everywhere else.
 
-Rejected: a stored stamp beside the rulings, since it is a copy and drifts; deferred conferred by the AI on itself, the second reading of the author's words, since it empties unanswered; a fourth response, defer, on the page, since deferred is a choice on the authority fact and the three responses stand; a timestamp as the pin, since content is what changes; the report-and-wait path for a reconciliation divergence, since it holds a decision outside the record; a delegated node returned to the author on every moved recommendation, since it un-delegates; re-confirmation opening at the periagogic movement in every case, since the classification the recording node already makes says where a dialogue resumes and only the recommendation moved; options folded into the rationale as prose at the recording, since the author found the prose ad hoc and the structure is what regression needs; keeping every option ever recorded whether or not viable, since the list would grow without a reason and version control holds what left. Traditions, recorded as readings under this node or owed under the stub-traditions ruling: architecture decision records in the MADR form, adopted for the considered options kept beside the decision, the divergence narrowing to the stage stored and the status derived; IBIS, adopted for positions with the arguments for and against each; event sourcing and the derived view, adopted for the class as a projection of recorded rulings, with the warning that every reader must derive it the same way; the spec and status of level-triggered reconciliation, adopted for the two frontiers as the difference between the AI's recommendation and what stands; attenuation in object-capability systems, adopted for what reconciliation may write; the recorded dissent and the motion to reconsider, adopted for the proposal state, a decision in force with the contrary recommendation on the record; the Pareto frontier, adopted for what viable means; and approval-directed agents, adopted for deferred as action under a review owed.
+
 
 ## Facts
 
@@ -136,6 +176,59 @@ Viability is a judgment shown on an option and not the condition of its listing.
 #### viable-not-chosen-as-it-stands
 
 The standing rule kept and read as the author used the word: an option is a candidate the AI categorized as worth recording, and the prose rejections migrate as options under `rejected`'s rule that a rejected alternative is a viable option not chosen, with no status minted and no key added; an option the AI no longer holds worth the author's attention still leaves the list, the option that displaced it saying why. It keeps the author's scoping on this node and both nodes' standing text, at the cost the clean-context review of prose-and-structure named: the AI still decides which candidates reach the structure, and nothing on a row says the AI holds it dominated. Raised by that review on 2026-09-04 as the viable option the draft was missing.
+
+#### a-stored-stamp-beside-the-rulings
+
+The class is stored as a stamp beside the rulings rather than read off them.
+It was passed over because a stamp beside the ruling is a copy, and a copy
+drifts, which is the reason the unanswered node gave for deriving the status.
+
+#### a-fourth-response-defer
+
+The alignment page offers a fourth response, defer, beside confirm, refine and
+kick back. It was passed over because deferred is a choice on the authority
+fact and the three responses stand.
+
+#### a-timestamp-as-the-pin
+
+The pin on a recommendation is a timestamp rather than a hash of its content.
+It was passed over because content is what changes: a clock cannot tell a
+recommendation re-affirmed from one changed, and the record pins by hash
+everywhere else.
+
+#### report-and-wait-on-a-divergence
+
+A divergence found in reconciliation is reported and held on a derived
+frontier until an alignment session transcribes it. It was passed over because
+it holds a decision outside the record, where an option is in the record at
+once and changes nothing the author confirmed.
+
+#### delegated-node-returned-on-every-move
+
+A delegated node returns to the alignment frontier on every moved
+recommendation, which is what the evaluation node's rule did. It was passed
+over because it un-delegates; the bound that rule wanted is the delegation's
+scope, and a move beyond it does return the node.
+
+#### re-confirmation-from-the-periagogic
+
+Re-confirmation of a proposal opens at the periagogic movement in every case.
+It was passed over because the recording node's classification already says
+where a dialogue resumes, and where only the recommendation moved that is the
+review stage.
+
+#### options-folded-into-the-rationale
+
+The options are folded into the rationale as prose when the recording removes
+the dialogue. It was passed over because the author found the prose ad hoc,
+and the structure is what the regression purpose needs.
+
+#### keep-every-option-ever-recorded
+
+Every option ever recorded stays on the fact whether or not the AI holds it
+viable. It was passed over because the list would grow without a reason and
+version control holds what left.
+
 ### authority
 
 Ratified. The answer redefines what authority is in this record and opens a

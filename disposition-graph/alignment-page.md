@@ -7,6 +7,8 @@ facts:
       - name: three-column-ruling-screen
         source: ai
         ref: "2026-09-04"
+        status: passed
+        reason: dominated by the author's words of 2026-09-04, which strike the fold it carries
       - name: stage-counts-kept
         source: ai
         ref: "2026-09-04"

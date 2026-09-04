@@ -88,7 +88,7 @@ As a disposition graph, which you read from the purpose node down and change onl
 
 ## Rationale
 
-This node is the second stop of the onboarding walk, after purpose, and it is written for a reader who needs to use the skill, not for one looking up the schema. Its refinements define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, criteria, readings, the work loop, materialized implementation, transience, and the standing of the legacy record. Rejected: a separate primer node between purpose and this one, because it would answer no question this node does not.
+This node is the second stop of the onboarding walk, after purpose, and it is written for a reader who needs to use the skill, not for one looking up the schema. Its refinements define each part of the record: the node, the edge, authority, growth, projection, persistence, naming, attention, criteria, readings, the work loop, materialized implementation, transience, and the standing of the legacy record.
 ```
 
 ## Account

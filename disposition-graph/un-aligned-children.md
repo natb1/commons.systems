@@ -12,6 +12,16 @@ facts:
       - name: standing
         source: ai
         ref: "2026-09-03"
+      - name: keep-the-rule-and-park-the-reading
+        source: ai
+        ref: "9ff1b0b0"
+        status: passed
+        reason: "it misplaces a reading for the life of the question"
+      - name: keep-the-rule-soften-the-instrument
+        source: ai
+        ref: "9ff1b0b0"
+        status: passed
+        reason: "it leaves a struck inference standing in the record as a rule nobody enforces"
     recommends: standing
     boldness: low
     stands: standing
@@ -43,7 +53,24 @@ The rule struck here was an inference from a premise the author denies. `transie
 
 Two further facts made the rule weaker than it looked. It keyed on the absence of an `## Answer` section rather than on the unanswered status, so nodes carrying a deferred answer — every stamped node in this graph — could already have children; the author's model was already the record's model everywhere but this one shape. And the rule was enforced by a machine check that hard-failed, which gave a deferred answer the force of a ratified one and removed in practice the overrule `evaluation` grants in principle; that instrument is removed on the implementation ref in the same landing.
 
-Rejected: keeping the rule and requiring a reading owed to an open question to be parked on the question's parent, which is what happened to `npm-committed-lockfile` on 2026-09-03 and which misplaces a reading for the life of the question. Rejected: keeping the rule but softening the instrument to a warning, which leaves a struck inference standing in the record as a rule nobody enforces. Not decided here, and left open on `instruments`, an alternative for its dialogue: whether a machine check should ever hard-fail an answer that is not ratified.
+Not decided here, and left open on `instruments`, an alternative for its dialogue: whether a machine check should ever hard-fail an answer that is not ratified.
+
+## Facts
+
+### answer
+
+#### keep-the-rule-and-park-the-reading
+
+The no-children rule stands, and a reading owed to an open question is parked
+on the question's parent. It was passed over because it misplaces a reading
+for the life of the question, which is what happened to
+`npm-committed-lockfile` on 2026-09-03.
+
+#### keep-the-rule-soften-the-instrument
+
+The no-children rule stands and its machine check is softened from a hard
+failure to a warning. It was passed over because it leaves a struck inference
+standing in the record as a rule nobody enforces.
 
 ## Account
 

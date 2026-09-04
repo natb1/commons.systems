@@ -24,6 +24,16 @@ facts:
       - name: order-names-self-documentation
         source: ai
         ref: "2026-09-03"
+      - name: order-as-sibling-order
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "it would make the tree carry priority, the conflation the attention node rejects"
+      - name: boosts-as-the-only-record
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "that is the drift this disposition guards against"
     recommends: standing
     boldness: moderate
     stands: standing
@@ -79,7 +89,7 @@ Why this order. Each section is what the next depends on, for a reader and for t
 
 The boosts of 2026-09-03 realize the order: this node 9 under purpose, above model's 8, so that it is the first thing after purpose; projection 5, growth 4, the work loop 3, and rsi 1 under model; session-context 6 under projection, raised from 2, because at 2 its rank fell below the work loop's, harness context management ranking after reconciliation against the author's order of the same day. That is the drift this disposition guards against, present in the record within a day of the boosts being set by hand. The equality of this node and projection cannot be exact, since projection's rank is a share of model's and this node's a share of purpose's; it is realized as each being outranked by nothing but its own ancestors. Whether self-documentation is a node of its own under purpose, equal to this one by construction, is the self-documentation node's open question.
 
-How high-level rank is materialized from this node, the recommendation. The order is recorded on this node as data, the field `order`, an ordered list of steps, each step one node or several that are equal, and the validator refuses a graph whose derived ranks do not realize it: every member of a step outranks every member of every later step, and the members of the first step are outranked by nothing under this node's parent but their own ancestors and descendants. The boosts remain the one mechanism of rank and the frontier and browser keep showing them; the order is recorded once; and since every landing on the graph is validated first, a boost that contradicts the order cannot land, which is what avoiding drift requires. This is the way the record already keeps its other invariants that span nodes, acyclicity and resolved parents. Considered and not recommended: deriving the boosts of the named nodes from the order, which needs a solver that must lift ancestors to lift a descendant, cannot make ranks at different depths equal, and fails in exactly the cases the validation rule reports, while hiding the boosts the projections display; a check instrument on this node, since an instrument measures the implementation against the record and turns a failure into work for the reconciliation loop, whereas an order the ranks contradict is an inconsistency of the record that must not land at all; moving the ordered nodes under this one so that the order becomes sibling order, which would make the tree carry priority, the conflation the attention node rejects; and leaving the boosts as the only record, which is the drift. This node defines the field, and the validator has held the ranks to it since 2026-09-03; the hand-set boosts declared as a shim that day were liquidated the same day.
+How high-level rank is materialized from this node, the recommendation. The order is recorded on this node as data, the field `order`, an ordered list of steps, each step one node or several that are equal, and the validator refuses a graph whose derived ranks do not realize it: every member of a step outranks every member of every later step, and the members of the first step are outranked by nothing under this node's parent but their own ancestors and descendants. The boosts remain the one mechanism of rank and the frontier and browser keep showing them; the order is recorded once; and since every landing on the graph is validated first, a boost that contradicts the order cannot land, which is what avoiding drift requires. This is the way the record already keeps its other invariants that span nodes, acyclicity and resolved parents. This node defines the field, and the validator has held the ranks to it since 2026-09-03; the hand-set boosts declared as a shim that day were liquidated the same day.
 
 ## Facts
 
@@ -100,6 +110,19 @@ The vocabulary finding makes instruments the survivor of criterion and holds tha
 #### order-names-self-documentation
 
 Scope's order field substitutes the projection node for the author's own item, self documentation via the graph browser, and its validator rule materializes that substitution. If self-documentation becomes a node of its own the first step of the order must name it instead, so the alternative is that scope's answer say the mapping stands only until self-documentation is ruled, and that the substitution is the one item the AI changed in the author's list. (Raised on commons.systems/disposition-graph/self-documentation.)
+
+#### order-as-sibling-order
+
+The ordered nodes move under this one so that the recorded order becomes
+sibling order. It was passed over because it would make the tree carry
+priority, which is the conflation the attention node rejects.
+
+#### boosts-as-the-only-record
+
+The hand-set boosts stay the only record of the high-level order, with nothing
+holding them to it. It was passed over because that is the drift this
+disposition guards against, found in the record within a day of the boosts
+being set.
 
 ## Account
 

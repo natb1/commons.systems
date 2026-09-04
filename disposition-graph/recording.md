@@ -42,6 +42,21 @@ facts:
       - name: denial-typed-to-maieutic
         source: commons.systems/disposition-graph/alignment-page
         ref: "2026-09-04"
+      - name: fixed-checklist-as-the-brief
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "the findings that matter are the ones no list anticipated"
+      - name: steelman-on-every-item
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "a manufactured objection is paper doubt and costs the author's attention"
+      - name: the-incumbents-review-mechanics
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "they were built for a record with phases and tactics, which this record does not have"
     recommends: options-persist-at-the-recording
     boldness: moderate
     stands: options-persist-at-the-recording
@@ -73,7 +88,7 @@ In three steps after the maieutic stage, the first before the author sees the re
 
 The author's disposition of 2026-09-03: "incumbent graph describes subagent, clean context adversarial review of all dispositions just prior to recording. Record this disposition (do not copy it verbatim, you are not bound by the incumbent, evaluate greenfield and write from scratch) and reconcile the alignment shim. ... It occurs at the granularity of the disposition - adversarial review should batch author confirmed dispositions, but dispositions unvalidated by adversarial review must not block validated dispositions. Instead, adversarial review may recommend to the main alignment thread kicking a disposition back to periogoge, maietic or author confirmation with additional context and edits." Amended the same day: "Change of adversarial review disposition: adversarial review happens after maieutic, before confirmation. This way the author can review any steelman counter argument as a standard part of confirmation review, and why AI thinks the disposition stands regardless (but steelman argument is optional, if adversarial review returns no strong counter argument)". And on the response: "Dispositions not validated verbatim during author confirmation using the alignment artifact follow a similar kickback analysis by the alignment skill. Based on author input on unconfirmed dispositions kick back to either periogogue (if there seems to be fundamental misunderstanding on author's part), miaeutic (if there is ambiguity and fundamental understanding on AI part) or just update the unanswered disposition with refinements to re-attempt confirmation (most likely case)."
 
-Why a second reader with no context: the session that ran the dialogue shares the author's framing and its own, and the defects that survive a dialogue are the ones both parties stopped seeing, a ruling paraphrased rather than quoted, a contradiction with a node neither re-read, a sentence that reads one way to the two of them and another way to an executor. A reader given only the record sees what the record says. Why before the confirmation: the author rules better with the strongest case against in front of them, and a review after confirmation would either second-guess a ruling or review a draft the author has not yet seen changed. Why per disposition and non-blocking: the reviews of a round are invoked together, but each reviewer reads for itself, since a shared reading carries one node's framing into the next, and a verdict that held one disposition hostage to another would turn the review into a gate. The author, 2026-09-03, on the review as a skill with a context per node, is quoted on the clean-context-review node; until that day the reviews of a round ran in one context, and the batch sentence above was amended at the author's ruling. Why the reviewer recommends and never writes: authority attenuates and nothing writes up; the session holds the dialogue and answers for the record. Rejected: a fixed checklist as the reviewer's brief, because the findings that matter are the ones no list anticipated, so the brief states what the review judges and leaves how to the reviewer; a steelman on every item whether or not one was found, because a manufactured objection is paper doubt and costs the author's attention; the incumbent's mechanics, its gate script and its workflow, because they were built for a record with phases and tactics, which this record does not have.
+Why a second reader with no context: the session that ran the dialogue shares the author's framing and its own, and the defects that survive a dialogue are the ones both parties stopped seeing, a ruling paraphrased rather than quoted, a contradiction with a node neither re-read, a sentence that reads one way to the two of them and another way to an executor. A reader given only the record sees what the record says. Why before the confirmation: the author rules better with the strongest case against in front of them, and a review after confirmation would either second-guess a ruling or review a draft the author has not yet seen changed. Why per disposition and non-blocking: the reviews of a round are invoked together, but each reviewer reads for itself, since a shared reading carries one node's framing into the next, and a verdict that held one disposition hostage to another would turn the review into a gate. The author, 2026-09-03, on the review as a skill with a context per node, is quoted on the clean-context-review node; until that day the reviews of a round ran in one context, and the batch sentence above was amended at the author's ruling. Why the reviewer recommends and never writes: authority attenuates and nothing writes up; the session holds the dialogue and answers for the record.
 
 Traditions, owed as readings: the office of the promotor fidei (Sixtus V, 1587; reformed 1983), adopted for a standing adversary to every candidate and diverged from in that the adversary here cannot stall, only send back or object on the record; blinded peer review, adopted for the independence of the reader's context; the four-eyes principle of financial control, adopted for a second reader before every write to the record; Peirce on paper doubt, adopted for the optional steelman. The evaluation node's rule that adversarial review of one's own output is part of producing it still holds; this node adds the reader who did not produce it.
 
@@ -142,6 +157,25 @@ itself is at issue is still classified further back by this node's rule.
 words of 2026-09-04 recorded there: "Last option is always 'kick back' because
 none of the options are acceptable - this is not recorded as confirmation, but
 a kick back to mieutic.")
+
+#### fixed-checklist-as-the-brief
+
+The reviewer's brief is a fixed checklist. It was passed over because the
+findings that matter are the ones no list anticipated, so the brief states
+what the review judges and leaves how to the reviewer.
+
+#### steelman-on-every-item
+
+The review returns a steelman on every item whether or not it found one. It
+was passed over because a manufactured objection is paper doubt and costs the
+author's attention.
+
+#### the-incumbents-review-mechanics
+
+The incumbent's review mechanics, its gate script and its workflow, are
+carried over. They were passed over because they were built for a record with
+phases and tactics, which this record does not have.
+
 ## Account
 
 ### Recording of 2026-09-03

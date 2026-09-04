@@ -64,7 +64,7 @@ None today. The purpose node stands unguarded, and the record says so on its pag
 
 ## Rationale
 
-Unguarded is a legible state the record announces rather than a defect it hides, so an honest absence is worth more than a check against a mechanism the implementation does not have and an assessment with no failure condition. Purpose ranks first, so a criterion that could only fail spuriously would put a false frontier item at the top of every ranked list, ahead of the work that would build the harness the check assumes. Rejected: the check and the assessment as drafted, because neither could guard anything today and because their stated authority, deferred, cannot stand beside purpose's ratified stamp on a node that carries one stamp. The author's words behind this question were a question of their own, whether every disposition has instrumentation or criteria or something like that, and not a direction that the purpose node must carry criteria before the harness they would check exists.
+Unguarded is a legible state the record announces rather than a defect it hides, so an honest absence is worth more than a check against a mechanism the implementation does not have and an assessment with no failure condition. Purpose ranks first, so a criterion that could only fail spuriously would put a false frontier item at the top of every ranked list, ahead of the work that would build the harness the check assumes. The author's words behind this question were a question of their own, whether every disposition has instrumentation or criteria or something like that, and not a direction that the purpose node must carry criteria before the harness they would check exists.
 ```
 
 ## Account

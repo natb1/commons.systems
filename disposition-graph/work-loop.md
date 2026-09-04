@@ -24,6 +24,16 @@ facts:
       - name: reconciliation-writes-options
         source: author
         ref: "2026-09-04"
+      - name: a-stored-bite-list
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "the transience node forbids it"
+      - name: a-worktree-of-the-shims-own
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "its landings go straight to the ref and a worktree would only add a merge"
     recommends: reconciliation-writes-options
     boldness: moderate
     stands: reconciliation-writes-options
@@ -87,7 +97,7 @@ The author's ruling of 2026-09-02 that reconciliation must run from disposition 
 
 The author, 2026-09-03, on bootstrap operations: "I will check out the greenfield ref at repo root and launch a new session to act as the reconciliation shim. Ideally, the reconciliation shim instructions are well defined enough to run with sonnet, but recommend the model this shim must run as. Does any work need to be done to prepare for this - for example to prepare the shim to be run as sonnet. Encode the shim as a skill with the recommended model so that I can initialize a session to act as the reconciliation shim by invoking that skill. The shim will iteratively bite work from the frontier in rank order for reconciliation. i.e. purpose/browser artifact (browser artifact may need new high ranking disposition) -> alignment skill -> the rest of the context management for the harness (CLAUDE.md, rules, CLAUDE.local.md per worktree) -> the non-shim reconciliation harness (codified reconciliation orchestrator, skills for each bite type). Non-shim bites will progress materialized artifacts (code, skills, rules etc.) through implementation, functional validation, non-functional validation, merge and qa on main (implicitly using reconciliation of signals/instruments/criteria, not with explicit phases of the incumbent dispatcher). Shim-reconciliation will skip functional and non-function and qa on main validation and batch all validation as bootstrap/shim exit criteria." And: "Alignment will continue in a new session(s) on the greenfield checkout via `/align` and pasting of output from alignment artifact."
 
-Evaluated adversarially before recording, 2026-09-03. One rank, two orders: the record had one rank serving onboarding, and reconciliation in rank order needs the same rank to serve the author's bite order; the boosts now transcribe that order (attention), and a walk that meets projection before growth costs onboarding nothing. A browser node is not needed for rank, since a child's rank is a share of its parent's: the browser bite ranks first through projection's boost, and the browser node is owed by projection's own shim at its sitting. Batching validation to exit lets defects surface late; the mitigation is that tests and use still gate every landing, that the exit list is the liquidation condition of a declared shim, derived onto the frontier and never a checklist, and that the alignment sessions exercise the alignment skill every day it is used. Two sessions on one checkout: the graph and the implementation are separate refs with separate worktrees and indexes, so an alignment session and a reconciliation session collide only when both write the graph, which the reconciliation session does for one file at a time, committed by pathspec and pushed at once. On the model: selecting a bite and writing its unit's contract from prose criteria is judgment, so the shim runs on the larger model and its units on the smaller until every frontier node carries an executable check and each kind of bite has a skill, the last bite in the author's order; a skill's model field holds only for the turn that invokes it, and the loop runs within that turn. Rejected: a stored bite list or plan for the shim, forbidden by the transience node; a worktree of the shim's own, because its landings go straight to the ref and a worktree would only add a merge. The derivation of unsupported artifacts onto the frontier, the second direction, is not yet materialized; until it is, the coverage node's survey is the list, and the swap waits on the coverage ruling, as materialization's shim says.
+Evaluated adversarially before recording, 2026-09-03. One rank, two orders: the record had one rank serving onboarding, and reconciliation in rank order needs the same rank to serve the author's bite order; the boosts now transcribe that order (attention), and a walk that meets projection before growth costs onboarding nothing. A browser node is not needed for rank, since a child's rank is a share of its parent's: the browser bite ranks first through projection's boost, and the browser node is owed by projection's own shim at its sitting. Batching validation to exit lets defects surface late; the mitigation is that tests and use still gate every landing, that the exit list is the liquidation condition of a declared shim, derived onto the frontier and never a checklist, and that the alignment sessions exercise the alignment skill every day it is used. Two sessions on one checkout: the graph and the implementation are separate refs with separate worktrees and indexes, so an alignment session and a reconciliation session collide only when both write the graph, which the reconciliation session does for one file at a time, committed by pathspec and pushed at once. On the model: selecting a bite and writing its unit's contract from prose criteria is judgment, so the shim runs on the larger model and its units on the smaller until every frontier node carries an executable check and each kind of bite has a skill, the last bite in the author's order; a skill's model field holds only for the turn that invokes it, and the loop runs within that turn. The derivation of unsupported artifacts onto the frontier, the second direction, is not yet materialized; until it is, the coverage node's survey is the list, and the swap waits on the coverage ruling, as materialization's shim says.
 
 Amended 2026-09-04 under the author's bootstrap grant of that day, from the author's words quoted above amending their ruling of 2026-09-03. The line falls between operational state, which stays outside the graph, and decision state, an option found viable and a recommendation moved, which goes in: a divergence held on a derived frontier until an alignment session transcribes it is a decision outside the record, and as an option it is in the record at once, changes nothing the author confirmed, and returns a ratified node to the author by the same projection that returns any moved recommendation. The attenuation is the class: what a move does is read from it, and a subagent never writes a node. The answer as it stood is kept as the option `never-writes-the-graph`, and the review of this text is owed.
 
@@ -114,6 +124,18 @@ The answer's phrase, each stage a reconciliation of the criteria the node carrie
 #### reconciliation-writes-options
 
 The sentence that a reconciliation session never writes the graph is incomplete, by the author's words of 2026-09-04 amending their ruling of 2026-09-03 quoted above: operational state stays outside the graph, and decision state goes in. A reconciliation session may record a viable option on a fact and move its recommendation, within the node's scope, and may never rule, edit a ruling, or edit the author's words. A divergence that needs the author is then recorded as an option on the node it conflicts with, which is what returns a ratified node to the author, and the path on which it is reported and stays on the derived frontier until alignment records it goes. The open question of reconciliation's own state between invocations is unchanged. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
+
+#### a-stored-bite-list
+
+The reconciliation shim keeps a stored list of bites, or a plan, between
+invocations. It was passed over because the transience node forbids storing
+operational state on the record.
+
+#### a-worktree-of-the-shims-own
+
+The reconciliation session works in a worktree of its own. It was passed over
+because its landings go straight to the ref, so a worktree would only add a
+merge.
 
 ## Account
 

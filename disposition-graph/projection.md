@@ -36,6 +36,21 @@ facts:
       - name: shim-carries-framed-viewer
         source: review
         ref: "2026-09-03"
+      - name: a-how-to-read-page-in-the-browser
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "hand-written orientation drifts, and the onboarding walk is the orientation"
+      - name: a-vocabulary-page-in-the-browser
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "hand-written vocabulary drifts, and the nodes that define the terms are the vocabulary"
+      - name: a-rejected-alternatives-section-apart
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "what was rejected is part of how the answer came to stand"
     recommends: draft
     boldness: moderate
     stands: standing
@@ -126,6 +141,24 @@ If the mapping stands, projection is the self-documentation section of the autho
 
 Projection's browser shim gains the framed viewer's divergence in its liquidation condition: until the browser is published from the implementation ref, the page keeps the reader's place itself and shows the address of the node in view. The finding is that this stand-in currently lives as a clause in web-routing's answer, where the frontier cannot read it, and the parent's shim is where transience puts a stand-in for an unmade materialization. (Raised on commons.systems/disposition-graph/web-routing.)
 
+#### a-how-to-read-page-in-the-browser
+
+The browser carries a how-to-read page of its own. It was passed over because
+the browser must carry nothing the graph does not: hand-written orientation
+drifts, and the onboarding walk is the orientation.
+
+#### a-vocabulary-page-in-the-browser
+
+The browser carries a vocabulary page of its own. It was passed over because
+the browser must carry nothing the graph does not: hand-written vocabulary
+drifts, and the nodes that define the terms are the vocabulary.
+
+#### a-rejected-alternatives-section-apart
+
+The browser shows the rejected alternatives in a section apart from authority.
+It was passed over because what was rejected is part of how the answer came to
+stand.
+
 ## Recommendation
 
 ```markdown
@@ -149,7 +182,7 @@ Through projections, never by opening node files, except in alignment sessions. 
 
 ## Rationale
 
-The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree, and of the same date that the browser must carry nothing the graph does not, since hand-written orientation and vocabulary drift and the onboarding walk is the orientation. Rejected: a how-to-read page and a vocabulary page in the browser; a rejected-alternatives section apart from authority, because what was rejected is part of how the answer came to stand.
+The author's ruling of 2026-09-02 that bite sessions read projections, not the worktree, and of the same date that the browser must carry nothing the graph does not, since hand-written orientation and vocabulary drift and the onboarding walk is the orientation.
 ```
 
 ## Account

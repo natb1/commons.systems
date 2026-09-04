@@ -71,7 +71,7 @@ Yes. The purpose answer states the hexis claim first and glosses it with the sto
 
 ## Rationale
 
-Hexis names the settled state, and this record is a projection of that state, so leading with the store would put the container before the claim it holds and make the gloss the assertion. The apposition answers the onboarding cost of a Greek term in the first paragraph a newcomer reads: the sentence teaches the word where it stands, and the knowledge-store node defines it so the browser can link it. Rejected: the knowledge store first, as the page had it, because it states the container as the claim and demotes the state to a qualifier, which is the reverse of what the reading supports. The ground is Aristotle, Nicomachean Ethics II.5, read by the AI and not yet by the author, which is why the reading under this wording is delegated while the wording itself is ratified.
+Hexis names the settled state, and this record is a projection of that state, so leading with the store would put the container before the claim it holds and make the gloss the assertion. The apposition answers the onboarding cost of a Greek term in the first paragraph a newcomer reads: the sentence teaches the word where it stands, and the knowledge-store node defines it so the browser can link it. The ground is Aristotle, Nicomachean Ethics II.5, read by the AI and not yet by the author, which is why the reading under this wording is delegated while the wording itself is ratified.
 ```
 
 ## Account

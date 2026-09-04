@@ -18,6 +18,16 @@ facts:
       - name: authors-own-arche
         source: review
         ref: "2026-09-03"
+      - name: detachment-as-retention
+        source: ai
+        ref: "1920badc"
+        status: passed
+        reason: "it measures the wrong thing: dependence is fine, unrecoverable dependence is capture"
+      - name: forced-detachment
+        source: ai
+        ref: "1920badc"
+        status: passed
+        reason: "it is dogma, and dogma needs power to maintain"
     stands: standing
   - name: authority
     options:
@@ -46,11 +56,6 @@ The word chosen for this node is agency, the state of being that origin. Authors
 
 The modal content is the point: capacity, not exercise. Being unable to recover is capture even if the delegatee never misbehaves; freedom is the capability to act, not the acting; exit and voice are the two recovery moves.
 
-### Rejected
-
-- *Detachment as retention* ("how detached am I?"): measures the wrong thing. Dependence is fine; unrecoverable dependence is capture.
-- *Forced detachment*: dogma, and dogma needs power to maintain.
-
 Stub note: drafted by the AI under the bootstrap grant from the author's rulings of 2026-09-02 and the author's own legacy text. Deferred until the author ratifies it. Pending readings to add under this node: Sen on capability, Hirschman on exit and voice, Korsgaard on authorship.
 
 ## Facts
@@ -64,6 +69,17 @@ The review's strongest counter-argument is that the answer's 'capacity, not exer
 #### authors-own-arche
 
 Agency is at the periagogic stage after a kickback with no Disposition section and no author words anywhere, and its answer is written in the author's first person by the AI, while every node at the review or ruling stage descends from it. The finding proposes nothing be ruled before the author's own account of who is the origin of what is done in their name is in the record, the next sitting being a periagogic one on agency whose product is a Disposition section in the author's words, after which the two readings under it are re-read. (Raised on commons.systems/public/pettit-non-domination.)
+
+#### detachment-as-retention
+
+The archē is read as detachment, asking how detached the person is. It was
+passed over because it measures the wrong thing: dependence is fine, and it is
+unrecoverable dependence that is capture.
+
+#### forced-detachment
+
+The archē requires detachment from delegated instruments. It was passed over
+as dogma, and dogma needs power to maintain.
 
 ## Account
 

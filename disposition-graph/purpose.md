@@ -30,6 +30,26 @@ facts:
       - name: keep-the-authors-words
         source: review
         ref: "2026-09-03"
+      - name: define-by-its-parts
+        source: author
+        ref: "1920badc"
+        status: passed
+        reason: "it is scope and not purpose: it says what is here, not why"
+      - name: intent-in-prompts-chat-or-memory
+        source: author
+        ref: "1920badc"
+        status: passed
+        reason: "not durable, not reviewable, not rankable; it is the tacit form this record replaces"
+      - name: issue-trackers-as-the-record-of-intent
+        source: author
+        ref: "1920badc"
+        status: passed
+        reason: "they record work, not dispositions, and cannot carry authority or rank"
+      - name: data-structure-the-harness-consumes
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "it makes the harness the origin"
     recommends: draft
     boldness: moderate
     stands: standing
@@ -85,14 +105,6 @@ Why it matters leads up to the archē this node refines. Delegating work to auto
 
 "Spec-driven development" and "software factories" are the audience's own vocabulary; each is a reading under this node, validated against its tradition and marked where this repository diverges.
 
-### Rejected
-
-Drafted by the AI from the record, for the author to confirm or strike at ratification.
-
-- *Defining the repository by its parts.* The incumbent README describes a data structure plus a harness. That is scope, not purpose: it says what is here, not why.
-- *Intent carried in prompts, chat, or memory.* Not durable, not reviewable, not rankable; it is the tacit form this repository exists to replace.
-- *Issue trackers as the record of intent.* Tried here at length; they record work, not dispositions, and cannot carry authority or rank.
-
 ## Facts
 
 ### answer
@@ -121,6 +133,31 @@ The same finding names purpose's draft, which uses criterion and the criteria fr
 
 Purpose's recommended text keeps a '## Disposition' section rather than dropping all nine dated quotations, and its account names for each quotation either the sentence of the answer that absorbs it or the node it moves to. Verified that the fence carries no author quotation of any date and that two of the three quotations answered elsewhere — the form question and the tradition instruction — have no '## Disposition' section on their target nodes to move into. It is on the table because quotes' recommended answer permits only a roll-up of what the answer absorbed, quotes is unruled, and this would be the first and largest application of a rule whose shape no node describes; the author may equally rule that the record's highest-ranked page should carry the answer alone, with version control holding the words.
 
+#### define-by-its-parts
+
+The repository is defined by its parts, a data structure plus a harness, as
+the incumbent README describes it. It was passed over because that is scope
+and not purpose: it says what is here, not why.
+
+#### intent-in-prompts-chat-or-memory
+
+Intent is carried in prompts, chat, or memory rather than in a record. It was
+passed over because it is not durable, not reviewable and not rankable: it is
+the tacit form this repository exists to replace.
+
+#### issue-trackers-as-the-record-of-intent
+
+Issue trackers are the record of intent, which was tried here at length. It
+was passed over because they record work and not dispositions, and cannot
+carry authority or rank; the scrum-like workflows on them are designed for a
+different requirement.
+
+#### data-structure-the-harness-consumes
+
+The strongest form of the incumbent's framing: the graph is a data structure
+the harness consumes. It was passed over because it makes the harness the
+origin, which is what the arche under this node forbids.
+
 ## Recommendation
 
 ```markdown
@@ -139,8 +176,6 @@ Two further functions are hypotheses, recorded under this node as hypotheses: th
 ## Rationale
 
 Why it matters leads up to the archē this node refines. Delegating work to autonomous tools is expected and good; it buys attention at the level where intent is set. What must not be lost is the person's standing as the origin of what is done in their name, and the capacity to notice capture and recover. A record of intent that the tools act under, and that the person can read, amend, and rank, is how the origin stays with the person while the tools work. The graph and the harness both serve this purpose, and the graph gives disposition for both.
-
-Rejected: defining the repository by its parts, a data structure plus a harness, which is scope and not purpose; intent carried in prompts, chat, or memory, which is not durable, reviewable, or rankable, and is the tacit form this record replaces; issue trackers as the record of intent, which with the scrum-like workflows that operate on them are designed for humans with different requirements that do not fit this purpose; and the strongest form of the incumbent's framing, a graph that is a data structure the harness consumes, because it makes the harness the origin.
 ```
 
 ## Account

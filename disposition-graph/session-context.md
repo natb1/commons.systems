@@ -24,6 +24,16 @@ facts:
       - name: shim-names-an-existing-artifact
         source: review
         ref: "2026-09-03"
+      - name: delete-claude-md
+        source: ai
+        ref: "d078c119"
+        status: passed
+        reason: "the arriving-session function is real for the audience and costs one projected page"
+      - name: operating-rules-in-claude-md
+        source: ai
+        ref: "d078c119"
+        status: passed
+        reason: "the projector cannot see them there"
     recommends: standing
     boldness: low
     stands: standing
@@ -63,7 +73,7 @@ From three projections and nothing else. Rules, one file per global-tier node un
 
 ## Rationale
 
-The author's ruling of 2026-09-02 that `CLAUDE.md` must be justified and materialized by disposition like rules and `CLAUDE.local.md`, with the question whether it serves any function rules do not. Evaluated against the harness: rules and `CLAUDE.md` are both always-loaded instructions; rules are scoped to the project root and may be scoped to paths, `CLAUDE.md` is scoped to the working directory and its ancestors and may import files; skills load on invocation; memory is private to one account and one path, so it can carry nothing the record needs. The functions that had accumulated in the bootstrap `CLAUDE.md` map as follows: the token-efficiency rule and the loop to the growth node and the skill; the code-review recipe to the review node's instrument; environment traps to evidence on the node whose instrument they qualify; the round log and the decisions list to git history. Rejected: deleting `CLAUDE.md` outright, because the arriving-session function is real for the audience and costs one projected page; keeping operating rules in it, because the projector cannot see them there. Traditions to record as readings: the Unix `README` and `INSTALL` convention, adopted, orientation kept apart from rules; twelve-factor configuration, one home per fact, adopted. The exit conditions this shim carried until 2026-09-03 are the liquidation condition of the reconciliation shim on the work-loop node, where the bootstrap operations now live.
+The author's ruling of 2026-09-02 that `CLAUDE.md` must be justified and materialized by disposition like rules and `CLAUDE.local.md`, with the question whether it serves any function rules do not. Evaluated against the harness: rules and `CLAUDE.md` are both always-loaded instructions; rules are scoped to the project root and may be scoped to paths, `CLAUDE.md` is scoped to the working directory and its ancestors and may import files; skills load on invocation; memory is private to one account and one path, so it can carry nothing the record needs. The functions that had accumulated in the bootstrap `CLAUDE.md` map as follows: the token-efficiency rule and the loop to the growth node and the skill; the code-review recipe to the review node's instrument; environment traps to evidence on the node whose instrument they qualify; the round log and the decisions list to git history. Traditions to record as readings: the Unix `README` and `INSTALL` convention, adopted, orientation kept apart from rules; twelve-factor configuration, one home per fact, adopted. The exit conditions this shim carried until 2026-09-03 are the liquidation condition of the reconciliation shim on the work-loop node, where the bootstrap operations now live.
 
 ## Facts
 
@@ -84,6 +94,18 @@ Session-context's account carries 'Depends on: ledger-sunset', which names no no
 #### shim-names-an-existing-artifact
 
 The harness-configuration shim names an artifact that exists. Verified on 2026-09-03 that `.claude/settings.json` is in neither the implementation ref nor the author's checkout, so the shim as restated names nothing a reader or the frontier can reach, while `.claude/settings.local.json` is present and gitignored. On this alternative the shim's artifact becomes the settings file that exists, with its exclusion from the ref stated as part of the liquidation condition, and CLAUDE.md's sentence about `worktree.baseRef` is reconciled to whatever file actually carries it. The alternative to it is that the author writes the file the shim names, which changes no text; the choice is the author's because it decides whether the harness configuration is a projected artifact of the record or a fact of the author's machine.
+
+#### delete-claude-md
+
+`CLAUDE.md` is deleted and rules carry everything. It was passed over because
+the arriving-session function is real for the audience and costs one projected
+page.
+
+#### operating-rules-in-claude-md
+
+Operating rules stay in `CLAUDE.md` beside the orientation. It was passed over
+because the projector cannot see them there, so a rule that lives only in that
+page is invisible to review.
 
 ## Account
 

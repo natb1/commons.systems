@@ -33,6 +33,16 @@ facts:
       - name: one-ruling-for-the-word
         source: review
         ref: "2026-09-03"
+      - name: criteria-as-nodes-of-their-own
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "a criterion that needs its own stamp is a question of its own and becomes a node then"
+      - name: a-single-instrument-per-node
+        source: ai
+        ref: "8938e2b7"
+        status: passed
+        reason: "an answer commonly has a check and an assessment"
     recommends: criteria-draft
     boldness: moderate
     stands: standing
@@ -101,6 +111,17 @@ This node and transience both leave the same question open on instruments and ne
 
 Instruments' answer says that its ruling settles the word for every node that uses it, so the four `say-instrument-not-criterion` alternatives now pending on scope, work-loop, transience and purpose are consequences of this ruling rather than four separate ones. Verified that 'criterion' is carried by no node's `defines`, that 'criteria' is not in FRONTMATTER_KEYS, and that three recommendation fences (knowledge-store, capture, node) carry a `criteria:` block the validator's key set would refuse. On this alternative the recording of instruments migrates the four nodes carrying an `instrument:` field, adds 'criterion' and 'unguarded' to `defines`, and adds the schema key, in one landing; it is on the table because the author is otherwise asked the same vocabulary question five times on five pages.
 
+#### criteria-as-nodes-of-their-own
+
+Each criterion is a node of its own rather than a field on the node it guards.
+It was passed over because a criterion that needs its own stamp is a question
+of its own, and becomes a node at that point.
+
+#### a-single-instrument-per-node
+
+A node carries one instrument. It was passed over because an answer commonly
+has both a check and an assessment.
+
 ## Recommendation
 
 ```markdown
@@ -124,7 +145,7 @@ By criteria bound to the answer, and every page shows them or says the answer is
 
 ## Rationale
 
-The author rejected cadence review of first principles on 2026-09-02; the record diverges from the periodic-convention strand and adopts Peirce, for whom inquiry begins with genuine doubt from surprise and manufactured doubt is paper doubt. Assumption moved from the forms to the criteria because it was instrumentation from the start, the condition under which an answer stays valid, and the requirements tradition records domain assumptions beside the specification for the same reason. Rejected: criteria as nodes of their own, because a criterion that needs its own stamp is a question of its own and becomes a node then; a single instrument per node, because an answer commonly has a check and an assessment. Open: whether a delegated stamp itself sunsets.
+The author rejected cadence review of first principles on 2026-09-02; the record diverges from the periodic-convention strand and adopts Peirce, for whom inquiry begins with genuine doubt from surprise and manufactured doubt is paper doubt. Assumption moved from the forms to the criteria because it was instrumentation from the start, the condition under which an answer stays valid, and the requirements tradition records domain assumptions beside the specification for the same reason. Open: whether a delegated stamp itself sunsets.
 ```
 
 ## Account
