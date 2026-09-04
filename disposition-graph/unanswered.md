@@ -335,3 +335,27 @@ whose answer the description would leave with nowhere to go, and on
 `dialogue#aspects-are-nodes`, without which the reserved facts do not exist.
 
 Not reviewed. The clean-context review is owed on this and on the batch.
+
+### Where the page contradicted this node, 2026-09-04
+
+The author read `commons.systems/public/agency` on the published page and
+found it offering, as the first choice on the graph's root question, "standing
+(the node as it stands)" — on a node they have never answered. The four
+findings are recorded on `commons.systems/disposition-graph/alignment-page`,
+whose question the page is.
+
+Recorded here because the first of them is this node's answer violated in
+implementation and nowhere else. This node says every node is unanswered until
+the author confirms it, and `authority` says a deferred answer is unanswered
+until the author rules; the author's ruling of 2026-09-03 reclassified every
+deferred answer in the record on exactly that ground. The projector then tested
+for a stamp of any class and called the result "standing", so on 33 of the 72
+staged nodes the page told the author a confirmation would ratify the node "as
+it stands" when no node in the record is ratified at all.
+
+Nothing in this node's answer or its recommendation changes. The evidence runs
+the other way: the rule was right, was not projected, and the page reintroduced
+the distinction the author's ruling had just collapsed. It is worth one line
+because it is the second time this shape has appeared — a doctrine that holds
+in the graph and lapses in the artifact projected from it — and the answer to
+it is projection, not more doctrine.
