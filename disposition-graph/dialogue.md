@@ -257,6 +257,10 @@ Two things the landing leaves as they are, for the author's sight. Twenty-six no
 
 The implementation landing that follows names this grant and the graph commit: the reader, validator, and hashing to the encoding; the projector, the alignment page, and the browser to the projections this node's answer describes; the alignment and reconciliation skills to the encoding and the narrowed sense of proposal; the adversarial review skill to the batch scope, the fifteenth validation, and the renamed sections; the tests of each. The rules are regenerated, since authority is global-tier, and both pages republished. Then the clean-context review on the batch. The alignment-order sitting still waits behind.
 
+### The grant discharged, 2026-09-03
+
+Every step above is landed: the re-encoding at 9e3a6624 and ec825043, the implementation at d96ef200 on the implementation ref, the rules regenerated, both pages republished, and the clean-context review of the batch at ae89292b, thirty-six nodes forwarded to the ruling stage and rejected kicked back to the maieutic stage, with the review's findings and the session's replies on the nodes they name. The bootstrap grant on this node is spent with this landing; the alignment-order sitting, and the author's rulings on the alignment page, come next.
+
 ### Clean-context review, 2026-09-03
 
 Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
