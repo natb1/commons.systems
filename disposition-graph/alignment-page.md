@@ -85,6 +85,13 @@ The author, 2026-09-04, granting bootstrap authority for this sitting's reconcil
 
 > Bootstrap authority granted to reconcile the alignment-page sitting
 
+The author, 2026-09-04, refining the answer after reading the page:
+
+> refinement to the alignment artifact disposition:
+>
+> - the right aligned context is ONLY the rendered disposition. everything else goes in the center "what it asks" area. This include "What a ruling here makes decidable (3)" and "Your ruling on the whole" which supercedes prior disposition.
+> - I'm looking at "commons.systems/public/agency". It's not clear what question is being asked and what the options are. It only says "what this ruling asks" and then lists what appear to be ids of some kind, and then "standing (the node as it stands)". I don't understand what "standing" would even refer to. This node has not yet been answered, there is no ground to confirm as standing. Is this a result of sparse alignment state written before current disposition for unanswered nodes? Or, does this suggest more structural issues?
+
 ## Alternatives
 
 ### three-column-ruling-screen
@@ -781,3 +788,64 @@ stamped nothing. Every recommendation from this sitting is still
 unanswered, and the clean-context review of the batch has not run. The grant
 is spent with this landing.
 
+
+### What `agency` renders, and why, 2026-09-04
+
+The author read `commons.systems/public/agency` on the published page and
+found the middle column unreadable: the ask names no question, the choices
+read as ids, and the first choice, `standing`, offers to confirm ground the
+author says does not exist. They asked whether this is sparse dialogue state
+left from before the current disposition, or something structural.
+
+It is structural, and none of it is left over. Agency's state is unusually
+full, not sparse: two alternatives sourced to the clean-context review with
+prose on each, a kickback verdict, and four account sections. The page renders
+it badly for four reasons, each of them current.
+
+**The word `standing` claims an authority no node on this page has.**
+`renderPane` computes `stamped` as `n.authority !== null`, and the caption it
+picks from that reads "Confirm ratifies the node as it stands. Nothing else is
+proposed." But `authority` says a deferred answer is unanswered until the
+author rules, and the author's ruling of 2026-09-03 on `unanswered`
+reclassified every deferred answer in the record. Measured against the graph at
+`49329b42`: of 72 nodes carrying a stage, **none is ratified**, 46 carry a
+deferred stamp and 26 carry none. So the test never once means what it reads
+as, and 33 nodes tell the author they are ratifying a node "as it stands" when
+what stands is an AI draft they have never confirmed. On `agency` this is the
+worst case the record can produce, and the node's own review said so before the
+page did: the answer is written in the author's first person by the AI, and the
+review kicked the node back to the periagogic stage because "a bare confirmation
+here ends the grant on a stamp the record calls invalid". The page offers that
+bare confirmation as the first choice on the graph's root question.
+
+**The caption contradicts the column beside it, on 27 of 72 nodes.** "Nothing
+else is proposed" is printed while the middle column offers between one and
+five alternatives. This is a seam the split opened: the alternatives used to
+live in the same pane as the caption, and the caption was never re-read against
+the two-column form this sitting adopted. Agency is one of the 27.
+
+**A choice row names an alternative and never says what it proposes.** The row
+renders `c.label`, the alternative's slug, in mono; the sentence saying what it
+would answer is behind a closed `<details>` reading "What this would answer".
+So `structural-test` and `authors-own-arche` appear as bare ids, which is
+exactly what the author reports seeing. This inverts the reading this node
+adopts: `progressive-disclosure` splits by what the reader needs most often,
+and what the author needs at a ruling is what each option says. The slug is the
+handle the record uses; the sentence is the decision. The page folded the
+decision and showed the handle.
+
+**The ruling control is stage-blind.** Agency is at `stage: periagogic`, which
+names the movement owed: the author's own account of the ground, never skipped.
+Twenty-nine nodes at the periagogic or maieutic stage are nonetheless offered
+a `standing` choice, a full ruling surface identical to a ruling-stage node's.
+The page does hold the right sentence — `STAGE_HINT.periagogic`, "The dialogue
+owes your account of the ground first; your words here are recorded verbatim" —
+but prints it at the foot of the other column, below the node, the indications,
+the review and two drill-downs. The page knew, and said so where it would not
+be read.
+
+Two of the four are language and two are structure, and only one behaviour is
+worth keeping as it is: leading a stamped node with the word-diff rather than
+the whole is right, because the author does need to see what changes. What is
+wrong is calling the result "the node as it stands" and telling the author a
+confirmation ratifies it.

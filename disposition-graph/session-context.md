@@ -209,3 +209,30 @@ Recorded as a pending alternative on this node: `shim-names-an-existing-artifact
 
 The boost was raised from six to seven when `alignment-page` was minted under `projection` at the author's direction: the new sibling divided `projection`'s rank one more way and dropped this node to exactly `work-loop`'s rank, which the `order` field on `scope` forbids and the validator refuses. Nothing in the answer, the rationale, or the dialogue changed, and the recommendation is re-pinned to the amended standing text; the earlier review's pin is left as it was, so the frontier flags this node's text as changed since that review, which is true of its frontmatter and of nothing else.
 
+
+### Stopgap grant on CLAUDE.md, 2026-09-04
+
+The author, 2026-09-04, while the alignment-page sitting was in hand:
+
+> side note: as a stopgap for rule reconciliation, you have bootstrap authority to reconcile the greenfield disposition to CLAUDE.md. This does not require a disposition or shim, it will be fixed when we get to rule reconciliation.
+
+Recorded here and not as an alternative, because the author states it is not a
+disposition and asks for no shim. It is a permission shim bypass of the kind
+`authority` names, spent on one reconciliation: this node's answer says
+`CLAUDE.md` "states no rule of its own, because a rule that lives only there is
+invisible to the projector and to review", and the grant authorises exactly
+that for the greenfield lens of `evaluation`, on the author's own statement
+that rule reconciliation will fix it. What the grant does not authorise is
+carried nowhere: it names CLAUDE.md and the greenfield disposition, and no
+other file and no other rule.
+
+The liquidation is the author's: when rules are reconciled, the greenfield lens
+is projected from `evaluation` like every other rule and the hand-written
+paragraph is deleted from CLAUDE.md. Until then the paragraph is unsupported
+implementation by this node's own standard, and it says so in its own text so
+that the frontier finds it.
+
+Unrelated and still open on this node: the shim asserting `.claude/settings.json`
+in the author's checkout, which the review of 2026-09-03 found names no file.
+Verified again on 2026-09-04 and it still names no file; CLAUDE.md repeats the
+claim. The grant does not reach it and it is left for the ruling.
