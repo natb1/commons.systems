@@ -3,13 +3,6 @@ question: Does a malformed recommendation fail?
 stage: periagogic
 recommendation:
   boldness: high
-facts:
-  - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: bogus
-    boldness: high
 ---
 
 ## Disposition

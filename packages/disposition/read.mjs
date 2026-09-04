@@ -240,7 +240,7 @@ function readFacts(raw, problems) {
     && Array.isArray(entry.choices) && entry.choices.length > 1
     && entry.choices.every((c) => typeof c === 'string' && c.trim().length > 0)
     && new Set(entry.choices).size === entry.choices.length
-    && typeof entry.adopts === 'string'
+    && typeof entry.adopts === 'string' && entry.adopts.trim().length > 0
     && BOLDNESS_VALUES.has(entry.boldness)
     && (isAbsent(entry.ruling) || rulingOk(entry.ruling));
   if (!Array.isArray(raw) || !raw.every(entryOk)) {
