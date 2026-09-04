@@ -32,17 +32,17 @@ facts:
         source: review
         ref: "2026-09-03"
       - name: define-by-its-parts
-        source: author
+        source: ai
         ref: "1920badc"
         status: passed
         reason: "it is scope and not purpose: it says what is here, not why"
       - name: intent-in-prompts-chat-or-memory
-        source: author
+        source: ai
         ref: "1920badc"
         status: passed
         reason: "not durable, not reviewable, not rankable; it is the tacit form this record replaces"
       - name: issue-trackers-as-the-record-of-intent
-        source: author
+        source: ai
         ref: "1920badc"
         status: passed
         reason: "they record work, not dispositions, and cannot carry authority or rank"
@@ -358,3 +358,29 @@ Recorded as a pending alternative on commons.systems/disposition-graph/readings:
 Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### A mis-attribution corrected, 2026-09-04
+
+The three founding rejections on the answer fact, `define-by-its-parts`,
+`intent-in-prompts-chat-or-memory` and `issue-trackers-as-the-record-of-intent`,
+carried `source: author`. They are the AI's. The prose they were migrated from,
+the `### Rejected` section written at graph commit 1920badc, said so in its own
+first line: "Drafted by the AI from the record, for the author to confirm or
+strike at ratification." The migration of 2026-09-04 read the section as the
+author's because the answer above it is theirs, and wrote the author's name on
+three candidates they never proposed. The source is now `ai`, the ref left at
+the commit where the AI drafted them, and the account of the sitting on
+`commons.systems/disposition-graph/alignment-page` is corrected in the two
+places it repeated the error.
+
+The test that found it, from the design unit on
+`commons.systems/disposition-graph/viable-options`: an option sourced to the
+author carries the date of the words, because the author speaks on a day, while
+an option sourced to a graph commit was written into the record by whoever was
+writing that commit. Eight options in the graph carry `source: author` with a
+graph commit and no date. Three were these. The other five, two on
+`commons.systems/disposition-graph/alignment-order` at a9ce7218, one on
+`commons.systems/disposition-graph/authority` at 6d21d356, and one each on
+`commons.systems/disposition-graph/dialogue` and
+`commons.systems/disposition-graph/unanswered` at 32600efe, are not checked
+here and are named for the survey.

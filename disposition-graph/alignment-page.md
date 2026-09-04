@@ -1500,8 +1500,8 @@ lists are exactly the dominated candidates the structure excludes. What
 liquidating them would destroy is specific: the nine designs `dialogue`
 considered for the encoding and four traditions named nowhere else; the nine
 `viable-options` rejected and the eight traditions recorded only in its
-rationale; the four founding rejections on `purpose`, which are the author's
-own; the legacy record's measured evidence on `transience`; the ratify command
+rationale; the three founding rejections on `purpose`, which the AI drafted for
+the author to confirm or strike; the legacy record's measured evidence on `transience`; the ratify command
 with the author's words on `authority`; and both rejected readings of the root
 archē on `agency`. So the author's diagnosis holds for seventeen entries and
 inverts for a hundred and two, and the rule that would make the rest safe to
@@ -1737,9 +1737,9 @@ judgment calls, checked and accepted: a fence's passages are in scope, since
 the fence is the node as it would stand; only a passage that enumerates
 candidates under a lead-in migrates, and a single candidate argued in the
 prose of an argument stays, on the six nodes the unit names; growth's eight
-are incumbent mechanics, migrated as candidates for how the loop runs; and
-purpose's four carry the source author, on the record's own word that the
-founding rejections are the author's. Thirteen tradition lists on thirteen
+are incumbent mechanics, migrated as candidates for how the loop runs;
+and purpose's three carry the source ai, corrected on 2026-09-04 from the
+source author the migration wrote, as the note below records. Thirteen tradition lists on thirteen
 nodes are readings and not options, and were left; viable-options' eight
 became the readings below. Nineteen readings drafted from the two tradition
 passes, this sitting's and the viable-options sitting's, entered the graph:
@@ -1845,3 +1845,20 @@ each of those nodes that is now the composed option rather than one clause
 inside it. The cascade paragraph above, written before the compositions, names
 the clauses; it is the record of what the sitting proposed then and is left as
 it was.
+
+### The census corrected on one figure, 2026-09-04
+
+The migration census above said that purpose's four founding rejections carry
+the source author, on the record's own word that they are the author's. Three
+carry it, not four, and the record's word runs the other way: the `### Rejected`
+section they were migrated from opens "Drafted by the AI from the record, for
+the author to confirm or strike at ratification." The design unit on
+`commons.systems/disposition-graph/viable-options` found it with a test worth
+keeping, that an option sourced to the author carries the date of the words
+while an option sourced to a graph commit was written by whoever wrote that
+commit. Both sentences here are corrected in place rather than left standing
+with a note beside them, because a census is a measurement the author reads at
+the ruling and a wrong figure there misleads the ruling; what the sitting
+claimed and why it was wrong is recorded on `commons.systems/disposition-graph/purpose`
+with the correction itself. Five more options carry `source: author` with a
+graph commit and no date, and are named there for the survey.
