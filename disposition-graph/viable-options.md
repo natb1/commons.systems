@@ -737,7 +737,7 @@ recorded, and the recommendation is owed to a sitting on `rsi`. This node's
 own recommendation acts under the grant: the fence is applied as its answer,
 `grant-from-a-ruling` stands, and the node stays at the review stage with
 the review owed, no ruling and no class written for it. The implementation
-follows on `greenfield` in a commit naming this one: the reader, the
+landed on `greenfield` as `33f9bb39`, naming the two graph commits: the reader, the
 derivations and the validator (183 tests), the projector with the frontier,
 the browser, the alignment page and the rules (105), the alignment skill, the
 clean-context review skill (47) and the reconciliation skill's write path,

@@ -1,6 +1,6 @@
 ---
 question: How are references to tradition recorded?
-stage: ruling
+stage: review
 review:
   verdict: forward
   strength: moderate
