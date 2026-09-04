@@ -150,8 +150,22 @@ The reconciliation drops the alternatives term from the settling count in the
 reader's derivation, leaves the count of alternatives in the breakdown as a
 displayed fact on the frontier line and beside the settling count on the
 alignment page, and restates the settle rule and the ancestor rule in the
-alignment skill. The implementation commit on `greenfield` names this grant
-and the graph commit it reconciles to.
+alignment skill. It landed on `greenfield` as
+a136b57c759faced4dbfcdeba7214e59b643e447 against this node at graph commit
+0e2e0624b9fed7756f5b32b2e6d539fff722ef1b.
+
+The property the amended count buys was verified on the record and not only
+argued: across the seventy nodes there is none whose settling count reaches
+its own parent's, so an ancestor precedes every unanswered descendant without
+the order forcing it. The ruling order now opens with
+`commons.systems/public/agency`, the graph's sole root, at sixty-nine, and
+`commons.systems/disposition-graph/purpose`, its only child, at sixty-six;
+under the earlier count purpose led by one on the strength of four extra
+alternatives. Two order tests in the implementation went vacuous under the
+change, their settling differences having come entirely from a node's own
+alternatives; both were given real reach differences rather than deleted,
+which is itself evidence for the change, since a difference that disappears
+when the alternatives stop counting was never a difference in reach.
 
 ### Recommendation changed to settle-counts-nodes-only, 2026-09-03
 
