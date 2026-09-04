@@ -26,6 +26,11 @@ The author, 2026-09-03, answering the periagogic probe on whether `depends` as d
 >
 > periagogic response: I'm not sure. Examples would include recording an unanswered disposition then before it's confirmed forgetting the original idea and recording the opposite idea, or recording the same idea again. If the first idea had confirmed authority the latter idea could be mechanically rejected or recorded as an alternative. Without the authority these must be "untangled".
 
+The author, 2026-09-03, on the first maieutic draft and the fork of three options:
+> The draft describes the simple case of untangling - but the frontier is itself a graph, and conflicts can occur on adjacent nodes that can be merged, or entire subtrees can diverge (and are not as easily merged). Does this change the recommendation?
+>
+> I don't fuly understand the difference betwen 1 and 2. We don't need additional disposition for #3 - I can already order manually with `/align <node_id>`
+
 ## Account
 
 An un-aligned disposition, recorded at its sitting's opening on 2026-09-03 and not yet answered. The question it asks is distinct from its parents': alignment-target says what a session given nothing takes up, and attention says how rank is computed and read; this node asks whether rank is the right order for the alignment frontier at all, and if not, what is, and whether the dialogue's state should carry something the order can be derived from.
