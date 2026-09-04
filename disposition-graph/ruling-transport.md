@@ -24,6 +24,11 @@ facts:
       - delegated
     adopts: delegated
     boldness: moderate
+shims:
+  - artifact: "the session launch control on the alignment page and on every stage chip, `https://claude.ai/code?prompt=<the instruction>&repositories=natb1/commons.systems`, stubbed in the user interface and in the implementation: it is rendered and it is marked a stub, and no part of the flow depends on it"
+    for: the launch half of this node's answer, the copy half being the route the author uses
+    liquidation: a session opened from the link is confirmed to reach the graph, and the stub mark comes off; or the link is found not to and it is deleted, the copy standing alone
+    declared: 2026-09-04
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -33,6 +38,10 @@ The author, 2026-09-04, on reading that "Submit" writes to the artifact's own
 database rather than starting a session:
 
 > Compare a stateful artifact approach to a stateless session flow (either via claude.ai/code session seed or copied instruction)
+
+The author, 2026-09-04, on reading the comparison:
+
+> claude.ai/code session initialization can be kept as a stub out shim (in ui and implementation). Author will rely on incstruction copy for now. You have bootstrap authority to reconcile.
 
 ## Alternatives
 
@@ -133,6 +142,8 @@ under:
 By an instruction, always; by the artifact's database as well, while that is worth its keep.
 
 The page produces one instruction for a ruling and one for a sitting, and every route to a session carries that same text: the seed link that pre-fills a session, the clipboard for a session already open, and the per-node chip that opens the dialogue on one node. Two controls that claim to do the same thing and emit different text is the defect this answer exists to prevent, so they are generated from one function and never written twice.
+
+The launch half is a stub and is marked as one, on the author's ruling of 2026-09-04 that they will rely on the copy. It is rendered, it is a real link with a real instruction in it, and nothing depends on it: a mark on the control says so and its shim carries the two ways it can end, confirmed and unmarked, or found not to work and deleted with the copy standing alone. A stub that looks finished is worse than no stub, because the author cannot tell which of the two routes they are being offered.
 
 The artifact's database keeps one job: letting a session skip the paste when the author ruled on another device. It is a buffer and never the record. No ruling exists only there, a session that cannot reach it loses a paste and nothing else, and the alignment skill treats a response it finds there as a convenience, reading it exactly as it would read the same instruction pasted by hand.
 

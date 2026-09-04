@@ -159,7 +159,7 @@ A metric on this page is a signal, an instrument, or a criterion of a recorded d
 
 The middle column holds everything the ruling asks, and the right-hand column holds nothing but the disposition itself. The stage is what the column says first, because the stage names the movement owed and so what the column is for: at the periagogic stage the ask is the author's own account of the ground and the free-text control for it leads; at the maieutic stage it is the author's intention. Only the ruling stage takes a response. A confirmation recorded on a node that has not reached that stage is invalid, as the author ruled on 2026-09-04, so at every earlier stage the decisions, their choices and the recommendation are all rendered and every input among them is disabled: the author sees exactly what will be asked and cannot yet answer it. This supersedes the same day's earlier clause, that the controls run ahead of the dialogue marked rather than withheld on the argument that the author may rule at any stage. They may, and the way they do it is to move the node's stage in the dialogue; a live control on a periagogic node does not offer that, it offers an act the record will not honour. Where the stage asks for the author's words and the node carries none, the column says that in as many words rather than rendering an empty space, because "nothing of yours is recorded here, and what the answer says the AI drafted" is the fact those stages exist to change, and a blank says it to no one.
 
-Then the decisions. They are the node's own answer, where alternatives are pending on it, and its asking facts: the authority class a confirmation would confer, the node's existence, and its persistence where the recommendation would change the node's shape. Each is labelled with the question it asks, in the words of the node or of the fact, because under `aspects-are-nodes` every decision is a question and a decision labelled with a category tells the author nothing about what is being asked. Under each are its choices, and a choice row leads with what that choice would answer, in the sentence the record holds for it, carrying its name beside that as the handle the record files it under. A row that shows only the name shows the author a list of identifiers: the name is how a ruling is stored and the sentence is the decision. The recommendation among the choices is marked, its boldness shown, the rest of the row's text beneath it as drill-down, one simple input records or edits the choice, and a last row rejects every choice on that decision with feedback.
+Then the decisions. They are the node's own answer, where alternatives are pending on it, and its asking facts: the authority class a confirmation would confer, the node's existence, and its persistence where the recommendation would change the node's shape. Each is labelled with the question it asks, in the words of the node or of the fact, because under `aspects-are-nodes` every decision is a question and a decision labelled with a category tells the author nothing about what is being asked. Under each are its choices, and a choice row leads with what that choice would answer, in the sentence the record holds for it, carrying its name beside that as the handle the record files it under. A row that shows only the name shows the author a list of identifiers: the name is how a ruling is stored and the sentence is the decision. A fact's choices are vocabulary rather than slugs, but the rule is the same and they carry the same sentence: what confirming that choice would mean, in the words the node defining the fact uses for it. The authority class is the most repeated decision on the page and rendered as the two bare words `ratified` and `delegated` it told the author nothing they did not already have to know. The recommendation among the choices is marked, its boldness shown, the rest of the row's text beneath it as drill-down, one simple input records or edits the choice, and a last row rejects every choice on that decision with feedback.
 
 A choice that keeps the text already in the record is named for the authority that text has and never for more. Where the answer is ratified, the choice is the answer as ratified and a confirmation keeps it. Where it carries a deferred stamp or none it is a draft no one has confirmed, since a deferred answer is unanswered until the author rules, so the choice says that confirming ratifies the AI's draft. Naming it "the node as it stands" claims a standing the text does not have, and it reads as the safe and ordinary choice when on an AI-drafted node written in the author's own voice it is the least safe one available. Where no answer stands at all the choice is not offered, because there is nothing to keep.
 
@@ -167,7 +167,7 @@ A decision is asked whenever its boldness is anything but low, and folds unasked
 
 Beneath the decisions, the ruling on the whole, with the caption that says what a confirmation would do sitting on the control itself and not across the screen from it, so that it cannot say nothing else is proposed while the decisions above it propose something. Beneath that, what a ruling here makes decidable: the node's unanswered children and the open questions that name it, what each asks, and that a ruling here is what makes them decidable. They are indications and never rows. Every decision that is a question is a node, and a node is ruled from the rail in its own turn in the one order, so a screen offering its children as confirmable rows would impose a second order on nodes the one order has already placed. Last, as drill-downs, the review's reading of the node, the author's words, and the AI's account -- except at the two stages that ask for the author's words, where what they have already said on this node comes up beside the control asking for more, open, rather than staying folded three sections below the question it answers.
 
-The right-hand column is the disposition and nothing else: the node as it would stand under the choices made so far, re-rendered as each choice changes, with the folded decisions simply present in it and never asked about. Where an answer stands it leads with the edit this ruling would make, and where none stands it shows the whole. The edit says what it is an edit against, because a diff implies a ground and the ground here is usually a draft: against the ratified answer where there is one, and against a draft no one has confirmed where there is not. That is the author's finding of 2026-09-03 on `commons.systems/disposition-graph/purpose`, that a node "still indicates that it is an edit to a confirmed disposition ... even though no node is yet confirmed". The diff is not what was wrong and it stays; what was wrong was letting it imply a standing its base does not have. Nothing that is about the ruling shares the column with it -- no control, no caption, no indication, no drill-down -- because the column's one job is to show the author the thing they are ruling on, and every sentence of apparatus in it is a sentence they must read past to see it.
+The right-hand column is the disposition and nothing else: the node as it would stand under the choices made so far, re-rendered as each choice changes, with the folded decisions simply present in it and never asked about. Where an answer stands it leads with the edit this ruling would make, and where none stands it shows the whole. The edit says what it is an edit against, because a diff implies a ground and the ground here is usually a draft: against the ratified answer where there is one, and against a draft no one has confirmed where there is not. That is the author's finding of 2026-09-03 on `commons.systems/disposition-graph/purpose`, that a node "still indicates that it is an edit to a confirmed disposition ... even though no node is yet confirmed". The diff is not what was wrong and it stays; what was wrong was letting it imply a standing its base does not have. Nothing that is about the ruling shares the column with it -- no control, no caption, no indication, no drill-down -- because the column's one job is to show the author the thing they are ruling on, and every sentence of apparatus in it is a sentence they must read past to see it. Where there is no disposition to show, because the node has neither an answer nor a recommended text, the column is not held open: the item is one column and the line saying so follows the ask, since half a screen of white reserved for a sentence is the same fault as apparatus in the column, spending the reader's attention on something that is not the node.
 
 The rail is fixed and narrow. The middle and the right share what is left, near enough evenly, and the disposition can take the whole screen on demand. Before the refinement the right-hand column was the widest, on the argument that the node is the thing in view while the decisions are worked; that argument survives, but the middle column now carries the stage's ask, the decisions, the ruling on the whole, the indications and three drill-downs, and a working column starved to a third is a worse failure than a reading column at a half. Neither is the author's ruling: the author moved the material and said nothing about width, and this is the consequence drawn from it.
 
@@ -958,3 +958,49 @@ belongs: on the stage chip, per node, and beside the pair, for the sitting.
 `alCopyAll` today copies a bare digest -- ids, stages, rulings, notes -- which
 is not an instruction and could not initialise anything. That is the gap the
 author found by asking.
+
+### The page read in a browser, 2026-09-04
+
+Driven at 1600x1000 and 1100x900 and swept across all 72 items. Reported
+clean on the things the answer is about: the two content columns within 5% of
+each other, no element escaping its column and none overflowing, exactly one
+item visible at a time on all 72, the item stacking rather than breaking at
+the narrow width, and the right-hand column holding one child and no input,
+textarea, button, label or list on any item. No console message of any kind.
+
+Six defects, and what each got.
+
+The page decodes as windows-1252 when read from `dist/` and mojibakes every
+long dash, ellipsis and Greek word in the record -- "arche" written with the
+eta appears as three characters. The file carries no charset because the
+publish wrapper supplies one, along with the doctype and head this file must
+not write. A `<meta charset>` is not among the tags the wrapper forbids and
+sits inside the first kilobyte where a browser honours it, so both templates
+now carry one: a duplicate in the published page is harmless and an
+undecodable local one is not. The quirks-mode rendering that comes with the
+missing doctype is left as it is, because writing a doctype would break the
+publish, and it is recorded here so the next reader does not take it for an
+oversight.
+
+Fifteen items rendered a right-hand column of one heading and one line beside
+a middle column twenty times its height. That is the answer working as
+written -- the column is the disposition, and these nodes have none -- and the
+answer is amended above rather than the implementation patched under it.
+
+Ninety choice rows were bare vocabulary with no sentence: the authority
+class's `ratified` and `delegated` on forty-one nodes each, and the existence
+fact's `keep` and `prune`. The same defect the alternatives were fixed for,
+missed because a fact's choices are words rather than slugs and looked
+finished. Thirty-two rows remain without a sentence and all of them are the
+keep-choice, whose label is already one.
+
+The keep-choice's pill was longer than the choice it captioned and set in
+capitals above it, so the caption read louder than the option; it is now one
+word. Two choice leads still break mid-sentence, which is the three per cent
+the cap was measured to leave and both have a working drill-down. The widened
+column had no measure and ran prose to about a hundred and thirty characters;
+it is capped.
+
+The one thing not treated as a defect is the font stylesheet from
+fonts.googleapis.com: it is on the artifact host's allowlist, every face has a
+fallback stack, and the page renders correctly without it.
