@@ -19,6 +19,11 @@ facts:
         source: review
         ref: "2026-09-03"
     stands: standing
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
 form: arche
 defines:
   - archē

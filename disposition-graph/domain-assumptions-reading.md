@@ -7,6 +7,11 @@ facts:
       - name: assumption-as-criterion
         source: ai
         ref: "2026-09-03"
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
 under:
   - commons.systems/disposition-graph/instruments
 ---

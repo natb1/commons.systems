@@ -6,6 +6,11 @@ facts:
       - name: ai-candidate-readings
         source: ai
         ref: "2026-09-02"
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
 under:
   - commons.systems/disposition-graph/capture
 stage: maieutic

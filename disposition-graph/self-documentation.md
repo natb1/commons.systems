@@ -7,6 +7,11 @@ facts:
       - name: section-of-its-own
         source: author
         ref: "2026-09-03"
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
   - name: existence
     options:
       - name: keep

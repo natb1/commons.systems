@@ -16,6 +16,11 @@ facts:
       - name: loop-writes-options
         source: author
         ref: "2026-09-04"
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
 under:
   - commons.systems/disposition-graph/model
 depends:

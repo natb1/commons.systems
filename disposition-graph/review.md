@@ -31,6 +31,7 @@ facts:
     options:
       - name: ratified
       - name: delegated
+      - name: deferred
     recommends: ratified
     boldness: high
 form: rule

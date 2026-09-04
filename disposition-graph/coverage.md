@@ -10,6 +10,11 @@ facts:
       - name: name-excluded-audiences
         source: ai
         ref: "2026-09-03"
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
 under:
   - commons.systems/disposition-graph/purpose
 ---

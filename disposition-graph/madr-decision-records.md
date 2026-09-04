@@ -22,6 +22,7 @@ facts:
     options:
       - name: ratified
       - name: delegated
+      - name: deferred
     recommends: delegated
     boldness: high
 form: reading

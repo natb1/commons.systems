@@ -18,6 +18,11 @@ facts:
       - name: record-what-makes-a-rule-global
         source: review
         ref: "2026-09-03"
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
 under:
   - commons.systems/disposition-graph/under
 ---

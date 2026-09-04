@@ -7,6 +7,11 @@ facts:
       - name: vocabulary-stays-with-the-owning-nodes
         source: ai
         ref: "2026-09-03"
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
   - name: existence
     options:
       - name: keep

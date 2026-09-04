@@ -13,6 +13,11 @@ facts:
       - name: one-ruling-for-the-prose-lists
         source: review
         ref: "2026-09-03"
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
 under:
   - commons.systems/disposition-graph/readings
 ---
