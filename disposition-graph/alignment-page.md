@@ -69,6 +69,10 @@ The author, 2026-09-04, closing the sitting before compaction:
 
 > record the current state of all dispositions from this session to prepare for compaction. Including this disposition which is a revision to a prior one: AI recommendations can be recorded at any time during the dialog (not just after the first meiutic). Ensure your recommendations so far are recorded. After compaction we will progress the alignment page nodes through meiutic and stop before review. Before review you will be granted bootstrap authourity to reconcile those nodes (including cascading effects on graph encoding/re-encoding of nodes/align/align-review/alignment page).
 
+The author, 2026-09-04, granting bootstrap authority for this sitting's reconciliation:
+
+> Bootstrap authority granted to reconcile the alignment-page sitting
+
 ## Alternatives
 
 ### three-column-ruling-screen
@@ -691,4 +695,24 @@ at the ruling stage show as ruleable under rules the author has already changed.
 reconciliation it authorises, then the clean-context review of the batch, then
 the author's rulings. The grant is not held by this sitting and is not implied
 by any sentence in this record.
+
+### The grant, and what it authorises, 2026-09-04
+
+Granted in the author's words, above, for a named reconciliation, which is what
+the shim on `authority` requires of a grant. It authorises what the sitting
+asked for and nothing beyond it: the `aspects-are-nodes` re-encoding across the
+graph, the reader, validator and projector, the alignment and review skills,
+the rule projection that is behind, and both published pages. Everything
+written under it is stamped deferred, since the dialectic has not concluded,
+and the clean-context review of the batch still runs on what the reconciliation
+wrote before the author rules on any of it. The grant is spent with that
+landing and is not carried into the next sitting.
+
+One ordering the grant forces and the account states so it is not read as
+drift. The graph and the implementation are separate refs, and the reader's
+exact-key check on `recommendation` means the old reader rejects the new
+encoding and the new reader rejects the old. The implementation lands first and
+the graph immediately after, so there is a window in which `origin/disposition`
+and `origin/greenfield` disagree. It cannot be closed by ordering, only made
+short.
 
