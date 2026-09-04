@@ -170,6 +170,14 @@ The inverse repair: this node's definition stands and the dialogue node, the ali
 
 The recommendation drops one of this node's two shims: the alignment page, which moves to `commons.systems/disposition-graph/alignment-page` with its declaration date and its liquidation condition intact. The skill shim stays, because this node is still what the alignment skill projects. Confirming it leaves one shim here; denying it leaves the page described in two places, which is what minting the page's own node was for. The two nodes rule together, and `alignment-page` carries the matching decision.
 
+#### both shims kept
+
+This node keeps both shims, the alignment skill's and the alignment page's, and the page stays described here, on a node whose question is growth and not the page; `alignment-page` then carries a matching declaration or none.
+
+#### the page's shim moved out
+
+This node keeps the skill's shim alone, and the page's declaration moves to `commons.systems/disposition-graph/alignment-page` with its date and its liquidation condition intact, so that the page is described where its question is asked and this node declares only what it projects.
+
 ## Recommendation
 
 ```markdown

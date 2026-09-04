@@ -38,3 +38,26 @@ skill invocation.
 The grant. In the words above the author granted bootstrap authority to
 reconcile this disposition immediately after its maieutic movement, before
 the clean-context review, which is owed on what is drafted and runs after.
+
+### State at compaction, 2026-09-04
+
+The maieutic movement was opened and divided into units: the tradition
+survey is done, at the job's `tmp/review-sitting/traditions.md`, and the
+record-and-implementation survey was running, to land at
+`tmp/review-sitting/survey.md`; the design unit for this node is briefed at
+`tmp/briefs/unit-design-review-skills.md` and not launched, and it runs on both
+surveys, drafting the split into two skills and where the shared text lives with its options, their status, the recommendation
+and its case against, and a fence. Then the main thread's adversarial reading,
+the recommendation recorded here with `stage: review`, the reconciliation the
+author granted immediately after maieutic, and the clean-context review.
+
+Two findings of the tradition survey are carried here so the design reads
+them. The record's rule that a draft's reviewer is never smaller than the
+drafter's cites no tradition, and it reads the reviewer's strength off
+boldness, which the drafter sets, so the drafter selects the strength of its
+own reviewer, a separation-of-duties failure; that is the strongest argument
+for the author's rule and it is nowhere in the record. And the drift question
+answers itself conditionally: reconciliation resolves drift between two
+skills only once the projector writes both from the graph; while the skill is
+a hand-written shim, a split makes two hand-maintained copies.
+

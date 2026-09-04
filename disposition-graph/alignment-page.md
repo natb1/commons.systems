@@ -212,6 +212,14 @@ Ratified, because this page is the surface every ruling passes through: a row th
 
 The recommendation declares a shim on this node that the node does not carry today: the alignment page itself, moved here from `growth` with its declaration date of 2026-09-03 intact and its liquidation condition unchanged, its `for:` line rewritten to name this node's answer. Confirming it makes this node the shim's home; denying it leaves the shim on `growth`, where it describes a page that no node's ruling settles. The two nodes rule together, and `growth` carries the matching decision.
 
+#### with the page's shim
+
+This node carries the alignment page's shim: the artifact, its declaration date of 2026-09-03 and its liquidation condition move here from `growth` unchanged, with the `for:` line naming this node's answer, so that the page is described where its question is asked.
+
+#### without it
+
+This node carries no shim and the page's declaration stays on `growth`, where it describes a page whose question that node does not ask; the two persistence facts then disagree, since `growth`'s recommendation moves the shim out.
+
 ## Recommendation
 
 ```markdown
@@ -1618,3 +1626,100 @@ On the viability of the options: `three-column-ruling-screen` is dominated by th
 Strongest counter-argument (moderate): The answer legislates the mechanics of ruling ahead of the nodes that own them: a response per fact with the whole-node response gone, a kick-back typed to the maieutic movement, a confirmation with text classified into a reason or edits, readiness read from two pins, and an edit-led first answer, each of which is an unruled option on unanswered, recording, dialogue or clean-context-review, or is recorded nowhere. Ratifying the page first would make a projection the specification of the record's ruling mechanics, which inverts materialization's rule that an artifact is the projection of the node whose answer it renders, and its `depends` names none of them, so the ruling order would not put them first. The page's own facts show the cost in miniature: the AI's decisions are encoded as mutually exclusive whole-answer options, so the very screen this answer describes could not take the author's combined ruling on them, and its authority fact cannot take the author's deferral at all. The answer's shape is the author's in their own words, and the split into children and dependencies is an amendment, which is why this is a forward and not a kickback.
 
 The session's reply: The forward is accepted and the pin is taken; every accepted amendment below changes substance, so the node returns to the review stage once they are written and the review runs again on the amended text. Finding 1 accepted: deferred added to the authority fact, and to every authority fact in the graph under the grant of 2026-09-04, the vocabulary being authority's. Finding 2 accepted: the `### authority` subsection is written on the ground the reviewer names, that this page is the surface every ruling passes through and a row that mis-states what a confirmation does records a ruling the author did not give. Finding 3 accepted in part: the split is a proposal and is recorded as the option `independent-decisions-as-children` with the review as its source, never done by the session; the three delta options stay, and the answer fact's prose now says what a ruling for a delta option rules on, the recommended text with that clause changed, the author's edits carrying the rest. Finding 4 accepted: the five decisions are recorded as options, `case-against-in-the-drill-down` sourced to the author's words of 2026-09-04 and the other four to the AI's account. Finding 5 accepted: `every-fact-every-option` is sourced to the AI, its prose naming the clauses that are the author's words. Finding 6 accepted: quoted exactly. Finding 7 accepted: `edit-led-against-a-named-ground` recorded on dialogue with this node as source and named in depends, and the answer says the departure is decided there. Finding 8 accepted: `confirmation-before-the-ruling-stage-is-invalid` recorded on unanswered with this node as source and named in depends; the alignment skill's held-confirmation sentence is reconciled to the author's words under the grant. Finding 9 accepted: the entries are added to depends, dialogue's in the one option that composes them, and the three restated rules are cited to their owners. Finding 10 accepted as amended by the reconciliation: the reserved sentences and the fold are projected and struck under the grant, and the shim says the launch link is the stub ruling-transport declares. Finding 11 accepted: five metrics, the fifth the survey owed, instrumenting clean-context-review's per-draft-and-survey; Ruleable is both readings behind the node and Stale either pin stale or a ruled recommendation moved; `whose recommended answer`; a metric whose node the browser does not render carries the id unlinked and says so. Finding 12 accepted on the option, the account, and the reading, which now says the sitting read the reason into the author's move. Finding 13 accepted: progressive-disclosure's recommendation moves in the same landing, and the readings the additions rest on are minted under the grant. Finding 14 accepted: the measurements move to the rationale with the graph commit they were taken at. Finding 15 accepted: the author's words of 2026-09-03 and 2026-09-04 are quoted in the rationale and `while it was open` is struck. Finding 16 accepted: the controls are named as ruling-transport describes them and cited to it, and the shim leaves the read-back to that node's. Against the counter-argument: the mechanics the page renders are the recommended options of the nodes that own them, which the depends now name and the answer cites rather than restates; the page projects them as every shim does, and a ruling on this node rules on the layout and not on them. The authority fact now takes the deferral, and the delta options say what they rule on.
+
+### State at compaction, 2026-09-04, the reconciliation under the grant
+
+Written for the session that resumes; the record is its memory and nothing
+below is held anywhere else.
+
+**Landed on the graph, commits 127c1926 through this one.** The two reviews
+applied, this node forward at moderate strength and `prose-and-structure`
+kicked back to maieutic at strong, every finding accepted with the session's
+reply in each account. The grant quoted above. `review-skills` and
+`review-model` queued under `clean-context-review` from the author's words.
+Twelve options recorded where the reviews put them: `passed-over-options-stay`
+and the review's `viable-not-chosen-as-it-stands` on `viable-options`,
+`passed-over-stays-listed` on `rejected`, `rationale-argues-facts-list` on
+`node`, `confirmation-before-the-ruling-stage-is-invalid` on `unanswered`,
+`edit-led-against-a-named-ground` on `dialogue`, and on this node the split
+proposal and the five decisions the account had left unrulable. This node
+amended for all sixteen findings and returned to the review stage, its pin
+stale by design. `master-detail-selection` amended. `deferred` on every
+authority fact and the fact itself on the fifteen staged nodes that carried
+facts and none; the three fact-less periagogic nodes left as they are, on the
+reading that a question with no candidate answer carries no decision, which
+narrows `authority-fact-on-every-node` and is recorded here as the AI's.
+`progressive-disclosure`'s recommendation moved with a fence. The persistence
+options on this node and on `growth` given their subsections, which the reader
+now requires.
+
+**The encodings this session decided and the reader unit implemented, in the
+implementation working tree, 331 tests green, not yet landed.** A ruling
+carries an optional `reason`, the author's words. An option carries `status:
+passed` with a required `reason`, never recommended, standing, or ruled. A
+`defines` entry may be `{term, gloss}`, and `glossary(graph)` and
+`defineTerms(node)` read them; `optionText(graph, node, fact, option)` in
+`derive.mjs` is the one home of an option's sentence: the `####` for answer
+and persistence options, `## Answer` for the option that stands, the gloss
+on the defining node for authority and existence, whose options carry no
+subsection; persistence options owe one. A staged node carrying facts carries
+`authority`; a fact-less staged node is valid only at the periagogic or
+maieutic stage. `against` on a fact, the AI's case against its recommendation,
+and `against` on `review`, the reader's counter-argument, both outside every
+hash. Adding a non-recommended option, a status, a ruling's reason, or a
+subsection on a non-recommended option moves no pin; adding a fact moves the
+node's pin; adding a gloss moves the defining node's own pins and no other's,
+since `defines` is part of what stands, which the unit found and this session
+accepts. Still to write on the graph: the glosses for `ratified`, `delegated`
+and `deferred` on `authority` and for `keep` and `prune` on `dialogue`, from
+those nodes' own sentences; `three-column-ruling-screen` marked passed on this
+node. The projector's `check()` must read `defineTerms(n)` and the browser's
+`termIndex` must read `defs[j].term`; the reader unit named the lines.
+
+**In flight or done in scratch, by unit, with the paths a resumed session
+reads.** The skills unit is done: the three skills and the two brief
+templates reconciled in the working tree, its seven notes read; the review
+scripts' own tests fail until their fixtures gain an authority fact, which
+the browser unit owes. The passed-options unit's census, apply script and
+report are under the job's `tmp/migrate/` (`passed-options.json`,
+`apply-passed.mjs`, `passed-report.md`), to be run by the main thread against
+`disposition/` after the reader lands and reported here; the passages inside
+recommendation fences are left, since editing a fence moves a pin under
+review. The readings unit is done: nineteen reading nodes under `tmp/migrate/
+readings/`, eleven under this node, `codd-update-anomaly` under
+`prose-and-structure`, seven under `viable-options`, with four `bears`
+additions in `bears-additions.json` and the one sentence to strike from
+`viable-options`' rationale in `strike-sentence.txt`; it validated at 97
+nodes against a copy; its judgment calls, four tradition pairs merged into one
+node each and three relations forced by the adopted-or-diverged vocabulary,
+are in `readings-report.md` and are the main thread's to check before the
+files are copied in; `pareto-frontier` owes a second `bears` on `evaluation`.
+The page unit and the browser unit are briefed under the job's `tmp/briefs/`
+(`unit-page.md`, `unit-browser.md`) and not launched; they run after the
+reader's work is committed. The review sitting's tradition unit is done
+(`tmp/review-sitting/traditions.md`) and its record survey was running
+(`tmp/review-sitting/survey.md`); the two design briefs are written
+(`tmp/briefs/unit-design-review-skills.md`, `unit-design-review-model.md`).
+
+**The order that remains.** Commit the reader and the skills on the
+implementation ref; write the glosses; run the passed-options migration and
+record its census here and on `prose-and-structure`; copy the readings in,
+apply the `bears` additions, strike the sentence on `viable-options`; then on
+`dialogue` a composed option adopting `survey-pin-in-review`,
+`ruling-carries-the-reason`, `every-option-carries-its-sentence`,
+`authority-fact-on-every-node` and `edit-led-against-a-named-ground`, with a
+fence, and this node's `depends` moved onto it; on `recording` the
+recommendation to `denial-typed-to-maieutic` with a fence; on `viable-options`
+to `passed-over-options-stay` at high boldness with a fence; on `rejected` to
+`passed-over-stays-listed` with a fence; `prose-and-structure` redrafted for
+its ten findings and sent to review; `agency`'s stub note struck; `review.
+against` backfilled from the accounts' review subsections; then the page and
+browser units, tests, the implementation landed in order and pushed, both
+pages projected and published; then the reviews of this node,
+`prose-and-structure`, `dialogue`, `recording`, `progressive-disclosure`,
+`viable-options` and `rejected`, on fable as the author directed on
+2026-09-04, and the survey before any ruling. The review sitting proceeds in
+parallel: the design units, the main thread's adversarial reading, the
+recommendations recorded and sent to review, then the reconciliation the
+author granted immediately after maieutic, then their reviews.
+
