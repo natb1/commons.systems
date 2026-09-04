@@ -39,6 +39,9 @@ facts:
       - name: review-divided-by-object
         source: commons.systems/disposition-graph/decomposition
         ref: "2026-09-04"
+      - name: denial-typed-to-maieutic
+        source: commons.systems/disposition-graph/alignment-page
+        ref: "2026-09-04"
     recommends: options-persist-at-the-recording
     boldness: moderate
     stands: options-persist-at-the-recording
@@ -119,6 +122,25 @@ The third step removes the dialogue and not the facts: the stage, the review, de
 
 The sentence sending a round's recommended dispositions to review together, one batch over the whole frontier in one context, cites the clean-context-review node's `per-draft-and-survey` instead: each draft is reviewed on its own the moment its recommendation is recorded, the survey runs over the frontier before the author rules, each node moves on its own verdict, and no disposition is confirmed while either reading is owed on it. The first step's description of what the reviewer judges is unchanged. Raised on commons.systems/disposition-graph/decomposition, from the author's words of 2026-09-04 recorded there.
 
+#### denial-typed-to-maieutic
+
+A denial given on the alignment page's kick-back row carries its own
+classification and is not analysed for one. The row means that none of the
+options on a fact is acceptable, which is a failure of the option set and so
+of the maieutic movement, where options are drawn out and drafted; so the row
+returns the node to that movement and the three-way classification below
+keeps running on free prose, which is where the ambiguity it exists to resolve
+actually lives. The tradition pass on the alignment page found the reason to
+state this rather than fold it in: the Roman *non liquet* is a third
+disposition about the decider's own ground, "it is not clear to me", and it
+calls for the periagogic movement, while "none of these is acceptable" is
+about the options and calls for the maieutic. One row cannot mean both, and
+what resolves it is that the row is typed while feedback showing the ground
+itself is at issue is still classified further back by this node's rule.
+(Raised on commons.systems/disposition-graph/alignment-page, from the author's
+words of 2026-09-04 recorded there: "Last option is always 'kick back' because
+none of the options are acceptable - this is not recorded as confirmation, but
+a kick back to mieutic.")
 ## Account
 
 ### Recording of 2026-09-03

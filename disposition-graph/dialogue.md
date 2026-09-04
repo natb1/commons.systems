@@ -45,6 +45,15 @@ facts:
       - name: survey-pin-in-review
         source: commons.systems/disposition-graph/decomposition
         ref: "2026-09-04"
+      - name: ruling-carries-the-reason
+        source: commons.systems/disposition-graph/alignment-page
+        ref: "2026-09-04"
+      - name: every-option-carries-its-sentence
+        source: commons.systems/disposition-graph/alignment-page
+        ref: "2026-09-04"
+      - name: authority-fact-on-every-node
+        source: commons.systems/disposition-graph/alignment-page
+        ref: "2026-09-04"
     recommends: facts-carry-options
     boldness: moderate
     stands: facts-carry-options
@@ -362,6 +371,62 @@ Alternatives and facts become one structure: every decision on a node is a fact 
 
 The `review` field carries, beside the draft review's `verdict`, `strength`, `date`, and `of`, the survey's state as `survey`, with its `date` and its `of`, the hash of the recommendation the survey read, written at apply only where the recommendation still matches what was read, and present without a verdict on a node the survey has judged before its draft review ran. A node is ready to rule when both pins match the recommendation as it stands, and the projections derive which of the two is owed and show it; nothing else is stored. Raised on commons.systems/disposition-graph/decomposition, from the author's words of 2026-09-04 recorded there; it follows the option `per-draft-and-survey` on the clean-context-review node, which names the two pins.
 
+#### ruling-carries-the-reason
+
+A ruling carries a fourth part beside the response, the date and the pin: the
+author's own reason for it, optional and in their words. Today it has none,
+and three nodes agree on the three parts, this one, `authority` and
+`viable-options`, while `quotes` puts the author's words in `## Disposition`
+per node and dated and never per option. So the reason the author gives for
+choosing one option over another has nowhere in the record to land, and
+`viable-options`' own answer already promises it does: "the confirmed choice
+with the author's reason". The gap is not theoretical. The alignment page's
+disposition of 2026-09-04 puts an optional input for exactly that reason in
+each option's drill-down, and `transience` and `ruling-transport` both hold
+that the page's database is a buffer and never the record, so without this
+field the author's reason is written to a buffer nothing reads back. (Raised
+on commons.systems/disposition-graph/alignment-page, from the author's words
+of 2026-09-04 recorded there: "Drill down also includes optional input from
+author on rationale for confirm/reject.")
+
+#### every-option-carries-its-sentence
+
+The two exemptions go, so that every option of every fact carries in prose
+what it would answer, which is what `viable-options` already requires of an
+option and what this node and the reader currently exempt. Measured, 168 of
+the graph's 407 options carry no such prose: 114 on the authority fact, 38 the
+option that stands, 12 on existence and 4 on persistence. The exemptions have
+two different reasons and both fail. A reserved fact's choices were held to be
+vocabulary rather than slugs and to need no gloss, and the projector's answer
+to that was a hardcoded sentence table, which is implementation no disposition
+justifies; the sentence belongs to the node that defines the fact and is
+projected from there. The option that stands was held to need none since its
+text is the answer, and that is why it renders on the alignment page as a bare
+name beside options that render their sentences, offering the author the least
+safe choice on the page with the least said about it: on a node no ruling
+reaches, confirming it ratifies a draft nobody has confirmed, which the record
+requires be said in as many words. (Raised on
+commons.systems/disposition-graph/alignment-page, from the author's words of
+2026-09-04 recorded there: "For each fact, list all options... For each option
+(other than kick back) provide short text summary of option and/or
+rationale".)
+
+#### authority-fact-on-every-node
+
+Every node carrying a stage carries an answer fact and an authority fact. This
+node states the conditionality of `existence`, which appears where a prune is
+proposed, and of `persistence`, present only where the recommendation would
+change the node's shape, and states none for the other two; the validator
+enforces neither. Measured, eighteen nodes carrying a stage carry no authority
+fact and three carry no fact of any kind. What the gap costs is the author's
+own range: the authority fact is how a ruling confers delegated or deferred,
+so on those eighteen the only class a confirmation can produce is ratified and
+the author's third exit is closed by an encoding accident rather than by a
+decision. `commons.systems/public/agency`, the graph's root question, is one
+of the eighteen. (Raised on commons.systems/disposition-graph/alignment-page,
+where the author's disposition of 2026-09-04 to list every fact without
+exception made the gap visible: a page can only list the facts a node
+carries.)
 ## Account
 
 ### Finding: the review pin does not cover the standing answer, 2026-09-03
