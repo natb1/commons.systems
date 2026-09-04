@@ -44,6 +44,10 @@ The author, 2026-09-04:
 >
 > Progress this dialogue through meiutic and stop before adversarial review.
 
+The author, 2026-09-04, after the maieutic movement, announcing a grant to be given after compaction:
+
+> prepare for compaction. after compaction you will be granted bootstrap authority to reconcile anything materialized from nodes in this sitting. that includes but is not limited to the encoding, migrating all nodes to the new encoding, the alignment/adversarial review skills, the alignment/browser artifacts and graph tooling.
+
 ## Alternatives
 
 ### authority-derived
@@ -624,3 +628,94 @@ confers, `facts` and `## Facts`; the recommendation, `recommendation` and the
 fence; the consequences for the eleven nodes, their `alternatives` and
 `depends`; the traditions, the fence's rationale, each a reading owed. Nothing
 of the round is held only in this session.
+
+### State at compaction, 2026-09-04
+
+The author's words above announce a grant and are not one. Bootstrap
+authority is explicit, in the author's words, for a named reconciliation,
+never assumed and never carried over (`authority`'s shim; the alignment
+skill, §0.2), and the words say the grant comes after compaction. Until it is
+given in the author's own words, nothing here is reconciled: the node stands
+at the review stage with the review owed, the eleven nodes carry their
+alternatives unapplied, and the implementation ref is untouched at
+`5af58312`. The record is the dialogue's memory (`checkpoint`,
+`transience`), so what a session resuming after compaction needs is written
+here and nowhere else.
+
+**What the announced grant covers, in the author's words:** "anything
+materialized from nodes in this sitting", naming the encoding, the migration
+of every node to it, the alignment and adversarial-review skills, the
+alignment page and the browser, and the graph tooling. The nodes of this
+sitting are this one and the eleven that carry its alternatives.
+
+**What the record's own rules require of that reconciliation.** The grant is
+quoted on this node before anything is written. The graph lands before the
+implementation, since landing the implementation first inverts the account
+(alignment skill, §6): the eleven nodes' recommendations move to the
+alternatives this sitting recorded and their standing texts are amended to
+them, each staying unanswered with the review owed; this node's
+recommendation stands and acts under the grant, which under its own answer
+is exactly what an explicit grant on an unanswered node does; then every
+node is re-encoded. Then the implementation: the reader and validator, the
+derivations, the frontier, the browser, the alignment page, the alignment
+skill, the review skill's brief and apply steps, the reconciliation skill's
+new write path, and the rules projection, each landing on the implementation
+ref in a commit naming the grant and the graph commit it reconciles to. The
+clean-context review runs on the batch after, as the author has directed for
+this sitting and as the bootstrap paragraph of the skill provides.
+
+**The encoding the fence implies, as delegated detail.** The author delegated
+the encoding's details on 2026-09-03 on `dialogue`, and the fence fixes the
+shape without the field names; the reconciliation decides these, and this is
+the session's account of them so that they are not decided twice.
+`alternatives` and `recommendation` fold into `facts`: a fact has a `name`
+(`answer`, `authority`, `existence`, `persistence`), `options`, each with a
+`name`, `source` (`author`, `ai`, `review`, or the instrument or node that
+raised it), `ref`, a `recommends` naming one option, `boldness`, and a
+`ruling` (`response`, `choice`, `date`, `of`) once given; `## Facts` carries
+a subsection per fact and one per option beneath it, saying what the option
+would answer and, on the recommended one, why. The `## Recommendation` fence
+stays as the recommended answer's full text where it differs from what
+stands. The `authority` stamp is derived from the rulings and the key leaves
+the frontmatter; `CONFERRABLE_CLASSES` gains deferred. A reading records what
+it bears on, a list of fact, option, and relation, adopted or diverged, on
+the reading node, and the option's list of readings is the derived inverse.
+The standing hash covers the frontmatter minus the dialogue keys and minus
+`facts`, plus the answer and the rationale, so that adding an option does not
+stale every pin; a ruling's `of` pins the recommended option and its reason.
+`stage`, `review`, `depends`, `## Disposition` and `## Account` remain the
+dialogue state and are what the recording removes, the Disposition section
+as `quotes` decides.
+
+**The migration, mechanically.** Measured on the graph at this commit:
+seventy-four nodes, of which twenty-seven carry no stamp and no answer,
+forty-six a deferred stamp with an answer, and one, `purpose`, an answer
+with no stamp; two hundred and fifteen alternatives, none of source
+`proposal`; facts on fifty-seven nodes, `authority` on fifty-five,
+`existence` on six, `persistence` on two, no rulings on any; thirteen
+readings, twelve adopted and one diverged, none chosen over. Each node's
+alternatives become its answer fact's options, `standing` the text as it
+stands, `recommendation.adopts` and `boldness` the fact's `recommends` and
+`boldness`; the reserved facts keep their choices as options; the forty-six
+deferred stamps go, which is the classification the author made on
+2026-09-03 and changes no node's status; each reading's `relation` becomes a
+`bears` entry on the answer fact's standing option. Rejected lines in
+rationales are not minted into options by the migration, since which of them
+are still viable is judgment per node, and they stay owed.
+
+**The implementation loci, verified this sitting.** `packages/disposition/read.mjs`:
+`FRONTMATTER_KEYS`, `FACT_NAMES`, `FACT_KEYS`, `RULING_KEYS`,
+`CONFERRABLE_CLASSES`, `readFacts`, the `## Facts` subsection check, and
+the dialogue-coherence check near line 1035. `packages/disposition/derive.mjs`:
+`deriveStatus` (line 214), `stripDialogueFrontmatterLines` (233, the key
+list that fixes what the standing hash omits), `deriveStandingHash` (267).
+`packages/disposition/project.mjs`: `renderFrontier` and the ruling order,
+`renderAsk`, `renderDecisions`, `renderChoice`, `standingState` and the
+keep labels, `renderPane`. `packages/disposition/alignment-template.html`
+and `browser-template.html`. `.claude/skills/align/SKILL.md`,
+`.claude/skills/align-review/` with `brief.mjs` and `apply.mjs`, and
+`.claude/skills/reconcile/SKILL.md`, whose line 27 states the rule the
+model amends. Tests: `packages/disposition/*.test.mjs` (225) and
+`.claude/skills/align-review/*.test.mjs` (45), all passing at `5af58312`.
+
+Nothing else of this sitting is held in the session.
