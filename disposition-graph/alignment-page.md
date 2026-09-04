@@ -96,6 +96,17 @@ The author, 2026-09-04, granting bootstrap authority for the reconciliation of t
 
 > granted, reconcile it
 
+The author, 2026-09-04, on the submit controls and on ruling ahead of the stage:
+
+> new refinements to alignment artifact dispositon:
+>
+> - What is "Submit 1 response"? Is that initializing a claude.ai/code session? If so that is good, but a) can this be done with a plain hyperlink (vs javascript) to make to external action clear b) move the "copy all responses" next to this button and make sure it is copying the same instruction that would be used to initialize the cloud session.
+> - Confirmed responses for nodes that are not at the confirmation stage of dialogue are invalid. Show the facts with pending confirmation, and recommendations, but disable to input. Add a button next to the dialogue phase lable (eg. "periagogic") to launch alignment dialog / copy instruction to initialize alignment dialog for that node (probably always `/align <node_id>`). Ideally, the visual presentation is a chip with two icon buttons embedded in it - the launch button is ideally an href.
+
+The author, 2026-09-04, granting bootstrap authority for that reconciliation:
+
+> You have bootstrap authority to reconcile these dispositions.
+
 ## Alternatives
 
 ### three-column-ruling-screen
@@ -146,7 +157,7 @@ The rail, on the left, carries the metrics at its top and then every unanswered 
 
 A metric on this page is a signal, an instrument, or a criterion of a recorded disposition and never a count for its own sake; each names the disposition it instruments and links to that node in the browser, which addresses every node by its id where this page has no route to one. Four meet that standard. Open, the size of the outstanding dialogue, for the unanswered node, under which every node is unanswered until the author confirms it, so the count is the author's outstanding authority. Ruleable, the nodes whose clean-context review is behind them, for the clean-context-review node, which is what stands between a draft and the author, so the count is what can be ruled now. Next settles, what a ruling on the first node in the order would make decidable, for the alignment-order node, whose answer is that the ruling settling the most comes first, so the count is what one ruling buys. Stale, the nodes whose review pin or recommendation pin no longer matches the text it read, for the frontier-consistency node, whose validations catch it, so the count is how much of what looks ruleable rests on a reading of text that has since moved. The stage counts, the per-graph lines, and the lede go: a stage count instruments no disposition, and a graph is a label on a row rather than a division of the order.
 
-The middle column holds everything the ruling asks, and the right-hand column holds nothing but the disposition itself. The stage is what the column says first, because the stage names the movement owed and so what the column is for: at the periagogic stage the ask is the author's own account of the ground and the free-text control for it leads; at the maieutic stage it is the author's intention. The ruling controls follow, marked as running ahead of the dialogue rather than withheld, since the author may rule at any stage; what the page must never do is present a confirmation as the ordinary path on a node whose own dialogue says the ground has not yet been given. Where the stage asks for the author's words and the node carries none, the column says that in as many words rather than rendering an empty space, because "nothing of yours is recorded here, and what the answer says the AI drafted" is the fact those stages exist to change, and a blank says it to no one.
+The middle column holds everything the ruling asks, and the right-hand column holds nothing but the disposition itself. The stage is what the column says first, because the stage names the movement owed and so what the column is for: at the periagogic stage the ask is the author's own account of the ground and the free-text control for it leads; at the maieutic stage it is the author's intention. Only the ruling stage takes a response. A confirmation recorded on a node that has not reached that stage is invalid, as the author ruled on 2026-09-04, so at every earlier stage the decisions, their choices and the recommendation are all rendered and every input among them is disabled: the author sees exactly what will be asked and cannot yet answer it. This supersedes the same day's earlier clause, that the controls run ahead of the dialogue marked rather than withheld on the argument that the author may rule at any stage. They may, and the way they do it is to move the node's stage in the dialogue; a live control on a periagogic node does not offer that, it offers an act the record will not honour. Where the stage asks for the author's words and the node carries none, the column says that in as many words rather than rendering an empty space, because "nothing of yours is recorded here, and what the answer says the AI drafted" is the fact those stages exist to change, and a blank says it to no one.
 
 Then the decisions. They are the node's own answer, where alternatives are pending on it, and its asking facts: the authority class a confirmation would confer, the node's existence, and its persistence where the recommendation would change the node's shape. Each is labelled with the question it asks, in the words of the node or of the fact, because under `aspects-are-nodes` every decision is a question and a decision labelled with a category tells the author nothing about what is being asked. Under each are its choices, and a choice row leads with what that choice would answer, in the sentence the record holds for it, carrying its name beside that as the handle the record files it under. A row that shows only the name shows the author a list of identifiers: the name is how a ruling is stored and the sentence is the decision. The recommendation among the choices is marked, its boldness shown, the rest of the row's text beneath it as drill-down, one simple input records or edits the choice, and a last row rejects every choice on that decision with feedback.
 
@@ -159,6 +170,8 @@ Beneath the decisions, the ruling on the whole, with the caption that says what 
 The right-hand column is the disposition and nothing else: the node as it would stand under the choices made so far, re-rendered as each choice changes, with the folded decisions simply present in it and never asked about. Where an answer stands it leads with the edit this ruling would make, and where none stands it shows the whole. The edit says what it is an edit against, because a diff implies a ground and the ground here is usually a draft: against the ratified answer where there is one, and against a draft no one has confirmed where there is not. That is the author's finding of 2026-09-03 on `commons.systems/disposition-graph/purpose`, that a node "still indicates that it is an edit to a confirmed disposition ... even though no node is yet confirmed". The diff is not what was wrong and it stays; what was wrong was letting it imply a standing its base does not have. Nothing that is about the ruling shares the column with it -- no control, no caption, no indication, no drill-down -- because the column's one job is to show the author the thing they are ruling on, and every sentence of apparatus in it is a sentence they must read past to see it.
 
 The rail is fixed and narrow. The middle and the right share what is left, near enough evenly, and the disposition can take the whole screen on demand. Before the refinement the right-hand column was the widest, on the argument that the node is the thing in view while the decisions are worked; that argument survives, but the middle column now carries the stage's ask, the decisions, the ruling on the whole, the indications and three drill-downs, and a working column starved to a third is a worse failure than a reading column at a half. Neither is the author's ruling: the author moved the material and said nothing about width, and this is the consequence drawn from it.
+
+What an earlier stage offers instead is the dialogue itself. The stage is a chip, and the chip carries two controls: one opens an alignment session on this node, as a plain link so that leaving the page reads as leaving the page, and one copies the instruction that starts it, `/align <the node's id>`. The two are the same instruction by two routes, one for a reader who can follow the link and one for a reader who is somewhere else. The page's own two controls at the top are the same pair at the scale of the whole sitting: one records every staged response where a session reads them back, and one copies the instruction that carries them into a session by hand, and they say which is which rather than leaving the author to infer it from a verb.
 
 A response is one of the three the unanswered node opens and this page adds none: choosing the recommendation's choice on every asked decision and confirming the whole is a confirmation; choosing any other and confirming is a confirmation with edits; a rejection row, on one decision or on the whole, is a denial with feedback. Responses stage and submit together across nodes, so selecting another node never discards one, and the rail marks every node that carries a staged response.
 
@@ -915,3 +928,33 @@ against a draft no one has confirmed" on all fourteen today, and "against the
 ratified answer" on none, because nothing in the record is ratified. When the
 first node is ratified the label will say so on it and on no other, which is
 the distinction the record has and the page did not.
+
+### What "Submit" does, 2026-09-04
+
+The author asked whether "Submit 1 response" initialises a claude.ai/code
+session, and said that if so it is good. It does not, and the premise is
+corrected here rather than built on.
+
+Read from `alSubmit` in the page's own script: it writes each staged response
+into the artifact's database, one document per node in the collection
+`responses`, whose id is the node id with each `/` replaced by `:`; it then
+best-effort writes a `meta/status` document with the answered and total
+counts. Nothing leaves the page and no session is started. The connection to a
+session is the other end: the alignment skill reads that collection back with
+the Artifact tool before anything else in a sitting, which is what makes a
+ruling made here reach the record at all.
+
+So there is no external action for a hyperlink to make clear, and turning the
+button into one would misdescribe it in the opposite direction. What the
+author's request is reaching for is real and is answered a different way: the
+page's two top controls become a pair that name their two routes -- record the
+responses where a session reads them, or copy the instruction that carries
+them into a session by hand -- and the copy produces exactly the instruction a
+session would be given, so that the two routes cannot drift apart. The plain
+hyperlink the author asked for is the right control for the thing that IS
+external, which is opening the session, and it is put where that action
+belongs: on the stage chip, per node, and beside the pair, for the sitting.
+
+`alCopyAll` today copies a bare digest -- ids, stages, rulings, notes -- which
+is not an instruction and could not initialise anything. That is the gap the
+author found by asking.
