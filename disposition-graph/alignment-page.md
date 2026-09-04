@@ -657,3 +657,38 @@ the AI's own judgment.
 This recommendation is not reviewed. The clean-context review is owed on it and
 on the rest of this sitting's batch, and the author's instruction stops the
 sitting before it.
+
+### The sitting closed at maieutic, 2026-09-04
+
+This supersedes the state index above, which was written for the compaction and
+is now behind. Every node in the sitting's scope is through its maieutic
+movement and none has been sent to review, which is where the author stopped
+the sitting.
+
+**Through maieutic, each with a recommendation and a fence.** This node, with
+its first answer, adopting `three-column-ruling-screen`. `dialogue`, adopting
+`aspects-are-nodes`, whose fence was drafted on 2026-09-04. `growth`, adopting
+`boldness-reversed`, which reverses the definition of boldness and hands this
+page's description and its shim to this node. `unanswered`, adopting
+`responses-on-decisions-and-children`. `recording`, kicked back from the ruling
+stage and adopting `responses-classified-per-decision`. `alignment-order`,
+kicked back from the review stage with its fence amended for the author's
+correction of 2026-09-04, its recommendation still `settle-counts-nodes-only`.
+`evaluation` was already through maieutic with the greenfield definition in its
+answer and its pin refreshed.
+
+**Two readings minted under this node**, `master-detail-selection` and
+`progressive-disclosure`, both deferred until the author reads the sources.
+
+**Still at the ruling stage and reached by the ruling on `aspects-are-nodes`,
+deliberately untouched:** `authority`, `clean-context-review`,
+`frontier-consistency`, `quotes`, `checkpoint`, and `madr-decision-records`.
+`node` is at maieutic and is untouched, because nothing about a node changes
+under this design. The exposure is what it was: until the ruling is made, those
+at the ruling stage show as ruleable under rules the author has already changed.
+
+**What is owed, in the author's order.** The bootstrap grant, then the
+reconciliation it authorises, then the clean-context review of the batch, then
+the author's rulings. The grant is not held by this sitting and is not implied
+by any sentence in this record.
+

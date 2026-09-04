@@ -1223,8 +1223,9 @@ record carry a decision per aspect, and it is worth the review's attention that
 the defect showed up in the node that defines the encoding, in the ordinary
 course of using it.
 
-The field is therefore not written in this checkpoint, and the reason is not
-the stage the author has just removed. It is that a recommendation adopting an
+The field was therefore not written in that checkpoint, and the reason was not
+the stage the author had just removed; it was written in the next, as the
+section below records. It is that a recommendation adopting an
 alternative requires the `## Recommendation` fence, the whole proposed node, and
 drafting that for this node is the maieutic movement the author has scheduled
 for after compaction. What is recorded is what the sitting recommends, named
@@ -1281,3 +1282,33 @@ the term. Its three load-bearing sentences are quoted from `node`,
 graph commit `e228e67e`. The clean-context review is owed and has not run; the
 fence is what it will read.
 
+### The cascade taken through maieutic, 2026-09-04
+
+The six nodes `aspects-are-nodes` touches are through their maieutic movements
+and none is at the review stage, on the author's instruction. `alignment-page`
+has its first answer and its fence; `growth` adopts `boldness-reversed`;
+`unanswered` adopts `responses-on-decisions-and-children`; `recording` is
+kicked back from the ruling stage and adopts `responses-classified-per-decision`;
+`alignment-order` is kicked back from the review stage with its fence amended
+for the author's correction of 2026-09-04; and this node carries the fence
+drafted on 2026-09-04. Four of them name this node's `aspects-are-nodes` in
+`depends`, which is the first use in the record of the second form
+`alignment-order` defined for that field, and the frontier now counts it.
+
+Two consequences of this node's fence were found in the writing of the others
+and are recorded where they land rather than here: `recording` is the only node
+that writes a stamp, so it is where the stamp's class comes from now that this
+fence takes `class` off the recommendation, and it is the only place a node is
+deleted, so it is where a ruling on the `existence` fact is recorded before the
+file goes.
+
+**One implementation fact the reconciliation must not miss.**
+`stripDialogueFrontmatterLines` in `packages/disposition/derive.mjs` removes
+`stage`, `recommendation`, `review`, `alternatives` and `depends` from the
+frontmatter before the standing hash is taken, and nothing else. `facts` is
+dialogue state by this node's answer, so it must be removed there too. If it is
+not, recording a fact on a node changes that node's standing hash, and every
+`amends` and `review.of` pin in the record goes stale at once for a reason that
+has nothing to do with the standing text. Recorded here because it is a
+consequence of this node's encoding and would otherwise be found by the
+frontier flagging seventy nodes at the same moment.
