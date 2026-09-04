@@ -18,6 +18,9 @@ facts:
       - name: rerun-earlier-reviews
         source: ai
         ref: "2026-09-03"
+      - name: per-draft-and-survey
+        source: commons.systems/disposition-graph/decomposition
+        ref: "2026-09-04"
     recommends: standing
     boldness: moderate
     stands: standing
@@ -75,6 +78,10 @@ The superseded per-node answer, kept live by the review's strong counter-argumen
 #### rerun-earlier-reviews
 
 The account holds open, as wholly the AI's, that the two review batches of 2026-09-03 stand as the reviews of that day rather than being re-run under this answer. The alternative is that they do not stand: every node whose only review was read in one of those batches goes back through the skill before the author rules on it. The author may take it simply by invoking the review, which the node itself says.
+
+#### per-draft-and-survey
+
+The review divides by its object. The review of one draft, validations one to six of the frontier-consistency node with the counter-argument and the viability of its options, runs in clean context the moment the draft's recommendation is recorded, reading the draft, the chain of nodes above it, its siblings under the same parent, the nodes it cites, the rules that bind everywhere, and the index of every question the record asks with its standing answer and options, on a model never smaller than the drafter's and the most capable one when the recommendation's boldness is not low or a ruling on the node would settle others; its forward is what puts the node at the ruling stage, and two such reviews never wait on each other. The survey, validations seven to fifteen, keeps the batch shape the author's words of 2026-09-03 give it, the whole graph read in one context without its accounts, and changes in what it judges and when: it judges the nodes changed since its last pin against the whole graph, it runs before the author rules and on demand rather than at every sitting's review stage, its findings carry the graph commit they read and a finding on a node changed since that commit is discarded at apply, which serializes it in place of the lock, and a node is ready to rule when it carries a forward verdict and a survey pin at or after its last change. Raised on commons.systems/disposition-graph/decomposition, from the author's words of 2026-09-04 recorded there; it takes the side of `split-survey-from-per-draft` on frontier-consistency, and it supersedes in part the author's words of 2026-09-03 that every invocation is one batch with nothing isolated by node, which stay whole for the survey.
 
 ## Account
 
