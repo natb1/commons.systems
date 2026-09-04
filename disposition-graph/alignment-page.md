@@ -105,6 +105,17 @@ The author, 2026-09-04, granting bootstrap authority for that reconciliation:
 
 > You have bootstrap authority to reconcile these dispositions.
 
+The author, 2026-09-04, opening this sitting on the layout of the questions:
+
+> Before progressing commons.systems/public/agency through confirmation, we will refine disposition for the alignment artifact (and possibly cascading effects on encoding, etc.) which I am using to review the commons.systems/public/agency question. This will help distinguish between systemic issues in disposition/reconciliation, vs. unfinished dialogue and residue of agency node encoding before encoding disposition was settled. It's been through multiple migrations. Progress dialogue through meiutic and stop before adversarial review. Then prepare for compaction. After compaction, you will be granted bootstrap authority to reconcile nodes in this sitting.
+>
+> - the graph name does not need to be listed in the eyebrow - is is already part of the node id. This does not require disposition, it can fall out as unjustified liquidation.
+> - the list of facts that require confirmation is unclear from what's presented. Now that the data model has been simplified and the list of facts in each disposition is bound and consistent, we can record revised disposition for the layout of the questions. List each fact without exceptions. For each fact, list all options. Last option is always "kick back" because none of the options are acceptable - this is not recorded as confirmation, but a kick back to mieutic. For each option (other than kick back) provide short text summary of option and/or rationale, indicate status of AI recommendation and (if applicable) status of tradition support or divergence. Radio input enables selection of option for confirmation or kickback (disabled if not at the confirmation phase). Each option has a drill down (details accordion?) for all other supporting details - full text of the fact, author quotes, AI explanations for recommended or rejection, explanation of tradition support/divergence and href to tradition node, etc. Drill down also includes optional input from author on rationale for confirm/reject.
+> - Everything under "The review" can be merged into the above (or let me know if it can't be)
+> - Structured data from the above must not be re-encoded into the prose (eg. "rejected" options). This is probably residue of the prose being written before the data model recorded rejected options.
+> - "Your ruling on the whole" can be liquidated as unjustified now that all facts are enumerated as standard.
+> - "What a ruling here makes decidable (3)" can remain where it is.
+
 ## Facts
 
 ### answer
