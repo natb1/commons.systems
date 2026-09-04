@@ -124,6 +124,15 @@ The author, 2026-09-04, opening this sitting on the layout of the questions:
 > - "Your ruling on the whole" can be liquidated as unjustified now that all facts are enumerated as standard.
 > - "What a ruling here makes decidable (3)" can remain where it is.
 
+The author, 2026-09-04, after compaction, granting the reconciliation of this
+sitting, which the `## Account` names below:
+
+> You have bootstrap reconciliation authority including migrating nodes to new encodings.
+
+And, the same turn, on the review:
+
+> launch align-review using the fable model
+
 ## Facts
 
 ### answer
