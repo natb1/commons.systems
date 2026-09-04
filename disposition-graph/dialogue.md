@@ -131,6 +131,10 @@ The author, 2026-09-03, retracting the rename put to them earlier the same day:
 
 The words in full are on `commons.systems/disposition-graph/alignment-page`.
 
+The author, 2026-09-04, revising the disposition on when a recommendation may be drafted:
+
+> AI recommendations can be recorded at any time during the dialog (not just after the first meiutic).
+
 ## Answer
 
 Its question, its fields, and its standing answer with its stamp when it has one; and, while a dialogue is active on it, the dialogue state. A dialogue is active on every unanswered node and on any answered node with an alternative pending on it. The status unanswered stays derived from the stamp, as the unanswered node says, and a standing answer of any class, ratified, delegated, or deferred, keeps its full authority while the dialogue is active, until an alternative is confirmed. Confirmed dialogue state folds into the node at the recording, into the answer, into the rationale as a rejected alternative with the ruling quoted, or into nothing; unconfirmed, it survives only in version control. Three requirements fix what the state must be: it must survive the session that held it, so that a session which loses its context resumes every node from its stage; it must hold the author's intention against the account that accumulates around it, the requirement the fidelity node asks; and it must give the author, at the moment of ruling, the context to see how this question stands to the rest of the unanswered frontier, and, reading a node that already has an answer, whether alternatives are pending on it and where each came from. It has these parts, each holding only what cannot be re-derived.
@@ -1118,4 +1122,44 @@ its three load-bearing sentences are quoted from `node`, `un-aligned-children`
 and `under`. Its boldness is low, in the direction the author uses the term.
 The clean-context review is owed on it before the author rules, and the
 author's instruction for this sitting stops short of it.
+
+### A recommendation may be recorded at any time, 2026-09-04
+
+The author's revision is above and it amends two sentences of this node's
+answer. The answer says `recommendation` is "required from the review stage
+on", and that "A recommendation is drafted after the first maieutic movement
+and may change on a kickback or as the frontier evolves". Under the revision
+the first sentence keeps its floor, since a node cannot reach review without
+one, and loses its implication that the field may not be written earlier; the
+second loses "after the first maieutic movement" and keeps the rest. The
+alignment skill's presentation rule carries the same implication and goes with
+it.
+
+It is a good revision on its own merits and not only as the author's. A
+recommendation withheld until a stage boundary is a recommendation held in a
+session, and this node's own first requirement is that the state survive the
+session that held it. The sitting of 2026-09-03 and 2026-09-04 is the
+demonstration: it formed and withdrew four recommendations on this node in one
+day, and each lived in prose in this account rather than in the field the
+projections read, because the field was not yet due.
+
+**What this sitting recommends on this node, and the encoding problem it
+exposes.** Two of the alternatives here are recommended and they are
+orthogonal: `aspects-are-nodes`, for what carries a decision the author rules
+on separately, and `first-answer-is-not-an-amendment`, for how a ruling that
+gives a first answer is presented rather than shown as an edit against nothing.
+Adopting either does not decide the other. The encoding cannot say so: this
+node's answer gives `recommendation` a single `adopts`, so the field can name
+one of the two and the account must carry the other in prose. That is the
+author's ruling of 2026-09-03 arriving from the opposite direction, that the
+record carry a decision per aspect, and it is worth the review's attention that
+the defect showed up in the node that defines the encoding, in the ordinary
+course of using it.
+
+The field is therefore not written in this checkpoint, and the reason is not
+the stage the author has just removed. It is that a recommendation adopting an
+alternative requires the `## Recommendation` fence, the whole proposed node, and
+drafting that for this node is the maieutic movement the author has scheduled
+for after compaction. What is recorded is what the sitting recommends, named
+here and set out in full in the two alternatives.
 

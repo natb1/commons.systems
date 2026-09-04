@@ -44,6 +44,10 @@ The author, 2026-09-04, on what list A holds under `aspects-are-nodes`:
 >
 > We already have multiple pages for working through trees in alignment order. Evaluate whether list A needs to/should include unanswered children? It sounds like list A is a list of facts per node. Maybe the child questions are indicated in the right aligned context pane under the node preview (so that the navigation pane can remain alignment order sorted).
 
+The author, 2026-09-04, closing the sitting before compaction:
+
+> record the current state of all dispositions from this session to prepare for compaction. Including this disposition which is a revision to a prior one: AI recommendations can be recorded at any time during the dialog (not just after the first meiutic). Ensure your recommendations so far are recorded. After compaction we will progress the alignment page nodes through meiutic and stop before review. Before review you will be granted bootstrap authourity to reconcile those nodes (including cascading effects on graph encoding/re-encoding of nodes/align/align-review/alignment page).
+
 ## Account
 
 An un-aligned disposition, recorded at the author's direction on 2026-09-03 and not yet answered. The question is the alignment page's own: what the author reads when they rule, what it must show of each unanswered node, in what order, and how their ruling returns to the record. The page exists and the author rules on it daily, and until now no node asked its question. It was recorded only inside other answers: a shim on `growth` naming the artifact, the projector flag that writes it, its published address, and its liquidation; one sentence of `growth`'s answer saying what it lists; one clause of `projection`'s answer and of its recommended text naming it the projection of the open dialogue; and the three responses defined on `unanswered`. So the page would have been ratified incidentally, by clauses inside larger rulings, and never put to the author as a question of its own, where the browser has this node's parent and `self-documentation` beside it.
@@ -340,4 +344,78 @@ order. That is the design working as intended, since the ancestor comes before
 its descendants precisely because ruling it makes theirs decidable, but it is
 worth the author seeing before they confirm, because it means the parent's
 screen will often ask little and show much.
+
+### State at compaction, 2026-09-04
+
+Recorded at the author's direction so the sitting resumes from the record and
+not from a session, which is what the checkpoint and transience nodes require
+of it. Every node below carries its own state; this is the index of what the
+sitting touched and what each is owed, and it is derivable from the frontier.
+
+**The node in hand.** This node, `alignment-page`, at the **periagogic** stage.
+It holds the author's six dispositions of 2026-09-03 and 2026-09-04 verbatim:
+the metrics moved to the top of the rail with a justification each and the rest
+of the pagehead dropped; one disposition shown at a time, selected from the
+rail, with the selection marked there; list A of confirmation requests, list B
+of summarized choices under each with the recommendation, its boldness, quotes
+and full text as drill-down, a simple input, and a last row rejecting all
+choices with feedback; the full detail rendering live in a right-aligned
+context pane, amended from below the list on 2026-09-03; the bootstrap encoding
+artifact, which fell to `dialogue`; and the correction of 2026-09-04 that list
+A holds no children. The probe of the sitting was answered. What is owed is the
+maieutic movement on the page itself: the metrics and their justifications, the
+single-selection rail, and the three columns. The author has scheduled it for
+after compaction.
+
+**Where the encoding stands.** `dialogue`, at **maieutic**, carries the whole
+of it: nine alternatives, of which the sitting recommends two that are
+orthogonal, `aspects-are-nodes` and `first-answer-is-not-an-amendment`; the
+withdrawn `aspects-compose-the-answer` and `ranges-on-whole-node-alternatives`
+with the accounts of why each fell; the corrected finding "a first answer is
+presented as an amendment"; the analysis of the unit of a ruling with its
+clean-context corrections against it; and the author's revision of 2026-09-04
+that a recommendation may be recorded at any time. Its `recommendation` field
+still adopts `standing` from before the sitting and is superseded; the account
+says so and says why the field is not yet rewritten.
+
+**Nodes moved off the ruling stage by this sitting**, each because the author's
+words of 2026-09-03 or 2026-09-04 contradict what its forwarded recommendation
+rested on, and each keeping its recorded review pin so the frontier shows the
+review as behind the words: `unanswered`, to **maieutic**, for confirmation on
+a subset of the aspects within a node rather than of nodes; `evaluation`, to
+**maieutic**, for the operational greenfield definition written into its answer
+at the author's direction, whose pin is refreshed to the amended standing text
+while its `review.of` stays as read; `growth`, already at maieutic, for the
+retracted rename, the directed `partial-ratification`, and the frontier finding
+that it defines boldness in the opposite direction from `dialogue`, from the
+author, and from the usage.
+
+**Nodes the ruling on `aspects-are-nodes` will reach, still at the ruling stage
+and deliberately untouched.** `recording`, `authority`, `clean-context-review`,
+`frontier-consistency`, `quotes`, `checkpoint` and `madr-decision-records` are
+at **ruling**; `alignment-order` is at **review**; `node` is at **maieutic**.
+The exposure is unchanged and is stated so it is not lost: until the ruling is
+made and the kickbacks with it, the frontier shows those at the ruling stage as
+ruleable under rules the author has already changed. The cascade under
+`aspects-are-nodes` is six nodes, not the fourteen the withdrawn design would
+have touched, and the difference is that nothing about a node changes.
+
+**What is owed before the author rules on anything from this sitting.** The
+clean-context review, on `dialogue` above all, which has had three ad-hoc
+validations of single questions and no review of the batch. The three ad-hoc
+validations are recorded where they bear and are not a substitute for it.
+
+**Bootstrap authority is not granted.** The author's words of 2026-09-04 say it
+will be granted before review, for the reconciliation of these nodes and the
+cascading effects on the graph encoding, the re-encoding of nodes, the
+alignment and review skills, and the alignment page. It is not granted by that
+sentence and this sitting has none. The shim on `authority` is explicit that
+the grant is for a named reconciliation, in the author's words, never assumed
+and never carried over, so the session that resumes after compaction asks for
+it in the turn it is needed and does not read this paragraph as the grant.
+
+**Nothing else is held anywhere.** No ledger, no scratch file, no session
+memory carries any part of this sitting, and the two pages have not been
+republished, since nothing reached a ruling. The commits from `4b75af10` to
+this one are the sitting's log.
 
