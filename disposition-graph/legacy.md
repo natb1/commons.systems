@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 6f0617ffb66143e3b524d06ba416e9c27bda7d43
+  against: "The node makes 'read it when a question needs it' the only path in and carries nothing by default, while nothing derives which legacy knowledge a question needs: work-loop assigns the drain to a second direction the frontier does not derive at all, and materialization's shim prunes at the swap whatever no disposition supports. The session's answer — that the swap is gated on the coverage ruling — is verified and does prevent loss by omission. What survives is milder and real: the drain sits on an eleven-clause exit condition that nothing reads, so it will be done at exit under time pressure or not at all."
 facts:
   - name: answer
     options:

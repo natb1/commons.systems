@@ -6,6 +6,7 @@ review:
   strength: weak
   date: 2026-09-03
   of: acffe2489b0ad9c7c0eb93bb1444595d6a9d31f4
+  against: "The reading now supports what the author already decided rather than testing it: the original question asked whether the tradition supports progressing to audience, the author answered that the title alone does not, and the question was re-oriented to the progression the author preferred. That is legitimate, but the reading's remaining evidential value is small — it says the standard opens with purpose and scope, which was never in doubt — and its one substantive contribution, that definitions and overview are handled differently here, is exactly the divergence the fence still does not record."
 facts:
   - name: answer
     options:

@@ -7,6 +7,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 30fbaa7140576becf743ee5c7e094e1b980037d0
+  against: "The author's objection was that the rejected section 'seems too ad-hoc' as a projection source, and the projector already reads it, so the schema change buys structure for the projector at the price of a field every node must maintain and that will accumulate entries nobody prunes — the drift the record resists elsewhere. Option 3 answers the author's objection at zero cost provided the browser's heading match is documented as the contract rather than left as an accident of the template, which is what the option's own text now says. The counter to that is thin: a heading convention is exactly what the author called ad hoc, and documenting a convention does not make it checkable."
 facts:
   - name: answer
     options:

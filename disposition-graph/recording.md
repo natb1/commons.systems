@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 75336fcff7555274971f7db32a861b19c5651f4e
+  against: "The review is mandatory before every confirmation and unbounded in cost, while what it guards is a draft the author is about to read anyway, and most of what it catches is mechanical: a ruling is quoted with its date or it is not, a shim's artifact exists or it does not, a cited command runs or it does not. This reading is the evidence — its highest-value findings are a shim naming a file absent from the checkout, a shim whose liquidation condition is met, an `at` pin in the wrong format, a `depends` field no node carries, and a Facts section contradicting its own frontmatter, every one of them checkable. The judgment findings are fewer and could be bought with a narrower reading over a smaller set."
 facts:
   - name: answer
     options:

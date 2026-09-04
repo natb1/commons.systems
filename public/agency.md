@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: b33788c35f071c2873d8b1bb6d951a3f0c89bbed
+  against: "The answer makes a claim the record cannot check. 'Capacity, not exercise' means the archē is satisfied by a capacity that is never used, and its only instrument is a re-grasp on events, so no observable state of the world contradicts it: an author who had in fact been captured would read the same answer and find nothing failing. Pettit is adopted as support, but Pettit's test is structural — does another hold arbitrary power over you — and the record records no structural test of its own. So the graph's first principle is the one node that nothing can falsify, which is defensible for an archē and dangerous for the node that every prune, every prioritisation and every ratification below it appeals to."
 facts:
   - name: answer
     options:

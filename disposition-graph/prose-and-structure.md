@@ -27,6 +27,7 @@ review:
   strength: strong
   date: 2026-09-04
   of: ee669918bcfe861c5b70d3497774f08f207554ea
+  against: "The author scoped what persists to 'any non-chosen option which is categorized as \"viable\" by the AI', and viable-options records the rejection of 'keeping every option ever recorded whether or not viable, since the list would grow without a reason and version control holds what left'; the draft reverses that on the AI's reading of the regression purpose, so a one-sentence rule about prose arrives carrying a redesign of the option list the author did not ask for. The redesign does not close the fold it is bought to close: 'every candidate the AI considered and can name' is still the AI's discretion over what the author sees, moved from viability to naming, while the alignment page now renders every option of every fact as a row the author may rule for, so about a hundred and twenty dominated candidates become live choices on a page whose own tradition pass says the anchoring surface is already multiplied. And the narrower reading needs none of it: 'Nothing' with duplicates-only liquidates the seventeen duplicates, the hundred and two prose-only rejections stay as the argument by elimination that rejected's standing licence keeps, and whatever deserves a structural home migrates under rejected's own rule as a viable option not chosen, no status minted and no encoding changed."
 form: rule
 under:
   - commons.systems/disposition-graph/node

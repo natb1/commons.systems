@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 33d06c42cce07aa1778d00c2c928ebb9fd4479e0
+  against: "The node fixes the shape of the record before the record knows what it contains: its own answer says 'What it leaves out is open', coverage names four recorded functions outside the purpose as worded, and the order field is now enforced by the validator, so a seventh section would reset every boost the list names. The session's answer — that a seventh section is a new word from the author, recorded then — is honest, but the cost is asymmetric: the order is data the validator refuses to contradict, so the author's next new section is a landing that fails until scope is re-answered."
 facts:
   - name: answer
     options:

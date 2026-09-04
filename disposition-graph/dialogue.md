@@ -6,6 +6,7 @@ review:
   strength: strong
   date: 2026-09-03
   of: 163f5ee5130f88f160523f95c72381f26751e96d
+  against: "The node's own test for storing anything is that it cannot be re-derived once the session that held it is gone, and three of the seven parts fail it: the recommendation's class and boldness are judgments the next session would make again from the same node, the review's verdict and strength are re-derivable by re-running a review the record already requires be re-run when the text changes, and the recommended text is a copy of the node inside the file that holds it. The session's answer — that the record stores the results of judgments, as it stores a stamp and a boost — is a good answer for the first two and weak for the third, and this batch is the evidence on both sides: the copy did drift on eight nodes, and the pin is what caught it."
 facts:
   - name: answer
     options:

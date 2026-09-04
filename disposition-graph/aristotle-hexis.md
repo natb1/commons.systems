@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 7dac080d201b955ceaf38e358b50b5cdd7ad1c29
+  against: "A hexis in Nicomachean Ethics II.5 is acquired by acting and is precisely not a set of propositions one holds; Aristotle contrasts it with both feelings and capacities. A written record of standing answers is nearer to a logos of one's dispositions than to the hexis itself. The node's move — that the record is both a projection of the hexis and part of how it is formed — is the strongest form of the claim and also where it stops being Aristotle's: writing answers down is an activity, but not the activity in which the relevant states are habituated. If the reading fails, knowledge-store loses its ground while keeping its name."
 facts:
   - name: answer
     options:

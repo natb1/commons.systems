@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: b67a1bb9cc90a7fa5c3d0cac98405295122fd786
+  against: "Saying a deferred answer is unanswered puts the record's definition of authority at odds with how the record behaves: deferred answers act — every file under .claude/rules/ is deferred, every session works under them, the projector writes them, and this review was produced under them. The session's reply, that they act as shims act, by default until the author rules, is a good answer and it is in the account rather than the answer. What remains is that the node defining the stamp vocabulary describes the whole operating record as unanswered while every session runs on it, and gives no word for the force those answers plainly have."
 facts:
   - name: answer
     options:

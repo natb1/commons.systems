@@ -6,6 +6,7 @@ review:
   strength: strong
   date: 2026-09-03
   of: 744e77e302f5a76885ced23983c0b6a8dfe94132
+  against: "Reading the whole frontier in one context is what the author asked for and it is what catches drift between nodes — but it guarantees that every verdict in a batch is formed by a reader carrying sixty-eight drafts' framing, which is precisely the leakage the superseded per-node answer existed to prevent and which this node's own rationale argued for at length. The record holds both arguments, adopts the second, and records the first only as history and as a pending alternative. The author should be told plainly that the survey was bought with the independence the earlier answer had, and that the validation step, which is the replacement, is a discipline and not a mechanism."
 facts:
   - name: answer
     options:

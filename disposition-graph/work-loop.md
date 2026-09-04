@@ -6,6 +6,7 @@ review:
   strength: strong
   date: 2026-09-03
   of: de8ecfc26b94e3610a8e35f9740f5a59cab8d479
+  against: "The second direction — every unsupported artifact is a frontier item, supported by a new disposition or pruned — decides the fate of the entire incumbent repository at the swap, and it exists only as prose that nothing derives. The session's answer, that materialization's shim holds the swap until the coverage ruling, is verified in the shim text and does close the deletion risk. What it does not close is the shim itself: an eleven-clause liquidation condition on the node that governs how all work happens, with no projection reading any clause, is the largest unguarded surface in the record, and the node's own review instrument is batched to the exit that the shim's condition gates."
 facts:
   - name: answer
     options:

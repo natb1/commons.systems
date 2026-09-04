@@ -6,6 +6,7 @@ review:
   strength: strong
   date: 2026-09-03
   of: 5597bbeedad00fbb6a4c6197563e1955dd7a3132
+  against: "Option 1 has one virtue the record should weigh before discarding it. A verbatim ruling kept in the node accumulates: purpose already carries nine quotations, work-loop eight, dialogue thirteen, and the author reads past all of them on every page of the browser and the alignment page. Transience's own test is that only what re-derivation cannot reconstruct is stored, and the recommended option answers the accumulation with a roll-up nobody has specified — so the choice as put is between an unreadable record and an unverifiable one. Option 2 is right, and it owes the roll-up rule before it is ratified rather than after."
 facts:
   - name: answer
     options:

@@ -59,6 +59,7 @@ review:
   strength: moderate
   date: 2026-09-04
   of: 4a8c0d39323bb7c5bace2f9c1bf4f1ae792bcd6b
+  against: "The answer legislates the mechanics of ruling ahead of the nodes that own them: a response per fact with the whole-node response gone, a kick-back typed to the maieutic movement, a confirmation with text classified into a reason or edits, readiness read from two pins, and an edit-led first answer, each of which is an unruled option on unanswered, recording, dialogue or clean-context-review, or is recorded nowhere. Ratifying the page first would make a projection the specification of the record's ruling mechanics, which inverts materialization's rule that an artifact is the projection of the node whose answer it renders, and its `depends` names none of them, so the ruling order would not put them first. The page's own facts show the cost in miniature: the AI's decisions are encoded as mutually exclusive whole-answer options, so the very screen this answer describes could not take the author's combined ruling on them, and its authority fact cannot take the author's deferral at all. The answer's shape is the author's in their own words, and the split into children and dependencies is an amendment, which is why this is a forward and not a kickback."
 depends:
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
   - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey

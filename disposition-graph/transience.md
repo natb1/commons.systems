@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 5146c975ea09a8483495b379e9faca8819ce3e11
+  against: "The amendment makes the un-aligned disposition a special case of a dialogue that lives on every node, which dissolves the distinction the author asked for. The author introduced 'un-aligned' for a disposition that has not even survived the alignment dialogue, and the amendment answers that a node with an answer carries the same fields. The fields therefore no longer mark the distinction, and the only thing dividing the two is whether the file has an '## Answer' heading — a fact about the file, not about the dialogue. If everything carries the dialogue then 'un-aligned' is a rendering rule for the browser rather than a class of disposition, and the author should be told that before ruling."
 facts:
   - name: answer
     options:

@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 3c163ef7f2a5f1e78301e90f70c8ffbc30a1e1cd
+  against: "The rule was struck under a bootstrap grant, without the periagogic movement the node's own account says is owed, on the strength of the author's words about what an unanswered disposition is — words that were about the unanswered status generally and not about this shape. The account itself concedes the AI 'treated a deferred answer as fixed, framed the author's challenge inside that frame, and parked a reading on the wrong parent'; the answer written from that concession removes a guard whose ground was a measured legacy failure, durable content stranded on a vanishing node. The author's model may well be right, but the record now has an answer and an instrument removed on an inference the periagogic movement was supposed to test."
 facts:
   - name: answer
     options:

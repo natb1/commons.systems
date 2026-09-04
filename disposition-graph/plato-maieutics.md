@@ -6,6 +6,7 @@ review:
   strength: strong
   date: 2026-09-03
   of: 4ebb5b6e5e722eb32986b93723f7c618e8adbca0
+  against: "Socrates' midwifery rests on his being barren: he delivers nothing of his own, which is what makes the offspring the interlocutor's. The AI is the opposite — it drafts first and the author reacts — so the visible, refusable draft is an anchor, and the known effect of an anchor is that what is delivered is the drafter's. The node names this divergence and keeps 'adopted', which imports a guarantee about whose answer emerges that the mechanism does not provide. Growth compounds it by making the maieutic stage the one where the ruling is taken."
 facts:
   - name: answer
     options:

@@ -6,6 +6,7 @@ review:
   strength: strong
   date: 2026-09-03
   of: 0826bba52cd81cceefb22d57298511ed3e173c38
+  against: "Ratifying this node arms a deletion whose scope is unruled: the greenfield shim's liquidation is a swap that prunes whatever no disposition supports, and coverage stands at the periagogic stage naming four recorded functions outside the purpose as worded. The mitigation the session added — the coverage ruling as a condition of the swap — is verified in the shim text and is real. What is not mitigated is that the rule's enforcement is a human reading: no projection walks the implementation ref, so 'unsupported implementation' is a judgment made once, at exit, by whoever is holding the swap."
 facts:
   - name: answer
     options:

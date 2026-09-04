@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 77a032beb8bd7a2d247f694cd986e1cd64df5403
+  against: "Making every reading a node multiplies files where the author's first framing did not: one tradition read by three nodes becomes one root plus three readings, so the Aristotle material already spans three files and would span four, and stub-traditions proposes about thirty more roots as open questions — every one of which, under transience, joins the author's queue. The node records the trade honestly as 'parsimony of mechanism against parsimony of files', and the four benefits it claims are real; but the queue effect is the cost the author will feel, and neither this node nor traditions-home states it."
 facts:
   - name: answer
     options:

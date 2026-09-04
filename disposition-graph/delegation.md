@@ -6,6 +6,7 @@ review:
   strength: weak
   date: 2026-09-03
   of: bf56eead33b7920c7b53f80973bf2531a753e69b
+  against: "The answer generalises well past the author's words: the author named debugging and browser-driving as prime candidates and gave a cost reason, and the answer turns that into a rule that everything but the interview and the record is a contracted unit with inputs, outputs, files and error behaviour. The contract, the report and the main thread's read of the conclusion are a fixed cost per unit, so the lookup exemption is the right floor and it is the only one — 'anything larger is a unit' still catches every three-line investigation. The node's own rejected alternative argues only that some small-looking questions are large, not that all are."
 facts:
   - name: answer
     options:

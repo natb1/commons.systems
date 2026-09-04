@@ -6,6 +6,7 @@ review:
   strength: strong
   date: 2026-09-03
   of: ba115e9727a9c3000ba85a9dca2cb63d7b1ebd70
+  against: "The node breaks the rule it sits under, and the cost is concrete rather than formal: growth is the alignment section of the author's own high-level order, so it is what a newcomer meets third, and an 816-word single paragraph answering seven separable questions is what they meet. The session's defence — that recording was split out when it needed a stamp of its own, and the presentation rule may be split the same way — concedes the principle and defers the act. Two of the questions the paragraph answers already have their own nodes (recording, alignment-target) and the paragraph restates both, which is exactly where drift enters."
 facts:
   - name: answer
     options:

@@ -6,6 +6,7 @@ review:
   strength: weak
   date: 2026-09-03
   of: 3c9b0a7059869f3446083b9871b81c51c828ae8d
+  against: "The archē already carries the general claim: it names capture without restricting it to software, and its readings are general. This node then asks whether the same discipline helps with capture generally, which is close to asking whether the archē is true. If the hypothesis fails, purpose returns to the author — but so would the archē. The node may be a restatement of its own root rather than a hypothesis under it, and since the root is at the periagogic stage with no author account, nothing yet distinguishes them."
 facts:
   - name: answer
     options:

@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: fc50b724ed00bf5f9eb4828284f5f7e561bba20b
+  against: "The recorded divergence is the whole of the practice. What makes spec-driven development work in the 2025 tools is exactly the per-feature requirements, design and task documents this reading rejects: they are what the agent reads, and the specification is useful because it is close enough to the work to be executable. Replacing them with a graph of standing answers keeps the name and drops the mechanism, so 'adopted, with a recorded divergence' understates the relation — on the thing the tradition is for, this is nearer to 'chosen over', and purpose leans on the audience's expectation of the name in its first paragraph."
 facts:
   - name: answer
     options:

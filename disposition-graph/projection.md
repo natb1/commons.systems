@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 5a1158c3c67eaa7e81097e7faeb737b46aeb8ede
+  against: "The amendment narrows the author's literal instruction while appearing to record it: the author said unanswered nodes are hidden from the browser and listed by the alignment page, and the record now hides only the nodes with no '## Answer' and shows the rest as drafts. The session's defence is sound and the stage is genuinely rendered, so the reversal is disclosed and mitigated — but the answer still states the narrowed rule as though it were the author's, and the clause that would say plainly 'this narrows what you said' exists only as the pending `narrowing-disclosed` alternative. The author is being asked to confirm a change to their own ruling that the text presents as a restatement of it."
 facts:
   - name: answer
     options:

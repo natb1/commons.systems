@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 04b24674220938c0568577b2df45eae56c0415ba
+  against: "The rewrite answers the author's complaint that the node 'jumps too quickly into reference shaped material', and it is well written for a newcomer — but it is the second page of the walk and every term on it is still being decided: 'criteria' by instruments at maieutic, 'rank' by under at maieutic with no drafted text, readings' tradition mount by traditions-home at review. A newcomer's second page cannot be stable while its whole vocabulary is in flight, so the case for ruling model after those nodes is stronger than its rank suggests. The ruling order below does that, which answers the objection at the cost of putting the record's second-highest-ranked node late."
 facts:
   - name: answer
     options:

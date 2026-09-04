@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: c38c74c977c5f7b56fe67c30fc32ef2a4180f413
+  against: "The reading is doing more work than its rank suggests and rests on less. Dialogue's encoding — alternatives with sources, a recommendation that adopts one, a rationale carrying the rejected options — is the record's central schema, and this node is the only place the tradition behind it is examined; yet the examination is one paragraph from the AI's memory of a template, with no version, no locus, and one divergence that is half wrong. If the MADR mapping is the justification for the encoding, it should be read from the source before dialogue is ratified; if it is not the justification but a post-hoc citation, the record should say so, since evaluation requires every tradition surfaced to be recorded 'with the resolution it informed'."
 facts:
   - name: answer
     options:

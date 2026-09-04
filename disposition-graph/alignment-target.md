@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 1c5395eea68a14452e88040c5894830533188fdf
+  against: "Taking the highest-ranked unanswered node is right if rank is the author's attention, and it is not: every boost in the record is the AI's and unratified, as attention's own answer now says, and the one order the author did state covers six nodes out of sixty-two. So 'rank answers it without the session's judgment entering' describes a queue the AI itself ordered and presents an AI choice to the author as the record's own. The session's reply — that the page shows the author the whole queue at every visit — is a real answer and is now true of the built page, which weakens but does not dissolve the objection."
 facts:
   - name: answer
     options:

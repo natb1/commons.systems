@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: d8e37f57ecea1ea28331867dccb730aa100663d6
+  against: "Eudemian II.6 makes the person an archē of actions the way archai are of proofs, but the analogy is about indemonstrability, not about authorship surviving through intermediaries. Politics I.4 does the opposite work from the one the reading puts it to: it argues that self-moving instruments would remove the need for subordinate humans, not that the master's origin-hood is preserved when they are used. Adopting the identification without recording that divergence takes the strongest support of the graph's root from a text that does not quite say it. The counter is unchanged from the previous review and has not been answered on the node."
 facts:
   - name: answer
     options:

@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 97906aa77d607f1befdb4d4d1a613eedaabfdc34
+  against: "Fifteen validations over sixty-eight nodes in one context is an unbounded reading, and the node sets no floor on what a finding must be worth. The author's requirement was that inconsistency within the frontier be surfaced, which validations seven to fifteen do; one to six duplicate what recording already requires of every draft review, so every invocation pays twice for the per-node pass and the cost grows with the frontier rather than with what changed. The session's answer, that the author ruled every invocation a batch, is right about the survey and does not answer the duplication, which the pending `split-survey-from-per-draft` alternative addresses."
 facts:
   - name: answer
     options:

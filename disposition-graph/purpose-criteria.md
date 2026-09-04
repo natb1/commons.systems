@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 8a450005c1e68f597936f2f11260bcf98629d261
+  against: "Standing unguarded is the right answer and the record has already conceded it, so the residual risk is the opposite of the one the reviews chased: purpose is ratified, unguarded, and the two criteria return only 'when the reconciliation harness exists' — a condition nothing on the frontier derives and no shim carries. The record's own rule is that a shim with no liquidation condition is an undeclared permanent; an unguarded root with an unwatched promise to guard it later is the same shape without the vocabulary."
 facts:
   - name: answer
     options:

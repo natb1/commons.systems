@@ -6,6 +6,7 @@ review:
   strength: strong
   date: 2026-09-03
   of: 6d87ee51ffab4195c5465354a36d4a2bc1f4fa1e
+  against: "'Nothing is sacred', 'no doctrine is implied by what exists' and 'the AI may overrule delegated and deferred answers on its best judgment' are stated without limit and exempt nothing, including this node. Since unanswered made every answer in the record deferred, the rule licenses an AI to re-decide the entire graph between two author sittings, with the author's review as the only brake. The session's answer — that an overrule sends the node back to review and shows on the frontier — is now materially true, which is a real brake; what it does not brake is an overrule of a node at the review or maieutic stage, where no review state exists to go stale."
 facts:
   - name: answer
     options:

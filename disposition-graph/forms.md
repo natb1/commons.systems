@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 52159a4998c58c1bfd23568bddb5537f47afe196
+  against: "Option 3, keeping all five forms, deserves the line the node does not give it. The author asked three questions — whether target is synonymous with disposition, what rule adds, and whether assumption is a form at all — and the recommended option answers only the second. Assumption as a form is still doing work: knowledge-store and capture carry `form: assumption` today and both recommended texts keep it, while instruments' recommended text calls assumption a criterion kind, so the record after this ruling holds assumption as a form and as a criterion kind at once. The question the author actually asked is settled by neither surviving option."
 facts:
   - name: answer
     options:

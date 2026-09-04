@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 793d76498e1c7f2d0b8f07d16ff8d13a395e9895
+  against: "Non-domination's content is that a dominus with arbitrary power makes you unfree even when benign, and it is a relation under institutions you cannot exit. Ported to AI delegation, the tool's capacity to interfere belongs to something the author can switch off, so the analogy proves too much (any dependency dominates) or too little (nothing switchable dominates). The failure the record actually fears is capture through atrophy, which is Sen's capability loss rather than Pettit's mechanism — and the Sen reading this node defers is the one that would ground it."
 facts:
   - name: answer
     options:

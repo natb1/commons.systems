@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 99d93a890181feb0a8ae23d834505b07cb0bcc9a
+  against: "Purpose is the onboarding entry point and the README's source, and leading with a Greek term the browser cannot link spends a newcomer's attention on vocabulary rather than on the claim. The apposition the recommendation keeps does teach the word where it stands, which mitigates it; the deeper cost is that the precision bought is the AI's reading of a text the author has not read, on a node whose own reading has a strong pending alternative saying the mapping fails. The order the page had — 'a knowledge store, a projection of its author's hexis' — asserts less and loses nothing the record can currently support."
 facts:
   - name: answer
     options:

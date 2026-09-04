@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: a732769a2b6a19dcb71bc0e2b117756564425968
+  against: "The failure condition is not observable on any timescale a sitting can reach, so the criterion cannot fail and therefore cannot guard, which means the whole change from the standing answer buys nothing operational: an assumption whose failure sends the question back to the author is exactly what the node already is. Purpose-criteria, ruling on the parent, reached the opposite conclusion the same day and now recommends standing unguarded and saying so. The record would ratify an unguarded parent and a criterion-guarded child on the same reasoning, which is a difference the author is not shown."
 facts:
   - name: answer
     options:

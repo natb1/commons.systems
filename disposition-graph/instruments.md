@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-03
   of: fbf4c5047cca6d46e77585d115ac371e239f89f4
+  against: "The rule mandated a fact the schema cannot hold and the common case cannot express, and the session has conceded it — but the concession has consequences the node does not draw. With the achieve-or-maintain sentence withdrawn and forms keeping rule beside disposition, the distinction stays on the form, which means the draft's three criterion kinds no longer need to carry it, and 'assumption' as a criterion kind loses the argument that carried it out of the forms. The node should be re-read as a whole against the withdrawn sentence rather than patched around it."
 facts:
   - name: answer
     options:
