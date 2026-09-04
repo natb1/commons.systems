@@ -199,9 +199,10 @@ status is derived and never a field. The defect is that
 `commons.systems/disposition-graph/dialogue` gives every recommendation an
 `amends` pin against a standing text and names the node as it stands an
 unlisted candidate, unconditionally, so nothing downstream can tell the second
-state from the third. It is recorded there, as the finding "the record has no
-way to say that nothing stands" and the alternative
-`no-standing-without-a-stamp`.
+state from the third. It is recorded there, as the finding "a first answer is
+presented as an amendment" and the alternatives
+`first-answer-is-not-an-amendment` and `caption-only`, with the clean-context
+correction that withdrew an earlier draft of both.
 
 The confirmation half does fall here. This node's answer opens confirm, confirm
 with edits, and deny with feedback "on any subset of them, at once", where they

@@ -25,8 +25,11 @@ alternatives:
   - name: depends-names-an-alternative
     source: author
     ref: "2026-09-03"
-  - name: no-standing-without-a-stamp
+  - name: first-answer-is-not-an-amendment
     source: ai
+    ref: "2026-09-03"
+  - name: caption-only
+    source: review
     ref: "2026-09-03"
 form: rule
 authority:
@@ -157,29 +160,48 @@ The answer names the migration that `depends` orders and drops the claim that th
 
 The alignment-order draft records a divergence between subtrees on the leaves: each node the review finds to stand under one side names, in `depends`, the ancestor and the alternative on it that it stands under, and the page derives the divergence at the ancestor by inversion. `depends` as this node defines it carries node ids only; the alternative extends its target to an alternative on the named node, keeping the inverse derived and never stored. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 
-### no-standing-without-a-stamp
+### first-answer-is-not-an-amendment
 
-A recommendation carries a pin, `amends`, the hash of the standing text it
-amends, and the node as it stands is an unlisted candidate named `standing`.
-Both presuppose that the node's body answer has authority to be amended. That
-holds for a node with a stamp of any class, ratified, delegated, or deferred,
-which the authority node says keeps its full authority while an alternative is
-pending. It does not hold for a node with no stamp: what its body carries is a
-prior AI draft that nothing has conferred authority on, and the unanswered node
-already names that as one of the three carrying-states of an unanswered node,
-"an answer stamped deferred, an answer with no stamp, or no answer at all".
+This node's answer says how a recommendation is encoded and how the page
+derives an edit from it, and says nothing about the difference between a ruling
+that amends an answer and a ruling that gives one for the first time. The
+alignment page therefore presents both the same way, and its caption for the
+second is false. This alternative would add the rule the answer lacks, and
+nothing else.
 
-This alternative would make the distinction load-bearing. `amends` is present
-exactly when the node has a stamp and absent otherwise, and its absence is what
-tells every projection that the ruling in front of the author is a first answer
-and not an amendment; the name `standing` is a candidate only on a stamped
-node. On a node with no stamp the projections render the recommended text
-whole, and say what the two responses actually do: confirm records this as the
-node's first answer, and deny leaves the question open with nothing standing
-behind it. Where the body of an unstamped node holds a draft the recommendation
-supersedes, the session lists that draft as an alternative of its own with
-`source: ai` and the date it was written, so the author can still rule for it
-and nothing written for a reason is dropped unread.
+Where the node's stamp confers authority to amend, the projections may lead
+with the edit and say that the node as it stands is what remains if the author
+denies. Where it does not, the projections lead with the recommended text
+whole, name the ruling a first answer, and say what deny actually leaves: the
+question open, with nothing behind it that holds. The edit stays derivable and
+stays available, because the pin the author asked for detects staleness on any
+node whether or not it has an answer; what changes is which of the two the
+author is shown first and what the page tells them the responses do.
+
+`amends` is untouched and stays required. `standing` stays the name of the node
+as it stands, on every node: the author ruled on 2026-09-03, on
+`un-aligned-children`, that what an unanswered disposition lacks is authority
+and not standing, and an earlier draft of this finding that proposed to take
+the name away from unstamped nodes contradicted that ruling and was withdrawn.
+
+### caption-only
+
+The clean-context validation of 2026-09-03 raised this as the case against
+touching the encoding at all. The record already carries the fact that
+distinguishes the two cases, the presence or absence of the `authority` stamp;
+`deriveStatus` and the projector already branch on it, printing an
+"unstamped" label and a "no stamp" pill on the very nodes in question, and the
+page's own field-level edit already shows the line `authority: none -> {...}`.
+So the whole defect can be met by making `EDIT_CAPTION` and the order of the
+two blocks conditional on `node.authority`, in the projector, with no change to
+this node's answer, no change to the validator, and no ruling required. On this
+alternative the finding is a reconciliation item against the alignment page and
+not a question for the author at all.
+
+What it gives up is that nothing in the record would then require the
+distinction: a later projector, or the projected alignment skill, would be free
+to caption a first answer as an amendment again and would contradict no
+disposition in doing it.
 
 ## Account
 
@@ -356,9 +378,10 @@ Counts and implementation claims recorded across the batch's review sections hav
 Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/recording.
 
 Proposed: No node's text is wrong and nothing moves. What is owed is that a count the author is asked to ratify be measured at the ruling rather than fixed in prose: quotes' facts state the bar as measured when the author rules, and the review skill's own briefs carry the counts, so the number the author sees is derived. Recording's counter-argument makes the general form of this point — most of what the review checks is mechanical — and frontier-consistency's validations 3, 5 and 11 are the natural home for the checks that would keep these numbers true.
-### Finding: the record has no way to say that nothing stands, 2026-09-03
+### Finding: a first answer is presented as an amendment, 2026-09-03
 
-Kind: encoding. Raised by the author, 2026-09-03, on the alignment page:
+Kind: reconciliation, and a rule this node's answer does not carry. Raised by
+the author, 2026-09-03, on the alignment page:
 
 > nodes (eg. commons.systems/disposition-graph/purpose) still indicate that
 > they are edits to confirmed dispositions (there appears to be a ground
@@ -367,49 +390,117 @@ Kind: encoding. Raised by the author, 2026-09-03, on the alignment page:
 > ruling for a node that does not yet exist on the reconciliation frontier
 > (only on the alignment frontier).
 
-Measured against the record at graph commit 4b75af10. Twenty-six nodes carry no
-`authority` stamp at all. Ten of those carry both a body `## Answer` and a
+Measured against the record at graph commit 4b75af10 and re-counted
+independently in clean context at 46070795. Twenty-six nodes carry no
+`authority` stamp. Ten of those carry both a body `## Answer` and a
 recommendation with an `amends` pin: alignment-order, forms, hexis,
 purpose-criteria, purpose, quotes, rationale-edge, rejected, second-stop, and
-traditions-home. On each of the ten the alignment page derives an edit between
-two texts, neither of which anything has confirmed, and captions it "Confirm
-ratifies the draft as the node. The node as it stands is what remains if you
-deny." Nothing stands. If the author denies, what remains is an unstamped AI
-draft, which the unanswered node says is not an answer.
+traditions-home; all ten also carry a `## Recommendation` fence. On each, the
+alignment page prints a "no stamp" pill, renders "The node as it stands" from
+the body answer, then the draft, then the word-level edit between them, under
+the caption "Confirm ratifies the draft as the node. The node as it stands is
+what remains if you deny."
 
-The author's example is the sharpest case available: `purpose` is second in the
-ruling order and settles sixty-six, so it is the node the author rules on next,
-and it would be ruled on under a caption that misdescribes the ruling.
+The caption is false on those ten. Nothing stands. If the author denies, what
+remains is an unstamped AI draft, which the unanswered node says is not an
+answer, and the question stays open. The author's example is the sharpest case
+available: `purpose` is second in the ruling order and settles sixty-six, so it
+is the node the author rules on next, and it would be ruled on under a caption
+that misdescribes the ruling. `purpose` has never carried a stamp in its
+history; the one `authority:` line in the file today is inside the
+`## Recommendation` fence.
 
-The defect is in this node's encoding and not only in the projection. This
-node's answer says "The node as it stands is always a candidate and is never
-listed; its name is `standing`", and requires `amends` on every recommendation
-from the review stage on. Both sentences are unconditional, so a projection
-that obeyed them exactly would render what the author is seeing. The projection
-has no field it could read to know the difference, because the record does not
-record one.
+What this node's answer does and does not say. It says how the recommendation
+is encoded, that the fence holds the whole proposed node, and that the page
+"derives the edit, field by field and word by word, beside the whole". Showing
+an edit is therefore licensed. What the answer nowhere says is that a ruling
+which gives a first answer is a different act from a ruling which amends one,
+or that the projections must say so. That is the rule the record lacks, and it
+is why the projector, obeying the answer exactly, produces what the author saw.
 
-The author's second sentence names the reason the presentation misleads. The
-reconciliation frontier, as the work-loop node derives it, is over answers: an
-answer whose instrument fails, ranked. A node with no answer has no instrument
-reading and is not on it; `purpose` is on the alignment frontier only. Showing
-a change against a landed baseline is the reconciliation frontier's idiom, and
-the alignment page has borrowed it for a node that is not on that frontier.
-That is the bootstrap artifact the author diagnosed: the deferred answers were
-written before the dialogue existed, as the unanswered node records, and the
-re-encoding of 2026-09-03 wrapped a fresh draft in a `## Recommendation` fence
-while leaving the older draft in the body, where the encoding can only read it
-as the text that stands.
+### The finding corrected in clean context, 2026-09-03
 
-Recorded as the alternative `no-standing-without-a-stamp`, which says what
-would change. It is not yet the recommendation: this node's maieutic movement
-is also open on the aspect-decomposition half of the author's dispositions,
-which is the probe outstanding on `commons.systems/disposition-graph/alignment-page`,
-and the recommendation is redrafted once when both halves are settled rather
-than twice.
+An earlier draft of this finding, and the alternative
+`no-standing-without-a-stamp` drafted with it, were checked adversarially by a
+subagent in clean context before the author saw them, as the evaluation node
+requires. Its verdict was sound with corrections. The census, the file list and
+the description of the artifact were confirmed exactly. Three claims were not,
+and the draft is corrected here rather than carried to the author.
+
+First, the draft said "The projection has no field it could read to know the
+difference, because the record does not record one." That is false. The field
+is `authority`, its absence is the difference, and the implementation already
+reads it: `deriveStatus` branches on it, the browser prints an "unstamped"
+label, the alignment page prints a "no stamp" pill on these very nodes, and the
+page's own field-level edit already renders the line `authority: none -> {...}`.
+What the record lacks is not a field but a rule making the presentation
+conditional on it. The correction is recorded and the claim is withdrawn.
+
+Second, the draft argued that showing a change against a landed baseline is the
+reconciliation frontier's idiom, borrowed here for a node not on that frontier.
+Half of that holds and half does not. The work-loop node does put the
+reconciliation frontier over answers whose instrument fails and does say that
+un-aligned dispositions are alignment's work and never reconciliation's, so a
+node with no answer is on the alignment frontier only. But nothing in
+`work-loop` or `materialization` makes the diff reconciliation's idiom, and
+this node's own rationale records the opposite: "the review of a change as a
+diff against what stands" is listed there among the traditions this encoding
+adopts, from code review, in alignment. The argument was a gloss on the
+author's sentence and not a reading of the record. It is withdrawn.
+
+Third, the draft cut the line at the stamp: a stamp of any class confers
+standing, no stamp confers none, so `amends` would be present only on stamped
+nodes. Two things in the record refuse that cut. The author ruled on
+`un-aligned-children` on 2026-09-03 that what an unanswered disposition lacks
+is authority and not standing, which the alignment skill's shim states in that
+form; taking the name `standing` away from unstamped nodes contradicts the
+author's own ruling. And the pin does not presuppose an answer in the first
+place: `deriveStandingHash` hashes the empty string for a missing `## Answer`,
+so `amends` is computable on any node and works as the staleness pin the author
+asked for on 2026-09-03, "we need some sort of pinning of the recommendation as
+well". Making `amends` conditional would also break validation as implemented,
+which requires all five recommendation keys with `amends` matching the hash
+pattern. The alternative was withdrawn and replaced by
+`first-answer-is-not-an-amendment`, which leaves `amends` and `standing` alone
+and adds only the presentation rule.
+
+The validation also surfaced author's words already in this node's Disposition
+that the draft had not weighed, from the refinement of 2026-09-03: "Since all
+nodes are currently unanswered we expect every recommendation to be a node, not
+a diff." Read with the answer's own sentence, "While nothing is answered every
+recommendation is a whole node; a diff is derived from it and never stored",
+the author's sentence is about how the recommendation is stored, which the
+record honours, and not about what the page renders. It does not settle the
+presentation question, but it is the closest thing in the record to the
+author's intent on it and the sitting owes it a reading rather than a silence.
+
+Its strongest counter-argument, recorded as the alternative `caption-only`: the
+defect is fully fixable in the projector, since the data is already there, the
+author's pin request was about staleness which `amends` already serves, and an
+encoding change buys nothing that a conditional caption does not. The reply is
+in that alternative: what it gives up is that no disposition would then require
+the distinction, so a later projector, or the projected alignment skill, could
+caption a first answer as an amendment again and contradict nothing.
+
+Two things an executor would still not know, named so the next movement
+resolves them rather than discovering them. Where a superseded body draft would
+go if it were ever listed as an alternative: left in `## Answer` it still
+renders as "the node as it stands", and removed it costs the node the answer
+its form requires and flips its frontier label to un-aligned. And on `purpose`
+the fence is already the alternative named `draft`, so a second AI alternative
+would leave two with no rule saying which the fence quotes. Neither bears on
+`first-answer-is-not-an-amendment`, which proposes no such listing; both
+belonged to the withdrawn alternative and are recorded so the withdrawal is
+legible.
+
+The two alternatives are on the table and neither is yet the recommendation.
+This node's maieutic movement is also open on the aspect-decomposition half of
+the author's dispositions, which is the probe outstanding on
+`commons.systems/disposition-graph/alignment-page`, and the recommendation is
+redrafted once when both halves are settled rather than twice.
 
 The standing `recommendation` on this node, which adopts `standing` with a
 forward review of 2026-09-03, is superseded by the author's words of the same
-day and is left in place only so that the review pin it carries is not lost.
-It is not what this node now recommends.
+day and is left in place only so that the review pin it carries is not lost. It
+is not what this node now recommends.
 

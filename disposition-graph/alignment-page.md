@@ -131,11 +131,14 @@ which aspects reach list A at all; the author names very high confidence and
 
 **The encoding artifact.** The fifth disposition is not this node's. It is
 recorded and answered on `commons.systems/disposition-graph/dialogue`, as the
-finding "the record has no way to say that nothing stands" and the alternative
-`no-standing-without-a-stamp`. In short: ten unstamped nodes carry both a body
-answer and an `amends` pin, so the page derives an edit between two texts
-neither of which anything has confirmed and captions it as an amendment to what
-stands; `purpose`, the author's example, is second in the ruling order. This
+finding "a first answer is presented as an amendment" and the two alternatives
+`first-answer-is-not-an-amendment` and `caption-only`. In short: ten unstamped
+nodes carry both a body answer and an `amends` pin, so the page derives an edit
+between two texts neither of which anything has confirmed and captions it "the
+node as it stands is what remains if you deny", which is false when nothing
+stands; `purpose`, the author's example, is second in the ruling order. The
+finding was corrected in clean context before reaching this page, and the
+correction is recorded there. This
 page is where the author sees it, and whatever this node answers about the
 render must show a first answer as a first answer.
 
