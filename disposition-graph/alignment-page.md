@@ -61,9 +61,9 @@ review:
   of: 4a8c0d39323bb7c5bace2f9c1bf4f1ae792bcd6b
   against: "The answer legislates the mechanics of ruling ahead of the nodes that own them: a response per fact with the whole-node response gone, a kick-back typed to the maieutic movement, a confirmation with text classified into a reason or edits, readiness read from two pins, and an edit-led first answer, each of which is an unruled option on unanswered, recording, dialogue or clean-context-review, or is recorded nowhere. Ratifying the page first would make a projection the specification of the record's ruling mechanics, which inverts materialization's rule that an artifact is the projection of the node whose answer it renders, and its `depends` names none of them, so the ruling order would not put them first. The page's own facts show the cost in miniature: the AI's decisions are encoded as mutually exclusive whole-answer options, so the very screen this answer describes could not take the author's combined ruling on them, and its authority fact cannot take the author's deferral at all. The answer's shape is the author's in their own words, and the split into children and dependencies is an amendment, which is why this is a forward and not a kickback."
 depends:
-  - commons.systems/disposition-graph/dialogue#aspects-are-nodes
+  - commons.systems/disposition-graph/dialogue#every-part-in-the-record
   - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey
-  - commons.systems/disposition-graph/recording#denial-typed-to-maieutic
+  - commons.systems/disposition-graph/recording#per-fact-after-two-readings
   - commons.systems/disposition-graph/unanswered#confirmation-before-the-ruling-stage-is-invalid
 under:
   - commons.systems/disposition-graph/projection
@@ -1831,3 +1831,17 @@ dialogue, recording, progressive-disclosure, viable-options, rejected,
 review-skills, review-model, and on clean-context-review and decomposition,
 whose recommendations moved today; then the survey; then the final report
 naming every node written.
+
+### Two dependencies repointed, 2026-09-04
+
+The `depends` entries naming `commons.systems/disposition-graph/dialogue` and
+`commons.systems/disposition-graph/recording` moved from the clauses they named
+to the composed options those clauses were adopted into,
+`dialogue#every-part-in-the-record` and `recording#per-fact-after-two-readings`.
+Both clauses survive as options on their facts, so neither pointer was broken;
+what the move corrects is which side of a divergence this page stands under.
+The page's design waits on the recommendation the author will rule on, and on
+each of those nodes that is now the composed option rather than one clause
+inside it. The cascade paragraph above, written before the compositions, names
+the clauses; it is the record of what the sitting proposed then and is left as
+it was.

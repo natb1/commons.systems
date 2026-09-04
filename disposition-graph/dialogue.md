@@ -1,6 +1,6 @@
 ---
 question: What does an unanswered node carry?
-stage: maieutic
+stage: review
 review:
   verdict: forward
   strength: strong
@@ -58,6 +58,9 @@ facts:
       - name: edit-led-against-a-named-ground
         source: commons.systems/disposition-graph/alignment-page
         ref: "2026-09-04"
+      - name: every-part-in-the-record
+        source: ai
+        ref: "2026-09-04"
       - name: state-as-prose-only
         source: ai
         ref: "32600efe"
@@ -103,8 +106,9 @@ facts:
         ref: "32600efe"
         status: passed
         reason: "an alternative is a candidate answer to this question and not a question of its own"
-    recommends: facts-carry-options
+    recommends: every-part-in-the-record
     boldness: moderate
+    against: "It puts six decisions in one row, the standing encoding and the five clauses adopted into it, so a confirmation confers together what the author examined and what they did not, which is the bundling this node's own rule that a text answering two questions is two nodes exists to prevent."
     stands: facts-carry-options
   - name: authority
     options:
@@ -113,6 +117,9 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: low
+    against: "Every node in the record is already written to this encoding under a bootstrap grant, so a ratification here ratifies a migration the AI performed rather than a design the author chose against a standing rival; deferred would let the recommendation act, keep the node in front of the author, and cost nothing."
+depends:
+  - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey
 form: rule
 under:
   - commons.systems/disposition-graph/unanswered
@@ -134,8 +141,6 @@ defines:
     gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
   - term: prune
     gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
-depends:
-  - commons.systems/disposition-graph/viable-options
 ---
 ## Disposition
 
@@ -253,6 +258,144 @@ Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on t
 ## Facts
 
 ### answer
+
+`every-part-in-the-record` is recommended: the standing encoding with the five
+clauses raised since its review folded into it, each of them an instance of one
+rule, that every part a ruling or a projection needs is in the record, in one
+place. That is what makes them one answer and not five. The survey's pin had no
+field and lived in a sidecar; the author's reason for a ruling had no field and
+was written to the page's database, which `transience` and `ruling-transport`
+both hold is a buffer and never the record; an option's sentence had no home on
+the two facts whose options are vocabulary, so the projector carried a sentence
+table of its own, which is implementation no disposition justifies; the
+authority fact was absent on eighteen nodes when the clause was raised, so the
+only class a confirmation could produce there was ratified; and the ground a
+diff was taken against was left to be inferred, which is what the author read
+off `purpose` on 2026-09-03. Five holes of one shape. Boldness moderate: the
+encoding is the author's model in their own words of 2026-09-04 on
+`viable-options`, and three of the five clauses rest on their words of the same
+day on `alignment-page`; what rests on the AI is the composition itself, the
+survey's field, which the author took as part of a recommendation rather than
+specified, the three departures below, and the reading of the author's words
+that `edit-led-against-a-named-ground` takes, which the review that raised it
+called unsettled. Boldness runs in the direction the author gave it on
+2026-09-03, "I want to know how much rests on the AI's own knowledge against
+the record", so high boldness is low confidence; `growth` defines the term and
+its own definition sentence runs the other way, which its option
+`boldness-reversed` repairs, and since that repair brings that node to this
+usage and to the author's words, this ruling does not wait on it.
+
+**Three of the five are departed from, and the fence says so.**
+`authority-fact-on-every-node` as recorded says every node carrying a stage
+carries an answer fact and an authority fact; the fence says every node
+carrying facts does. Measured at graph commit 9144c708: ninety-seven nodes all
+carry a stage, ninety-four carry both facts, and three carry none at all,
+`assumption-form`, `frontier-metrics` and `lockfile`, every one at the
+periagogic stage, where no candidate answer
+has been drafted and there is no decision to record. A fact-less node there is
+not the gap the clause was raised about; requiring an authority fact on it
+would ask the author to confer a class on an answer that does not exist. From
+the review stage on a node carries facts, because a review reads a
+recommendation, so the requirement bites exactly where it matters.
+`survey-pin-in-review` as recorded also says when the pin is written, "at apply
+only where the recommendation still matches what was read"; that is the
+review's own step and the `clean-context-review` node's, so the fence keeps the
+field's shape and the readiness rule and cites that node for the rest, on the
+same rule by which this answer stops restating what other nodes own. And
+`every-option-carries-its-sentence` opens by saying the two exemptions go and
+closes by striking one and keeping the other; the fence states what it
+concluded and not what it opened with, since what the option that stands has is
+not an exemption but a different home, its own answer.
+
+**Two changes the fence makes beyond the five, each because leaving them would
+land a contradiction.** The standing answer says an option the AI no longer
+holds viable leaves the list; the reader now carries `status: passed` with a
+required reason, and `viable-options` carries `passed-over-options-stay`,
+deciding the membership of an option list, which is that node's question and
+not this one's, as the clean-context review of `prose-and-structure` found on
+2026-09-04. The fence names the fields an option carries and cites
+`viable-options` for what viability is and whether a candidate ever leaves, so
+this node states the membership rule nowhere and is right under either ruling.
+And the fence says what an option on the answer fact may be. The record already
+holds two sets of options that are not whole answers, the five here and the
+eight on `alignment-page`, while the encoding said an option is a candidate
+answer and only the recommended one carries text; the fence closes that gap. An
+option may be a whole answer or a named change to another, and where it is a
+change its prose says which option it changes and what it changes, so a ruling
+for it is a ruling for that text with that change. `viable-options`' sentence
+that an option carries "in full the text where it would stand as the answer and
+differs from what stands" is read here as the fence, one text per node and the
+recommended option's; if the author reads it as a text per option, that is a
+change to this encoding and nothing in the record carries it today.
+
+**`existence` and `persistence` stay conditional, and the asymmetry with
+`authority` is a decision and not an oversight.** Every ruling decides a class,
+since a confirmation on the answer fact confers ratified and delegated and
+deferred are conferred only by a ruling on the authority fact, so the class must
+be askable wherever a ruling can be given, which is why its absence closed the
+author's third exit. A prune and a change of shape are decided only where one is
+proposed. A keep-or-prune row on a node nobody has proposed pruning is a
+candidate no one considered, which the options rule does not admit, and it would
+put a row on every screen in the record to ask a question none of them raises.
+Measured at the same commit: six nodes carry an existence fact and four a
+persistence fact, and on the rest both are derived from the node's shape and ask
+nothing.
+
+**A gloss is the sentence a `defines` entry carries beside its term**, written
+`{term, gloss}`, saying what the term means and so what confirming that choice
+would mean where the term is an option's name. It lives on the node that defines
+the term and nowhere else: `ratified`, `delegated` and `deferred` on
+`authority`, `keep` and `prune` here. That is the home the two vocabulary facts'
+options were missing, and it is why those options carry no `#### <option>`
+subsection: `ratified` means the same on every node, so a subsection per node
+would be one sentence written ninety-four times and would drift. The consequence
+the record should not discover later is that a gloss is part of what stands on
+the defining node, so writing one moves that node's own pins and no other's.
+
+**The two `against` fields are outside every pin, and that is the load-bearing
+part of them.** A fact's `against` is the strongest case against the option it
+recommends, in one line and in the AI's own words, written when the
+recommendation is recorded, which is the adversarial reading of one's own output
+the `evaluation` node requires; the review's `against` is the counter-argument
+the reader returned, which the projections show in its place on the recommended
+option's row. Neither is pinned. The fact's is the argument the recommendation
+had to beat and not part of what is recommended, so sharpening it should not
+send a reviewed node back; the review's is written by the apply step of the very
+review whose pin sits beside it, so a pin that covered it would stale itself the
+moment it was recorded. Measured: all fifty-four reviews now carry the
+counter-argument they returned, backfilled from their accounts on 2026-09-04,
+and five facts on two nodes carry the AI's own case against, the two nodes
+drafted since the field landed; the case against is owed on every other fact
+that recommends.
+
+**What the reader must change, named exactly.** Three checks in
+`packages/disposition/read.mjs`, in the coherence block that already raises "a
+staged node's facts must include authority" and in the
+`stage === 'review' || stage === 'ruling'` block below it. First, the answer
+fact from the review stage on, beside the authority fact already required:
+nothing today refuses a node that reaches review with an authority fact and no
+candidate answer to confer a class on. Second, the reason: from the review stage
+on, a fact that recommends carries its `### <fact>` subsection saying why, which
+the answer has required since 2026-09-03 and nothing holds. Measured, a hundred
+and five facts recommend with no reason recorded, seventy-six of them at the
+review or ruling stage, fifty-two on answer facts and fifty-three on authority
+facts, this node's own answer fact among them until this draft. Third, a cycle
+in `depends`, in `readGraph`'s depends block, as `deriveRank` already throws on
+a cycle in `under`: two are live, `dialogue` with `viable-options` and
+`alignment-page` with `unanswered`, and each puts two questions behind each
+other so the ruling order can place neither.
+
+**`depends`.** `viable-options` is dropped and
+`clean-context-review#per-draft-and-survey` added. The drop, because this ruling
+no longer waits on that one: the fence cites `authority` for the class read off
+the rulings and `viable-options` for what an option is, and reads correctly
+under either ruling there, while as recorded the entry closed the loop above
+with that node's own `depends` on `dialogue#aspects-are-nodes`, which is an
+option this answer carries whole and a ruling here settles. The addition,
+because `review.survey` exists only if the review divides into two readings; if
+the author rules for the standing single batch there is no second pin to carry.
+The five nodes naming `dialogue#aspects-are-nodes` are unaffected, since every
+option stays on the fact.
 
 #### alternatives-beside-facts
 
@@ -427,6 +570,8 @@ Alternatives and facts become one structure: every decision on a node is a fact 
 
 The `review` field carries, beside the draft review's `verdict`, `strength`, `date`, and `of`, the survey's state as `survey`, with its `date` and its `of`, the hash of the recommendation the survey read, written at apply only where the recommendation still matches what was read, and present without a verdict on a node the survey has judged before its draft review ran. A node is ready to rule when both pins match the recommendation as it stands, and the projections derive which of the two is owed and show it; nothing else is stored. Raised on commons.systems/disposition-graph/decomposition, from the author's words of 2026-09-04 recorded there; it follows the option `per-draft-and-survey` on the clean-context-review node, which names the two pins.
 
+Adopted into `every-part-in-the-record`, with one departure: when the pin is written is the review's own step and the clean-context-review node's, so the composed answer keeps the field and the readiness rule and cites that node for the rest. A ruling for this option alone adopts the survey pin onto the standing answer and none of the other four clauses.
+
 #### ruling-carries-the-reason
 
 A ruling carries a fourth part beside the response, the date and the pin: the
@@ -444,6 +589,12 @@ field the author's reason is written to a buffer nothing reads back. (Raised
 on commons.systems/disposition-graph/alignment-page, from the author's words
 of 2026-09-04 recorded there: "Drill down also includes optional input from
 author on rationale for confirm/reject.")
+
+Adopted into `every-part-in-the-record` as recorded, with the coherence with
+`quotes` stated rather than left: the reason is why this option was taken and
+the `## Disposition` section is what was said to the record. A ruling for this
+option alone adopts the field onto the standing answer and none of the other
+four clauses.
 
 #### every-option-carries-its-sentence
 
@@ -469,6 +620,14 @@ commons.systems/disposition-graph/alignment-page, from the author's words of
 (other than kick back) provide short text summary of option and/or
 rationale".)
 
+Adopted into `every-part-in-the-record` as its conclusion and not as its
+opening sentence: the composed answer says every option of every fact has a
+sentence and the record holds it in one place for each kind of option, so
+neither the `#### <option>`, the `## Answer` of the option that stands, nor the
+gloss on the defining node is an exemption. A ruling for this option alone
+strikes the vocabulary facts' exemption on the standing answer and none of the
+other four clauses.
+
 #### authority-fact-on-every-node
 
 Every node carrying a stage carries an answer fact and an authority fact. This
@@ -486,9 +645,41 @@ where the author's disposition of 2026-09-04 to list every fact without
 exception made the gap visible: a page can only list the facts a node
 carries.)
 
+Adopted into `every-part-in-the-record`, narrowed to a node that carries facts
+at all: three nodes now carry none, every one at the periagogic stage, where no
+candidate answer has been drafted and a class would be conferred on nothing,
+and from the review stage on a node carries facts, so the requirement holds
+wherever a ruling can be given. A ruling for this option alone adopts the
+requirement as recorded, unnarrowed, onto the standing answer and none of the
+other four clauses.
+
 #### edit-led-against-a-named-ground
 
 The projections lead with the edit wherever an answer stands, ratified or a draft no one has confirmed, and name the ground the edit is against; a node with no answer shows the recommended text whole. This departs from the standing rule that a node with no class leads with the recommended text whole and names the ruling a first answer: the author does need to see what a ruling changes, and what was wrong on `purpose` was the implication that the ground was confirmed, which naming the ground removes. The author's words of 2026-09-03, that nodes "still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed", read at least as easily as an objection to the diff on a first answer as to its caption, which is why this is an option here and not a settled reading. Raised on commons.systems/disposition-graph/alignment-page, whose clean-context review of 2026-09-04 found the departure recorded nowhere on this node.
+
+Adopted into `every-part-in-the-record` with its test sharpened: the ground is named by the standing of the text and not by the node's class, since a ruling on the authority fact says who decides and not that this text was confirmed, so a delegated node's draft is still a draft no one has confirmed. It is the clause of the composed option that rests most on the AI, and it is the one an author who wants the rest without it strikes by a confirmation with edits. A ruling for this option alone adopts the edit-led presentation onto the standing answer and none of the other four clauses.
+
+#### every-part-in-the-record
+
+Every part a ruling or a projection needs is in the record, in one place: the
+standing encoding, in which every decision on a node is a fact with viable
+options, together with the five clauses above, which are one rule met five
+times. The survey's pin joins the review field beside the draft review's; the
+author's reason for a ruling joins the ruling on the option they chose; every
+option of every fact has a sentence, in its `#### <option>`, in the `## Answer`
+it is, or in the gloss on the node that defines its term, and no projection
+carries a sentence of its own; a node that carries facts carries the answer
+fact and the authority fact, so that every class a ruling can confer is on the
+ballot; and the projections lead with the edit wherever an answer stands and
+name the ground it is against, so that a first answer is named as one by what
+it is an edit against rather than by withholding the edit. Three further things
+the composed text settles because the record has already met them and has no
+sentence for them: that an option on the answer fact may be a named change to
+another option, which is what the five above and the eight on `alignment-page`
+already are; that the two `against` fields and the statuses, reasons and
+unrecommended options sit outside every pin, so that recording them stales
+nothing; and that what viability is belongs to `viable-options` and is cited
+here rather than restated. Set out in full in the fence.
 
 #### state-as-prose-only
 
@@ -538,6 +729,103 @@ over because the page could not show them beside the answer.
 Each alternative becomes a node of its own under the node it answers. It was
 passed over because an alternative is a candidate answer to this question and
 not a question of its own.
+
+### authority
+
+Ratified. This node fixes what every node in the record carries and what every
+projection may show of it, so a wrong answer here is written into every node
+file and into both pages at once, and the two failures the record has already
+suffered are of exactly the kind a ratification guards: a projector that
+supplied a sentence the record did not hold, and a caption that told the author
+a draft was the node as it stands. Each told the author their ruling meant
+something other than it did, which is capture-shaped whatever else is true, and
+neither was catchable from inside the projection that made it. Delegated would
+hand the AI the shape of the author's own ruling surface, which is a delegation
+of the terms on which a delegation is confirmed. Deferred is the honest second
+choice and is why it is on the fact: the record is already written to this
+encoding, so a deferral would change nothing today and would keep the node in
+front of the author while they work the frontier; the reason to escalate past it
+is that this answer is what every other ruling is recorded in, so an error here
+is not corrected by the rulings that follow but carried by them. Boldness low:
+the rule that escalates toward ratified where being wrong is expensive,
+irreversible, or capture-shaped is the record's own, and both instances are the
+record's.
+
+## Recommendation
+
+```markdown
+---
+question: What does an unanswered node carry?
+form: rule
+under:
+  - commons.systems/disposition-graph/unanswered
+defines:
+  - dialogue
+  - dialogue state
+  - stage
+  - draft
+  - recommendation
+  - account
+  - fact
+  - ruling
+  - gloss
+  - term: existence
+    gloss: "Existence is the fact that asks whether the node stays in the record, with the choices keep and prune; it appears where a prune is proposed and replaces the prune alternative of the earlier encoding."
+  - term: keep
+    gloss: "Keep is the choice on the existence fact that the node stays in the record with its question and its answer."
+  - term: prune
+    gloss: "Prune is the choice on the existence fact that the node is removed from the record and its question retired; it is where a proposal to prune the node lives."
+---
+## Answer
+
+Its question, its fields, its facts with their options, and its answer as it stands; and, while a dialogue is active on it, the dialogue state. A dialogue is active on every node of the alignment frontier: every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling. The class is derived from the rulings on the facts, as the authority node says, and a confirmed choice of any class keeps its full authority while an option is pending beside it, until the author rules for another. At the recording the dialogue folds: the stage, the review, the dependencies and the account go, the author's words stay as the quotes node decides, and the facts stay with their options, their recommendation, their readings and the rulings the author gave, so that a later session meets what was considered and why before proposing it again. Three requirements fix what the state must be: it must survive the session that held it, so that a session which loses its context resumes every node from its stage; it must hold the author's intention against the account that accumulates around it, the requirement the fidelity node asks; and it must give the author, at the moment of ruling, the context to see how this question stands to the rest of the frontier, and, reading a node that already has an answer, whether options are pending on it and where each came from. A fourth follows from those three and governs every part below: what a ruling or a projection needs is in the record, in one place, and none of it is supplied by a projection's own text, held in a buffer, or left to be inferred from the absence of a field. It has these parts, each holding only what cannot be re-derived.
+
+One rule governs where a decision lives, and it is the node node's and not a new one. A decision the author is to rule on separately is a question, and a question is a node: "If a text answers two questions, it is two nodes." So a text carrying several such decisions is decomposed into children, not into an inner structure that would repeat inside the node what the node already is. The record already provides for the children of an open question, since "a reading, a refinement, or any other node may sit under an open question, and does not have to wait for the question to be answered", and it already makes the result legible, since "a node's ceiling is its nearest ratified ancestor", so a ratified child under an unruled parent is exactly a decision the author has confirmed inside a question they have not. What remains on the node itself are the decisions that are not questions under it but facts about its answer, and those are the `facts` below.
+
+`facts`, every decision on the node, as data, each with a `name`, its `options`, the one it `recommends` with the `boldness` of that recommendation, `against`, the strongest case against that recommendation in one line and in the AI's own words, and, on the answer fact, `stands`, the option whose full text the answer section holds. Boldness is low, moderate, or high: how much of the recommendation rests on the AI's own knowledge against the record and the author's words, so that high boldness is low confidence, which is the direction the author gave the term on 2026-09-03 and the direction the growth node's option `boldness-reversed` brings that node's own definition to. Four names are reserved and no others are minted without a ruling here: `answer`, whose options are the candidate answers to this node's own question; `authority`, the class a ruling would confer, ratified, delegated, or deferred, which is why no recommendation carries a class of its own; `existence`, keep or prune, which is where a proposal to prune the node is recorded rather than as an option of a special shape that answers no question; and `persistence`, whose options are the shapes the node would keep, present only where the recommendation would change its shape and otherwise derived from the shape and asking nothing.
+
+A node that carries facts at all carries the answer fact and the authority fact: the answer because the node's own question is what a dialogue on it is for, and the authority because a ruling on that fact is how delegated and deferred are conferred, so a node without it offers the author one exit where the record gives three. A node may carry no fact, and then it stands at the periagogic or the maieutic stage, where nothing has been proposed yet and a class would be conferred on nothing; from the review stage on there is a recommendation to read, so there are facts, and those two are among them. That `existence` and `persistence` are conditional where `authority` is not is a decision and not an accident of the encoding: every ruling decides a class, so the class is asked wherever a ruling can be given, while a prune and a change of shape are decided only where one is proposed, and a choice nobody has raised is not a candidate the record lists.
+
+An option carries its `name`; on the answer fact its `source`, the author's words in the disposition, the AI, the clean-context review, or the instrument or node that raised it outside alignment, and its `ref`, the date of the words or of the review, the graph commit, or the instrument or node; a `status`, which is `passed` and nothing else, with the `reason` it was passed over, wherever the AI holds it dominated on the record's criteria; and its `ruling` once the author has given one. What viability is, and whether a candidate ever leaves the list, is the viable-options node's question, whose terms this answer uses and does not restate. An option on the answer fact is a candidate answer to this node's question: it may be a whole answer, or a named change to another option, a clause taken alone or taken differently, and where it is a change its prose says which option it changes and what it changes, so that a ruling for it is a ruling for that text with that change. Only the option a fact recommends carries its text in full, in the `## Recommendation` fence; every other option carries its sentence and no text of its own.
+
+Every option of every fact has that sentence, and the record holds it in one place for each kind of option. An option of the answer or the persistence fact has a `#### <option>` subsection under its fact in `## Facts`, saying in prose what it would answer. The option that stands has none, its text being the answer, and a projection reads its first sentences from `## Answer` exactly as it reads any other option's from its subsection. An option of the two facts whose options are the record's own vocabulary, `authority` and `existence`, has no subsection at all: its name is a term, and its sentence is the gloss on the node that defines the term. A gloss is the sentence a `defines` entry carries beside its term, written as the term and the gloss together, saying what the term means and so what confirming that choice would mean; it is written once, on the defining node, and read from there, ratified, delegated and deferred on the authority node and keep and prune here. No projection carries a sentence of its own for an option: a sentence that lives only in a projection is a rule no node projects, and the same sentence written again on every node that carries the fact would drift.
+
+`## Facts` holds one `###` subsection per fact, in the facts' order, opening with the reason the fact recommends what it does and the boldness of that recommendation, and the `####` subsections of that fact's options beneath it, in the options' order. A recommendation may be recorded at any stage of the dialogue, as the author ruled on 2026-09-04, and is required from the review stage on, since a node cannot be reviewed without one; a recommendation withheld until a stage boundary is a recommendation held in a session, which the first requirement above forbids. The AI may add an option or move a recommendation in alignment, in reconciliation, and in the loop on itself, within the scope its class allows, as the authority, evaluation and work-loop nodes say.
+
+A `ruling` is the author's act on the option they chose, recorded on it: the `response`, confirm or edit, the `date`, `of`, the pin of the fact's recommendation it answered, and, where the author gave one, the `reason`, why they chose as they did, in their own words and optional. The reason sits on the option because that is where the choice is; the author's words that opened or moved the dialogue stay under `## Disposition`, dated, as the quotes node decides, and the two are different things, one being why this option was taken and the other what was said to the record. A denial is never a ruling: it is a kickback with the author's words. Only the author rules, on the alignment page or in prose, and the AI writes no ruling and no class for itself.
+
+`stage`, the next movement owed: periagogic, maieutic, review, or ruling. The movements come in that order, so the stage also says what is behind the node, and a kickback moves it back. A recommendation moved on a node with a class re-opens the dialogue at the movement the recording node's classification calls for, the review where only the recommendation moved, from wherever the move came.
+
+`## Disposition`, the author's words, verbatim and dated, accumulating through the dialogue.
+
+`## Recommendation`, the recommended text when the answer fact recommends an option other than the one that stands: one fenced markdown block holding the whole proposed node as it would stand once ruled, its frontmatter without the dialogue's own keys and without the facts, its `## Answer` and its `## Rationale`, so that the same reader parses it and the projections derive the edit, field by field and word by word, beside the whole. Where the recommended option is the one that stands, on every node whose recommendation acts and on every node whose draft is its recommendation, there is no such section, and a confirmation rules for the answer as it stands. A diff is derived from the fence and the node and never stored. The draft, elsewhere in the record, is this text. It may be invalid under the doctrine of the day, as when it presumes a ruling not yet given; the validator parses it and checks only that it answers the same question and carries none of the node's own keys and no facts of its own.
+
+A ruling that gives a node its first answer is not a ruling that amends one, and the projections say which by naming the ground rather than by withholding the edit. Wherever an answer stands they lead with the edit this ruling would make and name what that edit is against: the answer as ratified where the answer fact carries a ruling, and a draft no one has confirmed where it does not, whatever class a ruling on the authority fact confers, since that ruling is about who decides and not about this text. Where no answer stands there is nothing to diff and the recommended text is shown whole. A first answer is thereby named as one, by its ground: confirming a draft no one has confirmed ratifies the AI's draft, and a denial leaves the question open with nothing behind it that holds, since what an unanswered disposition lacks is authority and not standing, as the un-aligned-children node says.
+
+`review`, the state of the two readings the clean-context review divides into, as that node's answer describes them. Of this draft: `verdict`, forward or kickback; `strength`, of the counter-argument, strong, moderate, weak, or none; `date`; `of`, the pin of the recommendation the reviewer read; and `against`, the counter-argument it returned, which the projections show on the recommended option's row in place of the case the AI wrote there. The four are written together or not at all, and `against` is optional beside them. Of the frontier: `survey`, its `date` and its `of`, the same pin, and no verdict, since a survey judges the frontier's consistency with itself and kicks back the nodes a finding names rather than forwarding one; it may stand alone on a node the survey judged before that node's draft review ran. When each pin is written is the review's own step and the clean-context-review node's. What a reader saw is the record at the date recorded and needs no field. A node reaches the ruling stage on a forward verdict; that both pins name the recommendation as it stands is the node's readiness, derived and shown by the projections, and no ruling is recorded while either reading is owed.
+
+`depends`, the open questions whose rulings this one waits on, as data: the ids of nodes still on the frontier whose rulings must come before this node's, or a node id and an option on its answer fact, written as the id and the option's name, so the page can order the author's queue, show what a ruling here would unblock, and refuse to put a question before the one it rests on. It is also what carries coherence between decisions, within a subtree as between subtrees, so no separate exclusion field is minted. A dependency runs one way: entries that close a loop put each question behind the other and no order can place either, so a loop is a finding and one side of it is dropped. The inverse, what this question feeds, is derived from it and never stored, as is the rest of the node's position in the frontier: rank, order, and the ancestry, which `under`, `after`, `order` and `cites` already carry as data for the answered graph. `depends` is dialogue state and not one of those, because it holds only while both questions are open and is removed with the rest of the dialogue at the recording.
+
+`## Account`, the AI's account in prose: the evidence, the findings, the reasoning behind the recommendation of each fact, the review's findings and its counter-argument with the session's reply, and what is open for the author. It is not a proposal and does not carry that name: a proposal is the state the authority node defines.
+
+The validator holds the parts together: a stage on every node no ruling grants, on every deferred node, and on every node whose recommendation has moved since its ruling, and every part of the dialogue, the review, the dependencies and the account, requiring one; from the review stage on, facts, with every fact recommending one of its own options and a boldness beside it; the authority fact wherever a staged node carries facts; `stands` on the answer fact whenever an answer stands, naming the ruled option where there is one, and a `## Recommendation` fence exactly when the recommended option is not the one that stands, parsing as a node, answering the same question, and carrying none of the node's own keys nor a `## Facts` section; the facts' names from the reserved four with the answer first, each option's name unique on its fact and a slug on the answer fact, an answer option carrying its source and its ref, the two vocabulary facts offering only their own vocabulary, a `status` that is `passed` with its `reason` and that is neither recommended nor standing nor ruled, at most one ruling per fact, and the ruled option the one that stands; the `## Facts` subsections matching the facts in name and order, with one `####` under a per-node fact for each option but the one that stands and none at all under a vocabulary fact; the review's four draft keys together or not at all, with the survey standing alone; a forward verdict at the ruling stage; every `depends` entry resolving to a node that still carries a stage, and to an option on its answer fact where one is named; and every reading's `bears` entry resolving to a fact and an option of the node it names. Three things this answer asks for the validator does not yet hold, named here so that they are reconciled and not discovered: the answer fact from the review stage on, beside the authority fact it already requires; the reason for a recommendation, which is the fact's own `###` subsection, from the same stage; and a `depends` entry that closes a loop, which the reader refuses for `under` and not here.
+
+Everything else is derived: the class and the status, the persistence where no fact carries it, the queue and its order, whether a recommendation has moved since its ruling and whether it has changed since either reading, the readings on each option, the sentence of every option, the edit the projections show, and the counts. A pin covers what was recommended and why and no more: a fact's pin is its name, the option it recommends, its boldness, the reason in `## Facts`, that option's own sentence, and, on the answer fact, the recommended text; the review's pin is every fact's. So adding an option, marking one passed, recording the author's reason for a ruling, or writing a subsection under an option nothing recommends moves no pin, and neither case against moves one, the fact's because it is the argument the recommendation had to beat and not part of what is recommended, the review's because it is written beside the very pin it would otherwise stale. What stands is the node without the dialogue and without the facts, so that recording a fact never moves the ground a recommendation was drafted against.
+
+The projections that show a node with a confirmed choice, the browser and the alignment page, show the choice first and beneath it the recommendation, the other options, and what each tradition says, and say that the choice keeps its authority until the author rules for another.
+
+## Rationale
+
+The author's question of 2026-09-03, quoted above, and their model of 2026-09-04 recorded on the viable-options node fix the shape: every decision on a node is a fact with a list of viable options, the recommendation is a mark on one of them with its boldness, and the author's ruling is recorded on the option they chose. What the dialogue must carry is fixed by what cannot be re-derived once the session that held it is gone: the author's words, the position reached, the options on the table and where each came from, the recommended text, the reasons the facts require, and what each reading found. What it must not carry is anything a session would decide the same way twice.
+
+One rule decides the rest, and it is what this answer adds to the model: every part a ruling or a projection needs is in the record, in one place. The record learned it five times in one direction. A survey with a pin and nowhere to put it. An author's reason for choosing written to a page's database, which transience and ruling-transport both hold is a buffer and never the record. An option's sentence supplied by a table inside the projector, which is implementation no disposition justifies. An authority fact missing where a ruling would have conferred a class, so that the only class a confirmation could produce was ratified. And a diff whose ground was left to be inferred, which is what the author read off the purpose node on 2026-09-03: "nodes (eg. commons.systems/disposition-graph/purpose) still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed." In each of the five the record held part of a thing and something else held the rest, and in each the part outside the record was the part that could lie. Writing the sentence on the node that defines the term rather than in the projector is the same move as reading the class off the rulings rather than storing a stamp: keep it once where it is decided, derive the rest, and no copy can drift because there is no copy.
+
+The places this answer says what a pin does not cover follow from the same rule read the other way. A pin exists to tell the author that what they are about to confirm is what was read. A pin over everything on the node would say that of text nobody read differently, would send a reviewed node back because an option was added beside the recommendation, and would stale a review the moment its own counter-argument was written into the field beside its pin. So the pin covers the recommendation and its reason, and the statuses, the author's reasons, the options nothing recommends and both cases against sit outside it.
+
+The tradition closest to this encoding is read under this node as madr-decision-records, whose bears entries mark it adopted and whose one divergence is that the status is derived here where that tradition stores it. Readings owed under this node, each surfaced by the second evaluation of 2026-09-04 with the resolution it informed: the special verdict form, for the rule that a decider is asked each question the judgment needs and the form supplies none by default; legislative amendment shown against the text it changes, for naming the ground of an edit; the single-subject rule, which diverges from this answer and is the case against composing five clauses into one option; and the three the sitting of 2026-09-03 named in prose here and left owed, the status field of the RFC and PEP processes, the review approval pinned to a revision, and the review of a change as a diff against what stands. Two readings the record already holds gain an entry rather than a node of their own, chenery-reasoned-decision for the reason recorded with the ruling and codd-update-anomaly for the sentence stored once.
+
+What this costs, as a consequence of the design and never as a reason for it, measured at graph commit 9144c708: every fact that recommends owes the reason in its `## Facts` subsection, which a hundred and five do not carry and seventy-six of those stand at the review or ruling stage; every fact that recommends owes its case against, which five carry; the survey owes its pin on every node it has judged, of which none carries one, so no node is ready to rule until the survey has run; and the validator gains three checks. The answer as it stood is kept as the option `facts-carry-options`, and the answers before it as the options this fact carries.
+```
 
 ## Account
 
@@ -1456,3 +1744,161 @@ not, recording a fact on a node changes that node's standing hash, and every
 has nothing to do with the standing text. Recorded here because it is a
 consequence of this node's encoding and would otherwise be found by the
 frontier flagging seventy nodes at the same moment.
+
+### The maieutic movement, 2026-09-04
+
+Run as a design unit of the sitting the `alignment-page` node's account of
+2026-09-04 sets out, under the grant recorded there, on the record at graph
+commit 9144c708 and on nothing held in a session. The five options raised on
+this node since its review of 2026-09-03 are each a clause the reconciliation
+of that day has already written into the reader; what this movement owes the
+author is one answer that says the encoding whole, so that a ruling is on the
+encoding and not on five fragments of it, and the five keep their rows so that
+a ruling may still be on one.
+
+**The three classes of finding.**
+
+Contradictions within the graph. The standing answer holds that "an option the
+AI no longer holds viable leaves the list", while `viable-options` carries
+`passed-over-options-stay` and the reader carries `status: passed` with a
+required reason; the clean-context review of `prose-and-structure` on 2026-09-04
+found that the membership of an option list is that node's question, and this
+answer therefore states it nowhere and cites it. `authority-fact-on-every-node`
+as recorded requires the fact on every staged node, while three staged nodes
+carry no fact at all and the reader requires it only where a node carries facts;
+the fence takes the narrowing and says so. The standing answer holds that a node
+with no class leads with the recommended text whole, while `alignment-page`'s
+answer leads with the edit wherever an answer stands; the departure is
+`edit-led-against-a-named-ground`, recorded here for this node to decide, and
+the fence takes it with its test moved from the node's class to the standing of
+the text. And the rationale still carried a prose list of four traditions, which
+`readings` forbids and `prose-and-structure` names; the fence carries none, and
+the four are readings owed under this node.
+
+Between the graph and the AI's knowledge. A pin over everything on a node would
+stale itself: the review's counter-argument is written by the apply step of the
+review whose pin sits beside it, so `review.against` outside the hash is not a
+convenience but the only coherent place for it. A sentence held in one place and
+copied into a projection is the update anomaly the record has already read under
+`prose-and-structure` as `codd-update-anomaly`; the projector's table of class
+sentences was that copy. A `depends` that runs both ways cannot be scheduled;
+the reader already refuses a cycle in `under` and does not look for one here.
+
+Redundant seams, and what closes each. An option's sentence had three homes, the
+`#### <option>`, the `## Answer` of the option that stands, and the projector's
+table; the answer keeps the first two, which are the record's, and strikes the
+third. The author's reason for a ruling had two, the `## Disposition` section
+and the page's database; the answer separates them, one being what was said to
+the record and the other why an option was taken, and gives the second a field.
+The node's readiness had two, the review's own section on the page and the
+`review` field; the answer keeps the field and `alignment-page` puts it on the
+stage chip. Measured at 9144c708: ninety-seven nodes, all staged; ninety-four
+answer facts and ninety-four authority facts; six existence facts and four
+persistence; seven hundred and thirty-three options, of which a hundred and ten
+are passed and every one has a sentence; a hundred and five facts recommend with
+no reason recorded in `## Facts`, seventy-six of them at the review or ruling
+stage, this node's own answer fact among them until this draft; all fifty-four
+reviews carry the counter-argument they returned and five facts on two nodes
+carry the AI's own case against; no node carries a survey pin while thirty stand
+at the ruling stage; and two `depends` cycles are
+live, this node with `viable-options` and `alignment-page` with `unanswered`.
+
+**The evaluation twice.** Fresh judgment, written as if nothing were here to
+preserve: a node is a question, its answer, and the decisions on it; a decision
+is a list of options with the author's rulings recorded on the one chosen and
+the AI's mark on the one it recommends; every option says in one place what it
+would answer; a reading is pinned to what it read; and a projection shows what
+the record holds and supplies nothing of its own. Everything the five clauses
+ask for falls out of the last of those, which is why they are one option and not
+five. With reference to tradition: architecture decision records in the MADR
+form, read under this node and adopted, with the divergence already recorded
+that the status is derived here; the special verdict form, under which the
+decider is asked each question the judgment needs and no question is supplied by
+default, adopted for the authority fact on every node that carries facts;
+legislative amendment shown against the text it changes, adopted for naming the
+ground of an edit; the reasoned decision, already read under `alignment-page` as
+`chenery-reasoned-decision`, adopted for the reason recorded with the ruling;
+the single-subject rule, diverged from, and the case against this composition;
+and the glossary's rule that a term is defined once, which the record already
+holds as `codd-update-anomaly`. Traditions shelved by pre-agent constraints and
+affordable now: a rationale per option and an objection stated on every
+recommendation were both dropped from documents written by hand because no
+author could maintain them at that density, and an agent can. Each is owed as a
+reading under this node or as a `bears` entry on the two the record already
+holds, and none is restated in the fence's rationale.
+
+**Tested against the record it joins.** The `under` chain runs `dialogue` to
+`unanswered` to `growth` to `model`, and the global-tier nodes are `authority`,
+`evaluation`, `delegation`, `materialization` and `session-context`; nothing is
+ratified, so nothing here is written over doctrine. The answer cites and does
+not restate: `authority` for the class read off the rulings and for the classes
+a ruling confers, `viable-options` for what an option and viability are,
+`clean-context-review` for the two readings and when each pin is written,
+`recording` for where a moved recommendation re-opens the dialogue, `growth` for
+boldness, `quotes` for the author's words, `node`, `un-aligned-children` and
+`under` for the three sentences the second paragraph quotes, and `fidelity` for
+the requirement this answer states and does not meet. Five nodes name
+`dialogue#aspects-are-nodes` in `depends`, `alignment-page`, `growth`,
+`recording`, `unanswered` and `viable-options`; that option stays on the fact
+and the composed option carries its rule whole, so all five still resolve and a
+ruling here still settles them. Two nodes name this node's children,
+`checkpoint` and `madr-decision-records` sit under it with `viable-options`, and
+none of their answers changes.
+
+**The map of the movement's decisions to fields.** The composed option and its
+recommendation, the answer fact's `recommends` and the `## Recommendation`
+fence. Its case against, the fact's `against`, which the record now has a field
+for and which this node is among the first to use. The five clauses, their own
+options, each `####` saying it is adopted into the composed option, what the
+composition departs from where it departs, and what a ruling for it alone would
+adopt. The class a ruling would confer and its reason, the authority fact and
+its `### authority` subsection, which this node owed and did not carry. The
+dependency dropped and the one added, `depends`, with the reasons in the answer
+fact's prose. The three reader changes, named in the fence's answer and located
+exactly in the answer fact's prose. The readings owed, named in the fence's
+rationale and in this section. Nothing of the movement is held only in a
+session.
+
+**Two liquidations the fence carries and this section names, since neither is a
+disposition.** `defines` loses `alternative`, `standing answer` and `review
+state`: the first is the superseded name for an option and `viable-options`
+defines the term that replaced it, and neither of the other two occurs in the
+answer, so the record would carry three terms defined by a node that does not
+use them. And the rationale's prose list of traditions goes, the four becoming
+readings owed, as `readings` requires.
+
+**What this movement did not do.** It ruled nothing, wrote no ruling and no
+class, edited no words of the author's, and touched no node but this one. The
+clean-context review of this draft is owed and has not run; the fence is what it
+will read. The two `depends` cycles are recorded above as a finding: this node
+drops its side of one, and the other, between `alignment-page` and `unanswered`,
+is named for the survey and is not this node's to resolve.
+
+### Recorded at the review stage, 2026-09-04
+
+The main thread read the draft adversarially before recording it and changed
+nothing in it. What it checked rather than took: both `depends` cycles are
+live as the draft says, `viable-options` pointing here and this node pointing
+back, `alignment-page` and `unanswered` pointing at each other; the direction
+of boldness in the fence, that high is low confidence, is the direction the
+`boldness-reversed` option on `commons.systems/disposition-graph/growth`
+brings that node to, so the two do not contradict; the standing answer and
+rationale the draft leaves in place are the standing text unchanged, and the
+account before this section is the account as it stood; and no implementation
+name reaches the fence, the reader changes the movement identified being in
+the facts prose and the account, where a claim about the code belongs.
+
+The drop of `viable-options` from `depends` is the half of the cycle this node
+may drop, and the draft gives the test rather than the convenience: a `depends`
+entry is a wait and not a citation, and the fence reads correctly under either
+ruling on what an option is. The other cycle is not this node's to break and is
+named for the survey.
+
+Two entries elsewhere are repointed in this landing, because a `depends` entry
+naming an option says which side of a divergence a node stands under, and the
+side both of these stand under is now a composed option: `alignment-page`'s
+entry for this node moves to `every-part-in-the-record`, and its entry for
+`commons.systems/disposition-graph/recording` moves to
+`per-fact-after-two-readings`. Both clauses they named survive as options on
+their facts, so nothing is lost by the move and the pointer now names what the
+page's ruling actually waits on.
