@@ -1,12 +1,12 @@
 ---
 question: How is a disposition confirmed and recorded?
-stage: ruling
+stage: maieutic
 recommendation:
-  adopts: standing
+  adopts: responses-classified-per-decision
   class: ratified
-  boldness: moderate
+  boldness: low
   amends: "75336fcff7555274971f7db32a861b19c5651f4e"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+  at: "919cea3b"
 review:
   verdict: forward
   strength: moderate
@@ -28,6 +28,15 @@ alternatives:
   - name: cite-unanswered-responses
     source: review
     ref: "2026-09-03"
+  - name: responses-classified-per-decision
+    source: ai
+    ref: "2026-09-04"
+  - name: stage-per-decision
+    source: ai
+    ref: "2026-09-04"
+depends:
+  - commons.systems/disposition-graph/unanswered
+  - commons.systems/disposition-graph/dialogue#aspects-are-nodes
 form: rule
 authority:
   class: deferred
@@ -74,6 +83,44 @@ The frontier finding of 2026-09-03 records that recording describes the reviewer
 ### cite-unanswered-responses
 
 The contradiction finding carried on unanswered proposes that recording cite unanswered for the author's three responses rather than restating four outcomes of its own, and recast its second step as the classification of each of the three: a deferral being a node left unconfirmed, an overrule being a denial with feedback. Three response vocabularies are live for one act and the page implements only unanswered's three. (Raised on commons.systems/disposition-graph/unanswered.) Also raised on commons.systems/disposition-graph/growth.
+
+### responses-classified-per-decision
+
+The classification step takes a response given on one of the decisions a node's ruling asks as well as one given on the node: it moves the whole node, since a node has one stage, and the responses on the node's other decisions are written onto them as rulings and survive the kickback. The recording step takes the stamp's class from the ruling on the node's authority fact rather than from the recommendation, which no longer carries one, and records a prune ruling before the node is deleted. A ruling given while the node's parent is open is recorded like any other, with a contradicting parent's ruling later recorded as an alternative on the child. Adopted by the recommendation, and set out in the fence.
+
+### stage-per-decision
+
+Each decision carries its own stage, so a kickback on one leaves the others where they were and the author is not shown a node returned wholesale to the maieutic stage over one row. Against it: the dialogue node makes the stage the node's, the single next movement owed on it, and a node carrying four stages cannot answer what is owed; the ruling order and the frontier both read one stage per node, and the alignment page's rail shows one. The answer keeps one stage and gets the same benefit by keeping the other decisions' rulings.
+
+## Recommendation
+
+```markdown
+---
+question: How is a disposition confirmed and recorded?
+form: rule
+authority:
+  class: ratified
+  by: Nathan Buesgens
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - confirmation
+  - kickback
+  - clean-context review
+---
+## Answer
+
+In three steps after the maieutic stage, the first before the author sees the recommendation and the other two after. First, every recommended disposition is reviewed adversarially by a subagent that starts with no context but the record: the record as the clean-context-review node names it, the whole unanswered frontier among it, whose consistency with itself is the review's to check, as the frontier-consistency node describes. The reviewer judges whether the answer says what the author said and quotes every ruling it rests on; whether it contradicts the record it joins, or a tradition it cites, without recording the divergence; whether its stamp, boldness, and persistence class are the ones the session means to present; whether an executor reading it would take a wrong action; and what the strongest argument against the disposition is. Its verdict is per disposition: forward to the author, or kick back to the periagogic or the maieutic stage with findings. A forwarded disposition reaches the author with the reviewer's strongest counter-argument, when the reviewer found one worth the author's time, and the session's account of why the disposition stands regardless; when the review found no strong counter-argument, the recommendation goes alone and says so. Second, the author responds in one of the three ways the unanswered node defines, on the node or on one of the decisions its ruling asks, and the session classifies each response. A confirmation as shown, or of the recommended option, is recorded. A confirmation with edits, or a denial with feedback, is analysed for where the dialogue must resume: at the periagogic stage when the response shows the author has lost hold of the record's ground, asking for what the record forbids for a reason they have not engaged, or contradicting an ancestor they have not cited; at the maieutic stage when the response is ambiguous while the AI's understanding of the ground is complete, so the intention must be drawn out again with visible drafts; or, in the common case, the draft is refined with the author's edits and put back for confirmation. A response given on one decision is classified the same way and moves the whole node, because a node has one stage and one next movement owed on it; the responses given on the node's other decisions are written onto them as their rulings and survive the kickback, so that the author answers each decision once. A node left unconfirmed stays unanswered at its stage; a denial records what the author said, and the dialogue resumes from it. A ruling given on a node while its parent is still open is recorded like any other, and if a later ruling on the parent contradicts it the contradiction is recorded as an alternative on the child, with the parent's ruling as its source, and put to the author, never applied over their stamp. Third, the recording: the stamp is written in the class the ruling on the node's authority fact confers, the author's words are quoted into the rationale, the dialogue fields are removed, the facts and their rulings among them, the Disposition section excepted as the quotes ruling decides, and the node is landed. A ruling that the node not exist is recorded before the node is deleted, on the node that proposed the prune where one did and otherwise on the parent, so the record keeps the reason a question was closed instead of losing it with the file. The recommended dispositions of a round are sent to review together, one batch over the whole unanswered frontier in one clean context, as the clean-context-review node describes, and each moves on its own verdict; one that is kicked back never holds the others. The reviewer recommends and never writes; the session decides and answers for the record. No disposition is confirmed without the review and none is stamped without the confirmation.
+
+## Rationale
+
+The author's disposition of 2026-09-03: "incumbent graph describes subagent, clean context adversarial review of all dispositions just prior to recording. Record this disposition (do not copy it verbatim, you are not bound by the incumbent, evaluate greenfield and write from scratch) and reconcile the alignment shim. ... It occurs at the granularity of the disposition - adversarial review should batch author confirmed dispositions, but dispositions unvalidated by adversarial review must not block validated dispositions. Instead, adversarial review may recommend to the main alignment thread kicking a disposition back to periogoge, maietic or author confirmation with additional context and edits." Amended the same day: "Change of adversarial review disposition: adversarial review happens after maieutic, before confirmation. This way the author can review any steelman counter argument as a standard part of confirmation review, and why AI thinks the disposition stands regardless (but steelman argument is optional, if adversarial review returns no strong counter argument)". And on the response: "Dispositions not validated verbatim during author confirmation using the alignment artifact follow a similar kickback analysis by the alignment skill. Based on author input on unconfirmed dispositions kick back to either periogogue (if there seems to be fundamental misunderstanding on author's part), miaeutic (if there is ambiguity and fundamental understanding on AI part) or just update the unanswered disposition with refinements to re-attempt confirmation (most likely case)."
+
+Why a second reader with no context: the session that ran the dialogue shares the author's framing and its own, and the defects that survive a dialogue are the ones both parties stopped seeing, a ruling paraphrased rather than quoted, a contradiction with a node neither re-read, a sentence that reads one way to the two of them and another way to an executor. A reader given only the record sees what the record says. Why before the confirmation: the author rules better with the strongest case against in front of them, and a review after confirmation would either second-guess a ruling or review a draft the author has not yet seen changed. Why per disposition and non-blocking: the reviews of a round are invoked together, but each reviewer reads for itself, since a shared reading carries one node's framing into the next, and a verdict that held one disposition hostage to another would turn the review into a gate. The author, 2026-09-03, on the review as a skill with a context per node, is quoted on the clean-context-review node; until that day the reviews of a round ran in one context, and the batch sentence above was amended at the author's ruling. Why the reviewer recommends and never writes: authority attenuates and nothing writes up; the session holds the dialogue and answers for the record. Rejected: a fixed checklist as the reviewer's brief, because the findings that matter are the ones no list anticipated, so the brief states what the review judges and leaves how to the reviewer; a steelman on every item whether or not one was found, because a manufactured objection is paper doubt and costs the author's attention; the incumbent's mechanics, its gate script and its workflow, because they were built for a record with phases and tactics, which this record does not have.
+
+Traditions, owed as readings: the office of the promotor fidei (Sixtus V, 1587; reformed 1983), adopted for a standing adversary to every candidate and diverged from in that the adversary here cannot stall, only send back or object on the record; blinded peer review, adopted for the independence of the reader's context; the four-eyes principle of financial control, adopted for a second reader before every write to the record; Peirce on paper doubt, adopted for the optional steelman. The evaluation node's rule that adversarial review of one's own output is part of producing it still holds; this node adds the reader who did not produce it. Amended 2026-09-04, in the sitting on the alignment page. Why a response on one decision moves the whole node: the stage is the node's, the next movement owed on it, and a node carrying four stages has no answer to what is owed; the ruling order and the frontier are both built on one stage per node. Why the other decisions' responses survive the kickback: the author answered them, and discarding an answer because a different question was denied would ask for it twice. Why the stamp's class comes from the authority fact: the class a confirmation confers is one of the decisions the author rules on, which is why the recommendation no longer carries one, as the dialogue node's recommendation sets out. Rejected: a stage per decision, so that a kickback on one leaves the others at the ruling stage, since it would give a node no single next movement and would put the frontier's order on a quantity that no longer exists.
+```
 
 ## Account
 
@@ -220,3 +267,51 @@ Counts and implementation claims recorded across the batch's review sections hav
 Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/dialogue.
 
 Proposed: No node's text is wrong and nothing moves. What is owed is that a count the author is asked to ratify be measured at the ruling rather than fixed in prose: quotes' facts state the bar as measured when the author rules, and the review skill's own briefs carry the counts, so the number the author sees is derived. Recording's counter-argument makes the general form of this point — most of what the review checks is mechanical — and frontier-consistency's validations 3, 5 and 11 are the natural home for the checks that would keep these numbers true.
+
+### Kicked back to the maieutic stage, 2026-09-04
+
+This node was at the ruling stage with the clean-context review of 2026-09-03
+behind it, and it is moved back here, keeping its review pin so the frontier
+shows the review as behind the author's words. The cause is the author's
+disposition of 2026-09-03, that the record carry a decision per aspect, which
+`dialogue` answers with `aspects-are-nodes`: the responses this node classifies
+are no longer given only on nodes, and the stamp this node writes no longer
+takes its class from the recommendation.
+
+Three consequences, and the third was not in the cascade `dialogue` named.
+
+**A response on one decision.** It is classified exactly as a response on a
+node is, and it moves the whole node, because the stage is the node's and a
+node with four stages has no answer to what is owed on it. What is new is that
+the responses given on the node's other decisions are written onto them as
+rulings and survive the kickback. Without that clause the author answers four
+questions, denies one, and is asked the other three again. The rival,
+`stage-per-decision`, is recorded and rejected in the rationale.
+
+**A response on a child while the parent is open.** `unanswered` rules that it
+stands; this node carries the mechanics, which are that a later parent's ruling
+contradicting it is recorded as an alternative on the child with the parent's
+ruling as its source. That is the ordinary route for a conflicting answer under
+`authority`, applied to the one case the sitting created by putting the
+children in the pane as indications rather than as rows.
+
+**The stamp's class, and the prune.** This was not in the cascade list and is
+found here in the ordinary course of writing the amendment.
+`dialogue`'s fence takes `class` off the recommendation, on the ground that the
+class a confirmation confers is one of the three reserved facts. Nothing else
+in the record then says where the stamp's class comes from, and this node is
+the only node that writes a stamp. The answer now says: from the ruling on the
+node's authority fact. The same fence introduces `existence`, and this node is
+likewise the only place a node is deleted, so the answer now says a prune
+ruling is recorded before the file goes. Both are consequences of a ruling that
+has not been made, which is why `depends` names it.
+
+**Facts.** Adopts `responses-classified-per-decision`. Authority ratified,
+since this is the node that writes stamps. Boldness low for the first two
+consequences, which are `unanswered`'s and `authority`'s sentences applied, and
+moderate for the third: that the stamp's class comes from the authority fact
+follows from `dialogue`'s fence, but where a prune ruling is recorded once the
+node is gone is the AI's own judgment and the author may want it elsewhere.
+Persistence standing.
+
+Not reviewed. The clean-context review is owed on this and on the batch.

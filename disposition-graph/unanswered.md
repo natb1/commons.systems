@@ -2,11 +2,11 @@
 question: When is a disposition answered?
 stage: maieutic
 recommendation:
-  adopts: standing
+  adopts: responses-on-decisions-and-children
   class: ratified
-  boldness: moderate
+  boldness: low
   amends: "b5717e656b723368acf1ad6f3609c7ab85c6a1a3"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+  at: "919cea3b"
 review:
   verdict: forward
   strength: moderate
@@ -16,6 +16,15 @@ alternatives:
   - name: page-in-ruling-order
     source: author
     ref: "2026-09-03"
+  - name: responses-on-decisions-and-children
+    source: ai
+    ref: "2026-09-04"
+  - name: child-ruling-held-until-the-parent
+    source: ai
+    ref: "2026-09-04"
+depends:
+  - commons.systems/disposition-graph/alignment-page
+  - commons.systems/disposition-graph/dialogue#aspects-are-nodes
 form: rule
 authority:
   class: deferred
@@ -79,6 +88,47 @@ Why a confirmation ratifies: the recording node makes the confirmation the last 
 ### page-in-ruling-order
 
 This answer lists every unanswered node on the alignment page in rank order, the purpose node first. The alignment-order draft orders the alignment frontier by the ruling order, the node whose ruling settles the most first, with rank as tie-break; the alternative amends the page order accordingly, and amends "the purpose node first" with it: on the amended count, which counts what a ruling makes decidable elsewhere and not the alternatives it closes on itself, the first node is commons.systems/public/agency, the sole root, whose unanswered subtree is every other node in the record, and the purpose node is second, its only child. The page pages in one order across the manifest's graphs, the graph shown as a label on each node, since a graph precedence would put a descendant's ruling before its ancestor's. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+
+### responses-on-decisions-and-children
+
+The description of the alignment page leaves this answer for the node that asks the page's question, which subsumes `page-in-ruling-order`, and the three responses gain two rules the record did not have. A response may be given on one of the decisions a node's ruling asks, the reserved facts the dialogue node names, and a denial on one decision is a kickback on that decision while the responses on the others are kept. And a response on a node stands whether or not its parent has been ruled, with a later parent's ruling that contradicts it recorded as an alternative on the child and put to the author rather than applied over their stamp. Adopted by the recommendation, and set out in the fence.
+
+### child-ruling-held-until-the-parent
+
+A confirmation on a child given while the parent is open is held and recorded when the parent is ruled, by analogy with the confirmation held until the review runs. Against it: the review is a step in producing the draft the author is confirming, so a confirmation before it confirms something unfinished, while a parent's ruling is no part of producing the child's draft. Holding a ruling the author gave would make their ratification wait on a question they did not ask about, and the alignment-order node is explicit that the author's choice of what comes next is their own order.
+
+## Recommendation
+
+```markdown
+---
+question: When is a disposition answered?
+form: rule
+authority:
+  class: ratified
+  by: Nathan Buesgens
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/growth
+defines:
+  - unanswered
+  - answered
+  - confirmation with edits
+  - denial with feedback
+---
+## Answer
+
+When the author has ruled on it through the alignment dialogue. A disposition is answered when its stamp is ratified or delegated, the two classes that only the author's ruling confers; until then it is unanswered, whatever the node carries: an answer stamped deferred, an answer with no stamp, or no answer at all. Unanswered is a status the projections derive, never a field: the stamp stays as it is, saying who holds the answer and since when, and the answer stays as it is, the draft the author rules on, so that reclassifying a node loses nothing of its encoding.
+
+Every unanswered node carries the dialogue, as the dialogue node defines it, and first its `stage`, the next movement owed on it: periagogic while the author's account is not yet in the record, maieutic while the answer is not yet drafted, review while the draft has not had the clean-context review, and ruling while the author's confirmation is owed. The validator refuses an unanswered node without a stage, and an answered node carries one while an alternative is pending on it, from the alignment dialogue or from a proposal outside it, keeping its stamp and its full authority, whatever its class, until an alternative is confirmed; the author's first suggestion, that such a node be marked unanswered until confirmed, was retracted by the author on 2026-09-03 as a hack, and the projections show the pending alternatives beside the answer instead. Every deferred answer in the record was written during bootstrap, before the dialogue existed, and each stands unanswered at the stage it has reached: with the review behind it, at ruling; without, at review, and the review runs on it before anything else.
+
+The author rules on the alignment page or in prose; what that page shows, and in what order, is the alignment-page node's question. Three responses are open, and they are open on any subset at once: confirm, confirm with edits, and deny with feedback. A response is given on a node, or on one of the decisions that node's ruling asks, which are the reserved facts the dialogue node names, the authority class a confirmation would confer, the node's existence, and its persistence where the recommendation would change its shape; any other decision the author would rule on separately is a question and therefore a node, and is responded to as a node. A response stands whether or not the node's parent has been ruled: a ruling the author gives is a ruling, and a later ruling on the parent that contradicts it is recorded as an alternative on the child and put to the author, never applied over their stamp. A confirmation ratifies what the recommendation adopts, the node as it stands or the alternative it names, or delegates it where the author's words delegate it. A confirmation with edits ratifies the node with the edits: the session applies them, and where they change substance the draft goes through the review again before the stamp is written. A denial with feedback is a kickback, classified by the recording node to the movement it calls for, and the feedback is recorded as the author's words; a denial on one decision is a kickback on that decision, and the node returns to the movement the feedback calls for carrying the responses given on its other decisions. A confirmation given on a node whose review has not run is held until the review runs and recorded when the review forwards it. Nothing the author has not confirmed is doctrine, and nothing in the record is exempt from the dialogue.
+
+## Rationale
+
+The author's ruling of 2026-09-03, quoted above. The bootstrap wrote its answers stamped deferred because the dialogue that alone confers a stamp in the author's name did not yet exist, and the author's ruling on the authority node of 2026-09-02, that the first valid ratifications will be the outputs of this first alignment dialogue, already said that none of them was answered. What changed on 2026-09-03 is the classification. The record had two words for two things: "un-aligned disposition" for a node with no answer, hidden from the browser and listed by the alignment page, and the stamp's class for everything else, so that a deferred answer read as an answer in every projection although the author had not ruled on it. Re-evaluated at the author's direction the same day, the encoding needed one status derived from the stamp and the answer, answered or unanswered, and one rule, that an unanswered node carries its stage, so that the review queue is a listed dialogue the validator holds rather than a reading of the stamps. The un-aligned disposition keeps its name and its shape: it is the unanswered node with no answer yet, which the browser hides because it has nothing to show; every other unanswered node shows in the browser as the draft it is, marked with its stage, because the browser is the record's own documentation and the draft the author reads there is the draft the author rules on.
+
+Why a confirmation ratifies: the recording node makes the confirmation the last movement before the stamp, and the three responses the author asked for are the ruling's three outcomes as that node classifies them, recorded, refined, or kicked back; a fourth response, defer, is not needed, because leaving a node unconfirmed is the deferral. Why the page's order is not stated here: the order of the frontier is the alignment-order node's question and what the page shows of a node is the alignment-page node's, and this answer stated both, which is how it came to carry an order the record had already amended and a description the record now asks elsewhere. Rejected: reading the earlier ruling that unanswered nodes are hidden from the browser as covering every unanswered node, which would empty the browser of the record it documents; that ruling was made of nodes with no answer and is kept for them. Rejected: a fourth authority class, or a field, for unanswered, since the status is derived from the stamp and the answer and a stored copy would drift; marking an answered node unanswered while an alternative is pending, the author's own first suggestion of 2026-09-03, retracted by the author the same day, since a pending alternative is dialogue state beside the answer and the answer's authority does not lapse until one is confirmed, as the author ruled that day, quoted above. Rejected: leaving the deferred answers without a stage, which would keep the queue a reading of the stamps instead of a dialogue the page lists. Not adopted from the incumbent record: review-item nodes and a curriculum, since the queue is the unanswered nodes themselves. Rejected, 2026-09-04: a confirmation on a child held until its parent is ruled, on the analogy of the confirmation held until the review runs. The review is a step in producing the very draft the author confirms, so confirming before it is confirming something unfinished; a parent's ruling is no part of producing the child's draft, and holding a ruling the author gave would make their ratification wait on a question they did not ask about, which the authority node forbids.
+```
 
 ## Account
 
@@ -228,3 +278,54 @@ The standing `recommendation` on this node, adopting `standing` with a forward
 review of 2026-09-03, is superseded by the author's words of the same day and
 is left in place only so its review pin is not lost.
 
+### The maieutic movement of the alignment-page sitting, 2026-09-04
+
+This node was moved off the ruling stage on 2026-09-03 because the author's
+words of that day, that the record carry a decision per aspect, contradicted
+what its forwarded recommendation rested on: its three responses are open "on
+any subset of them", where "them" is the unanswered nodes and not the decisions
+within one. The recommendation now answers that, and answers a second thing the
+`dialogue` node named as this node's cascade, a response given on a child while
+the parent is still open.
+
+**Responses on a decision.** Under `dialogue`'s `aspects-are-nodes` the
+decisions a node's ruling asks are its answer, where alternatives are pending,
+and three reserved facts, the authority class, the node's existence, and its
+persistence where the recommendation would change the node's shape. Anything
+else the author would rule on separately is a question and therefore a node.
+So the extension this answer needs is small and exactly bounded: the subset the
+three responses open on now includes those decisions, and a denial on one is a
+kickback on that one, with the other decisions' responses kept rather than
+discarded with it. That last clause matters on the page: without it, rejecting
+one row of a screen throws away every other row the author had answered.
+
+**Responses on a child.** The rule is that the ruling stands. It follows from
+`authority` and not from a judgment of this sitting: ratified means the author
+decided and wants to be asked before it changes, so a later ruling on the
+parent that contradicts the child cannot silently undo it, and is recorded as
+an alternative on the child and put to the author like any other conflicting
+answer. The symmetric-looking rule, that the child's confirmation be held until
+the parent is ruled, is recorded as `child-ruling-held-until-the-parent` and
+rejected in the rationale, because the analogy it rests on does not hold: the
+review is a step in producing the draft the author confirms, and a parent's
+ruling is not.
+
+**The page's description leaves.** This answer described the page in a sentence
+and a half, including an order that `alignment-order` had already amended and
+that this node's own `page-in-ruling-order` alternative records. The whole
+description goes to `alignment-page`, which subsumes that alternative; what
+stays here is what this node owns, the three responses and what each one does.
+This is the same correction made on `growth` in this sitting, and it is the
+same cause: the page had no node, so three nodes described it.
+
+**Facts.** Adopts `responses-on-decisions-and-children`. Authority ratified,
+since a mis-specified response is a ruling the author did not give. Boldness
+low: the reserved facts are `dialogue`'s fence, the child rule is `authority`'s
+own sentence, and the hand-over is `alignment-page`'s answer. Persistence
+standing.
+
+`depends` records that this node's ruling waits on `alignment-page`, without
+whose answer the description would leave with nowhere to go, and on
+`dialogue#aspects-are-nodes`, without which the reserved facts do not exist.
+
+Not reviewed. The clean-context review is owed on this and on the batch.
