@@ -64,7 +64,7 @@ Why a confirmation ratifies: the recording node makes the confirmation the last 
 
 ### page-in-ruling-order
 
-This answer lists every unanswered node on the alignment page in rank order, the purpose node first. The alignment-order draft orders the alignment frontier by the ruling order, the node whose ruling settles the most first, with rank as tie-break; the alternative amends the page order accordingly, the purpose node remaining first while it is unanswered, since its ruling settles the whole graph. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+This answer lists every unanswered node on the alignment page in rank order, the purpose node first. The alignment-order draft orders the alignment frontier by the ruling order, the node whose ruling settles the most first, with rank as tie-break; the alternative amends the page order accordingly, and amends "the purpose node first" with it: on the amended count, which counts what a ruling makes decidable elsewhere and not the alternatives it closes on itself, the first node is commons.systems/public/agency, the sole root, whose unanswered subtree is every other node in the record, and the purpose node is second, its only child. The page pages in one order across the manifest's graphs, the graph shown as a label on each node, since a graph precedence would put a descendant's ruling before its ancestor's. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 
 ## Account
 

@@ -6,7 +6,7 @@ recommendation:
   class: ratified
   boldness: moderate
   amends: "4fa0c9e7b71f62087b2953d6a5ba212e3cc3368a"
-  at: "4edb8c9614dcc044b64b792b465ecf19bbcb8132"
+  at: "f8894fbcfedb24c3f1e91abf641089c4476b5793"
 alternatives:
   - name: draft
     source: ai
@@ -70,6 +70,12 @@ The author, 2026-09-03, on the reach-and-load answer:
 The author, 2026-09-03, granting bootstrap authority a second time, for the amended recommendation:
 > reconcile (bootstrap authority) align/align-review/alignment artifact with new recommendation
 
+The author, 2026-09-03, on the alignment page after the reconciliation:
+> https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 still lists commons.systems/disposition-graph/purpose first
+
+The author, 2026-09-03, granting bootstrap authority a third time, for the flat cross-graph order:
+> reconcile (bootstrap authority) align/align-review/alignment artifact with new recommendation
+
 ## Alternatives
 
 ### draft
@@ -127,7 +133,7 @@ defines:
 ---
 ## Answer
 
-The ruling order, derived from the tangle the record carries, and not rank. The alignment frontier is a set of nodes none of which has authority over another, so a recording on it may contradict, duplicate, or diverge from any other and nothing can reject it; the order's work is to untangle it, by asking for the rulings that settle the most first. A tangle is recorded, never computed in a session. A lateral tangle between unanswered nodes, the same idea twice, its opposite, or adjacent nodes that would merge, is recorded as an alternative on the earlier-recorded node, which stands by that rule alone, with the later one as the alternative carrying its source and date. A divergence between subtrees is recorded on the leaves: each node the review finds to stand under one side names, in `depends`, the ancestor and the alternative on it that it stands under; the page inverts that at the ancestor, showing beside each alternative the nodes a ruling for it keeps and the nodes it discards, which then liquidate by the standing rules, each a proposal against its ratified ancestor and its implementation unsupported. A ruling settles a node when it makes that node mechanically decidable: every unanswered node under the ruled node, and every node naming it in `depends`. What a ruling closes on the node it rules, the alternatives pending there, is not settling and is not counted: it is the ruling's own content and makes no other node decidable, and an alternative that does bear on another node bears on it through that node's `depends`, where it is already counted. The alternatives pending on a node are shown beside its settling count, since they are what tells the author what a sitting will cost, and they order nothing. The ruling order puts first the node whose ruling settles the most; an ancestor therefore comes before its descendants, its unanswered subtree containing theirs and the descendant besides, and the order does not have to force it; rank breaks ties and orders nothing else on this frontier. `/align` with nothing takes the first node of the ruling order; `/align <node id>` is the author's order and needs no boost. Rank remains what the attention node says it is for the reconciliation frontier and the onboarding path.
+The ruling order, derived from the tangle the record carries, and not rank. The alignment frontier is a set of nodes none of which has authority over another, so a recording on it may contradict, duplicate, or diverge from any other and nothing can reject it; the order's work is to untangle it, by asking for the rulings that settle the most first. A tangle is recorded, never computed in a session. A lateral tangle between unanswered nodes, the same idea twice, its opposite, or adjacent nodes that would merge, is recorded as an alternative on the earlier-recorded node, which stands by that rule alone, with the later one as the alternative carrying its source and date. A divergence between subtrees is recorded on the leaves: each node the review finds to stand under one side names, in `depends`, the ancestor and the alternative on it that it stands under; the page inverts that at the ancestor, showing beside each alternative the nodes a ruling for it keeps and the nodes it discards, which then liquidate by the standing rules, each a proposal against its ratified ancestor and its implementation unsupported. A ruling settles a node when it makes that node mechanically decidable: every unanswered node under the ruled node, and every node naming it in `depends`. What a ruling closes on the node it rules, the alternatives pending there, is not settling and is not counted: it is the ruling's own content and makes no other node decidable, and an alternative that does bear on another node bears on it through that node's `depends`, where it is already counted. The alternatives pending on a node are shown beside its settling count, since they are what tells the author what a sitting will cost, and they order nothing. The ruling order puts first the node whose ruling settles the most; an ancestor therefore comes before its descendants, its unanswered subtree containing theirs and the descendant besides, and the order does not have to force it; rank breaks ties and orders nothing else on this frontier. The order is one order over the whole alignment frontier, the manifest's graphs taken together: the frontier's dependencies cross them, so the graph a node belongs to is a label on the node and never a precedence over another node's ground, and the alignment page pages in the order flat, showing each node's graph beside it. `/align` with nothing takes the first node of the ruling order; `/align <node id>` is the author's order and needs no boost. Rank remains what the attention node says it is for the reconciliation frontier and the onboarding path.
 
 ## Rationale
 
@@ -135,6 +141,51 @@ The author's words of 2026-09-03, quoted in the dialogue that produced this node
 ```
 
 ## Account
+
+### Reconciled to the flat cross-graph order, 2026-09-03
+
+A third bootstrap grant, in the author's words quoted above, for the same
+three artifacts and the recommendation as amended again. Recorded as its own
+grant for the reason the second was: the first was spent on the draft that
+counted alternatives, the second on the amended count, and this skill reads
+no grant as standing. It answers this node no more than the others did; the
+stamp stays absent, the stage stays `review`, and the clean-context review
+and the ruling are both owed on the recommendation as it now stands.
+
+The reconciliation drops the alignment page's grouping by graph from its
+ordering: the page pages in one ruling order across the manifest's graphs
+and shows each node's graph as a label beside it, and the alignment skill's
+no-argument rule loses "this project's graph before the public graph". The
+implementation commit on `greenfield` names this grant and the graph commit
+it reconciles to.
+
+### The page's graph grouping contradicted the order, 2026-09-03
+
+Reported by the author, in the words above, from the page itself after the
+first reconciliation: it still listed `purpose` first. The cause is not the
+count. The page grouped by graph before it ordered, the manifest's order,
+this project's graph before the public graph, so `commons.systems/public/agency`
+sat in the second section whatever it settled, and the page's order and the
+frontier's ruling order disagreed at their heads. The first reconciliation
+kept the grouping deliberately, as the conservative reading, on the ground
+that `alignment-target` says "this project's graph before the public graph"
+and `unanswered` says "the purpose node first" and the draft amended neither
+in terms. That call was wrong, and the disclosure of it in this account did
+not make it right: a second order over one frontier can only fight the
+first, and here it fought it at the one place that matters, the node the
+author is asked about before any other. `agency` is the graph's sole root
+and `purpose` its only child, so the grouping put a descendant's ruling
+before its own ancestor's, which is the rug-pull the criterion exists to
+prevent.
+
+The recommended text now says the order is one order over the whole
+alignment frontier, the manifest's graphs together, the graph a label and
+not a precedence, and the alignment page pages in it flat. The alternatives
+raised on `alignment-target` and `unanswered` are widened to say that they
+amend the graph-precedence clause and the purpose-first clause too, the
+latter having become false on the amended count. Class ratified, boldness
+low: this follows from the answer already recommended rather than adding to
+it, and the author's report is what surfaced it.
 
 ### Reconciled to the amended recommendation, 2026-09-03
 
