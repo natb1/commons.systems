@@ -55,6 +55,9 @@ The author, 2026-09-03, at the checkpoint before the review, on what follows the
 
 > after the compaction you will be granted bootstrap authority to reconcile the align skill, the align-review skill (if necessary), and the alignment artifact
 
+The author, 2026-09-03, granting bootstrap authority for the reconciliation announced above:
+> Do not proceed with review. Instead you are granted bootstrap authority to reconcile the align skill, the align-review skill (if necessary), and the alignment artifact with unanswered alignment order (and related) disposition. reconcile now
+
 ## Alternatives
 
 ### draft
@@ -88,6 +91,30 @@ The author's words of 2026-09-03, quoted in the dialogue that produced this node
 ```
 
 ## Account
+
+### Reconciled under the author's bootstrap grant, 2026-09-03
+
+The author granted bootstrap authority in the words quoted above, for a
+named reconciliation: the alignment skill, the align-review skill if
+necessary, and the alignment page, brought to the unanswered recommendation
+on this node and to the alternatives it raised on its siblings. The grant
+also directed that the review not run. This node is therefore not answered
+by it: the grant names implementation artifacts as what is reconciled and
+this unanswered disposition as what they are reconciled to, so no
+`## Answer` is written here, the stamp stays absent, the stage stays
+`review`, and the clean-context review and the author's ruling are still
+owed on the recommendation as it stands. Nothing in the implementation
+acquires authority from having been built; if the ruling changes the
+recommendation, the implementation follows it and not the reverse.
+
+What the reconciliation covers, and what it therefore reaches beyond the
+three artifacts the grant names: the reader, because the divergence device
+the recommendation defines is recorded in `depends` as an ancestor together
+with the alternative on it, which the reader must parse and the validator
+must accept before any review can record one; and the projector, because the
+alignment page is written by it. That widening is disclosed here rather than
+assumed: it is the least that makes the three named artifacts work, and the
+author may strike it at the ruling.
 
 An un-aligned disposition, recorded at its sitting's opening on 2026-09-03 and not yet answered. The question it asks is distinct from its parents': alignment-target says what a session given nothing takes up, and attention says how rank is computed and read; this node asks whether rank is the right order for the alignment frontier at all, and if not, what is, and whether the dialogue's state should carry something the order can be derived from.
 
