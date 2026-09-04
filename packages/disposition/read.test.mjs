@@ -33,8 +33,9 @@ import {
   reviewStale,
   ruledOption,
 } from './derive.mjs';
+import { glossary, optionText } from './derive.mjs';
 import {
-  parseNode, readGraph, readyToRule, surveyJudges, surveyOwed, surveyStale,
+  defineTerms, parseNode, readGraph, readyToRule, surveyJudges, surveyOwed, surveyStale,
 } from './read.mjs';
 import { validate } from './validate.mjs';
 
@@ -74,17 +75,21 @@ function runCli(scriptPath, args) {
 function node(id, { under = [], facts = [], ...rest } = {}) {
   return { id, under, facts, ...rest };
 }
-function fact(name, options, { recommends = null, boldness = null, stands = null, prose = '' } = {}) {
+const OPTION_DEFAULTS = { source: null, ref: null, status: null, reason: null, ruling: null, prose: '' };
+function fact(name, options, { recommends = null, boldness = null, against = null, stands = null, prose = '' } = {}) {
   return {
     name,
-    options: options.map((o) => (typeof o === 'string' ? { name: o, ruling: null, prose: '' } : { ruling: null, prose: '', ...o })),
+    options: options.map((o) => (typeof o === 'string'
+      ? { ...OPTION_DEFAULTS, name: o }
+      : { ...OPTION_DEFAULTS, ...o })),
     recommends,
     boldness,
+    against,
     stands,
     prose,
   };
 }
-const ruling = (of, { response = 'confirm', date = '2026-09-05' } = {}) => ({ response, date, of });
+const ruling = (of, { response = 'confirm', date = '2026-09-05', reason = null } = {}) => ({ response, date, of, reason });
 
 // ---------------------------------------------------------------------------
 // derive.mjs
@@ -379,6 +384,85 @@ describe('derive.mjs', () => {
     assert.equal(reviewStale({ ...n, review: { of: deriveRecommendationHash(n) } }), false);
   });
 
+  // ---- the one home for an option's sentence ----
+
+  test('glossary maps every glossed term to its gloss and its definer, first definition winning', () => {
+    const graph = [
+      node('a', { defines: [{ term: 'ratified', gloss: 'The author ruled on the answer.' }, { term: 'bare', gloss: null }] }),
+      node('b', { defines: [{ term: 'ratified', gloss: 'A second definition, which does not win.' }] }),
+      node('c'),
+    ];
+    const terms = glossary(graph);
+    assert.deepEqual(terms.get('ratified'), { gloss: 'The author ruled on the answer.', node: 'a' });
+    assert.equal(terms.get('bare'), undefined, 'a term with no gloss has no sentence to project');
+    assert.equal(terms.size, 1);
+    assert.equal(glossary(graph), terms, 'memoized on the graph it was derived from');
+    assert.equal(glossary({ nodes: graph }).get('ratified').node, 'a', 'and reads the {nodes} shape too');
+  });
+
+  test("optionText reads every option's sentence from its one home, and null where none is recorded", () => {
+    const definer = node('def', { defines: [{ term: 'prune', gloss: 'The node leaves the record.' }] });
+    const answer = fact('answer', [
+      { name: 'standing', prose: '' },
+      { name: 'other', prose: 'The other way.' },
+      { name: 'silent', prose: '' },
+    ], { stands: 'standing' });
+    const persistence = fact('persistence', [{ name: 'present', prose: 'Kept on the node.' }]);
+    const existence = fact('existence', ['keep', 'prune']);
+    const n = node('n', { answer: 'What stands, in full.', facts: [answer, persistence, existence] });
+    const graph = [definer, n];
+
+    assert.deepEqual(optionText(graph, n, answer, answer.options[0]), { text: 'What stands, in full.', from: 'n' }, "the standing option's text is the '## Answer' section");
+    assert.deepEqual(optionText(graph, n, answer, answer.options[1]), { text: 'The other way.', from: 'n' });
+    assert.equal(optionText(graph, n, answer, answer.options[2]), null, 'nothing recorded, nothing to show');
+    assert.deepEqual(optionText(graph, n, persistence, persistence.options[0]), { text: 'Kept on the node.', from: 'n' });
+    assert.deepEqual(
+      optionText(graph, n, existence, existence.options[1]),
+      { text: 'The node leaves the record.', from: 'def' },
+      "a vocabulary option's sentence comes from the node that defines the term",
+    );
+    assert.equal(optionText(graph, n, existence, existence.options[0]), null, 'and is null where the term carries no gloss');
+    assert.equal(optionText(graph, n, answer, null), null);
+  });
+
+  // ---- what the pins do and do not see ----
+
+  test('the pins do not move for an edit beside the recommendation: an option added or removed, passed over, given prose, or a ruling given a reason', () => {
+    const base = () => {
+      const answer = fact('answer', [
+        { name: 'standing', prose: '' },
+        { name: 'other', prose: 'The other way.' },
+        { name: 'third', prose: '' },
+      ], { recommends: 'other', boldness: 'high', stands: 'standing', prose: 'Why the other way.' });
+      const existence = fact('existence', [{ name: 'keep', ruling: ruling('x') }, 'prune'], { recommends: 'keep', boldness: 'low' });
+      return {
+        id: 'n', fmText: 'question: Q?', answer: 'Ans.', rationale: null, fence: { raw: 'FENCE' }, facts: [answer, existence],
+      };
+    };
+    const pins = (n) => [deriveRecommendationHash(n), ...n.facts.map((f) => deriveFactRecommendationHash(n, f))].join(' ');
+    const before = pins(base());
+
+    const added = base();
+    added.facts[0].options.push({ ...OPTION_DEFAULTS, name: 'fourth', prose: 'A late arrival.' });
+    assert.equal(pins(added), before, 'an option added beside the recommended one, subsection and all');
+
+    const removed = base();
+    removed.facts[0].options = removed.facts[0].options.filter((o) => o.name !== 'third');
+    assert.equal(pins(removed), before, 'and one removed');
+
+    const passed = base();
+    Object.assign(passed.facts[0].options[2], { status: 'passed', reason: 'Dominated on every criterion.' });
+    assert.equal(pins(passed), before, 'a viability judgment recorded on an option that is not recommended');
+
+    const reasoned = base();
+    reasoned.facts[1].options[0].ruling = ruling('x', { reason: 'Because the question is still live.' });
+    assert.equal(pins(reasoned), before, "the author's reason for a ruling");
+
+    const argued = base();
+    argued.facts[0].against = 'What the recommendation costs, said by the AI that made it.';
+    assert.equal(pins(argued), before, 'the case against the recommendation, which argues about it and is not it');
+  });
+
   test("deriveReadings inverts every reading's bears, keyed by node, fact, and option", () => {
     const readings = deriveReadings([
       { id: 'z', bears: [{ node: 'target', fact: 'answer', option: 'standing', relation: 'diverged' }] },
@@ -399,6 +483,15 @@ describe('derive.mjs', () => {
 
 describe('parseNode', () => {
   const loc = { id: 'm/g/s', graph: 'g', slug: 's', path: 'g/s.md' };
+  // Every staged node carries the authority fact, so every staged fixture
+  // text below carries it too (commons.systems/disposition-graph/dialogue,
+  // `authority-fact-on-every-node`).
+  const AUTHORITY_FACT = [
+    '  - name: authority',
+    '    options:',
+    '      - name: ratified',
+    '      - name: delegated',
+  ];
   const ANSWER_FACT = [
     'facts:',
     '  - name: answer',
@@ -407,6 +500,7 @@ describe('parseNode', () => {
     '        source: ai',
     '        ref: "2026-09-04"',
     '    stands: standing',
+    ...AUTHORITY_FACT,
   ];
 
   test('parses a minimal unanswered (un-aligned) question', () => {
@@ -512,7 +606,8 @@ describe('parseNode', () => {
     'facts:', '  - name: answer', '    options:',
     '      - name: standing', '        source: ai', '        ref: "2026-09-04"',
     '      - name: other-way', '        source: ai', '        ref: "2026-09-04"',
-    '    recommends: other-way', '    boldness: low', '    stands: standing', '---', '',
+    '    recommends: other-way', '    boldness: low', '    stands: standing',
+    ...AUTHORITY_FACT, '---', '',
     '## Answer', '', 'x', '',
     '## Facts', '', '### answer', '', '#### other-way', '', 'The other way.', '',
     '## Recommendation', '', '```markdown', ...fenceLines, '```', '',
@@ -534,6 +629,15 @@ describe('parseNode', () => {
     });
   }
 
+  test("a fence may carry 'defines' with glosses, which come back exactly as written", () => {
+    const n = parseNode(fenced([
+      '---', 'question: What?', 'defines:', '  - term: vocabulary', '    gloss: What a reserved fact offers.',
+      '---', '', '## Answer', '', 'x',
+    ]), loc);
+    assert.deepEqual(n.fence.frontmatter.defines, [{ term: 'vocabulary', gloss: 'What a reserved fact offers.' }]);
+    assert.equal(n.defines, null, 'the node itself defines nothing');
+  });
+
   test("a fence carrying a '## Facts' section is rejected for the same reason", () => {
     const text = fenced(['---', 'question: What?', '---', '', '## Answer', '', 'x', '', '## Facts', '', '### answer', '', 'y']);
     assert.throws(() => parseNode(text, loc), /'## Recommendation' carries a '## Facts' section/);
@@ -545,7 +649,8 @@ describe('parseNode', () => {
   test("'## Facts' rejects prose before its first '### ' heading", () => {
     const text = [
       '---', 'question: What?', 'stage: periagogic',
-      'facts:', '  - name: existence', '    options:', '      - name: keep', '      - name: prune', '---', '',
+      'facts:', '  - name: existence', '    options:', '      - name: keep', '      - name: prune',
+      ...AUTHORITY_FACT, '---', '',
       '## Disposition', '', 'Open.', '',
       '## Facts', '', 'Stray prose belonging to no fact.', '', '### existence', '', 'Keep it.', '',
     ].join('\n');
@@ -571,7 +676,8 @@ describe('parseNode', () => {
   test("a '### ' heading inside a fenced example within '## Facts' is content, not a subsection", () => {
     const text = [
       '---', 'question: What?', 'stage: periagogic',
-      'facts:', '  - name: existence', '    options:', '      - name: keep', '      - name: prune', '---', '',
+      'facts:', '  - name: existence', '    options:', '      - name: keep', '      - name: prune',
+      ...AUTHORITY_FACT, '---', '',
       '## Disposition', '', 'Open.', '',
       '## Facts', '', '### existence', '', 'Shown by example:', '', '```', '### mysterious', '```', '',
     ].join('\n');
@@ -586,7 +692,8 @@ describe('parseNode', () => {
       '      - name: standing', '        source: ai', '        ref: "2026-09-04"',
       '      - name: other-way', '        source: ai', '        ref: "2026-09-04"',
       '    stands: standing',
-      '  - name: existence', '    options:', '      - name: keep', '      - name: prune', '---', '',
+      '  - name: existence', '    options:', '      - name: keep', '      - name: prune',
+      ...AUTHORITY_FACT, '---', '',
       '## Answer', '', 'x', '',
       '## Facts', '', '### answer', '', 'Why this one.', '', '#### other-way', '', 'The road not taken.', '',
       '### existence', '', 'Keep it.', '',
@@ -599,16 +706,92 @@ describe('parseNode', () => {
     assert.equal(n.facts[1].options[0].prose, '');
   });
 
-  test("a reserved fact's options may carry '#### ' subsections, and need not carry all of them", () => {
+  // A vocabulary fact's option names mean the same on every node, so their
+  // sentence is the gloss on the node that defines the term and never a
+  // subsection here; a persistence option's is written per node, so every one
+  // of them owes one (commons.systems/disposition-graph/dialogue,
+  // `every-option-carries-its-sentence`).
+  for (const name of ['authority', 'existence']) {
+    const option = name === 'authority' ? 'ratified' : 'prune';
+    test(`a '#### ' subsection under '### ${name}' is rejected: a vocabulary fact's options carry none`, () => {
+      const options = name === 'authority'
+        ? ['      - name: ratified', '      - name: delegated']
+        : ['      - name: keep', '      - name: prune'];
+      const text = [
+        '---', 'question: What?', 'stage: periagogic',
+        'facts:', `  - name: ${name}`, '    options:', ...options,
+        ...(name === 'authority' ? [] : AUTHORITY_FACT), '---', '',
+        '## Disposition', '', 'Open.', '',
+        '## Facts', '', `### ${name}`, '', 'Why this one.', '', `#### ${option}`, '', 'Said here instead.', '',
+      ].join('\n');
+      assert.throws(
+        () => parseNode(text, loc),
+        new RegExp(`'### ${name}' has '#### ${option}', which a vocabulary fact's options do not carry`),
+      );
+    });
+  }
+
+  test("a passed answer option owes its '#### ' subsection like any other option that is not the standing one", () => {
     const text = [
-      '---', 'question: What?', 'stage: periagogic',
-      'facts:', '  - name: existence', '    options:', '      - name: keep', '      - name: prune', '---', '',
-      '## Disposition', '', 'Open.', '',
-      '## Facts', '', '### existence', '', 'Why prune.', '', '#### prune', '', 'Fold it into the parent.', '',
+      '---', 'question: What?', 'form: rule', 'stage: periagogic',
+      'facts:', '  - name: answer', '    options:',
+      '      - name: standing', '        source: ai', '        ref: "2026-09-04"',
+      '      - name: dominated', '        source: ai', '        ref: "2026-09-04"',
+      '        status: passed', '        reason: Beaten on every criterion the record names.',
+      '    stands: standing', ...AUTHORITY_FACT, '---', '', '## Answer', '', 'x', '',
+      '## Facts', '', '### answer', '', 'Why this one.', '',
     ].join('\n');
-    const n = parseNode(text, loc);
-    assert.equal(n.facts[0].options[1].prose, 'Fold it into the parent.');
-    assert.equal(n.facts[0].options[0].prose, '');
+    assert.throws(() => parseNode(text, loc), /expected '#### dominated' at position 1, found nothing/);
+    const written = parseNode(`${text}\n#### dominated\n\nWhat it would have answered.\n`, loc);
+    assert.equal(written.answerFact.options[1].status, 'passed');
+    assert.equal(written.answerFact.options[1].prose, 'What it would have answered.');
+  });
+
+  test("a vocabulary fact may only offer its own vocabulary, and persistence names its options freely", () => {
+    const withOptions = (name, options, tail = []) => [
+      '---', 'question: What?', 'stage: periagogic',
+      'facts:', `  - name: ${name}`, '    options:', ...options.map((o) => `      - name: ${o}`),
+      ...(name === 'authority' ? [] : AUTHORITY_FACT), '---', '',
+      '## Disposition', '', 'Open.', '', ...tail,
+    ].join('\n');
+    assert.throws(
+      () => parseNode(withOptions('existence', ['keep', 'delete']), loc),
+      /fact 'existence' may only offer its own vocabulary: keep, prune/,
+    );
+    assert.throws(
+      () => parseNode(withOptions('authority', ['ratified', 'blessed']), loc),
+      /fact 'authority' may only offer the classes a ruling confers: ratified, delegated, deferred/,
+    );
+    const free = parseNode(
+      withOptions('persistence', ["with the page's shim"], [
+        '## Facts', '', '### persistence', '', "#### with the page's shim", '', 'Kept as it is.', '',
+      ]),
+      loc,
+    );
+    assert.deepEqual(free.facts[0].options.map((o) => o.name), ["with the page's shim"]);
+  });
+
+  test("every persistence option owes a '#### ' subsection of its own", () => {
+    const head = [
+      '---', 'question: What?', 'stage: periagogic',
+      'facts:', '  - name: persistence', '    options:', '      - name: derived', '      - name: present',
+      ...AUTHORITY_FACT, '---', '',
+      '## Disposition', '', 'Open.', '',
+    ];
+    assert.throws(
+      () => parseNode([...head, '## Facts', '', '### persistence', '', 'Why present.', '', '#### present', '', 'Kept here.', ''].join('\n'), loc),
+      /'### persistence' subsections must match the persistence fact's options in order: expected '#### derived' at position 1, found '#### present'/,
+    );
+    assert.throws(
+      () => parseNode(head.join('\n'), loc),
+      /the persistence fact carries 'derived', 'present', which requires a '## Facts' section stating each in prose/,
+    );
+    const n = parseNode([
+      ...head, '## Facts', '', '### persistence', '', 'Why present.', '',
+      '#### derived', '', 'Derived from elsewhere.', '', '#### present', '', 'Kept here.', '',
+    ].join('\n'), loc);
+    assert.equal(n.facts[0].options[0].prose, 'Derived from elsewhere.');
+    assert.equal(n.facts[0].options[1].prose, 'Kept here.');
   });
 
   test('a fact may be omitted from ## Facts, but an answer option that is not the standing one may not', () => {
@@ -617,7 +800,7 @@ describe('parseNode', () => {
       'facts:', '  - name: answer', '    options:',
       '      - name: standing', '        source: ai', '        ref: "2026-09-04"',
       '      - name: other-way', '        source: ai', '        ref: "2026-09-04"',
-      '    stands: standing', '---', '', '## Answer', '', 'x', '',
+      '    stands: standing', ...AUTHORITY_FACT, '---', '', '## Answer', '', 'x', '',
       '## Facts', '', '### answer', '', 'Why this one.', '',
     ].join('\n');
     assert.throws(() => parseNode(withOwedOption, loc), /expected '#### other-way' at position 1, found nothing/);
@@ -633,7 +816,7 @@ describe('parseNode', () => {
       '---', 'question: What?', 'form: rule', 'stage: maieutic',
       'facts:', '  - name: answer', '    options:',
       '      - name: standing', '        source: ai', '        ref: "2026-09-04"',
-      '    stands: standing', '---', '', '## Answer', '', 'x', '',
+      '    stands: standing', ...AUTHORITY_FACT, '---', '', '## Answer', '', 'x', '',
       '## Facts', '', '### answer', '', 'Why this one.', '', '#### standing', '', 'What it answers.', '',
     ].join('\n');
     assert.equal(parseNode(text, loc).answerFact.options[0].prose, 'What it answers.');
@@ -643,7 +826,10 @@ describe('parseNode', () => {
     const order = [['persistence', 'present'], ['authority', 'delegated'], ['existence', 'keep']];
     const lines = ['---', 'question: What?', 'stage: periagogic', 'facts:'];
     for (const [name, option] of order) lines.push(`  - name: ${name}`, '    options:', `      - name: ${option}`);
-    lines.push('---', '', '## Disposition', '', 'Open.', '');
+    lines.push(
+      '---', '', '## Disposition', '', 'Open.', '',
+      '## Facts', '', '### persistence', '', '#### present', '', 'Kept here.', '',
+    );
     assert.deepEqual(parseNode(lines.join('\n'), loc).facts.map((f) => f.name), order.map(([n]) => n));
   });
 });
@@ -932,7 +1118,7 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-alternatives-heading', /unexpected '## Alternatives' heading \(only Disposition, Answer, Rationale, Facts, Recommendation, Account are allowed\)/],
     ['invalid-section-order', /'## Disposition' heading is out of order/],
     // facts: shape, names, order, options
-    ['invalid-facts-shape', /'facts' must be a non-empty list of \{name: answer\|authority\|existence\|persistence, options: <one or more \{name: <lowercase slug on the answer fact, non-empty on a reserved one>, source: <non-empty string>, ref: <non-empty string>, ruling: <optional \{response: confirm\|edit, date: YYYY-MM-DD, of: <hash>\}>\}>/],
+    ['invalid-facts-shape', /'facts' must be a non-empty list of \{name: answer\|authority\|existence\|persistence, options: <one or more \{name: <lowercase slug on the answer fact, non-empty on a reserved one>, source: <non-empty string>, ref: <non-empty string>, status: <passed>, reason: <non-empty string, with status>, ruling: <optional \{response: confirm\|edit, date: YYYY-MM-DD, of: <hash>, reason: <optional non-empty string>\}>\}>/],
     ['invalid-fact-unknown-name', /'facts' must be a non-empty list of \{name: answer\|authority\|existence\|persistence/],
     ['invalid-ruling-response', /'facts' must be a non-empty list of .*ruling: <optional \{response: confirm\|edit/],
     ['invalid-duplicate-fact', /duplicate fact 'existence'/],
@@ -981,13 +1167,13 @@ describe('readGraph: invalid fixtures', () => {
     // the survey's pin: its two keys, both required, both typed, and the
     // four draft-review keys given together or not at all. Every one of
     // these is the same combined message the review's shape has always had.
-    ['invalid-review-survey-missing-of', /with an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
-    ['invalid-review-survey-unknown-key', /with an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
-    ['invalid-review-survey-type', /with an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
+    ['invalid-review-survey-missing-of', /an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
+    ['invalid-review-survey-unknown-key', /an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
+    ['invalid-review-survey-type', /an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
     ['invalid-review-partial', /the four draft-review keys are given together or not at all, and the survey may stand alone/],
     // '## Facts' and its subsections
     ['invalid-facts-section-without-list', /'## Facts' requires a non-empty 'facts' list/],
-    ['invalid-facts-heading-mismatch', /'## Facts' has '### mysterious', which is not a fact on this node \(facts: existence\)/],
+    ['invalid-facts-heading-mismatch', /'## Facts' has '### mysterious', which is not a fact on this node \(facts: existence, authority\)/],
     ['invalid-answer-option-heading-mismatch', /'### answer' subsections must match the answer fact's options in order: expected '#### second' at position 2, found '#### third'/],
     ['invalid-answer-option-without-subsection', /the answer fact carries 'unwritten' beside the option that stands, which requires a '## Facts' section stating each in prose/],
     // shims, tier, order
@@ -1001,6 +1187,26 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-order-head', /'order' puts example\.test\/main\/a in its first step, but example\.test\/main\/d \(rank 0\.9901\) outranks it and is not its ancestor/],
     ['invalid-order-unresolved', /'order' names example\.test\/main\/does-not-exist, which is not a node/],
     ['invalid-order-no-answer', /'order' requires an '## Answer' section/],
+    // the viability judgment on an option: its one value, its reason, and
+    // the three things a passed option may not be
+    ['invalid-option-status-value', /'facts' must be a non-empty list of .*status: <passed>/],
+    ['invalid-option-reason-without-status', /fact 'answer' option 'other-way' carries a 'reason' with no 'status'; a reason is why an option was passed over/],
+    ['invalid-passed-option-without-reason', /fact 'existence' option 'prune' is passed over and must say why \('reason'\)/],
+    ['invalid-passed-option-recommended', /fact 'existence' recommends 'prune', which it has passed over/],
+    ['invalid-passed-option-stands', /fact 'answer' stands on 'standing', which it has passed over/],
+    ['invalid-passed-option-with-ruling', /fact 'existence' option 'prune' is passed over and carries a ruling; the author's ruling supersedes the AI's viability judgment/],
+    // every option's sentence, in its one home
+    ['invalid-authority-option-subsection', /'### authority' has '#### ratified', which a vocabulary fact's options do not carry; 'ratified' means the same on every node, so its sentence is the gloss on the node that defines the term/],
+    ['invalid-persistence-option-without-subsection', /'### persistence' subsections must match the persistence fact's options in order: expected '#### derived' at position 1, found '#### present'/],
+    ['invalid-defines-gloss-shape', /'defines' must be a non-empty list of terms, each a non-empty string or \{term, gloss\} with both non-empty/],
+    // the authority fact on every staged node that carries facts, and the
+    // facts every node past the maieutic stage carries
+    ['invalid-staged-facts-without-authority', /a staged node's facts must include authority/],
+    ['invalid-factless-node-at-review', /stage review requires 'facts': there is nothing for a review or a ruling to read/],
+    // the case against a recommendation needs a recommendation, and the
+    // review's needs a verdict
+    ['invalid-fact-against-without-recommends', /fact 'existence' states a case against a recommendation but recommends no option/],
+    ['invalid-review-against-without-verdict', /'review' must be \{verdict: forward\|kickback/],
   ];
 
   for (const [dirName, pattern] of cases) {
@@ -1191,7 +1397,8 @@ describe('readGraph: valid-dialogue fixture', () => {
     assert.equal(n.answerFact.boldness, 'moderate');
     assert.equal(n.answerFact.stands, 'standing');
     assert.equal(n.review.verdict, 'forward');
-    assert.deepEqual(Object.keys(n.review).sort(), ['date', 'of', 'strength', 'survey', 'verdict'], "the two readings and nothing else -- no 'siblings' key");
+    assert.deepEqual(Object.keys(n.review).sort(), ['against', 'date', 'of', 'strength', 'survey', 'verdict'], "the two readings and nothing else -- no 'siblings' key");
+    assert.equal(n.review.against, null, 'the review recorded no counter-argument');
     assert.equal(n.review.survey, null, 'the survey has not read this node yet');
     assert.equal(n.review.of, n.recommendationHash, "the fixture's review.of is kept in step");
     assert.equal(n.reviewStale, false);
@@ -1245,6 +1452,7 @@ describe('readGraph: valid-dialogue fixture', () => {
       response: 'confirm',
       date: '2026-09-03',
       of: persistence.recommendationHash,
+      reason: null,
     });
     assert.equal(persistence.moved, false);
     assert.equal(n.class, 'unanswered', 'a ruling on persistence confers no class');
@@ -1261,7 +1469,7 @@ describe('readGraph: valid-dialogue fixture', () => {
     const original = await bySlug('facts-node');
     const changed = await bySlug('facts-node-changed');
     assert.equal(original.facts.length, 4);
-    assert.equal(changed.facts.length, 2);
+    assert.equal(changed.facts.length, 3);
     assert.notEqual(
       original.facts.find((f) => f.name === 'existence').recommends,
       changed.facts.find((f) => f.name === 'existence').recommends,
@@ -1394,6 +1602,140 @@ describe('readGraph: valid-options fixture', () => {
     assert.notEqual(n.recommendationHash, 'a'.repeat(40));
     assert.equal(n.reviewStale, true);
     assert.equal(n.moved, false, 'no ruling, so nothing has moved from one');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readGraph: valid-sentences fixture -- every option's sentence in its one
+// home, the author's reason for a ruling, the viability judgment on an
+// option, and the case against a recommendation
+// (commons.systems/disposition-graph/dialogue,
+// `every-option-carries-its-sentence`, `ruling-carries-the-reason`)
+// ---------------------------------------------------------------------------
+
+describe('readGraph: valid-sentences fixture', () => {
+  const graphPromise = readGraph(path.join(FIXTURES, 'valid-sentences'));
+  async function bySlug(slug) {
+    const graph = await graphPromise;
+    const n = graph.nodes.find((x) => x.id === `example.test/main/${slug}`);
+    assert.ok(n, `expected a node with slug ${slug}`);
+    return n;
+  }
+
+  test("a 'defines' entry normalizes to {term, gloss}, a bare term keeping a null gloss", async () => {
+    const n = await bySlug('glossary');
+    assert.deepEqual(n.defines.slice(0, 2), [
+      { term: 'ratified', gloss: 'The author ruled on the answer itself and wants to be asked before it changes.' },
+      { term: 'delegated', gloss: 'The recommendation acts, and the author does not want to be asked again.' },
+    ]);
+    assert.deepEqual(n.defines.at(-1), { term: 'vocabulary', gloss: null }, 'a bare string still defines a term');
+    assert.deepEqual(defineTerms(n), ['ratified', 'delegated', 'deferred', 'keep', 'prune', 'vocabulary']);
+    assert.deepEqual(defineTerms({}), [], 'a node that defines nothing');
+    assert.deepEqual(defineTerms({ defines: ['bare'] }), ['bare'], 'and a hand-built node reads too');
+  });
+
+  test("a ruling carries the author's own reason beside the response, the date and the pin", async () => {
+    const n = await bySlug('glossary');
+    assert.equal(n.class, 'ratified');
+    assert.deepEqual(n.answerFact.options[0].ruling, {
+      response: 'confirm',
+      date: '2026-09-04',
+      of: n.answerFact.recommendationHash,
+      reason: 'Say it once, here, and let every page read it from here.',
+    });
+    assert.equal(n.moved, false, "the reason is no part of what the ruling pinned");
+  });
+
+  test('a passed option carries its status and its reason, stays on the list, and owes its subsection', async () => {
+    const n = await bySlug('passed-and-reasoned');
+    const passed = n.answerFact.options.find((o) => o.name === 'list-the-viable-only');
+    assert.equal(passed.status, 'passed');
+    assert.equal(passed.reason, 'A candidate that silently leaves the list cannot be ruled for.');
+    assert.ok(passed.prose.startsWith('Drop an option once it is dominated'), 'a passed option still says what it would answer');
+    const viable = n.answerFact.options.find((o) => o.name === 'keep-every-candidate');
+    assert.deepEqual([viable.status, viable.reason], [null, null], 'absent means viable');
+  });
+
+  test('a fact and a review each carry their own case against, and neither is in any hash', async () => {
+    const n = await bySlug('passed-and-reasoned');
+    assert.ok(n.answerFact.against.startsWith('Two more rows on every fact'));
+    assert.ok(n.review.against.startsWith('The passed status is the AI accounting'));
+    assert.equal(n.facts[1].against, null, 'absent where the fact records none');
+    assert.equal(n.reviewStale, false, "the review's own pin still matches");
+
+    const raw = await readFile(path.join(FIXTURES, 'valid-sentences/main/passed-and-reasoned.md'), 'utf8');
+    const rewritten = raw
+      .replace(/^    against: .*$/m, '    against: A different case entirely, made in different words.')
+      .replace(/^  against: .*$/m, '  against: And a different counter-argument on the review.');
+    assert.notEqual(rewritten, raw, 'the fixture really carries both fields');
+    const edited = parseNode(rewritten, {
+      id: n.id, graph: 'main', slug: 'passed-and-reasoned', path: 'main/passed-and-reasoned.md',
+    });
+    assert.equal(edited.standingHash, n.standingHash);
+    assert.equal(edited.recommendationHash, n.recommendationHash);
+    assert.equal(edited.answerFact.recommendationHash, n.answerFact.recommendationHash);
+    assert.equal(edited.reviewStale, false);
+  });
+
+  test("every persistence option states itself, and the vocabulary facts state nothing of their own", async () => {
+    const n = await bySlug('passed-and-reasoned');
+    const persistence = n.facts.find((f) => f.name === 'persistence');
+    assert.deepEqual(persistence.options.map((o) => o.prose.split('\n')[0]), [
+      'Read the answer off whatever stands elsewhere, and keep nothing here.',
+      'Keep the answer present on the node, in its own words.',
+    ]);
+    for (const name of ['authority', 'existence']) {
+      const vocabulary = n.facts.find((f) => f.name === name);
+      assert.deepEqual(vocabulary.options.map((o) => o.prose), ['', ''], `${name} carries no option prose`);
+    }
+  });
+
+  test('optionText finds a sentence for every option of every fact, from the graph the reader returns', async () => {
+    const graph = await graphPromise;
+    const n = await bySlug('passed-and-reasoned');
+    const definer = 'example.test/main/glossary';
+    const found = n.facts.flatMap((f) => f.options.map((o) => [f.name, o.name, optionText(graph, n, f, o)]));
+    for (const [factName, optionName, text] of found) {
+      assert.ok(text !== null, `${factName}/${optionName} has no sentence`);
+      assert.ok(text.text.trim().length > 0);
+    }
+    const byKey = new Map(found.map(([f, o, t]) => [`${f}/${o}`, t]));
+    assert.ok(byKey.get('answer/standing').text.startsWith('Only the ones the AI still holds viable'), "the standing option's is the '## Answer'");
+    assert.equal(byKey.get('answer/standing').from, n.id);
+    assert.deepEqual(byKey.get('authority/ratified'), {
+      text: 'The author ruled on the answer itself and wants to be asked before it changes.',
+      from: definer,
+    });
+    assert.deepEqual(byKey.get('existence/prune'), {
+      text: 'The node leaves the record, its question answered elsewhere or not at all.',
+      from: definer,
+    });
+    assert.equal(byKey.get('persistence/derived').from, n.id);
+  });
+
+  test('a gloss is part of what stands, so adding one on the node that defines the term moves that node\'s pins and no other', async () => {
+    const n = await bySlug('glossary');
+    const other = await bySlug('passed-and-reasoned');
+    const raw = await readFile(path.join(FIXTURES, 'valid-sentences/main/glossary.md'), 'utf8');
+    const rewritten = raw.replace('  - vocabulary\n', '  - term: vocabulary\n    gloss: The names a reserved fact offers, which are not slugs.\n');
+    assert.throws(
+      () => parseNode(rewritten, { id: n.id, graph: 'main', slug: 'glossary', path: 'main/glossary.md' }),
+      /has a recommendation that has moved since its ruling and must carry stage/,
+      "the ruling's pin no longer matches, which is the reader saying the node must be asked again",
+    );
+    // The same text with the stage that move now requires, so the hashes can
+    // be read rather than only inferred from the refusal above.
+    const staged = parseNode(
+      rewritten
+        .replace('form: rule\n', 'form: rule\nstage: review\n')
+        .replace('    stands: standing\n', '    stands: standing\n  - name: authority\n    options:\n      - name: ratified\n      - name: delegated\n    recommends: ratified\n    boldness: low\n'),
+      { id: n.id, graph: 'main', slug: 'glossary', path: 'main/glossary.md' },
+    );
+    assert.notEqual(staged.standingHash, n.standingHash, "'defines' is frontmatter the standing text covers");
+    assert.notEqual(staged.answerFact.recommendationHash, n.answerFact.recommendationHash);
+    const otherAgain = await bySlug('passed-and-reasoned');
+    assert.equal(otherAgain.recommendationHash, other.recommendationHash, 'and no node but the definer is asked again');
+    assert.equal(otherAgain.reviewStale, false);
   });
 });
 

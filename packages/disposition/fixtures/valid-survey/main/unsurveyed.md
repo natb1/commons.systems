@@ -11,6 +11,12 @@ facts:
     recommends: standing
     boldness: low
     stands: standing
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
+    boldness: low
 ---
 
 ## Answer

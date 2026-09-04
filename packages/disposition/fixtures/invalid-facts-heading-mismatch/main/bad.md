@@ -6,6 +6,10 @@ facts:
     options:
       - name: keep
       - name: prune
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
 ---
 
 ## Disposition

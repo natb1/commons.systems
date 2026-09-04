@@ -21,6 +21,9 @@ import { createHash } from 'node:crypto';
  * @property {string} date
  * @property {string} of - the fact's recommendation hash at the time of the
  *   ruling, so that a recommendation moved since shows as `moved`.
+ * @property {string|null} reason - the author's own reason for the ruling, in
+ *   their words, optional (commons.systems/disposition-graph/dialogue,
+ *   `ruling-carries-the-reason`).
  */
 
 /**
@@ -29,6 +32,13 @@ import { createHash } from 'node:crypto';
  * @property {string|null} source
  * @property {string|null} ref
  * @property {Ruling|null} ruling
+ * @property {'passed'|null} status - `passed` where the AI holds the option
+ *   dominated on the record's criteria and keeps it on the list anyway;
+ *   null means viable. Viability is a judgment shown on the option and never
+ *   the condition of its being listed
+ *   (commons.systems/disposition-graph/prose-and-structure).
+ * @property {string|null} reason - why it was passed over; carried exactly
+ *   where `status` is.
  * @property {string} prose - the option's `#### <name>` subsection text.
  */
 
@@ -38,9 +48,33 @@ import { createHash } from 'node:crypto';
  * @property {Option[]} options
  * @property {string|null} recommends
  * @property {string|null} boldness
+ * @property {string|null} against - the AI's own case against the option it
+ *   recommends, written when the recommendation is recorded. Part of no
+ *   hash: it argues about the recommendation and is not the recommendation.
  * @property {string|null} stands - answer fact only.
  * @property {string} prose - the fact's `### <name>` subsection text.
  */
+
+/**
+ * The facts whose options are a fixed vocabulary rather than text written per
+ * node. `ratified` means the same on every node it appears on, so its
+ * sentence is written once, on the node that defines the term, and projected
+ * from there; the option itself carries no `#### <option>` subsection
+ * (commons.systems/disposition-graph/dialogue,
+ * `every-option-carries-its-sentence`).
+ */
+export const VOCABULARY_FACTS = ['authority', 'existence'];
+
+/**
+ * The facts whose options say in their own prose what they would answer: the
+ * answer fact, whose options are this question's candidate answers, and
+ * persistence, whose option names are written per node too. Every option of
+ * these owes a `#### <option>` subsection, but for the one named by `stands`,
+ * whose sentence is the `## Answer` section itself.
+ */
+export const PER_NODE_FACTS = ['answer', 'persistence'];
+
+const PER_NODE_FACT_SET = new Set(PER_NODE_FACTS);
 
 /**
  * @typedef {Object} DeriveNode
@@ -202,6 +236,91 @@ export function deriveRank(nodes) {
  */
 export function factByName(node, name) {
   return (node?.facts ?? []).find((f) => f && f.name === name) ?? null;
+}
+
+const glossaryCache = new WeakMap();
+
+/**
+ * Every term the graph defines with a gloss, mapped to that gloss and to the
+ * node that wrote it. A term is defined once across the graph, so the first
+ * definition wins and a second is a duplicate the projector already warns
+ * about. Terms defined without a gloss are absent: there is no sentence to
+ * project for them.
+ *
+ * This is the one home for the sentence a vocabulary fact's option carries.
+ * "What confirming that choice would mean" is the same sentence wherever
+ * `ratified` or `prune` appears, so it is written once on the node that
+ * defines the term and read from here -- never a sentence table in a
+ * projection, which would be a rule no node projects
+ * (commons.systems/disposition-graph/dialogue,
+ * `every-option-carries-its-sentence`).
+ *
+ * Memoized on the graph object's identity: a projection asks for one option's
+ * text hundreds of times and the glossary is a pure function of the nodes.
+ *
+ * @param {Map<string, DeriveNode>|DeriveNode[]|{nodes: DeriveNode[]}} graph
+ * @returns {Map<string, {gloss: string, node: string}>} term -> the gloss and
+ *   the id of the node that defines it.
+ */
+export function glossary(graph) {
+  const cacheKey = graph !== null && typeof graph === 'object' ? graph : null;
+  if (cacheKey !== null && glossaryCache.has(cacheKey)) return glossaryCache.get(cacheKey);
+  /** @type {Map<string, {gloss: string, node: string}>} */
+  const result = new Map();
+  for (const node of nodesByIdOf(graph).values()) {
+    for (const entry of node?.defines ?? []) {
+      const term = typeof entry === 'string' ? entry : entry?.term;
+      const gloss = typeof entry === 'string' ? null : (entry?.gloss ?? null);
+      if (typeof term !== 'string' || term.length === 0) continue;
+      if (typeof gloss !== 'string' || gloss.length === 0) continue;
+      if (result.has(term)) continue;
+      result.set(term, { gloss, node: node.id });
+    }
+  }
+  if (cacheKey !== null) glossaryCache.set(cacheKey, result);
+  return result;
+}
+
+/**
+ * The one place a projection reads an option's own sentence from -- what that
+ * option would answer, or what confirming it would mean. Every option of
+ * every fact has one and none is hardcoded
+ * (commons.systems/disposition-graph/dialogue,
+ * `every-option-carries-its-sentence`):
+ *
+ * - the answer option named by `stands` yields the node's `## Answer`, which
+ *   is its text; a projection reads its first sentences exactly as it reads
+ *   every other option's from its subsection, so the row is no longer bare;
+ * - any other answer option, and every persistence option, yields its
+ *   `#### <option>` prose;
+ * - an authority or existence option yields the gloss of the term its name
+ *   is, from the node that defines it, since those names are the graph's own
+ *   vocabulary.
+ *
+ * Null where nothing is recorded -- an option whose subsection is empty, or a
+ * term no node has glossed. A caller that wants to say something in that case
+ * says it as a projection's own absence marker, never as a sentence for the
+ * option.
+ *
+ * @param {Map<string, DeriveNode>|DeriveNode[]|{nodes: DeriveNode[]}} graph
+ * @param {DeriveNode} node - the node the fact is on.
+ * @param {Fact} fact
+ * @param {Option} option
+ * @returns {{text: string, from: string}|null} `from` is the id of the node
+ *   holding the text.
+ */
+export function optionText(graph, node, fact, option) {
+  if (!fact || !option) return null;
+  if (fact.name === 'answer' && fact.stands != null && fact.stands === option.name) {
+    const answer = node?.answer ?? '';
+    return answer.trim().length > 0 ? { text: answer, from: node.id } : null;
+  }
+  if (PER_NODE_FACT_SET.has(fact.name)) {
+    const prose = option.prose ?? '';
+    return prose.trim().length > 0 ? { text: prose, from: node.id } : null;
+  }
+  const defined = glossary(graph).get(option.name) ?? null;
+  return defined === null ? null : { text: defined.gloss, from: defined.node };
 }
 
 /**

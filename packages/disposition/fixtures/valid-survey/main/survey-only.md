@@ -5,7 +5,7 @@ stage: review
 review:
   survey:
     date: 2026-09-04
-    of: cd0178ebf6d6bdf94eb425d304f8ce1f13075e2c
+    of: ff1d4511bfcb1ec969f7cc09bba28c77ab03e523
 facts:
   - name: answer
     options:
@@ -15,6 +15,12 @@ facts:
     recommends: standing
     boldness: low
     stands: standing
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
+    boldness: low
 ---
 
 ## Answer

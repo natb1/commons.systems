@@ -15,6 +15,10 @@ facts:
         source: ai
         ref: 2026-01-01
     stands: standing
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
 ---
 
 ## Answer

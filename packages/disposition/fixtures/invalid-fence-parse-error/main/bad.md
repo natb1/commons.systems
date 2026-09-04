@@ -14,6 +14,10 @@ facts:
     recommends: the-other-way
     boldness: low
     stands: standing
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
 ---
 
 ## Answer

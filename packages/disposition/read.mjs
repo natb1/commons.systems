@@ -44,9 +44,11 @@ import {
   factMoved,
   moved,
   onFrontier,
+  PER_NODE_FACTS,
   proposal,
   reviewStale,
   ruledOption,
+  VOCABULARY_FACTS,
 } from './derive.mjs';
 
 // ---------------------------------------------------------------------------
@@ -72,9 +74,18 @@ export const FORMS = ['target', 'rule', 'assumption', 'arche', 'reading'];
 // the node's question, and the reserved three. No fifth is minted without a
 // ruling on the dialogue node.
 export const FACT_NAMES = ['answer', 'authority', 'existence', 'persistence'];
-export const FACT_KEYS = ['name', 'options', 'recommends', 'boldness', 'stands'];
-export const OPTION_KEYS = ['name', 'source', 'ref', 'ruling'];
-export const RULING_KEYS = ['response', 'date', 'of'];
+// `against` is the AI's own case against the option the fact recommends,
+// written when the recommendation is recorded, so a reader sees the argument
+// the recommendation had to beat rather than only the argument for it.
+export const FACT_KEYS = ['name', 'options', 'recommends', 'boldness', 'against', 'stands'];
+export const OPTION_KEYS = ['name', 'source', 'ref', 'status', 'reason', 'ruling'];
+// `reason` is the author's own reason for the ruling, in their words and
+// optional, so that what they said when they chose has somewhere in the
+// record to land (commons.systems/disposition-graph/dialogue,
+// `ruling-carries-the-reason`); the other three are required as they always
+// were.
+export const RULING_KEYS = ['response', 'date', 'of', 'reason'];
+export const RULING_REQUIRED_KEYS = ['response', 'date', 'of'];
 // `deny` is never stored: a denial is a kickback with the author's words.
 export const RULING_RESPONSES = ['confirm', 'edit'];
 // The classes a ruling on the `authority` fact confers. `deferred` is one of
@@ -84,6 +95,12 @@ export const CONFERRABLE_CLASSES = ['ratified', 'delegated', 'deferred'];
 // The named sources of an option. Any other non-empty string is read as the
 // id of the node, or the name of the instrument, that raised it.
 export const OPTION_SOURCES = ['author', 'ai', 'review'];
+// The one status an option may carry. Absent means viable; `passed` means the
+// AI holds the option dominated on the record's criteria and keeps it on the
+// list with the reason it was passed over, so that a candidate never silently
+// leaves the list and the author may still rule for it
+// (commons.systems/disposition-graph/prose-and-structure).
+export const OPTION_STATUSES = ['passed'];
 export const BEARS_KEYS = ['node', 'fact', 'option', 'relation'];
 // "chosen over" is derived and not stored: it is a tradition adopted on an
 // option that was not chosen.
@@ -101,7 +118,11 @@ export const REVIEW_STRENGTHS = ['strong', 'moderate', 'weak', 'none'];
 // at all; `survey` is the survey of the whole frontier, its date and the
 // hash of the recommendation it read, and it may stand alone on a node the
 // survey judged before that node's draft review ran.
-export const REVIEW_DRAFT_KEYS = ['verdict', 'strength', 'date', 'of'];
+// `against` is the review's own counter-argument, optional and outside the
+// all-or-nothing rule the other four share: a review may be complete without
+// one, and a node with no draft review carries none.
+export const REVIEW_DRAFT_KEYS = ['verdict', 'strength', 'date', 'of', 'against'];
+export const REVIEW_DRAFT_REQUIRED_KEYS = ['verdict', 'strength', 'date', 'of'];
 export const REVIEW_SURVEY_KEYS = ['date', 'of'];
 // The two stages the survey judges: a node is ruled from the ruling stage,
 // and reaches it from the review stage, so those are where the frontier's
@@ -109,22 +130,40 @@ export const REVIEW_SURVEY_KEYS = ['date', 'of'];
 export const SURVEY_STAGES = ['review', 'ruling'];
 export const SECTION_ORDER = ['Disposition', 'Answer', 'Rationale', 'Facts', 'Recommendation', 'Account'];
 export const SHIM_KEYS = ['artifact', 'liquidation', 'declared', 'for'];
+// A `defines` entry is a bare term or a term with the gloss a projection
+// shows wherever a vocabulary fact offers that term as an option: what
+// confirming that choice would mean, written once, on the node that defines
+// the term (commons.systems/disposition-graph/dialogue,
+// `every-option-carries-its-sentence`).
+export const DEFINES_KEYS = ['term', 'gloss'];
 // The keys a '## Recommendation' fence may not carry: the fence holds the
 // node as it would stand, and a stamp, the facts, and the dialogue's own
 // state are not part of that.
 export const FENCE_FORBIDDEN_KEYS = ['authority', 'facts', 'stage', 'review', 'depends'];
-// The reserved facts whose option names come from a fixed vocabulary. Only
-// `authority` has one: `existence` and `persistence` name their options
-// freely, as they did before this encoding.
-export const RESERVED_FACT_OPTIONS = { authority: CONFERRABLE_CLASSES };
+// Whether the node keeps its answer once the question is settled, or is
+// derived from what stands elsewhere. Free text per node, unlike the two
+// vocabulary facts: what persistence would mean here is this node's own.
+export const EXISTENCE_OPTIONS = ['keep', 'prune'];
+// The vocabulary facts and their option names. Both are vocabulary rather
+// than slugs, which is why their options carry no `#### <option>` subsection:
+// `ratified` means the same on every node, so its sentence is written once on
+// the node that defines the term and projected from there
+// (commons.systems/disposition-graph/dialogue,
+// `every-option-carries-its-sentence`). `persistence` names its options
+// freely and is not one of these.
+export const RESERVED_FACT_OPTIONS = { authority: CONFERRABLE_CLASSES, existence: EXISTENCE_OPTIONS };
 
 const FRONTMATTER_KEY_SET = new Set(FRONTMATTER_KEYS);
 const FORM_SET = new Set(FORMS);
 const FACT_NAME_SET = new Set(FACT_NAMES);
 const FACT_KEY_SET = new Set(FACT_KEYS);
 const OPTION_KEY_SET = new Set(OPTION_KEYS);
+const OPTION_STATUS_SET = new Set(OPTION_STATUSES);
 const RULING_KEY_SET = new Set(RULING_KEYS);
 const RULING_RESPONSE_SET = new Set(RULING_RESPONSES);
+const VOCABULARY_FACT_SET = new Set(VOCABULARY_FACTS);
+const PER_NODE_FACT_SET = new Set(PER_NODE_FACTS);
+const DEFINES_KEY_SET = new Set(DEFINES_KEYS);
 const BEARS_KEY_SET = new Set(BEARS_KEYS);
 const RELATION_SET = new Set(RELATIONS);
 const BOLDNESS_SET = new Set(BOLDNESS_VALUES);
@@ -133,6 +172,8 @@ const STAGE_SET = new Set(STAGES);
 const REVIEW_VERDICT_SET = new Set(REVIEW_VERDICTS);
 const REVIEW_STRENGTH_SET = new Set(REVIEW_STRENGTHS);
 const REVIEW_KEY_SET = new Set([...REVIEW_DRAFT_KEYS, 'survey']);
+const ANSWER_OWED_NOTE = 'every answer option but the one that stands says in prose what it would answer';
+const PERSISTENCE_OWED_NOTE = 'every persistence option says in prose what keeping the node that shape would mean';
 const SURVEY_STAGE_SET = new Set(SURVEY_STAGES);
 const SHIM_KEY_SET = new Set(SHIM_KEYS);
 
@@ -324,20 +365,25 @@ function readFacts(raw, problems) {
   if (isAbsent(raw)) return { entries: [], shapeOk: true };
 
   const rulingOk = (r) => isPlainObject(r)
-    && Object.keys(r).length === RULING_KEY_SET.size
-    && RULING_KEYS.every((k) => Object.prototype.hasOwnProperty.call(r, k))
+    && Object.keys(r).every((k) => RULING_KEY_SET.has(k))
+    && RULING_REQUIRED_KEYS.every((k) => Object.prototype.hasOwnProperty.call(r, k))
     && RULING_RESPONSE_SET.has(r.response)
     && typeof r.date === 'string' && isValidDate(r.date)
-    && isNonEmptyString(r.of);
+    && isNonEmptyString(r.of)
+    && (isAbsent(r.reason) || isNonEmptyString(r.reason));
   // The answer fact's options are referenced by name (`stands`, `recommends`,
   // `depends`, `bears`), so their names are slugs; a reserved fact's options
-  // are its vocabulary and may be free text, e.g. a persistence shape.
+  // are its vocabulary and may be free text, e.g. a persistence shape. Which
+  // vocabulary a reserved fact may draw on is `RESERVED_FACT_OPTIONS`, below,
+  // and persistence draws on none: it names its options per node.
   const optionOk = (o, factName) => isPlainObject(o)
     && Object.keys(o).every((k) => OPTION_KEY_SET.has(k))
     && typeof o.name === 'string'
     && (factName === ANSWER_FACT ? OPTION_NAME_RE.test(o.name) : isNonEmptyString(o.name) && !o.name.includes('\n'))
     && (isAbsent(o.source) || isNonEmptyString(o.source))
     && (isAbsent(o.ref) || isNonEmptyString(o.ref))
+    && (isAbsent(o.status) || OPTION_STATUS_SET.has(o.status))
+    && (isAbsent(o.reason) || isNonEmptyString(o.reason))
     && (isAbsent(o.ruling) || rulingOk(o.ruling));
   const entryOk = (entry) => isPlainObject(entry)
     && Object.keys(entry).every((k) => FACT_KEY_SET.has(k))
@@ -345,16 +391,18 @@ function readFacts(raw, problems) {
     && Array.isArray(entry.options) && entry.options.length > 0 && entry.options.every((o) => optionOk(o, entry.name))
     && (isAbsent(entry.recommends) || isNonEmptyString(entry.recommends))
     && (isAbsent(entry.boldness) || BOLDNESS_SET.has(entry.boldness))
+    && (isAbsent(entry.against) || isNonEmptyString(entry.against))
     && (isAbsent(entry.stands) || isNonEmptyString(entry.stands));
 
   if (!Array.isArray(raw) || raw.length === 0 || !raw.every(entryOk)) {
     problems.push(
       `'facts' must be a non-empty list of {name: ${FACT_NAMES.join('|')}, `
       + "options: <one or more {name: <lowercase slug on the answer fact, non-empty on a reserved one>, source: <non-empty string>, "
-      + "ref: <non-empty string>, ruling: <optional "
-      + `{response: ${RULING_RESPONSES.join('|')}, date: YYYY-MM-DD, of: <hash>}>}>, `
+      + `ref: <non-empty string>, status: <${OPTION_STATUSES.join('|')}>, reason: <non-empty string, with status>, ruling: <optional `
+      + `{response: ${RULING_RESPONSES.join('|')}, date: YYYY-MM-DD, of: <hash>, reason: <optional non-empty string>}>}>, `
       + 'recommends: <optional option name>, '
       + `boldness: <${BOLDNESS_VALUES.join('|')}, required with recommends>, `
+      + 'against: <optional non-empty string, with recommends>, '
       + 'stands: <optional option name, on the answer fact only>}',
     );
     return { entries: [], shapeOk: false };
@@ -366,15 +414,23 @@ function readFacts(raw, problems) {
       name: o.name,
       source: isAbsent(o.source) ? null : o.source,
       ref: isAbsent(o.ref) ? null : o.ref,
+      status: isAbsent(o.status) ? null : o.status,
+      reason: isAbsent(o.reason) ? null : o.reason,
       ruling: isAbsent(o.ruling)
         ? null
-        : { response: o.ruling.response, date: o.ruling.date, of: o.ruling.of },
+        : {
+          response: o.ruling.response,
+          date: o.ruling.date,
+          of: o.ruling.of,
+          reason: isAbsent(o.ruling.reason) ? null : o.ruling.reason,
+        },
       // filled in from '## Facts' once the body is parsed
       prose: '',
       readings: [],
     })),
     recommends: isAbsent(entry.recommends) ? null : entry.recommends,
     boldness: isAbsent(entry.boldness) ? null : entry.boldness,
+    against: isAbsent(entry.against) ? null : entry.against,
     stands: isAbsent(entry.stands) ? null : entry.stands,
     prose: '',
     recommendationHash: '',
@@ -422,10 +478,52 @@ function readFacts(raw, problems) {
       const vocabulary = RESERVED_FACT_OPTIONS[entry.name];
       if (!optionNames.every((n) => vocabulary.includes(n))) {
         problems.push(
-          `fact '${entry.name}' may only offer the classes a ruling confers: ${vocabulary.join(', ')}`,
+          entry.name === 'authority'
+            ? `fact 'authority' may only offer the classes a ruling confers: ${vocabulary.join(', ')}`
+            : `fact '${entry.name}' may only offer its own vocabulary: ${vocabulary.join(', ')}`,
         );
         ok = false;
       }
+    }
+
+    // An option the AI holds dominated stays on the list with the reason it
+    // was passed over: viability is a judgment shown on the option and never
+    // the condition of its being listed, so the author may still rule for it
+    // (commons.systems/disposition-graph/prose-and-structure). What the
+    // judgment may not do is act -- it cannot be what the fact recommends or
+    // what stands -- and it never survives the author's own ruling, which
+    // supersedes it.
+    for (const option of entry.options) {
+      if (option.status !== null && option.reason === null) {
+        problems.push(`fact '${entry.name}' option '${option.name}' is passed over and must say why ('reason')`);
+        ok = false;
+      }
+      if (option.status === null && option.reason !== null) {
+        problems.push(
+          `fact '${entry.name}' option '${option.name}' carries a 'reason' with no 'status'; a reason is why an option was passed over`,
+        );
+        ok = false;
+      }
+      if (option.status === null) continue;
+      if (entry.recommends === option.name) {
+        problems.push(`fact '${entry.name}' recommends '${option.name}', which it has passed over`);
+        ok = false;
+      }
+      if (entry.stands === option.name) {
+        problems.push(`fact '${entry.name}' stands on '${option.name}', which it has passed over`);
+        ok = false;
+      }
+      if (option.ruling !== null) {
+        problems.push(
+          `fact '${entry.name}' option '${option.name}' is passed over and carries a ruling; the author's ruling supersedes the AI's viability judgment`,
+        );
+        ok = false;
+      }
+    }
+
+    if (entry.recommends === null && entry.against !== null) {
+      problems.push(`fact '${entry.name}' states a case against a recommendation but recommends no option`);
+      ok = false;
     }
 
     if (entry.recommends !== null && !optionNames.includes(entry.recommends)) {
@@ -474,17 +572,24 @@ function readFacts(raw, problems) {
  * `#### <option>` subsections, and check them against the `facts` list.
  *
  * A fact subsection may open with prose -- the reason for the recommendation
- * -- and is omitted where there is nothing to say, so the `### ` headings
- * must be a subsequence of the fact names rather than a match: every one
- * names a fact, none repeats, and they read in the facts' order.
+ * -- and is omitted where there is nothing to say and nothing owed, so the
+ * `### ` headings must be a subsequence of the fact names rather than a
+ * match: every one names a fact, none repeats, and they read in the facts'
+ * order. What is owed is one `#### <option>` per option of a per-node fact,
+ * so such a fact's `### ` heading is omitted only where it has no owed
+ * option at all.
  *
- * Under `### answer`, one `#### <option>` subsection per option says what
- * that option would answer and why it is on the table. It is required for
- * every option except the one named by `stands`, whose text is the
- * `## Answer` section itself, so the option headings must match the option
- * list exactly but for that one. A reserved fact's options may carry
- * `#### ` subsections too and need not, so theirs are a subsequence like the
- * facts themselves.
+ * Under `### answer` and `### persistence`, one `#### <option>` subsection
+ * per option says what that option would answer and why it is on the table:
+ * every option of every fact carries in prose what it would answer
+ * (commons.systems/disposition-graph/dialogue,
+ * `every-option-carries-its-sentence`). The one exemption is the answer
+ * option named by `stands`, whose text is the `## Answer` section itself, so
+ * the option headings must match the option list exactly but for that one.
+ * A vocabulary fact -- `authority`, `existence` -- carries no `#### `
+ * subsections at all: its option names mean the same on every node, so the
+ * sentence is written once on the node that defines the term and projected
+ * from there.
  *
  * @param {string} sectionText
  * @param {Array<object>|null} facts - the parsed facts in order, or null
@@ -562,27 +667,43 @@ function parseFactsSection(sectionText, facts, problems) {
     checkOptionHeadings(facts[at], heading, problems);
   }
 
-  // Every answer option but the standing one states itself in prose, so an
-  // answer fact with such an option needs its '### answer' subsection.
-  const answerFact = facts.find((f) => f.name === ANSWER_FACT) ?? null;
-  if (answerFact !== null && !seen.has(ANSWER_FACT)) {
-    const owed = answerFact.options.filter((o) => o.name !== answerFact.stands).map((o) => o.name);
-    if (owed.length > 0) {
-      problems.push(
-        `'## Facts' has no '### answer' subsection, so ${owed.map((n) => `'#### ${n}'`).join(', ')} `
-        + `${owed.length === 1 ? 'is' : 'are'} missing; every answer option but the one that stands says in prose what it would answer`,
-      );
-    }
+  // A per-node fact's options state themselves in prose, so a fact with such
+  // an option needs its '### <fact>' subsection at all.
+  for (const fact of facts) {
+    if (!PER_NODE_FACT_SET.has(fact.name) || seen.has(fact.name)) continue;
+    const owed = owedOptionSubsections(fact);
+    if (owed.length === 0) continue;
+    problems.push(
+      `'## Facts' has no '### ${fact.name}' subsection, so ${owed.map((n) => `'#### ${n}'`).join(', ')} `
+      + `${owed.length === 1 ? 'is' : 'are'} missing; `
+      + (fact.name === ANSWER_FACT ? ANSWER_OWED_NOTE : PERSISTENCE_OWED_NOTE),
+    );
   }
 
   return text;
 }
 
 /**
+ * The `#### <option>` subsections one fact owes under its `### <fact>`
+ * heading: every option of a per-node fact, but for the answer option named
+ * by `stands`, whose text is the `## Answer` section; none at all for a
+ * vocabulary fact, whose option names mean the same on every node.
+ *
+ * @param {object} fact
+ * @returns {string[]} the option names, in the fact's own option order.
+ */
+function owedOptionSubsections(fact) {
+  if (!PER_NODE_FACT_SET.has(fact.name)) return [];
+  return fact.options.filter((o) => o.name !== fact.stands).map((o) => o.name);
+}
+
+/**
  * The `#### <option>` headings under one `### <fact>` subsection: an exact
- * match against the answer fact's options in order, but for the option named
- * by `stands`, which may be omitted (its text is `## Answer`); a subsequence
- * for a reserved fact, whose options need no prose at all.
+ * match against the fact's options in order for a per-node fact, but for the
+ * answer option named by `stands`, which may be omitted (its text is
+ * `## Answer`) and may be written anyway; none at all for a vocabulary fact,
+ * whose option name means the same on every node and whose sentence is the
+ * gloss on the node that defines the term.
  *
  * @param {object} fact
  * @param {{name: string, options: string[]}} heading
@@ -590,22 +711,12 @@ function parseFactsSection(sectionText, facts, problems) {
  */
 function checkOptionHeadings(fact, heading, problems) {
   const optionNames = fact.options.map((o) => o.name);
-  if (fact.name !== ANSWER_FACT) {
-    let cursor = 0;
-    const seen = new Set();
+  if (VOCABULARY_FACT_SET.has(fact.name)) {
     for (const name of heading.options) {
-      if (seen.has(name)) {
-        problems.push(`'### ${fact.name}' repeats '#### ${name}'`);
-        return;
-      }
-      seen.add(name);
-      const at = optionNames.indexOf(name, cursor);
-      if (at === -1) {
-        const why = optionNames.includes(name) ? "out of the fact's option order" : `not an option of '${fact.name}'`;
-        problems.push(`'### ${fact.name}' has '#### ${name}', which is ${why} (options: ${optionNames.join(', ')})`);
-        return;
-      }
-      cursor = at + 1;
+      problems.push(
+        `'### ${fact.name}' has '#### ${name}', which a vocabulary fact's options do not carry; `
+        + `'${name}' means the same on every node, so its sentence is the gloss on the node that defines the term`,
+      );
     }
     return;
   }
@@ -618,7 +729,7 @@ function checkOptionHeadings(fact, heading, problems) {
       const want = expected[i] === undefined ? 'nothing' : `'#### ${expected[i]}'`;
       const got = found[i] === undefined ? 'nothing' : `'#### ${found[i]}'`;
       problems.push(
-        `'### answer' subsections must match the answer fact's options in order: expected ${want} at position ${i + 1}, found ${got}`,
+        `'### ${fact.name}' subsections must match the ${fact.name} fact's options in order: expected ${want} at position ${i + 1}, found ${got}`,
       );
       return;
     }
@@ -872,6 +983,26 @@ function parseFence(fenceText, question, ctx, problems) {
 }
 
 // ---------------------------------------------------------------------------
+// the terms a node defines
+// ---------------------------------------------------------------------------
+
+/**
+ * The terms one node defines, as plain strings. `defines` carries a gloss
+ * beside the term where the node wrote one, so a consumer that wants the
+ * terms alone -- a term index, a duplicate check -- asks here rather than
+ * iterating the field and finding objects.
+ *
+ * Tolerates a bare-string entry so a node object built by hand, rather than
+ * read from a file, still reads.
+ *
+ * @param {{defines?: ({term: string, gloss: string|null}|string)[]|null}} node
+ * @returns {string[]}
+ */
+export function defineTerms(node) {
+  return (node?.defines ?? []).map((d) => (typeof d === 'string' ? d : d?.term)).filter((t) => typeof t === 'string');
+}
+
+// ---------------------------------------------------------------------------
 // the survey's pin, and the readiness it decides
 // ---------------------------------------------------------------------------
 
@@ -1036,7 +1167,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   if (!isAbsent(fm.review)) {
     const r = fm.review;
     const has = (k) => isPlainObject(r) && Object.prototype.hasOwnProperty.call(r, k) && !isAbsent(r[k]);
-    const drafted = REVIEW_DRAFT_KEYS.some(has);
+    const drafted = REVIEW_DRAFT_REQUIRED_KEYS.some(has);
     const surveyed = has('survey');
     const surveyOk = (s) => isPlainObject(s)
       && Object.keys(s).length === REVIEW_SURVEY_KEYS.length
@@ -1047,16 +1178,20 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
       && Object.keys(r).every((k) => REVIEW_KEY_SET.has(k))
       && (drafted || surveyed)
       && (!drafted || (
-        REVIEW_DRAFT_KEYS.every(has)
+        REVIEW_DRAFT_REQUIRED_KEYS.every(has)
         && REVIEW_VERDICT_SET.has(r.verdict)
         && REVIEW_STRENGTH_SET.has(r.strength)
         && typeof r.date === 'string' && isValidDate(r.date)
         && typeof r.of === 'string' && HASH_RE.test(r.of)))
+      // The counter-argument argues about a verdict, so it needs one to
+      // argue about; it is otherwise optional on a review that has one.
+      && (!has('against') || (drafted && isNonEmptyString(r.against)))
       && (!surveyed || surveyOk(r.survey));
     if (!ok) {
       problems.push(
         `'review' must be {verdict: ${REVIEW_VERDICTS.join('|')}, strength: ${REVIEW_STRENGTHS.join('|')}, date: YYYY-MM-DD, of: <sha1>}`
-        + ', with an optional survey: {date: YYYY-MM-DD, of: <sha1>};'
+        + ', with an optional against: <non-empty string> beside them'
+        + ', and an optional survey: {date: YYYY-MM-DD, of: <sha1>};'
         + ' the four draft-review keys are given together or not at all, and the survey may stand alone',
       );
     } else {
@@ -1065,6 +1200,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
         strength: drafted ? r.strength : null,
         date: drafted ? r.date : null,
         of: drafted ? r.of : null,
+        against: drafted && has('against') ? r.against : null,
         survey: surveyed ? { date: r.survey.date, of: r.survey.of } : null,
       };
     }
@@ -1158,13 +1294,22 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     if (hasBears) problems.push("'bears' is only allowed when form: reading");
   }
 
-  // defines
+  // defines: a term, or a term with the gloss a projection shows wherever a
+  // vocabulary fact offers that term as an option. The gloss lives here, on
+  // the node that defines the term, and nowhere else: a sentence a projection
+  // kept in its own text would be a rule no node projects.
   let defines = null;
   if (!isAbsent(fm.defines)) {
-    if (!Array.isArray(fm.defines) || fm.defines.some((d) => typeof d !== 'string')) {
-      problems.push("'defines' must be a list of strings");
+    const entryOk = (d) => isNonEmptyString(d)
+      || (isPlainObject(d)
+        && Object.keys(d).length === DEFINES_KEY_SET.size
+        && DEFINES_KEYS.every((k) => isNonEmptyString(d[k])));
+    if (!Array.isArray(fm.defines) || fm.defines.length === 0 || !fm.defines.every(entryOk)) {
+      problems.push("'defines' must be a non-empty list of terms, each a non-empty string or {term, gloss} with both non-empty");
     } else {
-      defines = fm.defines;
+      defines = fm.defines.map((d) => (typeof d === 'string'
+        ? { term: d, gloss: null }
+        : { term: d.term, gloss: d.gloss }));
     }
   }
 
@@ -1235,12 +1380,14 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   const factsText = hasFactsSection
     ? parseFactsSection(sections.Facts, factsShapeOk && facts.length > 0 ? facts : null, problems)
     : {};
-  if (!hasFactsSection && answerFact !== null && factsShapeOk) {
-    const owed = answerFact.options.filter((o) => o.name !== answerFact.stands).map((o) => o.name);
-    if (owed.length > 0) {
+  if (!hasFactsSection && factsShapeOk) {
+    for (const fact of facts) {
+      const owed = owedOptionSubsections(fact);
+      if (owed.length === 0) continue;
       problems.push(
-        `the answer fact carries ${owed.map((n) => `'${n}'`).join(', ')} beside the option that stands, `
-        + "which requires a '## Facts' section stating each in prose",
+        `the ${fact.name} fact carries ${owed.map((n) => `'${n}'`).join(', ')}`
+        + (fact.name === ANSWER_FACT ? ' beside the option that stands,' : ',')
+        + " which requires a '## Facts' section stating each in prose",
       );
     }
   }
@@ -1307,6 +1454,17 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
       ? 'the answer fact recommends nothing'
       : `the answer fact recommends the standing option '${stands}'`;
     problems.push(`'## Recommendation' holds the recommended node where it differs from what stands, and ${why}`);
+  }
+
+  // A node on the frontier carries the authority fact, because that is how a
+  // ruling confers delegated or deferred: without it the only class a
+  // confirmation can produce is ratified, and the author's third exit is
+  // closed by an encoding accident rather than by a decision
+  // (commons.systems/disposition-graph/dialogue,
+  // `authority-fact-on-every-node`). A node whose facts did not parse is
+  // told about its shape first and not about this.
+  if (stage !== null && facts.length > 0 && factsShapeOk && !facts.some((f) => f.name === 'authority')) {
+    problems.push("a staged node's facts must include authority");
   }
 
   // From the review stage on, every fact carries the option it recommends:

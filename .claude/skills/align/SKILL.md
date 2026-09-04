@@ -25,15 +25,28 @@ description: Record or revise one node of the disposition graph by interview wit
 > node's recommended text and to the options `per-draft-and-survey` on
 > `clean-context-review` and `split-survey-from-per-draft` on
 > `frontier-consistency`: the five seams a sitting's work divides along,
-> and the review divided by its object.
-> Every recommendation these reconciliations wrote is unanswered, and the
-> clean-context review is owed before the author rules on any
-> of it.)** Hand-materialized from
+> and the review divided by its object; and reconciled again on
+> 2026-09-04, under the author's bootstrap grant of that day for the
+> alignment-page sitting ("You have bootstrap reconciliation authority
+> including migrating nodes to new encodings"), to
+> `every-fact-every-option` on `alignment-page`,
+> `prose-argues-structure-records` on `prose-and-structure`, the options
+> `ruling-carries-the-reason`, `every-option-carries-its-sentence` and
+> `authority-fact-on-every-node` on `dialogue`, and
+> `denial-typed-to-maieutic` on `recording`: every fact listed with every
+> option under it and none folded, the sentence on every option, the
+> author's reason on a ruling, the option passed over rather than dropped
+> from the list, and the kick-back typed to the maieutic movement. Every
+> one of those recommendations is unanswered; the review of the first two
+> ran in that sitting and the review of the rest is owed.
+> Every recommendation these reconciliations wrote is unanswered, and no
+> ruling is recorded on any of it while either reading of the
+> clean-context review is owed.)** Hand-materialized from
 > the nodes `growth`, `recording`, `unanswered`, `dialogue`,
 > `clean-context-review`, `frontier-consistency`, `decomposition`,
 > `checkpoint`,
 > `alignment-target`, `alignment-order`, `alignment-page`, `authority`,
-> `viable-options`, `node`, `under`, `projection`,
+> `viable-options`, `prose-and-structure`, `node`, `under`, `projection`,
 > `un-aligned-children`, `fidelity`,
 > `persistence`, `readings`, `review`, `evaluation`, `attention`,
 > `delegation`, and `transience` of `commons.systems/disposition-graph`,
@@ -109,7 +122,13 @@ skill only when the session starts in the checkout that carries it.
    ruling order, and the alignment page's responses are read with the Artifact
    tool (`read_db`, collection `responses`; a document's id is the node id
    with each `/` replaced by `:`; a document carries `node`, `stage`,
-   `ruling` as `confirm`, `edit`, or `deny`, `text`, and `updated`). Act
+   `updated`, `words`, the author's text from the stage's own free-text
+   control, which the page offers at the periagogic and maieutic stages
+   alone, and `facts`, one entry per fact the author responded on, each
+   `{name, option, kickback, text}` — the option's name or null, whether
+   the kick-back row was chosen, and the author's words in that fact's
+   control — staged only at the ruling stage, since nothing on the page
+   stages a response on the node as a whole (`alignment-page`)). Act
    on every response before anything else (§5), then resume each sitting
    at its stage.
 
@@ -170,7 +189,12 @@ skill only when the session starts in the checkout that carries it.
      recorded: `/align-review <node id>` reads that draft against its
      neighbourhood and either forwards it, with its strongest
      counter-argument when it found one and the session's reply, or kicks
-     it back to stage 2 or 3 with findings. The survey runs before the
+     it back to stage 2 or 3 with findings. That counter-argument is the
+     line the page carries on the recommended option's row, with the
+     strength the review gave it, in place of the case against the AI
+     wrote when it recorded the recommendation; the reply sits one step
+     down with the rest of the AI's explanation (`alignment-page`).
+     The survey runs before the
      author rules, when the frontier shows one owed:
      `/align-review --survey` reads the whole graph and judges the nodes
      whose recommendation has moved since it last pinned them, and a
@@ -179,16 +203,22 @@ skill only when the session starts in the checkout that carries it.
   5. Ruling. The node is put on the alignment page, whose shape is the
      `alignment-page` node's question and is not restated here: one node
      at a time, selected from a rail that carries the metrics and every
-     node of the alignment frontier in the ruling order; the decisions
-     that ruling asks in the middle, each with its options, the
-     recommended one among them and its boldness, drill-down beneath a
-     row, and a last row rejecting every option with feedback; and the
-     node as it would stand on the
-     right, with its unanswered children beneath it as indications and a
-     rejection of the whole under that. The three responses, confirm,
-     confirm with edits, deny with feedback, are open on any subset at
-     once, on nodes and on the decisions within one (`unanswered`). The
-     author rules there or in prose.
+     node of the alignment frontier in the ruling order; in the middle,
+     the stage first, with every input disabled off the ruling stage, and
+     then every fact the node carries with every option under it and none
+     folded, each row leading with the option's sentence and its name and
+     carrying its status, the recommended row carrying beneath it the case
+     against in one line, and everything else one step down in a
+     drill-down that holds the author's words, the AI's reason and reply,
+     the readings, and a text control for the author's own reason and any
+     edits; the last row on every fact the kick-back, typed to the
+     maieutic movement, its feedback control at the first level; and,
+     after the facts, what a ruling here makes decidable, as indications
+     and never rows. The right-hand column is the disposition alone, and
+     no ruling is asked on the node as a whole. Every
+     response is given on a fact, and the three the author has — confirm,
+     confirm with edits, deny with feedback — are open on any subset of
+     the facts at once (`unanswered`). The author rules there or in prose.
   6. Recording. The response is classified (§5): a confirmation is
      recorded as a ruling on the option the author chose and landed; a
      confirmation with edits is applied, reviewed again when the edits
@@ -244,28 +274,56 @@ skill only when the session starts in the checkout that carries it.
   and `persistence`, present only where the recommendation would change
   the node's shape; a decision the author would rule on separately that is
   not one of those four is a question, and a question is a node under
-  this one (`dialogue`, `aspects-are-nodes`). Each fact carries its
-  `options`, the candidates the AI holds viable, at least one and possibly
-  only one — viable meaning not dominated on the record's criteria, in the
-  AI's judgment, which is what the evaluation node's solution frontier
+  this one (`dialogue`, `aspects-are-nodes`). Every node that carries a
+  stage and carries facts carries an `authority` fact, since that fact is
+  how a ruling confers a class other than ratified and without it the
+  author's third exit is closed by an encoding accident; a node carrying
+  no fact at all is one at the periagogic or maieutic stage, where nothing
+  is proposed yet (`dialogue`, `authority-fact-on-every-node`). Each fact carries its
+  `options`, every candidate the AI considered and can name, at least one
+  and possibly only one — an option is viable while nothing else on the
+  list dominates it on the record's criteria, in the AI's judgment, which
+  is what the evaluation node's solution frontier
   means for one decision — each with a `name`, its `source` (`author`, `ai`, `review`,
-  or the node or instrument that raised it) and a `ref` (the date of the
-  words or the review, the graph commit, or what raised it), and a
+  or the node or instrument that raised it), a `ref` (the date of the
+  words or the review, the graph commit, or what raised it), and, where
+  the AI holds it dominated, a `status`, which is exactly `passed`, with
+  the `reason` it was passed over, required whenever the status is there:
+  a passed option is never the recommendation and never the one that
+  stands and carries no ruling, and it stays on the list, since a
+  candidate never silently leaves it (`prose-and-structure`); the
+  author may rule for it all the same, and the recording clears the
+  status. An option carries a
   `ruling` once the author has given one on it, with its `response`,
-  `confirm` or `edit`, its `date`, and `of`, the pin of the fact's
-  recommendation the ruling answered; `recommends`, the one option the AI
+  `confirm` or `edit`, its `date`, `of`, the pin of the fact's
+  recommendation the ruling answered, and, where the author gave one, the
+  `reason` for it in their own words, which is optional and theirs
+  (`dialogue`, `ruling-carries-the-reason`). The fact carries `recommends`, the one option the AI
   recommends, recordable at any stage and required from the review stage
-  on, with the `boldness` of that recommendation; and, on the answer
+  on, with the `boldness` of that recommendation and `against`, the case
+  against that recommendation in one line and at full strength, in the
+  AI's own words, written when the recommendation is recorded and carried
+  on the recommended option's row (`alignment-page`); and, on the answer
   fact, `stands`, the option whose full text `## Answer` holds. `## Facts`
   holds one `###` subsection per fact, saying why its recommended option
-  is recommended, and under `### answer` one `####` subsection per option
-  saying what it would answer, the option named by `stands` excepted,
-  whose text is the answer itself. `## Recommendation`, one fenced
+  is recommended, and a `####` subsection per option saying what it would
+  answer: under `### answer` for every option but the one named by
+  `stands`, whose sentence is the answer's own first sentences, and under
+  `### persistence` for each of that fact's options, which are written per
+  node. The two facts whose choices are the record's own vocabulary carry
+  no subsection: their sentence belongs to the node that defines the fact
+  and is projected from there, `ratified`, `delegated` and `deferred`
+  glossed on `authority` and `keep` and `prune` on `dialogue`, each as a
+  `defines` entry `{term, gloss}`, so that no projection carries a
+  sentence of its own for an option (`dialogue`,
+  `every-option-carries-its-sentence`). `## Recommendation`, one fenced
   markdown block holding the whole proposed node, is present exactly when
   the answer fact recommends an option other than the one that stands.
   `review` is the clean-context review's `verdict`, `strength`, `date`,
   and `of`, the pin of the recommendation it read, which the frontier
-  flags when the recommendation has moved since.
+  flags when the recommendation has moved since, and `against`, the
+  counter-argument that review returned, which the row shows in place of
+  the fact's own case against.
   `depends` is the still-open questions this one's ruling waits on, as
   data, so the page can order the author's queue and show what a ruling
   here unblocks, its inverse being derived and never stored, each entry
@@ -396,7 +454,8 @@ skill only when the session starts in the checkout that carries it.
   delegated, deferred), a boldness assessment (how much of it rests on the
   AI's own knowledge against the record and the author's words, so that
   high boldness is low confidence, the direction `dialogue` and the author
-  use and the one the page's fold rule runs on), its persistence
+  use; it is shown on the recommendation and decides nothing the page
+  asks, now that no fact folds, `alignment-page`), its persistence
   class (standing, shim with its liquidation condition, proposal,
   un-aligned disposition, evidence, or not recorded; a transient
   disposition is a contradiction in terms, see `transience`), and the
@@ -487,8 +546,13 @@ skill only when the session starts in the checkout that carries it.
   the `quotes` node decides, the rationale restating the ruling in the
   record's own register and never replacing the quotation. The options go
   into their fact's `options` and into `## Facts` as they arise, each with
-  its source and its ref, and each answer option with a `####` subsection
-  saying what it would answer. The AI's account
+  its source and its ref, each carrying the sentence saying what it would
+  answer — a `####` subsection on the answer and persistence facts, and
+  the gloss on the node that defines the fact where the choices are the
+  record's own vocabulary — and each one the AI passes over carrying its
+  status and the reason it was passed over, rather than leaving the list
+  (`dialogue`, `every-option-carries-its-sentence`;
+  `prose-and-structure`). The AI's account
   goes into `## Account`: evidence, findings, the review's
   counter-argument and the
   reply, and the responses open; the reason a fact's recommendation is
@@ -496,8 +560,9 @@ skill only when the session starts in the checkout that carries it.
   `## Account` on an answered node is
   the pending findings of the dialogue open on it.
 - Write the node: question, form, `under`, the answer, the rationale with
-  the author's steers and the reasons the options not chosen were not
-  taken, an option on the fact
+  the author's steers and the argument for what stands against what it
+  beat, made in the argument's own sentences and never as the option list
+  restated, since the fields carry that (`prose-and-structure`), an option on the fact
   it belongs to for anything out of scope, `defines` for the terms it defines, an instrument where one
   exists, readings as nodes under it. The record is the sole carrier: a
   decision that is not in the node did not happen. Every decision of the
@@ -575,43 +640,72 @@ rule projections are regenerated by the next reconciliation run, not here.
   kickback sets `stage` and appends the findings to `## Account`; a
   forward sets `stage: ruling`, writes `review` with the verdict, the
   strength, the date, and the pin of the recommendation it read, and puts the
-  item on the page with the counter-argument and the session's reply, or
-  with the note that the review found no strong counter-argument; a
+  item on the page, where the counter-argument is the line on the
+  recommended option's row and carries the strength the review gave it,
+  the session's reply sitting one step down, and where the row says
+  instead that the review found no strong counter-argument
+  (`alignment-page`); a
   frontier finding kicks back each node it names with the finding and the
   proposed edit appended, and a merge or split is put to the author as an
   option on the node it would change, never done by the session. A
   recommendation changed in substance after its review goes back to the
   review stage. A disposition still in review
   never holds one that was forwarded.
-- **Classify the response** (`recording`, `unanswered`). `confirm`:
+- **Classify the response** (`recording`, `unanswered`,
+  `alignment-page`). Every response is given on a fact, since nothing on
+  the page stages one on the node as a whole. An option chosen with its
+  text left empty is a confirmation:
   record the ruling on the option the author chose, with
   `response: confirm`, its `date`, and
   `of`, the pin of that fact's recommendation it answered; a ruling on the
   answer fact ratifies, and a ruling on the authority fact confers the
-  class its option names, delegated or deferred.
-  `edit`: apply the author's edits to the draft; when they change
-  substance, send the draft through the review again and put it back for
-  confirmation; otherwise record the ruling with `response: edit`, the
-  author's words being
-  the ruling. `deny`, or prose that is neither: decide where the dialogue
-  resumes and set `stage` to it: `periagogic` when the response shows the
+  class its option names, delegated or deferred. An option chosen with
+  words written in its text is a confirmation with text, and the session
+  classifies those words as `recording` classifies every response given
+  in prose: where they are the author's reason for the choice, record
+  them on the ruling as its `reason`, in their words (`dialogue`,
+  `ruling-carries-the-reason`); where they amend the option, apply the
+  edits to it and record the ruling with `response: edit` and those words
+  as its `reason`, sending the draft through the review again and putting
+  it back for confirmation when they change substance. The response
+  `edit` is reached only that way, through an option's own text. The
+  kick-back row on a fact is a denial with feedback on that decision: it
+  records no ruling and returns the node to the `maieutic` stage, where
+  the options are drawn again from what the author wrote (`recording`,
+  `denial-typed-to-maieutic`); feedback showing that the ground itself is
+  at issue rather than the options is classified further back, to
+  `periagogic`, by the same node's rule, from the words. Prose the author
+  gives anywhere else is classified the three ways `recording` names, and
+  the stage is set to where the dialogue resumes:
+  `periagogic` when the response shows the
   author has lost hold of the record's ground (asking for what the record
   forbids for a reason they have not engaged, contradicting an ancestor
   they have not cited); `maieutic` when the response is ambiguous while
   the AI's understanding of the ground is complete; `ruling` in the common
   case, the draft refined with the feedback and put back for
   confirmation. A denial is never written as a ruling: it is the kickback
-  and the author's words. Leaving a node unruled leaves it unanswered, in
+  and the author's words. The `words` a response carries at the
+  periagogic or maieutic stage are no ruling at all: they are the
+  author's account of the ground, or their intention, appended verbatim
+  and dated to `## Disposition`, and the stage advances as the movement
+  completes. Leaving a node unruled leaves it unanswered, in
   which state nothing on it acts, and the deferral the author confers is
   the `deferred` option on the authority fact, so no fourth response is
   needed. An overrule is
   drafted as what the author said stands, reviewed, and put back for
-  confirmation. A confirmation on a node that is not ready to rule, either
-  reading being owed on it, is held until that reading runs and recorded
-  when the draft's review forwards. A response given on
-  one of the decisions a node's ruling asks is classified the same way and
+  confirmation. A confirmation given on a node that has not reached the
+  ruling stage is invalid and confers nothing, on the page or in prose,
+  as the author ruled on 2026-09-04 (`alignment-page`): the page renders
+  every fact and every recommendation at the earlier stages and disables
+  the inputs among them, and what the author writes there is recorded as
+  their words, the dialogue proceeding from the stage the node is at.
+  (`unanswered` carries this as the option
+  `confirmation-before-the-ruling-stage-is-invalid`, recorded 2026-09-04
+  and unanswered, against its standing sentence that such a confirmation
+  is held until the review runs.) A kick-back given on
+  one of the decisions a node's ruling asks
   moves the whole node, since a node has one stage and one next movement
-  owed on it; the responses given on the node's other decisions are
+  owed on it; the confirmations given on the node's other decisions are
   written as rulings on the options they chose and survive the kickback,
   so the
   author answers each decision once. A ruling given on a node while its
@@ -621,9 +715,12 @@ rule projections are regenerated by the next reconciliation run, not here.
   to the author, never applied over their ruling.
 - **Record.** Write no stamp: the class is read off the rulings. Write the
   ruling on the option the author chose, with its `response`, its `date`,
-  and `of`, the pin of that fact's recommendation it answered, and quote
+  `of`, the pin of that fact's recommendation it answered, and its
+  `reason` where the author gave one, and quote
   the author's words with their date in `## Disposition`, the rationale
-  restating the ruling in the record's own register; a ruling whose words
+  restating the ruling in the record's own register and carrying no list
+  a field carries, since the prose argues and the structure records
+  (`prose-and-structure`); a ruling whose words
   are not in the node is invalid (`authority`, `quotes`). Where the ruling
   moves what stands, copy the ruled option's full text into `## Answer`
   and name it in the answer fact's `stands`; the fence goes with that
@@ -632,7 +729,10 @@ rule projections are regenerated by the next reconciliation run, not here.
   boldness, the readings bearing on them, and the rulings, so that a later
   session meets what was considered and why (`recording`,
   `options-persist-at-the-recording`); an option the AI no longer holds
-  viable leaves the list, and the option that displaced it says why. What
+  viable stays on the list, marked passed over with the reason it was
+  passed over, and the option that displaced it says why
+  (`prose-and-structure`), and where the author has ruled for a passed
+  option the recording clears its status. What
   the recording removes is the dialogue and nothing else: `stage`,
   `review`, `depends`, and `## Account`, `## Disposition` staying as the
   `quotes` node decides. Validate and

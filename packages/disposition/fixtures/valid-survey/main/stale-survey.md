@@ -6,7 +6,7 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: 6b058d41ac0305df2f789e5a09e6ff7ecde55012
+  of: e58898ebee8ef0f307de9cc53b237189dffd66ac
   survey:
     date: 2026-09-03
     of: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -19,6 +19,12 @@ facts:
     recommends: standing
     boldness: low
     stands: standing
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
+    boldness: low
 ---
 
 ## Answer

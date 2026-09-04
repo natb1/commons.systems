@@ -21,12 +21,26 @@ description: Clean-context adversarial review in two readings divided by their o
 > `split-survey-from-per-draft` on `frontier-consistency`: the review
 > divided by its object, the draft's reading when its recommendation is
 > recorded and the survey before the ruling, the survey's pin at apply in
-> place of the lock, and the reviewer's model read from the node. Every
-> recommendation these reconciliations wrote is unanswered, and the review
-> is what is owed on them.)**
+> place of the lock, and the reviewer's model read from the node; and
+> reconciled again on 2026-09-04, under the author's bootstrap grant of
+> that day for the alignment-page sitting ("You have bootstrap
+> reconciliation authority including migrating nodes to new encodings"),
+> to `every-fact-every-option` on `alignment-page`,
+> `prose-argues-structure-records` on `prose-and-structure`, the options
+> `ruling-carries-the-reason`, `every-option-carries-its-sentence` and
+> `authority-fact-on-every-node` on `dialogue`, and
+> `denial-typed-to-maieutic` on `recording`: every fact listed with every
+> option under it and none folded, the sentence on every option, the
+> author's reason on a ruling, the option passed over rather than dropped
+> from the list, and the kick-back typed to the maieutic movement. Every
+> one of those recommendations is unanswered; the review of the first two
+> ran in that sitting and the review of the rest is owed. Every
+> recommendation these reconciliations wrote is unanswered, and no ruling
+> is recorded on any of it while either reading is owed.)**
 > Hand-written from the nodes `clean-context-review`,
 > `frontier-consistency`, `recording`, `dialogue`, `unanswered`,
-> `viable-options`, `decomposition`,
+> `viable-options`, `prose-and-structure`, `alignment-page`,
+> `decomposition`,
 > `checkpoint`, `alignment-order`, and `delegation` of
 > `commons.systems/disposition-graph`,
 > none of them carrying a ruling and all of them therefore unanswered, and
@@ -126,9 +140,11 @@ the reviewer's output file, and prints the reviewer's model it computed
 from the node, `fable` or `opus`, by the rule in §3. It fills `{{date}}`,
 `{{repo}}`, `{{node}}`
 (the node whole: question, `## Disposition`, the `## Answer` that
-stands, `## Rationale`, every fact with every option it holds viable — its
-source and `ref`, its prose, the readings that bear on it, and whether it is
-the recommended one, the one that stands, or the ruled one — the
+stands, `## Rationale`, every fact with every option it carries — its
+source and `ref`, its prose, the readings that bear on it, its `status`
+and the reason where the AI has passed it over, and whether it is
+the recommended one, the one that stands, or the ruled one, with the
+author's own reason where the ruling carries one — the
 `## Recommendation` fence when there is one, the review state with its
 staleness, `depends` as `<id>#<option>`, `bears` on a reading, and the
 `## Account`), `{{ancestry}}` (the chain of nodes above it and the rules
@@ -228,7 +244,18 @@ as a gap in the reading rather than as a finding of nothing.
    `deriveRecommendationHash` for the node as edited — the pin that goes
    stale when any fact's recommendation moves; on `kickback` sets the stage
    the reviewer named and writes the same `review` with the kickback
-   verdict.
+   verdict. What the counter-argument is for: the alignment page carries
+   it, with the strength the review gave it, on the recommended option's
+   row, in place of the case against the session wrote when it recorded
+   the recommendation, and the reply sits one step down in that option's
+   drill-down; a review that found none leaves the row saying so
+   (`alignment-page`). The viability judgment marks and never removes:
+   an option the reviewer no longer holds viable is marked passed over
+   with its reason and stays on the list, and a viable option the
+   reviewer names is added with the prose it gave (`prose-and-structure`).
+   Acting on that judgment is the session's when it amends the node
+   (§4.3); this step writes the dialogue's state and the account and
+   nothing else.
    **For the survey**: for each judged node whose current recommendation
    hash equals the hash the survey read, it writes `review.survey` with its
    `date` and its `of`, that same hash, and applies that node's findings; a

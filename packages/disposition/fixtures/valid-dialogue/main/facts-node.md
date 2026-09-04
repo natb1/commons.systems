@@ -16,7 +16,7 @@ facts:
         ruling:
           response: confirm
           date: 2026-09-03
-          of: 3d3b7831a92369838c0960095de572bab3a94458
+          of: b3a4a5a9bea359ef7a03286c94288deed7039e85
     recommends: present
     boldness: low
   - name: authority
@@ -54,3 +54,13 @@ same despite its very different facts.
 
 Present, because the recommendation would change the node's shape rather than
 merely confirm it.
+
+#### derived
+
+Derive the answer from what stands elsewhere, so this node keeps none of
+its own.
+
+#### present
+
+Keep the answer present on the node, in its own words, which is what a
+changed shape needs.

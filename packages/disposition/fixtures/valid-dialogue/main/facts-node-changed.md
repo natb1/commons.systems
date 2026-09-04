@@ -15,6 +15,10 @@ facts:
       - name: prune
     recommends: prune
     boldness: high
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
 ---
 
 ## Disposition

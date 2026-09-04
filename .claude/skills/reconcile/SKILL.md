@@ -12,13 +12,22 @@ disable-model-invocation: true
 > `viable-options`, in which every decision on a node is a fact with
 > viable options, a node's class is read off the rulings recorded on them
 > rather than stamped, and this loop's main thread may record an option
-> and move a recommendation on the graph, §4. The recommendation that
+> and move a recommendation on the graph, §4; and reconciled again on
+> 2026-09-04, under the author's bootstrap grant of that day for the
+> alignment-page sitting ("You have bootstrap reconciliation authority
+> including migrating nodes to new encodings"), to
+> `every-fact-every-option` on `alignment-page`,
+> `prose-argues-structure-records` on `prose-and-structure`, the three
+> options on `dialogue` and `denial-typed-to-maieutic` on `recording`,
+> every one of them unanswered: an option this loop passes over is marked
+> and stays on the list, and a ruling may carry the author's reason, §4.
+> The recommendation that
 > reconciliation is written from is unanswered, and the clean-context
 > review of its batch is owed before the author rules on any of it.)**
 > Hand-written from the nodes `work-loop`,
 > `materialization`, `review`, `validation-order`, `delegation`,
 > `session-context`, `projection`, `transience`, `evaluation`,
-> `authority`, and `viable-options` of
+> `authority`, `viable-options`, and `prose-and-structure` of
 > `commons.systems/disposition-graph`, all unanswered, and
 > from the author's dispositions of 2026-09-03 and 2026-09-04 quoted on
 > `work-loop` and `viable-options`.
@@ -161,7 +170,14 @@ recommendation moved onto one, within the node's scope (the author,
 `reconciliation-writes-options`). It never rules, never edits a ruling or
 the author's words, and never recommends beyond the scope a delegation
 confers; a subagent never edits a node (`delegation`,
-`reconciliation-session-writes-options`). Operational state, a bite in
+`reconciliation-session-writes-options`). An option this loop finds
+dominated is not taken off the fact: it is marked passed over, with the
+reason it was passed over, and stays on the list, since every candidate
+that can be named is an option carrying its status and a candidate never
+silently leaves the list (`prose-and-structure`). A ruling may carry the
+author's own reason beside its response, its date and its pin
+(`dialogue`, `ruling-carries-the-reason`), and this loop writes none of
+it: rulings are the author's alone. Operational state, a bite in
 flight and what this loop has already done, stays outside the graph, as
 the author said. Two things come of what this session finds, one on the
 record and one in the report:

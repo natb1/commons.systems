@@ -10,6 +10,12 @@ facts:
         ref: 2026-09-04
     recommends: only-way
     boldness: low
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
+    boldness: low
 ---
 
 ## Disposition

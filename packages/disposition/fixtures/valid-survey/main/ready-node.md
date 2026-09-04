@@ -6,10 +6,10 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-04
-  of: 74452cc5590382e476fbce0e06cb7bd644c31141
+  of: 397360806fda583feaabb45c95aecb78c27395e7
   survey:
     date: 2026-09-04
-    of: 74452cc5590382e476fbce0e06cb7bd644c31141
+    of: 397360806fda583feaabb45c95aecb78c27395e7
 facts:
   - name: answer
     options:
@@ -19,6 +19,12 @@ facts:
     recommends: standing
     boldness: low
     stands: standing
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
+    boldness: low
 ---
 
 ## Answer

@@ -6,7 +6,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 5ffec67c1a856b47dbf4950be2502c18c94d7b23
+  of: f1ddedd9d315621be162e861754cb95c1c6da037
 facts:
   - name: answer
     options:
@@ -22,6 +22,12 @@ facts:
       - name: prune
     recommends: prune
     boldness: moderate
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
+    boldness: low
 ---
 
 ## Disposition

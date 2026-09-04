@@ -6,7 +6,7 @@ review:
   verdict: forward
   strength: strong
   date: 2026-09-03
-  of: 6a33933864561e78bcfca99dbb2c4e40377788e2
+  of: 66241af795659e300ca3fac42cd2663c6159f7a1
 facts:
   - name: answer
     options:
@@ -19,6 +19,12 @@ facts:
     recommends: presume-freely
     boldness: moderate
     stands: standing
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: ratified
+    boldness: low
 ---
 
 ## Disposition

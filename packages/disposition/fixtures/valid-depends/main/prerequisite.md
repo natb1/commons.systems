@@ -7,6 +7,10 @@ facts:
       - name: split-it
         source: author
         ref: 2026-09-01
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
 ---
 
 ## Disposition
