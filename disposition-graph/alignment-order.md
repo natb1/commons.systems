@@ -11,6 +11,9 @@ alternatives:
   - name: draft
     source: ai
     ref: "2026-09-03"
+  - name: settle-counts-nodes-only
+    source: ai
+    ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/alignment-target
   - commons.systems/disposition-graph/attention
@@ -64,6 +67,24 @@ The author, 2026-09-03, granting bootstrap authority for the reconciliation anno
 
 The recommended text answers the question with the ruling order in place of rank: tangles between unanswered nodes recorded as alternatives on the earlier-recorded survivor, divergences between subtrees recorded on the leaves in `depends` and derived at the ancestor, a ruling settling every node it makes mechanically decidable, and the order putting first the node whose ruling settles the most, rank breaking ties. The node as it stands has no answer, so there is no standing text to adopt.
 
+### settle-counts-nodes-only
+
+The draft as recommended, with one change: a ruling's settling count is the
+count of nodes it makes mechanically decidable and nothing else, the
+alternatives it closes no longer added into the same scalar. Raised against
+the recommended text by the reconciliation of 2026-09-03, which measured the
+order the text produces and found it puts a node ahead of its own ancestor:
+`agency`, the graph's sole root, settles sixty-nine unanswered nodes and
+carries two alternatives, seventy-one; `purpose`, its only child, settles
+sixty-six and carries six, seventy-two. Counting nodes alone puts `agency`
+first, sixty-nine against sixty-six, and restores the draft's own sentence
+that ancestors come before descendants by the count and not by hand. What it
+gives up is the draft's reason for adding them: an alternative is something a
+ruling closes, and a node thick with alternatives is genuinely more entangled
+than a bare one. A third answer is open to the author and not drafted here:
+keep the sum and order ancestors before descendants outright, the count
+deciding only between nodes neither of which is under the other.
+
 ## Recommendation
 
 ```markdown
@@ -91,6 +112,35 @@ The author's words of 2026-09-03, quoted in the dialogue that produced this node
 ```
 
 ## Account
+
+### Ancestor overtaken at the head of the order, 2026-09-03
+
+Measured on the graph at the reconciliation, not argued from the text: the
+ruling order the recommended answer produces puts `purpose` first and
+`commons.systems/public/agency` second, and `purpose` is `agency`'s only
+child. `agency` is the graph's sole root, so its sixty-nine unanswered
+descendants are every other node in the record, `purpose` among them; it
+carries two alternatives, for seventy-one. `purpose` has sixty-six
+unanswered descendants and six alternatives, for seventy-two. The
+recommended answer says "ancestors come before descendants by that count
+and not by hand", and on this graph the count does not deliver it: nodes and
+alternatives are summed into one scalar, and four extra alternatives outweigh
+three extra descendants. The margin is one, so one alternative recorded
+anywhere moves the head of the queue.
+
+This is a defect in the recommendation and not in the implementation, which
+computes what the text says. It is recorded as the alternative
+`settle-counts-nodes-only` rather than fixed under the grant: the grant is to
+reconcile the implementation to this disposition, not to redraft the
+disposition, and which of the three answers is right is the author's ruling.
+The clean-context review, still owed, reads the recommendation as it stands.
+
+The alignment page shows `purpose` first for a second and independent
+reason, which no ruling here changes: the page groups by graph, this
+project's before the public graph, as `alignment-target` and `unanswered`
+fix and this draft does not amend, so `agency` is in the second group
+whatever its count. The two compete directly only in the flat `## Ruling
+order` section of the frontier projection.
 
 ### Reconciled under the author's bootstrap grant, 2026-09-03
 
