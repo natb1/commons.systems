@@ -54,6 +54,9 @@ facts:
       - name: authority-fact-on-every-node
         source: commons.systems/disposition-graph/alignment-page
         ref: "2026-09-04"
+      - name: edit-led-against-a-named-ground
+        source: commons.systems/disposition-graph/alignment-page
+        ref: "2026-09-04"
     recommends: facts-carry-options
     boldness: moderate
     stands: facts-carry-options
@@ -429,6 +432,10 @@ of the eighteen. (Raised on commons.systems/disposition-graph/alignment-page,
 where the author's disposition of 2026-09-04 to list every fact without
 exception made the gap visible: a page can only list the facts a node
 carries.)
+
+#### edit-led-against-a-named-ground
+
+The projections lead with the edit wherever an answer stands, ratified or a draft no one has confirmed, and name the ground the edit is against; a node with no answer shows the recommended text whole. This departs from the standing rule that a node with no class leads with the recommended text whole and names the ruling a first answer: the author does need to see what a ruling changes, and what was wrong on `purpose` was the implication that the ground was confirmed, which naming the ground removes. The author's words of 2026-09-03, that nodes "still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed", read at least as easily as an objection to the diff on a first answer as to its caption, which is why this is an option here and not a settled reading. Raised on commons.systems/disposition-graph/alignment-page, whose clean-context review of 2026-09-04 found the departure recorded nowhere on this node.
 ## Account
 
 ### Finding: the review pin does not cover the standing answer, 2026-09-03

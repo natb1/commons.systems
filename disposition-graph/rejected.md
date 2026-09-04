@@ -28,6 +28,9 @@ facts:
       - name: non-chosen-viable-options
         source: author
         ref: "2026-09-04"
+      - name: passed-over-stays-listed
+        source: commons.systems/disposition-graph/prose-and-structure
+        ref: "2026-09-04"
     recommends: non-chosen-viable-options
     boldness: moderate
     stands: non-chosen-viable-options
@@ -83,6 +86,9 @@ The author's words carried here say that listing rejected alternatives as prose 
 
 A rejected alternative is a viable option the author did not choose, kept on the fact beside the confirmed choice with the reason it was not taken and the traditions bearing on it; the projector reads the structure and the rationale cites it. It is `rejected-list-on-node` generalised to every fact, and the fact the second review established, that the projector already reads a rationale heading, no longer decides the question, since the structure exists for regression and for the browser's drill-down and not for the projector alone. The author's objection carried above, that prose under the rationale seems too ad hoc, is what the structure answers. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
+#### passed-over-stays-listed
+
+A rejected alternative is any candidate the AI considered and can name, kept on the fact with its status and the reason it was not taken, whether or not the AI still holds it viable: `status: passed` with its `reason`, as `viable-options`' option `passed-over-options-stay` encodes it. Version control holds nothing the record does not, and the rejected passages of the rationales migrate as options passed over; the rationale argues and does not list. Raised on commons.systems/disposition-graph/prose-and-structure, whose clean-context review of 2026-09-04 found the membership rule to be this node's and `viable-options`'.
 ## Account
 
 ### Sitting on purpose, 2026-09-03

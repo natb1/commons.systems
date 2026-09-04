@@ -13,6 +13,12 @@ facts:
       - name: grant-from-a-recommendation
         source: ai
         ref: "2026-09-04"
+      - name: passed-over-options-stay
+        source: commons.systems/disposition-graph/prose-and-structure
+        ref: "2026-09-04"
+      - name: viable-not-chosen-as-it-stands
+        source: review
+        ref: "2026-09-04"
     recommends: grant-from-a-ruling
     boldness: moderate
     stands: grant-from-a-ruling
@@ -122,6 +128,13 @@ which is the state the author reclassified the whole record into on
 2026-09-03; the authority node holds that no command confers a class, and a
 review that stamps is a command.
 
+#### passed-over-options-stay
+
+Viability is a judgment shown on an option and not the condition of its listing. Every candidate the AI considered and can name stays on the fact it answers with its status, recommended, viable, or passed over, the last carrying the reason it was passed over as `status: passed` with a required `reason`, and none leaves the list silently. The author may rule for a passed-over option, since only the author rules and rules on any option the fact lists, and the recording then clears the status. Against the rationale's rejection of keeping every option whether or not viable, that the list would grow without a reason and version control holds what left: the reason is the regression the author gave for persisting options, which bears at least as much on a candidate the AI rejected as dominated, since a later session is as likely to re-propose it, and version control is not a projection, so a later session meets none of what left; the list grows to the size the rationales already carry in prose. Raised on commons.systems/disposition-graph/prose-and-structure, whose clean-context review of 2026-09-04 found that the membership of an option list is this node's question and not that one's.
+
+#### viable-not-chosen-as-it-stands
+
+The standing rule kept and read as the author used the word: an option is a candidate the AI categorized as worth recording, and the prose rejections migrate as options under `rejected`'s rule that a rejected alternative is a viable option not chosen, with no status minted and no key added; an option the AI no longer holds worth the author's attention still leaves the list, the option that displaced it saying why. It keeps the author's scoping on this node and both nodes' standing text, at the cost the clean-context review of prose-and-structure named: the AI still decides which candidates reach the structure, and nothing on a row says the AI holds it dominated. Raised by that review on 2026-09-04 as the viable option the draft was missing.
 ### authority
 
 Ratified. The answer redefines what authority is in this record and opens a

@@ -19,6 +19,24 @@ facts:
       - name: every-fact-every-option
         source: author
         ref: "2026-09-04"
+      - name: independent-decisions-as-children
+        source: review
+        ref: "2026-09-04"
+      - name: case-against-in-the-drill-down
+        source: author
+        ref: "2026-09-04"
+      - name: case-against-after-the-review-only
+        source: ai
+        ref: "2026-09-04"
+      - name: kick-back-feedback-one-step-down
+        source: ai
+        ref: "2026-09-04"
+      - name: eyebrow-settles-and-pending-only
+        source: ai
+        ref: "2026-09-04"
+      - name: standing-sentence-stored
+        source: ai
+        ref: "2026-09-04"
     recommends: every-fact-every-option
     boldness: moderate
   - name: authority
@@ -159,6 +177,29 @@ The decisions take the widest column and the node as it would stand sits in a na
 
 Every fact the node carries is listed and none folds, and boldness stays shown on the recommendation and acts on nothing; each option's row leads with its sentence, carries its status as the record holds it and what each reading bearing on it says, and the recommended option's row carries beneath its sentence the strongest case against it, in one line, written by the AI and replaced by the clean-context review's counter-argument when the review returns one; everything else on an option is one step down, with a text control for the author's reason and any edits; the last row on every fact is the kick-back, set apart, captioned with what it does to the node, its feedback opening with it, typed to the maieutic movement; the review keeps no section, its readiness going to the stage chip and its counter-argument to the row it argues against; the ruling on the whole goes, the confirmation with edits riding on the option's text instead; the sentence for a reserved fact's choice is projected from the node that defines the fact and the standing option's row leads with the answer's own first sentences beside the standing the text has; and the eyebrow says what placed the node in the order and nothing else. The page renders the structure and never reads prose for what it holds, so its completeness is the facts' completeness, which is the prose-and-structure node's question. Adopted by the recommendation, and set out in the fence.
 
+#### independent-decisions-as-children
+
+The decisions the answer takes beyond the author's words, which metrics the rail carries and where each links, how the two content columns divide, where the case against the recommended option sits and when it is written, where the kick-back's feedback sits, what the eyebrow keeps, and how the standing option gets its sentence, are minted as questions under this node, each with its own options, and the answer fact keeps the shape the author's words fix. Under `dialogue`'s rule a decision the author would rule on separately is a question and a question is a node, and the delta options on this fact are pairwise compatible, so a ruling for one rules on a whole text that takes the others the AI's way. Proposed by the clean-context review of 2026-09-04; a split is the author's to make, and the session records it and never makes it.
+
+#### case-against-in-the-drill-down
+
+The recommended answer with one clause changed: the AI's case for and against each option sits one step down with the rest of its explanation, as the author's words of 2026-09-04 place it, "AI explanations for recommended or rejection" in the drill-down, and the row carries the sentence, the status and the tradition's bearing only. This is the author's placement, and the recommended option's amendment of it, the case against on the row, is the AI's; a ruling for this option keeps the rest of the recommended text.
+
+#### case-against-after-the-review-only
+
+The recommended answer with one clause changed: the recommended option's row carries no case against until the clean-context review has returned one, so that what the author reads there is always the reader's and never the drafter's. Against it, the recording node has the session review its own output adversarially before the review runs, and a row that is empty until then is a row on which the recommendation stands unopposed through the maieutic and review movements.
+
+#### kick-back-feedback-one-step-down
+
+The recommended answer with one clause changed: the kick-back's feedback control sits in a drill-down beneath its row, like the reason box on an option, so that every row has the same two levels. Against it, the words are what a kick-back consists of and what the dialogue resumes from, where on an option they are optional because the ruling's content is the option.
+
+#### eyebrow-settles-and-pending-only
+
+The recommended answer with one clause changed: the line beneath the question carries the settling count and the options pending, which `alignment-order` names, and not the nodes this one stands under, which no answer names. Against it, the nodes it stands under are whose grant a ruling here falls within and whose rulings made this one decidable, and the line is where the author reads why the node is where it is.
+
+#### standing-sentence-stored
+
+The recommended answer with one clause changed: the option that stands carries a `####` subsection of its own, a stored sentence, rather than the answer's first sentences read from `## Answer`; the data-side resolution of the seam between `viable-options`, which has every option carry its sentence, and `dialogue`, which exempts the one that stands. Against it, a stored sentence beside the answer is the answer's first sentences said twice, and drifts.
 ### persistence
 
 The recommendation declares a shim on this node that the node does not carry today: the alignment page itself, moved here from `growth` with its declaration date of 2026-09-03 intact and its liquidation condition unchanged, its `for:` line rewritten to name this node's answer. Confirming it makes this node the shim's home; denying it leaves the shim on `growth`, where it describes a page that no node's ruling settles. The two nodes rule together, and `growth` carries the matching decision.

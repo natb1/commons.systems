@@ -24,6 +24,9 @@ facts:
       - name: absorb-form-vocabulary
         source: review
         ref: "2026-09-03"
+      - name: rationale-argues-facts-list
+        source: commons.systems/disposition-graph/prose-and-structure
+        ref: "2026-09-04"
     recommends: four-form-draft
     boldness: moderate
     stands: standing
@@ -91,6 +94,9 @@ The vocabulary finding holds that transience is the survivor of the term: un-ali
 
 The redundancy finding makes projection and readings the survivors of the linking rules and proposes that this node be folded into node's rationale as a rejected alternative and pruned. Node already carries the author's quotation verbatim, so the fold costs no words; what it adds to node is the recorded rejection of one node per form, on the ground that each such node would restate the definition its owning node already carries. (Raised on commons.systems/disposition-graph/form-vocabulary.) Also raised on commons.systems/disposition-graph/projection.
 
+#### rationale-argues-facts-list
+
+The rationale says why the answer stands and why the candidates it beat fell, in argument; what was considered is the answer fact's options, each with its status, and the page projects them from the fact and never from the rationale. The standing sentence, that the rationale says which alternatives were rejected, and the fence's, that the page projects those alternatives beside the stamp, both give the rationale a list a field also carries. Raised on commons.systems/disposition-graph/prose-and-structure, whose clean-context review of 2026-09-04 asked that the conflict be recorded here rather than resolved by that node's draft.
 ## Recommendation
 
 ```markdown

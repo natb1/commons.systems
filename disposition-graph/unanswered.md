@@ -24,6 +24,9 @@ facts:
       - name: unanswered-is-no-ruling
         source: author
         ref: "2026-09-04"
+      - name: confirmation-before-the-ruling-stage-is-invalid
+        source: commons.systems/disposition-graph/alignment-page
+        ref: "2026-09-04"
     recommends: unanswered-is-no-ruling
     boldness: moderate
     stands: unanswered-is-no-ruling
@@ -117,6 +120,9 @@ A confirmation on a child given while the parent is open is held and recorded wh
 
 Unanswered is the state of a node no ruling grants: nothing on it acts, and it is reconciled only on an explicit grant. Deferred is not that state but a class the author confers on the authority fact, beside ratified and delegated, under which the recommendation acts and the node stays on the alignment frontier; the answer's ground for rejecting a fourth response, that leaving a node unconfirmed is the deferral, no longer holds, and no fourth response is needed, since the deferral is a choice on a fact. The alignment frontier becomes every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling. The three responses and the status derived rather than stored are unchanged. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
+#### confirmation-before-the-ruling-stage-is-invalid
+
+A confirmation given on a node that has not reached the ruling stage, on the page or in prose, is not held and confers nothing: it is recorded as the author's words and the dialogue proceeds from its stage, and the page renders its inputs disabled there. This supersedes the standing sentence that a confirmation given before the review has run is held until the review forwards it, on the author's words of 2026-09-04 recorded on commons.systems/disposition-graph/alignment-page: "Confirmed responses for nodes that are not at the confirmation stage of dialogue are invalid. Show the facts with pending confirmation, and recommendations, but disable to input." Raised by that node's clean-context review of 2026-09-04, which found the supersession recorded nowhere here.
 ## Account
 
 ### Recording of 2026-09-03
