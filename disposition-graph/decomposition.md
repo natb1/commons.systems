@@ -1,6 +1,6 @@
 ---
 question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
-stage: periagogic
+stage: review
 facts:
   - name: answer
     options:
@@ -61,6 +61,10 @@ The author, 2026-09-04, opening the sitting (the two examples were each fenced i
 >
 > Proceed through meiutic, stop before adversarial review. Then request booststrap authority to reconcile the unanswered dispositions along with a list of all things that will be materialized.
 > ```
+
+The author, 2026-09-04, on the recommendation above, the probe, and the grant asked for at its close:
+
+> go, and bootrap authority granted
 
 ## Facts
 
@@ -127,3 +131,7 @@ The three classes of finding. Within the graph: the recording node still says th
 The evaluation twice. Best judgment: the two halves of the review have different objects and different minimal contexts, one draft against its neighbourhood and the frontier against itself, and the standing answer runs both in one reading sized for the second; separating them sizes each to its object, lets the first run at the moment it is useful and in parallel, and leaves the second the batch it needs; the lock is replaced by the pin the review state already carries, since a finding recorded with the commit it read can be discarded when the node has moved since. With reference to tradition: the compiler and the linker, blinded review of the piece and the copy desk's pass over the issue, compare-and-swap in place of the lock, and pair review at the point of writing, each recorded as a reading owed in the recommended rationale. Steelman for the standing answer: a reader of the whole frontier sees a draft in the company of every node it might contradict, and a per-draft reader sees only what the brief points at, which is the second reading's finding on the clean-context-review node; the reply is that the per-draft reader is given the sitting's siblings from the record, since checkpoint lands them, and the index of every question the record asks, and that the survey still reads the whole.
 
 Responses open: confirm the recommended text; confirm with edits; deny with feedback; or rule the second option.
+
+### Grant of 2026-09-04
+
+The author's "go" takes the recommendation as presented, its reading of a bundled disposition as questions queued under the node it refines included, which the probe asked about; the author may overrule that reading at the review. It moved the recommendation of the clean-context-review node to `per-draft-and-survey` and that of the frontier-consistency node to `split-survey-from-per-draft`, each with the fence its option now names, and returned both to the review stage; it raised `survey-pin-in-review` on the dialogue node and `review-divided-by-object` on the recording node, since the survey's pin is a field the dialogue node defines and the recording node's batch sentence would otherwise contradict the split. The grant is the author's explicit grant on an unanswered node for this reconciliation, as the authority node requires: the alignment skill and the review skill on the implementation ref, with their briefs, scripts, and tests, and the graph's reader and projector so far as the survey's pin and the readiness of a node for ruling require, reconciled to this node's recommended text and to the two options it stands under. No ruling and no class is written for any of it; this node, clean-context-review, and frontier-consistency stand at the review stage with the clean-context review owed, and the first review of a draft the reconciled skill runs is owed on them. The implementation commit names this grant and the graph commit that carries it.

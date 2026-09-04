@@ -36,6 +36,9 @@ facts:
       - name: options-persist-at-the-recording
         source: author
         ref: "2026-09-04"
+      - name: review-divided-by-object
+        source: commons.systems/disposition-graph/decomposition
+        ref: "2026-09-04"
     recommends: options-persist-at-the-recording
     boldness: moderate
     stands: options-persist-at-the-recording
@@ -111,6 +114,10 @@ Each decision carries its own stage, so a kickback on one leaves the others wher
 #### options-persist-at-the-recording
 
 The third step removes the dialogue and not the facts: the stage, the review, depends and the account go, and the facts stay with their options, their recommendation, their readings, and the rulings the author gave, so that a later session meets what was considered and why. The stamp is read from those rulings rather than written. A ruling given on the page is recorded on the option chosen, with the pin of the recommendation it answered. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
+
+#### review-divided-by-object
+
+The sentence sending a round's recommended dispositions to review together, one batch over the whole frontier in one context, cites the clean-context-review node's `per-draft-and-survey` instead: each draft is reviewed on its own the moment its recommendation is recorded, the survey runs over the frontier before the author rules, each node moves on its own verdict, and no disposition is confirmed while either reading is owed on it. The first step's description of what the reviewer judges is unchanged. Raised on commons.systems/disposition-graph/decomposition, from the author's words of 2026-09-04 recorded there.
 
 ## Account
 

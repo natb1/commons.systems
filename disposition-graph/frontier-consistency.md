@@ -1,6 +1,6 @@
 ---
 question: How is the unanswered frontier kept consistent with itself?
-stage: ruling
+stage: review
 review:
   verdict: forward
   strength: moderate
@@ -12,19 +12,10 @@ facts:
       - name: standing
         source: ai
         ref: "2026-09-03"
-      - name: new-question-or-new-answer
-        source: author
-        ref: "2026-09-03"
       - name: split-survey-from-per-draft
         source: review
         ref: "2026-09-03"
-      - name: cite-run-mechanics
-        source: ai
-        ref: "2026-09-03"
-      - name: placement-feeds-the-order
-        source: author
-        ref: "2026-09-03"
-    recommends: standing
+    recommends: split-survey-from-per-draft
     boldness: moderate
     stands: standing
   - name: authority
@@ -57,6 +48,9 @@ The author, 2026-09-03, during the reconciliation under the bootstrap grant on t
 > disposition (if not already recorded as unanswered): adversarial alignment review validation includes a check for opportunites to merge unanswered nodes as alternate answers to the same question. Adversarial review evaluates batch of nodes which are at the review dialogue phase against the full graph.
 >
 > you have bootstrap authority to reconcile the adversarial alignment review skill in additino to the alignment skill and other bootstrap grants already provided.
+
+The author, 2026-09-04, on the decomposition node, whose recommendation stands under this node's option `split-survey-from-per-draft`:
+> go, and bootrap authority granted
 
 ## Answer
 
@@ -97,21 +91,56 @@ The merge validation and the batch scope were added on 2026-09-03 under the auth
 
 ### answer
 
-#### new-question-or-new-answer
-
-The author's words on the sitting of dialogue name the analysis of whether a disposition is a new question or a new answer to a question already recorded as performed by periagoge and by the adversarial review. Validation 15 now carries it for the review; the standing answer's periagogic sentence covers a draft's inconsistency with the answered graph and not this analysis. This alternative is the answer with the analysis named as belonging to the periagogic stage as well as to the review, so that a sitting checks it before a draft exists and not only when the batch is read.
+The recommendation moves from the standing text to `split-survey-from-per-draft` on the author's "go" of 2026-09-04 on the decomposition node, which stands under this option: the fifteen validations divide between the two readers the clean-context-review node's `per-draft-and-survey` names, and the run mechanics are cited there rather than restated. Boldness moderate: the requirement and the survey are the author's, the division and the readers' contexts are the AI's. Three options leave the list because the recommended text carries them, and none of them stood against it: `new-question-or-new-answer`, the author's own, since the text names the merge analysis as the periagogic stage's as well as the review's; `cite-run-mechanics`, since the text cites the clean-context-review node for the batch and the serialization; and `placement-feeds-the-order`, the author's, since the text records what the survey finds as the alignment-order node says and derives the order from it.
 
 #### split-survey-from-per-draft
 
-The review's counter-argument, which the session's reply left standing as a proposal a sitting may put: validations one to six duplicate what the recording node already requires of every draft review, so every batch pays twice for the per-node pass. The alternative splits the two: the survey, validations seven to fourteen, runs over the whole frontier at every invocation, while the per-draft review runs only on drafts that changed since their last reading. It keeps the author's requirement that inconsistency within the frontier be surfaced and bounds the cost of an unbounded reading over sixty-odd nodes.
+The answer the fence holds. The review of a draft runs validations one to six and the fifteenth on one node when its recommendation is recorded, against the draft's neighbourhood and the index of every question the record asks; the survey runs seven to fifteen over the whole graph, judging the nodes whose recommendation changed since its pin, before the author rules; the periagogic stage asks the merge analysis first, as the author's words of 2026-09-03 on the dialogue node say; a tangle or a divergence the survey finds is recorded as the alignment-order node says and the ruling order is derived from it; and how each reading is run, what its reader is given, and how the survey is pinned and serialized are the clean-context-review node's. First raised by the review's counter-argument of 2026-09-03, that the batch paid twice for the per-draft pass; taken up by the decomposition node from the author's words of 2026-09-04.
 
-#### cite-run-mechanics
+## Recommendation
 
-Both nodes state the same two run rules in full: that every invocation is one batch over the whole frontier read in one context, and that one review runs at a time by the invoking session's discipline until a lock exists. Clean-context-review is the survivor of the run mechanics, since its question is how the review is run and it is the node the skill implements. Frontier-consistency cites it for the batch scope and the serialization and keeps what is its own, the fifteen validations and the kickback flow, so that drift between the two restatements cannot open. (Raised on commons.systems/disposition-graph/clean-context-review.)
+```markdown
+---
+question: How is the unanswered frontier kept consistent with itself?
+form: rule
+under:
+  - commons.systems/disposition-graph/clean-context-review
+defines:
+  - frontier survey
+---
+## Answer
 
-#### placement-feeds-the-order
+By the adversarial review, whose two readings divide the validations below by their object, as the clean-context-review node describes: the review of a draft runs the first six and the fifteenth on one node the moment its recommendation is recorded, and the survey runs the seventh to the fifteenth over the whole graph, answered and unanswered at every stage, judging the nodes whose recommendation has changed since it last pinned them, before the author rules. Inconsistency between a draft and the answered graph is surfaced to the author by the periagogic stage, where the dialogue turns the author toward the doctrine the draft would join and asks whether the disposition is a new question or a new answer to one the record already asks, as the author's words of 2026-09-03 say; inconsistency within the frontier has no author to meet it, and the review is where it is surfaced. The validations, each producing findings that name the nodes and the sentences:
 
-Validation 13, placement and order, has the review recommend the order in which the author rules, and nothing consumed the recommendation of 2026-09-03. The alignment-order draft gives it a consumer: the review's findings of contradiction, supersession, and redundancy between unanswered nodes are recorded as alternatives on the earlier-recorded survivor, and its findings of divergence between subtrees as `depends` on the leaves, and the ruling order is derived from that data rather than recommended in prose. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+On a draft, the text its recommendation names:
+
+1. Question and words. The draft answers the node's question and nothing else, and the author's words on the node are answered by it: no drift between what the author said and what the draft says.
+2. Doctrine. The draft contradicts no answered node in its ancestry or among the nodes it cites; what would contradict doctrine is never adopted by a recommendation; it is recorded as an option on the node it conflicts with, a proposal under the authority node when it arose outside alignment, and the review says which.
+3. Facts. The recommendation's boldness is right and the class its authority fact recommends is the one the session means to present, it names a listed option, its pin names the recommendation as it is, so that a review of text since amended is caught, its persistence follows from the node's shape, and every claim about the record or the implementation is verified: a file named exists, a command cited runs, a date and a quotation are exact.
+4. Readings. A tradition cited is represented accurately within its recorded support scope, and a divergence from it is recorded as the author's.
+5. Shims. Each declared shim names an artifact that exists and a liquidation condition, and nothing the draft presumes materialized is unmaterialized without saying so.
+6. Counter-argument. The strongest case against the draft, with its strength.
+
+Across the graph, each node the survey judges against every other node, answered or unanswered, at whatever stage, and a finding naming whichever nodes it concerns:
+
+7. Contradiction. Two frontier nodes whose answers, drafts, or author's words touch the same matter and disagree.
+8. Supersession. The author's words on one node superseded by later words on another while the earlier node still answers the superseded words; the occasion of this node.
+9. Redundancy. Two nodes answering the same question, defining the same term, or restating each other; a merge is proposed naming the survivor and what moves.
+10. Decomposition. A node answering more than one question or carrying what another node owns, or a node that is a fragment of its parent; a split or a fold is proposed.
+11. Vocabulary. Every term used with one meaning across the frontier, each definition made once, and no term used by a node that has no path to the node defining it.
+12. Cross-reference. Every prose reference to another node points at a node that still says what is attributed to it; a reference stale since an amendment is the drift this review exists to catch.
+13. Placement and order. The `under` and `order` fields agree with the answers' dependencies: a draft that presupposes another node's answer is under it or after it, and no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so. What the survey finds is recorded as the alignment-order node says, a lateral tangle as an option on the earlier-recorded node and a divergence between subtrees on the leaves, and the ruling order is derived from that and never recommended in prose.
+14. Coverage. Each part of every disposition the author has given in the record is answered by exactly one node: none unanswered, none answered twice; a quotation may be carried on a child as the ground of the part it answers.
+15. Merge. Whether each disposition the author has given, each node, and each option pending on one is a new question or a new answer to a question the record already asks, answered or unanswered: a new answer standing as its own node is proposed for the node whose question it answers, as an option with its source, and a new question carried on another node's dialogue is proposed a node of its own. The review of a draft asks it of the draft against the index of every question the record asks; the survey asks it across the frontier.
+
+The result is applied as the kickback flow the recording and clean-context-review nodes describe, and nothing else: a draft is forwarded to the ruling stage or kicked back, and a frontier finding kicks back each node it names whose text must change to the earliest stage the finding touches, the periagogic stage when the ground or the author's words are in question, the maieutic when the answer must be redrafted, with the finding as context and, where the reviewer can give it, the edit or the proposed merge or split. The merge or split itself is an option recorded on the node it would change, which the author rules on; the review does neither. How each reading is run, what its reader is given, its model, and how the survey's findings are pinned and serialized are the clean-context-review node's and are not restated here.
+
+## Rationale
+
+The author, 2026-09-03: "there is a flaw in the harness disposition that makes the unanswered question frontier (the entire graph right now) prone to drift. As the unanswered frontier grows we expect it to maintain consistency with the answered-with-authority graph, but there is no recorded disposition for the harness to enforce self consistency of the unanswered frontier. Inconsistency with the answered-with-authority graph is expected to be surfaced by periogoge (recorded disposition). Inconcistency with the unanswered frontier must be surfaced by the adversarial alignment review skill. Propose a full list of validations which must be encoded into the adversarial alignment review skill - it must include a survey of the full unanswered frontier to identify inconcistencies and redundancies (unanswered dispositions that should be merged, or decomposed in a better way)." Refining: "When adversarial review identifies conflict the result is the same kickback flow described previously. Recommend kick back to earlier alignment dialogue phase with context and/or edits." On the sitting of dialogue: "One of the analyses performed by periagoge and adversarial alignment review is whether disposition is a new question or a new answer for a disposition (answered or unanswered)." During the reconciliation of that day: "adversarial alignment review validation includes a check for opportunites to merge unanswered nodes as alternate answers to the same question. Adversarial review evaluates batch of nodes which are at the review dialogue phase against the full graph." The author, 2026-09-04, on the decomposition node, whose recommendation stands under this node's split: "go, and bootrap authority granted".
+
+Drift between unanswered nodes is invisible to any reading of one node, and the author's disposition carries that to its end: the survey reads the whole frontier. The list divides by what the reader must hold in view, which is why it divides between two readers: the first six validations need the draft and its neighbourhood and are the review of a draft as the recording node describes it; the last nine need the whole frontier at once and are the survey the author asked for; the fifteenth runs in both, on the draft against the index of every question the record asks, and across the frontier. Contradiction, supersession, redundancy, and decomposition are the four shapes of drift a growing frontier takes; vocabulary, cross-reference, and placement are where drift leaves a trace a reader can check; coverage closes the loop from the author's words back to the nodes; merge asks of each disposition and each node whether it is a new question or a new answer, and the periagogic stage asks it first, as the author's words say, so that a duplicate is met before it is drafted further. The kickback flow is the author's refinement: a finding across nodes is a finding on each, and each returns to the stage where it is repaired, so that the frontier is repaired by the dialogue and not by the review. Splitting the readers, on the author's words of 2026-09-04: one reading over sixty-odd nodes on every invocation paid twice for the per-draft pass, handing the survey's reader the whole graph to judge six validations that need a neighbourhood, and its cost grew with the frontier rather than with what changed, which the review of this node found on 2026-09-03 and which stands as the reason. Rejected: a review of each node in a context of its own with no survey, the answer of the clean-context-review node on the morning of 2026-09-03, which sees only what it is handed and never the frontier's drift; a validator rule for consistency, since a validator holds ids, edges, ranks, and shapes, and whether two answers disagree is judgment; a survey at reconciliation time, which is too late, the implementation being built by then on inconsistent drafts; one reading for both objects, the practice from 2026-09-03 to 2026-09-04. Kept: the clean context, a fresh subagent that is never a fork.
+```
 
 ## Account
 
@@ -170,3 +199,7 @@ On the three facts: The frontmatter recommendation (adopts standing, ratified, m
 Strongest counter-argument (moderate): Fifteen validations over sixty-eight nodes in one context is an unbounded reading, and the node sets no floor on what a finding must be worth. The author's requirement was that inconsistency within the frontier be surfaced, which validations seven to fifteen do; one to six duplicate what recording already requires of every draft review, so every invocation pays twice for the per-node pass and the cost grows with the frontier rather than with what changed. The session's answer, that the author ruled every invocation a batch, is right about the survey and does not answer the duplication, which the pending `split-survey-from-per-draft` alternative addresses.
 
 The session's reply: Forward accepted. The circularity is real and disclosed here; the lock sentence is stale as clean-context-review's is; validation 3's persistence and the periagogic half of validation 15 stay as pending alternatives.
+
+### Recommendation moved, 2026-09-04
+
+Moved by the alignment session from the standing text to `split-survey-from-per-draft` on the author's words of 2026-09-04 quoted above, given on the decomposition node, whose account carries the reasoning and the grant. The review of 2026-09-03 pinned the standing text, so this node returns to the review stage and the frontier shows it as changed since its review; the first review of a draft the reconciled skill runs is owed here. The fifteen validations are kept whole; what changes is which reader runs which, the periagogic half of the merge analysis, the recording of what the survey finds, and the citation of the run mechanics to the clean-context-review node in place of the restatement that let both nodes go stale together on the lock.

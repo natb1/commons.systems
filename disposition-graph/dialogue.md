@@ -42,6 +42,9 @@ facts:
       - name: facts-carry-options
         source: author
         ref: "2026-09-04"
+      - name: survey-pin-in-review
+        source: commons.systems/disposition-graph/decomposition
+        ref: "2026-09-04"
     recommends: facts-carry-options
     boldness: moderate
     stands: facts-carry-options
@@ -354,6 +357,10 @@ subtree contains its descendants' by construction.
 #### facts-carry-options
 
 Alternatives and facts become one structure: every decision on a node is a fact with viable options, the answer among them, its options the candidate answers this answer lists as alternatives. The node-level recommendation field goes, each fact carrying its recommended option with why and boldness; each option carries its source, its reference, the readings bearing on it, and a ruling once the author has given one. The options persist after the recording, which amends the sentence that confirmed dialogue state folds and unconfirmed state survives only in version control: what folds is the dialogue, the stage, the review, depends and the account, and what persists is the facts with their options. `aspects-are-nodes` stands: the facts are the answer and the reserved three, and any other decision is a child. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
+
+#### survey-pin-in-review
+
+The `review` field carries, beside the draft review's `verdict`, `strength`, `date`, and `of`, the survey's state as `survey`, with its `date` and its `of`, the hash of the recommendation the survey read, written at apply only where the recommendation still matches what was read, and present without a verdict on a node the survey has judged before its draft review ran. A node is ready to rule when both pins match the recommendation as it stands, and the projections derive which of the two is owed and show it; nothing else is stored. Raised on commons.systems/disposition-graph/decomposition, from the author's words of 2026-09-04 recorded there; it follows the option `per-draft-and-survey` on the clean-context-review node, which names the two pins.
 
 ## Account
 
