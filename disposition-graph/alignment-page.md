@@ -1,6 +1,27 @@
 ---
 question: What does the author read to rule?
-stage: periagogic
+stage: maieutic
+recommendation:
+  adopts: three-column-ruling-screen
+  class: ratified
+  boldness: moderate
+  amends: "58feba8753e69fc8f557f0a318735219940f5272"
+  at: "919cea3b"
+alternatives:
+  - name: three-column-ruling-screen
+    source: ai
+    ref: "2026-09-04"
+  - name: stage-counts-kept
+    source: ai
+    ref: "2026-09-04"
+  - name: metrics-link-into-the-page
+    source: ai
+    ref: "2026-09-04"
+  - name: decisions-are-the-widest-column
+    source: ai
+    ref: "2026-09-04"
+depends:
+  - commons.systems/disposition-graph/dialogue#aspects-are-nodes
 under:
   - commons.systems/disposition-graph/projection
 ---
@@ -47,6 +68,74 @@ The author, 2026-09-04, on what list A holds under `aspects-are-nodes`:
 The author, 2026-09-04, closing the sitting before compaction:
 
 > record the current state of all dispositions from this session to prepare for compaction. Including this disposition which is a revision to a prior one: AI recommendations can be recorded at any time during the dialog (not just after the first meiutic). Ensure your recommendations so far are recorded. After compaction we will progress the alignment page nodes through meiutic and stop before review. Before review you will be granted bootstrap authourity to reconcile those nodes (including cascading effects on graph encoding/re-encoding of nodes/align/align-review/alignment page).
+
+## Alternatives
+
+### three-column-ruling-screen
+
+The metrics at the top of the rail with the disposition each instruments named and linked, the rest of the pagehead dropped; one node at a time, selected from the rail, the selection marked there; the decisions this ruling asks in the middle column, each with its choices, the recommendation among them and its boldness; and the node as it would stand on the right, re-rendered as choices change, with the node's unanswered children indicated beneath it and a rejection of the whole under that. Adopted by the recommendation, and set out in the fence.
+
+### stage-counts-kept
+
+The four stage counts stay among the metrics, on the argument that the author needs to see what is coming, how much sits at the periagogic stage and how much at review, and not only how much can be ruled now. Against it: a stage count instruments no disposition, which is the standard the author set for a metric, and what is coming is already carried by the open count and by the order itself.
+
+### metrics-link-into-the-page
+
+Each metric links to the first node on this page that it counts, keeping the author inside the page, rather than out to the disposition it instruments in the browser. Against it: the author's standard is that the metric hyperlinks to the disposition, and a disposition leaves this page the moment it is answered, so three of the four links would break on the ruling that makes them true.
+
+### decisions-are-the-widest-column
+
+The decisions take the widest column and the node as it would stand sits in a narrow pane beside them, which is the plainer reading of the author's own phrase, "right aligned context pane". Against it: the reason the author gave for moving the detail there was that the result should be in view while the list is worked, and a whole node's text in a narrow pane is not in view. The answer takes the reason over the noun and lets the pane expand to the whole screen on demand; a ruling for this alternative takes the noun.
+
+## Recommendation
+
+```markdown
+---
+question: What does the author read to rule?
+form: rule
+authority:
+  class: ratified
+  by: Nathan Buesgens
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/projection
+shims:
+  - artifact: the alignment page, written by `node packages/disposition/project.mjs disposition --alignment <file>` on the implementation ref and published as the private page https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 with the `db` capability, the author's responses read back by the session with the artifact tool
+    for: the projection of this node's answer, the open dialogue as the author rules on it
+    liquidation: the page is published from the implementation ref and the alignment skill reads the responses without the artifact tool
+    declared: 2026-09-03
+---
+## Answer
+
+One node at a time, on a three-column screen, in the ruling order.
+
+The rail, on the left, carries the metrics at its top and then every unanswered node in the ruling order, flat, each row showing the node's question, its graph, its stage, its settling count, and a mark when a response is staged on it. The selected row is marked as selected, and selecting a row is what changes the other two columns. Once one node is shown at a time the rail is the only place the whole frontier is visible, which is why the metrics sit there, why it lists every node, and why it filters and pages nothing.
+
+A metric on this page is a signal, an instrument, or a criterion of a recorded disposition and never a count for its own sake; each names the disposition it instruments and links to that node in the browser, which addresses every node by its id where this page has no route to one. Four meet that standard. Open, the size of the outstanding dialogue, for the unanswered node, under which every node is unanswered until the author confirms it, so the count is the author's outstanding authority. Ruleable, the nodes whose clean-context review is behind them, for the clean-context-review node, which is what stands between a draft and the author, so the count is what can be ruled now. Next settles, what a ruling on the first node in the order would make decidable, for the alignment-order node, whose answer is that the ruling settling the most comes first, so the count is what one ruling buys. Stale, the nodes whose review pin or recommendation pin no longer matches the text it read, for the frontier-consistency node, whose validations catch it, so the count is how much of what looks ruleable rests on a reading of text that has since moved. The stage counts, the per-graph lines, and the lede go: a stage count instruments no disposition, and a graph is a label on a row rather than a division of the order.
+
+The middle column holds the decisions this ruling asks. They are the node's own answer, where alternatives are pending on it, and its asking facts: the authority class a confirmation would confer, the node's existence, and its persistence where the recommendation would change the node's shape. Under each decision are its choices, the recommendation among them marked, its boldness shown, the author's words and the full text beneath the row as drill-down, one simple input that records or edits the choice, and a last row rejecting every choice on that decision with feedback. A decision is asked whenever its boldness is anything but low, and folds unasked into the right-hand column when its boldness is low; nothing else folds, and a session that folds against that rule records the override and its reason in the account. Because boldness measures how much rests on the AI's own knowledge against the record, high boldness is low confidence: reading the author's words, that very high confidence can just be included in the final render, straight off the stored field and without that inversion would ask about everything the AI is surest of and fold everything it is least sure of.
+
+The right-hand column holds the node as it would stand under the choices made so far, re-rendered as each choice changes, with the folded decisions simply present in it and never asked about, and one rejection of the whole with feedback beneath it. Where an answer stands, the column leads with the edit this ruling would make; where none stands, it shows the whole node and says that a denial leaves the question open. Beneath the node it indicates the node's unanswered children: what each asks, and that a ruling here is what makes them decidable. They are indications and never rows. Every decision that is a question is a node, and a node is ruled from the rail in its own turn in the one order, so a screen offering its children as confirmable rows would impose a second order on nodes the one order has already placed.
+
+The three columns are not equal. The node in the right-hand column is the thing in view while the decisions are worked, so it is the widest and can take the whole screen on demand; the rail is fixed and narrow; the decisions sit between them at the width their inputs need.
+
+A response is one of the three the unanswered node opens and this page adds none: choosing the recommendation's choice on every asked decision and confirming the whole is a confirmation; choosing any other and confirming is a confirmation with edits; a rejection row, on one decision or on the whole, is a denial with feedback. Responses stage and submit together across nodes, so selecting another node never discards one, and the rail marks every node that carries a staged response.
+
+## Rationale
+
+Recorded on the author's dispositions of 2026-09-03 and 2026-09-04, quoted in the dialogue on this node while it was open. The question is the page's own and it was minted because the page was described only inside other rulings, a shim on the growth node, one clause of projection, one sentence of growth's answer, and the three responses on unanswered, so it would have been ratified incidentally and never asked as a question of its own. The shim naming the artifact moves here with the answer, and growth carries the alternative that says so.
+
+The standard the four metrics meet is the one the author set for the browser's graph headings on the frontier-metrics node, that a metric is a signal, an instrument, or a criterion of some disposition and hyperlinks to it. That node's question is the browser's headings and this one's is this page, so the standard is cited rather than adopted and the four metrics are this node's own choice; and because that node is unanswered and grounds no work, the standard is restated in this answer rather than leaned on.
+
+Rejected:
+
+- The stage counts kept, on the argument that they show what is coming and not only what is ruleable. - A stage count instruments no disposition, which is the standard; what is coming is the open count and the order.
+- Each metric linking to the first node on this page that it counts. - A metric names the disposition it instruments, and a disposition leaves this page the moment it is answered.
+- The node as it would stand in the narrow column, with the decisions widest. - The author moved the detail beside the list so that the result is in view while the list is worked, which makes it the thing read most.
+- The rail filtered to the ruleable, or paged. - Once one node is shown at a time the rail is the only view of the frontier, and a filter is a second order over the one the projector computes.
+- The node's unanswered children offered as rows among the decisions. - The one ruling order places every node, and a parent screen listing its children as rows orders them a second time.
+- Boldness renamed confidence on the page. - The author retracted the rename; confidence is the presentation of the fact and boldness is the fact, and the fold rule runs on the fact.
+```
 
 ## Account
 
@@ -419,3 +508,152 @@ memory carries any part of this sitting, and the two pages have not been
 republished, since nothing reached a ruling. The commits from `4b75af10` to
 this one are the sitting's log.
 
+### The maieutic movement, 2026-09-04
+
+What remained after the compaction was the page itself: the metrics at the top
+of the rail with their justifications, the single-selection rail, and the three
+columns. The author's words settle the shape of all three; what they leave to
+this node is which metrics, what the fold rule is, where a metric's link goes,
+and how the columns are proportioned. Those four are what the recommendation
+decides and what its boldness is about.
+
+One claim this account carried is spent and is corrected here rather than left
+standing. The clean-context review of 2026-09-03 found that the page as built
+groups by stage in a fixed order and ranks only within a group, against
+`alignment-order`'s one flat order. The implementation was reconciled the same
+day: `orderAlignmentItems` in `packages/disposition/project.mjs` now sorts by
+settling count, then rank, then id, across every graph, with the manifest's
+per-graph text surfaced as a header rather than as a grouping. The finding is
+answered. What is still wrong is the shim's own description of the page on
+`growth`, which says "every unanswered node in rank order"; rank is not the
+order and has not been since that reconciliation. The shim moves here under
+this recommendation and its `for:` line is rewritten with it.
+
+### The three classes of finding, 2026-09-04
+
+**Contradictions within the graph.**
+
+The record's fullest description of this page is a shim's `for:` line on
+another node's answer. That is the defect this node was minted to fix, stated
+in the record's own vocabulary: a page described only inside other rulings is
+ratified incidentally. The shim moves here, and `growth` carries the
+alternative that says so, so that one ruling moves it and the record is never
+carrying it twice.
+
+`unanswered` opens the three responses "on any subset of them", where "them"
+is the unanswered nodes. This page also takes a response on one decision within
+a node, a rejection row on a fact that is not itself a node. Nothing in
+`unanswered` provides for that, and nothing in `recording` says what a session
+does with it. Both are in this sitting's cascade and both are amended for it.
+
+`frontier-metrics` carries the standard a metric on this page must meet, and it
+carries it in the author's words on an unanswered node. `un-aligned-children`
+is explicit that an unanswered disposition grounds no work. So this answer
+cannot rest on that node; it restates the standard in its own words and cites
+the node as provenance. The same reading applies to every citation of an
+unanswered node in this sitting and is worth the review's attention, because
+the sitting cites several.
+
+**Contradictions between the graph and the AI's own knowledge.**
+
+The record contradicts itself on which direction boldness runs, `growth`
+defining it as how much rests on the record and `dialogue` and the author
+defining it as how much rests on the AI's own knowledge. The fold rule is where
+that contradiction would do damage rather than sit quietly: a page written
+against `growth`'s definition folds away every decision the AI is least sure of
+and asks about every one it is surest of, which is the exact inversion of what
+the author asked for. The finding is recorded on `growth` and the fold rule in
+this answer is written against the author's direction.
+
+A whole node's markdown rendered into a third of a laptop screen is not read,
+it is skimmed, and the author's stated reason for moving the detail beside the
+decisions was that the result be in view while they are worked. That is the
+AI's own knowledge of reading a document at that width and not the record's,
+which is why the proportions are named in the answer and why the pane can take
+the whole screen. It is also the whole of the case against
+`decisions-are-the-widest-column`, so the author should see that it is a
+design judgment and not a citation.
+
+**Redundant seams.**
+
+The rail's per-node mark and the footer's staged count are two renderings of
+one fact, and with one node shown at a time they are the only state that spans
+nodes. Both are kept deliberately: the mark answers "which nodes have I
+touched", the count answers "how much am I about to submit", and a reader who
+has scrolled the rail can see neither from the other.
+
+`frontier-metrics` and this node ask different questions about the same kind of
+thing, and the seam between them is a shared standard, not a shared answer.
+Recorded so that a later ruling on either does not read the other as settled.
+
+### Evaluated twice, 2026-09-04
+
+Fresh judgment produced the answer above. The pass with reference to tradition
+surfaced two that bear on it, and both are recorded as readings under this
+node, as `readings` and `evaluation` require: `master-detail-selection`, which
+the single-selection rail adopts with two divergences, and
+`progressive-disclosure`, which the middle column adopts in shape while
+diverging on the criterion for the split. The metric question's ground is the
+author's own standard and the record's `instruments` vocabulary; the tradition
+pass found nothing there that changes the answer, and nothing is recorded as a
+reading that did not inform it.
+
+The steelman from the traditions is the one-panel master-detail: a single
+detail panel, the decisions and the result in one column, on the tradition's
+own argument that the reader's attention has one object. It is answered in the
+reading, and the answer is that the two panels have one object between them,
+the node, and that the author ruled the result into view rather than after the
+list. The alternative that survives the steelman is
+`decisions-are-the-widest-column`, which is recorded.
+
+### Tested against the record it joins, 2026-09-04
+
+The `under` chain to the ceiling: `projection`, this node's parent, whose one
+clause naming the page this answer refines rather than contradicts; `scope`;
+`purpose`; and `commons.systems/public/agency` at the root. The global-tier
+nodes: `materialization`, under which this page is the projection of this
+node's answer and the shim is the stopgap until the projector writes it;
+`session-context`, which this answer does not touch, since the page is not one
+of the three things a session loads; `evaluation`, whose greenfield test this
+answer was written under, no argument from what is already built appearing in
+it; `authority`, under which this recommendation's `ratified` class is
+justified below; and `delegation`, untouched.
+
+The answer contradicts no doctrine, because nothing is ratified. It does
+contradict two standing deferred texts, `growth`'s shim and `unanswered`'s
+"any subset of them", and in both cases the contradiction is recorded as an
+alternative on the node it contradicts rather than written here as though it
+were settled, which is what `authority` requires.
+
+### The recommendation and its three facts, 2026-09-04
+
+Adopts `three-column-ruling-screen`, the answer in the fence above.
+
+**Authority: ratified.** Being wrong here is cheap to fix, since it is a page.
+But this page is the instrument through which every ratification the author
+ever gives will pass, and a page that folds a decision away is a page that
+takes it. That is capture-shaped, which is the record's own reason to escalate
+a class toward ratified, and it is why the fold rule is in the answer and not
+in the implementation.
+
+**Boldness: moderate.** The shape is the author's, in their words, and is
+quoted above: the metrics at the top of the rail, the rest of the pagehead
+dropped, one node at a time from the rail with the selection marked, the
+decisions with their choices and drill-downs and rejections, and the result in
+a right-aligned pane. What rests on the AI is the choice of the four metrics
+against the author's standard, the fold rule's direction, the link's target,
+and the proportions of the columns. None of the four is structural and all four
+are recorded as decisions the author can take differently.
+
+**Persistence: standing**, with one shim carried in the fence: the artifact
+itself, moved here from `growth` with its declaration date intact and its
+liquidation condition unchanged.
+
+The three exits are open. The author may amend the answer, defer it, so that it
+stays a deferred draft on the frontier, or claim authority over the AI's
+account of the proportions and the metric set, which is the part of it that is
+the AI's own judgment.
+
+This recommendation is not reviewed. The clean-context review is owed on it and
+on the rest of this sitting's batch, and the author's instruction stops the
+sitting before it.
