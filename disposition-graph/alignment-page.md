@@ -1899,3 +1899,45 @@ that unit lands, which a reviewer would rightly find; then the eleven briefs are
 written in one pass, the eleven readings run on the model
 `commons.systems/disposition-graph/review-model` decides, and the survey runs
 after them.
+
+### State at the third compaction, 2026-09-04
+
+Where the work stands. The graph carries the four design drafts, the fourteen
+readings of the review sitting and the seven relations they left owed, and is
+pushed. The implementation ref carries the two pages and the review scripts
+reconciled to the facts encoding, three hundred and thirty-nine tests in the
+reader's package and sixty in the review's, all green, and is pushed at
+29d285d5. The rules projected from the global-tier nodes are unchanged, none of
+those five nodes' answers having moved. Both pages are republished at the
+addresses `commons.systems/disposition-graph/projection` names, the alignment
+page now asking every fact of a node with every option and none folded, and the
+browser reading structure rather than the text of a heading.
+
+Two units are running and write only to the session's scratch or to the files
+their briefs name. One drafts the readings the four design sittings of today
+left owed, the traditions each account named and did not write, to the job's
+`tmp/drafts/readings2/`, with a `bears-additions.json` for the relations that
+belong on readings the graph already holds. The other reconciles the split this
+node's sibling `commons.systems/disposition-graph/review-skills` recommends:
+two skills, `/align-review` for the review of a draft and `/align-survey` for
+the survey, over one workspace package holding the scripts and the brief
+templates with their two shared fragments, both readings on fable at high
+effort as `commons.systems/disposition-graph/review-model` decides, and the
+model gone from the brief generator. That unit's landing is what makes the
+three shims `review-skills` declares name artifacts that exist; until it lands,
+two of the three name files that do not.
+
+The order that remains. The split lands and its tests run green. Then the
+eleven briefs are written in one pass by the package's generator, and the
+eleven readings run, one fresh subagent each, on the nodes named in the section
+above: `prose-and-structure`, `recording`, `dialogue`, `viable-options`,
+`rejected`, `review-skills`, `review-model`, `clean-context-review`,
+`decomposition`, `progressive-disclosure`, and this node. Each reading's
+findings are validated on the main thread against the record before any is
+applied, and a forward writes the reading's counter-argument onto the node.
+Then the survey runs once over the whole graph, which is what answers the
+thirty-nine nodes reading as moved since their review rather than thirty-nine
+draft readings. Then `clean-context-review`'s own shim is struck, its
+persistence fact recommending it, and the final report names every node
+written. The readings unit's output is copied in with its relations whenever it
+returns.
