@@ -31,6 +31,9 @@ alternatives:
   - name: caption-only
     source: review
     ref: "2026-09-03"
+  - name: ranges-on-whole-node-alternatives
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -212,6 +215,30 @@ What it gives up is that nothing in the record would then require the
 distinction: a later projector, or the projected alignment skill, would be free
 to caption a first answer as an amendment again and would contradict no
 disposition in doing it.
+
+### ranges-on-whole-node-alternatives
+
+Raised by the clean-context validation of 2026-09-03 as the case against
+replacing the encoding. The author's page can be reached without `aspects` at
+all: leave `alternatives` whole-node as they stand, add to each the range of
+the node it touches, a field or a section or a paragraph, and let the page
+derive list A by grouping alternatives whose ranges do not overlap, so that
+each group is a row and the alternatives in it are its choices. Combinations
+compose for the same reason they compose under `aspects`, because
+non-overlapping ranges apply independently.
+
+Its case is cost. It is one additive field on an entry the record already has.
+No node file is restructured, `adopts`, `amends` and the `## Recommendation`
+fence keep their meanings, the validator's alternative rules stand, and the
+clean-context reviews of 2026-09-03 on the eight ruling-stage nodes are not
+spent, because none of their answers change.
+
+Its case against is the author's own words, that the revised record is to carry
+a decision per aspect. Under this alternative the record carries whole-node
+candidates with a hint, and the page infers the decisions; an aspect on which
+no alternative was ever recorded, the authority class the author named first
+among them, has no row of its own and no boldness of its own, since boldness
+here stays a property of an alternative and not of a decision.
 
 ## Account
 
@@ -704,4 +731,126 @@ implies an authority class. And what happens to an aspect's `ruling` when a
 later aspect's ruling changes the text its choice was written against, which is
 the staleness problem the pin solves at the node level and which the model as
 drafted does not solve within a node.
+
+#### The analysis corrected in clean context, 2026-09-03
+
+The analysis above was checked adversarially by a subagent in clean context
+before it reached the author, as the author directed and as the evaluation node
+requires of the AI's own recorded output. Verdict: sound with corrections. The
+per-aspect model is faithful to the author's ruling and the stamp rule holds.
+Eight things do not, and are corrected here rather than carried.
+
+**The slot constraint degenerates as drafted, and this is the serious one.**
+The analysis defined a slot as one frontmatter field or one named section. Test
+that on the alternatives the record actually holds and the model collapses. Of
+this node's own six, `freeze-standing-under-recommendation`,
+`depends-migration-named`, `depends-names-an-alternative` and
+`first-answer-is-not-an-amendment` are each a clause or a paragraph inside
+`## Answer` and are mutually independent, so under a section-sized slot all
+four fall into the single `answer` aspect, which would then need up to sixteen
+whole-node choices to express their combinations. On `projection`,
+`narrowing-disclosed`, `name-what-it-does-not-settle` and
+`strike-the-field-link-clause` are single clauses, and
+`hold-for-self-documentation` and `absorb-self-documentation` are sequencing
+proposals that touch no slot at all; only two of eight are slot-confined. On
+`purpose`, two of six. The record's own proto-aspects, the option-nodes the
+review named on `purpose` under `fold-option-nodes`, are one paragraph-level
+(`hexis`), one field-level (`purpose-criteria`) and one whole-node
+(`second-stop`). So with section-sized slots the author gets one aspect per
+node plus `authority`, which is today's page with a second pill.
+
+The correction: a slot is one frontmatter field, one named section, **or one
+paragraph of a section, identified by its ordinal**. That is what makes the
+model deliver anything, and it is also the model's real cost, which the
+analysis had filed as an open question rather than as the load-bearing
+decision it is. Prose decomposed to the paragraph must still compose, and
+nothing yet says who checks that it does.
+
+**A rival is on the table and it is cheaper.** Recorded as the alternative
+`ranges-on-whole-node-alternatives`: leave `alternatives` whole-node as they
+are, add to each the range of the node it touches, and let the page derive list
+A by grouping alternatives whose ranges do not overlap. It reaches the author's
+page without replacing the encoding, without migrating seventy node files, and
+without spending the clean-context reviews of 2026-09-03. What it gives up is
+the author's own words, that the *record* carry a decision per aspect: under it
+the record carries whole-node candidates with a hint, and an aspect on which no
+alternative was recorded, the authority class among them, has no row of its own
+and no boldness of its own.
+
+**The record contradicts itself on which direction boldness runs, and the
+analysis leaned on the wrong half without noticing.** The author, this node,
+and the usage across the graph all measure how much rests on the AI's own
+knowledge against the record. But `growth`, the node that `defines` the term,
+words it the other way, "how much of it rests on the record and the author's
+words against the AI's own knowledge", and the alignment skill repeats
+`growth`'s direction. The two are inverse scales, so the same node stamped
+`boldness: high` means well-grounded under one and least-grounded under the
+other. This is a contradiction within the graph, independent of the present
+ruling, and it is exactly what the fold rule would have inverted. The cascade
+must correct `growth`'s definition sentence and the skill's line, not merely
+add a fact per aspect.
+
+**The fold rule is incoherent at two corners.** As drafted, an aspect reaches
+the list when it has more than one choice or when its boldness is high. So an
+aspect with one choice and moderate boldness folds silently, though the author
+folds only what is very high confidence; and an aspect with several choices and
+low boldness asks, though it is the case the AI is surest of. And "derived,
+never stored" is a fiction here: the session decides the list by deciding
+whether to record a second choice, so folding an aspect means deleting its
+provenance. Either fold only on `low` boldness, or store an `asks` override the
+session sets and the account justifies.
+
+**The cascade list is wrong in membership.** `validation-order` answers
+"functional before non-functional", which is about landings and not the graph
+validator, and `forms` says "Nothing migrates under this answer": neither
+carries text this ruling changes, and both are struck. Two nodes were missed
+and both do: `node`, at the maieutic stage, whose answer says a node carries
+"the alternatives pending the author's ruling, each with its source, and the
+recommendation among them"; and `madr-decision-records`, at the ruling stage,
+whose answer maps the encoding onto the MADR tradition term by term, "the
+alternatives with their sources are the considered options, the recommendation
+naming the alternative it adopts is the decision outcome". Two others were
+under-scoped: `alternatives` runs through five sentences of `alignment-order`
+including the `depends` qualifier, not one, and `transience` describes the
+alternatives as data with a subsection each, not one sentence on persistence.
+The total stays fourteen by coincidence; the ruling-stage count falls from
+eight to seven, and the frontier holds thirty-nine nodes at that stage, so the
+analysis's "a third of the frontier" was wrong and the figure is seven of
+thirty-nine.
+
+**The migration is not lossless.** Three things do not survive as claimed. The
+record uses `prune` alternatives, on `audience`, `purpose-criteria`,
+`second-stop` and `self-documentation`, which propose removing the node and
+therefore write no slot at all, so the model has no shape for them. Listing
+`standing` as a choice contradicts this node's own answer, "The node as it
+stands is always a candidate and is never listed". And migrating the
+node-level `class` into an `authority` aspect invents a boldness that no
+sitting assessed. In implementation, `derive.mjs`'s `stripDialogueFrontmatterLines`
+strips `stage`, `recommendation`, `review`, `alternatives` and `depends` and
+would not strip `aspects`, so unless it is updated in the same landing every
+`amends` pin in the graph goes stale at once.
+
+**A ruling needs its own pin, and `quotes` needs more than the analysis
+allowed.** The analysis deferred what happens when a later ruling moves the
+text an earlier aspect's ruling was given against. That is the defect the pin
+was invented for and it should be settled, not deferred: `ruling` carries
+`of`, the hash of the choice text ruled, exactly as `review` carries its own.
+And `quotes` says "the ruling a stamp requires is the one the author gives at
+that sitting"; a stamp assembled from rulings across several sittings has no
+single sitting, so that node changes substantively and not by one clause.
+
+**Two more things the analysis passed over.** The author's drill-down of
+"author quotes" per list-B row has no data path: `## Disposition` is per node
+and dated, and a choice carries only a `ref`. And confirming a choice the
+recommendation did not adopt produces a render the review never pinned, which
+under the `unanswered` node sends it back to review, so every row of list B is
+potentially a review round; the page must say so or the author will confirm a
+non-adopted choice expecting it to land.
+
+The analysis is left standing above with these corrections against it, rather
+than rewritten, so that what was drafted and what the validation changed are
+both legible. The recommendation is drafted from the corrected analysis, not
+from the analysis, and is not drafted yet: this node still owes the author a
+choice between the corrected aspects model and
+`ranges-on-whole-node-alternatives`.
 

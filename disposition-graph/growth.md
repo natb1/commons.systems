@@ -303,3 +303,30 @@ Un-aligned-children's account carries a '### Facts' section stating 'Authority n
 Also named: commons.systems/disposition-graph/un-aligned-children, commons.systems/disposition-graph/dialogue.
 
 Proposed: Dialogue is the survivor of the requirement and growth of the presentation rule; neither text need change for this node. Un-aligned-children's stale '### Facts' section is superseded by its own later '### Answered on the author's ruling, 2026-09-03' section and should be struck or marked superseded rather than left standing beside a contradicting frontmatter — the alternative below is the vehicle, since the review proposes and never edits. Growth's already-pending `facts-from-recommendation-field` alternative is what closes the class at its source, by saying the three facts are presented from the recommendation field and the node's shims and never from a prose line; taking it would make this and the sixteen other instances unrepresentable rather than fixed one by one.
+### Frontier finding: this node defines boldness in the wrong direction, 2026-09-03
+
+Kind: contradiction within the graph. Raised by the clean-context validation of
+the aspects analysis, 2026-09-03, and independent of that ruling.
+
+This node `defines` boldness, and its answer words it "its boldness, how much
+of it rests on the record and the author's words against the AI's own
+knowledge". The alignment skill repeats that direction. The `dialogue` node,
+which carries the field, words it the other way, "how much of it rests on the
+AI's own knowledge against the record and the author's words", and so does the
+author, ruling on 2026-09-03: "I want to know how much rests on the AI's own
+knowledge against the record."
+
+The two are inverse scales, so a node stamped `boldness: high` means
+well-grounded under this node's answer and least-grounded under `dialogue`'s.
+Every boldness in the record was written under one reading or the other and
+nothing says which. The usage across the graph follows `dialogue` and the
+author, so the correction falls here: this node's definition sentence is
+reversed, and the alignment skill's line with it.
+
+Also named: commons.systems/disposition-graph/dialogue.
+
+Proposed: reverse the direction in this node's answer to match `dialogue`, the
+author's words, and the usage, and correct the skill's line in the same
+landing. The alternative, reversing `dialogue` instead, is refused by the
+author's ruling of 2026-09-03.
+

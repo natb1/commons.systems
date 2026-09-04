@@ -189,3 +189,38 @@ boldness to confidence is retracted, and the note above on the fold rule is why
 the retraction was right: confidence is the presentation of the fact, boldness
 is the fact, and the record carries the fact.
 
+### The analysis corrected, 2026-09-03
+
+The cascade analysis on `commons.systems/disposition-graph/dialogue` was
+validated in clean context and corrected there. Three of the corrections change
+what this page would be.
+
+The fold rule, as this account first stated it, is incoherent at two corners:
+an aspect with one choice and moderate boldness would fold silently though the
+author folds only what is very high confidence, and an aspect with several
+choices and low boldness would ask though it is the case the AI is surest of.
+It folds on `low` boldness alone, or the session stores an override and
+justifies it in the account. And the note above on the inversion holds with a
+correction of its own: the record contradicts itself on which direction
+boldness runs, `growth` defining it opposite to `dialogue` and to the author,
+so the page cannot be written against the definition as it stands and the
+contradiction is recorded on `growth`.
+
+The drill-down the author asked for, author quotes beneath a list-B row, has no
+data path in the model as drafted: `## Disposition` is per node and dated, and
+a choice carries only a `ref`. Either a choice gains the dates it rests on, or
+the drill-down shows the node's words and not the row's.
+
+And a row of list B that is not the recommendation's own choice produces a
+render the clean-context review never pinned, which under the `unanswered` node
+sends it back to review. So confirming a non-adopted choice does not land it;
+the page must say so on the row, or the author will confirm expecting
+otherwise.
+
+A rival to the whole model is on the table there,
+`ranges-on-whole-node-alternatives`, which reaches this page without replacing
+the encoding and without spending seven clean-context reviews. This node's
+answer does not depend on which of the two the author takes: list A, list B,
+the pane and the two rejections are the same page either way, and what differs
+is whether the record carries the decisions or the page infers them.
+
