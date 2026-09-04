@@ -1,25 +1,22 @@
 ---
-question: Does ruling without a forward review fail?
+question: Does the ruling stage require a forward review?
 form: rule
 stage: ruling
-recommendation:
-  adopts: standing
-  boldness: moderate
-  amends: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  at: a1b2c3d
 facts:
-  - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: 2026-09-04
+    recommends: standing
     boldness: moderate
+    stands: standing
 ---
 
 ## Disposition
 
-Awaiting ruling.
+Awaiting the author's ruling, with no review behind it.
 
 ## Answer
 
-A standing answer for the recommendation to adopt.
+A standing answer for the answer fact to recommend.

@@ -7,4 +7,4 @@ order:
 
 ## Disposition
 
-Not yet decided, but already carrying an order.
+Still open.

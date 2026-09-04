@@ -204,14 +204,18 @@
   .pill.stage-periagogic { background: var(--stage-periagogic-soft); color: var(--stage-periagogic); }
   .pill.rec-class-ratified { background: var(--ratified-soft); color: var(--ratified); }
   .pill.rec-class-delegated { background: var(--delegated-soft); color: var(--delegated); }
+  .pill.rec-class-deferred { background: var(--deferred-soft); color: var(--deferred); }
   .pill.rec-bold-low, .pill.rec-bold-moderate, .pill.rec-bold-high { background: var(--paper-3); color: var(--ink-2); }
   .pill.rec-bold-high { background: var(--deferred-soft); color: var(--deferred); }
   .pill.rev-forward { background: var(--ratified-soft); color: var(--ratified); }
   .pill.rev-kickback { background: var(--proposal-soft); color: var(--proposal); }
   .pill.rev-strength, .pill.rev-date { background: var(--paper-3); color: var(--ink-2); }
-  .pill.rev-stale, .pill.rec-stale { background: var(--deferred-soft); color: var(--deferred); }
+  .pill.rev-stale, .pill.rec-moved { background: var(--deferred-soft); color: var(--deferred); }
+  .pill.rec-diverges { background: var(--proposal-soft); color: var(--proposal); }
+  .pill.alt-ruled { background: var(--ratified-soft); color: var(--ratified); }
   .pill.rec-adopts { background: var(--accent-soft); color: var(--accent-ink); }
   .pill.alt-src, .pill.alt-ref { background: var(--paper-3); color: var(--ink-2); }
+  .pill.alt-stands { background: var(--paper-2); color: var(--ink-3); border: 1px solid var(--line); }
   .pill.alt-ref { text-transform: none; letter-spacing: .02em; }
   .pill.alt-prune { background: var(--proposal-soft); color: var(--proposal); }
   .pill.alt-adopted { background: var(--accent-soft); color: var(--accent-ink); }
@@ -259,7 +263,7 @@
   .quoted pre { margin: 0; }
   .account { padding: 14px 16px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; }
 
-  /* ---------- the alternatives ---------- */
+  /* ---------- the options on a decision ---------- */
   .altlist { list-style: none; margin: 0; padding: 0; }
   .alt { margin: 0 0 14px; padding: 10px 0 0 14px; border-left: 2px solid var(--line); }
   .alt:last-child { margin-bottom: 0; }
@@ -267,8 +271,7 @@
   .altname { margin: 0 0 8px; font-size: 14px; }
   .altname .mono { font-family: var(--mono); font-size: 12.5px; color: var(--ink); margin-right: 10px; overflow-wrap: anywhere; }
 
-  /* ---------- the draft and the edit ---------- */
-  .draftsec { border-left: 2px solid var(--accent); padding-left: 14px; }
+  /* ---------- the recommended text and the edit ---------- */
   .edit-lbl { margin-top: 18px; }
   .edit { background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px; overflow-x: auto; }
   .fmdiff { list-style: none; margin: 0 0 12px; padding: 0; font-family: var(--mono); font-size: 12.5px; line-height: 1.6; }
@@ -405,6 +408,7 @@
   .choices { list-style: none; margin: 6px 0 0; padding: 0; }
   .choice { margin: 0 0 4px; padding: 5px 6px; border-radius: 3px; }
   .choice.adopted { background: var(--paper-2); }
+  .choice.ruled { box-shadow: inset 2px 0 0 var(--ratified); }
   .choice.reject { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 9px; }
   .choicelbl { display: flex; align-items: baseline; gap: 8px; cursor: pointer; }
   .choicelbl input { flex: none; margin-top: 1px; }
@@ -417,6 +421,12 @@
   .drill summary { font-size: 12px; color: var(--ink-3); cursor: pointer; }
   .drill summary:hover { color: var(--ink-2); }
   .drill .mdbody { font-size: 13.5px; }
+  .optreadings { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+  .optreadings li { display: flex; gap: 6px; align-items: baseline; }
+  .optreadings .mono { font-family: var(--mono); font-size: 11px; color: var(--ink-3); overflow-wrap: anywhere; }
+  .badge { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; border: 1px solid; }
+  .badge.adopted { color: var(--ratified); border-color: var(--ratified); }
+  .badge.diverged { color: var(--deferred); border-color: var(--deferred); }
   .recline { margin: 10px 0 0; }
   .recline.none { color: var(--ink-3); font-size: 13px; }
   .pill.rec-bold-none { background: var(--paper-3); color: var(--ink-3); }
@@ -505,9 +515,9 @@ function alFootNote(text) {
 /* The whole-node control, and never a decision inside the same item. Both
    the decisions and this control are radios under the one `[data-item]`, so
    an unscoped `input[type="radio"]:checked` returned whichever came first in
-   the document: with the decisions ahead of the control, choosing an
-   alternative was read back as the node's own ruling and stored as
-   `ruling: "<alternative name>"` on the response document, where `confirm`,
+   the document: with the decisions ahead of the control, choosing an option
+   was read back as the node's own ruling and stored as
+   `ruling: "<option name>"` on the response document, where `confirm`,
    `edit` or `deny` was meant. Scope every read and write of it to
    `[data-controls]`, which is the control's own fieldset and holds no
    decision. */

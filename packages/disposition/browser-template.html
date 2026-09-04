@@ -175,6 +175,9 @@
   .pill.pro { background: var(--proposal-soft); color: var(--proposal); }
   .pill.none { background: var(--paper-3); color: var(--ink-3); }
   .pill.unans { background: var(--deferred-soft); color: var(--deferred); }
+  .pill.stg { background: var(--paper-3); color: var(--ink-3); }
+  .pill.ruled { background: var(--ratified-soft); color: var(--ratified); }
+  .pill.rec { background: var(--accent-soft); color: var(--accent-ink); }
 
   /* ---------- node header ---------- */
   .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 14px; }
@@ -185,9 +188,9 @@
   .facts dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 2px; }
   .facts dd { margin: 0; font-size: 14px; line-height: 1.4; color: var(--ink-2); }
   .facts dd a { color: var(--accent-ink); }
-  .facts .stamp { color: var(--ink-3); font-size: 13px; margin-left: 7px; }
+  .facts .classnote { color: var(--ink-3); font-size: 13px; margin-left: 7px; }
   .facts .sep { color: var(--ink-3); margin: 0 6px; }
-  .draftnote { font-size: 13px; line-height: 1.4; color: var(--ink-3); margin: 0 0 20px; }
+  .fencenote { font-size: 13px; line-height: 1.4; color: var(--ink-3); margin: 0 0 20px; }
   .idv { font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
   .copy { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; background: none; border: 1px solid var(--line); border-radius: 3px; color: var(--ink-3); padding: 1px 6px; cursor: pointer; margin-left: 6px; }
   .copy:hover { border-color: var(--accent); color: var(--accent-ink); }
@@ -217,7 +220,7 @@
   .lead { font-variant-caps: all-small-caps; font-feature-settings: "c2sc", "smcp"; letter-spacing: .09em; font-weight: 600; color: var(--ink-3); margin-right: .45em; }
 
   /* ---------- role-specific blocks ---------- */
-  .unstamped { border-left: 2px dashed var(--proposal); padding-left: 16px; }
+  .unruled { border-left: 2px dashed var(--proposal); padding-left: 16px; }
   .rejected { margin: 22px 0 0; padding: 14px 18px; background: var(--paper-2); border-left: 2px solid var(--proposal); border-radius: 0 3px 3px 0; }
   .rejected > .blk-label { font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--proposal); margin: 0 0 8px; }
   .rejected p, .rejected li { font-size: 15.5px; }
@@ -235,6 +238,14 @@
   .altmeta { font-family: var(--mono); font-size: 11px; letter-spacing: .04em; color: var(--ink-3); overflow-wrap: anywhere; }
   .alts .mdbody { font-size: 15px; }
   .altnote { font-size: 13.5px; line-height: 1.45; color: var(--ink-3); margin: 12px 0 0; }
+  .optlist { list-style: none; margin: 8px 0 0; padding: 0; }
+  .optlist > li { margin: 0 0 12px; padding-left: 12px; border-left: 2px solid var(--line); }
+  .optlist > li:last-child { margin-bottom: 0; }
+  .optlist > li.stands { border-left-color: var(--ink-3); }
+  .optlist > li.ruled { border-left-color: var(--ratified); }
+  .optlist > li.adopted { border-left-color: var(--accent-ink); }
+  .optreadings { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+  .optreadings .mono { font-family: var(--mono); font-size: 11px; color: var(--ink-3); overflow-wrap: anywhere; }
   .pill.prune { background: var(--proposal-soft); color: var(--proposal); }
   .instr { padding: 2px 0 2px 16px; border-left: 2px solid var(--accent); max-width: var(--measure); }
   .instr .kind { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-ink); margin: 0 0 5px; }
@@ -254,7 +265,7 @@
   .reading .rq2 a { color: var(--ink); text-decoration: none; }
   .reading .rq2 a:hover { color: var(--accent-ink); text-decoration: underline; }
   .reading .src { font-family: var(--serif); font-style: italic; font-size: 15px; line-height: 1.45; color: var(--ink-2); margin: 0 0 10px; }
-  .reading .stamp { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; color: var(--ink-3); margin: 0 0 10px; }
+  .reading .classnote { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; color: var(--ink-3); margin: 0 0 10px; }
   .reading .mdbody { font-size: 16px; }
   .reading .more { font-size: 13.5px; margin: 10px 0 0; }
   .reading.solo { max-width: var(--measure); }
@@ -600,12 +611,12 @@ function linkTextNode(node, used, selfId) {
 
 var FORM_WORD = { target: "target", rule: "rule", assumption: "assumption", arche: "archē", reading: "reading" };
 var FORM_MARK = { target: "tgt", rule: "rule", assumption: "asm", arche: "arch", reading: "rdg" };
-// Only the three stamp classes now: `status` (answered/unanswered, see
-// derive.mjs's deriveStatus) is no longer a per-node word painted through
-// this map -- an unanswered node gets its own "unanswered · <stage>" pill
-// (unansweredPill, below) instead of a repurposed status color.
-var STATUS_CLASS = { ratified: "rat", delegated: "del", deferred: "def" };
-var STATUS_WORD = { ratified: "ratified", delegated: "delegated", deferred: "deferred" };
+// The four classes a node's rulings derive to (derive.mjs's deriveClass).
+// There is no stamp to paint: `unanswered` is a class like the other three
+// and gets its own color, and the stage a node carries is a separate pill
+// beside it (stagePill, below).
+var STATUS_CLASS = { ratified: "rat", delegated: "del", deferred: "def", unanswered: "unans" };
+var STATUS_WORD = { ratified: "ratified", delegated: "delegated", deferred: "deferred", unanswered: "unanswered" };
 
 function formWord(f) { return FORM_WORD[f] || (f ? String(f) : "unanswered"); }
 function formMark(f) { return FORM_MARK[f] || "··"; }
@@ -621,104 +632,128 @@ function pill(status, small) {
     esc(STATUS_WORD[status] || status) + "</span>";
 }
 
-/* The stamp pill a node's own page and the nav/cards show: the authority
-   class when there is one, "unstamped" (neutral) when there is not -- a
-   node with neither is a no-answer node, hidden from the browser entirely
-   (excludeUnaligned), so this never has to render "no answer yet" for real
-   embedded data. */
-function stampPill(n, small) {
-  if (n.authority && n.authority.class) return pill(n.authority.class, small);
-  return pill("unstamped", small);
+/* The class pill a node's own page and the nav/cards show. The class is
+   derived from the rulings on the node's facts and on its ancestors', never
+   stored (commons.systems/disposition-graph/viable-options), so there is
+   always one to show and never a "no stamp" case. */
+function classPill(n, small) {
+  return pill(n["class"] || "unanswered", small);
 }
 
-/* What a node in the dialogue adds beside its stamp: which stage it is at.
-   An unanswered node says so and names the stage; an answered node -- one
-   whose standing answer holds while a dialogue runs on it anyway -- names
-   the stage alone, since "unanswered" would misdescribe it. Reuses the same
-   `.pill` look (the "deferred" color, since a deferred stamp is itself
-   always unanswered) rather than a bespoke color, so it already carries
-   both themes. */
-function unansweredPill(n, small) {
-  var label;
-  if (n.status === "unanswered") label = "unanswered" + (n.stage ? " · " + n.stage : "");
-  else if (n.stage) label = "in dialogue · " + n.stage;
-  else return "";
-  return '<span class="pill unans' + (small ? " sm" : "") + '">' + esc(label) + "</span>";
+/* What a node in the dialogue adds beside its class: which stage it is at.
+   The class pill already says "unanswered" where that is the case, so this
+   one names the stage alone rather than repeating it. Reuses the same
+   `.pill` look rather than a bespoke color, so it already carries both
+   themes. */
+function stagePill(n, small) {
+  if (!n.stage) return "";
+  return '<span class="pill stg' + (small ? " sm" : "") + '">' + esc("in dialogue · " + n.stage) + "</span>";
 }
 
 /* The browser never renders a recommended text (that is the alignment
    page's job); a node that carries one just says so, once, beside its
-   stamp. */
-function draftNoteHtml(n) {
-  if (!n.draft) return "";
-  return '<p class="draftnote">' + "A recommendation awaits the author's ruling on the alignment page." + "</p>";
+   class. A ratified node whose recommendation has moved since the ruling
+   says that it is a proposal returned for re-confirmation, and one whose
+   ruling went against the recommendation says that too, since both are
+   read off the same facts and neither is stored. */
+function fenceNoteHtml(n) {
+  var out = [];
+  if (n.proposal) {
+    out.push("This node is ratified and its recommendation has moved since the ruling: a proposal, "
+      + "returned to the alignment page for re-confirmation. The confirmed choice keeps its full authority.");
+  }
+  if (n.divergesFromRecommendation) {
+    out.push("The author ruled against the AI's recommendation on this node's answer; both are kept below.");
+  }
+  if (n.fence) {
+    out.push("A recommendation awaits the author's ruling on the alignment page.");
+  }
+  return out.map(function (t) { return '<p class="fencenote">' + esc(t) + "</p>"; }).join("");
 }
 
-/* The answers on the table beside the one the node stands on, listed under
-   the stamp with the one line that says what they do and do not do: the
-   standing answer keeps its authority until the author confirms one of
-   them. Each carries its name, where it came from (`source`, and the `ref`
-   that dates it or names the instrument that raised it), and its prose
-   from the node's `## Alternatives` section. Deleting the node is never
-   one of these: it is the `existence` fact, rendered by `factsHtml`.
-   Nothing is rendered for a node with none. */
-function alternativesHtml(n) {
-  var alts = n.alternatives || [];
-  if (!alts.length) return "";
-  var text = n.alternativesText || {};
-  var items = alts.map(function (a) {
-    var meta = [a.source];
-    if (a.ref) meta.push(a.ref);
-    return "<li>" +
-      '<p class="altname"><span class="mono">' + esc(a.name) + "</span>" +
-      '<span class="altmeta">' + esc(meta.join(" · ")) + "</span></p>" +
-      (text[a.name] ? '<div class="mdbody">' + mdHtml(text[a.name]) + "</div>" : "") +
-      "</li>";
-  }).join("");
-  return '<div class="alts"><p class="blk-label">Pending alternatives</p>' +
-    '<ul class="altlist">' + items + "</ul>" +
-    '<p class="altnote">' +
-    "The standing answer keeps its authority until the author confirms one of these." +
-    "</p></div>";
-}
+/* Every decision on a node is a fact with a list of viable options, and the
+   options persist after the ruling: the confirmed choice, the AI's
+   recommendation with its boldness, the readings that bear on each option,
+   and every option the AI still holds viable, so that a later reader meets
+   what was considered and why before proposing it again
+   (commons.systems/disposition-graph/viable-options).
 
-/* The decisions about the answer that are not questions under it: the class
-   a confirmation would confer, whether the node exists, and what its shape
-   would become where the recommendation would change it. A decision the
-   author would rule on separately that is none of those three is a
-   question, and a question is a node under this one
-   (commons.systems/disposition-graph/dialogue). Nothing is rendered for a
-   node with none. */
+   The answer fact leads with the option whose text stands -- the confirmed
+   choice on a ratified node -- and every other option follows in the order
+   the record lists them, with its source, its reference, its prose, and the
+   traditions bearing on it. A reserved fact's options are its vocabulary
+   and read the same way. */
 var FACT_TITLES = {
+  answer: "The answer this node stands on",
   authority: "The class a confirmation confers",
   existence: "Whether the node exists",
   persistence: "What the node's shape would become"
 };
 
+var OPTION_NOTE = "The standing answer keeps its full authority until the author confirms one of these.";
+
+/* The answer fact's options with the one that stands first; every other
+   fact's in the order the record lists them. */
+function orderedOptions(f) {
+  var opts = (f.options || []).slice();
+  if (f.name !== "answer" || !f.stands) return opts;
+  var i = opts.findIndex(function (o) { return o.name === f.stands; });
+  if (i <= 0) return opts;
+  return [opts[i]].concat(opts.slice(0, i)).concat(opts.slice(i + 1));
+}
+
+/* The traditions bearing on one option, each saying whether it supports the
+   option or contradicts it. "Chosen over" is derived and never stored: it is
+   a reading adopted on an option the author did not choose. */
+function optionReadings(o, chosen) {
+  var rs = o.readings || [];
+  if (!rs.length) return "";
+  return '<ul class="optreadings">' + rs.map(function (r) {
+    var rel = r.relation === "adopted" && chosen && chosen !== o.name ? "chosen-over" : r.relation;
+    return "<li>" + relBadge(rel) + '<span class="mono">' + esc(r.id) + "</span></li>";
+  }).join("") + "</ul>";
+}
+
+function optionHtml(f, o) {
+  var marks = [];
+  var cls = [];
+  if (f.name === "answer" && o.name === f.stands) { marks.push('<span class="pill sm none">stands</span>'); cls.push("stands"); }
+  if (o.ruling) {
+    marks.push('<span class="pill sm ruled">' + esc("confirmed · " + o.ruling.response + " · " + o.ruling.date) + "</span>");
+    cls.push("ruled");
+  }
+  if (o.name === f.recommends) {
+    marks.push('<span class="pill sm rec">' + esc("recommended · boldness " + f.boldness) + "</span>");
+    cls.push("adopted");
+  }
+  var meta = [];
+  if (o.source) meta.push(o.source);
+  if (o.ref) meta.push(o.ref);
+  return '<li class="' + cls.join(" ") + '">' +
+    '<p class="altname"><span class="mono">' + esc(o.name) + "</span>" +
+    (meta.length ? '<span class="altmeta">' + esc(meta.join(" · ")) + "</span>" : "") +
+    marks.join("") + "</p>" +
+    (o.prose ? '<div class="mdbody">' + mdHtml(o.prose) + "</div>" : "") +
+    optionReadings(o, f.ruled) +
+    "</li>";
+}
+
 function factsHtml(n) {
   var facts = n.facts || [];
   if (!facts.length) return "";
-  var text = n.factsText || {};
   var items = facts.map(function (f) {
-    var choices = f.choices.map(function (c) {
-      return c === f.adopts
-        ? '<strong class="mono">' + esc(c) + "</strong>"
-        : '<span class="mono">' + esc(c) + "</span>";
-    }).join(" · ");
-    var ruled = f.ruling
-      ? '<p class="altmeta">Ruled ' + esc(f.ruling.response) + " on " +
-        esc(f.ruling.choice) + ", " + esc(f.ruling.date) + ".</p>"
-      : "";
     return "<li>" +
       '<p class="altname"><span class="mono">' + esc(f.name) + "</span>" +
-      '<span class="altmeta">' + esc(FACT_TITLES[f.name] || "") +
-      " · boldness " + esc(f.boldness) + "</span></p>" +
-      '<p class="altmeta">' + choices + "</p>" + ruled +
-      (text[f.name] ? '<div class="mdbody">' + mdHtml(text[f.name]) + "</div>" : "") +
+      '<span class="altmeta">' + esc(FACT_TITLES[f.name] || "") + "</span></p>" +
+      (f.prose ? '<div class="mdbody">' + mdHtml(f.prose) + "</div>" : "") +
+      '<ul class="optlist">' + orderedOptions(f).map(function (o) { return optionHtml(f, o); }).join("") + "</ul>" +
       "</li>";
   }).join("");
+  var pending = (n.answerFact ? n.answerFact.options.length - (n.answerFact.stands ? 1 : 0) : 0);
   return '<div class="alts"><p class="blk-label">The decisions this ruling asks</p>' +
-    '<ul class="altlist">' + items + "</ul></div>";
+    '<ul class="altlist">' + items + "</ul>" +
+    (pending > 0 ? '<p class="altnote">' + esc(OPTION_NOTE) + "</p>" : "") +
+    "</div>";
 }
 
 /* ------------------------------------------------------------------ *
@@ -795,7 +830,7 @@ function rowHtml(n, current) {
     ' title="' + esc(n.question || n.id) + '">' +
     '<span class="rq">' + esc(n.question || n.id) + "</span>" +
     '<span class="rf" title="' + esc(formWord(n.form)) + '">' + esc(formMark(n.form)) + "</span>" +
-    stampPill(n, true) + unansweredPill(n, true) + "</a>";
+    classPill(n, true) + stagePill(n, true) + "</a>";
 }
 
 function treeHtml(nodes, current, path, budget) {
@@ -864,20 +899,29 @@ function fact(k, v, dtTitle) {
   return "<div><dt" + t + ">" + esc(k) + "</dt><dd>" + v + "</dd></div>";
 }
 
-function authorityHtml(n) {
-  var a = n.authority;
-  var html;
-  if (a && a.class) {
-    var stamp = [];
-    if (a.by) stamp.push("by " + a.by);
-    if (a.date) stamp.push(a.date);
-    html = pill(a.class) + (stamp.length ? '<span class="stamp">' + esc(stamp.join(" · ")) + "</span>" : "");
-  } else if (n.answer) {
-    html = pill("unstamped") + '<span class="stamp">no authority</span>';
+/* The class, and where it came from: this node's own ruling with the date
+   of it, the ancestor whose ruling grants it, or no ruling at all, in which
+   state nothing on the node acts and reconciling under it takes an explicit
+   grant from the author. */
+function ruledOptionOf(n, factName) {
+  var f = (n.facts || []).filter(function (x) { return x.name === factName; })[0];
+  if (!f) return null;
+  return (f.options || []).filter(function (o) { return o.ruling; })[0] || null;
+}
+
+function classHtml(n) {
+  var cls = n["class"] || "unanswered";
+  var src = n.classSource || null;
+  var note;
+  if (cls === "unanswered") {
+    note = "no ruling";
+  } else if (src && src.kind === "ancestor") {
+    note = "granted by " + src.id;
   } else {
-    html = pill("question") + '<span class="stamp">no answer yet</span>';
+    var o = ruledOptionOf(n, cls === "ratified" ? "answer" : "authority");
+    note = o ? "ruled " + o.ruling.date : "ruled";
   }
-  return html + unansweredPill(n);
+  return pill(cls) + '<span class="classnote">' + esc(note) + "</span>" + stagePill(n);
 }
 
 /* One line per shim: what it is, what it is for (when recorded), what
@@ -898,7 +942,7 @@ function nodeHeader(n) {
 
   var items = [];
   items.push(fact("form", esc(formWord(n.form))));
-  items.push(fact("authority", authorityHtml(n)));
+  items.push(fact("class", classHtml(n)));
   items.push(fact("rank", '<span class="num">' + fmtPct(n.rank) + "</span>"));
   if (n.boost != null) items.push(fact("boost", '<span class="num">' + fmtPct(n.boost) + "</span>"));
   if (n.ceiling) items.push(fact("ceiling", nodeLink(n.ceiling)));
@@ -921,17 +965,27 @@ function nodeHeader(n) {
   return '<p class="eyebrow">' + eyebrow.join(" &nbsp; ") + "</p>" +
     "<h1 tabindex=\"-1\" id=\"nodetitle\">" + esc(n.question || n.id) + "</h1>" +
     '<dl class="facts">' + items.join("") + "</dl>" +
-    draftNoteHtml(n) +
-    alternativesHtml(n) +
+    fenceNoteHtml(n) +
     factsHtml(n);
 }
 
-/* A reading's own page has to carry the citation it is a reading of. */
+/* A reading's own page has to carry the citation it is a reading of, and
+   what it bears on: a tradition bears on an option of a fact of a node, not
+   on the node, so one reading may adopt one option and diverge from
+   another. */
+function bearsHtml(bears) {
+  return (bears || []).map(function (b) {
+    return '<p class="src">' + relBadge(b.relation) +
+      '<span class="mono">' + esc(b.node + " · " + b.fact + " · " + b.option) + "</span></p>";
+  }).join("");
+}
+
 function readsSection(n) {
-  if (n.form !== "reading" || (!n.source && !n.relation)) return "";
+  var bears = n.bears || [];
+  if (n.form !== "reading" || (!n.source && !bears.length)) return "";
   return '<section><h2 class="sect">Reads</h2><div class="reading solo">' +
-    (n.relation ? '<div class="rhead">' + relBadge(n.relation) + "</div>" : "") +
     (n.source ? '<p class="src">' + esc(n.source) + "</p>" : "") +
+    bearsHtml(bears) +
     "</div></section>";
 }
 
@@ -940,9 +994,9 @@ function answerSection(n) {
   var html = mdHtml(n.answer);
   var lead = '<span class="lead">' + esc(formWord(n.form)) + ".</span>";
   html = html.indexOf("<p>") === 0 ? "<p>" + lead + html.slice(3) : "<p>" + lead + "</p>" + html;
-  var unstamped = !(n.authority && n.authority.class) ? " unstamped" : "";
+  var unruled = n["class"] === "unanswered" ? " unruled" : "";
   return '<section class="answer"><h2 class="sect">Answer</h2>' +
-    '<div class="mdbody' + unstamped + '">' + html + "</div></section>";
+    '<div class="mdbody' + unruled + '">' + html + "</div></section>";
 }
 
 function rationaleSection(n) {
@@ -974,26 +1028,29 @@ function relBadge(relation) {
   return '<span class="badge ' + cls + '">' + esc(word) + "</span>";
 }
 
-function readingBlock(r) {
-  var a = r.authority;
-  var stamp = a && a.class
-    ? [STATUS_WORD[a.class] || a.class].concat(a.by ? ["by " + a.by] : [], a.date ? [a.date] : []).join(" · ")
-    : "unstamped";
+/* One reading, listed under the node it bears on: the badges are the
+   relations it records against that node's options, so a reading that
+   adopts one option and diverges from another shows both. */
+function readingBlock(r, onId) {
+  var mine = (r.bears || []).filter(function (b) { return !onId || b.node === onId; });
+  var heads = mine.length
+    ? mine.map(function (b) { return relBadge(b.relation) + '<span class="mono">' + esc(b.fact + " · " + b.option) + "</span>"; }).join(" ")
+    : relBadge(null);
   return '<article class="reading">' +
-    '<div class="rhead">' + relBadge(r.relation) + "</div>" +
+    '<div class="rhead">' + heads + "</div>" +
     '<h3 class="rq2"><a href="#' + esc(r.id) + '">' + esc(r.question || r.id) + "</a></h3>" +
     (r.source ? '<p class="src">' + esc(r.source) + "</p>" : "") +
-    '<p class="stamp">' + esc(stamp) + "</p>" +
+    '<p class="classnote">' + esc(STATUS_WORD[r["class"]] || r["class"] || "unanswered") + "</p>" +
     (r.answer ? '<div class="mdbody">' + mdHtml(r.answer) + "</div>" : "") +
     '<p class="more"><a href="#' + esc(r.id) + '">Read this reading</a></p>' +
     "</article>";
 }
 
-function traditionsSection(kids) {
+function traditionsSection(kids, onId) {
   var readings = kids.filter(function (k) { return k.form === "reading"; });
   if (!readings.length) return "";
   return '<section><h2 class="sect">Traditions</h2><div class="readings">' +
-    readings.map(readingBlock).join("") + "</div></section>";
+    readings.map(function (r) { return readingBlock(r, onId); }).join("") + "</div></section>";
 }
 
 function refinementsSection(kids) {
@@ -1003,7 +1060,7 @@ function refinementsSection(kids) {
     return '<a class="card" href="#' + esc(k.id) + '">' +
       '<h3 class="cq">' + esc(k.question || k.id) + "</h3>" +
       '<p class="cmeta"><span>' + esc(formWord(k.form)) + "</span>" +
-      stampPill(k, true) + unansweredPill(k, true) +
+      classPill(k, true) + stagePill(k, true) +
       '<span class="num">' + fmtPct(k.rank) + "</span></p></a>";
   }).join("");
   return '<section><h2 class="sect">Refinements</h2><div class="cards">' + cards + "</div></section>";
@@ -1030,7 +1087,7 @@ function renderNode(n) {
     rationaleSection(n) +
     accountSection(n) +
     instrumentSection(n) +
-    traditionsSection(kids) +
+    traditionsSection(kids, n.id) +
     refinementsSection(kids) +
     citesSection(n) +
     "</article>";

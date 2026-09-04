@@ -1,17 +1,27 @@
 ---
 name: reconcile
-description: Reconcile materialized implementation to the disposition graph, one bite per invocation from the answered frontier in rank order, from disposition to implementation only, never writing the graph. Bootstrap shim declared on work-loop; the graph wins on conflict. The session runs on opus, its units on sonnet.
+description: Reconcile materialized implementation to the disposition graph, one bite per invocation from the answered frontier in rank order, from disposition to implementation, writing the graph only as viable options recorded and recommendations moved. Bootstrap shim declared on work-loop; the graph wins on conflict. The session runs on opus, its units on sonnet.
 model: opus
 effort: high
 disable-model-invocation: true
 ---
 # Reconcile
 
-> **Shim notice (2026-09-03).** Hand-written from the nodes `work-loop`,
+> **Shim notice (2026-09-03, reconciled 2026-09-04 under the author's
+> bootstrap grant of that day to the viable-options model of
+> `viable-options`, in which every decision on a node is a fact with
+> viable options, a node's class is read off the rulings recorded on them
+> rather than stamped, and this loop's main thread may record an option
+> and move a recommendation on the graph, §4. The recommendation that
+> reconciliation is written from is unanswered, and the clean-context
+> review of its batch is owed before the author rules on any of it.)**
+> Hand-written from the nodes `work-loop`,
 > `materialization`, `review`, `validation-order`, `delegation`,
-> `session-context`, `projection`, `transience`, `evaluation`, and
-> `authority` of `commons.systems/disposition-graph`, all unanswered, and
-> from the author's dispositions of 2026-09-03 quoted on `work-loop`.
+> `session-context`, `projection`, `transience`, `evaluation`,
+> `authority`, and `viable-options` of
+> `commons.systems/disposition-graph`, all unanswered, and
+> from the author's dispositions of 2026-09-03 and 2026-09-04 quoted on
+> `work-loop` and `viable-options`.
 > This text has no authority of its own. Where it conflicts with the graph
 > at `origin/disposition`, the graph wins and the conflict is reported for
 > alignment (§4). Declared as a shim on `work-loop`, whose
@@ -24,9 +34,16 @@ answer, delegate the bite as a unit, verify, land, report, and stop. The
 next invocation derives the frontier again. Bites run from disposition to
 implementation only: an artifact no node justifies is not a bite under
 this shim (§5). It never interviews the author and never records a
-standing answer, and it never writes the graph: a divergence that needs
-the author is reported for the alignment skill, which alone writes the
-graph; un-aligned dispositions are never this skill's bites.
+standing answer. It writes the graph only as decision state: its main
+thread may record a viable option on a fact and move a fact's
+recommendation, within the node's scope, and may never rule, edit a
+ruling, edit the author's words, or recommend beyond the scope a
+delegation confers (§4); the interview, the ruling, and the recording are
+alignment's alone. A node no ruling reaches carries a draft and not an
+answer, and nothing under it is bitten unless the author has granted that
+reconciliation explicitly, in their own words, for that reconciliation —
+a standing rule of this record and no shim, never assumed and never
+carried over from one grant to the next (`authority`, `viable-options`).
 
 ## Model
 
@@ -60,12 +77,18 @@ judgment.
 ## 1. Frontier
 
 `node packages/disposition/project.mjs disposition --frontier -` lists
-every node in rank order with its stamp, instrument, shims, and stage,
-under a heading of the unanswered nodes in the ruling order, which orders
-alignment and not this loop (`alignment-order`).
-Only an answered node, one with a ratified or delegated stamp, can be
-bitten: an unanswered node carries a draft, not an answer, and a bite
-never pre-empts the author. If no node is answered, report
+every node in rank order with its class, instrument, shims, and stage,
+under a heading of the alignment frontier in the ruling order, which
+orders alignment and not this loop (`alignment-order`).
+Only an answered node can be bitten, one whose class a ruling grants:
+ratified, where the author's confirmed choice acts; delegated or deferred,
+where the recommendation acts under the ruling on the authority fact or
+under an ancestor's grant. A node no ruling reaches is unanswered: it
+carries a draft, not an answer, and a bite
+never pre-empts the author. What a bite materializes is the option that
+acts — the confirmed choice on a ratified node, the recommendation on a
+delegated or deferred one, whose text `## Answer` holds unless a fence
+carries a newer recommendation (`viable-options`). If no node is answered, report
 `no answered node: nothing to bite` and stop. Otherwise read the answered
 nodes top down and take the first where one of these holds:
 
@@ -74,8 +97,8 @@ nodes top down and take the first where one of these holds:
   declaration for alignment to remove (§4);
 - an instrument whose ref says it is not yet materialized, or whose check
   fails when run: materialize it or fix what it checks;
-- an answer that names an artifact, the browser, a rule, a skill, a page,
-  whose current state does not match the answer: reconcile the artifact.
+- an acting option that names an artifact, the browser, a rule, a skill, a
+  page, whose current state does not match it: reconcile the artifact.
 
 An artifact on this ref that no node justifies is not a bite: that is the
 second direction of reconciliation (`work-loop`), an exit criterion (§5),
@@ -95,8 +118,11 @@ read and stop.
   it done. A unit that needs a second contract is two units. Name the
   model and the effort.
 - **Delegate** with the Agent tool. The brief carries the contract, the
-  node's answer quoted, and the standing constraints: no state-changing
-  git; write only the named files; work only in this checkout; report the
+  acting option's text quoted, and the standing constraints: no
+  state-changing
+  git; write only the named files; never edit a node of the graph
+  (`delegation`, `reconciliation-session-writes-options`); work only in
+  this checkout; report the
   exact commands and outputs. Read the conclusion, never the context.
   Never write tooling, tests, surveys, or pages on this thread.
 - **Verify.** `node --test packages/disposition/*.test.mjs`; the unit's
@@ -122,39 +148,65 @@ read and stop.
   with the `db` capability. A page is read in full by a unit before it is
   published when this thread did not write it.
 - Then report the bite in a few lines, the node, the divergence, the
-  commit, and what the projector shows, and stop: the frontier re-derives
+  commit, every node of the graph this session wrote (§4), and what the
+  projector shows, and stop: the frontier re-derives
   at the next invocation.
 
 ## 4. The graph
 
-This session never writes the `disposition` ref: the graph is alignment's
-alone (the author, 2026-09-03, quoted on `work-loop`). Two things reach
-alignment through the report instead of through a node:
+This session's main thread writes the `disposition` ref, and only as
+decision state: a viable option recorded on a fact, and a fact's
+recommendation moved onto one, within the node's scope (the author,
+2026-09-04, quoted on `viable-options`; `work-loop`,
+`reconciliation-writes-options`). It never rules, never edits a ruling or
+the author's words, and never recommends beyond the scope a delegation
+confers; a subagent never edits a node (`delegation`,
+`reconciliation-session-writes-options`). Operational state, a bite in
+flight and what this loop has already done, stays outside the graph, as
+the author said. Two things come of what this session finds, one on the
+record and one in the report:
 
-- **A divergence that needs the author**, when a node's answer is silent
-  or contradictory about the artifact it justifies, or the bite would need
-  a decision only the author can make: take no bite on it. A conflicting
-  answer found here is a proposal in the sense the `authority` node
-  defines, a conflicting answer that arose outside alignment. Report the
-  node, the divergence, and a recommendation with its authority class,
-  boldness, which runs from the AI's own knowledge against the record, and
-  persistence class (`growth`, `transience`), in a form the
-  author can paste into `/align`, which records it on the node as an
-  alternative of source `proposal` naming this report or the instrument
-  that raised it and opens the node's dialogue at the periagogic stage
-  (`dialogue`); the standing answer keeps its authority meanwhile. The
-  divergence stays on the frontier, derived and never stored, until the
-  alignment dialogue records it.
+- **A divergence that needs the author**, when the option that acts is
+  silent or contradictory about the artifact it justifies, or the bite
+  would need a decision only the author can make: take no bite on it, and
+  record the conflicting answer as a viable option on the fact it
+  conflicts with, with its `name`, a `source` naming this loop or the
+  instrument that raised it, a `ref`, and a `####` subsection under
+  `### answer` saying what it would answer and why it is viable. What
+  follows is read from the class (`evaluation`, `overrule-by-class`). On a
+  ratified node the confirmed choice keeps its full authority and goes on
+  acting; move the recommendation onto the option only where that is the
+  AI's judgment, and the node then returns to the alignment frontier at
+  the review stage, which the session writes with the move and which is
+  the state proposal names. On a deferred node a moved recommendation acts
+  and the node is on the alignment frontier already. On a delegated node
+  it acts within the delegation's scope and the node stays off the
+  alignment frontier; a move that would leave the scope is not
+  recommended, is recorded as an option, and returns the node to the
+  author with its class intact and a stage on it. On an unanswered node
+  nothing acts and the option is dialogue. Report the node, the
+  divergence, and the recommendation with its boldness, which runs from
+  the AI's own knowledge against the record, and its persistence class
+  (`growth`, `transience`).
 - **A shim whose liquidation condition this session has met**: liquidate
   the artifact on this ref and report that the declaration on the node is
   owed its removal by alignment; the declaration stands until then.
 
-Whether reconciliation keeps state of its own outside the graph, the
-divergences it has reported, a bite in flight, is a question the author
+**Landing a graph write.** One node file at a time, by compare-and-swap
+(`persistence`): from `disposition/`, `git fetch origin disposition`,
+apply the write on top of `origin/disposition`, validate, commit that one
+node file by pathspec with a message naming the node and what was
+recorded, and `git push origin disposition`. On rejection, re-fetch and
+reapply the write on the new head; never rebase the commit over another
+session's, and never carry an unrelated change with it. The session names
+in its report every node it wrote.
+
+Whether reconciliation keeps state of its own outside the graph, a bite in
+flight and the like, is a question the author
 opened on 2026-09-03 (`work-loop`) and has not ruled on. Until then this
-shim persists nothing beyond the git log: each invocation re-derives the
-frontier and reports a divergence again if alignment has not yet recorded
-it.
+shim persists nothing beyond the git log and the options it records on the
+graph: each invocation re-derives the frontier, and an option already
+recorded is read from the node rather than raised again.
 
 ## 5. Exit
 

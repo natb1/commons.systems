@@ -1,37 +1,42 @@
 ---
-question: Do facts reorder, carry rulings, and stay invisible to the standing hash?
+question: Do facts carry rulings and stay invisible to the standing hash?
 form: rule
 stage: periagogic
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: 2026-09-03
+    stands: standing
   - name: persistence
-    choices:
-      - derived
-      - present
-    adopts: present
+    options:
+      - name: derived
+      - name: present
+        ruling:
+          response: confirm
+          date: 2026-09-03
+          of: 3d3b7831a92369838c0960095de572bab3a94458
+    recommends: present
     boldness: low
-    ruling:
-      response: confirm
-      choice: present
-      date: 2026-09-03
-      of: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: low
   - name: existence
-    choices:
-      - keep
-      - prune
-    adopts: keep
+    options:
+      - name: keep
+      - name: prune
+    recommends: keep
     boldness: low
 ---
 
 ## Disposition
 
-Still open; this fixture and its twin, facts-node-changed, pin that only
-the facts entries differ between them, below.
+Still open; this fixture and its twin, facts-node-changed, pin that only the
+facts entries differ between them, below.
 
 ## Answer
 
@@ -47,5 +52,5 @@ same despite its very different facts.
 
 ### persistence
 
-Present, because the recommendation would change the node's shape rather
-than merely confirm it.
+Present, because the recommendation would change the node's shape rather than
+merely confirm it.

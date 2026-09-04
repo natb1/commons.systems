@@ -1,9 +1,9 @@
 ---
 question: Fixture root for the duplicate-depends case?
-form: target
-stage: maieutic
+stage: periagogic
 ---
 
-## Answer
+## Disposition
 
-A minimal root so the duplicate reference below resolves to a real node.
+A minimal open node so the reference above resolves to something on the
+frontier.

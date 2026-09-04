@@ -1,14 +1,17 @@
 ---
 question: C of the violated-order fixture?
 form: rule
-authority:
-  class: deferred
-  by: Fixture Author
-  date: 2026-01-01
 under:
   - example.test/main/root
 boost: 10
 stage: maieutic
+facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: 2026-01-01
+    stands: standing
 ---
 
 ## Answer

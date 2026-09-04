@@ -1,75 +1,69 @@
 ---
-question: May a draft presume doctrine the author has not yet ratified?
+question: May a fence presume doctrine the author has not yet ratified?
 form: rule
-authority:
-  class: deferred
-  by: claude
-  date: 2026-09-03
 stage: ruling
-alternatives:
-  - name: presume-freely
-    source: ai
-    ref: 2026-09-03
-recommendation:
-  adopts: presume-freely
-  boldness: moderate
-  amends: 7a2ed804a439f12f0cf6c9a512b7cc18f65e35aa
-  at: a1b2c3d
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
-  of: 777cc3dede8f172790b1e4257963861cc446d2c9
+  of: 6a33933864561e78bcfca99dbb2c4e40377788e2
 facts:
-  - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: 2026-09-02
+      - name: presume-freely
+        source: ai
+        ref: 2026-09-03
+    recommends: presume-freely
     boldness: moderate
+    stands: standing
 ---
 
 ## Disposition
 
-The author asked whether a draft may presume a ruling not yet given.
+The author asked whether a fence may presume a ruling not yet given.
 
 ## Answer
 
-Not yet: this is the node as it stands, unratified.
+Not yet: this is the node as it stands, unruled.
 
 ## Rationale
 
 Reasoned from the fixture's own small record.
 
-## Alternatives
+## Facts
 
-### presume-freely
+### answer
+
+Let the fence carry the vocabulary the ruling it presumes would introduce.
+
+#### presume-freely
 
 Let the fence carry whatever vocabulary the ruling it presumes would
-introduce; the validator checks only that it parses and answers the same
-question.
+introduce; the validator checks only that it parses, answers the same
+question, and carries none of the keys that belong to the node.
 
 ## Recommendation
 
 ```markdown
 ---
-question: May a draft presume doctrine the author has not yet ratified?
+question: May a fence presume doctrine the author has not yet ratified?
 form: disposition
-authority:
-  class: ratified
-  by: Fixture Author
-  date: <the date of the ruling>
 tier: cosmic
+under:
+  - example.test/main/nowhere
 ---
 
 ## Answer
 
-Yes: the validator parses a draft and checks only that it answers the
-same question, so a form outside today's vocabulary, an authority date
-still a placeholder, and a tier the vocabulary does not name are all
-carried through unchecked.
+Yes: the validator parses a fence and checks only that it answers the same
+question, so a form outside today's vocabulary, a tier the vocabulary does
+not name, and an 'under' that resolves to nothing are all carried through
+unchecked.
 ```
 
 ## Account
 
-Ratify the alternative above.
+Rule on the recommended option above.

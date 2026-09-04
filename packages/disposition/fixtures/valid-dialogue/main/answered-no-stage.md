@@ -1,16 +1,26 @@
 ---
 question: Does a ratified node need no stage at all?
 form: rule
-authority:
-  class: ratified
-  by: Fixture Author
-  date: 2026-09-03
+facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: 2026-09-03
+        ruling:
+          response: confirm
+          date: 2026-09-03
+          of: f0b690c2dd468ed4fe436efa96c7474536bf736a
+    recommends: standing
+    boldness: moderate
+    stands: standing
 ---
 
 ## Answer
 
-No: once ratified, the dialogue is closed and nothing here needs tracking.
+No: once the author has ruled, the dialogue is closed and nothing here needs
+tracking.
 
 ## Rationale
 
-The plain answered case: no stage, no recommendation, no review, no draft.
+The plain answered case: no stage, no review, no fence.

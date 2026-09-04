@@ -2,20 +2,23 @@
 question: Review-stage node B -- what does it answer?
 form: rule
 stage: review
-recommendation:
-  adopts: standing
-  boldness: high
-  amends: "d58e6358f3bc43963b9bc702b27727c9009733ac"
-  at: "0000000"
-alternatives:
-  - name: narrower
-    source: ai
 facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-08-01"
+      - name: narrower
+        source: ai
+        ref: "2026-08-01"
+    recommends: standing
+    boldness: high
+    stands: standing
   - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: delegated
+    options:
+      - name: ratified
+      - name: delegated
+    recommends: delegated
     boldness: high
 ---
 
@@ -25,16 +28,17 @@ Open question B, drafted and awaiting review.
 
 ## Answer
 
-B stands on this provisional answer, with one alternative on the table that
-the recommendation does not adopt.
+B stands on this provisional answer, with one further option on the table
+that the answer fact does not recommend.
 
-## Alternatives
+## Facts
 
-### narrower
+### answer
+
+The standing option is recommended: the narrower reading answers less than
+the author's words ask for.
+
+#### narrower
 
 Answer B only for the case the author named, leaving the general case to a
 node of its own.
-
-## Account
-
-Under clean-context review; no ruling yet, so no `review` data.

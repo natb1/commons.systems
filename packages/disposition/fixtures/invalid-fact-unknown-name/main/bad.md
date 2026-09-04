@@ -1,13 +1,11 @@
 ---
-question: Does a facts entry named outside the reserved three fail?
+question: Does a facts entry named outside the four fail?
 stage: periagogic
 facts:
   - name: momentum
-    choices:
-      - keep
-      - prune
-    adopts: keep
-    boldness: low
+    options:
+      - name: keep
+      - name: prune
 ---
 
 ## Disposition

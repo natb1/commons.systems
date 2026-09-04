@@ -1,4 +1,4 @@
 ---
-question: Does a stage without either dialogue section fail?
+question: Does a stage without any section to hold it fail?
 stage: periagogic
 ---

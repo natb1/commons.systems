@@ -15,11 +15,23 @@ import {
   canonicalizeId,
   deriveCeiling,
   deriveChildren,
-  deriveDraftHash,
+  deriveClass,
+  deriveClassSource,
+  deriveFactRecommendationHash,
   deriveRank,
+  deriveReadings,
+  deriveRecommendationHash,
   deriveSettles,
   deriveStandingHash,
   deriveStatus,
+  divergesFromRecommendation,
+  factByName,
+  factMoved,
+  moved,
+  onFrontier,
+  proposal,
+  reviewStale,
+  ruledOption,
 } from './derive.mjs';
 import { parseNode, readGraph } from './read.mjs';
 import { validate } from './validate.mjs';
@@ -54,6 +66,23 @@ function runCli(scriptPath, args) {
     return { stdout: err.stdout ?? '', stderr: err.stderr ?? '', status: err.status };
   }
 }
+
+// A node as `derive.mjs` sees one: enough of the shape for the derivations,
+// hand-built so a rule can be pinned without a fixture graph.
+function node(id, { under = [], facts = [], ...rest } = {}) {
+  return { id, under, facts, ...rest };
+}
+function fact(name, options, { recommends = null, boldness = null, stands = null, prose = '' } = {}) {
+  return {
+    name,
+    options: options.map((o) => (typeof o === 'string' ? { name: o, ruling: null, prose: '' } : { ruling: null, prose: '', ...o })),
+    recommends,
+    boldness,
+    stands,
+    prose,
+  };
+}
+const ruling = (of, { response = 'confirm', date = '2026-09-05' } = {}) => ({ response, date, of });
 
 // ---------------------------------------------------------------------------
 // derive.mjs
@@ -107,53 +136,127 @@ describe('derive.mjs', () => {
     assert.equal(rank.get('light'), 0.25);
   });
 
-  test('deriveSettles: settles is under + depends only -- a node\'s own alternatives are carried but not summed in, so a parent settles strictly more than its unanswered child even when the child carries more alternatives', () => {
-    const nodes = [
-      { id: 'parent', under: [], alternatives: [] },
-      { id: 'child', under: ['parent'], alternatives: [{ name: 'a' }, { name: 'b' }, { name: 'c' }] },
-    ];
-    const children = deriveChildren(nodes);
-    const settled = deriveSettles(nodes, children);
-    const parent = settled.get('parent');
-    const child = settled.get('child');
+  // ---- the class, read off the rulings ----
 
-    assert.equal(parent.settles, 1, 'parent settles its one unanswered child');
-    assert.equal(parent.alternatives, 0);
-    assert.equal(child.settles, 0, 'child has no descendant or dependant of its own');
-    assert.equal(child.alternatives, 3, "carried on the record even though it settles nothing else");
-    assert.ok(parent.settles > child.settles, 'the parent settles strictly more than the child, despite carrying fewer alternatives');
+  test('deriveClass: a ruled answer fact is ratified, whatever an ancestor says', () => {
+    const parent = node('p', { facts: [fact('authority', [{ name: 'delegated', ruling: ruling('x') }, 'ratified'])] });
+    const child = node('c', {
+      under: ['p'],
+      facts: [fact('answer', [{ name: 'standing', ruling: ruling('x') }], { stands: 'standing' })],
+    });
+    const graph = [parent, child];
+    assert.equal(deriveClass(child, graph), 'ratified');
+    assert.deepEqual(deriveClassSource(child, graph), { kind: 'ruling' });
+  });
+
+  test('deriveClass: a ruled authority fact confers delegated or deferred; ruled ratified leaves the node unanswered', () => {
+    const graph = [];
+    const of = (name) => node(name, { facts: [fact('authority', [{ name, ruling: ruling('x') }])] });
+    for (const name of ['delegated', 'deferred', 'ratified']) graph.push(of(name));
+    assert.equal(deriveClass(graph[0], graph), 'delegated');
+    assert.equal(deriveClass(graph[1], graph), 'deferred');
+    assert.equal(deriveClass(graph[2], graph), 'unanswered', 'the author asked to be asked and has not been');
+    assert.deepEqual(deriveClassSource(graph[2], graph), { kind: 'ruling' }, 'a ruling on the node put it there');
+  });
+
+  test('deriveClass: an unruled node takes the nearest ancestor\'s conferred class, and names it as the source', () => {
+    const graph = [
+      node('root', { facts: [fact('authority', [{ name: 'delegated', ruling: ruling('x') }])] }),
+      node('mid', { under: ['root'] }),
+      node('leaf', { under: ['mid'] }),
+    ];
+    assert.equal(deriveClass(graph[2], graph), 'delegated');
+    assert.deepEqual(deriveClassSource(graph[2], graph), { kind: 'ancestor', id: 'root' });
+    assert.equal(deriveClass(node('lonely'), graph), 'unanswered');
+    assert.equal(deriveClassSource(node('lonely'), graph), null);
+  });
+
+  test('deriveClass: at equal depth deferred wins, since authority only narrows on the way down', () => {
+    const graph = [
+      node('a-delegated', { facts: [fact('authority', [{ name: 'delegated', ruling: ruling('x') }])] }),
+      node('z-deferred', { facts: [fact('authority', [{ name: 'deferred', ruling: ruling('x') }])] }),
+      node('leaf', { under: ['a-delegated', 'z-deferred'] }),
+    ];
+    assert.equal(deriveClass(graph[2], graph), 'deferred');
+    assert.deepEqual(deriveClassSource(graph[2], graph), { kind: 'ancestor', id: 'z-deferred' });
+  });
+
+  test('deriveClass: a ratified ancestor confers nothing and does not stop the walk', () => {
+    const graph = [
+      node('top', { facts: [fact('authority', [{ name: 'delegated', ruling: ruling('x') }])] }),
+      node('mid', {
+        under: ['top'],
+        facts: [fact('answer', [{ name: 'standing', ruling: ruling('x') }], { stands: 'standing' })],
+      }),
+      node('leaf', { under: ['mid'] }),
+    ];
+    assert.equal(deriveClass(graph[1], graph), 'ratified');
+    assert.equal(deriveClass(graph[2], graph), 'delegated', 'the walk passes the ratified node and reaches the delegation');
+    assert.deepEqual(deriveClassSource(graph[2], graph), { kind: 'ancestor', id: 'top' });
+  });
+
+  test('deriveStatus: answered iff some ruling confers a class', () => {
+    const delegated = node('d', { facts: [fact('authority', [{ name: 'delegated', ruling: ruling('x') }])] });
+    const bare = node('b');
+    assert.equal(deriveStatus(delegated, [delegated]), 'answered');
+    assert.equal(deriveStatus(bare, [bare]), 'unanswered');
+  });
+
+  test('deriveClass accepts a Map, an array, or the {nodes} object readGraph returns', async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-rulings'));
+    const leaf = graph.nodes.find((n) => n.slug === 'inherits-delegated');
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    assert.equal(deriveClass(leaf, graph), 'delegated');
+    assert.equal(deriveClass(leaf, graph.nodes), 'delegated');
+    assert.equal(deriveClass(leaf, byId), 'delegated');
+  });
+
+  test('factByName and ruledOption read one fact and its one ruled option', () => {
+    const n = node('n', { facts: [fact('answer', [{ name: 'standing', ruling: ruling('x') }, 'other'])] });
+    assert.equal(factByName(n, 'answer').name, 'answer');
+    assert.equal(factByName(n, 'existence'), null);
+    assert.equal(ruledOption(factByName(n, 'answer')), 'standing');
+    assert.equal(ruledOption(null), null);
   });
 
   test('deriveCeiling finds the nearest ratified ancestor, breadth first, ties by id', () => {
+    const ratified = (id, under = []) => node(id, {
+      under,
+      facts: [fact('answer', [{ name: 'standing', ruling: ruling('x') }], { stands: 'standing' })],
+    });
     const nodesById = new Map([
-      ['root', { id: 'root', under: [], authority: { class: 'ratified' } }],
-      ['mid', { id: 'mid', under: ['root'], authority: null }],
-      ['leaf', { id: 'leaf', under: ['mid'], authority: null }],
-      ['unrelated-root', { id: 'unrelated-root', under: [], authority: null }],
+      ['root', ratified('root')],
+      ['mid', node('mid', { under: ['root'] })],
+      ['leaf', node('leaf', { under: ['mid'] })],
+      ['unrelated-root', node('unrelated-root')],
     ]);
     assert.equal(deriveCeiling('leaf', nodesById), 'root');
-    assert.equal(deriveCeiling('root', nodesById), null, "a node's own authority is not its own ceiling");
+    assert.equal(deriveCeiling('root', nodesById), null, "a node's own ruling is not its own ceiling");
     assert.equal(deriveCeiling('unrelated-root', nodesById), null);
   });
 
-  test('deriveStatus: answered only for a ratified or delegated stamp; unanswered for deferred, no stamp, or no answer', () => {
-    assert.equal(deriveStatus({ authority: { class: 'ratified' }, answer: 'x' }), 'answered');
-    assert.equal(deriveStatus({ authority: { class: 'delegated' }, answer: 'x' }), 'answered');
-    assert.equal(deriveStatus({ authority: { class: 'deferred' }, answer: 'x' }), 'unanswered');
-    assert.equal(deriveStatus({ authority: { class: 'deferred' }, answer: null }), 'unanswered');
-    assert.equal(deriveStatus({ authority: null, answer: 'x' }), 'unanswered');
-    assert.equal(deriveStatus({ authority: null, answer: null }), 'unanswered');
+  test("deriveSettles: settles is under + depends only -- a node's own options are carried but not summed in, and 'under' counts descendants that carry a stage", () => {
+    const nodes = [
+      node('parent', { stage: null }),
+      node('child', {
+        under: ['parent'],
+        stage: 'periagogic',
+        facts: [fact('answer', ['a', 'b', 'c'])],
+      }),
+      node('settled-child', { under: ['parent'], stage: null }),
+    ];
+    const settled = deriveSettles(nodes, deriveChildren(nodes));
+    const parent = settled.get('parent');
+    const child = settled.get('child');
+
+    assert.equal(parent.settles, 1, 'only the descendant that carries a stage counts');
+    assert.equal(parent.options, 0);
+    assert.equal(child.settles, 0, 'child has no descendant or dependant of its own');
+    assert.equal(child.options, 3, 'carried on the record even though it settles nothing else');
+    assert.ok(parent.settles > child.settles, 'the parent settles strictly more, despite carrying fewer options');
   });
 
-  test('deriveDraftHash: with a Recommendation fence, hashes the fence content exactly; without one, falls back to the standing hash', () => {
-    const withDraft = deriveDraftHash({ fmText: 'question: Q?\nstage: ruling', draftFence: 'question: Q?\n', answer: 'ignored', rationale: 'ignored' });
-    assert.equal(withDraft, createHash('sha1').update('question: Q?\n', 'utf8').digest('hex'));
-
-    const parts = { fmText: 'question: Q?\nstage: review', answer: 'Ans.', rationale: 'Rat.' };
-    const noDraft = deriveDraftHash({ ...parts, draftFence: null });
-    assert.equal(noDraft, createHash('sha1').update('question: Q?\nAns.\nRat.', 'utf8').digest('hex'));
-    assert.equal(noDraft, deriveStandingHash(parts), 'the no-fence draft hash is exactly the standing hash');
-  });
+  // ---- the hashes ----
 
   test('deriveStandingHash: stripped frontmatter, then the answer, then the rationale', () => {
     const hash = deriveStandingHash({ fmText: 'question: Q?\nform: rule', answer: 'Ans.', rationale: 'Rat.' });
@@ -162,23 +265,21 @@ describe('derive.mjs', () => {
     assert.equal(bare, createHash('sha1').update('question: Q?\n\n', 'utf8').digest('hex'), 'an absent section hashes as the empty string');
   });
 
-  test('deriveStandingHash: every dialogue key (and everything nested under it) is invisible to the hash', () => {
+  test('deriveStandingHash: stage, review, depends and facts (with everything nested under them) are invisible to it', () => {
     const bare = deriveStandingHash({ fmText: 'question: Q?\nform: rule', answer: 'Ans.', rationale: null });
     const dressedUp = deriveStandingHash({
       fmText: [
         'question: Q?',
         'stage: review',
-        'alternatives:',
-        '  - name: other-way',
-        '    source: ai',
+        'facts:',
+        '  - name: answer',
+        '    options:',
+        '      - name: standing',
+        '        source: ai',
+        '        ref: "2026-09-04"',
+        '    stands: standing',
         'depends:',
         '  - example.test/main/open',
-        'recommendation:',
-        '  adopts: other-way',
-        '  class: ratified',
-        '  boldness: high',
-        `  amends: ${'b'.repeat(40)}`,
-        '  at: a1b2c3d',
         'form: rule',
         'review:',
         '  verdict: forward',
@@ -188,15 +289,105 @@ describe('derive.mjs', () => {
       ].join('\n'),
       answer: 'Ans.', rationale: null,
     });
-    assert.equal(bare, dressedUp, 'stage, alternatives, depends, recommendation, and review are all stripped');
+    assert.equal(bare, dressedUp, 'adding an option must not stale every pin');
   });
 
-  test('deriveDraftHash and deriveStandingHash agree with the reader on a real fixture node', async () => {
-    const graph = await readGraph(path.join(FIXTURES, 'valid-alternatives'));
-    const fresh = graph.nodes.find((n) => n.id === 'example.test/main/fresh-node');
-    assert.equal(fresh.recommendation.amends, fresh.standingHash, 'the fixture pins the current standing hash');
-    assert.equal(fresh.review.of, fresh.draftHash, 'the fixture pins the current fence hash');
-    assert.notEqual(fresh.standingHash, fresh.draftHash, 'a fence makes the two hashes diverge');
+  test('deriveFactRecommendationHash: name, recommends, boldness, the fact prose, the option prose, and -- for the answer fact -- the recommended text', () => {
+    const f = fact('answer', [{ name: 'standing', prose: '' }, { name: 'other', prose: 'The other way.' }], {
+      recommends: 'other', boldness: 'high', stands: 'standing', prose: 'Why the other way.',
+    });
+    const withFence = { fmText: 'question: Q?', answer: 'Ans.', rationale: null, fence: { raw: 'FENCE' }, facts: [f] };
+    assert.equal(
+      deriveFactRecommendationHash(withFence, f),
+      createHash('sha1').update('answer\nother\nhigh\nWhy the other way.\nThe other way.\nFENCE', 'utf8').digest('hex'),
+    );
+
+    const noFence = { ...withFence, fence: null };
+    assert.equal(
+      deriveFactRecommendationHash(noFence, f),
+      createHash('sha1').update('answer\nother\nhigh\nWhy the other way.\nThe other way.\nquestion: Q?\nAns.\n', 'utf8').digest('hex'),
+      'with no fence the recommended text is the standing text',
+    );
+
+    const reserved = fact('existence', ['keep', 'prune'], { recommends: 'prune', boldness: 'low' });
+    assert.equal(
+      deriveFactRecommendationHash(noFence, reserved),
+      createHash('sha1').update('existence\nprune\nlow\n\n', 'utf8').digest('hex'),
+      'a reserved fact folds in no text of its own',
+    );
+
+    assert.equal(deriveFactRecommendationHash(noFence, fact('existence', ['keep'])), '', 'nothing recommended, nothing to pin');
+  });
+
+  test('deriveRecommendationHash: every fact name and hash in facts order -- what review.of pins', () => {
+    const a = fact('answer', ['standing'], { recommends: 'standing', boldness: 'low', stands: 'standing' });
+    const e = fact('existence', ['keep', 'prune'], { recommends: 'keep', boldness: 'low' });
+    const n = { fmText: 'question: Q?', answer: 'Ans.', rationale: null, fence: null, facts: [a, e] };
+    const expected = createHash('sha1').update(
+      `answer\n${deriveFactRecommendationHash(n, a)}\nexistence\n${deriveFactRecommendationHash(n, e)}`,
+      'utf8',
+    ).digest('hex');
+    assert.equal(deriveRecommendationHash(n), expected);
+  });
+
+  test('moved: a ruling whose pin no longer matches its fact; per fact and for the node', () => {
+    const f = fact('answer', [{ name: 'standing', ruling: ruling('a'.repeat(40)) }], {
+      recommends: 'standing', boldness: 'low', stands: 'standing',
+    });
+    const n = { id: 'n', fmText: 'question: Q?', answer: 'Ans.', rationale: null, fence: null, facts: [f] };
+    assert.equal(factMoved(n, f), true);
+    assert.equal(moved(n), true);
+    assert.equal(proposal(n), true, 'a ratified node whose recommendation has moved is a proposal');
+
+    f.options[0].ruling = ruling(deriveFactRecommendationHash(n, f));
+    assert.equal(moved(n), false);
+    assert.equal(proposal(n), false);
+    assert.equal(factMoved(n, fact('existence', ['keep'])), false, 'a fact with no ruling has nothing to move from');
+  });
+
+  test('moved is per fact: a delegated node stays off the frontier when only the answer fact moves', () => {
+    const answer = fact('answer', ['standing', 'narrower'], {
+      recommends: 'narrower', boldness: 'low', stands: 'standing',
+    });
+    const authority = fact('authority', [{ name: 'delegated', ruling: null }], { recommends: 'delegated', boldness: 'low' });
+    const n = { id: 'n', fmText: 'question: Q?', answer: 'Ans.', rationale: null, fence: { raw: 'F' }, facts: [answer, authority] };
+    authority.options[0].ruling = ruling(deriveFactRecommendationHash(n, authority));
+    assert.equal(moved(n), false, 'the ruling is on the authority fact, whose recommendation has not moved');
+    assert.equal(deriveClass(n, [n]), 'delegated');
+  });
+
+  test('divergesFromRecommendation: the author ruled against the recommendation, which is not a move', () => {
+    const f = fact('answer', [{ name: 'standing', ruling: ruling('x') }, 'bolder'], {
+      recommends: 'bolder', boldness: 'high', stands: 'standing',
+    });
+    const n = { id: 'n', fmText: 'q', answer: 'A', rationale: null, fence: { raw: 'F' }, facts: [f] };
+    assert.equal(divergesFromRecommendation(n), true);
+    f.recommends = 'standing';
+    assert.equal(divergesFromRecommendation(n), false);
+    assert.equal(divergesFromRecommendation(node('unruled', { facts: [fact('answer', ['standing'])] })), false);
+  });
+
+  test('onFrontier and reviewStale', () => {
+    assert.equal(onFrontier({ stage: 'review' }), true);
+    assert.equal(onFrontier({ stage: null }), false);
+    assert.equal(onFrontier({}), false);
+    const n = { fmText: 'q', answer: null, rationale: null, fence: null, facts: [] };
+    assert.equal(reviewStale({ ...n, review: null }), false);
+    assert.equal(reviewStale({ ...n, review: { of: 'a'.repeat(40) } }), true);
+    assert.equal(reviewStale({ ...n, review: { of: deriveRecommendationHash(n) } }), false);
+  });
+
+  test("deriveReadings inverts every reading's bears, keyed by node, fact, and option", () => {
+    const readings = deriveReadings([
+      { id: 'z', bears: [{ node: 'target', fact: 'answer', option: 'standing', relation: 'diverged' }] },
+      { id: 'a', bears: [{ node: 'target', fact: 'answer', option: 'standing', relation: 'adopted' }] },
+      { id: 'no-bears' },
+    ]);
+    assert.deepEqual(readings.get('target\nanswer\nstanding'), [
+      { id: 'a', relation: 'adopted' },
+      { id: 'z', relation: 'diverged' },
+    ]);
+    assert.equal(readings.get('target\nanswer\nother'), undefined);
   });
 });
 
@@ -206,31 +397,39 @@ describe('derive.mjs', () => {
 
 describe('parseNode', () => {
   const loc = { id: 'm/g/s', graph: 'g', slug: 's', path: 'g/s.md' };
+  const ANSWER_FACT = [
+    'facts:',
+    '  - name: answer',
+    '    options:',
+    '      - name: standing',
+    '        source: ai',
+    '        ref: "2026-09-04"',
+    '    stands: standing',
+  ];
 
   test('parses a minimal unanswered (un-aligned) question', () => {
-    const node = parseNode('---\nquestion: What?\nstage: periagogic\n---\n\n## Disposition\n\nOpen for now.\n', loc);
-    assert.equal(node.question, 'What?');
-    assert.equal(node.answer, null);
-    assert.equal(node.form, null);
-    assert.equal(node.stage, 'periagogic');
-    assert.equal(node.disposition, 'Open for now.');
-    assert.deepEqual(node.under, []);
-    assert.deepEqual(node.cites, []);
-    assert.deepEqual(node.shims, []);
+    const n = parseNode('---\nquestion: What?\nstage: periagogic\n---\n\n## Disposition\n\nOpen for now.\n', loc);
+    assert.equal(n.question, 'What?');
+    assert.equal(n.answer, null);
+    assert.equal(n.form, null);
+    assert.equal(n.stage, 'periagogic');
+    assert.equal(n.disposition, 'Open for now.');
+    assert.deepEqual(n.under, []);
+    assert.deepEqual(n.cites, []);
+    assert.deepEqual(n.shims, []);
+    assert.deepEqual(n.facts, []);
+    assert.equal(n.answerFact, null);
+    assert.equal(n.fence, null);
+    assert.equal(n.onFrontier, true);
+    assert.equal(n.moved, false);
   });
 
   test('rejects a file with no frontmatter delimiter', () => {
-    assert.throws(
-      () => parseNode('question: What?\n', loc),
-      /frontmatter delimiter/,
-    );
+    assert.throws(() => parseNode('question: What?\n', loc), /frontmatter delimiter/);
   });
 
   test('rejects unclosed frontmatter', () => {
-    assert.throws(
-      () => parseNode('---\nquestion: What?\n', loc),
-      /never closed/,
-    );
+    assert.throws(() => parseNode('---\nquestion: What?\n', loc), /never closed/);
   });
 
   test('collects multiple problems from one file, not just the first', () => {
@@ -240,24 +439,44 @@ describe('parseNode', () => {
       assert.ok(lines.some((l) => l.includes("unknown frontmatter key 'bogus'")));
       assert.ok(lines.some((l) => l.includes("'question' is required")));
       assert.ok(lines.some((l) => l.includes("'source' is required")));
-      assert.ok(lines.some((l) => l.includes("'relation' is required")));
+      assert.ok(lines.some((l) => l.includes("'bears' is required")));
       assert.ok(lines.every((l) => l.startsWith('g/s.md: ')));
       return true;
     });
   });
 
+  // ---- the keys the encoding of 2026-09-04 removed ----
+
+  for (const [key, block] of [
+    ['authority', 'authority:\n  class: ratified\n  by: x\n  date: 2026-01-01'],
+    ['alternatives', 'alternatives:\n  - name: other\n    source: ai'],
+    ['recommendation', 'recommendation:\n  adopts: standing\n  boldness: low'],
+    ['relation', 'relation: adopted'],
+  ]) {
+    test(`'${key}' is rejected by name, not as an unknown key`, () => {
+      const text = `---\nquestion: What?\nstage: periagogic\n${block}\n---\n\n## Disposition\n\nOpen.\n`;
+      assert.throws(() => parseNode(text, loc), (err) => {
+        assert.match(err.message, new RegExp(`'${key}' is no longer a frontmatter key: the encoding changed on 2026-09-04`));
+        assert.doesNotMatch(err.message, new RegExp(`unknown frontmatter key '${key}'`));
+        return true;
+      });
+    });
+  }
+
   // ---- order: per-file shape checks (graph-level scope/existence checks
   // need the whole graph and are covered by the fixtures below instead). ----
 
+  const answered = (extraFm) => [
+    '---', 'question: Q?', 'form: rule', 'stage: maieutic', ...(extraFm ?? []), ...ANSWER_FACT, '---', '',
+    '## Answer', '', 'x', '',
+  ].join('\n');
+
   test('order: a bare string step and a tied-list step both normalize to arrays of ids', () => {
-    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\nstage: maieutic\norder:\n  - [a, b]\n  - c\n---\n\n## Answer\n\nx\n';
-    const node = parseNode(text, loc);
-    assert.deepEqual(node.order, [['a', 'b'], ['c']]);
+    assert.deepEqual(parseNode(answered(['order:', '  - [a, b]', '  - c']), loc).order, [['a', 'b'], ['c']]);
   });
 
   test('order: absent field normalizes to an empty array', () => {
-    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\nstage: maieutic\n---\n\n## Answer\n\nx\n';
-    assert.deepEqual(parseNode(text, loc).order, []);
+    assert.deepEqual(parseNode(answered(), loc).order, []);
   });
 
   test('order: rejects a non-list value and a step that is neither a string nor a list', () => {
@@ -265,18 +484,15 @@ describe('parseNode', () => {
       () => parseNode('---\nquestion: Q?\nstage: periagogic\norder: not-a-list\n---\n\n## Disposition\n\nx\n', loc),
       /'order' must be a list of steps, each a node id or a list of node ids/,
     );
-    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\norder:\n  - 5\n---\n\n## Answer\n\nx\n';
-    assert.throws(() => parseNode(text, loc), /'order' must be a list of steps, each a node id or a list of node ids/);
+    assert.throws(() => parseNode(answered(['order:', '  - 5']), loc), /'order' must be a list of steps/);
   });
 
   test('order: an empty-list step is reported by number, one-based', () => {
-    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\norder:\n  - a\n  - []\n---\n\n## Answer\n\nx\n';
-    assert.throws(() => parseNode(text, loc), /'order' step 2 is empty/);
+    assert.throws(() => parseNode(answered(['order:', '  - a', '  - []']), loc), /'order' step 2 is empty/);
   });
 
   test('order: an id repeated across steps is reported once per repeat', () => {
-    const text = '---\nquestion: Q?\nform: rule\nauthority:\n  class: deferred\n  by: x\n  date: 2026-01-01\norder:\n  - a\n  - [a, b]\n---\n\n## Answer\n\nx\n';
-    assert.throws(() => parseNode(text, loc), /'order' names a twice/);
+    assert.throws(() => parseNode(answered(['order:', '  - a', '  - [a, b]']), loc), /'order' names a twice/);
   });
 
   test("order requires an '## Answer' section", () => {
@@ -286,92 +502,147 @@ describe('parseNode', () => {
 
   // ---- '## Recommendation': dialogue.md's "the validator parses it and
   // checks only that it answers the same question" -- no field rule, shape
-  // rule, vocabulary, or section-requirement rule applies inside the fence. ----
+  // rule, or vocabulary applies inside the fence beyond the keys that belong
+  // to the node rather than to the text it would stand on. ----
 
-  test('a ## Recommendation fence with an unknown frontmatter key parses without error -- only structure and the question are checked', () => {
-    const text = [
-      '---',
-      'question: What?',
-      'stage: periagogic',
-      '---',
-      '',
-      '## Disposition',
-      '',
-      'Open.',
-      '',
-      '## Recommendation',
-      '',
-      '```markdown',
-      '---',
-      'question: What?',
-      'bogus: true',
-      '---',
-      '',
-      '## Answer',
-      '',
-      'x',
-      '```',
-      '',
-    ].join('\n');
-    const node = parseNode(text, loc);
-    assert.ok(node.draft, 'the draft parses despite its unrecognized frontmatter key');
-    assert.equal(node.draft.question, 'What?');
+  const fenced = (fenceLines) => [
+    '---', 'question: What?', 'form: rule', 'stage: maieutic',
+    'facts:', '  - name: answer', '    options:',
+    '      - name: standing', '        source: ai', '        ref: "2026-09-04"',
+    '      - name: other-way', '        source: ai', '        ref: "2026-09-04"',
+    '    recommends: other-way', '    boldness: low', '    stands: standing', '---', '',
+    '## Answer', '', 'x', '',
+    '## Facts', '', '### answer', '', '#### other-way', '', 'The other way.', '',
+    '## Recommendation', '', '```markdown', ...fenceLines, '```', '',
+  ].join('\n');
+
+  test('a fence with an unknown frontmatter key parses -- only structure, the question, and the forbidden keys are checked', () => {
+    const n = parseNode(fenced(['---', 'question: What?', 'bogus: true', '---', '', '## Answer', '', 'x']), loc);
+    assert.ok(n.fence, 'the fence parses despite its unrecognized frontmatter key');
+    assert.equal(n.fence.question, 'What?');
+    assert.equal(n.fence.frontmatter.bogus, true, 'the frontmatter comes back exactly as written');
+    assert.equal(n.fence.sections.Answer, 'x');
   });
 
-  // ---- '## Alternatives': every line of it belongs to one alternative,
-  // so prose before the first '### ' heading has no alternative to belong
-  // to. (The list/heading correspondence rules are covered by fixtures.) ----
+  for (const key of ['authority', 'facts', 'stage', 'review', 'depends']) {
+    test(`a fence carrying '${key}' is rejected: it belongs to the node, not to the text it would stand on`, () => {
+      const value = key === 'facts' || key === 'depends' ? '\n  - name: answer' : key === 'stage' ? ' review' : '\n  x: 1';
+      const text = fenced(['---', 'question: What?', `${key}:${value}`, '---', '', '## Answer', '', 'x']);
+      assert.throws(() => parseNode(text, loc), new RegExp(`'## Recommendation' carries '${key}'`));
+    });
+  }
 
-  test("'## Alternatives' rejects prose before its first '### ' heading", () => {
+  test("a fence carrying a '## Facts' section is rejected for the same reason", () => {
+    const text = fenced(['---', 'question: What?', '---', '', '## Answer', '', 'x', '', '## Facts', '', '### answer', '', 'y']);
+    assert.throws(() => parseNode(text, loc), /'## Recommendation' carries a '## Facts' section/);
+  });
+
+  // ---- '## Facts': one '### <fact>' per fact that needs explaining, one
+  // '#### <option>' per answer option that is not the one that stands. ----
+
+  test("'## Facts' rejects prose before its first '### ' heading", () => {
     const text = [
-      '---',
-      'question: What?',
-      'stage: periagogic',
-      'alternatives:',
-      '  - name: other-way',
-      '    source: ai',
-      '---',
-      '',
-      '## Disposition',
-      '',
-      'Open.',
-      '',
-      '## Alternatives',
-      '',
-      'Stray prose belonging to no alternative.',
-      '',
-      '### other-way',
-      '',
-      'The one alternative on the table.',
-      '',
+      '---', 'question: What?', 'stage: periagogic',
+      'facts:', '  - name: existence', '    options:', '      - name: keep', '      - name: prune', '---', '',
+      '## Disposition', '', 'Open.', '',
+      '## Facts', '', 'Stray prose belonging to no fact.', '', '### existence', '', 'Keep it.', '',
     ].join('\n');
     assert.throws(
       () => parseNode(text, loc),
-      /'## Alternatives' has text before the first '### ' heading: "Stray prose belonging to no alternative\."/,
+      /'## Facts' has text before the first '### ' heading: "Stray prose belonging to no fact\."/,
     );
   });
 
-  test("a '### ' heading outside '## Alternatives' stays content", () => {
+  test("a '###' heading outside '## Facts' stays content, and so does a '####' one", () => {
     const text = [
-      '---',
-      'question: What?',
-      'stage: periagogic',
-      '---',
-      '',
-      '## Disposition',
-      '',
-      'Open.',
-      '',
-      '## Account',
-      '',
-      '### Clean-context review, 2026-09-03',
-      '',
-      'The reviewer read the node and forwarded it.',
-      '',
+      '---', 'question: What?', 'stage: periagogic', '---', '',
+      '## Disposition', '', 'Open.', '',
+      '## Account', '', '### Clean-context review, 2026-09-03', '',
+      'The reviewer read the node and forwarded it.', '', '#### A nested note', '', 'Which is content too.', '',
     ].join('\n');
-    const node = parseNode(text, loc);
-    assert.ok(node.account.startsWith('### Clean-context review, 2026-09-03'));
-    assert.deepEqual(node.alternativesText, {});
+    const n = parseNode(text, loc);
+    assert.ok(n.account.startsWith('### Clean-context review, 2026-09-03'));
+    assert.ok(n.account.includes('#### A nested note'));
+    assert.deepEqual(n.facts, []);
+  });
+
+  test("a '### ' heading inside a fenced example within '## Facts' is content, not a subsection", () => {
+    const text = [
+      '---', 'question: What?', 'stage: periagogic',
+      'facts:', '  - name: existence', '    options:', '      - name: keep', '      - name: prune', '---', '',
+      '## Disposition', '', 'Open.', '',
+      '## Facts', '', '### existence', '', 'Shown by example:', '', '```', '### mysterious', '```', '',
+    ].join('\n');
+    const n = parseNode(text, loc);
+    assert.ok(n.facts[0].prose.includes('### mysterious'), 'the fenced heading survives as prose');
+  });
+
+  test('the fact and option prose land on the fact and the option', () => {
+    const text = [
+      '---', 'question: What?', 'form: rule', 'stage: maieutic',
+      'facts:', '  - name: answer', '    options:',
+      '      - name: standing', '        source: ai', '        ref: "2026-09-04"',
+      '      - name: other-way', '        source: ai', '        ref: "2026-09-04"',
+      '    stands: standing',
+      '  - name: existence', '    options:', '      - name: keep', '      - name: prune', '---', '',
+      '## Answer', '', 'x', '',
+      '## Facts', '', '### answer', '', 'Why this one.', '', '#### other-way', '', 'The road not taken.', '',
+      '### existence', '', 'Keep it.', '',
+    ].join('\n');
+    const n = parseNode(text, loc);
+    assert.equal(n.answerFact.prose, 'Why this one.');
+    assert.equal(n.answerFact.options[0].prose, '', "the standing option's text is the '## Answer' section");
+    assert.equal(n.answerFact.options[1].prose, 'The road not taken.');
+    assert.equal(n.facts[1].prose, 'Keep it.');
+    assert.equal(n.facts[1].options[0].prose, '');
+  });
+
+  test("a reserved fact's options may carry '#### ' subsections, and need not carry all of them", () => {
+    const text = [
+      '---', 'question: What?', 'stage: periagogic',
+      'facts:', '  - name: existence', '    options:', '      - name: keep', '      - name: prune', '---', '',
+      '## Disposition', '', 'Open.', '',
+      '## Facts', '', '### existence', '', 'Why prune.', '', '#### prune', '', 'Fold it into the parent.', '',
+    ].join('\n');
+    const n = parseNode(text, loc);
+    assert.equal(n.facts[0].options[1].prose, 'Fold it into the parent.');
+    assert.equal(n.facts[0].options[0].prose, '');
+  });
+
+  test('a fact may be omitted from ## Facts, but an answer option that is not the standing one may not', () => {
+    const withOwedOption = [
+      '---', 'question: What?', 'form: rule', 'stage: maieutic',
+      'facts:', '  - name: answer', '    options:',
+      '      - name: standing', '        source: ai', '        ref: "2026-09-04"',
+      '      - name: other-way', '        source: ai', '        ref: "2026-09-04"',
+      '    stands: standing', '---', '', '## Answer', '', 'x', '',
+      '## Facts', '', '### answer', '', 'Why this one.', '',
+    ].join('\n');
+    assert.throws(() => parseNode(withOwedOption, loc), /expected '#### other-way' at position 1, found nothing/);
+    // the same node with no '## Facts' section at all names what is owed
+    assert.throws(
+      () => parseNode(withOwedOption.split('\n## Facts')[0] + '\n', loc),
+      /the answer fact carries 'other-way' beside the option that stands, which requires a '## Facts' section/,
+    );
+  });
+
+  test("the option named by 'stands' may keep a '#### ' subsection of its own", () => {
+    const text = [
+      '---', 'question: What?', 'form: rule', 'stage: maieutic',
+      'facts:', '  - name: answer', '    options:',
+      '      - name: standing', '        source: ai', '        ref: "2026-09-04"',
+      '    stands: standing', '---', '', '## Answer', '', 'x', '',
+      '## Facts', '', '### answer', '', 'Why this one.', '', '#### standing', '', 'What it answers.', '',
+    ].join('\n');
+    assert.equal(parseNode(text, loc).answerFact.options[0].prose, 'What it answers.');
+  });
+
+  test('facts keep the order they are written in -- presentation order, not a reserved one', () => {
+    const order = [['persistence', 'present'], ['authority', 'delegated'], ['existence', 'keep']];
+    const lines = ['---', 'question: What?', 'stage: periagogic', 'facts:'];
+    for (const [name, option] of order) lines.push(`  - name: ${name}`, '    options:', `      - name: ${option}`);
+    lines.push('---', '', '## Disposition', '', 'Open.', '');
+    assert.deepEqual(parseNode(lines.join('\n'), loc).facts.map((f) => f.name), order.map(([n]) => n));
   });
 });
 
@@ -408,9 +679,9 @@ describe('readGraph: valid fixture', () => {
 
   async function byId(id) {
     const graph = await graphPromise;
-    const node = graph.nodes.find((n) => n.id === id);
-    assert.ok(node, `expected a node with id ${id}`);
-    return node;
+    const n = graph.nodes.find((x) => x.id === id);
+    assert.ok(n, `expected a node with id ${id}`);
+    return n;
   }
 
   test('rank: exact per-node numbers', async () => {
@@ -424,24 +695,27 @@ describe('readGraph: valid fixture', () => {
     assert.equal((await byId('example.test/pub/note2')).rank, 0.25);
   });
 
-  test('ceiling: nearest ratified ancestor across a multi-parent join, or null', async () => {
+  test('ceiling: nearest ancestor whose class is ratified, across a multi-parent join, or null', async () => {
     assert.equal((await byId('example.test/main/root-a')).ceiling, null);
     assert.equal((await byId('example.test/main/root-b')).ceiling, null, 'ratified is not its own ceiling');
     assert.equal((await byId('example.test/pub/note')).ceiling, null);
     assert.equal((await byId('example.test/main/child-a1')).ceiling, null);
-    assert.equal((await byId('example.test/main/child-a2')).ceiling, null);
-    assert.equal((await byId('example.test/pub/note2')).ceiling, null);
     assert.equal((await byId('example.test/main/multi')).ceiling, 'example.test/main/root-b');
     assert.equal((await byId('example.test/main/reading')).ceiling, 'example.test/main/root-b');
   });
 
-  test('status', async () => {
-    assert.equal((await byId('example.test/main/root-a')).status, 'unanswered');
-    assert.equal((await byId('example.test/main/root-b')).status, 'answered');
-    assert.equal((await byId('example.test/main/child-a1')).status, 'unanswered');
-    assert.equal((await byId('example.test/main/child-a2')).status, 'unanswered');
-    assert.equal((await byId('example.test/main/multi')).status, 'unanswered');
-    assert.equal((await byId('example.test/main/reading')).status, 'unanswered');
+  test('class and status', async () => {
+    const rootB = await byId('example.test/main/root-b');
+    assert.equal(rootB.class, 'ratified');
+    assert.deepEqual(rootB.classSource, { kind: 'ruling' });
+    assert.equal(rootB.status, 'answered');
+    assert.equal(rootB.stage, null, 'a ratified node carries no stage');
+    for (const slug of ['root-a', 'child-a1', 'child-a2', 'multi', 'reading']) {
+      const n = await byId(`example.test/main/${slug}`);
+      assert.equal(n.class, 'unanswered', `${slug} carries no ruling and none reaches it`);
+      assert.equal(n.classSource, null);
+      assert.equal(n.status, 'unanswered');
+    }
   });
 
   test('children', async () => {
@@ -450,7 +724,6 @@ describe('readGraph: valid fixture', () => {
       'example.test/main/child-a2',
     ]);
     assert.deepEqual((await byId('example.test/main/root-b')).children, ['example.test/main/multi']);
-    assert.deepEqual((await byId('example.test/main/child-a1')).children, ['example.test/main/multi']);
     assert.deepEqual((await byId('example.test/main/child-a2')).children, []);
     assert.deepEqual((await byId('example.test/main/multi')).children, ['example.test/main/reading']);
     assert.deepEqual((await byId('example.test/pub/note')).children, ['example.test/pub/note2']);
@@ -470,11 +743,17 @@ describe('readGraph: valid fixture', () => {
     ]);
   });
 
-  test('reading node carries source and relation', async () => {
+  test("a reading carries source and bears; an entry with no node of its own takes the reading's one parent", async () => {
     const reading = await byId('example.test/main/reading');
     assert.equal(reading.form, 'reading');
     assert.equal(reading.source, 'Aristotle, Nicomachean Ethics I.4');
-    assert.equal(reading.relation, 'adopted');
+    assert.deepEqual(reading.bears, [
+      { node: 'example.test/main/multi', fact: 'answer', option: 'standing', relation: 'adopted' },
+    ]);
+    const multi = await byId('example.test/main/multi');
+    assert.deepEqual(multi.answerFact.options[0].readings, [
+      { id: 'example.test/main/reading', relation: 'adopted' },
+    ], 'the option carries the derived inverse');
   });
 
   test('boost is recorded only on the ratified node', async () => {
@@ -483,10 +762,134 @@ describe('readGraph: valid fixture', () => {
   });
 
   test('hash is a 40-hex git blob sha', async () => {
-    const node = await byId('example.test/main/root-a');
-    assert.match(node.hash, /^[0-9a-f]{40}$/);
+    const n = await byId('example.test/main/root-a');
+    assert.match(n.hash, /^[0-9a-f]{40}$/);
     const bytes = await readFile(path.join(VALID_DIR, 'main/root-a.md'));
-    assert.equal(node.hash, blobSha1(bytes));
+    assert.equal(n.hash, blobSha1(bytes));
+  });
+
+  test('the reader recomputes its own hashes from the node it returns', async () => {
+    const n = await byId('example.test/main/root-b');
+    assert.equal(deriveStandingHash(n), n.standingHash);
+    assert.equal(deriveRecommendationHash(n), n.recommendationHash);
+    assert.equal(n.answerFact.options[0].ruling.of, n.answerFact.recommendationHash, 'the fixture pins its own recommendation');
+    assert.equal(n.moved, false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readGraph: valid-rulings fixture -- the class, read off the rulings
+// ---------------------------------------------------------------------------
+
+describe('readGraph: valid-rulings fixture', () => {
+  const graphPromise = readGraph(path.join(FIXTURES, 'valid-rulings'));
+  async function bySlug(slug) {
+    const graph = await graphPromise;
+    const n = graph.nodes.find((x) => x.slug === slug);
+    assert.ok(n, `expected a node with slug ${slug}`);
+    return n;
+  }
+
+  test('a ruled answer fact makes the node ratified, off the frontier, and not a proposal', async () => {
+    const n = await bySlug('ratified');
+    assert.equal(n.class, 'ratified');
+    assert.deepEqual(n.classSource, { kind: 'ruling' });
+    assert.equal(n.status, 'answered');
+    assert.equal(n.stage, null);
+    assert.equal(n.onFrontier, false);
+    assert.equal(n.moved, false);
+    assert.equal(n.proposal, false);
+    assert.equal(n.divergesFromRecommendation, false);
+    assert.equal(n.answerFact.ruled, 'standing');
+    assert.equal(n.answerFact.options[0].ruling.response, 'confirm');
+  });
+
+  test('a ruled authority fact confers delegated, and the answer fact may then move without moving the node onto the frontier', async () => {
+    const n = await bySlug('delegated');
+    assert.equal(n.class, 'delegated');
+    assert.deepEqual(n.classSource, { kind: 'ruling' });
+    assert.equal(n.stage, null);
+    assert.equal(n.moved, false, 'the ruling is on the authority fact, and its recommendation has not moved');
+    assert.equal(n.answerFact.recommends, 'narrower');
+    assert.equal(n.answerFact.stands, 'standing');
+    assert.ok(n.fence, 'a recommendation that is not what stands is quoted whole');
+    assert.equal(n.fence.question, n.question);
+    assert.equal(n.facts[1].ruled, 'delegated');
+    assert.equal(n.facts[1].moved, false);
+  });
+
+  test('a ruled authority fact of deferred keeps the node on the alignment frontier', async () => {
+    const n = await bySlug('deferred');
+    assert.equal(n.class, 'deferred');
+    assert.equal(n.status, 'answered');
+    assert.equal(n.onFrontier, true);
+    assert.equal(n.stage, 'review');
+  });
+
+  test("a ruled authority fact of ratified leaves the node unanswered: the author has not been asked", async () => {
+    const n = await bySlug('authority-ratified');
+    assert.equal(n.class, 'unanswered');
+    assert.deepEqual(n.classSource, { kind: 'ruling' });
+    assert.equal(n.status, 'unanswered');
+    assert.equal(n.onFrontier, true);
+  });
+
+  test('an unruled node takes its class from the nearest ancestor that has one', async () => {
+    const delegated = await bySlug('inherits-delegated');
+    assert.equal(delegated.class, 'delegated');
+    assert.deepEqual(delegated.classSource, { kind: 'ancestor', id: 'example.test/main/delegated' });
+    assert.equal(delegated.stage, null, 'a delegated node is off the alignment frontier');
+
+    const deferred = await bySlug('inherits-deferred');
+    assert.equal(deferred.class, 'deferred');
+    assert.deepEqual(deferred.classSource, { kind: 'ancestor', id: 'example.test/main/deferred' });
+    assert.equal(deferred.stage, 'periagogic', 'a deferred node stays on it');
+  });
+
+  test('a ratified node whose recommendation has moved is a proposal, and carries a stage again', async () => {
+    const n = await bySlug('moved');
+    assert.equal(n.class, 'ratified');
+    assert.equal(n.moved, true);
+    assert.equal(n.proposal, true);
+    assert.equal(n.onFrontier, true);
+    assert.equal(n.answerFact.moved, true);
+    assert.notEqual(n.answerFact.options[0].ruling.of, n.answerFact.recommendationHash);
+  });
+
+  test('a ratified node whose ruled option is not the recommended one diverges, and is not on the frontier', async () => {
+    const n = await bySlug('diverges');
+    assert.equal(n.class, 'ratified');
+    assert.equal(n.divergesFromRecommendation, true);
+    assert.equal(n.moved, false, 'the ruling pins the recommendation it answered');
+    assert.equal(n.proposal, false);
+    assert.equal(n.onFrontier, false);
+    assert.equal(n.answerFact.ruled, 'standing');
+    assert.equal(n.answerFact.recommends, 'bolder');
+    assert.ok(n.fence, 'the recommended option is quoted whole beside what stands');
+  });
+
+  test('a reading bears on named options of named nodes, and each option carries the inverse', async () => {
+    const reading = await bySlug('reading-diverged');
+    assert.deepEqual(reading.bears, [
+      { node: 'example.test/main/delegated', fact: 'answer', option: 'narrower', relation: 'diverged' },
+      { node: 'example.test/main/ratified', fact: 'answer', option: 'standing', relation: 'adopted' },
+    ]);
+    const delegated = await bySlug('delegated');
+    const narrower = delegated.answerFact.options.find((o) => o.name === 'narrower');
+    assert.deepEqual(narrower.readings, [{ id: 'example.test/main/reading-diverged', relation: 'diverged' }]);
+    assert.deepEqual(delegated.answerFact.options[0].readings, [], 'the standing option carries none');
+    const ratified = await bySlug('ratified');
+    assert.deepEqual(ratified.answerFact.options[0].readings, [
+      { id: 'example.test/main/reading-diverged', relation: 'adopted' },
+    ]);
+  });
+
+  test('settles counts the descendants that carry a stage', async () => {
+    const deferred = await bySlug('deferred');
+    assert.equal(deferred.settles, 1, 'inherits-deferred carries a stage');
+    assert.deepEqual(deferred.settledBy, { under: 1, options: 1, depends: 0 });
+    const delegated = await bySlug('delegated');
+    assert.equal(delegated.settles, 0, 'neither node under it carries a stage');
   });
 });
 
@@ -496,40 +899,92 @@ describe('readGraph: valid fixture', () => {
 
 describe('readGraph: invalid fixtures', () => {
   const cases = [
+    // the keys the encoding of 2026-09-04 removed, each named in its message
+    ['invalid-authority-key', /'authority' is no longer a frontmatter key: the encoding changed on 2026-09-04, and a node's class is derived from the rulings on its facts/],
+    ['invalid-alternatives-key', /'alternatives' is no longer a frontmatter key/],
+    ['invalid-recommendation-key', /'recommendation' is no longer a frontmatter key/],
+    ['invalid-relation-key', /'relation' is no longer a frontmatter key/],
     ['invalid-unknown-key', /unknown frontmatter key 'bogus'/],
+    ['invalid-ledger-key', /unknown frontmatter key 'ledger'/],
+    // readings: source, bears, and what bears must resolve to
     ['invalid-reading-without-source', /'source' is required.*form: reading/],
+    ['invalid-bears-not-a-reading', /'bears' is only allowed when form: reading/],
+    ['invalid-bears-shape', /'bears' must be a non-empty list of \{node: <optional node id>, fact: answer\|authority\|existence\|persistence, option: <option name>, relation: adopted\|diverged\}/],
+    ['invalid-bears-node-required', /'bears' entry on fact 'answer' must name a 'node': the reading has 2 parents/],
+    ['invalid-bears-unknown-node', /'bears' names example\.test\/main\/does-not-exist, which is not a node/],
+    ['invalid-bears-unknown-fact', /'bears' names the 'existence' fact of example\.test\/main\/root, which has no such fact/],
+    ['invalid-bears-unknown-option', /'bears' names option nope on the 'answer' fact of example\.test\/main\/root, which has no such option/],
+    // references
     ['invalid-unresolved-under', /unresolved 'under' reference: example\.test\/main\/does-not-exist/],
     ['invalid-cycle', /cycle in 'under'/],
-    ['invalid-stamp-without-answer', /'authority' requires an '## Answer' section/],
-    ['invalid-stray-heading', /unexpected '## Notes' heading/],
-    // validator rule: a repeated id in 'under' would double that parent's
-    // rank contribution and duplicate the child in `children`.
     ['invalid-duplicate-under', /duplicate under reference: example\.test\/main\/root/],
-    // validator rule: an 'after' reference must resolve like 'under' does.
     ['invalid-unresolved-after', /unresolved after reference: example\.test\/main\/does-not-exist/],
-    // validator rules for 'depends': a dependency must resolve, must not
-    // repeat, must not be the node's own id, and must name an unanswered
-    // node -- a dependency is on an open question, not a settled one.
     ['invalid-unresolved-depends', /unresolved 'depends' reference: example\.test\/main\/does-not-exist/],
     ['invalid-duplicate-depends', /duplicate 'depends' reference: example\.test\/main\/root/],
-    ['invalid-depends-answered', /'depends' names example\.test\/main\/root, which is answered; a dependency is on an open question/],
     ['invalid-depends-self', /'depends' names itself/],
-    // '<id>#<alternative name>' entries: the alternative must be non-empty,
-    // and, once the ancestor resolves, must actually be listed on it.
-    ['invalid-depends-empty-alternative', /'depends' names an empty alternative on example\.test\/main\/root/],
-    ['invalid-depends-unknown-alternative', /'depends' names alternative nonexistent-alt on example\.test\/main\/root, which has no such alternative/],
-    // ledger is no longer a field: a 'ledger:' key is just another unknown key.
-    ['invalid-ledger-key', /unknown frontmatter key 'ledger'/],
-    ['invalid-shim-missing-liquidation', /'shims\[0\]\.liquidation' is required/],
-    ['invalid-shim-unknown-key', /unknown key 'shims\[0\]\.bogus'/],
-    // status / dialogue rules (session-context: an unanswered node -- a
-    // deferred stamp, no stamp, or no '## Answer' -- carries the dialogue).
-    ['invalid-unaligned-without-stage', /example\.test\/main\/bad is unanswered and must carry stage/],
+    ['invalid-depends-no-stage', /'depends' names example\.test\/main\/root, which carries no stage; a dependency is on an open question/],
+    ['invalid-depends-empty-option', /'depends' names an empty option on example\.test\/main\/root/],
+    ['invalid-depends-unknown-option', /'depends' names option nonexistent-option on example\.test\/main\/root, whose answer fact has no such option/],
+    // sections
+    ['invalid-stray-heading', /unexpected '## Notes' heading \(only Disposition, Answer, Rationale, Facts, Recommendation, Account are allowed\)/],
+    ['invalid-alternatives-heading', /unexpected '## Alternatives' heading \(only Disposition, Answer, Rationale, Facts, Recommendation, Account are allowed\)/],
+    ['invalid-section-order', /'## Disposition' heading is out of order/],
+    // facts: shape, names, order, options
+    ['invalid-facts-shape', /'facts' must be a non-empty list of \{name: answer\|authority\|existence\|persistence, options: <one or more \{name: <lowercase slug on the answer fact, non-empty on a reserved one>, source: <non-empty string>, ref: <non-empty string>, ruling: <optional \{response: confirm\|edit, date: YYYY-MM-DD, of: <hash>\}>\}>/],
+    ['invalid-fact-unknown-name', /'facts' must be a non-empty list of \{name: answer\|authority\|existence\|persistence/],
+    ['invalid-ruling-response', /'facts' must be a non-empty list of .*ruling: <optional \{response: confirm\|edit/],
+    ['invalid-duplicate-fact', /duplicate fact 'existence'/],
+    ['invalid-answer-fact-not-first', /'facts' lists the answer fact at position 2; the answer fact comes first/],
+    ['invalid-option-duplicate-name', /fact 'existence' names option 'keep' twice/],
+    ['invalid-answer-option-without-source', /fact 'answer' option 'only-way' requires 'source' \(author, ai, review, or the node or instrument that raised it\)/],
+    ['invalid-answer-option-without-ref', /fact 'answer' option 'only-way' requires 'ref'/],
+    ['invalid-fact-authority-class', /fact 'authority' may only offer the classes a ruling confers: ratified, delegated, deferred/],
+    ['invalid-fact-recommends-unlisted', /fact 'existence' recommends 'delete', which is not one of its own options/],
+    ['invalid-boldness-without-recommends', /fact 'existence' states a boldness but recommends no option/],
+    ['invalid-two-rulings', /fact 'answer' carries a ruling on 2 options \(standing, other-way\); the author rules on one/],
+    // what stands, what is recommended, and the fence between them
+    ['invalid-stands-unlisted', /fact 'answer' stands on 'elsewhere', which is not one of its own options/],
+    ['invalid-stands-not-ruled', /fact 'answer' is ruled on 'the-ruled-one' but stands on 'standing'; what stands is what the author confirmed/],
+    ['invalid-stands-without-answer', /'stands' names the option whose text '## Answer' holds, so it requires an '## Answer' section/],
+    ['invalid-answer-without-fact', /an '## Answer' section requires an answer fact, whose options are the candidate answers to this question/],
+    ['invalid-stands-on-authority-fact', /fact 'authority' carries 'stands', which is the answer fact's alone/],
+    ['invalid-recommends-without-fence', /the answer fact recommends 'the-other-way' rather than the standing 'standing', which requires a '## Recommendation' section holding it whole/],
+    ['invalid-first-answer-without-fence', /the answer fact recommends 'only-way' and nothing stands yet, which requires a '## Recommendation' section holding the recommended node whole/],
+    ['invalid-fence-with-standing-recommendation', /'## Recommendation' holds the recommended node where it differs from what stands, and the answer fact recommends the standing option 'standing'/],
+    // the fence itself
+    ['invalid-fence-not-fenced', /'## Recommendation' must hold exactly one fenced markdown block/],
+    ['invalid-fence-parse-error', /'## Recommendation' does not parse as a node: /],
+    ['invalid-fence-wrong-question', /'## Recommendation' answers a different question/],
+    ['invalid-fence-forbidden-key', /'## Recommendation' carries 'facts', which belongs to the node and not to the text it would stand on/],
+    ['invalid-fence-facts-section', /'## Recommendation' carries a '## Facts' section, which belongs to the node and not to the text it would stand on/],
+    // stage: when it is required, and what it requires
+    ['invalid-stage-value', /'stage' must be one of: periagogic, maieutic, ruling, review/],
     ['invalid-stage-without-dialogue', /stage requires a '## Disposition', '## Account', or '## Answer' section/],
     ['invalid-disposition-without-stage', /'## Disposition' requires 'stage'/],
-    ['invalid-stage-value', /'stage' must be one of: periagogic, maieutic, ruling, review/],
+    ['invalid-dialogue-without-stage', /'review', 'depends', and '## Account' are parts of the dialogue and require stage/],
+    ['invalid-account-without-stage', /'review', 'depends', and '## Account' are parts of the dialogue and require stage/],
+    ['invalid-stage-needs-recommends', /stage review requires every fact to recommend one of its options; fact 'answer' recommends none/],
+    ['invalid-stage-ruling-needs-forward-review', /stage ruling requires a 'review' with verdict forward/],
+    ['invalid-unanswered-without-stage', /example\.test\/main\/bad is unanswered and must carry stage/],
+    ['invalid-deferred-without-stage', /example\.test\/main\/bad is deferred and must carry stage/],
+    ['invalid-inherited-deferred-without-stage', /example\.test\/main\/bad is deferred and must carry stage/],
+    ['invalid-moved-without-stage', /example\.test\/main\/bad has a recommendation that has moved since its ruling and must carry stage/],
+    // review
+    ['invalid-review-shape', /'review' must be \{verdict: forward\|kickback, strength: strong\|moderate\|weak\|none, date: YYYY-MM-DD, of: <sha1>\}/],
+    // `siblings` (the other drafts a per-node reviewer once read) is no
+    // longer part of the review schema now that every review is a batch
+    // over the whole frontier; this fixture's extra key fails the same
+    // generic shape check invalid-review-shape does.
+    ['invalid-review-siblings-unresolved', /'review' must be \{verdict: forward\|kickback/],
+    // '## Facts' and its subsections
+    ['invalid-facts-section-without-list', /'## Facts' requires a non-empty 'facts' list/],
+    ['invalid-facts-heading-mismatch', /'## Facts' has '### mysterious', which is not a fact on this node \(facts: existence\)/],
+    ['invalid-answer-option-heading-mismatch', /'### answer' subsections must match the answer fact's options in order: expected '#### second' at position 2, found '#### third'/],
+    ['invalid-answer-option-without-subsection', /the answer fact carries 'unwritten' beside the option that stands, which requires a '## Facts' section stating each in prose/],
+    // shims, tier, order
+    ['invalid-shim-missing-liquidation', /'shims\[0\]\.liquidation' is required/],
+    ['invalid-shim-unknown-key', /unknown key 'shims\[0\]\.bogus'/],
     ['invalid-unaligned-tier', /'tier' requires an '## Answer' section/],
-    ['invalid-section-order', /'## Disposition' heading is out of order/],
     // order rule (i): the boosts of b and c contradict the recorded step order.
     ['invalid-order-violated', /'order' step 2 names example\.test\/main\/b \(rank 0\.0090\), which does not outrank example\.test\/main\/c \(rank 0\.0901\) of step 3/],
     // order rule (ii): d is an unrelated (not ancestor) sibling that outranks
@@ -537,58 +992,6 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-order-head', /'order' puts example\.test\/main\/a in its first step, but example\.test\/main\/d \(rank 0\.9901\) outranks it and is not its ancestor/],
     ['invalid-order-unresolved', /'order' names example\.test\/main\/does-not-exist, which is not a node/],
     ['invalid-order-no-answer', /'order' requires an '## Answer' section/],
-    // dialogue fields: alternatives, recommendation, review, and the
-    // '## Alternatives' / '## Recommendation' / '## Account' sections.
-    ['invalid-recommendation-shape', /'recommendation' must be \{adopts: standing\|<alternative name>, boldness: low\|moderate\|high, amends: <sha1>, at: <7-40 hex commit>\}/],
-    ['invalid-recommendation-missing-amends', /'recommendation' must be \{adopts: .*amends: <sha1>, at: <7-40 hex commit>\}/],
-    ['invalid-review-shape', /'review' must be \{verdict: forward\|kickback, strength: strong\|moderate\|weak\|none, date: YYYY-MM-DD, of: <sha1>\}/],
-    // `siblings` (the other drafts a per-node reviewer once read) is no
-    // longer part of the review schema now that every review is a batch
-    // over the whole frontier; this fixture's extra 'siblings' key fails
-    // the same generic shape check invalid-review-shape does.
-    ['invalid-review-siblings-unresolved', /'review' must be \{verdict: forward\|kickback, strength: strong\|moderate\|weak\|none, date: YYYY-MM-DD, of: <sha1>\}/],
-    ['invalid-dialogue-without-stage', /'alternatives', 'facts', 'recommendation', 'review', 'depends', '## Alternatives', '## Facts', '## Recommendation', and '## Account' are parts of the dialogue and require stage/],
-    ['invalid-account-without-stage', /'alternatives', 'facts', 'recommendation', 'review', 'depends', '## Alternatives', '## Facts', '## Recommendation', and '## Account' are parts of the dialogue and require stage/],
-    // a node whose only dialogue-carrying field is 'facts' needs stage too.
-    ['invalid-facts-without-stage', /'alternatives', 'facts', 'recommendation', 'review', 'depends', '## Alternatives', '## Facts', '## Recommendation', and '## Account' are parts of the dialogue and require stage/],
-    ['invalid-draft-not-fenced', /'## Recommendation' must hold exactly one fenced markdown block/],
-    ['invalid-draft-parse-error', /'## Recommendation' does not parse as a node: /],
-    ['invalid-draft-wrong-question', /'## Recommendation' answers a different question/],
-    ['invalid-stage-needs-recommendation', /stage review or ruling requires 'recommendation'/],
-    ['invalid-stage-ruling-needs-forward-review', /stage ruling requires a 'review' with verdict forward/],
-    // the 'alternatives' list: its own shape, its unique names, and the
-    // name 'standing', which belongs to the node as it stands.
-    ['invalid-alternatives-shape', /'alternatives' must be a list of \{name: <lowercase slug>, source: author\|ai\|review\|proposal, ref: <non-empty string, required when source is proposal>\}/],
-    ['invalid-alternatives-proposal-without-ref', /'alternatives' must be a list of \{name: <lowercase slug>, source: author\|ai\|review\|proposal, ref: <non-empty string, required when source is proposal>\}/],
-    ['invalid-alternatives-duplicate-name', /'alternatives' names same twice/],
-    ['invalid-alternatives-standing-name', /'alternatives' names an alternative 'standing', which is reserved for the node as it stands/],
-    // '## Alternatives' stands with the list: present iff it is non-empty,
-    // one '### <name>' subsection per entry, in the entries' order.
-    ['invalid-alternatives-without-section', /'alternatives' is non-empty and requires a '## Alternatives' section/],
-    ['invalid-alternatives-section-without-list', /'## Alternatives' requires a non-empty 'alternatives' list/],
-    ['invalid-alternatives-heading-mismatch', /'## Alternatives' subsections must match the 'alternatives' list in order: expected '### second' at position 2, found '### third'/],
-    // 'recommendation.adopts' resolves, and the '## Recommendation' fence
-    // is present exactly when it names an alternative.
-    ['invalid-adopts-unlisted', /'recommendation\.adopts' names 'unlisted', which is neither 'standing' nor a listed alternative/],
-    ['invalid-adopts-standing-without-answer', /'recommendation\.adopts' is 'standing', which requires an '## Answer' section/],
-    ['invalid-adopts-standing-with-fence', /'recommendation\.adopts' is 'standing', so the node carries no '## Recommendation' section/],
-    ['invalid-adopts-alternative-without-fence', /'recommendation\.adopts' names the alternative 'the-other-way', which requires a '## Recommendation' section/],
-    // pruning is the 'existence' fact now, never an alternative, so there is
-    // no such thing as a "prune alternative" recommendation any more --
-    // every recommendation that adopts an alternative requires a fence, with
-    // no exception (the amendment of 2026-09-03).
-    // the two retired headings are now just unknown headings.
-    ['invalid-proposal-heading', /unexpected '## Proposal' heading \(only Disposition, Answer, Rationale, Alternatives, Facts, Recommendation, Account are allowed\)/],
-    ['invalid-draft-heading', /unexpected '## Draft' heading \(only Disposition, Answer, Rationale, Alternatives, Facts, Recommendation, Account are allowed\)/],
-    // facts: the reserved name vocabulary, the authority fact's restricted
-    // choice set, adopts/ruling coherence against the entry's own choices,
-    // and the '## Facts' section's subsequence correspondence with the list.
-    ['invalid-fact-unknown-name', /'facts' must be a list of \{name: authority\|existence\|persistence, choices: <two or more distinct non-empty strings>, adopts: <one of them>, boldness: low\|moderate\|high, ruling: <optional \{response: confirm\|edit\|deny, choice: <one of them>, date: YYYY-MM-DD, of: <sha1>\}>\}/],
-    ['invalid-fact-authority-class', /fact 'authority' may only choose among the classes a confirmation confers: ratified, delegated/],
-    ['invalid-fact-adopts-unlisted-choice', /fact 'existence' adopts 'delete', which is not one of its own choices/],
-    ['invalid-fact-ruling-shape', /fact 'existence' has a ruling on 'delete', which is not one of its own choices/],
-    ['invalid-facts-heading-mismatch', /'## Facts' has '### mysterious', which is not a fact on this node \(facts: existence\)/],
-    ['invalid-facts-section-without-list', /'## Facts' requires a non-empty 'facts' list/],
   ];
 
   for (const [dirName, pattern] of cases) {
@@ -607,23 +1010,23 @@ describe('readGraph: invalid fixtures', () => {
     await assert.rejects(readGraph(path.join(FIXTURES, 'invalid-reading-without-source')), (err) => {
       const lines = err.message.split('\n');
       assert.ok(lines.some((l) => l.includes("'source' is required")));
-      assert.ok(lines.some((l) => l.includes("'relation' is required")));
+      assert.ok(lines.some((l) => l.includes("'bears' is required")));
       return true;
     });
   });
 
-  test('invalid-draft-parse-error fails structurally (no frontmatter delimiter), not on any field rule', async () => {
-    await assert.rejects(readGraph(path.join(FIXTURES, 'invalid-draft-parse-error')), (err) => {
+  test('invalid-fence-parse-error fails structurally (no frontmatter delimiter), not on any field rule', async () => {
+    await assert.rejects(readGraph(path.join(FIXTURES, 'invalid-fence-parse-error')), (err) => {
       assert.match(err.message, /file must begin with a '---' frontmatter delimiter/);
-      assert.doesNotMatch(err.message, /authority\.date|unknown frontmatter key|'form' must be one of|unanswered and must carry stage/);
+      assert.doesNotMatch(err.message, /unknown frontmatter key|'form' must be one of|must carry stage/);
       return true;
     });
   });
 
-  test('invalid-draft-wrong-question fails on the question mismatch alone -- the fence is otherwise old-doctrine-valid', async () => {
-    await assert.rejects(readGraph(path.join(FIXTURES, 'invalid-draft-wrong-question')), (err) => {
+  test('invalid-fence-wrong-question fails on the question mismatch alone -- the fence is otherwise valid', async () => {
+    await assert.rejects(readGraph(path.join(FIXTURES, 'invalid-fence-wrong-question')), (err) => {
       const lines = err.message.split('\n');
-      assert.equal(lines.length, 1, 'no other field on this well-formed draft is checked, so this is the only problem');
+      assert.equal(lines.length, 1, 'no other field on this well-formed fence is checked, so this is the only problem');
       assert.match(lines[0], /'## Recommendation' answers a different question$/);
       return true;
     });
@@ -633,8 +1036,8 @@ describe('readGraph: invalid fixtures', () => {
     await assert.rejects(readGraph(path.join(FIXTURES, 'invalid-cycle')), (err) => {
       const lines = err.message.split('\n');
       assert.equal(lines.length, 2);
-      assert.ok(lines.some((l) => l.startsWith('main/a.md:')));
       assert.ok(lines.some((l) => l.startsWith('main/b.md:')));
+      assert.ok(lines.some((l) => l.startsWith('main/bad.md:')));
       return true;
     });
   });
@@ -646,58 +1049,48 @@ describe('readGraph: invalid fixtures', () => {
 });
 
 // ---------------------------------------------------------------------------
-// readGraph: fenced-body fixture
+// readGraph: the smaller valid fixtures
 // ---------------------------------------------------------------------------
 
 describe('readGraph: fenced-body fixture', () => {
-  // covers finding read.mjs:65 (parseBody fence handling): pre-fix, a '##'
-  // line inside a fenced code block was read as a real section boundary, so
-  // this fixture's nested '## Answer' example threw "duplicate '## Answer'
-  // heading" instead of parsing as content.
+  // covers parseBody's fence handling: pre-fix, a '##' line inside a fenced
+  // code block was read as a real section boundary, so this fixture's nested
+  // '## Answer' example threw "duplicate '## Answer' heading".
   test('a "## Answer" line inside a fenced example is content, not a section boundary', async () => {
     const graph = await readGraph(path.join(FIXTURES, 'valid-fenced-body'));
     assert.equal(graph.nodes.length, 1);
-    const node = graph.nodes[0];
-    assert.equal(node.rationale, null);
-    assert.equal(node.account, null, "the section is 'account' now, not 'proposal'");
-    assert.equal(node.proposal, undefined, "'proposal' is gone from the node object");
-    assert.ok(node.answer.startsWith('Real answer text before the example.'));
-    assert.ok(node.answer.endsWith('More real answer text after the fence.'));
+    const n = graph.nodes[0];
+    assert.equal(n.rationale, null);
+    assert.equal(n.account, null);
+    assert.equal(n.authority, undefined, "'authority' is gone from the node object");
+    assert.equal(n.alternatives, undefined, "'alternatives' is gone from the node object");
+    assert.equal(n.recommendation, undefined, "'recommendation' is gone from the node object");
+    assert.ok(n.answer.startsWith('Real answer text before the example.'));
+    assert.ok(n.answer.endsWith('More real answer text after the fence.'));
     assert.ok(
-      node.answer.includes('## Answer\n\nFenced example text that must not be treated as a boundary.'),
+      n.answer.includes('## Answer\n\nFenced example text that must not be treated as a boundary.'),
       'the fenced heading survives verbatim as body content',
     );
   });
 });
 
-// ---------------------------------------------------------------------------
-// readGraph: deferred-boost fixture
-// ---------------------------------------------------------------------------
-
 describe('readGraph: deferred-boost fixture', () => {
-  // covers the removal of the old "'boost' is only allowed when
-  // authority.class is 'ratified'" rule: a boost is the author's act
-  // whatever the answer's stamp (an allocation only the author may ratify),
-  // so a node stamped deferred may carry one too.
+  // a boost is the author's act whatever class their rulings confer, so a
+  // node the author deferred may carry one too.
   test('a deferred node with a positive boost parses', async () => {
     const graph = await readGraph(path.join(FIXTURES, 'valid-deferred-boost'));
     assert.equal(graph.nodes.length, 1);
-    const node = graph.nodes[0];
-    assert.equal(node.authority.class, 'deferred');
-    assert.equal(node.boost, 2);
+    const n = graph.nodes[0];
+    assert.equal(n.class, 'deferred');
+    assert.equal(n.boost, 2);
   });
 });
-
-// ---------------------------------------------------------------------------
-// readGraph: shims fixture
-// ---------------------------------------------------------------------------
 
 describe('readGraph: shims fixture', () => {
   test('a node with two shims parses with both entries in order', async () => {
     const graph = await readGraph(path.join(FIXTURES, 'valid-shims'));
     assert.equal(graph.nodes.length, 1);
-    const node = graph.nodes[0];
-    assert.deepEqual(node.shims, [
+    assert.deepEqual(graph.nodes[0].shims, [
       {
         artifact: "packages/disposition/read.mjs's ledger field",
         liquidation: 'when the ledger field is fully removed from the schema',
@@ -714,82 +1107,57 @@ describe('readGraph: shims fixture', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// readGraph: valid-unaligned fixture
-// ---------------------------------------------------------------------------
-
 describe('readGraph: valid-unaligned fixture', () => {
-  test('an unanswered node reads with stage/disposition populated; a mid-dialogue node with an answer stays unanswered until ratified', async () => {
+  test('an unanswered node reads with stage/disposition populated; a node at ruling carries its review', async () => {
     const graph = await readGraph(path.join(FIXTURES, 'valid-unaligned'));
-    const byId = (slug) => graph.nodes.find((n) => n.id === `example.test/main/${slug}`);
+    const bySlug = (slug) => graph.nodes.find((n) => n.id === `example.test/main/${slug}`);
 
-    // root is ratified: answered, and so carries no stage of its own, even
-    // though this fixture is otherwise about nodes still in the dialogue.
-    const root = byId('root');
+    const root = bySlug('root');
+    assert.equal(root.class, 'ratified');
     assert.equal(root.status, 'answered');
     assert.equal(root.stage, null);
 
-    const unaligned = byId('child-unaligned');
-    assert.equal(unaligned.status, 'unanswered');
+    const unaligned = bySlug('child-unaligned');
+    assert.equal(unaligned.class, 'unanswered');
     assert.equal(unaligned.stage, 'periagogic');
     assert.equal(unaligned.disposition, 'The author has not yet ruled on this branch.');
     assert.equal(unaligned.answer, null);
 
-    // a node with '## Disposition', '## Answer', '## Rationale', and
-    // '## Account' all together: still mid-dialogue (carries a stage,
-    // recommendation, and a forward review), but an '## Answer' means it
-    // is not an un-aligned disposition -- it is unanswered only because its
-    // stamp is deferred, not because it has no answer.
-    const ruling = byId('child-ruling');
-    assert.equal(ruling.status, 'unanswered');
-    assert.equal(ruling.stage, 'ruling');
-    assert.deepEqual(ruling.recommendation, {
-      adopts: 'standing',
-      boldness: 'moderate',
-      amends: ruling.standingHash,
-      at: 'a1b2c3d',
-    });
-    assert.equal(ruling.recommendationStale, false, "the fixture's amends pins the current standing hash");
-    assert.equal(ruling.review.verdict, 'forward');
-    assert.equal(ruling.reviewStale, true, "the fixture's placeholder review.of does not match the computed draft hash");
-    assert.ok(ruling.disposition && ruling.answer && ruling.rationale && ruling.account);
-    assert.deepEqual(ruling.alternatives, [], 'a recommendation that adopts the standing answer needs none');
-    assert.deepEqual(ruling.alternativesText, {});
+    const ruling_ = bySlug('child-ruling');
+    assert.equal(ruling_.class, 'unanswered', 'a node awaiting the ruling is unanswered');
+    assert.equal(ruling_.stage, 'ruling');
+    assert.equal(ruling_.answerFact.recommends, 'standing');
+    assert.equal(ruling_.answerFact.stands, 'standing');
+    assert.equal(ruling_.fence, null, 'a recommendation of what stands quotes nothing');
+    assert.equal(ruling_.review.verdict, 'forward');
+    assert.equal(ruling_.reviewStale, true, "the fixture's placeholder review.of does not match the computed hash");
+    assert.ok(ruling_.disposition && ruling_.answer && ruling_.rationale && ruling_.account);
   });
 });
 
 describe('readGraph: valid-unanswered-with-child fixture', () => {
-  // an unanswered parent (no '## Answer') may have a child: the graph-level
-  // rule that once forbade this was retired, so this fixture -- an
-  // unaligned node with a child under it -- now validates cleanly.
-  test('loads without throwing', async () => {
+  test('an unanswered parent may have a child', async () => {
     const graph = await readGraph(path.join(FIXTURES, 'valid-unanswered-with-child'));
     assert.equal(graph.nodes.length, 2);
   });
 });
 
 describe('readGraph: valid-depends fixture', () => {
-  // 'depends' names a dependency that must itself be an open question: an
-  // unanswered node may depend on another unanswered node.
-  test('loads without throwing, and a bare depends entry resolves to {id, alternative: null}', async () => {
+  test('a bare depends entry resolves to {id, option: null} and names a node on the frontier', async () => {
     const graph = await readGraph(path.join(FIXTURES, 'valid-depends'));
     assert.equal(graph.nodes.length, 3);
     const dependent = graph.nodes.find((n) => n.id === 'example.test/main/dependent');
-    assert.ok(dependent);
-    assert.equal(dependent.status, 'unanswered');
-    assert.deepEqual(dependent.depends, [{ id: 'example.test/main/prerequisite', alternative: null }]);
+    assert.deepEqual(dependent.depends, [{ id: 'example.test/main/prerequisite', option: null }]);
     const prerequisite = graph.nodes.find((n) => n.id === 'example.test/main/prerequisite');
-    assert.equal(prerequisite.status, 'unanswered');
+    assert.equal(prerequisite.onFrontier, true);
+    assert.equal(prerequisite.answer, null, 'nothing stands on it yet');
+    assert.equal(prerequisite.answerFact.stands, null);
   });
 
-  // '<id>#<alternative name>' names a divergence: this node stands under
-  // that named alternative on the ancestor, rather than merely waiting on
-  // the ancestor's open question.
-  test('a qualified depends entry parses to {id, alternative}, with the id part canonicalized like any other reference', async () => {
+  test("a qualified depends entry names an option on the ancestor's answer fact", async () => {
     const graph = await readGraph(path.join(FIXTURES, 'valid-depends'));
     const sibling = graph.nodes.find((n) => n.id === 'example.test/main/sibling');
-    assert.ok(sibling, 'fixture has a third node with a qualified depends entry');
-    assert.deepEqual(sibling.depends, [{ id: 'example.test/main/prerequisite', alternative: 'split-it' }]);
+    assert.deepEqual(sibling.depends, [{ id: 'example.test/main/prerequisite', option: 'split-it' }]);
   });
 });
 
@@ -799,116 +1167,98 @@ describe('readGraph: valid-depends fixture', () => {
 
 describe('readGraph: valid-dialogue fixture', () => {
   const graphPromise = readGraph(path.join(FIXTURES, 'valid-dialogue'));
-  async function byId(slug) {
+  async function bySlug(slug) {
     const graph = await graphPromise;
-    const node = graph.nodes.find((n) => n.id === `example.test/main/${slug}`);
-    assert.ok(node, `expected a node with slug ${slug}`);
-    return node;
+    const n = graph.nodes.find((x) => x.id === `example.test/main/${slug}`);
+    assert.ok(n, `expected a node with slug ${slug}`);
+    return n;
   }
 
-  test('a node at ruling carries recommendation, a forward review whose "of" matches the draft hash, and a parsed Recommendation fence', async () => {
-    const node = await byId('ruling-node');
-    assert.equal(node.status, 'unanswered');
-    assert.equal(node.stage, 'ruling');
-    assert.deepEqual(node.recommendation, {
-      adopts: 'whole-node',
-      boldness: 'moderate',
-      amends: node.standingHash,
-      at: 'a1b2c3d',
-    });
-    assert.equal(node.recommendationStale, false);
-    assert.deepEqual(node.alternatives, [{ name: 'whole-node', source: 'ai', ref: '2026-09-03' }]);
-    assert.ok(node.alternativesText['whole-node'].startsWith('Read the fence as a whole proposed node'));
-    assert.ok(node.account.startsWith('Ratify the alternative above'), "the account replaces the old '## Proposal'");
-    assert.equal(node.review.verdict, 'forward');
-    assert.deepEqual(Object.keys(node.review).sort(), ['date', 'of', 'strength', 'verdict'], "no 'siblings' key");
-    assert.equal(node.review.of, node.draftHash, "the fixture's review.of is kept in step with the draft hash");
-    assert.equal(node.reviewStale, false);
-    assert.ok(node.draft, 'the node carries a parsed Recommendation fence');
-    assert.equal(node.draft.question, node.question, "the draft answers the node's own question");
-    assert.equal(node.draft.frontmatter.authority.class, 'ratified');
-    assert.ok(node.draft.sections.Answer.startsWith('Yes: a draft is a whole proposed node'));
+  test('a node at ruling carries a forward review whose "of" is the node\'s recommendation hash, and a parsed fence', async () => {
+    const n = await bySlug('ruling-node');
+    assert.equal(n.class, 'unanswered');
+    assert.equal(n.stage, 'ruling');
+    assert.equal(n.answerFact.recommends, 'whole-node');
+    assert.equal(n.answerFact.boldness, 'moderate');
+    assert.equal(n.answerFact.stands, 'standing');
+    assert.equal(n.review.verdict, 'forward');
+    assert.deepEqual(Object.keys(n.review).sort(), ['date', 'of', 'strength', 'verdict'], "no 'siblings' key");
+    assert.equal(n.review.of, n.recommendationHash, "the fixture's review.of is kept in step");
+    assert.equal(n.reviewStale, false);
+    assert.ok(n.fence, 'the node carries a parsed Recommendation fence');
+    assert.equal(n.fence.question, n.question, "the fence answers the node's own question");
+    assert.ok(n.fence.sections.Answer.startsWith('Yes: a fence holds a whole proposed node'));
+    assert.equal(n.fence.frontmatter.authority, undefined, 'no stamp inside a fence');
   });
 
   test('a node at review carries a recommendation only -- no review yet', async () => {
-    const node = await byId('review-node');
-    assert.equal(node.status, 'unanswered');
-    assert.equal(node.stage, 'review');
-    assert.deepEqual(node.recommendation, {
-      adopts: 'standing',
-      boldness: 'high',
-      amends: node.standingHash,
-      at: 'a1b2c3d',
-    });
-    assert.equal(node.review, null);
-    assert.equal(node.reviewStale, false, 'reviewStale is only ever true when a review exists');
-    assert.equal(node.draft, null, "adopts: standing means there is no '## Recommendation' fence");
-    assert.equal(node.draftHash, node.standingHash, 'with no fence the two hashes are the same');
+    const n = await bySlug('review-node');
+    assert.equal(n.class, 'unanswered');
+    assert.equal(n.stage, 'review');
+    assert.equal(n.answerFact.recommends, 'standing');
+    assert.equal(n.answerFact.boldness, 'high');
+    assert.equal(n.review, null);
+    assert.equal(n.reviewStale, false, 'reviewStale is only ever true when a review exists');
+    assert.equal(n.fence, null, 'recommending what stands means no fence');
   });
 
-  test('an answered ratified node needs no stage at all', async () => {
-    const node = await byId('answered-no-stage');
-    assert.equal(node.status, 'answered');
-    assert.equal(node.stage, null);
-    assert.equal(node.recommendation, null);
-    assert.equal(node.recommendationStale, false, 'recommendationStale is only ever true when a recommendation exists');
-    assert.equal(node.review, null);
+  test('a ratified node needs no stage at all', async () => {
+    const n = await bySlug('answered-no-stage');
+    assert.equal(n.class, 'ratified');
+    assert.equal(n.status, 'answered');
+    assert.equal(n.stage, null);
+    assert.equal(n.review, null);
+    assert.equal(n.moved, false);
   });
 
-  test('a ratified node may still carry a stage, satisfied by "## Answer" alone (the relaxed rule)', async () => {
-    const node = await byId('answered-with-stage');
-    assert.equal(node.status, 'answered');
-    assert.equal(node.stage, 'review');
-    assert.equal(node.disposition, null);
-    assert.equal(node.account, null);
-    assert.ok(node.answer, 'only an Answer section supports the stage here');
-    assert.deepEqual(node.recommendation, {
-      adopts: 'standing',
-      boldness: 'low',
-      amends: node.standingHash,
-      at: 'a1b2c3d',
-    });
+  test('a ratified node may still carry a stage, satisfied by "## Answer" alone', async () => {
+    const n = await bySlug('answered-with-stage');
+    assert.equal(n.class, 'ratified');
+    assert.equal(n.stage, 'review');
+    assert.equal(n.disposition, null);
+    assert.equal(n.account, null);
+    assert.ok(n.answer, 'only an Answer section supports the stage here');
   });
 
-  // ---- facts: the decisions about the answer that stay on the node rather
-  // than becoming children (dialogue state, like alternatives -- present
-  // beside the standing answer, and invisible to the standing hash). ----
-
-  test('facts parse in the reserved order (authority, existence, persistence), whatever order the frontmatter lists them in', async () => {
-    const node = await byId('facts-node');
-    assert.deepEqual(node.facts.map((f) => f.name), ['authority', 'existence', 'persistence']);
+  test('facts keep the order the frontmatter writes them in, with the answer fact first', async () => {
+    const n = await bySlug('facts-node');
+    assert.deepEqual(n.facts.map((f) => f.name), ['answer', 'persistence', 'authority', 'existence']);
+    assert.equal(n.answerFact, n.facts[0]);
   });
 
-  test('a fact with no ruling parses as ruling: null; one with a ruling parses it whole', async () => {
-    const node = await byId('facts-node');
-    const authority = node.facts.find((f) => f.name === 'authority');
-    const existence = node.facts.find((f) => f.name === 'existence');
-    const persistence = node.facts.find((f) => f.name === 'persistence');
-    assert.equal(authority.ruling, null);
-    assert.equal(existence.ruling, null);
-    assert.deepEqual(persistence.ruling, {
+  test('a fact with no ruling reads as ruled: null; one with a ruling carries it on the option', async () => {
+    const n = await bySlug('facts-node');
+    assert.equal(n.facts[0].ruled, null);
+    const persistence = n.facts.find((f) => f.name === 'persistence');
+    assert.equal(persistence.ruled, 'present');
+    assert.deepEqual(persistence.options[1].ruling, {
       response: 'confirm',
-      choice: 'present',
       date: '2026-09-03',
-      of: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      of: persistence.recommendationHash,
     });
+    assert.equal(persistence.moved, false);
+    assert.equal(n.class, 'unanswered', 'a ruling on persistence confers no class');
   });
 
-  test("factsText carries the prose of a '## Facts' subsection; a fact with no subsection is still valid", async () => {
-    const node = await byId('facts-node');
-    assert.deepEqual(Object.keys(node.factsText), ['persistence'], 'only the fact that needs explaining gets a subsection');
-    assert.ok(node.factsText.persistence.startsWith('Present, because'));
-    assert.equal(node.factsText.authority, undefined, "authority has no '### ' subsection, and the node is still valid");
-    assert.equal(node.factsText.existence, undefined, "existence has no '### ' subsection either");
+  test("a fact's prose is the '## Facts' subsection, and a fact with no subsection keeps ''", async () => {
+    const n = await bySlug('facts-node');
+    assert.ok(n.facts.find((f) => f.name === 'persistence').prose.startsWith('Present, because'));
+    assert.equal(n.facts.find((f) => f.name === 'authority').prose, '');
+    assert.equal(n.facts.find((f) => f.name === 'existence').prose, '');
   });
 
-  test('adding or changing a facts entry does not change the standing hash -- facts is stripped like stage, alternatives, recommendation, review, and depends', async () => {
-    const original = await byId('facts-node');
-    const changed = await byId('facts-node-changed');
-    assert.equal(original.facts.length, 3);
+  test('changing the facts does not change the standing hash -- facts is stripped like stage, review and depends', async () => {
+    const original = await bySlug('facts-node');
+    const changed = await bySlug('facts-node-changed');
+    assert.equal(original.facts.length, 4);
     assert.equal(changed.facts.length, 2);
-    assert.notEqual(original.facts.find((f) => f.name === 'authority').adopts, changed.facts.find((f) => f.name === 'authority').adopts, 'the fixture pair genuinely differs in their facts, not just in name');
-    assert.equal(original.standingHash, changed.standingHash, "the two fixtures' frontmatter differs only in 'facts', and their Answer/Rationale text is identical");
+    assert.notEqual(
+      original.facts.find((f) => f.name === 'existence').recommends,
+      changed.facts.find((f) => f.name === 'existence').recommends,
+      'the fixture pair genuinely differs in its facts',
+    );
+    assert.equal(original.standingHash, changed.standingHash, "their frontmatter differs only in 'facts', and their text is identical");
+    assert.notEqual(original.recommendationHash, changed.recommendationHash, 'what they recommend does differ');
   });
 });
 
@@ -923,20 +1273,17 @@ describe('readGraph: valid-order fixture', () => {
   // but is excepted as its descendant.
   test('loads without throwing, and order normalizes to canonical ids', async () => {
     const graph = await readGraph(path.join(FIXTURES, 'valid-order'));
-    const byId = (slug) => graph.nodes.find((n) => n.id === `example.test/main/${slug}`);
+    const bySlug = (slug) => graph.nodes.find((n) => n.id === `example.test/main/${slug}`);
 
-    const orderNode = byId('order-node');
-    assert.deepEqual(orderNode.order, [
+    assert.deepEqual(bySlug('order-node').order, [
       ['example.test/main/order-node', 'example.test/main/leaf-a'],
       ['example.test/main/leaf-b'],
     ]);
 
-    // the depths and the ancestor/descendant exceptions this fixture exists
-    // to cover, stated as ranks so a future change to the rule notices them.
-    assert.ok(orderNode.rank > byId('leaf-a').rank, 'order-node outranks leaf-a (its step-1 partner)');
-    assert.ok(byId('leaf-a').rank > byId('leaf-b').rank, 'leaf-a (step 1) outranks leaf-b (step 2)');
-    assert.ok(byId('hub').rank > byId('leaf-a').rank, "hub outranks leaf-a but is leaf-a's ancestor");
-    assert.equal(byId('solo-child').rank, byId('leaf-a').rank, "leaf-a's lone child ties its rank exactly");
+    assert.ok(bySlug('order-node').rank > bySlug('leaf-a').rank, 'order-node outranks leaf-a (its step-1 partner)');
+    assert.ok(bySlug('leaf-a').rank > bySlug('leaf-b').rank, 'leaf-a (step 1) outranks leaf-b (step 2)');
+    assert.ok(bySlug('hub').rank > bySlug('leaf-a').rank, "hub outranks leaf-a but is leaf-a's ancestor");
+    assert.equal(bySlug('solo-child').rank, bySlug('leaf-a').rank, "leaf-a's lone child ties its rank exactly");
   });
 });
 
@@ -947,119 +1294,96 @@ describe('readGraph: valid-order fixture', () => {
 describe('readGraph: valid-draft-old-doctrine fixture', () => {
   // dialogue.md: "A draft may be invalid under the doctrine of the day, as
   // when it presumes a ruling not yet given; the validator parses it and
-  // checks only that it answers the same question." This draft carries a
-  // form outside FORMS, an authority.date that is still the sitting's
-  // placeholder text, and a tier outside its vocabulary -- none of it is a
-  // validation problem.
-  test('a draft with an out-of-vocabulary form, a placeholder authority date, and an out-of-vocabulary tier still validates', async () => {
+  // checks only that it answers the same question." This fence carries a
+  // form outside FORMS, a tier outside its vocabulary, and an `under` that
+  // resolves to nothing -- none of it is a validation problem.
+  test('a fence with an out-of-vocabulary form and tier and an unresolvable under still validates', async () => {
     const result = await validate(path.join(FIXTURES, 'valid-draft-old-doctrine'));
     assert.equal(result.ok, true);
     assert.equal(result.message, 'ok: 1 nodes');
   });
 
-  test("the draft's frontmatter is returned exactly as written, not normalized or rejected", async () => {
+  test("the fence's frontmatter comes back exactly as written, not normalized or rejected", async () => {
     const graph = await readGraph(path.join(FIXTURES, 'valid-draft-old-doctrine'));
-    const node = graph.nodes.find((n) => n.id === 'example.test/main/ruling-node');
-    assert.ok(node, 'expected the fixture node to parse');
-    assert.equal(node.draft.question, node.question, "the draft still answers the node's own question");
-    assert.equal(node.draft.frontmatter.form, 'disposition', "'form' outside FORMS is passed through, not rejected");
-    assert.deepEqual(node.draft.frontmatter.authority, {
-      class: 'ratified',
-      by: 'Fixture Author',
-      date: '<the date of the ruling>',
-    }, 'an authority.date that fails isValidDate is passed through unvalidated, not rejected or normalized to null');
-    assert.equal(node.draft.frontmatter.tier, 'cosmic', "'tier' outside its vocabulary is passed through, not rejected");
-    assert.equal(node.reviewStale, false, "the fixture's review.of is kept in step with the draft hash");
-    assert.equal(node.recommendationStale, false, "the fixture's recommendation.amends is kept in step with the standing hash");
+    const n = graph.nodes.find((x) => x.id === 'example.test/main/ruling-node');
+    assert.equal(n.fence.question, n.question, "the fence still answers the node's own question");
+    assert.equal(n.fence.frontmatter.form, 'disposition', "'form' outside FORMS is passed through, not rejected");
+    assert.equal(n.fence.frontmatter.tier, 'cosmic', "'tier' outside its vocabulary is passed through");
+    assert.deepEqual(n.fence.frontmatter.under, ['example.test/main/nowhere'], "the fence's references are not resolved");
+    assert.equal(n.reviewStale, false, "the fixture's review.of is kept in step with the recommendation hash");
   });
 });
 
 // ---------------------------------------------------------------------------
-// readGraph: valid-alternatives fixture
+// readGraph: valid-options fixture
 // ---------------------------------------------------------------------------
 
-describe('readGraph: valid-alternatives fixture', () => {
-  const graphPromise = readGraph(path.join(FIXTURES, 'valid-alternatives'));
-  async function byId(slug) {
+describe('readGraph: valid-options fixture', () => {
+  const graphPromise = readGraph(path.join(FIXTURES, 'valid-options'));
+  async function bySlug(slug) {
     const graph = await graphPromise;
-    const node = graph.nodes.find((n) => n.id === `example.test/main/${slug}`);
-    assert.ok(node, `expected a node with slug ${slug}`);
-    return node;
+    const n = graph.nodes.find((x) => x.id === `example.test/main/${slug}`);
+    assert.ok(n, `expected a node with slug ${slug}`);
+    return n;
   }
 
-  test('a stamped node carries its alternatives, one per source, with ref null only where the source allows it', async () => {
-    const node = await byId('fresh-node');
-    assert.equal(node.status, 'unanswered', 'a deferred stamp is still unanswered');
-    assert.equal(node.authority.class, 'deferred');
-    assert.deepEqual(node.alternatives, [
-      { name: 'keep-standing', source: 'author', ref: '2026-09-01' },
-      { name: 'split-the-node', source: 'review', ref: '2026-09-02' },
-      { name: 'follow-the-instrument', source: 'proposal', ref: 'node --test packages/disposition/read.test.mjs' },
-    ], 'each entry is exactly {name, source, ref} -- there is no prune key any more');
+  test("the answer fact's options carry name, source, ref, and a ruling only where the author gave one", async () => {
+    const n = await bySlug('fresh-node');
+    assert.equal(n.class, 'unanswered');
+    assert.deepEqual(n.answerFact.options.map((o) => [o.name, o.source, o.ref, o.ruling]), [
+      ['standing', 'author', '2026-09-01', null],
+      ['split-the-node', 'review', '2026-09-02', null],
+      ['follow-the-instrument', 'node --test packages/disposition/read.test.mjs', '2026-09-03', null],
+    ]);
+    assert.equal(n.answerFact.ruled, null);
   });
 
-  test('alternativesText maps each listed name to its trimmed subsection prose', async () => {
-    const node = await byId('fresh-node');
-    assert.deepEqual(Object.keys(node.alternativesText), [
-      'keep-standing', 'split-the-node', 'follow-the-instrument',
-    ], "the map's keys are the list's names, in the list's order");
-    assert.ok(node.alternativesText['keep-standing'].startsWith("The author's own alternative"));
-    assert.ok(node.alternativesText['split-the-node'].endsWith('before any of it is ratified.'));
-    assert.ok(!node.alternativesText['follow-the-instrument'].includes('###'), 'the heading itself is not part of the prose');
+  test("each option's prose is its '#### ' subsection, and the standing one's text is '## Answer'", async () => {
+    const n = await bySlug('fresh-node');
+    assert.ok(n.answerFact.prose.startsWith("The review's option is recommended"));
+    assert.equal(n.answerFact.options[0].prose, '');
+    assert.ok(n.answerFact.options[1].prose.startsWith("The clean-context review's option"));
+    assert.ok(n.answerFact.options[2].prose.startsWith('An option that arose outside alignment'));
+    assert.ok(!n.answerFact.options[2].prose.includes('####'), 'the heading itself is not part of the prose');
   });
 
-  test('a recommendation adopting an alternative carries the fence, and both hashes pin what they name', async () => {
-    const node = await byId('fresh-node');
-    assert.equal(node.recommendation.adopts, 'split-the-node');
-    assert.equal(node.recommendation.boldness, 'high');
-    assert.equal(
-      node.facts.find((f) => f.name === 'authority').adopts,
-      'ratified',
-      "the class a confirmation would confer is now the 'authority' fact, not recommendation.class",
-    );
-    assert.ok(node.draft, "adopting an alternative means a '## Recommendation' fence");
-    assert.equal(node.draft.question, node.question);
-    assert.ok(node.draft.sections.Answer.startsWith('Split the node'));
-    assert.equal(node.review.of, node.draftHash);
-    assert.equal(node.reviewStale, false);
-    assert.equal(node.recommendation.amends, node.standingHash);
-    assert.equal(node.recommendationStale, false, 'amends equals the computed standing hash');
-    assert.notEqual(node.standingHash, node.draftHash);
+  test('a recommendation that is not what stands carries the fence, and the review pins the whole recommendation', async () => {
+    const n = await bySlug('fresh-node');
+    assert.equal(n.answerFact.recommends, 'split-the-node');
+    assert.equal(n.answerFact.boldness, 'high');
+    assert.equal(n.facts[1].name, 'authority');
+    assert.equal(n.facts[1].recommends, 'ratified', 'the class a ruling would confer is the authority fact');
+    assert.ok(n.fence);
+    assert.ok(n.fence.sections.Answer.startsWith('Split the node'));
+    assert.equal(n.review.of, n.recommendationHash);
+    assert.equal(n.reviewStale, false);
+    assert.notEqual(n.standingHash, n.recommendationHash);
   });
 
-  // dialogue.md's amendment of 2026-09-03: pruning the node is the
-  // 'existence' fact now, never an alternative -- an alternative is a
-  // candidate answer to this node's question, and deleting the node answers
-  // nothing. So a recommendation to prune still just adopts the node as it
-  // stands (there is no alternative naming the deletion to adopt instead),
-  // and carries no fence for the same reason 'standing' never does.
-  test("pruning is the 'existence' fact, not an alternative: the recommendation still adopts standing and carries no fence", async () => {
-    const node = await byId('prune-node');
-    assert.equal(node.status, 'unanswered');
-    assert.deepEqual(node.alternatives, [], 'pruning is the existence fact now, never an alternative');
-    assert.equal(node.recommendation.adopts, 'standing');
-    assert.equal(node.draft, null, "adopts: standing means there is no '## Recommendation' fence");
-    assert.equal(node.draftHash, node.standingHash, 'with no fence the draft hash is the standing hash');
-    assert.equal(node.review.of, node.draftHash);
-    assert.equal(node.reviewStale, false);
-    assert.equal(node.recommendation.amends, node.standingHash);
-    assert.equal(node.recommendationStale, false);
-    assert.ok(node.answer, 'the node as it stands is what remains if the author denies the prune');
-    const existence = node.facts.find((f) => f.name === 'existence');
-    assert.ok(existence, 'the proposal to prune is recorded as the existence fact');
-    assert.deepEqual(existence.choices, ['keep', 'prune']);
-    assert.equal(existence.adopts, 'prune');
-    assert.ok(node.factsText.existence.startsWith('Prune the node'));
+  // pruning the node is the 'existence' fact, never an answer option: an
+  // option is a candidate answer to this node's question, and deleting the
+  // node answers nothing.
+  test("pruning is the 'existence' fact, so the answer fact still recommends what stands and carries no fence", async () => {
+    const n = await bySlug('prune-node');
+    assert.equal(n.class, 'unanswered');
+    assert.deepEqual(n.answerFact.options.map((o) => o.name), ['standing']);
+    assert.equal(n.answerFact.recommends, 'standing');
+    assert.equal(n.fence, null);
+    assert.equal(n.review.of, n.recommendationHash);
+    assert.equal(n.reviewStale, false);
+    assert.ok(n.answer, 'the node as it stands is what remains if the author denies the prune');
+    const existence = n.facts.find((f) => f.name === 'existence');
+    assert.deepEqual(existence.options.map((o) => o.name), ['keep', 'prune']);
+    assert.equal(existence.recommends, 'prune');
+    assert.ok(existence.prose.startsWith('Prune the node'));
   });
 
-  test('recommendationStale is true when amends no longer matches the standing hash', async () => {
-    const node = await byId('stale-node');
-    assert.equal(node.recommendation.adopts, 'standing');
-    assert.equal(node.recommendation.amends, 'a'.repeat(40));
-    assert.notEqual(node.standingHash, 'a'.repeat(40));
-    assert.equal(node.recommendationStale, true);
-    assert.equal(node.reviewStale, false, 'no review, so nothing is stale on that side');
-    assert.equal(node.draft, null);
+  test('reviewStale is true when review.of no longer matches the recommendation hash', async () => {
+    const n = await bySlug('stale-review');
+    assert.equal(n.review.of, 'a'.repeat(40));
+    assert.notEqual(n.recommendationHash, 'a'.repeat(40));
+    assert.equal(n.reviewStale, true);
+    assert.equal(n.moved, false, 'no ruling, so nothing has moved from one');
   });
 });
 

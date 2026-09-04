@@ -4,6 +4,17 @@
 // Parses and validates one disposition graph (a `disposition.yaml` manifest
 // plus one markdown file per node) into a plain object tree.
 //
+// The encoding changed on 2026-09-04
+// (commons.systems/disposition-graph/viable-options): a node's authority is
+// no longer a stamp. Every decision on a node is a `facts` entry with a list
+// of viable `options`; the AI marks the one it `recommends` with a
+// `boldness`; the author's ruling is recorded on the option they chose; and
+// the class -- ratified, delegated, deferred, unanswered -- is derived from
+// those rulings by `derive.mjs`, never stored. The node-level `authority`,
+// `alternatives` and `recommendation` keys are gone, `## Alternatives` with
+// them, and a reading says what it `bears` on rather than carrying one
+// `relation` for the whole node.
+//
 // `yaml` resolves from this repo's ancestor node_modules (there is none
 // inside this worktree) -- the bootstrap shim declared on materialization.
 import YAML from 'yaml';
@@ -18,49 +29,101 @@ import {
   deriveAncestors,
   deriveCeiling,
   deriveChildren,
+  deriveClass,
+  deriveClassSource,
   deriveDescendants,
-  deriveDraftHash,
+  deriveFactRecommendationHash,
   deriveRank,
+  deriveReadings,
+  deriveRecommendationHash,
   deriveSettles,
   deriveStandingHash,
   deriveStatus,
+  divergesFromRecommendation,
+  factByName,
+  factMoved,
+  moved,
+  onFrontier,
+  proposal,
+  reviewStale,
+  ruledOption,
 } from './derive.mjs';
 
-const FRONTMATTER_KEYS = new Set([
-  'question', 'form', 'authority', 'under', 'tier', 'boost', 'cites',
-  'instrument', 'after', 'source', 'relation', 'defines', 'shims', 'stage',
-  'order', 'alternatives', 'facts', 'recommendation', 'review', 'depends',
-]);
-const FORMS = new Set(['target', 'rule', 'assumption', 'arche', 'reading']);
-const AUTHORITY_CLASSES = new Set(['ratified', 'delegated', 'deferred']);
-const RELATIONS = new Set(['adopted', 'diverged', 'chosen-over']);
-const INSTRUMENT_KINDS = new Set(['check', 'assessment']);
-const STAGES = new Set(['periagogic', 'maieutic', 'ruling', 'review']);
-// The classes a confirmation can confer, which is the `authority` fact's
-// choice set: `deferred` is what the AI writes without the author and is
-// never what a confirmation confers (commons.systems/disposition-graph/dialogue).
-const CONFERRABLE_CLASSES = new Set(['ratified', 'delegated']);
-const BOLDNESS_VALUES = new Set(['low', 'moderate', 'high']);
-const REVIEW_VERDICTS = new Set(['forward', 'kickback']);
-const REVIEW_STRENGTHS = new Set(['strong', 'moderate', 'weak', 'none']);
+// ---------------------------------------------------------------------------
+// vocabulary
+// ---------------------------------------------------------------------------
+
+export const FRONTMATTER_KEYS = [
+  'question', 'form', 'under', 'tier', 'boost', 'cites', 'instrument', 'after',
+  'source', 'bears', 'defines', 'shims', 'stage', 'order', 'facts', 'review',
+  'depends',
+];
+// Keys the encoding of 2026-09-04 removed. A node still carrying one is
+// rejected by name, since the fix is a migration and not a typo.
+export const REMOVED_KEYS = {
+  authority: "a node's class is derived from the rulings on its facts",
+  alternatives: "the answer fact's options replace it",
+  recommendation: "each fact's 'recommends' and 'boldness' replace it",
+  relation: "a reading's 'bears' entries carry the relation now",
+};
+export const FORMS = ['target', 'rule', 'assumption', 'arche', 'reading'];
+// The four fact names, in the order '## Facts' presents them when a node
+// carries them all: the answer, whose options are the candidate answers to
+// the node's question, and the reserved three. No fifth is minted without a
+// ruling on the dialogue node.
+export const FACT_NAMES = ['answer', 'authority', 'existence', 'persistence'];
+export const FACT_KEYS = ['name', 'options', 'recommends', 'boldness', 'stands'];
+export const OPTION_KEYS = ['name', 'source', 'ref', 'ruling'];
+export const RULING_KEYS = ['response', 'date', 'of'];
+// `deny` is never stored: a denial is a kickback with the author's words.
+export const RULING_RESPONSES = ['confirm', 'edit'];
+// The classes a ruling on the `authority` fact confers. `deferred` is one of
+// them since 2026-09-04: it is a class the author confers, not one the AI
+// writes for itself.
+export const CONFERRABLE_CLASSES = ['ratified', 'delegated', 'deferred'];
+// The named sources of an option. Any other non-empty string is read as the
+// id of the node, or the name of the instrument, that raised it.
+export const OPTION_SOURCES = ['author', 'ai', 'review'];
+export const BEARS_KEYS = ['node', 'fact', 'option', 'relation'];
+// "chosen over" is derived and not stored: it is a tradition adopted on an
+// option that was not chosen.
+export const RELATIONS = ['adopted', 'diverged'];
+export const BOLDNESS_VALUES = ['low', 'moderate', 'high'];
+export const INSTRUMENT_KINDS = ['check', 'assessment'];
+export const STAGES = ['periagogic', 'maieutic', 'ruling', 'review'];
+export const REVIEW_VERDICTS = ['forward', 'kickback'];
+export const REVIEW_STRENGTHS = ['strong', 'moderate', 'weak', 'none'];
+export const SECTION_ORDER = ['Disposition', 'Answer', 'Rationale', 'Facts', 'Recommendation', 'Account'];
+export const SHIM_KEYS = ['artifact', 'liquidation', 'declared', 'for'];
+// The keys a '## Recommendation' fence may not carry: the fence holds the
+// node as it would stand, and a stamp, the facts, and the dialogue's own
+// state are not part of that.
+export const FENCE_FORBIDDEN_KEYS = ['authority', 'facts', 'stage', 'review', 'depends'];
+// The reserved facts whose option names come from a fixed vocabulary. Only
+// `authority` has one: `existence` and `persistence` name their options
+// freely, as they did before this encoding.
+export const RESERVED_FACT_OPTIONS = { authority: CONFERRABLE_CLASSES };
+
+const FRONTMATTER_KEY_SET = new Set(FRONTMATTER_KEYS);
+const FORM_SET = new Set(FORMS);
+const FACT_NAME_SET = new Set(FACT_NAMES);
+const FACT_KEY_SET = new Set(FACT_KEYS);
+const OPTION_KEY_SET = new Set(OPTION_KEYS);
+const RULING_KEY_SET = new Set(RULING_KEYS);
+const RULING_RESPONSE_SET = new Set(RULING_RESPONSES);
+const BEARS_KEY_SET = new Set(BEARS_KEYS);
+const RELATION_SET = new Set(RELATIONS);
+const BOLDNESS_SET = new Set(BOLDNESS_VALUES);
+const INSTRUMENT_KIND_SET = new Set(INSTRUMENT_KINDS);
+const STAGE_SET = new Set(STAGES);
+const REVIEW_VERDICT_SET = new Set(REVIEW_VERDICTS);
+const REVIEW_STRENGTH_SET = new Set(REVIEW_STRENGTHS);
+const SHIM_KEY_SET = new Set(SHIM_KEYS);
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HASH_RE = /^[0-9a-f]{40}$/;
-// a graph commit, written short or long, as `recommendation.at` records it.
-const COMMIT_RE = /^[0-9a-f]{7,40}$/;
-const SHIM_KEYS = new Set(['artifact', 'liquidation', 'declared', 'for']);
-const SECTION_ORDER = ['Disposition', 'Answer', 'Rationale', 'Alternatives', 'Facts', 'Recommendation', 'Account'];
-const ALTERNATIVE_SOURCES = new Set(['author', 'ai', 'review', 'proposal']);
-const ALTERNATIVE_KEYS = new Set(['name', 'source', 'ref']);
-const ALTERNATIVE_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
-const RECOMMENDATION_KEYS = ['adopts', 'boldness', 'amends', 'at'];
-// The three reserved fact names, in the order '## Facts' subsections take.
-// No fourth is minted without a ruling on the dialogue node.
-const FACT_NAMES = ['authority', 'existence', 'persistence'];
-const FACT_KEYS = new Set(['name', 'choices', 'adopts', 'boldness', 'ruling']);
-const RULING_KEYS = new Set(['response', 'choice', 'date', 'of']);
-const RULING_RESPONSES = new Set(['confirm', 'edit', 'deny']);
-// `standing` names the node as it stands, so no alternative may take it.
-const STANDING = 'standing';
+const OPTION_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
+const ANSWER_FACT = 'answer';
 
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -70,6 +133,10 @@ function isAbsent(value) {
   return value === undefined || value === null;
 }
 
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 function isValidDate(s) {
   if (!DATE_RE.test(s)) return false;
   const [y, m, d] = s.split('-').map(Number);
@@ -77,18 +144,25 @@ function isValidDate(s) {
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
 }
 
+// ---------------------------------------------------------------------------
+// the body
+// ---------------------------------------------------------------------------
+
 /**
  * Split a body into its `## Disposition` / `## Answer` / `## Rationale` /
- * `## Alternatives` / `## Recommendation` / `## Account` sections. `###`+
- * headings are content, not section boundaries -- including the
- * `### <name>` subsections of `## Alternatives`, which a second pass
- * (`parseAlternativesSection`) splits out of that one section's text.
+ * `## Facts` / `## Recommendation` / `## Account` sections. `###`+ headings
+ * are content, not section boundaries -- including the `### <fact>` and
+ * `#### <option>` subsections of `## Facts`, which a second pass
+ * (`parseFactsSection`) splits out of that one section's text. `####`
+ * headings anywhere else (an account's dated notes, say) are content this
+ * parser never looks at.
+ *
  * Pushes one message per problem (without file-path prefix) onto
  * `problems`.
  *
  * @param {string} bodyText
  * @param {string[]} problems
- * @returns {{Disposition: string|null, Answer: string|null, Rationale: string|null, Alternatives: string|null, Recommendation: string|null, Account: string|null}}
+ * @returns {{Disposition: string|null, Answer: string|null, Rationale: string|null, Facts: string|null, Recommendation: string|null, Account: string|null}}
  */
 function parseBody(bodyText, problems) {
   const lines = bodyText.split('\n');
@@ -120,7 +194,7 @@ function parseBody(bodyText, problems) {
   }
 
   const sections = {
-    Disposition: null, Answer: null, Rationale: null, Alternatives: null, Facts: null, Recommendation: null, Account: null,
+    Disposition: null, Answer: null, Rationale: null, Facts: null, Recommendation: null, Account: null,
   };
   let lastOrder = -1;
   boundaries.forEach((boundary, idx) => {
@@ -146,6 +220,10 @@ function parseBody(bodyText, problems) {
   return sections;
 }
 
+// ---------------------------------------------------------------------------
+// reference lists
+// ---------------------------------------------------------------------------
+
 function readIdList(fm, key, problems) {
   if (isAbsent(fm[key])) return [];
   const list = fm[key];
@@ -160,22 +238,21 @@ function readIdList(fm, key, problems) {
  * Parse and validate the `depends` frontmatter field: each entry is either a
  * bare node id -- an open question this node's ruling waits on, the
  * original and still the common form -- or an id qualified with
- * `#<alternative name>`, naming the alternative on that ancestor this node
- * stands under: a divergence, recorded here on the leaf and inverted at the
- * ancestor by the alignment page (see `renderAlternatives` in
- * `project.mjs`). The list's own shape (a list of non-empty strings) is the
- * same check `readIdList` already makes for `under` and `after`, so this
- * reuses it; only the entry syntax is depends' own. Two problems are
- * structural enough to catch here, one entry at a time, with no need of the
- * whole graph: more than one `#` in an entry, and a `#` with nothing (or
- * only whitespace) after it. Whether the id resolves, is answered, is
- * repeated, or is the node's own id, and whether a named alternative is
- * actually listed on the ancestor it qualifies, all need the whole graph
+ * `#<option name>`, naming the option on that ancestor's answer fact this
+ * node stands under: a divergence, recorded here on the leaf and inverted at
+ * the ancestor by the alignment page. The list's own shape (a list of
+ * non-empty strings) is the same check `readIdList` already makes for
+ * `under` and `after`, so this reuses it; only the entry syntax is depends'
+ * own. Two problems are structural enough to catch here, one entry at a
+ * time, with no need of the whole graph: more than one `#` in an entry, and
+ * a `#` with nothing (or only whitespace) after it. Whether the id resolves,
+ * carries a stage, is repeated, or is the node's own id, and whether a named
+ * option is actually on the ancestor's answer fact, all need the whole graph
  * and are checked by `readGraph`.
  *
  * @param {object} fm
  * @param {string[]} problems
- * @returns {{id: string, alternative: string|null}[]}
+ * @returns {{id: string, option: string|null}[]}
  */
 function readDependsList(fm, problems) {
   const raw = readIdList(fm, 'depends', problems);
@@ -183,145 +260,238 @@ function readDependsList(fm, problems) {
     const parts = entry.split('#');
     if (parts.length > 2) {
       problems.push(`malformed 'depends' reference: ${entry}`);
-      return { id: entry, alternative: null };
+      return { id: entry, option: null };
     }
     if (parts.length === 1) {
-      return { id: entry, alternative: null };
+      return { id: entry, option: null };
     }
-    const [id, altRaw] = parts;
-    const alternative = altRaw.trim();
-    if (alternative.length === 0) {
-      problems.push(`'depends' names an empty alternative on ${id}`);
-      return { id, alternative: null };
+    const [id, optionRaw] = parts;
+    const option = optionRaw.trim();
+    if (option.length === 0) {
+      problems.push(`'depends' names an empty option on ${id}`);
+      return { id, option: null };
     }
-    return { id, alternative };
+    return { id, option };
   });
 }
 
+// ---------------------------------------------------------------------------
+// facts and their options
+// ---------------------------------------------------------------------------
+
 /**
- * Parse and validate the `facts` frontmatter field: the decisions about the
- * answer that are not questions under it, which stay on the node because a
+ * Parse and validate the `facts` frontmatter field: every decision on the
+ * node, each with the list of options the AI holds viable, the one it
+ * recommends, and the author's ruling on the option they chose. The `answer`
+ * fact's options are the candidate answers to the node's own question; the
+ * reserved three -- `authority`, the class a ruling would confer;
+ * `existence`, keep or prune; `persistence`, present or derived -- are the
+ * decisions about the answer that are not questions under it, since a
  * decision that *is* a question is a child node
- * (commons.systems/disposition-graph/dialogue).  Each entry is
- * `{name, choices, adopts, boldness, ruling?}`.
+ * (commons.systems/disposition-graph/dialogue).
  *
- * Only the three reserved names are accepted -- `authority`, the class a
- * confirmation would confer, which is why `recommendation` carries none;
- * `existence`, keep or prune, where a proposal to prune the node lives now
- * that it is no longer an alternative of a special shape; and
- * `persistence`, present only where the recommendation would change the
- * node's shape and otherwise derived and asking nothing.
+ * One combined message covers every shape problem, as `review` does; the
+ * coherence problems -- a duplicated name, an `answer` fact that is not
+ * first, a `recommends` or a `stands` outside the fact's own options, a
+ * `boldness` without a `recommends`, two rulings on one fact -- each get
+ * their own, since those are about one fact's coherence rather than its
+ * shape.
  *
- * `adopts` must be one of the entry's own `choices`, and a `ruling`, once
- * the author has given one, must name one too. One combined message covers
- * every shape problem, as `alternatives` and `recommendation` do; a
- * duplicated name and an `adopts` or a `ruling.choice` outside the entry's
- * own choices each get their own, since those are about one entry's
- * coherence rather than its shape.
+ * Order is presentation order, as written, except that `answer` comes first
+ * when the node carries one.
  *
  * @param {*} raw - fm.facts, or undefined/null when absent.
  * @param {string[]} problems
- * @returns {{entries: Array<{name: string, choices: string[], adopts: string,
- *   boldness: string, ruling: {response: string, choice: string, date: string, of: string}|null}>,
- *   shapeOk: boolean}}
+ * @returns {{entries: Array<object>, shapeOk: boolean}}
  */
 function readFacts(raw, problems) {
   if (isAbsent(raw)) return { entries: [], shapeOk: true };
+
   const rulingOk = (r) => isPlainObject(r)
-    && Object.keys(r).length === RULING_KEYS.size
-    && [...RULING_KEYS].every((k) => Object.prototype.hasOwnProperty.call(r, k))
-    && RULING_RESPONSES.has(r.response)
-    && typeof r.choice === 'string' && r.choice.trim().length > 0
+    && Object.keys(r).length === RULING_KEY_SET.size
+    && RULING_KEYS.every((k) => Object.prototype.hasOwnProperty.call(r, k))
+    && RULING_RESPONSE_SET.has(r.response)
     && typeof r.date === 'string' && isValidDate(r.date)
-    && typeof r.of === 'string' && HASH_RE.test(r.of);
+    && isNonEmptyString(r.of);
+  // The answer fact's options are referenced by name (`stands`, `recommends`,
+  // `depends`, `bears`), so their names are slugs; a reserved fact's options
+  // are its vocabulary and may be free text, e.g. a persistence shape.
+  const optionOk = (o, factName) => isPlainObject(o)
+    && Object.keys(o).every((k) => OPTION_KEY_SET.has(k))
+    && typeof o.name === 'string'
+    && (factName === ANSWER_FACT ? OPTION_NAME_RE.test(o.name) : isNonEmptyString(o.name) && !o.name.includes('\n'))
+    && (isAbsent(o.source) || isNonEmptyString(o.source))
+    && (isAbsent(o.ref) || isNonEmptyString(o.ref))
+    && (isAbsent(o.ruling) || rulingOk(o.ruling));
   const entryOk = (entry) => isPlainObject(entry)
-    && Object.keys(entry).every((k) => FACT_KEYS.has(k))
-    && typeof entry.name === 'string' && FACT_NAMES.includes(entry.name)
-    && Array.isArray(entry.choices) && entry.choices.length > 1
-    && entry.choices.every((c) => typeof c === 'string' && c.trim().length > 0)
-    && new Set(entry.choices).size === entry.choices.length
-    && typeof entry.adopts === 'string' && entry.adopts.trim().length > 0
-    && BOLDNESS_VALUES.has(entry.boldness)
-    && (isAbsent(entry.ruling) || rulingOk(entry.ruling));
-  if (!Array.isArray(raw) || !raw.every(entryOk)) {
+    && Object.keys(entry).every((k) => FACT_KEY_SET.has(k))
+    && typeof entry.name === 'string' && FACT_NAME_SET.has(entry.name)
+    && Array.isArray(entry.options) && entry.options.length > 0 && entry.options.every((o) => optionOk(o, entry.name))
+    && (isAbsent(entry.recommends) || isNonEmptyString(entry.recommends))
+    && (isAbsent(entry.boldness) || BOLDNESS_SET.has(entry.boldness))
+    && (isAbsent(entry.stands) || isNonEmptyString(entry.stands));
+
+  if (!Array.isArray(raw) || raw.length === 0 || !raw.every(entryOk)) {
     problems.push(
-      `'facts' must be a list of {name: ${FACT_NAMES.join('|')}, `
-      + 'choices: <two or more distinct non-empty strings>, adopts: <one of them>, '
-      + 'boldness: low|moderate|high, '
-      + 'ruling: <optional {response: confirm|edit|deny, choice: <one of them>, '
-      + 'date: YYYY-MM-DD, of: <sha1>}>}',
+      `'facts' must be a non-empty list of {name: ${FACT_NAMES.join('|')}, `
+      + "options: <one or more {name: <lowercase slug on the answer fact, non-empty on a reserved one>, source: <non-empty string>, "
+      + "ref: <non-empty string>, ruling: <optional "
+      + `{response: ${RULING_RESPONSES.join('|')}, date: YYYY-MM-DD, of: <hash>}>}>, `
+      + 'recommends: <optional option name>, '
+      + `boldness: <${BOLDNESS_VALUES.join('|')}, required with recommends>, `
+      + 'stands: <optional option name, on the answer fact only>}',
     );
     return { entries: [], shapeOk: false };
   }
+
   const entries = raw.map((entry) => ({
     name: entry.name,
-    choices: [...entry.choices],
-    adopts: entry.adopts,
-    boldness: entry.boldness,
-    ruling: isAbsent(entry.ruling)
-      ? null
-      : {
-        response: entry.ruling.response,
-        choice: entry.ruling.choice,
-        date: entry.ruling.date,
-        of: entry.ruling.of,
-      },
+    options: entry.options.map((o) => ({
+      name: o.name,
+      source: isAbsent(o.source) ? null : o.source,
+      ref: isAbsent(o.ref) ? null : o.ref,
+      ruling: isAbsent(o.ruling)
+        ? null
+        : { response: o.ruling.response, date: o.ruling.date, of: o.ruling.of },
+      // filled in from '## Facts' once the body is parsed
+      prose: '',
+      readings: [],
+    })),
+    recommends: isAbsent(entry.recommends) ? null : entry.recommends,
+    boldness: isAbsent(entry.boldness) ? null : entry.boldness,
+    stands: isAbsent(entry.stands) ? null : entry.stands,
+    prose: '',
+    recommendationHash: '',
+    ruled: null,
+    moved: false,
   }));
+
   let ok = true;
   const seen = new Set();
-  for (const entry of entries) {
+  entries.forEach((entry, index) => {
     if (seen.has(entry.name)) {
       problems.push(`duplicate fact '${entry.name}'`);
       ok = false;
     }
     seen.add(entry.name);
-    if (!entry.choices.includes(entry.adopts)) {
+    if (entry.name === ANSWER_FACT && index !== 0) {
+      problems.push(`'facts' lists the answer fact at position ${index + 1}; the answer fact comes first`);
+      ok = false;
+    }
+
+    const optionNames = entry.options.map((o) => o.name);
+    const seenOptions = new Set();
+    for (const name of optionNames) {
+      if (seenOptions.has(name)) {
+        problems.push(`fact '${entry.name}' names option '${name}' twice`);
+        ok = false;
+      }
+      seenOptions.add(name);
+    }
+
+    if (entry.name === ANSWER_FACT) {
+      // An answer option is a candidate answer to the node's own question,
+      // so it always says where it came from and what raised it.
+      for (const option of entry.options) {
+        if (option.source === null) {
+          problems.push(`fact 'answer' option '${option.name}' requires 'source' (${OPTION_SOURCES.join(', ')}, or the node or instrument that raised it)`);
+          ok = false;
+        }
+        if (option.ref === null) {
+          problems.push(`fact 'answer' option '${option.name}' requires 'ref' (a date, a graph commit, or what raised it)`);
+          ok = false;
+        }
+      }
+    } else if (Object.prototype.hasOwnProperty.call(RESERVED_FACT_OPTIONS, entry.name)) {
+      const vocabulary = RESERVED_FACT_OPTIONS[entry.name];
+      if (!optionNames.every((n) => vocabulary.includes(n))) {
+        problems.push(
+          `fact '${entry.name}' may only offer the classes a ruling confers: ${vocabulary.join(', ')}`,
+        );
+        ok = false;
+      }
+    }
+
+    if (entry.recommends !== null && !optionNames.includes(entry.recommends)) {
+      problems.push(`fact '${entry.name}' recommends '${entry.recommends}', which is not one of its own options`);
+      ok = false;
+    }
+    if (entry.recommends !== null && entry.boldness === null) {
+      problems.push(`fact '${entry.name}' recommends '${entry.recommends}' and must state a boldness`);
+      ok = false;
+    }
+    if (entry.recommends === null && entry.boldness !== null) {
+      problems.push(`fact '${entry.name}' states a boldness but recommends no option`);
+      ok = false;
+    }
+
+    const ruledOptions = entry.options.filter((o) => o.ruling !== null);
+    if (ruledOptions.length > 1) {
       problems.push(
-        `fact '${entry.name}' adopts '${entry.adopts}', which is not one of its own choices`,
+        `fact '${entry.name}' carries a ruling on ${ruledOptions.length} options (${ruledOptions.map((o) => o.name).join(', ')}); the author rules on one`,
       );
       ok = false;
     }
-    if (entry.ruling !== null && !entry.choices.includes(entry.ruling.choice)) {
-      problems.push(
-        `fact '${entry.name}' has a ruling on '${entry.ruling.choice}', which is not one of its own choices`,
-      );
-      ok = false;
+    entry.ruled = ruledOptions.length === 1 ? ruledOptions[0].name : null;
+
+    if (entry.stands !== null) {
+      if (entry.name !== ANSWER_FACT) {
+        problems.push(`fact '${entry.name}' carries 'stands', which is the answer fact's alone`);
+        ok = false;
+      } else if (!optionNames.includes(entry.stands)) {
+        problems.push(`fact 'answer' stands on '${entry.stands}', which is not one of its own options`);
+        ok = false;
+      } else if (entry.ruled !== null && entry.ruled !== entry.stands) {
+        problems.push(
+          `fact 'answer' is ruled on '${entry.ruled}' but stands on '${entry.stands}'; what stands is what the author confirmed`,
+        );
+        ok = false;
+      }
     }
-    if (entry.name === 'authority' && !entry.choices.every((c) => CONFERRABLE_CLASSES.has(c))) {
-      problems.push(
-        "fact 'authority' may only choose among the classes a confirmation confers: "
-        + [...CONFERRABLE_CLASSES].join(', '),
-      );
-      ok = false;
-    }
-  }
-  // Keep the reserved order, so '## Facts' subsections read in one order
-  // whatever order the frontmatter happens to list them in.
-  entries.sort((a, b) => FACT_NAMES.indexOf(a.name) - FACT_NAMES.indexOf(b.name));
+  });
+
   return { entries, shapeOk: ok };
 }
 
 /**
- * Split a '## Facts' section into `{name: text}` by its '### <name>'
- * subsections, and check them against the `facts` list. Unlike
- * '## Alternatives', which takes one subsection per entry, '## Facts' takes
- * one per fact *whose choices need explaining* and omits the rest, so the
- * subsections must be a subsequence of the fact names rather than a match:
- * every one names a fact, none repeats, and they read in the facts' order.
+ * Split a '## Facts' section into its `### <fact>` subsections and their
+ * `#### <option>` subsections, and check them against the `facts` list.
+ *
+ * A fact subsection may open with prose -- the reason for the recommendation
+ * -- and is omitted where there is nothing to say, so the `### ` headings
+ * must be a subsequence of the fact names rather than a match: every one
+ * names a fact, none repeats, and they read in the facts' order.
+ *
+ * Under `### answer`, one `#### <option>` subsection per option says what
+ * that option would answer and why it is on the table. It is required for
+ * every option except the one named by `stands`, whose text is the
+ * `## Answer` section itself, so the option headings must match the option
+ * list exactly but for that one. A reserved fact's options may carry
+ * `#### ` subsections too and need not, so theirs are a subsequence like the
+ * facts themselves.
  *
  * @param {string} sectionText
- * @param {string[]|null} names - the fact names in order, or null when the
- *   list did not parse and there is nothing to check against.
+ * @param {Array<object>|null} facts - the parsed facts in order, or null
+ *   when the list did not parse and there is nothing to check against.
  * @param {string[]} problems
- * @returns {Record<string, string>}
+ * @returns {Record<string, {prose: string, options: Record<string, string>}>}
  */
-function parseFactsSection(sectionText, names, problems) {
+function parseFactsSection(sectionText, facts, problems) {
   const lines = String(sectionText).split('\n');
-  const headingRe = /^###\s+(.+?)\s*$/;
+  const headingRe = /^(#{3,4})[ \t]+(.+?)\s*$/;
+  const fenceRe = /^[ \t]*(`{3,}|~{3,})/;
   const boundaries = [];
+  let fenceChar = null;
   lines.forEach((line, index) => {
+    const fence = line.match(fenceRe);
+    if (fence) {
+      if (fenceChar === null) fenceChar = fence[1][0];
+      else if (fence[1][0] === fenceChar) fenceChar = null;
+      return;
+    }
+    if (fenceChar !== null) return;
     const m = line.match(headingRe);
-    if (m) boundaries.push({ name: m[1].trim(), index });
+    if (m) boundaries.push({ depth: m[1].length, name: m[2].trim(), index });
   });
 
   const firstIndex = boundaries.length > 0 ? boundaries[0].index : lines.length;
@@ -331,145 +501,169 @@ function parseFactsSection(sectionText, names, problems) {
     problems.push(`'## Facts' has text before the first '### ' heading: ${snippet}`);
   }
 
-  /** @type {Record<string, string>} */
+  /** @type {Record<string, {prose: string, options: Record<string, string>}>} */
   const text = {};
+  /** @type {{name: string, options: string[]}[]} */
+  const found = [];
+  let current = null;
   boundaries.forEach((boundary, idx) => {
     const end = idx + 1 < boundaries.length ? boundaries[idx + 1].index : lines.length;
-    text[boundary.name] = lines.slice(boundary.index + 1, end).join('\n').trim();
+    const prose = lines.slice(boundary.index + 1, end).join('\n').trim();
+    if (boundary.depth === 3) {
+      current = { name: boundary.name, options: [] };
+      found.push(current);
+      if (!Object.prototype.hasOwnProperty.call(text, boundary.name)) {
+        text[boundary.name] = { prose, options: {} };
+      }
+      return;
+    }
+    if (current === null) {
+      problems.push(`'## Facts' has '#### ${boundary.name}' with no '### ' heading above it`);
+      return;
+    }
+    current.options.push(boundary.name);
+    text[current.name].options[boundary.name] = prose;
   });
 
-  if (names !== null) {
+  if (facts === null) return text;
+
+  const factNames = facts.map((f) => f.name);
+  let cursor = 0;
+  const seen = new Set();
+  for (const heading of found) {
+    if (seen.has(heading.name)) {
+      problems.push(`'## Facts' repeats '### ${heading.name}'`);
+      break;
+    }
+    seen.add(heading.name);
+    const at = factNames.indexOf(heading.name, cursor);
+    if (at === -1) {
+      const why = factNames.includes(heading.name) ? "out of the facts' order" : 'not a fact on this node';
+      problems.push(`'## Facts' has '### ${heading.name}', which is ${why} (facts: ${factNames.join(', ')})`);
+      break;
+    }
+    cursor = at + 1;
+    checkOptionHeadings(facts[at], heading, problems);
+  }
+
+  // Every answer option but the standing one states itself in prose, so an
+  // answer fact with such an option needs its '### answer' subsection.
+  const answerFact = facts.find((f) => f.name === ANSWER_FACT) ?? null;
+  if (answerFact !== null && !seen.has(ANSWER_FACT)) {
+    const owed = answerFact.options.filter((o) => o.name !== answerFact.stands).map((o) => o.name);
+    if (owed.length > 0) {
+      problems.push(
+        `'## Facts' has no '### answer' subsection, so ${owed.map((n) => `'#### ${n}'`).join(', ')} `
+        + `${owed.length === 1 ? 'is' : 'are'} missing; every answer option but the one that stands says in prose what it would answer`,
+      );
+    }
+  }
+
+  return text;
+}
+
+/**
+ * The `#### <option>` headings under one `### <fact>` subsection: an exact
+ * match against the answer fact's options in order, but for the option named
+ * by `stands`, which may be omitted (its text is `## Answer`); a subsequence
+ * for a reserved fact, whose options need no prose at all.
+ *
+ * @param {object} fact
+ * @param {{name: string, options: string[]}} heading
+ * @param {string[]} problems
+ */
+function checkOptionHeadings(fact, heading, problems) {
+  const optionNames = fact.options.map((o) => o.name);
+  if (fact.name !== ANSWER_FACT) {
     let cursor = 0;
     const seen = new Set();
-    for (const boundary of boundaries) {
-      if (seen.has(boundary.name)) {
-        problems.push(`'## Facts' repeats '### ${boundary.name}'`);
-        break;
+    for (const name of heading.options) {
+      if (seen.has(name)) {
+        problems.push(`'### ${fact.name}' repeats '#### ${name}'`);
+        return;
       }
-      seen.add(boundary.name);
-      const at = names.indexOf(boundary.name, cursor);
+      seen.add(name);
+      const at = optionNames.indexOf(name, cursor);
       if (at === -1) {
-        const why = names.includes(boundary.name) ? 'out of the facts\' order' : 'not a fact on this node';
-        problems.push(`'## Facts' has '### ${boundary.name}', which is ${why} (facts: ${names.join(', ')})`);
-        break;
+        const why = optionNames.includes(name) ? "out of the fact's option order" : `not an option of '${fact.name}'`;
+        problems.push(`'### ${fact.name}' has '#### ${name}', which is ${why} (options: ${optionNames.join(', ')})`);
+        return;
       }
       cursor = at + 1;
     }
+    return;
   }
-  return text;
+
+  const expected = optionNames.filter((n) => n !== fact.stands);
+  const found = heading.options.filter((n) => n !== fact.stands);
+  const span = Math.max(expected.length, found.length);
+  for (let i = 0; i < span; i += 1) {
+    if (expected[i] !== found[i]) {
+      const want = expected[i] === undefined ? 'nothing' : `'#### ${expected[i]}'`;
+      const got = found[i] === undefined ? 'nothing' : `'#### ${found[i]}'`;
+      problems.push(
+        `'### answer' subsections must match the answer fact's options in order: expected ${want} at position ${i + 1}, found ${got}`,
+      );
+      return;
+    }
+  }
 }
 
+// ---------------------------------------------------------------------------
+// readings
+// ---------------------------------------------------------------------------
+
 /**
- * Parse and validate the `alternatives` frontmatter field: the answers on
- * the table beside the one the node stands on, each
- * `{name, source, ref?}`. Pruning the node is no longer one of these: it
- * is the `existence` fact, because an alternative is a candidate answer to
- * this node's question and deleting the node answers nothing
- * (commons.systems/disposition-graph/dialogue).
+ * Parse and validate the `bears` frontmatter field, which a reading carries
+ * in place of the one node-level `relation` it carried before 2026-09-04: a
+ * tradition bears on the *options* of a fact, so that "chosen over" is
+ * derived (a tradition adopted on an option that was not chosen) rather than
+ * stored. `node` may be omitted when the reading has exactly one `under`
+ * parent, which is then what it bears on; with more than one parent it must
+ * be named on every entry, since nothing else says which.
  *
- * One combined message covers every shape problem (a non-list, a
- * non-mapping entry, an unknown key, a name that is not a slug, a source
- * outside the vocabulary, a `proposal` with no `ref`), in the style
- * `recommendation` and `review` already use; a
- * duplicated name and the reserved name `standing` each get their own
- * message, since both are about the list as a whole rather than one
- * entry's shape.
+ * Whether the named node exists, carries the fact, and carries the option is
+ * checked by `readGraph`.
  *
- * @param {*} raw - fm.alternatives, or undefined/null when absent.
+ * @param {*} raw - fm.bears, or undefined/null when absent.
+ * @param {number} parentCount - the length of this node's `under`.
  * @param {string[]} problems
- * @returns {{entries: Array<{name: string, source: string, ref: string|null}>, shapeOk: boolean}}
+ * @returns {{node: string|null, fact: string, option: string, relation: string}[]}
  */
-function readAlternatives(raw, problems) {
-  if (isAbsent(raw)) return { entries: [], shapeOk: true };
+function readBears(raw, parentCount, problems) {
+  if (isAbsent(raw)) return [];
   const entryOk = (entry) => isPlainObject(entry)
-    && Object.keys(entry).every((k) => ALTERNATIVE_KEYS.has(k))
-    && typeof entry.name === 'string' && ALTERNATIVE_NAME_RE.test(entry.name)
-    && typeof entry.source === 'string' && ALTERNATIVE_SOURCES.has(entry.source)
-    && (isAbsent(entry.ref)
-      ? entry.source !== 'proposal'
-      : typeof entry.ref === 'string' && entry.ref.trim().length > 0);
-  if (!Array.isArray(raw) || !raw.every(entryOk)) {
+    && Object.keys(entry).every((k) => BEARS_KEY_SET.has(k))
+    && (isAbsent(entry.node) || isNonEmptyString(entry.node))
+    && typeof entry.fact === 'string' && FACT_NAME_SET.has(entry.fact)
+    && isNonEmptyString(entry.option)
+    && RELATION_SET.has(entry.relation);
+  if (!Array.isArray(raw) || raw.length === 0 || !raw.every(entryOk)) {
     problems.push(
-      "'alternatives' must be a list of {name: <lowercase slug>, "
-      + `source: ${[...ALTERNATIVE_SOURCES].join('|')}, `
-      + 'ref: <non-empty string, required when source is proposal>}',
+      "'bears' must be a non-empty list of {node: <optional node id>, "
+      + `fact: ${FACT_NAMES.join('|')}, option: <option name>, relation: ${RELATIONS.join('|')}}`,
     );
-    return { entries: [], shapeOk: false };
+    return [];
   }
   const entries = raw.map((entry) => ({
-    name: entry.name,
-    source: entry.source,
-    ref: isAbsent(entry.ref) ? null : entry.ref,
+    node: isAbsent(entry.node) ? null : entry.node,
+    fact: entry.fact,
+    option: entry.option,
+    relation: entry.relation,
   }));
-  let ok = true;
-  const seen = new Set();
   for (const entry of entries) {
-    if (entry.name === STANDING) {
-      problems.push(`'alternatives' names an alternative '${STANDING}', which is reserved for the node as it stands`);
-      ok = false;
+    if (entry.node === null && parentCount !== 1) {
+      problems.push(
+        `'bears' entry on fact '${entry.fact}' must name a 'node': the reading has ${parentCount} parents, so nothing says which one it bears on`,
+      );
     }
-    if (seen.has(entry.name)) {
-      problems.push(`'alternatives' names ${entry.name} twice`);
-      ok = false;
-    }
-    seen.add(entry.name);
   }
-  return { entries, shapeOk: ok };
+  return entries;
 }
 
-/**
- * Split a `## Alternatives` section into its `### <name>` subsections, one
- * per entry of the `alternatives` list and in the list's order. Text before
- * the first `### ` heading is a problem: everything in this section belongs
- * to one alternative. When `names` is given, the headings must equal it
- * exactly, in order, and the first position where they differ is named in
- * one message.
- *
- * @param {string} sectionText - `sections.Alternatives`, trimmed by parseBody.
- * @param {string[]|null} names - the listed names, or null to skip the match
- *   check (the list itself was malformed or empty, already reported).
- * @param {string[]} problems
- * @returns {Record<string, string>} each heading's name to its trimmed prose.
- */
-function parseAlternativesSection(sectionText, names, problems) {
-  const lines = sectionText.split('\n');
-  const headingRe = /^### (.+)$/;
-  const boundaries = [];
-  lines.forEach((line, index) => {
-    const m = line.match(headingRe);
-    if (m) boundaries.push({ name: m[1].trim(), index });
-  });
-
-  const firstIndex = boundaries.length > 0 ? boundaries[0].index : lines.length;
-  const prefix = lines.slice(0, firstIndex).join('\n');
-  if (prefix.trim().length > 0) {
-    const snippet = JSON.stringify(prefix.trim().slice(0, 60));
-    problems.push(`'## Alternatives' has text before the first '### ' heading: ${snippet}`);
-  }
-
-  /** @type {Record<string, string>} */
-  const text = {};
-  boundaries.forEach((boundary, idx) => {
-    const end = idx + 1 < boundaries.length ? boundaries[idx + 1].index : lines.length;
-    text[boundary.name] = lines.slice(boundary.index + 1, end).join('\n').trim();
-  });
-
-  if (names !== null) {
-    const found = boundaries.map((b) => b.name);
-    const span = Math.max(found.length, names.length);
-    for (let i = 0; i < span; i += 1) {
-      if (found[i] !== names[i]) {
-        const want = names[i] === undefined ? 'nothing' : `'### ${names[i]}'`;
-        const got = found[i] === undefined ? 'nothing' : `'### ${found[i]}'`;
-        problems.push(
-          `'## Alternatives' subsections must match the 'alternatives' list in order: expected ${want} at position ${i + 1}, found ${got}`,
-        );
-        break;
-      }
-    }
-  }
-  return text;
-}
+// ---------------------------------------------------------------------------
+// order
+// ---------------------------------------------------------------------------
 
 /**
  * Parse and validate the `order` frontmatter field's own shape: a list of
@@ -513,6 +707,10 @@ function fail(relPath, problemList) {
   return new Error(problemList.map((p) => `${relPath}: ${p}`).join('\n'));
 }
 
+// ---------------------------------------------------------------------------
+// the '## Recommendation' fence
+// ---------------------------------------------------------------------------
+
 /**
  * Extract the exact content of a `## Recommendation` section's one fenced
  * markdown block: a line that, trimmed, is exactly `` ```markdown `` opens
@@ -526,7 +724,7 @@ function fail(relPath, problemList) {
  * @param {string[]} problems
  * @returns {string|null} the fence's inner lines, joined by '\n'.
  */
-function extractDraftFence(sectionText, problems) {
+function extractFence(sectionText, problems) {
   const fail1 = () => {
     problems.push("'## Recommendation' must hold exactly one fenced markdown block");
     return null;
@@ -553,7 +751,7 @@ function extractDraftFence(sectionText, problems) {
 /**
  * Recover a node file's frontmatter and body text from its raw bytes: the
  * structural parse shared by a top-level node file (`parseNode`) and a
- * `## Recommendation` fence's nested one (`parseDraftFence`). Throws immediately
+ * `## Recommendation` fence's nested one (`parseFence`). Throws immediately
  * (one message, as befits a file with nothing left worth checking) when
  * the frontmatter cannot be recovered at all: no opening or closing `---`
  * delimiter, invalid YAML, or a frontmatter that is not a mapping. Every
@@ -597,22 +795,23 @@ function parseFrontmatter(text, relPath) {
 }
 
 /**
- * Parse a `## Recommendation` fence's content only structurally, per dialogue.md's
- * Answer: "A draft may be invalid under the doctrine of the day, as when
- * it presumes a ruling not yet given; the validator parses it and checks
- * only that it answers the same question." The fence must parse as a node
- * at all -- a frontmatter block that recovers as a YAML mapping
+ * Parse a `## Recommendation` fence's content only structurally, per
+ * dialogue.md's Answer: "A draft may be invalid under the doctrine of the
+ * day, as when it presumes a ruling not yet given; the validator parses it
+ * and checks only that it answers the same question." The fence must parse
+ * as a node at all -- a frontmatter block that recovers as a YAML mapping
  * (`parseFrontmatter`), and a body whose sections are the reader's known
- * sections in the reader's order (`parseBody`), the same two structural
- * parses a top-level node file gets -- and its `question` must equal the
- * one it drafts (one combined check: absent, wrong-typed, and merely
- * different all fail it the same way, with the same message). No other
- * field rule, shape rule, vocabulary, or section-requirement rule applies:
- * a draft may carry a form outside today's vocabulary, an authority whose
- * date is still a placeholder, a tier or any other field with a value the
- * vocabulary of the day does not name, or an unknown frontmatter key
- * entirely -- none of it is checked here, and each field is returned as
- * written, not normalized.
+ * sections in the reader's order (`parseBody`) -- its `question` must equal
+ * the one it drafts, and it must not carry the keys that are not part of
+ * what stands (`FENCE_FORBIDDEN_KEYS`: the class is derived from the
+ * rulings, and the facts and the dialogue's state belong to the node and
+ * never to the text it would stand on).
+ *
+ * No other field rule, shape rule, vocabulary, or section-requirement rule
+ * applies: a draft may carry a form outside today's vocabulary, a tier or
+ * any other field with a value the vocabulary of the day does not name, or
+ * an unknown frontmatter key entirely. The frontmatter is returned exactly
+ * as written -- every key it carries, none normalized, none invented.
  *
  * @param {string} fenceText
  * @param {string} question - the enclosing node's own (already-validated) question.
@@ -621,12 +820,12 @@ function parseFrontmatter(text, relPath) {
  * @param {string[]} problems
  * @returns {{raw: string, question: string|null, frontmatter: object, sections: object}|null}
  */
-function parseDraftFence(fenceText, question, ctx, problems) {
-  const draftPath = `${ctx.path} (## Recommendation)`;
+function parseFence(fenceText, question, ctx, problems) {
+  const fencePath = `${ctx.path} (## Recommendation)`;
   let fm;
   let bodyText;
   try {
-    ({ fm, bodyText } = parseFrontmatter(fenceText, draftPath));
+    ({ fm, bodyText } = parseFrontmatter(fenceText, fencePath));
   } catch (err) {
     problems.push(`'## Recommendation' does not parse as a node: ${err.message}`);
     return null;
@@ -634,60 +833,42 @@ function parseDraftFence(fenceText, question, ctx, problems) {
   const bodyProblems = [];
   const sections = parseBody(bodyText, bodyProblems);
   if (bodyProblems.length > 0) {
-    problems.push(`'## Recommendation' does not parse as a node: ${fail(draftPath, bodyProblems).message}`);
+    problems.push(`'## Recommendation' does not parse as a node: ${fail(fencePath, bodyProblems).message}`);
     return null;
   }
   if (fm.question !== question) {
     problems.push("'## Recommendation' answers a different question");
   }
-  const get = (key, absentValue) => (isAbsent(fm[key]) ? absentValue : fm[key]);
+  for (const key of FENCE_FORBIDDEN_KEYS) {
+    if (!isAbsent(fm[key])) {
+      problems.push(`'## Recommendation' carries '${key}', which belongs to the node and not to the text it would stand on`);
+    }
+  }
+  if (sections.Facts !== null) {
+    problems.push("'## Recommendation' carries a '## Facts' section, which belongs to the node and not to the text it would stand on");
+  }
   return {
     raw: fenceText,
-    question: get('question', null),
-    frontmatter: {
-      form: get('form', null),
-      authority: get('authority', null),
-      under: get('under', []),
-      tier: get('tier', null),
-      boost: get('boost', null),
-      cites: get('cites', []),
-      instrument: get('instrument', null),
-      after: get('after', []),
-      source: get('source', null),
-      relation: get('relation', null),
-      defines: get('defines', null),
-      shims: get('shims', []),
-      stage: get('stage', null),
-      order: get('order', []),
-      alternatives: get('alternatives', []),
-      recommendation: get('recommendation', null),
-      review: get('review', null),
-    },
-    sections: {
-      Disposition: sections.Disposition,
-      Answer: sections.Answer,
-      Rationale: sections.Rationale,
-      Alternatives: sections.Alternatives,
-      Recommendation: sections.Recommendation,
-      Account: sections.Account,
-    },
+    question: isAbsent(fm.question) ? null : fm.question,
+    frontmatter: { ...fm },
+    sections: { ...sections },
   };
 }
 
+// ---------------------------------------------------------------------------
+// one node file
+// ---------------------------------------------------------------------------
+
 /**
  * Parse and validate a single node file's text (frontmatter + body).
- * Does not resolve `under`/`after`/`depends`/`cites[].id` against a manifest or
- * against sibling nodes, and does not compute `children`/`rank`/`ceiling`/
- * `status`/`hash` -- those need the whole graph and the raw file bytes, and
- * are added by `readGraph`.
+ * Does not resolve `under`/`after`/`depends`/`cites[].id`/`bears[].node`
+ * against a manifest or against sibling nodes, and does not compute
+ * `children`/`rank`/`ceiling`/`class`/`status`/`hash` -- those need the
+ * whole graph and the raw file bytes, and are added by `readGraph`.
  *
  * @param {string} text - the file's decoded text.
  * @param {{id: string, graph: string, slug: string, path: string}} loc
- * @returns {object} a partial node (all deliverable-1 fields except
- *   `children`, `rank`, `ceiling`, `status`, `hash`), plus the dialogue
- *   fields: `alternatives`, `alternativesText`, `recommendation`,
- *   `recommendationStale`, `review`, `reviewStale`, `draft`,
- *   `standingHash`, `draftHash`, and `account`.
+ * @returns {object} a partial node: everything the file itself decides.
  * @throws {Error} listing every problem found in this file, one per line,
  *   each prefixed with `loc.path`.
  */
@@ -696,7 +877,11 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   const { fm, fmText, bodyText } = parseFrontmatter(text, relPath);
 
   for (const key of Object.keys(fm)) {
-    if (!FRONTMATTER_KEYS.has(key)) {
+    if (Object.prototype.hasOwnProperty.call(REMOVED_KEYS, key)) {
+      problems.push(
+        `'${key}' is no longer a frontmatter key: the encoding changed on 2026-09-04, and ${REMOVED_KEYS[key]}`,
+      );
+    } else if (!FRONTMATTER_KEY_SET.has(key)) {
       problems.push(`unknown frontmatter key '${key}'`);
     }
   }
@@ -712,37 +897,10 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   // form
   let form = null;
   if (!isAbsent(fm.form)) {
-    if (typeof fm.form !== 'string' || !FORMS.has(fm.form)) {
-      problems.push(`'form' must be one of: ${[...FORMS].join(', ')}`);
+    if (typeof fm.form !== 'string' || !FORM_SET.has(fm.form)) {
+      problems.push(`'form' must be one of: ${FORMS.join(', ')}`);
     } else {
       form = fm.form;
-    }
-  }
-
-  // authority
-  let authority = null;
-  if (!isAbsent(fm.authority)) {
-    if (!isPlainObject(fm.authority)) {
-      problems.push("'authority' must be a mapping with class, by, date");
-    } else {
-      const a = fm.authority;
-      for (const k of Object.keys(a)) {
-        if (!['class', 'by', 'date'].includes(k)) problems.push(`unknown key 'authority.${k}'`);
-      }
-      let ok = true;
-      if (typeof a.class !== 'string' || !AUTHORITY_CLASSES.has(a.class)) {
-        problems.push(`'authority.class' must be one of: ${[...AUTHORITY_CLASSES].join(', ')}`);
-        ok = false;
-      }
-      if (typeof a.by !== 'string' || a.by.trim().length === 0) {
-        problems.push("'authority.by' is required and must be a non-empty string");
-        ok = false;
-      }
-      if (typeof a.date !== 'string' || !isValidDate(a.date)) {
-        problems.push("'authority.date' must be a YYYY-MM-DD date string");
-        ok = false;
-      }
-      if (ok) authority = { class: a.class, by: a.by, date: a.date };
     }
   }
 
@@ -764,69 +922,37 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   // stage: the next movement of the alignment dialogue owed on this node.
   let stage = null;
   if (!isAbsent(fm.stage)) {
-    if (typeof fm.stage !== 'string' || !STAGES.has(fm.stage)) {
-      problems.push(`'stage' must be one of: ${[...STAGES].join(', ')}`);
+    if (typeof fm.stage !== 'string' || !STAGE_SET.has(fm.stage)) {
+      problems.push(`'stage' must be one of: ${STAGES.join(', ')}`);
     } else {
       stage = fm.stage;
     }
   }
 
-  // alternatives: the answers on the table beside the standing one. Its
-  // own shape only; whether the '## Alternatives' subsections match it is
-  // checked below, once the body is parsed.
-  const { entries: alternatives, shapeOk: alternativesShapeOk } = readAlternatives(fm.alternatives, problems);
-
-  // facts: the decisions about the answer that are not questions under it,
-  // which is why they stay on the node rather than becoming children. Its
-  // own shape only; whether the '## Facts' subsections match is checked
+  // facts: every decision on the node, with the options the AI holds
+  // viable, the one it recommends, and the author's rulings. Its own shape
+  // and coherence only; whether the '## Facts' subsections match is checked
   // below, once the body is parsed.
   const { entries: facts, shapeOk: factsShapeOk } = readFacts(fm.facts, problems);
+  const answerFact = facts.find((f) => f.name === ANSWER_FACT) ?? null;
 
-  // recommendation: the facts a recommendation must state, required from the
-  // review stage on (checked below, once stage is known). One combined
-  // message for any shape problem -- missing field, bad value, or an extra
-  // key -- there is no per-field message for this one, unlike authority.
-  // Whether `adopts` resolves (to the standing answer or to a listed
-  // alternative) is checked below, once the body and the list are known.
-  let recommendation = null;
-  if (!isAbsent(fm.recommendation)) {
-    const r = fm.recommendation;
-    const ok = isPlainObject(r)
-      && Object.keys(r).length === RECOMMENDATION_KEYS.length
-      && RECOMMENDATION_KEYS.every((k) => Object.prototype.hasOwnProperty.call(r, k))
-      && typeof r.adopts === 'string' && r.adopts.trim().length > 0
-      && BOLDNESS_VALUES.has(r.boldness)
-      && typeof r.amends === 'string' && HASH_RE.test(r.amends)
-      && typeof r.at === 'string' && COMMIT_RE.test(r.at);
-    if (!ok) {
-      problems.push(
-        "'recommendation' must be {adopts: standing|<alternative name>, "
-        + 'boldness: low|moderate|high, amends: <sha1>, at: <7-40 hex commit>}',
-      );
-    } else {
-      recommendation = {
-        adopts: r.adopts, boldness: r.boldness, amends: r.amends, at: r.at,
-      };
-    }
-  }
-
-  // review: the state of the clean-context review of the draft. Same
-  // single-message-on-any-shape-problem style as recommendation above.
-  // Exactly four keys; an unknown key (the former `siblings`, the other
-  // drafts a per-node reviewer was given -- gone now that every review is a
-  // batch over the whole frontier and needs no such field) fails this check
-  // like any other malformed shape.
+  // review: the state of the clean-context review of what the node
+  // recommends. One combined message on any shape problem. Exactly four
+  // keys; an unknown key (the former `siblings`, the other drafts a
+  // per-node reviewer was given -- gone now that every review is a batch
+  // over the whole frontier and needs no such field) fails this check like
+  // any other malformed shape.
   let review = null;
   if (!isAbsent(fm.review)) {
     const r = fm.review;
     const ok = isPlainObject(r)
       && Object.keys(r).length === 4
-      && REVIEW_VERDICTS.has(r.verdict)
-      && REVIEW_STRENGTHS.has(r.strength)
+      && REVIEW_VERDICT_SET.has(r.verdict)
+      && REVIEW_STRENGTH_SET.has(r.strength)
       && typeof r.date === 'string' && isValidDate(r.date)
       && typeof r.of === 'string' && HASH_RE.test(r.of);
     if (!ok) {
-      problems.push("'review' must be {verdict: forward|kickback, strength: strong|moderate|weak|none, date: YYYY-MM-DD, of: <sha1>}");
+      problems.push(`'review' must be {verdict: ${REVIEW_VERDICTS.join('|')}, strength: ${REVIEW_STRENGTHS.join('|')}, date: YYYY-MM-DD, of: <sha1>}`);
     } else {
       review = { verdict: r.verdict, strength: r.strength, date: r.date, of: r.of };
     }
@@ -883,8 +1009,8 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
         if (!['kind', 'ref', 'note'].includes(k)) problems.push(`unknown key 'instrument.${k}'`);
       }
       let ok = true;
-      if (typeof inst.kind !== 'string' || !INSTRUMENT_KINDS.has(inst.kind)) {
-        problems.push(`'instrument.kind' must be one of: ${[...INSTRUMENT_KINDS].join(', ')}`);
+      if (typeof inst.kind !== 'string' || !INSTRUMENT_KIND_SET.has(inst.kind)) {
+        problems.push(`'instrument.kind' must be one of: ${INSTRUMENT_KINDS.join(', ')}`);
         ok = false;
       }
       if (typeof inst.ref !== 'string' || inst.ref.trim().length === 0) {
@@ -899,25 +1025,25 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     }
   }
 
-  // source / relation: required together under form:reading, forbidden otherwise
+  // source / bears: required together under form:reading, forbidden otherwise
   let source = null;
-  let relation = null;
+  let bears = [];
   const hasSource = !isAbsent(fm.source);
-  const hasRelation = !isAbsent(fm.relation);
+  const hasBears = !isAbsent(fm.bears);
   if (form === 'reading') {
     if (!hasSource || typeof fm.source !== 'string' || fm.source.trim().length === 0) {
       problems.push("'source' is required and must be a non-empty string when form: reading");
     } else {
       source = fm.source;
     }
-    if (!hasRelation || typeof fm.relation !== 'string' || !RELATIONS.has(fm.relation)) {
-      problems.push(`'relation' is required and must be one of: ${[...RELATIONS].join(', ')} when form: reading`);
+    if (!hasBears) {
+      problems.push("'bears' is required when form: reading: a reading says which options of which node the tradition bears on");
     } else {
-      relation = fm.relation;
+      bears = readBears(fm.bears, under.length, problems);
     }
   } else {
     if (hasSource) problems.push("'source' is only allowed when form: reading");
-    if (hasRelation) problems.push("'relation' is only allowed when form: reading");
+    if (hasBears) problems.push("'bears' is only allowed when form: reading");
   }
 
   // defines
@@ -943,7 +1069,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
             return null;
           }
           for (const k of Object.keys(entry)) {
-            if (!SHIM_KEYS.has(k)) problems.push(`unknown key 'shims[${i}].${k}'`);
+            if (!SHIM_KEY_SET.has(k)) problems.push(`unknown key 'shims[${i}].${k}'`);
           }
           let entryOk = true;
           if (typeof entry.artifact !== 'string' || entry.artifact.trim().length === 0) {
@@ -978,47 +1104,45 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   // order: a high-level order recorded once, as data (see scope.md's
   // Answer/Rationale). Its own shape is checked regardless of whether this
   // node has an '## Answer'; the requirement that it have one is checked
-  // below, once hasAnswer is known, alongside authority/tier.
+  // below, once hasAnswer is known, alongside tier.
   const order = readOrder(fm.order, problems);
 
   // body
   const sections = parseBody(bodyText, problems);
   const hasAnswer = sections.Answer !== null;
   const hasDisposition = sections.Disposition !== null;
-  const hasDraftSection = sections.Recommendation !== null;
-  const hasAlternativesSection = sections.Alternatives !== null;
+  const hasFenceSection = sections.Recommendation !== null;
   const hasFactsSection = sections.Facts !== null;
 
-  // '## Alternatives' stands with the frontmatter list, one '### <name>'
-  // subsection per entry, in the list's order: present exactly when the
-  // list is non-empty, and naming exactly what the list names.
-  if (alternatives.length > 0 && !hasAlternativesSection) {
-    problems.push("'alternatives' is non-empty and requires a '## Alternatives' section");
-  }
-  if (hasAlternativesSection && alternatives.length === 0) {
-    problems.push("'## Alternatives' requires a non-empty 'alternatives' list");
-  }
-  const matchNames = alternativesShapeOk && alternatives.length > 0 ? alternatives.map((a) => a.name) : null;
-  const alternativesText = hasAlternativesSection
-    ? parseAlternativesSection(sections.Alternatives, matchNames, problems)
-    : {};
-
-  // '## Facts' takes one subsection per fact whose choices need explaining
-  // and is omitted where none do, so it requires facts but facts do not
-  // require it.
+  // '## Facts' takes one subsection per fact whose recommendation needs
+  // explaining and one per answer option that is not the standing one, so
+  // it requires facts but facts do not always require it.
   if (hasFactsSection && facts.length === 0) {
     problems.push("'## Facts' requires a non-empty 'facts' list");
   }
-  const factNames = factsShapeOk && facts.length > 0 ? facts.map((f) => f.name) : null;
   const factsText = hasFactsSection
-    ? parseFactsSection(sections.Facts, factNames, problems)
+    ? parseFactsSection(sections.Facts, factsShapeOk && facts.length > 0 ? facts : null, problems)
     : {};
+  if (!hasFactsSection && answerFact !== null && factsShapeOk) {
+    const owed = answerFact.options.filter((o) => o.name !== answerFact.stands).map((o) => o.name);
+    if (owed.length > 0) {
+      problems.push(
+        `the answer fact carries ${owed.map((n) => `'${n}'`).join(', ')} beside the option that stands, `
+        + "which requires a '## Facts' section stating each in prose",
+      );
+    }
+  }
+  for (const fact of facts) {
+    const found = factsText[fact.name];
+    if (found === undefined) continue;
+    fact.prose = found.prose;
+    for (const option of fact.options) {
+      if (found.options[option.name] !== undefined) option.prose = found.options[option.name];
+    }
+  }
 
   if (hasAnswer && form === null) {
     problems.push("'form' is required when the body has an '## Answer' section");
-  }
-  if (authority !== null && !hasAnswer) {
-    problems.push("'authority' requires an '## Answer' section");
   }
   if (tier !== null && !hasAnswer) {
     problems.push("'tier' requires an '## Answer' section");
@@ -1032,88 +1156,100 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   if (hasDisposition && stage === null) {
     problems.push("'## Disposition' requires 'stage'");
   }
-  const carriesDialogue = !isAbsent(fm.alternatives) || !isAbsent(fm.facts)
-    || !isAbsent(fm.recommendation)
-    || !isAbsent(fm.review) || !isAbsent(fm.depends)
-    || hasAlternativesSection || hasFactsSection || hasDraftSection || sections.Account !== null;
+  // What the recording removes is the dialogue: the stage, the review, the
+  // dependencies, and the account. The facts and the '## Recommendation'
+  // fence are not dialogue state -- they persist after the ruling -- so
+  // neither asks for a stage of its own.
+  const carriesDialogue = !isAbsent(fm.review) || !isAbsent(fm.depends) || sections.Account !== null;
   if (carriesDialogue && stage === null) {
     problems.push(
-      "'alternatives', 'facts', 'recommendation', 'review', 'depends', '## Alternatives', "
-      + "'## Facts', '## Recommendation', and '## Account' are parts of the dialogue and require stage",
+      "'review', 'depends', and '## Account' are parts of the dialogue and require stage",
     );
   }
 
-  // status: answered when the stamp is ratified or delegated, unanswered
-  // otherwise (a deferred stamp, no stamp, or -- below -- no answer at
-  // all). Every unanswered node carries the dialogue and so must carry a
-  // stage; the validator refuses one that does not.
-  const status = deriveStatus({ authority });
-  if (status === 'unanswered' && stage === null) {
-    problems.push(`${id} is unanswered and must carry stage`);
+  // What stands, what is recommended, and the fence between them. The
+  // '## Answer' section holds the text of the option named by `stands`; a
+  // fence holds the whole proposed node where the recommended option is not
+  // that one.
+  if (hasAnswer && answerFact === null && factsShapeOk) {
+    problems.push("an '## Answer' section requires an answer fact, whose options are the candidate answers to this question");
   }
-  if ((stage === 'review' || stage === 'ruling') && recommendation === null) {
-    problems.push("stage review or ruling requires 'recommendation'");
+  if (hasAnswer && answerFact !== null && answerFact.stands === null) {
+    problems.push("an '## Answer' section requires the answer fact to name the option it stands on ('stands')");
+  }
+  if (!hasAnswer && answerFact !== null && answerFact.stands !== null) {
+    problems.push("'stands' names the option whose text '## Answer' holds, so it requires an '## Answer' section");
+  }
+  const recommends = answerFact === null ? null : answerFact.recommends;
+  const stands = answerFact === null ? null : answerFact.stands;
+  const fenceExpected = recommends !== null && (stands === null || stands !== recommends);
+  if (fenceExpected && !hasFenceSection) {
+    problems.push(
+      stands === null
+        ? `the answer fact recommends '${recommends}' and nothing stands yet, which requires a '## Recommendation' section holding the recommended node whole`
+        : `the answer fact recommends '${recommends}' rather than the standing '${stands}', which requires a '## Recommendation' section holding it whole`,
+    );
+  }
+  if (!fenceExpected && hasFenceSection) {
+    const why = recommends === null
+      ? 'the answer fact recommends nothing'
+      : `the answer fact recommends the standing option '${stands}'`;
+    problems.push(`'## Recommendation' holds the recommended node where it differs from what stands, and ${why}`);
+  }
+
+  // From the review stage on, every fact carries the option it recommends:
+  // that is what a review reads and what a ruling answers.
+  if (stage === 'review' || stage === 'ruling') {
+    for (const fact of facts) {
+      if (fact.recommends === null) {
+        problems.push(`stage ${stage} requires every fact to recommend one of its options; fact '${fact.name}' recommends none`);
+      }
+    }
+    if (facts.length === 0) {
+      problems.push(`stage ${stage} requires 'facts': there is nothing for a review or a ruling to read`);
+    }
   }
   if (stage === 'ruling' && (review === null || review.verdict !== 'forward')) {
     problems.push("stage ruling requires a 'review' with verdict forward");
   }
 
-  // `recommendation.adopts` resolves either to the node as it stands --
-  // which takes an '## Answer' to stand on, and leaves nothing to quote --
-  // or to one listed alternative, whose whole proposed node the
-  // '## Recommendation' fence holds. There is no exception: pruning the
-  // node is the `existence` fact now and never an alternative, so every
-  // adopted alternative has a proposed text to quote.
-  if (recommendation !== null) {
-    const adopted = alternatives.find((a) => a.name === recommendation.adopts);
-    if (recommendation.adopts === STANDING) {
-      if (!hasAnswer) {
-        problems.push(`'recommendation.adopts' is '${STANDING}', which requires an '## Answer' section`);
-      }
-      if (hasDraftSection) {
-        problems.push(`'recommendation.adopts' is '${STANDING}', so the node carries no '## Recommendation' section`);
-      }
-    } else if (adopted === undefined) {
-      problems.push(
-        `'recommendation.adopts' names '${recommendation.adopts}', which is neither '${STANDING}' nor a listed alternative`,
-      );
-    } else if (!hasDraftSection) {
-      problems.push(
-        `'recommendation.adopts' names the alternative '${adopted.name}', which requires a '## Recommendation' section`,
-      );
-    }
-  }
-
   // '## Recommendation': one fenced ```markdown block, parsed only
-  // structurally by parseDraftFence (frontmatter and sections; no field
-  // rule beyond parsing except that it answers the same question) and
-  // exposed reduced to {raw, question, frontmatter, sections} as `draft`.
-  // `draftFenceText` (the fence's exact content, or null with no
-  // '## Recommendation') feeds the draft hash below regardless of whether
-  // the draft is otherwise valid -- that value is only ever read once this
-  // function has returned without throwing.
-  let draft = null;
-  let draftFenceText = null;
-  if (hasDraftSection) {
-    draftFenceText = extractDraftFence(sections.Recommendation, problems);
-    if (draftFenceText !== null) {
-      draft = parseDraftFence(draftFenceText, question, { id, graph, slug, path: relPath }, problems);
+  // structurally by parseFence. `fenceText` (the fence's exact content, or
+  // null with no '## Recommendation') feeds the hashes below regardless of
+  // whether the fence is otherwise valid -- that value is only ever read
+  // once this function has returned without throwing.
+  let fence = null;
+  let fenceText = null;
+  if (hasFenceSection) {
+    fenceText = extractFence(sections.Recommendation, problems);
+    if (fenceText !== null) {
+      fence = parseFence(fenceText, question, { id, graph, slug, path: relPath }, problems);
     }
   }
 
-  const standingHash = deriveStandingHash({
+  // The hashes: what stands, and what each fact recommends. A ruling pins
+  // its fact's recommendation hash and a review pins the node's, so both
+  // are computed from the same parts the node itself exposes.
+  const hashParts = {
     fmText,
     answer: sections.Answer,
     rationale: sections.Rationale,
-  });
-  const draftHash = deriveDraftHash({
-    fmText,
-    draftFence: draftFenceText,
-    answer: sections.Answer,
-    rationale: sections.Rationale,
-  });
-  const reviewStale = review !== null && review.of !== draftHash;
-  const recommendationStale = recommendation !== null && recommendation.amends !== standingHash;
+    fence: fenceText === null ? null : { raw: fenceText },
+    facts,
+    review,
+    stage,
+  };
+  const standingHash = deriveStandingHash(hashParts);
+  for (const fact of facts) {
+    fact.recommendationHash = deriveFactRecommendationHash(hashParts, fact);
+    fact.moved = factMoved(hashParts, fact);
+  }
+  const recommendationHash = deriveRecommendationHash(hashParts);
+  const nodeMoved = moved(hashParts);
+
+  if (nodeMoved && stage === null) {
+    problems.push(`${id} has a recommendation that has moved since its ruling and must carry stage`);
+  }
 
   if (problems.length > 0) {
     throw fail(relPath, problems);
@@ -1127,7 +1263,6 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     hash: null, // set by readGraph from the file's raw bytes
     question,
     form,
-    authority,
     under,
     tier,
     boost,
@@ -1136,28 +1271,33 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     after,
     depends,
     source,
-    relation,
+    bears,
     defines,
     shims,
     stage,
     order,
-    alternatives,
-    alternativesText,
     facts,
-    factsText,
-    recommendation,
-    recommendationStale,
+    answerFact,
     review,
-    reviewStale,
-    draft,
+    reviewStale: reviewStale(hashParts),
+    fence,
+    fmText,
     standingHash,
-    draftHash,
+    recommendationHash,
+    moved: nodeMoved,
+    proposal: proposal(hashParts),
+    divergesFromRecommendation: divergesFromRecommendation(hashParts),
+    onFrontier: onFrontier(hashParts),
     answer: sections.Answer,
     rationale: sections.Rationale,
     account: sections.Account,
     disposition: sections.Disposition,
   };
 }
+
+// ---------------------------------------------------------------------------
+// the whole graph
+// ---------------------------------------------------------------------------
 
 async function pathIsDirectory(p) {
   try {
@@ -1265,13 +1405,21 @@ export async function readGraph(rootDir) {
     }
   }
 
-  // canonicalize reference fields to local form now that we have the manifest
+  // canonicalize reference fields to local form now that we have the
+  // manifest. A `bears` entry with no `node` of its own bears on the
+  // reading's one parent, which is what makes the common case say nothing.
   for (const node of parsed) {
     node.under = node.under.map((refId) => canonicalizeId(refId, manifest));
     node.after = node.after.map((refId) => canonicalizeId(refId, manifest));
     node.depends = node.depends.map((d) => ({ ...d, id: canonicalizeId(d.id, manifest) }));
     node.cites = node.cites.map((c) => ({ ...c, id: canonicalizeId(c.id, manifest) }));
     node.order = node.order.map((step) => step.map((refId) => canonicalizeId(refId, manifest)));
+    node.bears = node.bears.map((b) => ({
+      ...b,
+      node: b.node === null
+        ? (node.under.length === 1 ? node.under[0] : null)
+        : canonicalizeId(b.node, manifest),
+    }));
   }
 
   // referential integrity: every 'under' entry must resolve within this
@@ -1279,13 +1427,12 @@ export async function readGraph(rootDir) {
   // double that parent's rank contribution and duplicate the child in
   // `children`); every 'after' entry must also resolve within this graph.
   // every 'depends' entry must resolve within this graph, must not repeat,
-  // must not name the node itself, and must name a node whose status is
-  // unanswered -- a dependency is on an open question, not a settled one --
+  // must not name the node itself, and must name a node that carries a
+  // stage -- a dependency is on an open question, not a settled one --
   // keyed on the entry's 'id' part throughout, so the same ancestor named
-  // twice under two different alternatives is still a duplicate. A
-  // qualified entry additionally requires the named alternative to actually
-  // be listed on the ancestor it qualifies, once the ancestor itself
-  // resolves.
+  // twice under two different options is still a duplicate. A qualified
+  // entry additionally requires the named option to actually be on the
+  // ancestor's answer fact, once the ancestor itself resolves.
   const nodesById = new Map(parsed.map((n) => [n.id, n]));
   const idSet = new Set(nodesById.keys());
   for (const node of parsed) {
@@ -1312,15 +1459,49 @@ export async function readGraph(rootDir) {
       }
       if (!idSet.has(d.id)) {
         problems.push(`${node.path}: unresolved 'depends' reference: ${d.id}`);
-      } else if (deriveStatus(nodesById.get(d.id)) === 'answered') {
-        problems.push(`${node.path}: 'depends' names ${d.id}, which is answered; a dependency is on an open question`);
-      } else if (d.alternative !== null && !nodesById.get(d.id).alternatives.some((a) => a.name === d.alternative)) {
-        problems.push(`${node.path}: 'depends' names alternative ${d.alternative} on ${d.id}, which has no such alternative`);
+      } else if (!onFrontier(nodesById.get(d.id))) {
+        problems.push(`${node.path}: 'depends' names ${d.id}, which carries no stage; a dependency is on an open question`);
+      } else if (d.option !== null) {
+        const answerFact = factByName(nodesById.get(d.id), 'answer');
+        if (answerFact === null || !answerFact.options.some((o) => o.name === d.option)) {
+          problems.push(`${node.path}: 'depends' names option ${d.option} on ${d.id}, whose answer fact has no such option`);
+        }
       }
       if (seenDepends.has(d.id)) {
         problems.push(`${node.path}: duplicate 'depends' reference: ${d.id}`);
       }
       seenDepends.add(d.id);
+    }
+
+    // bears: a reading names the node, the fact, and the option a tradition
+    // bears on, each of which must exist for the inverse to be derivable.
+    for (const b of node.bears) {
+      if (b.node === null) continue; // already reported: no parent to default to
+      const target = nodesById.get(b.node);
+      if (target === undefined) {
+        problems.push(`${node.path}: 'bears' names ${b.node}, which is not a node`);
+        continue;
+      }
+      const fact = factByName(target, b.fact);
+      if (fact === null) {
+        problems.push(`${node.path}: 'bears' names the '${b.fact}' fact of ${b.node}, which has no such fact`);
+        continue;
+      }
+      if (!fact.options.some((o) => o.name === b.option)) {
+        problems.push(`${node.path}: 'bears' names option ${b.option} on the '${b.fact}' fact of ${b.node}, which has no such option`);
+      }
+    }
+  }
+
+  // The class a node's rulings confer decides whether it owes the dialogue a
+  // stage: an unanswered node carries the whole dialogue, a deferred node
+  // stays on the alignment frontier until the author returns to it, and a
+  // delegated or ratified node is off it -- unless its recommendation has
+  // moved since the ruling, which `parseNode` has already caught.
+  for (const node of parsed) {
+    const cls = deriveClass(node, nodesById);
+    if ((cls === 'unanswered' || cls === 'deferred') && node.stage === null) {
+      problems.push(`${node.path}: ${node.id} is ${cls} and must carry stage`);
     }
   }
 
@@ -1413,6 +1594,17 @@ export async function readGraph(rootDir) {
     throw new Error(orderProblems.join('\n'));
   }
 
+  // The readings' inverse: every option carries the readings that bear on
+  // it, derived from their `bears` and never stored twice.
+  const readingsByOption = deriveReadings(parsed);
+  for (const node of parsed) {
+    for (const fact of node.facts) {
+      for (const option of fact.options) {
+        option.readings = readingsByOption.get(`${node.id}\n${fact.name}\n${option.name}`) ?? [];
+      }
+    }
+  }
+
   const nodes = parsed
     .map((node) => {
       const settled = settlesMap.get(node.id);
@@ -1421,9 +1613,11 @@ export async function readGraph(rootDir) {
         children: childrenMap.get(node.id) ?? [],
         rank: rankMap.get(node.id) ?? 0,
         ceiling: deriveCeiling(node.id, nodesById),
-        status: deriveStatus(node),
+        class: deriveClass(node, nodesById),
+        classSource: deriveClassSource(node, nodesById),
+        status: deriveStatus(node, nodesById),
         settles: settled.settles,
-        settledBy: { under: settled.under, alternatives: settled.alternatives, depends: settled.depends },
+        settledBy: { under: settled.under, options: settled.options, depends: settled.depends },
       };
     })
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

@@ -2,6 +2,13 @@
 question: Does a disposition after the answer violate section order?
 form: target
 stage: periagogic
+facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: 2026-09-04
+    stands: standing
 ---
 
 ## Answer

@@ -1,9 +1,9 @@
 ---
 question: Can a tier be declared without an answer?
-tier: global
 stage: periagogic
+tier: global
 ---
 
 ## Disposition
 
-Not yet decided, but already claiming global tier.
+Still open.

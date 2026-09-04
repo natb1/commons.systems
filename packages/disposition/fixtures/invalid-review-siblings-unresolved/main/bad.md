@@ -1,12 +1,6 @@
 ---
-question: Does an unresolved review sibling fail?
-form: rule
-stage: ruling
-recommendation:
-  adopts: standing
-  boldness: low
-  amends: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  at: a1b2c3d
+question: Does a review with the retired siblings key fail?
+stage: periagogic
 review:
   verdict: forward
   strength: none
@@ -14,19 +8,8 @@ review:
   of: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   siblings:
     - example.test/main/does-not-exist
-facts:
-  - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
-    boldness: low
 ---
 
 ## Disposition
 
 Still open.
-
-## Answer
-
-A standing answer for the recommendation to adopt.

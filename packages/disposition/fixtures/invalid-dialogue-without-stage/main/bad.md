@@ -1,24 +1,27 @@
 ---
-question: Does a recommendation without stage fail?
+question: Does a review without a stage fail?
 form: rule
-authority:
-  class: ratified
-  by: Fixture Author
-  date: 2026-01-01
-recommendation:
-  adopts: standing
-  boldness: low
-  amends: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  at: a1b2c3d
+review:
+  verdict: forward
+  strength: weak
+  date: 2026-09-03
+  of: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 facts:
-  - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: 2026-09-04
+        ruling:
+          response: confirm
+          date: 2026-09-05
+          of: f156001518723cb12c570f0c2bc8b23e69fd4ef2
+    recommends: standing
     boldness: low
+    stands: standing
 ---
 
 ## Answer
 
-Settled.
+Ruled, so the node needs no stage of its own -- except that a review is part
+of the dialogue and asks for one.

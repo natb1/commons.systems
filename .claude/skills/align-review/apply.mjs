@@ -3,17 +3,17 @@
 //
 // Applies clean-context review verdicts (see brief.md, SKILL.md §4, and the
 // disposition-graph nodes clean-context-review/recording/dialogue/
-// frontier-consistency) to node files: appends the reviewer's account to
-// '## Account', records a proposed merge or split as a pending alternative on
-// the node it would change, and writes the dialogue frontmatter (`stage`,
-// `review`, `alternatives`) the verdict and the findings imply. The reviewer
-// only recommends; this script is the mechanical half of "the session decides
-// and answers for the record" -- replies and overrides are supplied by the
-// caller, never invented here.
+// frontier-consistency/viable-options) to node files: appends the reviewer's
+// account to '## Account', records a proposed merge or split as an option on
+// the answer fact of the node it would change, and writes the dialogue
+// frontmatter (`stage`, `review`, `depends`) the verdict and the findings
+// imply. The reviewer only recommends; this script is the mechanical half of
+// "the session decides and answers for the record" -- replies and overrides
+// are supplied by the caller, never invented here.
 //
 // Usage:
 //   node apply.mjs <json file> --replies <file> \
-//     [--overrides <file>] [--date YYYY-MM-DD] [--dry] [--fields-only]
+//     [--overrides <file>] [--date YYYY-MM-DD] [--dry]
 //
 // The one <json file> is normally the batch frontier-consistency.md and
 // clean-context-review.md describe -- the nodes at `stage: review`, judged
@@ -21,24 +21,22 @@
 //   { date, read: [id], nodes: [entry], frontier: [finding],
 //     subtree_divergences: [divergence] }
 // detected by the presence of a `nodes` array. A `frontier` finding may name
-// any node in the graph, in the batch or outside it, and may propose
-// alternatives:
+// any node in the graph, in the batch or outside it, and may propose options:
 //   { kind, nodes: [id], finding, proposal, stages: {id: stage},
-//     alternatives: [{node, name, text}] }
-// A `subtree_divergences` entry names an ancestor whose pending alternatives
-// two unanswered subtrees stand under (`alignment-order`), and is written on
-// the leaves and never on the ancestor:
-//   { ancestor: id, sides: { alternativeName: [id, ...] }, finding }
-// each leaf named under a side gains `<ancestor>#<alternativeName>` in its
+//     options: [{node, name, text}] }
+// A `subtree_divergences` entry names an ancestor whose pending answer
+// options two unruled subtrees stand under (`alignment-order`), and is
+// written on the leaves and never on the ancestor:
+//   { ancestor: id, sides: { optionName: [id, ...] }, finding }
+// each leaf named under a side gains `<ancestor>#<optionName>` in its
 // `depends`.
 //
 // Absent a `nodes` array, the file (or files) are read the old way -- one
 // entry or a JSON list of entries, each
 //   {id, scope?, verdict, kickback_stage?, findings[], counter_argument,
-//    strength, facts_check}
-// `scope` defaults to "node"; the other shape is "amendment" -- so that
-// --fields-only and the tests of the per-node model this superseded still
-// work.
+//    strength, facts_check, viability}
+// `scope` defaults to "node"; the other shape is "amendment" -- so that the
+// tests of the per-node model this superseded still work.
 
 import { readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
@@ -46,24 +44,24 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
 import { readGraph, parseNode } from "../../../packages/disposition/read.mjs";
-import { deriveDraftHash } from "../../../packages/disposition/derive.mjs";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
 const STAGE_ORDER = ["periagogic", "maieutic", "review", "ruling"];
 const FRONTIER_KINDS = new Set([
   "contradiction", "supersession", "redundancy", "decomposition",
   "vocabulary", "cross-reference", "placement", "coverage",
-  // added 2026-09-03 with the fifteenth validation and the staleness the
-  // recommendation's `amends` pin makes visible (frontier-consistency).
+  // added 2026-09-03 with the fifteenth validation and the staleness a pin
+  // makes visible (frontier-consistency); under the encoding of 2026-09-04
+  // that staleness is `reviewStale`, a review whose `of` no longer matches
+  // what the node recommends.
   "merge", "stale-recommendation",
 ]);
-// the reader's own rule for an alternative's name (read.mjs
-// ALTERNATIVE_NAME_RE), checked here so a bad name is refused before any
-// file is touched rather than caught by the post-write parse.
-const ALTERNATIVE_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
-// the sections a node file may carry, in order: an inserted '## Alternatives'
-// goes before the first of the sections that follow it.
-const SECTIONS_AFTER_ALTERNATIVES = ["Recommendation", "Account"];
+// the reader's own rule for an option's name (read.mjs OPTION_NAME_RE),
+// checked here so a bad name is refused before any file is touched rather
+// than caught by the post-write parse.
+const OPTION_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
+// the sections a node file may carry, in order (read.mjs SECTION_ORDER): an
+// inserted '## Facts' goes before the first of the sections that follow it.
+const SECTIONS_AFTER_FACTS = ["Recommendation", "Account"];
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -75,7 +73,7 @@ function isNonEmptyString(x) {
 
 function parseArgs(argv) {
   const files = [];
-  const opts = { repliesFile: null, overridesFile: null, date: null, dry: false, fieldsOnly: false };
+  const opts = { repliesFile: null, overridesFile: null, date: null, dry: false };
   const valueFlags = { "--replies": "repliesFile", "--overrides": "overridesFile", "--date": "date" };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -85,8 +83,6 @@ function parseArgs(argv) {
       opts[valueFlags[a]] = v;
     } else if (a === "--dry") {
       opts.dry = true;
-    } else if (a === "--fields-only") {
-      opts.fieldsOnly = true;
     } else if (a.startsWith("--")) {
       throw new Error(`unknown flag ${a}`);
     } else {
@@ -94,7 +90,7 @@ function parseArgs(argv) {
     }
   }
   if (files.length === 0) {
-    throw new Error("usage: node apply.mjs <json file> [<json file> ...] --replies <file> [--overrides <file>] [--date YYYY-MM-DD] [--dry] [--fields-only]");
+    throw new Error("usage: node apply.mjs <json file> [<json file> ...] --replies <file> [--overrides <file>] [--date YYYY-MM-DD] [--dry]");
   }
   return { files, ...opts };
 }
@@ -133,7 +129,7 @@ async function loadInput(files) {
 // directly as `entries`/`batch.nodes` (the latter used by tests), so no
 // path can forget a default.
 function withDefaults(e) {
-  return { scope: "node", kickback_stage: null, counter_argument: null, facts_check: null, ...e };
+  return { scope: "node", kickback_stage: null, counter_argument: null, facts_check: null, viability: null, ...e };
 }
 
 /**
@@ -167,8 +163,9 @@ function extractScalar(text, key) {
   return m ? m[1].trim() : null;
 }
 
-function hasReviewSubsection(text) {
-  return text.includes("### Clean-context review");
+/** The names already on a node's answer fact, or an empty set where it has none. */
+function listedOptionNames(node) {
+  return new Set(((node.answerFact && node.answerFact.options) || []).map((o) => o.name));
 }
 
 // ------------------------------------------------------------ file surgery
@@ -199,28 +196,39 @@ function joinRaw(fmLines, bodyLines) {
 }
 
 /**
- * The body's `## ` blocks, in order, each with the index of its heading line
- * and the index one past its last line. Fenced regions are skipped, using the
- * same toggling rule read.mjs's `parseBody` uses.
+ * The heading boundaries of `lines[from..to)` at depths 2 to 4, skipping
+ * fenced regions with the same toggling rule read.mjs's `parseBody` uses.
  *
- * @returns {Array<{name: string, start: number, end: number}>}
+ * @returns {Array<{depth: number, name: string, index: number}>}
  */
-function splitBodyBlocks(bodyLines) {
+function headingBoundaries(lines, from = 0, to = lines.length) {
   const headingRe = /^(#{1,6})[ \t]+(.*?)\s*$/;
   const fenceRe = /^[ \t]*(`{3,}|~{3,})/;
-  const boundaries = [];
+  const out = [];
   let fenceChar = null;
-  bodyLines.forEach((line, index) => {
+  for (let i = from; i < to; i += 1) {
+    const line = lines[i];
     const fence = line.match(fenceRe);
     if (fence) {
       if (fenceChar === null) fenceChar = fence[1][0];
       else if (fence[1][0] === fenceChar) fenceChar = null;
-      return;
+      continue;
     }
-    if (fenceChar !== null) return;
+    if (fenceChar !== null) continue;
     const m = line.match(headingRe);
-    if (m && m[1].length === 2) boundaries.push({ name: m[2], index });
-  });
+    if (m && m[1].length >= 2 && m[1].length <= 4) out.push({ depth: m[1].length, name: m[2], index: i });
+  }
+  return out;
+}
+
+/**
+ * The body's `## ` blocks, in order, each with the index of its heading line
+ * and the index one past its last line.
+ *
+ * @returns {Array<{name: string, start: number, end: number}>}
+ */
+function splitBodyBlocks(bodyLines) {
+  const boundaries = headingBoundaries(bodyLines).filter((b) => b.depth === 2);
   return boundaries.map((b, i) => ({
     name: b.name,
     start: b.index,
@@ -256,79 +264,53 @@ function appendToAccount(text, subsection) {
 }
 
 /**
- * Append `### <name>` subsections to '## Alternatives', creating the section
- * when it is absent -- before '## Recommendation'/'## Account' if either is
- * there, since the reader fixes the section order, and at the end of the body
- * otherwise.
+ * Append `#### <name>` subsections under `### answer` in '## Facts' -- what
+ * an option proposed by a finding says in prose: what it would answer and
+ * why it is on the table. Every answer option but the one that stands owes
+ * one (read.mjs `checkOptionHeadings`), and the headings must read in the
+ * options' own order, which is why these go last, as the frontmatter entries
+ * do.
+ *
+ * `### answer` is created at the top of '## Facts' when the section exists
+ * without it (the answer fact is first among the facts), and '## Facts'
+ * itself is created in SECTION_ORDER position -- before
+ * '## Recommendation'/'## Account' if either is there, at the end of the
+ * body otherwise.
  */
-function appendAlternativeSubsections(text, entries) {
+function appendAnswerOptionSubsections(text, entries) {
   if (entries.length === 0) return text;
   const { fmLines, bodyLines } = splitRaw(text);
   const blocks = splitBodyBlocks(bodyLines);
   const lines = [...bodyLines];
   const rendered = [];
-  for (const e of entries) rendered.push("", `### ${e.name}`, "", e.text.trim());
+  for (const e of entries) rendered.push("", `#### ${e.name}`, "", e.text.trim());
 
-  const alternatives = blocks.find((b) => b.name === "Alternatives");
-  if (alternatives) {
-    const end = trimBlockEnd(lines, alternatives.start, alternatives.end);
-    lines.splice(end, alternatives.end - end, ...rendered, "");
+  const facts = blocks.find((b) => b.name === "Facts");
+  if (!facts) {
+    const following = blocks.find((b) => SECTIONS_AFTER_FACTS.includes(b.name));
+    if (following) {
+      lines.splice(following.start, 0, "## Facts", "", "### answer", ...rendered, "");
+    } else {
+      const end = trimBlockEnd(lines, 0, lines.length);
+      lines.splice(end, lines.length - end, "", "## Facts", "", "### answer", ...rendered, "");
+    }
     return joinRaw(fmLines, lines);
   }
 
-  const following = blocks.find((b) => SECTIONS_AFTER_ALTERNATIVES.includes(b.name));
-  if (following) {
-    lines.splice(following.start, 0, "## Alternatives", ...rendered, "", "");
-  } else {
-    const end = trimBlockEnd(lines, 0, lines.length);
-    lines.splice(end, lines.length - end, "", "## Alternatives", ...rendered, "");
+  const subs = headingBoundaries(lines, facts.start + 1, facts.end).filter((b) => b.depth === 3);
+  const answer = subs.find((b) => b.name === "answer");
+  if (!answer) {
+    const insertAt = facts.start + 1;
+    const tail = lines[insertAt] !== undefined && lines[insertAt].trim() !== "" ? [""] : [];
+    lines.splice(insertAt, 0, "", "### answer", ...rendered, ...tail);
+    return joinRaw(fmLines, lines);
   }
+
+  const nextSub = subs.find((b) => b.index > answer.index);
+  const sectionEnd = nextSub ? nextSub.index : facts.end;
+  const end = trimBlockEnd(lines, answer.index, sectionEnd);
+  lines.splice(end, sectionEnd - end, ...rendered, "");
   return joinRaw(fmLines, lines);
-}
-
-// --------------------------------------------------------------- draft hash
-//
-// `--fields-only` targets nodes the live graph already carries at `stage:
-// ruling` without ever having had a `review` field written (the two 2026-
-// 09-03 batches, applied by hand before this script existed) -- so
-// `parseNode` on the untouched file throws (dialogue.md/clean-context-
-// review.md's own rule: "stage ruling requires a 'review' with verdict
-// forward"), before ever returning the `draftHash` this script needs to
-// write. `read.mjs` is off limits to edit here, so this mirrors just the two
-// mechanical, non-validating slices `deriveDraftHash` needs -- the
-// frontmatter's raw text and, when present, the exact '## Recommendation'
-// fence content -- using the same fence-aware boundary rule `parseBody` and
-// `extractDraftFence` use, but collecting no problems and never recursing
-// into the fence's own content. `deriveDraftHash` itself (imported, not
-// duplicated) does the actual hashing and dialogue-key stripping.
-function extractFenceLoose(sectionText) {
-  const lines = sectionText.split("\n");
-  let i = 0;
-  while (i < lines.length && lines[i].trim() === "") i += 1;
-  if (i >= lines.length || lines[i].trim() !== "```markdown") return null;
-  i += 1;
-  const content = [];
-  while (i < lines.length && lines[i].trim() !== "```") {
-    content.push(lines[i]);
-    i += 1;
-  }
-  if (i >= lines.length) return null;
-  return content.join("\n");
-}
-
-function computeDraftHashUnvalidated(rawText) {
-  const { fmLines, bodyLines } = splitRaw(rawText);
-  const sections = {};
-  for (const b of splitBodyBlocks(bodyLines)) {
-    sections[b.name] = bodyLines.slice(b.start + 1, b.end).join("\n").trim();
-  }
-  const draftFence = sections.Recommendation !== undefined ? extractFenceLoose(sections.Recommendation) : null;
-  return deriveDraftHash({
-    fmText: fmLines.join("\n"),
-    draftFence,
-    answer: sections.Answer ?? null,
-    rationale: sections.Rationale ?? null,
-  });
 }
 
 // ------------------------------------------------------------- frontmatter
@@ -340,6 +322,10 @@ function findFrontmatterBlock(fmLines, key) {
   return [start, end];
 }
 
+function indentOf(line) {
+  return (line.match(/^[ \t]*/) || [""])[0];
+}
+
 function renderReviewBlock({ verdict, strength, date, of }) {
   // an all-digit sha1 would parse as a YAML integer and fail the reader's
   // `of: <sha1>` check, so it is quoted; every other hash is left bare, as
@@ -349,22 +335,105 @@ function renderReviewBlock({ verdict, strength, date, of }) {
 }
 
 /**
- * One `alternatives` list entry, at the indentation the node's own list
- * already uses (a YAML sequence cannot mix indentations), `source: review`
- * and the review's date as its `ref`, quoted so an all-digit or date-shaped
- * ref stays a string.
+ * One option entry on the answer fact, at the indentation the node's own
+ * list already uses (a YAML sequence cannot mix indentations), `source:
+ * review` -- the option was raised by a reading -- and the review's date as
+ * its `ref`, quoted so a date-shaped ref stays a string.
  */
-function renderAlternativeEntry({ name, date }, indent) {
+function renderOptionEntry({ name, date }, indent) {
   return [`${indent}- name: ${name}`, `${indent}  source: review`, `${indent}  ref: "${date}"`];
+}
+
+/**
+ * Append option entries to the answer fact's `options` list, creating the
+ * `facts:` list and its answer fact when either is absent. The answer fact
+ * is written first among the facts, which is where the reader requires it.
+ *
+ * Text-level, like every other edit here: the entries go at the end of the
+ * list the file already writes, at its own indentation, and no other line
+ * of the block is touched.
+ */
+function upsertAnswerOptions(fmLines, options, date) {
+  if (options.length === 0) return fmLines;
+  const lines = [...fmLines];
+  const facts = findFrontmatterBlock(lines, "facts");
+
+  if (!facts) {
+    const order = findFrontmatterBlock(lines, "order");
+    const stageIdx = lines.findIndex((l) => /^stage:/.test(l));
+    const review = findFrontmatterBlock(lines, "review");
+    const depends = findFrontmatterBlock(lines, "depends");
+    const insertAt = order ? order[1] : stageIdx !== -1 ? stageIdx + 1 : review ? review[0] : depends ? depends[0] : lines.length;
+    lines.splice(
+      insertAt,
+      0,
+      "facts:",
+      "  - name: answer",
+      "    options:",
+      ...options.flatMap((o) => renderOptionEntry({ ...o, date }, "      ")),
+    );
+    return lines;
+  }
+
+  const [start, end] = facts;
+  const firstItem = lines.slice(start + 1, end).find((l) => /^\s*- /.test(l));
+  const itemIndent = firstItem ? indentOf(firstItem) : "  ";
+  const itemStarts = [];
+  for (let i = start + 1; i < end; i += 1) {
+    if (lines[i].startsWith(`${itemIndent}- `)) itemStarts.push(i);
+  }
+  const keyIndent = `${itemIndent}  `;
+  const answerIdx = itemStarts.findIndex((s, k) => {
+    const itemEnd = k + 1 < itemStarts.length ? itemStarts[k + 1] : end;
+    if (lines[s] === `${itemIndent}- name: answer`) return true;
+    for (let i = s + 1; i < itemEnd; i += 1) {
+      if (lines[i] === `${keyIndent}name: answer`) return true;
+    }
+    return false;
+  });
+
+  if (answerIdx === -1) {
+    const insertAt = itemStarts.length > 0 ? itemStarts[0] : start + 1;
+    lines.splice(
+      insertAt,
+      0,
+      `${itemIndent}- name: answer`,
+      `${keyIndent}options:`,
+      ...options.flatMap((o) => renderOptionEntry({ ...o, date }, `${keyIndent}  `)),
+    );
+    return lines;
+  }
+
+  const itemStart = itemStarts[answerIdx];
+  const itemEnd = answerIdx + 1 < itemStarts.length ? itemStarts[answerIdx + 1] : end;
+  let optionsIdx = -1;
+  for (let i = itemStart; i < itemEnd; i += 1) {
+    if (lines[i] === `${keyIndent}options:` || lines[i] === `${itemIndent}- options:`) {
+      optionsIdx = i;
+      break;
+    }
+  }
+  if (optionsIdx === -1) {
+    // The reader requires at least one option on every fact, so this is a
+    // file the reader would already have refused; say so rather than
+    // guessing where the list belongs.
+    throw new Error("the answer fact carries no 'options' list to append to");
+  }
+  let listEnd = optionsIdx + 1;
+  while (listEnd < itemEnd && indentOf(lines[listEnd]).length > keyIndent.length) listEnd += 1;
+  const firstOption = lines.slice(optionsIdx + 1, listEnd).find((l) => /^\s*- /.test(l));
+  const optionIndent = firstOption ? indentOf(firstOption) : `${keyIndent}  `;
+  lines.splice(listEnd, 0, ...options.flatMap((o) => renderOptionEntry({ ...o, date }, optionIndent)));
+  return lines;
 }
 
 /**
  * Update `stage:` (inserting the line when the node carries none, which is
  * how a finding opens a dialogue on settled doctrine), unless `stage` is
- * null; replace the `review:` block, unless `reviewLines` is null; append
- * `alternatives` entries, creating the list when absent; and append
- * `dependsAdd` entries (each already rendered `<id>` or `<id>#<alternative>`)
- * to `depends`, creating the list when absent.
+ * null; append `options` to the answer fact, creating `facts:` when absent;
+ * replace the `review:` block, unless `reviewLines` is null; and append
+ * `dependsAdd` entries (each already rendered `<id>` or `<id>#<option>`) to
+ * `depends`, creating the list when absent.
  *
  * `reviewLines` is null for a node touched only by a finding (no verdict of
  * its own to record): whatever `review:` block it already carries -- from an
@@ -372,16 +441,13 @@ function renderAlternativeEntry({ name, date }, indent) {
  * null for a node no entry names a stage for: the top-level `stage:` line, if
  * any, is left exactly as it stands.
  *
- * A newly created `depends:` list is placed last among the dialogue keys
- * this function upserts -- after `alternatives`, `recommendation`, and
- * `review` when any of them is present, else right after `stage` -- which is
- * where the reader's own declared frontmatter-key order
- * (`FRONTMATTER_KEYS` in read.mjs) puts it: `stage`, `order`,
- * `alternatives`, `recommendation`, `review`, `depends`, in that order.
+ * Each field is placed where the reader's own declared frontmatter-key order
+ * (`FRONTMATTER_KEYS` in read.mjs) puts it: `stage`, `order`, `facts`,
+ * `review`, `depends`.
  */
-function upsertDialogueFields(rawText, { stage, reviewLines, alternatives = [], dependsAdd = [] }) {
+function upsertDialogueFields(rawText, { stage, reviewLines, options = [], date = null, dependsAdd = [] }) {
   const { fmLines: originalFm, bodyLines } = splitRaw(rawText);
-  const fmLines = [...originalFm];
+  let fmLines = [...originalFm];
 
   let stageIdx = fmLines.findIndex((l) => /^stage:/.test(l));
   if (stage !== null) {
@@ -395,6 +461,10 @@ function upsertDialogueFields(rawText, { stage, reviewLines, alternatives = [], 
   }
   if (stageIdx === -1) stageIdx = fmLines.findIndex((l) => /^stage:/.test(l));
 
+  if (options.length > 0) {
+    fmLines = upsertAnswerOptions(fmLines, options, date);
+  }
+
   if (reviewLines !== null) {
     const existingReview = findFrontmatterBlock(fmLines, "review");
     let insertAt;
@@ -402,27 +472,10 @@ function upsertDialogueFields(rawText, { stage, reviewLines, alternatives = [], 
       insertAt = existingReview[0];
       fmLines.splice(existingReview[0], existingReview[1] - existingReview[0]);
     } else {
-      const rec = findFrontmatterBlock(fmLines, "recommendation");
-      insertAt = rec ? rec[1] : stageIdx + 1;
+      const facts = findFrontmatterBlock(fmLines, "facts");
+      insertAt = facts ? facts[1] : stageIdx + 1;
     }
     fmLines.splice(insertAt, 0, ...reviewLines);
-  }
-
-  if (alternatives.length > 0) {
-    const existing = findFrontmatterBlock(fmLines, "alternatives");
-    if (existing) {
-      const [start, end] = existing;
-      const firstItem = fmLines.slice(start + 1, end).find((l) => /^\s*- /.test(l));
-      const indent = firstItem ? firstItem.match(/^(\s*)- /)[1] : "  ";
-      const rendered = alternatives.flatMap((a) => renderAlternativeEntry(a, indent));
-      fmLines.splice(end, 0, ...rendered);
-    } else {
-      const review = findFrontmatterBlock(fmLines, "review");
-      const rec = findFrontmatterBlock(fmLines, "recommendation");
-      const insertAt = review ? review[1] : rec ? rec[1] : stageIdx + 1;
-      const rendered = alternatives.flatMap((a) => renderAlternativeEntry(a, "  "));
-      fmLines.splice(insertAt, 0, "alternatives:", ...rendered);
-    }
   }
 
   if (dependsAdd.length > 0) {
@@ -430,13 +483,12 @@ function upsertDialogueFields(rawText, { stage, reviewLines, alternatives = [], 
     if (existing) {
       const [start, end] = existing;
       const firstItem = fmLines.slice(start + 1, end).find((l) => /^\s*- /.test(l));
-      const indent = firstItem ? firstItem.match(/^(\s*)- /)[1] : "  ";
+      const indent = firstItem ? indentOf(firstItem) : "  ";
       fmLines.splice(end, 0, ...dependsAdd.map((d) => `${indent}- ${d}`));
     } else {
-      const alt = findFrontmatterBlock(fmLines, "alternatives");
       const review = findFrontmatterBlock(fmLines, "review");
-      const rec = findFrontmatterBlock(fmLines, "recommendation");
-      const insertAt = alt ? alt[1] : review ? review[1] : rec ? rec[1] : stageIdx + 1;
+      const facts = findFrontmatterBlock(fmLines, "facts");
+      const insertAt = review ? review[1] : facts ? facts[1] : stageIdx + 1;
       fmLines.splice(insertAt, 0, "depends:", ...dependsAdd.map((d) => `  - ${d}`));
     }
   }
@@ -445,7 +497,7 @@ function upsertDialogueFields(rawText, { stage, reviewLines, alternatives = [], 
 }
 
 // ------------------------------------------------------------------ prose
-function renderSubsection({ scope, date, verdict, kickback_stage: kickbackStage, findings, counter_argument: counterArgument, strength, facts_check: factsCheck, reply }) {
+function renderSubsection({ scope, date, verdict, kickback_stage: kickbackStage, findings, counter_argument: counterArgument, strength, facts_check: factsCheck, viability, reply }) {
   const heading = scope === "amendment" ? `### Clean-context review of the amendment, ${date}` : `### Clean-context review, ${date}`;
   const opening = scope === "amendment"
     ? "Read in clean context by a subagent given the node, its ancestry, the author's words, and the amendment named in the brief, and nothing of the sitting."
@@ -454,7 +506,10 @@ function renderSubsection({ scope, date, verdict, kickback_stage: kickbackStage,
 
   const parts = [heading, "", `${opening} ${verdictSentence}`, "", "Findings:", "", ...(findings || []).map((f) => `- ${f}`)];
   if (factsCheck) {
-    parts.push("", `On the three facts: ${factsCheck}`);
+    parts.push("", `On the facts and what they recommend: ${factsCheck}`);
+  }
+  if (viability) {
+    parts.push("", `On the viability of the options: ${viability}`);
   }
   parts.push("", counterArgument ? `Strongest counter-argument (${strength}): ${counterArgument}` : "The review found no strong counter-argument.");
   if (reply) {
@@ -465,19 +520,19 @@ function renderSubsection({ scope, date, verdict, kickback_stage: kickbackStage,
 
 /**
  * The subsection a finding appends to every node it names -- in the batch or
- * outside it. An alternative the finding proposes is named here as well as
- * recorded in the frontmatter, so the node's own account says where the
+ * outside it. An option the finding proposes is named here as well as
+ * recorded on the answer fact, so the node's own account says where the
  * merge or split it proposes went.
  */
-function renderFrontierSubsection({ date, kind, finding, proposal, otherIds, alternatives, id }) {
+function renderFrontierSubsection({ date, kind, finding, proposal, otherIds, options, id }) {
   const namedLine = otherIds.length > 0 ? `Also named: ${otherIds.join(", ")}.` : "Names only this node.";
   const parts = [`### Frontier finding, ${date}`, "", `Kind: ${kind}.`, "", finding, "", namedLine, "", `Proposed: ${proposal}`];
-  for (const a of alternatives || []) {
+  for (const a of options || []) {
     parts.push(
       "",
       a.node === id
-        ? `Recorded as a pending alternative on this node: \`${a.name}\` (source review, ${date}).`
-        : `Recorded as a pending alternative on ${a.node}: \`${a.name}\` (source review, ${date}).`,
+        ? `Recorded as an option on this node's answer fact: \`${a.name}\` (source review, ${date}).`
+        : `Recorded as an option on ${a.node}'s answer fact: \`${a.name}\` (source review, ${date}).`,
     );
   }
   return parts.join("\n");
@@ -485,11 +540,11 @@ function renderFrontierSubsection({ date, kind, finding, proposal, otherIds, alt
 
 /**
  * The subsection a subtree divergence appends to its *ancestor*: for each
- * alternative on the table, the nodes a ruling for it keeps (the side's own
+ * option on the table, the nodes a ruling for it keeps (the side's own
  * nodes) and the nodes it discards (every node named under every other
  * side), so the author reads at the ancestor, on the alignment page, what a
- * ruling for each alternative keeps and what it discards
- * (`alignment-order`). Quotes the entry's finding.
+ * ruling for each option keeps and what it discards (`alignment-order`).
+ * Quotes the entry's finding.
  */
 function renderAncestorDivergenceSubsection({ date, sides, finding }) {
   const names = Object.keys(sides);
@@ -504,16 +559,75 @@ function renderAncestorDivergenceSubsection({ date, sides, finding }) {
 
 /**
  * The subsection a subtree divergence appends to one *leaf*: which ancestor
- * and which alternative on it this node stands under (the same divergence
+ * and which option on it this node stands under (the same divergence
  * recorded as `depends` in the frontmatter). Quotes the entry's finding.
  */
-function renderLeafDivergenceSubsection({ date, ancestor, alternative, finding }) {
-  return [`### Subtree divergence, ${date}`, "", finding, "", `Stands under ${ancestor}, alternative \`${alternative}\`.`].join("\n");
+function renderLeafDivergenceSubsection({ date, ancestor, option, finding }) {
+  return [`### Subtree divergence, ${date}`, "", finding, "", `Stands under ${ancestor}, option \`${option}\`.`].join("\n");
+}
+
+// ------------------------------------------------------------ the two pins
+//
+// Every edit this script makes is dialogue state or the account: the stage,
+// the review, the depends, an option on the answer fact, and prose in
+// '## Facts' and '## Account'. None of that is part of what stands
+// (`deriveStandingHash` strips `stage`, `review`, `depends` and `facts` from
+// the frontmatter and reads only '## Answer' and '## Rationale'), so the
+// standing hash is invariant under this script and is checked as such after
+// every write.
+//
+// `review.of` pins what the node recommends, `deriveRecommendationHash`, as
+// the node stands *after* the edit. Writing the block cannot itself move
+// that hash -- `review` is stripped from every hash input -- so at most one
+// re-render is ever needed, and the result is asserted rather than assumed.
+const MAX_PIN_PASSES = 2;
+
+/**
+ * Build the edited text, settling `review.of` on the recommendation hash of
+ * the node as edited.
+ *
+ * @param {(of: string|null) => string} build - renders the whole edited text
+ *   with `of` in its `review:` block (`of` null when no block is written).
+ * @param {(text: string) => object} parse - parseNode for this node.
+ * @param {string|null} seed - the hash to try first (the node's own, before
+ *   the edit).
+ * @returns {{text: string, parsed: object, of: string|null}}
+ */
+function settlePin(build, parse, seed) {
+  // A parse failure after the edit is the caller's own message ("does not
+  // parse after edit"), and is told from a build failure and from the pin
+  // failing to settle by this tag.
+  const parseTagged = (text) => {
+    try {
+      return parse(text);
+    } catch (err) {
+      err.parseError = true;
+      throw err;
+    }
+  };
+  let of = seed;
+  for (let pass = 0; pass < MAX_PIN_PASSES; pass += 1) {
+    const text = build(of);
+    const parsed = parseTagged(text);
+    if (of === null || parsed.recommendationHash === of) return { text, parsed, of };
+    of = parsed.recommendationHash;
+  }
+  const text = build(of);
+  const parsed = parseTagged(text);
+  if (parsed.recommendationHash !== of) {
+    throw new Error(`internal error -- 'review.of' will not settle (${of} vs ${parsed.recommendationHash}); writing the review block must not move the recommendation hash`);
+  }
+  return { text, parsed, of };
+}
+
+/** The message one of `settlePin`'s three failures reads as. */
+function pinFailureMessage(err) {
+  return err.parseError ? `does not parse after edit: ${err.message}` : err.message;
 }
 
 // -------------------------------------------------------- old-shape plans
 async function planEntry(entry, ctx) {
-  const { id, scope, verdict, kickback_stage: kickbackStage, findings, counter_argument: counterArgument, strength, facts_check: factsCheck } = entry;
+  const { id, scope, verdict, kickback_stage: kickbackStage, findings, counter_argument: counterArgument, strength, facts_check: factsCheck, viability } = entry;
   let graphName, slug, file;
   try {
     ({ graph: graphName, slug, file } = resolveIdToFile(ctx.manifest, ctx.rootDir, id));
@@ -536,10 +650,6 @@ async function planEntry(entry, ctx) {
     if (currentStage !== "ruling") {
       problems.push(`${id}: amendment entry requires stage 'ruling', found '${currentStage}'`);
     }
-  } else if (ctx.fieldsOnly) {
-    if (!hasReviewSubsection(rawTextBefore)) {
-      problems.push(`${id}: --fields-only requires an existing '### Clean-context review' subsection; none found`);
-    }
   } else if (currentStage !== "review" && !hasOverride) {
     problems.push(`${id}: node entry requires stage 'review' (or an override), found '${currentStage}'`);
   }
@@ -557,7 +667,7 @@ async function planEntry(entry, ctx) {
   if (problems.length > 0) return { id, problems };
 
   const reply = Object.prototype.hasOwnProperty.call(ctx.replies, id) ? ctx.replies[id] : null;
-  const subsection = ctx.fieldsOnly ? null : renderSubsection({ scope, date: ctx.date, verdict, kickback_stage: kickbackStage, findings, counter_argument: counterArgument, strength, facts_check: factsCheck, reply });
+  const subsection = renderSubsection({ scope, date: ctx.date, verdict, kickback_stage: kickbackStage, findings, counter_argument: counterArgument, strength, facts_check: factsCheck, viability, reply });
 
   if (scope === "amendment") {
     const rawTextAfter = appendToAccount(rawTextBefore, subsection);
@@ -565,46 +675,31 @@ async function planEntry(entry, ctx) {
   }
 
   const newStage = hasOverride ? ctx.overrides[id] : verdict === "forward" ? "ruling" : kickbackStage;
+  const parse = (text) => parseNode(text, { id, graph: graphName, slug, path: file });
 
-  let draftHashBefore;
-  if (ctx.fieldsOnly) {
-    try {
-      draftHashBefore = computeDraftHashUnvalidated(rawTextBefore);
-    } catch (err) {
-      return { id, problems: [`${id}: cannot compute draft hash: ${err.message}`] };
-    }
-  } else {
-    let parsedBefore;
-    try {
-      parsedBefore = parseNode(rawTextBefore, { id, graph: graphName, slug, path: file });
-    } catch (err) {
-      return { id, problems: [`${id}: does not parse before edit: ${err.message}`] };
-    }
-    draftHashBefore = parsedBefore.draftHash;
-  }
-
-  const reviewLines = renderReviewBlock({ verdict, strength, date: ctx.date, of: draftHashBefore });
-  let text = rawTextBefore;
-  if (subsection !== null) text = appendToAccount(text, subsection);
+  let parsedBefore;
   try {
-    text = upsertDialogueFields(text, { stage: newStage, reviewLines });
+    parsedBefore = parse(rawTextBefore);
   } catch (err) {
-    return { id, problems: [`${id}: ${err.message}`] };
+    return { id, problems: [`${id}: does not parse before edit: ${err.message}`] };
   }
 
-  if (!ctx.fieldsOnly) {
-    let parsedAfter;
-    try {
-      parsedAfter = parseNode(text, { id, graph: graphName, slug, path: file });
-    } catch (err) {
-      return { id, problems: [`${id}: does not parse after edit: ${err.message}`] };
-    }
-    if (parsedAfter.draftHash !== draftHashBefore) {
-      return { id, problems: [`${id}: internal error -- draftHash changed by the edit (${draftHashBefore} -> ${parsedAfter.draftHash}); the account-is-not-part-of-the-hash assumption is violated`] };
-    }
+  const build = (of) => upsertDialogueFields(appendToAccount(rawTextBefore, subsection), {
+    stage: newStage,
+    reviewLines: renderReviewBlock({ verdict, strength, date: ctx.date, of }),
+  });
+
+  let settled;
+  try {
+    settled = settlePin(build, parse, parsedBefore.recommendationHash);
+  } catch (err) {
+    return { id, problems: [`${id}: ${pinFailureMessage(err)}`] };
+  }
+  if (settled.parsed.standingHash !== parsedBefore.standingHash) {
+    return { id, problems: [`${id}: internal error -- the standing hash changed by the edit (${parsedBefore.standingHash} -> ${settled.parsed.standingHash}); this script writes dialogue state and the account only`] };
   }
 
-  return { id, file, scope, verdict, notes: [], oldStage: currentStage, newStage, rawTextBefore, rawTextAfter: text };
+  return { id, file, scope, verdict, notes: [], oldStage: currentStage, newStage, rawTextBefore, rawTextAfter: settled.text };
 }
 
 // ----------------------------------------------------------- batch checks
@@ -613,9 +708,9 @@ async function planEntry(entry, ctx) {
 // once over the whole batch before any file is touched: every batch node
 // named in `read`; `nodes` exactly covering the review stage, no more and no
 // fewer; every finding shaped and grounded, its named nodes real (in the
-// batch or outside it); every proposed alternative shaped, named on a node
-// the finding names, and not already listed there; a strong counter-argument
-// answered.
+// batch or outside it); every proposed option shaped, named on a node the
+// finding names, and not already on that node's answer fact; a strong
+// counter-argument answered.
 function validateBatch(batch, graph, { replies, overrides }) {
   const problems = [];
   const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -690,43 +785,43 @@ function validateBatch(batch, graph, { replies, overrides }) {
       }
     }
 
-    const alts = f && f.alternatives;
-    if (alts !== undefined && alts !== null && !Array.isArray(alts)) {
-      problems.push(`${label}: 'alternatives' must be a list of {node, name, text}`);
+    const opts = f && f.options;
+    if (opts !== undefined && opts !== null && !Array.isArray(opts)) {
+      problems.push(`${label}: 'options' must be a list of {node, name, text}`);
     } else {
-      for (const [j, a] of (Array.isArray(alts) ? alts : []).entries()) {
-        const altLabel = `${label}.alternatives[${j}]`;
+      for (const [j, a] of (Array.isArray(opts) ? opts : []).entries()) {
+        const optLabel = `${label}.options[${j}]`;
         if (!a || typeof a !== "object") {
-          problems.push(`${altLabel}: must be {node, name, text}`);
+          problems.push(`${optLabel}: must be {node, name, text}`);
           continue;
         }
         if (!isNonEmptyString(a.node) || !nodesById.has(a.node)) {
-          problems.push(`${altLabel}: 'node' must name a node, found '${JSON.stringify(a.node)}'`);
+          problems.push(`${optLabel}: 'node' must name a node, found '${JSON.stringify(a.node)}'`);
         } else if (nodeIds && !nodeIds.includes(a.node)) {
-          problems.push(`${altLabel}: proposes an alternative on ${a.node}, which this finding does not name in 'nodes'`);
+          problems.push(`${optLabel}: proposes an option on ${a.node}, which this finding does not name in 'nodes'`);
         }
-        if (!isNonEmptyString(a.name) || !ALTERNATIVE_NAME_RE.test(a.name) || a.name === "standing") {
-          problems.push(`${altLabel}: 'name' must be a lowercase slug and never 'standing', found '${JSON.stringify(a.name)}'`);
+        if (!isNonEmptyString(a.name) || !OPTION_NAME_RE.test(a.name) || a.name === "standing") {
+          problems.push(`${optLabel}: 'name' must be a lowercase slug and never 'standing', the name the option that stands takes, found '${JSON.stringify(a.name)}'`);
         }
-        if (!isNonEmptyString(a.text)) problems.push(`${altLabel}: 'text' is required`);
+        if (!isNonEmptyString(a.text)) problems.push(`${optLabel}: 'text' is required`);
         if (isNonEmptyString(a.node) && isNonEmptyString(a.name)) {
           const key = `${a.node}\x00${a.name}`;
-          if (proposedNames.has(key)) problems.push(`${altLabel}: '${a.name}' is proposed on ${a.node} more than once in this batch`);
+          if (proposedNames.has(key)) problems.push(`${optLabel}: '${a.name}' is proposed on ${a.node} more than once in this batch`);
           proposedNames.add(key);
         }
       }
     }
-    if (f && f.kind === "merge" && !(Array.isArray(alts) && alts.length > 0)) {
-      problems.push(`${label}: a 'merge' finding must propose at least one alternative (the node it goes on, its name, its prose)`);
+    if (f && f.kind === "merge" && !(Array.isArray(opts) && opts.length > 0)) {
+      problems.push(`${label}: a 'merge' finding must propose at least one option (the node it goes on, its name, its prose)`);
     }
   });
 
   // subtree_divergences (frontier-consistency's placement validation,
-  // alignment-order): a tangle between two unanswered subtrees standing
-  // under different sides of one ancestor's pending alternatives, recorded
-  // on the leaves and never on the ancestor. `proposedNames` (built above)
-  // lets a side name an alternative this same run's own `frontier` proposes,
-  // not only one the ancestor already lists.
+  // alignment-order): a tangle between two unruled subtrees standing under
+  // different options of one ancestor's answer fact, recorded on the leaves
+  // and never on the ancestor. `proposedNames` (built above) lets a side
+  // name an option this same run's own `frontier` proposes, not only one the
+  // ancestor already lists.
   const divergences = Array.isArray(batch.subtree_divergences) ? batch.subtree_divergences : [];
   const seenAncestors = new Set();
   divergences.forEach((d, i) => {
@@ -737,7 +832,7 @@ function validateBatch(batch, graph, { replies, overrides }) {
     const sides = d && d.sides;
     const sideNames = sides && typeof sides === "object" && !Array.isArray(sides) ? Object.keys(sides) : null;
     if (!sideNames || sideNames.length === 0) {
-      problems.push(`${label}: 'sides' must be a non-empty object of alternative name to a non-empty list of node ids`);
+      problems.push(`${label}: 'sides' must be a non-empty object of option name to a non-empty list of node ids`);
     }
 
     const ancestor = d && isNonEmptyString(d.ancestor) ? d.ancestor : null;
@@ -749,7 +844,7 @@ function validateBatch(batch, graph, { replies, overrides }) {
       if (!nodesById.has(ancestor)) {
         problems.push(`${label}: names ${ancestor} as its ancestor, which is not a node`);
       } else if (nodesById.get(ancestor).status !== "unanswered") {
-        problems.push(`${label}: ${ancestor} is answered; a subtree divergence stands on an ancestor's pending alternatives`);
+        problems.push(`${label}: ${ancestor} is answered; a subtree divergence stands on an ancestor's pending options`);
       }
     }
 
@@ -758,13 +853,13 @@ function validateBatch(batch, graph, { replies, overrides }) {
       const sideLabel = `${label}.sides['${JSON.stringify(name)}']`;
       const ids = sides[name];
       if (!isNonEmptyString(name)) {
-        problems.push(`${label}: an alternative name in 'sides' must be a non-empty string, found '${JSON.stringify(name)}'`);
+        problems.push(`${label}: an option name in 'sides' must be a non-empty string, found '${JSON.stringify(name)}'`);
       } else if (ancestor !== null) {
         const ancestorNode = nodesById.get(ancestor);
-        const alreadyListed = ancestorNode && (ancestorNode.alternatives || []).some((a) => a.name === name);
+        const alreadyListed = ancestorNode && listedOptionNames(ancestorNode).has(name);
         const addedThisRun = proposedNames.has(`${ancestor}\x00${name}`);
         if (!alreadyListed && !addedThisRun) {
-          problems.push(`${label}: '${name}' is not an alternative on ${ancestor} (not listed, and not added to it by this run's 'frontier')`);
+          problems.push(`${label}: '${name}' is not an option on ${ancestor}'s answer fact (not listed, and not added to it by this run's 'frontier')`);
         }
       }
       if (!Array.isArray(ids) || ids.length === 0 || ids.some((x) => !isNonEmptyString(x))) {
@@ -778,19 +873,19 @@ function validateBatch(batch, graph, { replies, overrides }) {
         }
         const node = nodesById.get(id);
         if (node.status !== "unanswered") {
-          problems.push(`${sideLabel}: names ${id}, which is answered; a subtree divergence stands on unanswered nodes`);
+          problems.push(`${sideLabel}: names ${id}, which is answered; a subtree divergence stands on unruled nodes`);
         }
         if (ancestor !== null && id === ancestor) {
           problems.push(`${sideLabel}: names ${id}, which is this entry's own ancestor`);
         }
         if (idsSeen.has(id)) {
-          problems.push(`${label}: ${id} stands under two sides ('${idsSeen.get(id)}' and '${name}') of the same ancestor`);
+          problems.push(`${label}: ${id} stands under two options ('${idsSeen.get(id)}' and '${name}') of the same ancestor`);
         } else {
           idsSeen.set(id, name);
         }
-        const conflict = (node.depends || []).find((dep) => dep.id === ancestor && dep.alternative !== name);
+        const conflict = (node.depends || []).find((dep) => dep.id === ancestor && dep.option !== name);
         if (conflict) {
-          problems.push(`${sideLabel}: ${id} already depends on ${ancestor}#${conflict.alternative}, which conflicts with side '${name}'; not overwritten, refused`);
+          problems.push(`${sideLabel}: ${id} already depends on ${ancestor}#${conflict.option}, which conflicts with side '${name}'; not overwritten, refused`);
         }
       }
     }
@@ -809,14 +904,14 @@ function stageRank(stage) {
  * Every node the batch touches -- named in `nodes` (a verdict), named by a
  * `frontier` finding (findings only, in the batch or outside it), or both --
  * keyed by id, in the order first encountered (`nodes` first, then `frontier`
- * in array order). A finding's proposed alternatives are collected onto the
- * node each goes on, which the checks above have already required the finding
- * to name.
+ * in array order). A finding's proposed options are collected onto the node
+ * each goes on, which the checks above have already required the finding to
+ * name.
  */
 function collectTouched(batch) {
   const touched = new Map();
   const ensure = (id) => {
-    if (!touched.has(id)) touched.set(id, { nodeEntry: null, findings: [], alternatives: [] });
+    if (!touched.has(id)) touched.set(id, { nodeEntry: null, findings: [], options: [] });
     return touched.get(id);
   };
   for (const rawEntry of batch.nodes || []) {
@@ -824,7 +919,7 @@ function collectTouched(batch) {
     ensure(entry.id).nodeEntry = entry;
   }
   for (const f of batch.frontier || []) {
-    const alternatives = Array.isArray(f.alternatives) ? f.alternatives : [];
+    const options = Array.isArray(f.options) ? f.options : [];
     for (const id of f.nodes) {
       ensure(id).findings.push({
         kind: f.kind,
@@ -832,11 +927,11 @@ function collectTouched(batch) {
         proposal: f.proposal,
         stage: f.stages ? f.stages[id] : undefined,
         otherIds: f.nodes.filter((x) => x !== id),
-        alternatives,
+        options,
       });
     }
-    for (const a of alternatives) {
-      ensure(a.node).alternatives.push({ name: a.name, text: a.text });
+    for (const a of options) {
+      ensure(a.node).options.push({ name: a.name, text: a.text });
     }
   }
   return touched;
@@ -847,7 +942,7 @@ function collectTouched(batch) {
  * (an entry it is the `ancestor` of), a leaf (an entry that names it under
  * one of its `sides`), or both -- keyed by id, each occurrence tagged with
  * the index of the entry it came from (so a report line can be built per
- * entry, not per node) and, for a leaf, the alternative it stands under.
+ * entry, not per node) and, for a leaf, the option it stands under.
  * `validateBatch` has already checked every entry's shape and grounding; this
  * only regroups it by node, which is what the write step below needs.
  */
@@ -859,9 +954,9 @@ function collectDivergencePerNode(divergences) {
   };
   divergences.forEach((d, entryIndex) => {
     ensure(d.ancestor).ancestorOf.push({ entryIndex, sides: d.sides, finding: d.finding });
-    for (const [altName, ids] of Object.entries(d.sides)) {
+    for (const [optionName, ids] of Object.entries(d.sides)) {
       for (const nodeId of ids) {
-        ensure(nodeId).leafOf.push({ entryIndex, ancestor: d.ancestor, alternative: altName, finding: d.finding });
+        ensure(nodeId).leafOf.push({ entryIndex, ancestor: d.ancestor, option: optionName, finding: d.finding });
       }
     }
   });
@@ -875,12 +970,12 @@ function collectDivergencePerNode(divergences) {
  * no stage; if no entry assigns it one at all, its stage is left exactly as
  * it stands), every subsection to append in input order (the node's own
  * verdict first, if it has one, then each finding in the order `frontier`
- * lists it), each proposed alternative not already listed on the node, and
+ * lists it), each proposed option not already on the node's answer fact, and
  * the `review:` block, written only when the node has a verdict of its own.
  *
  * The node is parsed before the edit and again after it: a node that does not
- * parse after the write is reported and left unwritten, and so is a node the
- * edit would leave without the `stage` its new dialogue state requires.
+ * parse after the write is reported and left unwritten, and so is a node
+ * whose standing text the edit would move.
  */
 async function planTouchedNode(id, t, ctx) {
   let graphName, slug, file;
@@ -897,14 +992,14 @@ async function planTouchedNode(id, t, ctx) {
     return { id, problems: [`${id}: cannot read ${file}: ${err.message}`] };
   }
 
+  const parse = (text) => parseNode(text, { id, graph: graphName, slug, path: file });
   let parsedBefore;
   try {
-    parsedBefore = parseNode(rawTextBefore, { id, graph: graphName, slug, path: file });
+    parsedBefore = parse(rawTextBefore);
   } catch (err) {
     return { id, problems: [`${id}: does not parse before edit: ${err.message}`] };
   }
   const currentStage = parsedBefore.stage;
-  const draftHashBefore = parsedBefore.draftHash;
 
   const candidates = [];
   if (t.nodeEntry) candidates.push(t.nodeEntry.verdict === "forward" ? "ruling" : t.nodeEntry.kickback_stage);
@@ -930,24 +1025,24 @@ async function planTouchedNode(id, t, ctx) {
     };
   }
 
-  // An alternative whose name is already on the node is skipped, not
-  // refused: the record already carries that answer, and a second entry of
-  // the same name would not validate.
-  const listed = new Set((parsedBefore.alternatives || []).map((a) => a.name));
-  const newAlternatives = [];
+  // An option whose name is already on the node's answer fact is skipped,
+  // not refused: the record already carries that answer, and a second entry
+  // of the same name would not validate.
+  const listed = listedOptionNames(parsedBefore);
+  const newOptions = [];
   const notes = [];
-  for (const a of t.alternatives) {
+  for (const a of t.options) {
     if (listed.has(a.name)) {
-      notes.push(`${id}: alternative '${a.name}' is already listed on this node; skipped (the finding is still recorded)`);
+      notes.push(`${id}: option '${a.name}' is already on this node's answer fact; skipped (the finding is still recorded)`);
       continue;
     }
     listed.add(a.name);
-    newAlternatives.push(a);
+    newOptions.push(a);
   }
 
   const subsections = [];
   const labels = [];
-  let reviewLines = null;
+  let reviewMeta = null;
 
   if (t.nodeEntry) {
     const entry = t.nodeEntry;
@@ -961,10 +1056,11 @@ async function planTouchedNode(id, t, ctx) {
       counter_argument: entry.counter_argument,
       strength: entry.strength,
       facts_check: entry.facts_check,
+      viability: entry.viability,
       reply,
     }));
     labels.push("Clean-context review");
-    reviewLines = renderReviewBlock({ verdict: entry.verdict, strength: entry.strength, date: ctx.date, of: draftHashBefore });
+    reviewMeta = { verdict: entry.verdict, strength: entry.strength, date: ctx.date };
   }
 
   for (const f of t.findings) {
@@ -974,39 +1070,37 @@ async function planTouchedNode(id, t, ctx) {
       finding: f.finding,
       proposal: f.proposal,
       otherIds: f.otherIds,
-      alternatives: f.alternatives,
+      options: f.options,
       id,
     }));
     labels.push("Frontier finding");
   }
-  if (newAlternatives.length > 0) {
-    labels.push(`alternative${newAlternatives.length > 1 ? "s" : ""} ${newAlternatives.map((a) => `'${a.name}'`).join(", ")}`);
+  if (newOptions.length > 0) {
+    labels.push(`option${newOptions.length > 1 ? "s" : ""} ${newOptions.map((a) => `'${a.name}'`).join(", ")}`);
   }
 
-  let text = rawTextBefore;
-  try {
-    text = appendAlternativeSubsections(text, newAlternatives);
+  const build = (of) => {
+    let text = appendAnswerOptionSubsections(rawTextBefore, newOptions);
     for (const s of subsections) text = appendToAccount(text, s);
-    text = upsertDialogueFields(text, {
+    return upsertDialogueFields(text, {
       stage: stageTouched ? finalStage : null,
-      reviewLines,
-      alternatives: newAlternatives.map((a) => ({ name: a.name, date: ctx.date })),
+      reviewLines: reviewMeta === null ? null : renderReviewBlock({ ...reviewMeta, of }),
+      options: newOptions.map((a) => ({ name: a.name })),
+      date: ctx.date,
     });
-  } catch (err) {
-    return { id, problems: [`${id}: ${err.message}`] };
-  }
+  };
 
-  let parsedAfter;
+  let settled;
   try {
-    parsedAfter = parseNode(text, { id, graph: graphName, slug, path: file });
+    settled = settlePin(build, parse, reviewMeta === null ? null : parsedBefore.recommendationHash);
   } catch (err) {
-    return { id, problems: [`${id}: does not parse after edit: ${err.message}`] };
+    return { id, problems: [`${id}: ${pinFailureMessage(err)}`] };
   }
-  if (parsedAfter.draftHash !== draftHashBefore) {
-    return { id, problems: [`${id}: internal error -- draftHash changed by the edit (${draftHashBefore} -> ${parsedAfter.draftHash}); the account-is-not-part-of-the-hash assumption is violated`] };
+  if (settled.parsed.standingHash !== parsedBefore.standingHash) {
+    return { id, problems: [`${id}: internal error -- the standing hash changed by the edit (${parsedBefore.standingHash} -> ${settled.parsed.standingHash}); this script writes dialogue state and the account only`] };
   }
 
-  return { id, file, labels, notes, oldStage: currentStage, newStage: finalStage, rawTextBefore, rawTextAfter: text };
+  return { id, file, labels, notes, oldStage: currentStage, newStage: finalStage, rawTextBefore, rawTextAfter: settled.text };
 }
 
 /**
@@ -1016,15 +1110,13 @@ async function planTouchedNode(id, t, ctx) {
  * leaf of, and, for a leaf, a `depends` entry, unless it already carries
  * exactly that entry (skipped, and reported via `skips`, not refused --
  * `validateBatch` has already refused the run outright over a genuine
- * conflict, a different alternative on the same ancestor). A subtree
- * divergence never touches `stage`, `recommendation`, or anything
- * hash-bearing (`stripDialogueFrontmatterLines` excludes `depends` from the
- * draft hash, same as `alternatives`), so `oldStage`/`newStage` are always
- * equal here, and layering these edits onto an existing plan cannot change
- * the stage that plan already settled on.
+ * conflict, a different option on the same ancestor). A subtree divergence
+ * never touches `stage`, the facts, or anything hash-bearing, so
+ * `oldStage`/`newStage` are always equal here, and layering these edits onto
+ * an existing plan cannot change the stage that plan already settled on.
  *
  * Parsed before and after, like every other write in this file: a node that
- * does not parse after the edit, or whose draft hash the edit moved, is
+ * does not parse after the edit, or whose standing hash the edit moved, is
  * reported and left unwritten.
  */
 async function planDivergenceNode(id, entry, ctx, existingPlan) {
@@ -1042,13 +1134,13 @@ async function planDivergenceNode(id, entry, ctx, existingPlan) {
     return { id, problems: [`${id}: cannot read ${file}: ${err.message}`] };
   }
 
+  const parse = (text) => parseNode(text, { id, graph: graphName, slug, path: file });
   let parsedBefore;
   try {
-    parsedBefore = parseNode(rawTextBefore, { id, graph: graphName, slug, path: file });
+    parsedBefore = parse(rawTextBefore);
   } catch (err) {
     return { id, problems: [`${id}: does not parse before edit: ${err.message}`] };
   }
-  const draftHashBefore = parsedBefore.draftHash;
   const existingDepends = parsedBefore.depends || [];
 
   const subsections = [];
@@ -1061,31 +1153,31 @@ async function planDivergenceNode(id, entry, ctx, existingPlan) {
     labels.push("Subtree divergence");
   }
   for (const l of entry.leafOf) {
-    if (existingDepends.some((d) => d.id === l.ancestor && d.alternative === l.alternative)) {
+    if (existingDepends.some((d) => d.id === l.ancestor && d.option === l.option)) {
       skips.push({ entryIndex: l.entryIndex, id });
     } else {
-      dependsAdd.push(`${l.ancestor}#${l.alternative}`);
+      dependsAdd.push(`${l.ancestor}#${l.option}`);
     }
-    subsections.push(renderLeafDivergenceSubsection({ date: ctx.date, ancestor: l.ancestor, alternative: l.alternative, finding: l.finding }));
+    subsections.push(renderLeafDivergenceSubsection({ date: ctx.date, ancestor: l.ancestor, option: l.option, finding: l.finding }));
     labels.push("Subtree divergence");
   }
 
   let text = existingPlan ? existingPlan.rawTextAfter : rawTextBefore;
   try {
     for (const s of subsections) text = appendToAccount(text, s);
-    text = upsertDialogueFields(text, { stage: null, reviewLines: null, alternatives: [], dependsAdd });
+    text = upsertDialogueFields(text, { stage: null, reviewLines: null, options: [], dependsAdd });
   } catch (err) {
     return { id, problems: [`${id}: ${err.message}`] };
   }
 
   let parsedAfter;
   try {
-    parsedAfter = parseNode(text, { id, graph: graphName, slug, path: file });
+    parsedAfter = parse(text);
   } catch (err) {
     return { id, problems: [`${id}: does not parse after edit: ${err.message}`] };
   }
-  if (parsedAfter.draftHash !== draftHashBefore) {
-    return { id, problems: [`${id}: internal error -- draftHash changed by the edit (${draftHashBefore} -> ${parsedAfter.draftHash}); the account-is-not-part-of-the-hash assumption is violated`] };
+  if (parsedAfter.standingHash !== parsedBefore.standingHash) {
+    return { id, problems: [`${id}: internal error -- the standing hash changed by the edit (${parsedBefore.standingHash} -> ${parsedAfter.standingHash}); this script writes dialogue state and the account only`] };
   }
 
   return {
@@ -1194,7 +1286,7 @@ async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overri
  * `dry`, run `readGraph` once afterward and report (without reverting)
  * whether it still has problems. `batch` (or a loaded file shaped like
  * one -- a `nodes` array) runs the batch flow; otherwise this is the old
- * per-entry flow, kept for `--fields-only` and its own tests.
+ * per-entry flow, kept for its own tests.
  *
  * @returns {Promise<{plans: object[], report: string[], validation: {ok:boolean, message?:string}|null}>}
  */
@@ -1208,7 +1300,6 @@ export async function applyReviews({
   overrides = {},
   date = null,
   dry = false,
-  fieldsOnly = false,
 }) {
   const manifest = await loadManifest(rootDir);
 
@@ -1223,7 +1314,7 @@ export async function applyReviews({
   }
 
   const entries = (rawEntries ?? []).map(withDefaults);
-  const ctx = { rootDir, reviewDir, manifest, replies, overrides, date: date ?? todayIso(), fieldsOnly };
+  const ctx = { rootDir, reviewDir, manifest, replies, overrides, date: date ?? todayIso() };
 
   const plans = [];
   const problems = [];
@@ -1283,7 +1374,6 @@ if (isMain) {
         overrides,
         date: opts.date,
         dry: opts.dry,
-        fieldsOnly: opts.fieldsOnly,
       });
       for (const line of result.report) console.log(line);
       if (opts.dry) {

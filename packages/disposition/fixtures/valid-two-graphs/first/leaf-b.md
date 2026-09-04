@@ -7,5 +7,5 @@ under:
 
 ## Disposition
 
-The author has not yet said what this second branch of the first graph
-holds either; it ties with leaf-a on rank, so id breaks the tie.
+The author has not yet said what this second branch of the first graph holds
+either; it ties with leaf-a on rank, so id breaks the tie.

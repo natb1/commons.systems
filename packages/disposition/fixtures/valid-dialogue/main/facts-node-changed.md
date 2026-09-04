@@ -1,31 +1,26 @@
 ---
-question: Do facts reorder, carry rulings, and stay invisible to the standing hash?
+question: Do facts carry rulings and stay invisible to the standing hash?
 form: rule
 stage: periagogic
 facts:
-  - name: authority
-    choices:
-      - ratified
-      - delegated
-    adopts: ratified
-    boldness: high
-    ruling:
-      response: confirm
-      choice: ratified
-      date: 2026-09-03
-      of: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: 2026-09-03
+    stands: standing
   - name: existence
-    choices:
-      - keep
-      - prune
-    adopts: prune
+    options:
+      - name: keep
+      - name: prune
+    recommends: prune
     boldness: high
 ---
 
 ## Disposition
 
 facts-node's twin: a different set of facts entirely (fewer of them, other
-choices, another ruling), and no '## Facts' section at all.
+options, no ruling), and no '## Facts' section at all.
 
 ## Answer
 

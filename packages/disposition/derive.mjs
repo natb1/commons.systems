@@ -1,17 +1,45 @@
 // packages/disposition/derive.mjs
 //
 // Pure derivation functions for the disposition graph: git blob sha1,
-// target-prefix id canonicalization, children, rank, ceiling, and status.
-// Nothing here touches the filesystem; read.mjs composes these over parsed
-// node files.
+// target-prefix id canonicalization, children, rank, ceiling, the class a
+// node's rulings confer, and the hashes a ruling and a review pin. Nothing
+// here touches the filesystem; read.mjs composes these over parsed node
+// files.
+//
+// Since 2026-09-04 a node's authority is not a stamp. Every decision on a
+// node is a `facts` entry with a list of viable `options`; the AI marks the
+// one it `recommends`; the author's ruling is recorded on the option they
+// chose. The class -- ratified, delegated, deferred, unanswered -- is
+// derived from those rulings here, and every reader shares this derivation
+// (commons.systems/disposition-graph/viable-options).
 
 import { createHash } from 'node:crypto';
 
 /**
- * @typedef {Object} Authority
- * @property {'ratified'|'delegated'|'deferred'} class
- * @property {string} by
+ * @typedef {Object} Ruling
+ * @property {'confirm'|'edit'} response
  * @property {string} date
+ * @property {string} of - the fact's recommendation hash at the time of the
+ *   ruling, so that a recommendation moved since shows as `moved`.
+ */
+
+/**
+ * @typedef {Object} Option
+ * @property {string} name
+ * @property {string|null} source
+ * @property {string|null} ref
+ * @property {Ruling|null} ruling
+ * @property {string} prose - the option's `#### <name>` subsection text.
+ */
+
+/**
+ * @typedef {Object} Fact
+ * @property {'answer'|'authority'|'existence'|'persistence'} name
+ * @property {Option[]} options
+ * @property {string|null} recommends
+ * @property {string|null} boldness
+ * @property {string|null} stands - answer fact only.
+ * @property {string} prose - the fact's `### <name>` subsection text.
  */
 
 /**
@@ -20,9 +48,14 @@ import { createHash } from 'node:crypto';
  * @property {string[]} [under] - canonicalized (local-form) parent ids.
  * @property {number|null} [boost] - positive number; null/absent means the
  *   implicit default of 1.
- * @property {Authority|null} [authority]
+ * @property {Fact[]} [facts]
+ * @property {string} [fmText] - the node file's raw frontmatter text, which
+ *   the standing hash covers with the dialogue keys stripped out.
  * @property {string|null} [answer] - raw trimmed markdown of the node's
  *   `## Answer` section, or null when it has none.
+ * @property {string|null} [rationale]
+ * @property {{raw: string}|null} [fence] - the `## Recommendation` fence.
+ * @property {string|null} [stage]
  */
 
 /**
@@ -38,6 +71,10 @@ export function blobSha1(bytes) {
   const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
   const header = Buffer.from(`blob ${buf.length}\0`, 'utf8');
   return createHash('sha1').update(header).update(buf).digest('hex');
+}
+
+function sha1(text) {
+  return createHash('sha1').update(text, 'utf8').digest('hex');
 }
 
 /**
@@ -152,12 +189,165 @@ export function deriveRank(nodes) {
   return rank;
 }
 
+// ---------------------------------------------------------------------------
+// facts, options, rulings
+// ---------------------------------------------------------------------------
+
+/**
+ * One named fact of a node, or null when it carries none by that name.
+ *
+ * @param {DeriveNode} node
+ * @param {string} name
+ * @returns {Fact|null}
+ */
+export function factByName(node, name) {
+  return (node?.facts ?? []).find((f) => f && f.name === name) ?? null;
+}
+
+/**
+ * The name of the one option of a fact the author has ruled on, or null when
+ * none carries a ruling. At most one option per fact may (the validator
+ * refuses more), so the first is the only one.
+ *
+ * @param {Fact|null} fact
+ * @returns {string|null}
+ */
+export function ruledOption(fact) {
+  const option = (fact?.options ?? []).find((o) => o && o.ruling);
+  return option ? option.name : null;
+}
+
+/**
+ * Ratified is the one class no ancestor confers: it means the author ruled
+ * on this node's own answer, so it is read off this node alone and needs no
+ * graph. `deriveClass` step 1 and every caller below share this test.
+ *
+ * @param {DeriveNode} node
+ * @returns {boolean}
+ */
+function isRatified(node) {
+  return ruledOption(factByName(node, 'answer')) !== null;
+}
+
+/**
+ * Accept a graph in any of the shapes a caller has to hand -- a
+ * `Map<id, node>`, a plain array of nodes, or the `{nodes}` object
+ * `readGraph` returns -- and index it by id.
+ *
+ * @param {Map<string, DeriveNode>|DeriveNode[]|{nodes: DeriveNode[]}|null|undefined} graph
+ * @returns {Map<string, DeriveNode>}
+ */
+function nodesByIdOf(graph) {
+  if (graph instanceof Map) return graph;
+  const list = Array.isArray(graph) ? graph : (Array.isArray(graph?.nodes) ? graph.nodes : []);
+  return new Map(list.map((n) => [n.id, n]));
+}
+
+/**
+ * The class a node's rulings confer, and where that class came from, in one
+ * walk (`deriveClass` and `deriveClassSource` are its two projections).
+ *
+ * 1. The answer fact carries a ruled option -> ratified: the author decided
+ *    the answer itself, and the confirmed choice acts.
+ * 2. Else the authority fact carries a ruled option: `delegated` -> delegated,
+ *    `deferred` -> deferred, `ratified` -> unanswered. The third is not a
+ *    fallthrough: the author has said this node's answer must be ratified
+ *    and has not ratified it, so nothing on it acts and no ancestor's
+ *    delegation reaches it.
+ * 3. Else the nearest ancestor by `under`, breadth first, whose authority
+ *    fact carries a ruled option `delegated` or `deferred` confers that
+ *    class; at equal depth deferred wins, since authority only narrows on
+ *    the way down, and ties within a class break on the smallest id so that
+ *    the source is deterministic. An ancestor whose authority fact is ruled
+ *    `ratified` confers nothing and does not stop the walk.
+ * 4. Else unanswered.
+ *
+ * @param {DeriveNode} node
+ * @param {Map<string, DeriveNode>|DeriveNode[]|{nodes: DeriveNode[]}} graph
+ * @returns {{class: 'ratified'|'delegated'|'deferred'|'unanswered',
+ *   source: {kind: 'ruling'}|{kind: 'ancestor', id: string}|null}}
+ */
+function classAndSource(node, graph) {
+  if (isRatified(node)) return { class: 'ratified', source: { kind: 'ruling' } };
+
+  const ruled = ruledOption(factByName(node, 'authority'));
+  if (ruled === 'delegated') return { class: 'delegated', source: { kind: 'ruling' } };
+  if (ruled === 'deferred') return { class: 'deferred', source: { kind: 'ruling' } };
+  if (ruled !== null) return { class: 'unanswered', source: { kind: 'ruling' } };
+
+  const nodesById = nodesByIdOf(graph);
+  const visited = new Set([node.id]);
+  let frontier = [...new Set(node.under ?? [])];
+  while (frontier.length > 0) {
+    let best = null;
+    for (const id of [...frontier].sort()) {
+      const ancestor = nodesById.get(id);
+      if (!ancestor) continue;
+      const conferred = ruledOption(factByName(ancestor, 'authority'));
+      if (conferred !== 'delegated' && conferred !== 'deferred') continue;
+      if (best === null || (conferred === 'deferred' && best.class !== 'deferred')) {
+        best = { class: conferred, id };
+      }
+    }
+    if (best !== null) return { class: best.class, source: { kind: 'ancestor', id: best.id } };
+    const next = new Set();
+    for (const id of frontier) {
+      visited.add(id);
+      for (const parent of nodesById.get(id)?.under ?? []) {
+        if (!visited.has(parent)) next.add(parent);
+      }
+    }
+    frontier = [...next];
+  }
+  return { class: 'unanswered', source: null };
+}
+
+/**
+ * A node's class, derived from the rulings on its facts and on its
+ * ancestors' (see `classAndSource`). Never stored: a stamp beside the
+ * rulings is a copy, and a copy drifts.
+ *
+ * @param {DeriveNode} node
+ * @param {Map<string, DeriveNode>|DeriveNode[]|{nodes: DeriveNode[]}} graph
+ * @returns {'ratified'|'delegated'|'deferred'|'unanswered'}
+ */
+export function deriveClass(node, graph) {
+  return classAndSource(node, graph).class;
+}
+
+/**
+ * Where a node's class came from: a ruling on the node itself, an ancestor
+ * whose ruling confers it, or nothing at all (an unanswered node no ruling
+ * reaches).
+ *
+ * @param {DeriveNode} node
+ * @param {Map<string, DeriveNode>|DeriveNode[]|{nodes: DeriveNode[]}} graph
+ * @returns {{kind: 'ruling'}|{kind: 'ancestor', id: string}|null}
+ */
+export function deriveClassSource(node, graph) {
+  return classAndSource(node, graph).source;
+}
+
+/**
+ * A node's status: `answered` when some ruling confers a class on it,
+ * `unanswered` when none does -- in which state nothing on the node acts and
+ * reconciling anything under it takes an explicit grant from the author
+ * (commons.systems/disposition-graph/unanswered).
+ *
+ * @param {DeriveNode} node
+ * @param {Map<string, DeriveNode>|DeriveNode[]|{nodes: DeriveNode[]}} graph
+ * @returns {'answered'|'unanswered'}
+ */
+export function deriveStatus(node, graph) {
+  return deriveClass(node, graph) === 'unanswered' ? 'unanswered' : 'answered';
+}
+
 /**
  * Find the nearest ratified ancestor of a node, walking `under` breadth
  * first (nearest depth first; ties among ratified ancestors at the same
  * depth broken by smallest id). Returns null when no ancestor is ratified,
- * including for a root. A node's own authority never counts as its ceiling
- * — only strict ancestors are considered.
+ * including for a root. A node's own ruling never counts as its ceiling --
+ * only strict ancestors are considered.
  *
  * @param {string} nodeId
  * @param {Map<string, DeriveNode>} nodesById
@@ -178,9 +368,7 @@ export function deriveCeiling(nodeId, nodesById) {
       if (!node) {
         throw new Error(`deriveCeiling: node '${nodeId}' has unresolved 'under' reference '${id}'`);
       }
-      if (node.authority && node.authority.class === 'ratified') {
-        ratifiedHere.push(id);
-      }
+      if (isRatified(node)) ratifiedHere.push(id);
     }
     if (ratifiedHere.length > 0) {
       ratifiedHere.sort();
@@ -199,41 +387,31 @@ export function deriveCeiling(nodeId, nodesById) {
   return null;
 }
 
-/**
- * A node's status: `answered` when the stamp's class is `ratified` or
- * `delegated` -- the two classes only the author's ruling confers -- and
- * `unanswered` otherwise, whatever the node carries: a stamp of class
- * `deferred`, no stamp at all, or no `## Answer` section. See
- * commons.systems/disposition-graph/unanswered. The values `proposal` and
- * `unaligned` this function used to return are gone: both were forms of
- * "not yet answered" that the two-value encoding now names directly.
- *
- * @param {{authority: Authority|null}} node
- * @returns {'answered'|'unanswered'}
- */
-export function deriveStatus(node) {
-  const cls = node.authority ? node.authority.class : null;
-  return cls === 'ratified' || cls === 'delegated' ? 'answered' : 'unanswered';
-}
+// ---------------------------------------------------------------------------
+// the hashes: what stands, and what is recommended
+// ---------------------------------------------------------------------------
 
 /**
  * Strip the dialogue keys from a node file's raw frontmatter text, by line:
- * `stage`, `recommendation`, `review`, `alternatives`, and `depends`, each
- * together with every line nested under it (indented relative to it), so
- * that writing this hash into `review.of` or `recommendation.amends` -- or
- * removing either from the frontmatter afterward, or adding an alternative
- * to the list -- never changes it. Operates on the raw YAML source text,
- * not the parsed object, because it is the *lines* belonging to a key that
- * must go, not just the key's value.
+ * `stage`, `review`, `depends`, and `facts`, each together with every line
+ * nested under it (indented relative to it), so that writing a hash into
+ * `review.of` or a ruling's `of` -- or removing either afterward, or adding
+ * an option to a fact -- never changes the standing hash. Operates on the
+ * raw YAML source text, not the parsed object, because it is the *lines*
+ * belonging to a key that must go, not just the key's value.
+ *
+ * `facts` is stripped although it is no longer dialogue state (the options
+ * and their rulings persist after the ruling): what the standing hash is for
+ * is the text that stands, and adding an option must not stale every pin.
  *
  * @param {string} fmText - the raw text between the frontmatter's `---`
  *   delimiters (as `read.mjs`'s `parseNode` extracts it, before YAML.parse).
  * @returns {string}
  */
 function stripDialogueFrontmatterLines(fmText) {
-  const removedKeyRe = /^(stage|recommendation|review|alternatives|facts|depends):/;
+  const removedKeyRe = /^(stage|review|depends|facts):/;
   let skipping = false;
-  return fmText
+  return String(fmText)
     .split('\n')
     .filter((line) => {
       const isTopLevel = /^\S/.test(line);
@@ -247,58 +425,173 @@ function stripDialogueFrontmatterLines(fmText) {
 }
 
 /**
- * The standing hash: the sha1 hex digest of the node *as it stands*, which
- * `recommendation.amends` pins and whose mismatch against a current
- * recomputation is what `node.recommendationStale` means. It covers the
- * frontmatter's raw text with every dialogue key removed (see
- * `stripDialogueFrontmatterLines`), then a newline, the raw `## Answer`
- * text (`''` when the node has none), a newline, and the raw
- * `## Rationale` text (`''` when the node has none) -- so the standing
- * answer and the fields that carry it are hashed, and the dialogue running
- * beside them is not.
+ * The exact text `deriveStandingHash` digests: the frontmatter with every
+ * dialogue key removed, then a newline, the raw `## Answer` text ('' when
+ * the node has none), a newline, and the raw `## Rationale` text ('' when it
+ * has none). Exposed to `deriveFactRecommendationHash`, which folds it into
+ * the answer fact's hash when no fence holds a newer text.
+ *
+ * @param {{fmText?: string, answer?: string|null, rationale?: string|null}} node
+ * @returns {string}
+ */
+function standingText({ fmText, answer, rationale }) {
+  return `${stripDialogueFrontmatterLines(fmText ?? '')}\n${answer ?? ''}\n${rationale ?? ''}`;
+}
+
+/**
+ * The standing hash: the sha1 hex digest of the node *as it stands*, over
+ * `standingText` above -- so the standing answer and the fields that carry
+ * it are hashed, and the dialogue running beside them is not.
  *
  * A plain sha1 over synthesized text, not `blobSha1`'s git-blob framing:
  * the git framing exists so a hash matches `git hash-object` on a real
  * file's exact bytes, and this splice was never a file of its own.
  *
- * @param {{fmText: string, answer: string|null, rationale: string|null}} parts
+ * @param {{fmText: string, answer: string|null, rationale: string|null}} node
  * @returns {string} 40-hex sha1
  */
-export function deriveStandingHash({ fmText, answer, rationale }) {
-  const strippedFm = stripDialogueFrontmatterLines(fmText);
-  const text = `${strippedFm}\n${answer ?? ''}\n${rationale ?? ''}`;
-  return createHash('sha1').update(text, 'utf8').digest('hex');
+export function deriveStandingHash(node) {
+  return sha1(standingText(node));
 }
 
 /**
- * The draft hash: the sha1 hex digest that `review.of` pins, and whose
- * mismatch against a current recomputation is what `node.reviewStale`
- * means (see commons.systems/disposition-graph/dialogue). This is a plain
- * sha1 over synthesized text, not `blobSha1`'s git-blob framing (`"blob "
- * + length + "\0" + bytes`) used elsewhere in this module: the git framing
- * exists so a hash matches `git hash-object` on a real file's exact bytes,
- * and the text hashed here -- a fence's content, or a frontmatter-minus-
- * dialogue-keys/answer/rationale splice -- was never a file of its own.
+ * The hash one fact's ruling pins: the recommendation as it stood when the
+ * author ruled on it, by content and never by clock, so that a
+ * recommendation re-affirmed is told from one changed
+ * (commons.systems/disposition-graph/viable-options).
  *
- * With a `## Recommendation` fence, the hash is of the fence's content,
- * exactly: the recommendation is a whole proposed node quoted verbatim, so
- * any change to it is a new draft. With no fence (the recommendation
- * adopts the node as it stands), the hash is the standing hash.
+ * It digests, in this order and newline-joined: the fact's name; the option
+ * it `recommends`; its `boldness`; the `### <fact>` prose, which is why that
+ * option is recommended; the recommended option's `#### <option>` prose, or
+ * '' where it has none, as the option named by `stands` may; and, for the
+ * answer fact alone, the recommended text in full -- the `## Recommendation`
+ * fence's inner text where a fence holds it, and otherwise the standing
+ * text, which is what the answer fact recommends when it recommends what
+ * stands.
  *
- * `read.mjs`'s `parseNode` calls this, passing the raw frontmatter text and
- * raw section text it extracts while parsing a node file -- the parsed,
- * structured node object this module otherwise deals with does not retain
- * that raw text, only the fields YAML.parse and the section split resolve
- * it into.
+ * The empty string, not a digest, when the fact recommends nothing: there is
+ * no recommendation for a ruling to pin.
  *
- * @param {{fmText: string, draftFence: string|null, answer: string|null, rationale: string|null}} parts
+ * @param {DeriveNode} node - the fact's own node, for the fence and the
+ *   standing text.
+ * @param {Fact} fact
+ * @returns {string} 40-hex sha1, or '' when `recommends` is absent.
+ */
+export function deriveFactRecommendationHash(node, fact) {
+  if (!fact || fact.recommends === null || fact.recommends === undefined) return '';
+  const recommended = (fact.options ?? []).find((o) => o && o.name === fact.recommends) ?? null;
+  const parts = [
+    fact.name,
+    fact.recommends,
+    fact.boldness ?? '',
+    fact.prose ?? '',
+    recommended ? (recommended.prose ?? '') : '',
+  ];
+  if (fact.name === 'answer') {
+    const fence = node?.fence ?? null;
+    parts.push(fence && fence.raw !== undefined && fence.raw !== null ? fence.raw : standingText(node ?? {}));
+  }
+  return sha1(parts.join('\n'));
+}
+
+/**
+ * The hash `review.of` pins: every fact's name and recommendation hash, in
+ * `facts` order. A review reads the whole of what is recommended on a node,
+ * so it goes stale when any fact's recommendation moves.
+ *
+ * @param {DeriveNode} node
  * @returns {string} 40-hex sha1
  */
-export function deriveDraftHash({ fmText, draftFence, answer, rationale }) {
-  if (draftFence !== null && draftFence !== undefined) {
-    return createHash('sha1').update(draftFence, 'utf8').digest('hex');
-  }
-  return deriveStandingHash({ fmText, answer, rationale });
+export function deriveRecommendationHash(node) {
+  const facts = node?.facts ?? [];
+  return sha1(facts.map((f) => `${f.name}\n${deriveFactRecommendationHash(node, f)}`).join('\n'));
+}
+
+/**
+ * Whether one fact's recommendation has moved since the author ruled on it:
+ * the ruling's `of` no longer matches the fact's recommendation hash. False
+ * for a fact with no ruling -- nothing has been answered for a move to
+ * contradict.
+ *
+ * @param {DeriveNode} node
+ * @param {Fact} fact
+ * @returns {boolean}
+ */
+export function factMoved(node, fact) {
+  const ruled = (fact?.options ?? []).find((o) => o && o.ruling);
+  if (!ruled) return false;
+  return ruled.ruling.of !== deriveFactRecommendationHash(node, fact);
+}
+
+/**
+ * Whether any ruled fact's recommendation has moved since its ruling. On a
+ * ratified node this is what `proposal` names; on a delegated node the
+ * answer fact's recommendation may move freely without moving the ruling on
+ * the authority fact, which is how a delegated node stays off the alignment
+ * frontier.
+ *
+ * @param {DeriveNode} node
+ * @returns {boolean}
+ */
+export function moved(node) {
+  return (node?.facts ?? []).some((f) => factMoved(node, f));
+}
+
+/**
+ * Whether the review recorded on a node reads a recommendation that has
+ * since moved. False with no review at all.
+ *
+ * @param {DeriveNode} node
+ * @returns {boolean}
+ */
+export function reviewStale(node) {
+  return !!node?.review && node.review.of !== deriveRecommendationHash(node);
+}
+
+/**
+ * Whether the node is on the alignment frontier: it carries a stage, the
+ * next movement of the dialogue owed on it. The frontier is a projection of
+ * this state and the record stores neither frontier.
+ *
+ * @param {DeriveNode} node
+ * @returns {boolean}
+ */
+export function onFrontier(node) {
+  return node?.stage !== null && node?.stage !== undefined;
+}
+
+/**
+ * A proposal: a ratified node whose recommendation has moved from the
+ * confirmed choice, wherever the move came from -- the origin being the
+ * option's source. The confirmed choice keeps its full authority; what
+ * changes is that the node returns to the alignment frontier for
+ * re-confirmation.
+ *
+ * Needs no graph: ratified is the one class that is never conferred from
+ * above (`isRatified`).
+ *
+ * @param {DeriveNode} node
+ * @returns {boolean}
+ */
+export function proposal(node) {
+  return isRatified(node) && moved(node);
+}
+
+/**
+ * A ratified node whose ruled option is not the one the AI recommends: the
+ * author overruled the recommendation at the ruling. Shown by the
+ * projections beside the confirmed choice, and *not* on the frontier -- the
+ * author has already answered this, and only a recommendation moved *since*
+ * the ruling (`proposal`) asks them again.
+ *
+ * @param {DeriveNode} node
+ * @returns {boolean}
+ */
+export function divergesFromRecommendation(node) {
+  const answer = factByName(node, 'answer');
+  const ruled = ruledOption(answer);
+  if (ruled === null) return false;
+  return answer.recommends !== null && answer.recommends !== undefined && answer.recommends !== ruled;
 }
 
 /**
@@ -335,31 +628,32 @@ export function deriveDescendants(parentIds, childrenMap) {
  * summed in:
  *
  * - `under`: the node's strict descendants (`deriveDescendants`, following
- *   `children` transitively) whose status (`deriveStatus`) is unanswered --
- *   a ruling on the ancestor can move the ceiling a descendant answers
- *   under, or free the descendant to be ruled on in its own turn.
+ *   `children` transitively) that carry a stage -- a ruling on the ancestor
+ *   can move the ceiling a descendant answers under, or free the descendant
+ *   to be ruled on in its own turn. Carrying a stage is what the alignment
+ *   frontier means now that the class is derived: a node with no stage,
+ *   whatever its class, is not waiting on anything.
  * - `depends`: every node whose `depends` names this one, in any entry
- *   (qualified by an alternative or not), except one already counted under
+ *   (qualified by an option or not), except one already counted under
  *   `under` -- a dependant elsewhere in the graph is waiting on this
  *   node's ruling just as surely as a descendant is.
- * - `alternatives`: the node's own `alternatives` count. It is not summed
- *   into `settles`: an alternative pending on this node is this node's own
+ * - `options`: the node's own answer fact's option count. It is not summed
+ *   into `settles`: an option pending on this node is this node's own
  *   ruling, not a separate decision elsewhere that ruling reaches, so it
  *   settles nothing beyond the node itself and orders nothing against it.
  *   It is carried on the record because it tells a reader how much a
- *   sitting on this node will cost -- how many alternatives the dialogue
- *   has to work through -- even though it makes no other node decidable.
+ *   sitting on this node will cost -- how many options the dialogue has to
+ *   work through -- even though it makes no other node decidable.
  *
  * `settles` is `under + depends`, reach only. Computed for every node,
  * pure and deterministic: nothing here is randomized or depends on
  * wall-clock time.
  *
- * @param {DeriveNode[]} nodes - each also carrying `alternatives`
- *   (`{name: string}[]`, or absent) and `depends`
- *   (`{id: string, alternative: string|null}[]`, or absent).
+ * @param {DeriveNode[]} nodes - each also carrying `stage`, `facts`, and
+ *   `depends` (`{id: string, option: string|null}[]`, or absent).
  * @param {Map<string, string[]>} childrenMap - as returned by
  *   `deriveChildren`.
- * @returns {Map<string, {settles: number, under: number, alternatives: number, depends: number}>}
+ * @returns {Map<string, {settles: number, under: number, options: number, depends: number}>}
  */
 export function deriveSettles(nodes, childrenMap) {
   const nodesById = new Map(nodes.map((n) => [n.id, n]));
@@ -367,18 +661,18 @@ export function deriveSettles(nodes, childrenMap) {
   for (const node of nodes) {
     const descendants = deriveDescendants([node.id], childrenMap);
     const under = new Set(
-      [...descendants].filter((id) => deriveStatus(nodesById.get(id)) === 'unanswered'),
+      [...descendants].filter((id) => onFrontier(nodesById.get(id))),
     );
     const dependants = new Set();
     for (const other of nodes) {
       if (under.has(other.id)) continue;
       if ((other.depends ?? []).some((d) => d.id === node.id)) dependants.add(other.id);
     }
-    const alternatives = (node.alternatives ?? []).length;
+    const options = (factByName(node, 'answer')?.options ?? []).length;
     result.set(node.id, {
       settles: under.size + dependants.size,
       under: under.size,
-      alternatives,
+      options,
       depends: dependants.size,
     });
   }
@@ -403,6 +697,30 @@ export function deriveAncestors(nodeId, nodesById) {
     result.add(id);
     for (const parent of nodesById.get(id)?.under ?? []) {
       if (!result.has(parent)) queue.push(parent);
+    }
+  }
+  return result;
+}
+
+/**
+ * The derived inverse of the readings' `bears`: for every node, fact, and
+ * option, the readings that bear on it, each with the relation it records.
+ * A tradition "chosen over" is derived rather than stored -- it is a reading
+ * `adopted` on an option that was not chosen.
+ *
+ * @param {DeriveNode[]} nodes - each optionally carrying `bears`
+ *   (`{node: string, fact: string, option: string, relation: string}[]`).
+ * @returns {Map<string, {id: string, relation: string}[]>} keyed
+ *   `<node id>\n<fact>\n<option>`, each list in reading-id order.
+ */
+export function deriveReadings(nodes) {
+  const result = new Map();
+  for (const reading of [...nodes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    for (const bears of reading.bears ?? []) {
+      if (!bears || typeof bears.node !== 'string') continue;
+      const key = `${bears.node}\n${bears.fact}\n${bears.option}`;
+      if (!result.has(key)) result.set(key, []);
+      result.get(key).push({ id: reading.id, relation: bears.relation });
     }
   }
   return result;

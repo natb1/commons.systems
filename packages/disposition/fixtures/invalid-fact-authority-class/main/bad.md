@@ -1,14 +1,11 @@
 ---
-question: May an authority fact offer deferred among its choices?
+question: May an authority fact offer a class no ruling confers?
 stage: periagogic
 facts:
   - name: authority
-    choices:
-      - ratified
-      - delegated
-      - deferred
-    adopts: ratified
-    boldness: low
+    options:
+      - name: ratified
+      - name: unanswered
 ---
 
 ## Disposition

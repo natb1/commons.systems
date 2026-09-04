@@ -1,13 +1,11 @@
 ---
-question: Must a Facts subsection actually name a fact on the node?
+question: Must a Facts subsection name a fact on the node?
 stage: periagogic
 facts:
   - name: existence
-    choices:
-      - keep
-      - prune
-    adopts: keep
-    boldness: low
+    options:
+      - name: keep
+      - name: prune
 ---
 
 ## Disposition

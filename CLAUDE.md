@@ -63,7 +63,9 @@ reason for choosing it.
   `disposition/disposition.yaml`; its nodes are one markdown file each under
   `disposition/disposition-graph/` and `disposition/public/`; a node's id is
   `commons.systems/<graph>/<slug>`. A node with no `## Answer` is an
-  un-aligned disposition, part of the open dialogue with the author.
+  un-aligned disposition, part of the open dialogue with the author. No
+  node carries a stamp: a node's class is read off the rulings the author
+  recorded on its facts, and a node no ruling reaches is unanswered.
 - **The materialized implementation** is this ref, `greenfield`, during
   bootstrap (the shim declared on `materialization`; swapped with `main` at
   exit). `packages/disposition/` is the graph's reader, validator, and
@@ -83,12 +85,14 @@ reason for choosing it.
 
 - Read the graph through the browser, the rules, and
   `node packages/disposition/project.mjs disposition --frontier -`, which
-  lists every node in rank order with its stamp, instrument, shims, and
+  lists every node in rank order with its class, instrument, shims, and
   the stage of any open dialogue, headed by the unanswered nodes in the
   ruling order that `/align` takes them in.
-- Write the graph only through `/align`, the alignment dialogue with the
-  author; write the implementation only through `/reconcile`, the
-  reconciliation loop. Sessions divide by ref. Graph landings go straight to
+- Write the graph's rulings and recordings only through `/align`, the
+  alignment dialogue with the author; write the implementation only
+  through `/reconcile`, the reconciliation loop, whose main thread may
+  also record a viable option on a fact and move a fact's recommendation
+  within the node's scope, as its skill describes. Sessions divide by ref. Graph landings go straight to
   `origin/disposition` and implementation landings to `origin/greenfield`;
   no pull requests, and nothing is pushed to `main`.
 - Commands, from this directory: validate,
