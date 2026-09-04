@@ -1,6 +1,6 @@
 ---
 question: What does an unanswered node carry?
-stage: ruling
+stage: maieutic
 recommendation:
   adopts: standing
   class: ratified
@@ -44,6 +44,18 @@ defines:
   - account
 ---
 ## Disposition
+
+The author, 2026-09-03, on the alignment page and the encoding beneath it:
+
+> dispositions may have cascading effects on disposition for unanswered data model.
+
+> Each is a sublist B of summarized options with the AI recommendation, and confidence in the recommendation (previously called boldness, now called confidence).
+
+> Not all aspects of the disposition need to be confirmed individually. After the list A of confirmation requests is the full disposition detail. It dynamically reflects choices made in the confirmation request list. Very high confidence or default disposition elements can just be included in the final render.
+
+> nodes (eg. commons.systems/disposition-graph/purpose) still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed. This appears to be bootstrap encoding artifact. purpose node is a confirmation ruling for a node that does not yet exist on the reconciliation frontier (only on the alignment frontier).
+
+The words in full are on `commons.systems/disposition-graph/alignment-page`, the node whose question they open.
 
 The author, 2026-09-03:
 > re-evaluate the encoding of unanswered greenfield if necessary

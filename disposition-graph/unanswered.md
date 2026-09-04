@@ -1,6 +1,6 @@
 ---
 question: When is a disposition answered?
-stage: ruling
+stage: maieutic
 recommendation:
   adopts: standing
   class: ratified
@@ -30,6 +30,14 @@ defines:
   - denial with feedback
 ---
 ## Disposition
+
+The author, 2026-09-03, on the alignment page and what it says about confirmation:
+
+> Not all aspects of the disposition need to be confirmed individually. ... I want a list A of the things I need to confirm about the recommended disposition. Eg. authority and permanence are on list A if confirmation is required. ... The final option on list B is always reject all choices with feedback text input. ... After the final render is an option to reject final render with text input for feedback.
+
+> nodes (eg. commons.systems/disposition-graph/purpose) still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed. This appears to be bootstrap encoding artifact. purpose node is a confirmation ruling for a node that does not yet exist on the reconciliation frontier (only on the alignment frontier).
+
+The words in full are on `commons.systems/disposition-graph/alignment-page`, the node whose question they open.
 
 The author, 2026-09-03:
 > bootstrap operations: Due to the bootstrap nature of the current graph which needed to record (deferred) dispositions that weren't yet answered by alignment dialogue because the alignment dialogue (shim) was not yet bootstrapped. Now that the alignment dialogue does exist, all existing dispositions need to be answered by it. Classify all dispositions as unanswered (the actual status). There should be no loss of disposition encoding - it is only a reclassification to unanswered. For any unanswered dispositions that have not already received adversarial review - do so. The alignment artifact must sort unanswered nodes by rank (purpose node first) and provide inputs to confirm/confirm with edits/or deny with feedback any subset of unanswered nodes.

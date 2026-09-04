@@ -65,6 +65,12 @@ shims:
 ---
 ## Disposition
 
+The author, 2026-09-03, on the term this node defines:
+
+> confidence in the recommendation (previously called boldness, now called confidence)
+
+The words in full are on `commons.systems/disposition-graph/alignment-page`, the node whose question they open.
+
 The author, 2026-09-02:
 > All alignment involves a periagogic and maieutic phase, not just `/align <node_id>` but also `/align <disposition>`. The periagogic of `/align <disposition>` confirms I fully understand the existing record and implementation before making changes. This way I dont, for eg., undo a disposition because I forgot or didn't understand the good reason it was in place.
 

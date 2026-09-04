@@ -12,6 +12,16 @@ The author, 2026-09-03:
 The author, 2026-09-03, on being told it was not:
 > record it
 
+The author, 2026-09-03, opening this sitting on the alignment page:
+
+> new dispositions for the alignment artifact. dispositions may have cascading effects on disposition for unanswered data model. progress the dialogue but stop before the alignment-review. do not execute.
+>
+> - move the metrics to the top of the left navigation bar (justify with disposition). remove the rest of the pagehead (drop the lede) - it liquidates without disposition.
+> - show only one disposition at a time selected from the left nav (with indicator on left nav for the selection)
+> - give each disposition better layout that focuses on the confirmation and progressive disclosure. I want a list A of the things I need to confirm about the recommended disposition. Eg. authority and permanence are on list A if confirmation is required. Each is a sublist B of summarized options with the AI recommendation, and confidence in the recommendation (previously called boldness, now called confidence). Author quotes, full text, etc. are drill down items for rows in list B. Confirmation is recorded or edited with simple input for each list B item. The final option on list B is always reject all choices with feedback text input.
+> - Not all aspects of the disposition need to be confirmed individually. After the list A of confirmation requests is the full disposition detail. It dynamically reflects choices made in the confirmation request list. Very high confidence or default disposition elements can just be included in the final render. After the final render is an option to reject final render with text input for feedback.
+> - nodes (eg. commons.systems/disposition-graph/purpose) still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed. This appears to be bootstrap encoding artifact. purpose node is a confirmation ruling for a node that does not yet exist on the reconciliation frontier (only on the alignment frontier). After drafting recommendation for this item, and/or identifying issue with bootstrap reconciliation of disposition for unanswered data structure, launch an ad-hoc fable subagent to validate just this recommendation/reconciliation issue (not a full alignment review).
+
 ## Account
 
 An un-aligned disposition, recorded at the author's direction on 2026-09-03 and not yet answered. The question is the alignment page's own: what the author reads when they rule, what it must show of each unanswered node, in what order, and how their ruling returns to the record. The page exists and the author rules on it daily, and until now no node asked its question. It was recorded only inside other answers: a shim on `growth` naming the artifact, the projector flag that writes it, its published address, and its liquidation; one sentence of `growth`'s answer saying what it lists; one clause of `projection`'s answer and of its recommended text naming it the projection of the open dialogue; and the three responses defined on `unanswered`. So the page would have been ratified incidentally, by clauses inside larger rulings, and never put to the author as a question of its own, where the browser has this node's parent and `self-documentation` beside it.
