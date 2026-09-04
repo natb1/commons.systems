@@ -48,6 +48,10 @@ The author, 2026-09-04, after the maieutic movement, announcing a grant to be gi
 
 > prepare for compaction. after compaction you will be granted bootstrap authority to reconcile anything materialized from nodes in this sitting. that includes but is not limited to the encoding, migrating all nodes to the new encoding, the alignment/adversarial review skills, the alignment/browser artifacts and graph tooling.
 
+The author, 2026-09-04, after compaction, giving the grant announced above:
+
+> bootstrap authority granted - delegate to subagents with righ-sized models and effort level (opus, sonnet) when it would result in token efficiency
+
 ## Alternatives
 
 ### authority-derived
