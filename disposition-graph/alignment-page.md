@@ -92,6 +92,10 @@ The author, 2026-09-04, refining the answer after reading the page:
 > - the right aligned context is ONLY the rendered disposition. everything else goes in the center "what it asks" area. This include "What a ruling here makes decidable (3)" and "Your ruling on the whole" which supercedes prior disposition.
 > - I'm looking at "commons.systems/public/agency". It's not clear what question is being asked and what the options are. It only says "what this ruling asks" and then lists what appear to be ids of some kind, and then "standing (the node as it stands)". I don't understand what "standing" would even refer to. This node has not yet been answered, there is no ground to confirm as standing. Is this a result of sparse alignment state written before current disposition for unanswered nodes? Or, does this suggest more structural issues?
 
+The author, 2026-09-04, granting bootstrap authority for the reconciliation of this refinement:
+
+> granted, reconcile it
+
 ## Alternatives
 
 ### three-column-ruling-screen
@@ -861,3 +865,29 @@ worth keeping as it is: leading a stamped node with the word-diff rather than
 the whole is right, because the author does need to see what changes. What is
 wrong is calling the result "the node as it stands" and telling the author a
 confirmation ratifies it.
+
+### A latent defect found in the reconciliation, 2026-09-04
+
+Found while reconciling the two columns, and not by any of the author's four
+findings. The page's `alReadControl` read the whole-node response with
+`el.querySelector('input[type="radio"]:checked')` scoped to the whole item.
+The decisions and the whole-node control are both radios inside that item, so
+the selector returned whichever came first in the document: with the decisions
+ahead of the control, choosing an alternative was read back as the node's own
+ruling and staged as `ruling: "<the alternative's name>"` where `confirm`,
+`edit` or `deny` was meant. `alSyncNoteLabel` mislabelled the textarea from the
+same read, and `alHasResponse` counted the item as answered on it.
+
+Nothing was corrupted. The `responses` collection on the published page was
+read on 2026-09-04 and holds no document at all, so the defect never met a
+real response. It is recorded because it was latent rather than absent: the
+author has not yet ruled from the page, and the first ruling made on a node
+with a decision on it would have been the one to store the wrong value.
+
+Fixed by scoping every read and write of the control to `[data-controls]`,
+the control's own fieldset, which holds no decision. Recorded here rather than
+carried silently because it bears on the answer: two sets of radios under one
+item is what made it possible, and the answer's division of the columns does
+not by itself prevent it -- the reordering this sitting makes would have
+hidden the defect at the periagogic and maieutic stages, where the control now
+comes first, and left it standing at review and ruling.
