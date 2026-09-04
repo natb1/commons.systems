@@ -1,51 +1,95 @@
 #!/usr/bin/env node
 // .claude/skills/align-review/brief.mjs
 //
-// Writes one clean-context-review brief for the batch of nodes at the review
-// stage, judged against the full graph: brief.md with its placeholders filled
-// from the graph as it stands (SKILL.md §2; clean-context-review.md: "every
-// invocation of it is one batch: the nodes at the review stage, evaluated
-// against the full graph, answered and unanswered at every stage, read in one
-// context, with nothing isolated by node"). Locks tmp/review/frontier.lock
-// against a concurrent batch (frontier-consistency.md: "One review runs at a
-// time over the frontier").
+// Writes one reviewer's brief for one clean-context reading, in the two
+// readings the review divides into by their object (SKILL.md §1 and §2;
+// clean-context-review.md, "running two reviews divided by their object";
+// frontier-consistency.md, which divides the fifteen validations between
+// them).
 //
-// The batch's nodes are carried in full -- question, disposition, the text
-// that stands, rationale, every fact with every option it holds viable (its
-// source and reference, the readings that bear on it, the one recommended
-// and why, the one that stands, and the author's ruling where there is one),
-// the '## Recommendation' fence when there is one, the review state, and the
-// account -- because that is what receives a verdict. Every other node is
-// carried as context -- class, stage, question, the text that stands, and a
-// summary of its facts -- so the reviewer can tell whether a node or an
-// option is a new question or a new answer to a question the record already
-// asks (frontier-consistency.md, validation 15). Nothing of the invoking
-// session enters the brief.
+//   --node <id>  the review of one draft. Its object is that node's
+//                recommendation, and it runs the moment the recommendation is
+//                recorded, which is the node's transition to the review
+//                stage. The reader is given the node whole -- the '## Account'
+//                included, since a draft's dialogue is its own history -- its
+//                ancestry and the rules that bind everywhere, its siblings
+//                under the same parent, the nodes it names, and the index of
+//                every other question the record asks. Validations 1 to 6 and
+//                15. Writes tmp/review/draft-<slug>.brief.md, names
+//                tmp/review/draft-<slug>.json, and prints the reviewer's
+//                model, read from the node (§3).
+//
+//   --survey     the survey of the frontier. Its object is the frontier's
+//                consistency with itself: the whole graph in one context,
+//                judging every node at the review or ruling stage whose
+//                recommendation has moved since the survey last pinned it
+//                (`surveyJudges`), in the ruling order. Validations 7 to 15.
+//                No '## Account' goes into this brief -- the accounts are the
+//                dialogue's history and not its text. Writes
+//                tmp/review/survey.brief.md, names tmp/review/survey.json,
+//                and writes tmp/review/survey.pins.json, the sidecar the
+//                apply step compares against: the graph commit read and the
+//                recommendation hash of every node of the graph, judged and
+//                context alike, so that a finding whose subject has moved
+//                since is discarded rather than applied to text no reading
+//                attests to.
+//
+// Nothing is locked (clean-context-review: "a lock at launch, which is
+// advisory, per checkout, and unneeded once the pin serializes"). Reviews of
+// drafts never wait on each other, and the survey is serialized by the pin
+// its findings carry.
 //
 // Usage:
-//   node brief.mjs [rootDir] [--date YYYY-MM-DD] [--dry]
+//   node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry]
+//   node brief.mjs --survey    [rootDir] [--date YYYY-MM-DD] [--dry]
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { readGraph } from "../../../packages/disposition/read.mjs";
+import { readGraph, surveyJudges } from "../../../packages/disposition/read.mjs";
 import { renderFrontier } from "../../../packages/disposition/project.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const BRIEF_TEMPLATE_PATH = path.join(HERE, "brief.md");
-const OUT_FILE = "tmp/review/frontier.json";
-const LOCK_MESSAGE = "a review is running (tmp/review/frontier.lock); wait for it, or remove the lock if its writer is gone";
+const DRAFT_TEMPLATE_PATH = path.join(HERE, "brief-draft.md");
+const SURVEY_TEMPLATE_PATH = path.join(HERE, "brief-survey.md");
+
+// The paths the brief names to its reader, repo-relative and literal: the
+// reviewer works in the repository, whatever scratch directory this run
+// happens to write into (a test's copy, say).
+const SURVEY_OUT_FILE = "tmp/review/survey.json";
+const SURVEY_PINS_FILE = "tmp/review/survey.pins.json";
+const draftOutFile = (slug) => `tmp/review/draft-${slug}.json`;
+
+export const USAGE = [
+  "usage: node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry]",
+  "       node brief.mjs --survey    [rootDir] [--date YYYY-MM-DD] [--dry]",
+  "exactly one of --node <id> and --survey is given: the review of one draft,",
+  "or the survey of the frontier.",
+].join("\n");
 
 function todayIsoUtc() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function parseArgs(argv) {
-  const opts = { rootDir: null, date: null, dry: false };
+/**
+ * The two modes are exclusive and one is required: neither, both, an unknown
+ * flag, or a second positional is a usage error, which the CLI reports on
+ * stderr and exits 2 on.
+ */
+export function parseArgs(argv) {
+  const opts = { node: null, survey: false, rootDir: null, date: null, dry: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
-    if (a === "--date") {
+    if (a === "--node") {
+      const v = argv[++i];
+      if (v === undefined) throw new Error("--node needs a node id");
+      if (opts.node !== null) throw new Error("--node is given more than once");
+      opts.node = v;
+    } else if (a === "--survey") {
+      opts.survey = true;
+    } else if (a === "--date") {
       const v = argv[++i];
       if (v === undefined) throw new Error("--date needs a value");
       opts.date = v;
@@ -58,6 +102,12 @@ function parseArgs(argv) {
     } else {
       throw new Error(`unexpected argument ${a}`);
     }
+  }
+  if (opts.node !== null && opts.survey) {
+    throw new Error("--node and --survey are the two readings, and one invocation runs one of them");
+  }
+  if (opts.node === null && !opts.survey) {
+    throw new Error("no reading named: give --node <id> for the review of a draft, or --survey for the survey of the frontier");
   }
   return opts;
 }
@@ -94,6 +144,34 @@ function indexLine(node) {
   return `- ${node.id} | stage ${node.stage} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | ${classText(node)} | ${nodeFile(node)}`;
 }
 
+function contextIndexLine(node) {
+  return `- ${node.id} | ${node.status} | stage ${node.stage || "none"} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | ${classText(node)} | ${nodeFile(node)}`;
+}
+
+/**
+ * The reviewer's model for the review of one draft, read from the node and
+ * never argued in the brief (`clean-context-review`, `decomposition`;
+ * SKILL.md §3): the most capable model when the recommendation's boldness is
+ * not low, when the node is global-tier, or when a ruling on it would settle
+ * other nodes -- a reader weaker than the writer finds what the writer
+ * already saw -- and otherwise the smaller one, since the most capable model
+ * on every simple draft is the cost `delegation`'s rule exists to avoid.
+ *
+ * Boldness is the answer fact's: a node with no answer fact, or one
+ * recommending nothing, has no low boldness to read and takes the capable
+ * model.
+ *
+ * @param {object} node
+ * @returns {"fable"|"opus"}
+ */
+export function reviewerModel(node) {
+  const boldness = node.answerFact ? node.answerFact.boldness : null;
+  if (boldness !== "low") return "fable";
+  if (node.tier === "global") return "fable";
+  if (typeof node.settles === "number" && node.settles > 0) return "fable";
+  return "opus";
+}
+
 /**
  * The frontier's own order, exactly as `renderFrontier` (descending rank, id
  * tiebreak) lists it -- recovered from its own rendered listing rather than
@@ -109,12 +187,10 @@ function indexLine(node) {
  * comparator the frontier is defined by (rank descending, id ascending).
  * The fallback is the same order, computed here rather than read off there.
  *
- * This is the order `{{context_index}}` is written in, and the order
- * `batchNodes`/`contextNodes` are both drawn from below: the context is read
- * by rank because it is not what the author rules on. `{{batch_index}}` is
- * not this order -- it is separately re-sorted into the *ruling order*
- * (`rulingOrderCompare`), settling count first, since that is the order the
- * author rules on the batch in (`alignment-order`), and a node's rank alone
+ * This is the order the survey's context is read in, and it is not the order
+ * the judged set is presented in: that is separately re-sorted into the
+ * *ruling order* (`rulingOrderCompare`), settling count first, since that is
+ * the order the author rules in (`alignment-order`), and a node's rank alone
  * does not say how much of the graph a ruling on it would settle.
  *
  * @param {{nodes: object[]}} graph
@@ -144,15 +220,15 @@ export function frontierOrderIds(graph) {
 }
 
 /**
- * The batch's *ruling order* (`alignment-order`): settling count
- * descending -- a node whose ruling would settle more of the graph (more of
- * it standing under the node itself, or depending on it; `deriveSettles`)
- * is ruled on first -- then rank descending, then id ascending to break
- * what settling count alone does not. A node's own options are its own
- * ruling's content, not reach elsewhere, and do not count toward this. This
- * is deliberately not the frontier's own order (`frontierOrderIds`): rank
- * alone ranks by boost and shape, not by how much of the graph a ruling
- * settles, so the two orders can and do differ.
+ * The *ruling order* (`alignment-order`): settling count descending -- a node
+ * whose ruling would settle more of the graph (more of it standing under the
+ * node itself, or depending on it; `deriveSettles`) is ruled on first -- then
+ * rank descending, then id ascending to break what settling count alone does
+ * not. A node's own options are its own ruling's content, not reach
+ * elsewhere, and do not count toward this. This is deliberately not the
+ * frontier's own order (`frontierOrderIds`): rank alone ranks by boost and
+ * shape, not by how much of the graph a ruling settles, so the two orders can
+ * and do differ.
  *
  * `settles` is a number for every node the reader returns (`node.settles`);
  * a node for which it is not is sorted last, as though it settled nothing,
@@ -166,12 +242,35 @@ function rulingOrderCompare(a, b) {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-function reviewLine(node) {
-  if (!node.review) return "none (never reviewed)";
-  const stale = node.reviewStale
-    ? " — STALE: what the node recommends has moved since that review was written (`reviewStale`), so its verdict answers a recommendation the node no longer carries"
-    : "";
-  return `${node.review.verdict} (${node.review.strength}, ${node.review.date}, of ${node.review.of})${stale}`;
+/**
+ * A node's review state, in the two readings it divides into: the review of
+ * this draft (verdict, strength, date, and the pin), the survey of the
+ * frontier (its date and its pin), or either alone -- the survey may pin a
+ * node before its draft review has run, and a draft review is recorded before
+ * any survey has read it (read.mjs: "Either reading may stand without the
+ * other"). Each half is flagged where its own pin has gone stale.
+ */
+export function reviewLine(node) {
+  const review = node.review;
+  if (!review) return "none (neither reading has run)";
+  const parts = [];
+  if (review.verdict !== null) {
+    const stale = node.reviewStale
+      ? " — STALE: what the node recommends has moved since that review was written (`reviewStale`), so its verdict answers a recommendation the node no longer carries"
+      : "";
+    parts.push(`draft review: ${review.verdict} (${review.strength}, ${review.date}, of ${review.of})${stale}`);
+  } else {
+    parts.push("draft review: none (this draft has not been reviewed)");
+  }
+  if (review.survey !== null) {
+    const stale = node.surveyStale
+      ? " — STALE: what the node recommends has moved since that survey read it (`surveyStale`), so the survey is owed again"
+      : "";
+    parts.push(`survey: surveyed ${review.survey.date}, of ${review.survey.of}${stale}`);
+  } else {
+    parts.push("survey: none (no survey has pinned this node)");
+  }
+  return parts.join("; ");
 }
 
 function dependsText(node) {
@@ -266,8 +365,18 @@ function renderFacts(node, headingPrefix) {
   return out;
 }
 
-/** One batch node, whole: everything the reviewer gives a verdict on. */
-function renderBatchNode(node) {
+/**
+ * One node in full: question, the author's words, the text that stands, the
+ * rationale, every fact with every option it holds viable, the
+ * '## Recommendation' fence when there is one, and the account.
+ *
+ * `account: false` leaves the '## Account' out. The survey's brief never
+ * carries an account (`clean-context-review`: the accounts "are the
+ * dialogue's history and not its text"), and neither do the neighbourhood
+ * nodes of a draft's brief; the draft under review carries its own, since a
+ * verdict on it answers the dialogue that produced it.
+ */
+function renderWholeNode(node, { account = true } = {}) {
   const parts = [
     `### ${node.id}`,
     "",
@@ -275,7 +384,7 @@ function renderBatchNode(node) {
     `- Question: ${node.question}`,
     `- Stage: ${node.stage} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | status ${node.status} | class: ${classText(node)}`,
     `- Facts: ${factsSummary(node)}`,
-    `- Earlier review: ${reviewLine(node)}`,
+    `- Review state: ${reviewLine(node)}`,
     `- Depends: ${dependsText(node)} | under: ${(node.under || []).join(", ") || "none"}`,
   ];
   const bears = bearsText(node);
@@ -306,13 +415,15 @@ function renderBatchNode(node) {
     parts.push("(no '## Recommendation' fence: the answer fact recommends the option that stands, or recommends nothing)", "");
   }
 
-  parts.push("#### Account (the AI's account, with the subsections of earlier reviews)", "");
-  parts.push(node.account || "(no '## Account' section)", "");
+  if (account) {
+    parts.push("#### Account (the AI's account, with the subsections of earlier readings)", "");
+    parts.push(node.account || "(no '## Account' section)", "");
+  }
 
   return parts.join("\n");
 }
 
-/** One context node: what the batch is judged against. */
+/** One context node: class, stage, question, standing answer, other options. */
 function renderContextNode(node) {
   const head = [`### ${node.id}`, "", `- File: ${nodeFile(node)}`, `- Question: ${node.question}`];
   head.push(`- Status: ${node.status} | class: ${classText(node)} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | stage: ${node.stage || "none (no dialogue open)"}`);
@@ -336,110 +447,277 @@ function renderContextNode(node) {
 }
 
 /**
- * Fill brief.md for the batch at the review stage, with the full graph as
- * context, and write it, locking tmp/review/frontier.lock against a
- * concurrent batch -- unless `dry`, which prints the filled brief to stdout
- * and writes nothing at all, lock included. Refuses (letting the reader's
- * own message through) on a graph that does not validate.
- *
- * @returns {Promise<{briefPath: string, lockPath: string, batchCount: number, contextCount: number, lines: number}>}
+ * Fill `{{nav}}` last, from the filled text itself: a brief is long, and a
+ * reader that must read it whole is told how long it is and where each of its
+ * parts begins. The replacement is one line, as the placeholder's own line
+ * is, so the line numbers it names stay true.
  */
-export async function writeFrontierBrief({ rootDir, reviewDir, date = null, dry = false }) {
-  const lockPath = path.join(reviewDir, "frontier.lock");
-  const briefPath = path.join(reviewDir, "frontier.brief.md");
+function fillNav(text) {
+  const lines = text.split("\n");
+  const headings = [];
+  let fenced = false;
+  lines.forEach((line, i) => {
+    if (/^[ \t]*(`{3,}|~{3,})/.test(line)) fenced = !fenced;
+    else if (!fenced && /^## /.test(line)) headings.push({ name: line.slice(3).trim(), line: i + 1 });
+  });
+  const where = headings.map((h) => `"## ${h.name}" at line ${h.line}`).join(", ");
+  const nav = `This brief is ${lines.length} lines. Read it whole before writing anything: ${where}.`;
+  return { text: lines.map((l) => (l === "{{nav}}" ? nav : l)).join("\n"), lines: lines.length };
+}
 
-  if (!dry) {
-    let existingLock = null;
-    try {
-      existingLock = await readFile(lockPath, "utf8");
-    } catch (err) {
-      if (err.code !== "ENOENT") throw err;
+function fill(template, values) {
+  let out = template;
+  for (const [key, value] of Object.entries(values)) {
+    out = out.split(`{{${key}}}`).join(value);
+  }
+  return out;
+}
+
+// --------------------------------------------------------- the graph commit
+//
+// The survey's findings name the graph commit they read
+// (`frontier-consistency`, `clean-context-review`), and the pins sidecar
+// carries it beside the hashes. Read-only, and never fatal: a graph that is
+// not a git checkout at all (a fixture copy under a scratch directory) still
+// gets a brief, with the commit reported as unknown.
+
+export function graphCommit(rootDir) {
+  const run = (args) => execFileSync("git", ["-C", rootDir, ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  try {
+    const commit = run(["rev-parse", "HEAD"]).trim();
+    const dirty = run(["status", "--porcelain"]).trim().length > 0;
+    return { commit, dirty };
+  } catch {
+    return { commit: null, dirty: false };
+  }
+}
+
+function commitText({ commit, dirty }) {
+  if (commit === null) return "(unknown: this graph is not a git checkout)";
+  return dirty ? `${commit} (dirty)` : commit;
+}
+
+// -------------------------------------------------- the review of one draft
+
+/**
+ * The neighbourhood a draft is judged against, from the record and never from
+ * a set the session names (`clean-context-review`): the chain above it, its
+ * siblings under the same parent, the nodes it names, and every other
+ * question the record asks.
+ *
+ * - ancestry: every node above it by `under`, nearest first, plus every
+ *   `tier: global` node not already in the chain (the rules that bind
+ *   everywhere).
+ * - siblings: every other node sharing one of its `under` parents.
+ * - cited: every node whose id appears in the node's own rendered text, or in
+ *   its `depends`, and that no earlier part already carries.
+ * - index: every remaining node.
+ */
+export function draftNeighbourhood(graph, node) {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const taken = new Set([node.id]);
+  const take = (list) => {
+    const out = [];
+    for (const n of list) {
+      if (!n || taken.has(n.id)) continue;
+      taken.add(n.id);
+      out.push(n);
     }
-    if (existingLock !== null) {
-      const lockErr = new Error(LOCK_MESSAGE);
-      lockErr.exitCode = 3;
-      lockErr.lockContents = existingLock;
-      throw lockErr;
+    return out;
+  };
+
+  const chain = [];
+  let frontier = [...(node.under || [])];
+  const seenInChain = new Set();
+  while (frontier.length > 0) {
+    const next = [];
+    for (const id of frontier) {
+      if (seenInChain.has(id)) continue;
+      seenInChain.add(id);
+      const parent = byId.get(id);
+      if (!parent) continue;
+      chain.push(parent);
+      next.push(...(parent.under || []));
     }
+    frontier = next;
+  }
+  const globals = graph.nodes.filter((n) => n.tier === "global");
+  const ancestry = take([...chain, ...globals]);
+
+  const parents = new Set(node.under || []);
+  const siblings = take(graph.nodes.filter((n) => (n.under || []).some((p) => parents.has(p))));
+
+  // The node's own text, as this brief renders it, is what "the nodes it
+  // names" is read from: every section, every fact, every option's prose and
+  // the fence, so a citation anywhere in the node is caught.
+  const ownText = renderWholeNode(node);
+  const cited = take(graph.nodes.filter((n) => (
+    ownText.includes(n.id) || (node.depends || []).some((d) => d.id === n.id)
+  )));
+
+  const index = graph.nodes.filter((n) => !taken.has(n.id));
+  return { ancestry, siblings, cited, index };
+}
+
+function renderNodeList(nodes, empty, options) {
+  if (nodes.length === 0) return empty;
+  return nodes.map((n) => renderWholeNode(n, options)).join("\n");
+}
+
+/**
+ * Write the brief for the review of one draft, and report the model this
+ * skill read from the node. Refuses (letting the reader's own message
+ * through) on a graph that does not validate, and refuses with an exit-2
+ * error on a node that does not exist or does not stand at the review stage.
+ *
+ * @returns {Promise<{briefPath: string, outFile: string, model: string,
+ *   ancestryCount: number, siblingCount: number, citedCount: number,
+ *   indexCount: number, lines: number}>}
+ */
+export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry = false }) {
+  const graph = await readGraph(rootDir);
+  const node = graph.nodes.find((n) => n.id === id);
+  if (!node) {
+    const err = new Error(`no node '${id}' in ${rootDir}: the review of a draft is invoked on a node the record carries`);
+    err.exitCode = 2;
+    throw err;
+  }
+  if (node.stage !== "review") {
+    const err = new Error(`${id} is at stage ${node.stage ?? "none"}, and the review of a draft runs on a node at stage review (its recommendation has just been recorded)`);
+    err.exitCode = 2;
+    throw err;
   }
 
+  const effectiveDate = date ?? todayIsoUtc();
+  const { ancestry, siblings, cited, index } = draftNeighbourhood(graph, node);
+  const outFile = draftOutFile(node.slug);
+  const briefPath = path.join(reviewDir, `draft-${node.slug}.brief.md`);
+
+  const template = await readFile(DRAFT_TEMPLATE_PATH, "utf8");
+  const withoutNav = fill(template, {
+    date: effectiveDate,
+    repo: path.resolve(rootDir, ".."),
+    id: node.id,
+    node: renderWholeNode(node),
+    ancestry: renderNodeList(ancestry, "(no node above it and no rule that binds everywhere: this node is a root)", { account: false }),
+    siblings: renderNodeList(siblings, "(no sibling: no other node stands under the same parent)", { account: false }),
+    cited: renderNodeList(cited, "(this node names no other node the parts above do not already carry)", { account: false }),
+    index: index.length > 0
+      ? index.map(renderContextNode).join("\n")
+      : "(no other question: the parts above carry the whole record)",
+    out: outFile,
+  });
+  const { text: filled, lines } = fillNav(withoutNav);
+
+  const result = {
+    briefPath,
+    outFile,
+    model: reviewerModel(node),
+    ancestryCount: ancestry.length,
+    siblingCount: siblings.length,
+    citedCount: cited.length,
+    indexCount: index.length,
+    lines,
+  };
+  if (dry) return result;
+
+  await mkdir(reviewDir, { recursive: true });
+  await writeFile(briefPath, filled);
+  return result;
+}
+
+// ------------------------------------------------------ the frontier survey
+
+/**
+ * The sidecar the apply step compares against, written the moment the survey
+ * is briefed: the graph commit the survey reads, the ids it judges, and the
+ * recommendation hash of every node of the graph -- judged and context alike,
+ * since a finding may name any node at any stage and a finding whose subject
+ * has moved since is stale on its face (`clean-context-review`: "a review
+ * attests to the text it read"). The apply step compares against this file
+ * and never against a hash the reviewer copied.
+ *
+ * @returns {{commit: string|null, dirty: boolean, date: string,
+ *   judged: string[], pins: Record<string, string>}}
+ */
+export function surveyPins({ graph, judged, date, commit, dirty }) {
+  const pins = {};
+  for (const n of graph.nodes) pins[n.id] = n.recommendationHash;
+  return { commit, dirty, date, judged: judged.map((n) => n.id), pins };
+}
+
+/**
+ * Write the survey's brief and its pins sidecar. The judged set is
+ * `surveyJudges` -- every node at the review or ruling stage whose
+ * recommendation has moved since the survey last pinned it, and every such
+ * node no survey has read -- in the ruling order; the context is every other
+ * node, in the frontier's order. No account goes into either.
+ *
+ * @returns {Promise<{briefPath: string, pinsPath: string, outFile: string,
+ *   model: string, batchCount: number, contextCount: number, lines: number,
+ *   commit: string|null, dirty: boolean}>}
+ */
+export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = false }) {
   const graph = await readGraph(rootDir);
   const effectiveDate = date ?? todayIsoUtc();
+  const { commit, dirty } = graphCommit(rootDir);
 
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const ordered = frontierOrderIds(graph).map((id) => byId.get(id)).filter(Boolean);
 
-  // The batch: the nodes at the review stage, in the frontier's order (the
-  // order the batch itself, `{{batch}}`, is presented in). The context:
-  // every other node, answered or unanswered, at whatever stage, by rank.
-  const batchNodes = ordered.filter((n) => n.stage === "review");
-  const contextNodes = ordered.filter((n) => n.stage !== "review");
+  const judged = [...surveyJudges(graph)].sort(rulingOrderCompare);
+  const judgedIds = new Set(judged.map((n) => n.id));
+  const contextNodes = ordered.filter((n) => !judgedIds.has(n.id));
 
-  // The batch *index* alone is re-sorted into the ruling order: the author
-  // rules on the batch in that order, not by rank, so this is the one
-  // listing that must show it (`rulingOrderCompare`). The batch's own
-  // presentation above (`batchText`) stays in the frontier's order.
-  const batchIndexNodes = [...batchNodes].sort(rulingOrderCompare);
+  const briefPath = path.join(reviewDir, "survey.brief.md");
+  const pinsPath = path.join(reviewDir, "survey.pins.json");
 
-  const batchIndexText = batchIndexNodes.length > 0
-    ? batchIndexNodes.map(indexLine).join("\n")
-    : "(the batch is empty: no node carries `stage: review`)";
-  const batchText = batchNodes.length > 0
-    ? batchNodes.map(renderBatchNode).join("\n")
-    : "(the batch is empty: no node carries `stage: review`, so there is no verdict to give)";
-  const contextIndexText = contextNodes.length > 0
-    ? contextNodes
-      .map((n) => `- ${n.id} | ${n.status} | stage ${n.stage || "none"} | rank ${n.rank.toFixed(4)} | settles ${settlesText(n)} | ${classText(n)} | ${nodeFile(n)}`)
-      .join("\n")
-    : "(no other node: the batch is the whole graph)";
-  const contextText = contextNodes.length > 0
-    ? contextNodes.map(renderContextNode).join("\n")
-    : "(no other node: the batch is the whole graph)";
-
-  const template = await readFile(BRIEF_TEMPLATE_PATH, "utf8");
-  const withoutNav = template
-    .split("{{date}}").join(effectiveDate)
-    .split("{{repo}}").join(path.resolve(rootDir, ".."))
-    .split("{{batch_count}}").join(String(batchNodes.length))
-    .split("{{context_count}}").join(String(contextNodes.length))
-    .split("{{batch_index}}").join(batchIndexText)
-    .split("{{context_index}}").join(contextIndexText)
-    .split("{{batch}}").join(batchText)
-    .split("{{context}}").join(contextText)
-    .split("{{out}}").join(OUT_FILE);
-
-  // {{nav}} is filled last, from the filled text itself: the brief is long,
-  // and a reader that must read it whole is told where its parts begin. The
-  // replacement is one line, as the placeholder's own line is, so the line
-  // numbers it names stay true.
-  const navLines = withoutNav.split("\n");
-  const lineOf = (heading) => {
-    const i = navLines.findIndex((l) => l === heading || l.startsWith(`${heading} `));
-    return i === -1 ? "?" : String(i + 1);
-  };
-  const nav = `This brief is ${navLines.length} lines. Read it whole before writing anything: "## The batch" begins at line ${lineOf("## The batch")}, "## The full graph, as context" at line ${lineOf("## The full graph, as context")}, and "## Output" at line ${lineOf("## Output")}.`;
-  const filled = navLines.map((l) => (l === "{{nav}}" ? nav : l)).join("\n");
+  const template = await readFile(SURVEY_TEMPLATE_PATH, "utf8");
+  const withoutNav = fill(template, {
+    date: effectiveDate,
+    repo: path.resolve(rootDir, ".."),
+    commit: commitText({ commit, dirty }),
+    batch_count: String(judged.length),
+    context_count: String(contextNodes.length),
+    batch_index: judged.length > 0
+      ? judged.map(indexLine).join("\n")
+      : "(nothing is judged: every node at the review or ruling stage carries a survey pin on the recommendation it now stands on)",
+    context_index: contextNodes.length > 0
+      ? contextNodes.map(contextIndexLine).join("\n")
+      : "(no other node: the judged set is the whole graph)",
+    batch: judged.length > 0
+      ? judged.map((n) => renderWholeNode(n, { account: false })).join("\n")
+      : "(nothing is judged: there is no entry to write in `nodes`)",
+    context: contextNodes.length > 0
+      ? contextNodes.map(renderContextNode).join("\n")
+      : "(no other node: the judged set is the whole graph)",
+    out: SURVEY_OUT_FILE,
+    pins: SURVEY_PINS_FILE,
+  });
+  const { text: filled, lines } = fillNav(withoutNav);
 
   const result = {
     briefPath,
-    lockPath,
-    batchCount: batchNodes.length,
+    pinsPath,
+    outFile: SURVEY_OUT_FILE,
+    model: "opus",
+    batchCount: judged.length,
     contextCount: contextNodes.length,
-    lines: navLines.length,
+    lines,
+    commit,
+    dirty,
   };
-
-  if (dry) {
-    process.stdout.write(filled);
-    return result;
-  }
+  if (dry) return result;
 
   await mkdir(reviewDir, { recursive: true });
   await writeFile(briefPath, filled);
   await writeFile(
-    lockPath,
-    `${JSON.stringify({ pid: process.pid, started: new Date().toISOString(), brief: "tmp/review/frontier.brief.md", out: OUT_FILE }, null, 2)}\n`,
+    pinsPath,
+    `${JSON.stringify(surveyPins({ graph, judged, date: effectiveDate, commit, dirty }), null, 2)}\n`,
   );
-
   return result;
 }
 
@@ -450,25 +728,34 @@ if (isMain) {
     try {
       opts = parseArgs(process.argv.slice(2));
     } catch (err) {
-      process.stderr.write(`${err.message}\n`);
-      process.exitCode = 1;
+      process.stderr.write(`${err.message}\n${USAGE}\n`);
+      process.exitCode = 2;
       return;
     }
     const rootDir = path.resolve(process.cwd(), opts.rootDir ?? "disposition");
     const reviewDir = path.resolve(process.cwd(), "tmp/review");
     try {
-      const result = await writeFrontierBrief({ rootDir, reviewDir, date: opts.date, dry: opts.dry });
-      if (!opts.dry) {
-        console.log(result.briefPath);
-        console.log(`batch: ${result.batchCount} node(s) at stage review; context: ${result.contextCount} node(s); ${result.lines} lines`);
-        if (result.lines > 4000) {
-          process.stderr.write(
-            `note: this brief is ${result.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`,
-          );
+      if (opts.node !== null) {
+        const r = await writeDraftBrief({ rootDir, reviewDir, id: opts.node, date: opts.date, dry: opts.dry });
+        console.log(`reviewer model: ${r.model}`);
+        console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
+        console.log(`draft: ${opts.node}; ancestry ${r.ancestryCount}, siblings ${r.siblingCount}, cited ${r.citedCount}, index ${r.indexCount}; ${r.lines} lines`);
+        console.log(`the reviewer's output file: ${r.outFile}`);
+        if (r.lines > 4000) {
+          process.stderr.write(`note: this brief is ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
+        }
+      } else {
+        const r = await writeSurveyBrief({ rootDir, reviewDir, date: opts.date, dry: opts.dry });
+        console.log(`reviewer model: ${r.model}`);
+        console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
+        console.log(`survey: ${r.batchCount} node(s) judged; context: ${r.contextCount} node(s); ${r.lines} lines; graph commit ${commitText({ commit: r.commit, dirty: r.dirty })}`);
+        console.log(opts.dry ? `the pins sidecar: ${r.pinsPath} (dry run: nothing written)` : `the pins sidecar: ${r.pinsPath}`);
+        console.log(`the reviewer's output file: ${r.outFile}`);
+        if (r.lines > 4000) {
+          process.stderr.write(`note: this brief is ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
         }
       }
     } catch (err) {
-      if (err.lockContents) console.log(err.lockContents);
       process.stderr.write(`${err.message}\n`);
       process.exitCode = err.exitCode ?? 1;
     }

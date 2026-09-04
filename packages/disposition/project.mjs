@@ -372,6 +372,20 @@ function factLine(node, fact) {
   return `  fact ${fact.name}: ${bits.join("; ")}`;
 }
 
+/* One node's survey state on one line: when the survey last read this
+ * recommendation, whether the recommendation has moved since, and whether
+ * the survey is owed. Null where there is nothing to say -- no pin, and no
+ * stage the survey judges (commons.systems/disposition-graph/dialogue's
+ * `survey-pin-in-review`: the projections derive which of the two readings
+ * is owed and show it). */
+function surveyLine(node) {
+  const survey = node.review ? node.review.survey : null;
+  if (!survey) return node.surveyOwed ? "survey: owed" : null;
+  const stale = node.surveyStale ? ", changed since its survey" : "";
+  const owed = node.surveyOwed ? "; survey owed" : "";
+  return `survey: surveyed ${survey.date}${stale}${owed}`;
+}
+
 /**
  * Render every node in the graph as a flat markdown listing: first the
  * ruling order -- the alignment frontier (every node carrying a `stage`)
@@ -397,7 +411,24 @@ export function renderFrontier(graph) {
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 
-  const lines = [`# Frontier of ${graph.module}`, "", "## Ruling order", ""];
+  // The head says what the two readings leave outstanding: how many of the
+  // nodes at the ruling stage carry both pins on the recommendation as it
+  // stands, and how many nodes anywhere on the frontier still owe the
+  // survey. That is the answer to "what can be ruled now", which the count
+  // of ruling-stage nodes alone stopped being once the review divided in two
+  // (commons.systems/disposition-graph/clean-context-review).
+  const atRuling = graph.nodes.filter((n) => n.stage === "ruling");
+  const ready = atRuling.filter((n) => n.readyToRule);
+  const awaitingSurvey = graph.nodes.filter((n) => n.surveyOwed);
+
+  const lines = [
+    `# Frontier of ${graph.module}`,
+    "",
+    `Ready to rule: ${ready.length} of ${atRuling.length} at the ruling stage. Awaiting the survey: ${awaitingSurvey.length}.`,
+    "",
+    "## Ruling order",
+    "",
+  ];
   if (rulingOrder.length === 0) {
     lines.push("_none_");
   } else {
@@ -430,10 +461,13 @@ export function renderFrontier(graph) {
       lines.push(`  depends: ${node.depends.map(formatDependsEntry).join(", ")}`);
     }
     for (const fact of node.facts || []) lines.push(factLine(node, fact));
-    if (node.review) {
+    if (node.review && node.review.verdict) {
       const stale = node.reviewStale ? ", changed since its review" : "";
       lines.push(`  review: ${node.review.verdict} (${node.review.strength}, ${node.review.date})${stale}`);
     }
+    const survey = surveyLine(node);
+    if (survey) lines.push(`  ${survey}`);
+    if (node.readyToRule) lines.push("  ready to rule");
     if (node.answer == null) lines.push(`  under: ${(node.under || []).join(", ")}`);
     if (node.instrument) {
       const note = node.instrument.note ? ` — ${node.instrument.note}` : "";
@@ -988,16 +1022,60 @@ function persistenceShims(n) {
   return Array.isArray(n.shims) ? n.shims : [];
 }
 
+// The stages at which the two readings are owed: a draft is judged once it
+// is drafted, and the frontier once the node stands on it (the reader's
+// SURVEY_STAGES; kept here so the page derives the same answer from a node's
+// own fields).
+const JUDGED_STAGES = new Set(["review", "ruling"]);
+
+/* The review, in the two readings it divides into
+ * (commons.systems/disposition-graph/clean-context-review): the review of
+ * this one draft, and the survey of the whole frontier. Each row says when
+ * it read and whether the recommendation has moved since; the last row says
+ * which of the two is owed, or marks the node ready to rule when neither is
+ * -- which is the readiness a ruling waits on, and the reason the page shows
+ * both pins rather than a verdict alone. */
 function renderReview(n) {
-  if (!n.review) {
-    return '<section class="rev"><p class="lbl">The review</p><p class="none">Not yet reviewed.</p></section>';
+  const review = n.review || null;
+  const drafted = !!(review && review.verdict);
+  const survey = review ? review.survey : null;
+
+  let draftRow;
+  if (!drafted) {
+    draftRow = '<p class="none">Not yet reviewed.</p>';
+  } else {
+    let pills = '<span class="pill alt-stands">this draft</span>'
+      + `<span class="pill rev-${alignEsc(review.verdict)}">${alignEsc(review.verdict === "forward" ? "forwarded" : "kicked back")}</span>`
+      + `<span class="pill rev-strength">counter-argument: ${alignEsc(review.strength)}</span>`
+      + `<span class="pill rev-date">${alignEsc(review.date)}</span>`;
+    if (n.reviewStale) pills += '<span class="pill rev-stale">changed since its review</span>';
+    draftRow = `<p class="pills">${pills}</p>`;
   }
-  const verdict = n.review.verdict === "forward" ? "forwarded" : "kicked back";
-  let pills = `<span class="pill rev-${alignEsc(n.review.verdict)}">${alignEsc(verdict)}</span>`
-    + `<span class="pill rev-strength">counter-argument: ${alignEsc(n.review.strength)}</span>`
-    + `<span class="pill rev-date">${alignEsc(n.review.date)}</span>`;
-  if (n.reviewStale) pills += '<span class="pill rev-stale">changed since its review</span>';
-  return `<section class="rev"><p class="lbl">The review</p><p class="pills">${pills}</p></section>`;
+
+  let surveyRow;
+  if (!survey) {
+    surveyRow = '<p class="none">Not yet surveyed.</p>';
+  } else {
+    let pills = '<span class="pill alt-stands">the frontier</span>'
+      + `<span class="pill rev-date">surveyed ${alignEsc(survey.date)}</span>`;
+    if (n.surveyStale) pills += '<span class="pill rev-stale">changed since its survey</span>';
+    surveyRow = `<p class="pills">${pills}</p>`;
+  }
+
+  const reviewOwed = JUDGED_STAGES.has(n.stage) && (!drafted || n.reviewStale);
+  const surveyOwed = !!n.surveyOwed;
+  let owedRow = "";
+  if (n.readyToRule) {
+    owedRow = '<p class="pills"><span class="pill rev-forward">ready to rule</span></p>';
+  } else if (reviewOwed || surveyOwed) {
+    const owed = (reviewOwed ? '<span class="pill rev-stale">the review of this draft is owed</span>' : "")
+      + (surveyOwed ? '<span class="pill rev-stale">the survey of the frontier is owed</span>' : "");
+    owedRow = `<p class="pills">${owed}</p>`;
+  } else if (JUDGED_STAGES.has(n.stage)) {
+    owedRow = '<p class="pills"><span class="pill rev-forward">neither reading is owed</span></p>';
+  }
+
+  return `<section class="rev"><p class="lbl">The review, in its two readings</p>${draftRow}${surveyRow}${owedRow}</section>`;
 }
 
 /* --------------------------- the ruling screen ------------------------
@@ -1105,10 +1183,16 @@ function alignmentMetrics(items) {
       why: "Nodes the author has not confirmed. Every node is unanswered until they do, so this is the outstanding authority.",
     },
     {
-      key: "ruleable",
-      value: items.filter((n) => n.stage === "ruling").length,
+      key: "ready to rule",
+      value: items.filter((n) => n.readyToRule).length,
       of: "commons.systems/disposition-graph/clean-context-review",
-      why: "Nodes whose clean-context review is behind them. The review is what stands between a draft and the author, so this is what can be ruled now.",
+      why: "Nodes carrying both readings on the recommendation as it stands: a forward verdict on this draft, and the survey's pin on the same. That is what can be ruled now, and the ruling stage alone stopped being it once the review divided in two.",
+    },
+    {
+      key: "survey owed",
+      value: items.filter((n) => n.stage === "ruling" && n.surveyOwed).length,
+      of: "commons.systems/disposition-graph/frontier-consistency",
+      why: "Nodes at the ruling stage the survey has not read at the recommendation they now carry. Each is a draft that looks ruleable with the frontier's consistency unchecked beneath it.",
     },
     {
       key: "next settles",

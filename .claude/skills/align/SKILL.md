@@ -19,12 +19,19 @@ description: Record or revise one node of the disposition graph by interview wit
 > for the `viable-options` sitting, to the viable-options model, in which
 > every decision on a node is a fact with viable options, the AI marks the
 > one it recommends, the author's ruling is recorded on the option they
-> chose, and the node's class is read off those rulings and never stamped.
+> chose, and the node's class is read off those rulings and never stamped;
+> and reconciled once more on 2026-09-04, under the author's grant of that
+> day on `decomposition` ("go, and bootrap authority granted"), to that
+> node's recommended text and to the options `per-draft-and-survey` on
+> `clean-context-review` and `split-survey-from-per-draft` on
+> `frontier-consistency`: the five seams a sitting's work divides along,
+> and the review divided by its object.
 > Every recommendation these reconciliations wrote is unanswered, and the
-> clean-context review of the batch is owed before the author rules on any
+> clean-context review is owed before the author rules on any
 > of it.)** Hand-materialized from
 > the nodes `growth`, `recording`, `unanswered`, `dialogue`,
-> `clean-context-review`, `frontier-consistency`, `checkpoint`,
+> `clean-context-review`, `frontier-consistency`, `decomposition`,
+> `checkpoint`,
 > `alignment-target`, `alignment-order`, `alignment-page`, `authority`,
 > `viable-options`, `node`, `under`, `projection`,
 > `un-aligned-children`, `fidelity`,
@@ -97,7 +104,8 @@ skill only when the session starts in the checkout that carries it.
    `node packages/disposition/project.mjs disposition --frontier -` lists
    every node with its status, its class and where the class comes from,
    `stage`, each fact's recommendation, review
-   state, and settling count, headed by the alignment frontier in the
+   state, the survey's state and which of the two readings is owed, whether
+   the node is ready to rule, and settling count, headed by the alignment frontier in the
    ruling order, and the alignment page's responses are read with the Artifact
    tool (`read_db`, collection `responses`; a document's id is the node id
    with each `/` replaced by `:`; a document carries `node`, `stage`,
@@ -120,7 +128,10 @@ skill only when the session starts in the checkout that carries it.
      record holds viable and not chosen. The AI's own account, findings, drafts, and
      recommendations are held back until the author has committed an
      answer to the probe, and then enter only as counterpoint, cited to
-     the text by locus. No verdict is in play.
+     the text by locus. No verdict is in play. The periagogic object, the
+     nodes the disposition would amend and the implementation their
+     criteria point to, is read by a survey unit and never by the main
+     thread (`decomposition`).
   3. Maieutic stage, intention. What the author means and intends to bind
      is elicited and tested: the three classes of finding, the evaluation
      twice, the steelman alternative from the traditions, the test against
@@ -128,15 +139,43 @@ skill only when the session starts in the checkout that carries it.
      option it marks and the boldness of the mark, the class a ruling on
      the authority fact would confer, the persistence where the shape
      would change, and the other options held viable, with the three
-     exits open.
+     exits open. The stage divides into units by the kind of analysis each
+     performs (`decomposition`, `delegation`), each with its own contract:
+     the record survey, what the graph says on the question, the chain of
+     nodes above it, the rules that bind everywhere, the nodes that define
+     or use its terms, and the contradictions and redundant seams among
+     them (opus); the tradition survey, the second evaluation, returning
+     readings with source, locus, and what each bears on, traditions
+     shelved by pre-agent constraints among them (opus); the
+     implementation survey, what exists and what a named artifact or
+     command does (sonnet); the design, the options on each fact, the
+     recommendation with its boldness, and the draft text (opus, or fable
+     where the draft touches a global-tier node or an ancestor); and the
+     review of the draft in clean context, whose model `/align-review`
+     reads from the node (§5). The surveys run together, the design waits
+     on them, the review waits on the design, and the main thread's own
+     adversarial reading of the integrated draft (`evaluation`) comes
+     between the two. Each unit returns its conclusion as data with the
+     commands it ran and writes nothing to the record; the main thread
+     writes the conclusion into the node's account at the next checkpoint,
+     so the record and not the session carries it. The facts divide with
+     the work: the answer fact is the design's, the authority fact follows
+     the record's rule of escalating toward ratified where being wrong is
+     expensive, irreversible, or capture-shaped, persistence follows the
+     node's shape, and existence appears only where a prune is proposed; a
+     design unit's contract names which facts are its.
   4. Review (`recording`, `clean-context-review`, `frontier-consistency`).
-     Before the author sees the recommendation, `/align-review` reads the
-     batch of nodes at the review stage, the sitting's drafts among the
-     rest, against the full graph, in
-     one fresh context (§5) and either forwards each draft, with its
-     strongest counter-argument when it found one and the session's
-     reply, or kicks it back to stage 2 or 3 with findings; a finding
-     across nodes kicks back each node it names.
+     Two readings divided by their object, each in a fresh context (§5).
+     The review of a draft runs the moment the node's recommendation is
+     recorded: `/align-review <node id>` reads that draft against its
+     neighbourhood and either forwards it, with its strongest
+     counter-argument when it found one and the session's reply, or kicks
+     it back to stage 2 or 3 with findings. The survey runs before the
+     author rules, when the frontier shows one owed:
+     `/align-review --survey` reads the whole graph and judges the nodes
+     whose recommendation has moved since it last pinned them, and a
+     finding across nodes kicks back each node it names. The node is ready
+     to rule when both pins name the recommendation as it stands.
   5. Ruling. The node is put on the alignment page, whose shape is the
      `alignment-page` node's question and is not restated here: one node
      at a time, selected from a rail that carries the metrics and every
@@ -170,7 +209,11 @@ skill only when the session starts in the checkout that carries it.
   author's words verbatim and dated, and an `## Account` section naming
   what the sitting would amend and its periagogic object; no `## Answer`,
   no ruling. For a node the author names, set `stage` on that node and add
-  the `## Disposition` of their words. `stage` names the next movement
+  the `## Disposition` of their words. A disposition that asks or answers
+  more than one question is queued as several such nodes, one per question,
+  each carrying the author's words that bear on it and, in `depends`, the
+  questions it rests on; the decomposition that yields them is the
+  sitting's first unit (below). `stage` names the next movement
   owed, `periagogic`, `maieutic`, `review`, or `ruling`; advance it as the
   movements complete and remove it, with the rest of the dialogue's
   fields, at the recording. The queue is the alignment frontier, in
@@ -297,7 +340,7 @@ skill only when the session starts in the checkout that carries it.
   `## Ruling order` section and the alignment page pages in it. Rank stays
   what `attention` says it is for the reconciliation frontier and the
   onboarding path. Finding a tangle is the clean-context review's work
-  (`/align-review`); a sitting records one the turn the author's words
+  (`/align-review --survey`); a sitting records one the turn the author's words
   show it, and lands it like any other checkpoint.
 - No argument (`alignment-target`, `alignment-order`): take the first
   node of the alignment frontier in the ruling order, which is one order
@@ -311,8 +354,25 @@ skill only when the session starts in the checkout that carries it.
   session takes the node the author names.
 - A question or a requirement: search the graph for a node with the same
   question. A keyword search only shortlists; only reading a node disposes of
-  it. Same question, same node, and the round is an edit. A requirement that
-  bundles independent questions is several rounds, one node each.
+  it. Same question, same node, and the round is an edit. A disposition that
+  asks or answers more than one question is several nodes (`node`,
+  `decomposition`), and decomposing it is the sitting's first unit: a survey
+  subagent proposes the questions the disposition asks, where each sits
+  under the record, whether the record already asks it, which of the
+  author's words bear on each, and which questions rest on which
+  (opus: the decomposition is judgment). The main thread validates the
+  proposal, records each question as a queued node carrying its words, with
+  the rests-on relations among them as `depends`, and puts the
+  decomposition to the author at the periagogic stage as a reading of their
+  own words, refusable like any probe. The questions are then several
+  rounds, one node each, and the dependency between them orders the work
+  and not the surveys: their surveys fan out regardless, a design waits on
+  the recommendation and not the ruling of the question it depends on, the
+  main thread integrates them in the ruling order, and the review of each
+  draft runs the moment its recommendation is recorded, while the others
+  are still in hand, so the counter-argument reaches the main thread with
+  the node it concerns and never as a batch of findings on nodes it has
+  stopped seeing.
 - State the conduct before the dialectic (`growth`).
   Periagogic: the record is authoritative and the author is turned back to
   it; the record at `origin/disposition` is the fixed object, the author
@@ -474,27 +534,44 @@ rule projections are regenerated by the next reconciliation run, not here.
   mapped every decision of the round to a field. The recommendation to
   ratify carries its boldness assessment and the other options held
   viable, and the three exits stay open.
-- **Review in clean context**, before the author sees a recommendation.
-  Set `stage: review` on each recommended disposition of the round, land
-  (`checkpoint`), and invoke `/align-review` (`clean-context-review`,
-  `frontier-consistency`): one batch of the nodes at the review stage,
-  the round's drafts among the rest, judged against the full graph,
-  answered and unanswered at every stage, all of it read by one
-  fresh subagent (opus, high effort), never a fork, in one context, whose
-  brief carries nothing but the record and the validations the
-  frontier-consistency node lists: on each draft, whether it answers the
-  question and the author's words, contradicts the record it joins or a
-  tradition it cites without recording the divergence, states the facts to
-  present, names shims that exist, would lead an executor to a wrong
-  action, and what the strongest argument against it is; across the
-  frontier, contradiction, supersession, redundancy, decomposition,
-  vocabulary, cross-reference, placement and order, and coverage of the
-  author's words. The subagent reports, per draft, forward or kick back
-  with findings and the stage they name, plus the counter-argument when it
-  found one worth the author's time, and the frontier's findings, each
-  naming its nodes and recommending their stage with the edit, merge, or
-  split it proposes; it writes nothing. One batch runs at a time: wait
-  for any review already running. Apply each verdict on its own: a
+- **Review in clean context**, in two readings divided by their object
+  (`clean-context-review`, `frontier-consistency`, `decomposition`), before
+  the author sees a recommendation.
+  *The review of a draft.* When a node's recommendation is recorded or
+  moved in substance, set `stage: review` on it, land (`checkpoint`), and
+  invoke `/align-review <node id>`: one fresh subagent, never a fork, whose
+  brief carries nothing of the session and nothing but the record — the
+  node whole, the chain of nodes above it, its siblings under the same
+  parent, the nodes it names, the rules that bind everywhere, the author's
+  words on each, and the index of every question the record asks with its
+  class, stage, standing answer, and the options on its answer fact. It
+  judges whether the draft answers the question and the author's words,
+  contradicts the record it joins or a tradition it cites without
+  recording the divergence, states the facts to present, names shims that
+  exist, would lead an executor to a wrong action, whether every option on
+  its facts is viable and whether a viable one is missing, and what the
+  strongest argument against it is; it reports forward or kick back with
+  the findings and the stage they name, plus the counter-argument when it
+  found one worth the author's time, and it writes nothing. The reviewer's
+  model is read from the node by the review skill and never argued in a
+  brief: never smaller than the drafter's, fable when the recommendation's
+  boldness is not low, the node is global-tier, or a ruling on it would
+  settle other nodes, and opus otherwise. Reviews of drafts run
+  concurrently and never wait on each other.
+  *The survey.* Before the author rules, when the frontier shows a survey
+  owed, invoke `/align-review --survey`: the whole graph, answered and
+  unanswered at every stage, read in one context without its accounts,
+  judging every node whose recommendation has moved since its survey pin
+  for contradiction, supersession, redundancy, decomposition, vocabulary,
+  cross-reference, placement and order, and coverage of the author's
+  words, each finding naming its nodes and recommending their stage with
+  the edit, merge, or split it proposes.
+  *Ready to rule.* A node is ready when it carries a forward verdict
+  pinned to the recommendation as it stands and a survey pin on the same;
+  the frontier and the alignment page show which of the two is owed, and
+  no ruling is recorded while either is.
+  The session validates every finding against the record on its own thread
+  and never delegates it. Apply each verdict on its own: a
   kickback sets `stage` and appends the findings to `## Account`; a
   forward sets `stage: ruling`, writes `review` with the verdict, the
   strength, the date, and the pin of the recommendation it read, and puts the
@@ -502,7 +579,9 @@ rule projections are regenerated by the next reconciliation run, not here.
   with the note that the review found no strong counter-argument; a
   frontier finding kicks back each node it names with the finding and the
   proposed edit appended, and a merge or split is put to the author as an
-  option on the node it would change, never done by the session. A disposition still in review
+  option on the node it would change, never done by the session. A
+  recommendation changed in substance after its review goes back to the
+  review stage. A disposition still in review
   never holds one that was forwarded.
 - **Classify the response** (`recording`, `unanswered`). `confirm`:
   record the ruling on the option the author chose, with
@@ -527,8 +606,9 @@ rule projections are regenerated by the next reconciliation run, not here.
   the `deferred` option on the authority fact, so no fourth response is
   needed. An overrule is
   drafted as what the author said stands, reviewed, and put back for
-  confirmation. A confirmation on a node whose review has not run is held
-  until the review runs and recorded when it forwards. A response given on
+  confirmation. A confirmation on a node that is not ready to rule, either
+  reading being owed on it, is held until that reading runs and recorded
+  when the draft's review forwards. A response given on
   one of the decisions a node's ruling asks is classified the same way and
   moves the whole node, since a node has one stage and one next movement
   owed on it; the responses given on the node's other decisions are
@@ -602,3 +682,20 @@ tooling) and every investigation whose context is verbose (debugging,
 driving a browser, reading logs or transcripts, reading a page in full
 before publishing it) is a subagent unit under `delegation`; the main
 thread reads the conclusion, never the context.
+
+A sitting's work divides along five seams (`decomposition`): the question,
+the movement, the kind of analysis, the fact, and the dependency. The units
+and their models: the decomposition of a bundled disposition into questions
+(opus, §1); the reading of the periagogic object, a survey unit and never
+the main thread (§1); the record survey (opus); the tradition survey
+(opus); the implementation survey (sonnet); the design (opus, or fable
+where the draft touches a global-tier node or an ancestor); and the review
+of the draft, whose model `/align-review` reads from the node — never
+smaller than the drafter's, fable when the recommendation's boldness is not
+low, the node is global-tier, or a ruling on it would settle other nodes,
+and opus otherwise, since a reader weaker than the writer finds what the
+writer already saw. The effort is stated in the brief. Every unit returns
+its conclusion as data with the commands it ran and writes nothing to the
+record; the main thread integrates and writes. A disposition that asks one
+question runs one design unit and one review and no decomposition.
+Validating a review's findings is the main thread's and is never delegated.

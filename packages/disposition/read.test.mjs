@@ -33,7 +33,9 @@ import {
   reviewStale,
   ruledOption,
 } from './derive.mjs';
-import { parseNode, readGraph } from './read.mjs';
+import {
+  parseNode, readGraph, readyToRule, surveyJudges, surveyOwed, surveyStale,
+} from './read.mjs';
 import { validate } from './validate.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -976,6 +978,13 @@ describe('readGraph: invalid fixtures', () => {
     // over the whole frontier; this fixture's extra key fails the same
     // generic shape check invalid-review-shape does.
     ['invalid-review-siblings-unresolved', /'review' must be \{verdict: forward\|kickback/],
+    // the survey's pin: its two keys, both required, both typed, and the
+    // four draft-review keys given together or not at all. Every one of
+    // these is the same combined message the review's shape has always had.
+    ['invalid-review-survey-missing-of', /with an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
+    ['invalid-review-survey-unknown-key', /with an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
+    ['invalid-review-survey-type', /with an optional survey: \{date: YYYY-MM-DD, of: <sha1>\}/],
+    ['invalid-review-partial', /the four draft-review keys are given together or not at all, and the survey may stand alone/],
     // '## Facts' and its subsections
     ['invalid-facts-section-without-list', /'## Facts' requires a non-empty 'facts' list/],
     ['invalid-facts-heading-mismatch', /'## Facts' has '### mysterious', which is not a fact on this node \(facts: existence\)/],
@@ -1182,7 +1191,8 @@ describe('readGraph: valid-dialogue fixture', () => {
     assert.equal(n.answerFact.boldness, 'moderate');
     assert.equal(n.answerFact.stands, 'standing');
     assert.equal(n.review.verdict, 'forward');
-    assert.deepEqual(Object.keys(n.review).sort(), ['date', 'of', 'strength', 'verdict'], "no 'siblings' key");
+    assert.deepEqual(Object.keys(n.review).sort(), ['date', 'of', 'strength', 'survey', 'verdict'], "the two readings and nothing else -- no 'siblings' key");
+    assert.equal(n.review.survey, null, 'the survey has not read this node yet');
     assert.equal(n.review.of, n.recommendationHash, "the fixture's review.of is kept in step");
     assert.equal(n.reviewStale, false);
     assert.ok(n.fence, 'the node carries a parsed Recommendation fence');
@@ -1384,6 +1394,127 @@ describe('readGraph: valid-options fixture', () => {
     assert.notEqual(n.recommendationHash, 'a'.repeat(40));
     assert.equal(n.reviewStale, true);
     assert.equal(n.moved, false, 'no ruling, so nothing has moved from one');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readGraph: valid-survey fixture -- the survey's pin beside the draft
+// review's (commons.systems/disposition-graph/dialogue, `survey-pin-in-review`)
+// ---------------------------------------------------------------------------
+
+describe('readGraph: valid-survey fixture', () => {
+  const graphPromise = readGraph(path.join(FIXTURES, 'valid-survey'));
+  async function bySlug(slug) {
+    const graph = await graphPromise;
+    const n = graph.nodes.find((x) => x.id === `example.test/main/${slug}`);
+    assert.ok(n, `expected a node with slug ${slug}`);
+    return n;
+  }
+
+  test('a survey pin beside a forward verdict, both on the recommendation as it stands, is ready to rule', async () => {
+    const n = await bySlug('ready-node');
+    assert.equal(n.stage, 'ruling');
+    assert.equal(n.review.verdict, 'forward');
+    assert.deepEqual(n.review.survey, { date: '2026-09-04', of: n.recommendationHash });
+    assert.equal(n.review.of, n.recommendationHash, 'the draft review pins the same recommendation');
+    assert.equal(n.reviewStale, false);
+    assert.equal(n.surveyStale, false);
+    assert.equal(n.surveyOwed, false);
+    assert.equal(n.readyToRule, true);
+  });
+
+  test('a survey pin stands alone on a node the survey judged before its draft review ran', async () => {
+    const n = await bySlug('survey-only');
+    assert.equal(n.stage, 'review');
+    assert.equal(n.review.verdict, null, 'no verdict: the draft review has not run');
+    assert.deepEqual(
+      [n.review.strength, n.review.date, n.review.of],
+      [null, null, null],
+      'and none of the other three draft-review keys either',
+    );
+    assert.deepEqual(n.review.survey, { date: '2026-09-04', of: n.recommendationHash });
+    assert.equal(n.reviewStale, false, 'there is no draft-review pin for a move to overtake');
+    assert.equal(n.surveyStale, false);
+    assert.equal(n.surveyOwed, false, 'the survey has read this recommendation');
+    assert.equal(n.readyToRule, false, 'and the draft review is still owed');
+  });
+
+  test('each pin goes stale by itself: a stale survey leaves a current draft review alone', async () => {
+    const n = await bySlug('stale-survey');
+    assert.equal(n.stage, 'ruling');
+    assert.equal(n.review.survey.of, 'a'.repeat(40));
+    assert.notEqual(n.recommendationHash, 'a'.repeat(40));
+    assert.equal(n.review.of, n.recommendationHash);
+    assert.equal(n.reviewStale, false, 'the draft review still pins the recommendation');
+    assert.equal(n.surveyStale, true);
+    assert.equal(n.surveyOwed, true);
+    assert.equal(n.readyToRule, false, 'a forward verdict alone does not make a node ruleable');
+  });
+
+  test('a node at the review stage with no review at all owes the survey and is not stale', async () => {
+    const n = await bySlug('unsurveyed');
+    assert.equal(n.review, null);
+    assert.equal(n.reviewStale, false);
+    assert.equal(n.surveyStale, false, 'nothing has been pinned for a move to overtake');
+    assert.equal(n.surveyOwed, true);
+    assert.equal(n.readyToRule, false);
+  });
+
+  test('the survey is owed only at the review and ruling stages: a stale pin below them owes nothing', async () => {
+    const n = await bySlug('kicked-back');
+    assert.equal(n.stage, 'maieutic');
+    assert.equal(n.surveyStale, true, 'the pin it carries is stale all the same');
+    assert.equal(n.surveyOwed, false);
+    assert.equal(n.readyToRule, false);
+  });
+
+  test('surveyJudges lists exactly the nodes the next survey reads, in input order, from a graph or a node list', async () => {
+    const graph = await graphPromise;
+    const judged = surveyJudges(graph).map((n) => n.slug);
+    assert.deepEqual(judged, ['stale-survey', 'unsurveyed']);
+    assert.deepEqual(surveyJudges(graph.nodes).map((n) => n.slug), judged, 'the node list alone works too');
+    assert.deepEqual(surveyJudges({}), [], 'and a graph with no nodes judges nothing');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// the survey derivations on their own
+// ---------------------------------------------------------------------------
+
+describe('surveyStale, surveyOwed, readyToRule', () => {
+  // A node with no facts hashes to a fixed recommendation hash, which is all
+  // these three read besides the stage and the review.
+  const HASH = deriveRecommendationHash({ facts: [] });
+  const pin = (of) => ({ date: '2026-09-04', of });
+  const forward = { verdict: 'forward', strength: 'strong', date: '2026-09-04', of: HASH, survey: null };
+
+  test('surveyStale is true only where a pin exists and the recommendation has moved past it', () => {
+    assert.equal(surveyStale({ facts: [], review: null }), false);
+    assert.equal(surveyStale({ facts: [], review: { ...forward, survey: null } }), false);
+    assert.equal(surveyStale({ facts: [], review: { ...forward, survey: pin(HASH) } }), false);
+    assert.equal(surveyStale({ facts: [], review: { ...forward, survey: pin('a'.repeat(40)) } }), true);
+  });
+
+  test('surveyOwed gates on the stage: the survey judges review and ruling and nothing else', () => {
+    for (const stage of ['review', 'ruling']) {
+      assert.equal(surveyOwed({ facts: [], stage, review: null }), true, `${stage}: no pin`);
+      assert.equal(surveyOwed({ facts: [], stage, review: { ...forward, survey: pin('a'.repeat(40)) } }), true, `${stage}: stale pin`);
+      assert.equal(surveyOwed({ facts: [], stage, review: { ...forward, survey: pin(HASH) } }), false, `${stage}: current pin`);
+    }
+    for (const stage of ['periagogic', 'maieutic', null]) {
+      assert.equal(surveyOwed({ facts: [], stage, review: null }), false, `${stage}: not a stage the survey judges`);
+    }
+  });
+
+  test('readyToRule takes the ruling stage, a forward verdict, and both pins on the recommendation as it stands', () => {
+    const ready = { facts: [], stage: 'ruling', review: { ...forward, survey: pin(HASH) } };
+    assert.equal(readyToRule(ready), true);
+    assert.equal(readyToRule({ ...ready, stage: 'review' }), false, 'the review stage is not the ruling stage');
+    assert.equal(readyToRule({ ...ready, review: { ...ready.review, verdict: 'kickback' } }), false, 'a kickback forwards nothing');
+    assert.equal(readyToRule({ ...ready, review: { ...forward, survey: null } }), false, 'no survey pin');
+    assert.equal(readyToRule({ ...ready, review: { ...forward, of: 'a'.repeat(40), survey: pin(HASH) } }), false, 'a stale draft review');
+    assert.equal(readyToRule({ ...ready, review: { ...forward, survey: pin('a'.repeat(40)) } }), false, 'a stale survey');
+    assert.equal(readyToRule({ facts: [], stage: 'ruling', review: null }), false, 'no review at all');
   });
 });
 

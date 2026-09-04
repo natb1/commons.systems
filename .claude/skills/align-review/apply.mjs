@@ -1,27 +1,41 @@
 #!/usr/bin/env node
 // .claude/skills/align-review/apply.mjs
 //
-// Applies clean-context review verdicts (see brief.md, SKILL.md §4, and the
-// disposition-graph nodes clean-context-review/recording/dialogue/
-// frontier-consistency/viable-options) to node files: appends the reviewer's
-// account to '## Account', records a proposed merge or split as an option on
-// the answer fact of the node it would change, and writes the dialogue
-// frontmatter (`stage`, `review`, `depends`) the verdict and the findings
-// imply. The reviewer only recommends; this script is the mechanical half of
-// "the session decides and answers for the record" -- replies and overrides
-// are supplied by the caller, never invented here.
+// Applies what one clean-context reading found (SKILL.md §4, and the
+// disposition-graph nodes clean-context-review/frontier-consistency/
+// recording/dialogue/viable-options/alignment-order) to node files: appends
+// the reading's account to '## Account', records a proposed merge or split as
+// an option on the answer fact of the node it would change, and writes the
+// dialogue frontmatter (`stage`, `review`, `depends`) the verdict and the
+// findings imply. The reviewer only recommends; this script is the mechanical
+// half of "the session decides and answers for the record" -- replies and
+// overrides are supplied by the caller, never invented here.
 //
 // Usage:
 //   node apply.mjs <json file> --replies <file> \
-//     [--overrides <file>] [--date YYYY-MM-DD] [--dry]
+//     [--overrides <file>] [--pins <file>] [--date YYYY-MM-DD] [--dry]
 //
-// The one <json file> is normally the batch frontier-consistency.md and
-// clean-context-review.md describe -- the nodes at `stage: review`, judged
-// against the full graph:
-//   { date, read: [id], nodes: [entry], frontier: [finding],
-//     subtree_divergences: [divergence] }
-// detected by the presence of a `nodes` array. A `frontier` finding may name
-// any node in the graph, in the batch or outside it, and may propose options:
+// The reading is read from the input's own `scope`, and nothing else:
+//
+//   {scope: "draft", id, date, verdict, kickback_stage, findings[],
+//    facts_check, viability, counter_argument, strength}
+// the review of one draft. One node, at the review stage: '### Clean-context
+// review, <date>' on its account, `stage: ruling` on a forward or the named
+// stage on a kickback, and the four draft keys of `review` pinned to
+// `deriveRecommendationHash` of the node as edited. A survey pin the node
+// already carries is preserved: the `review:` block is merged, never replaced
+// wholesale.
+//
+//   {scope: "survey", commit, date, nodes: [{id, findings, ...}],
+//    frontier: [finding], subtree_divergences: [divergence]}
+// the survey of the frontier. Serialized by its pin and by no lock: the
+// sidecar `survey.pins.json`, written beside the brief by brief.mjs, holds
+// the graph commit the survey read, the ids it judged, and the recommendation
+// hash of every node of the graph. A judged node whose recommendation still
+// matches its pin receives `review.survey` and its findings; one that has
+// moved receives nothing and is reported. A `frontier` finding naming any
+// node that has moved is discarded with a note and applied to none of its
+// nodes, for the same reason: a review attests to the text it read.
 //   { kind, nodes: [id], finding, proposal, stages: {id: stage},
 //     options: [{node, name, text}] }
 // A `subtree_divergences` entry names an ancestor whose pending answer
@@ -30,15 +44,8 @@
 //   { ancestor: id, sides: { optionName: [id, ...] }, finding }
 // each leaf named under a side gains `<ancestor>#<optionName>` in its
 // `depends`.
-//
-// Absent a `nodes` array, the file (or files) are read the old way -- one
-// entry or a JSON list of entries, each
-//   {id, scope?, verdict, kickback_stage?, findings[], counter_argument,
-//    strength, facts_check, viability}
-// `scope` defaults to "node"; the other shape is "amendment" -- so that the
-// tests of the per-node model this superseded still work.
 
-import { readFile, writeFile, rm } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
@@ -46,6 +53,12 @@ import YAML from "yaml";
 import { readGraph, parseNode } from "../../../packages/disposition/read.mjs";
 
 const STAGE_ORDER = ["periagogic", "maieutic", "review", "ruling"];
+// the two stages a reading may send a node back to: the ground, or the draft
+// (frontier-consistency: "the periagogic stage when the ground or the
+// author's words are in question, the maieutic when the answer must be
+// redrafted").
+const KICKBACK_STAGES = ["periagogic", "maieutic"];
+const SCOPES = new Set(["draft", "survey"]);
 const FRONTIER_KINDS = new Set([
   "contradiction", "supersession", "redundancy", "decomposition",
   "vocabulary", "cross-reference", "placement", "coverage",
@@ -62,6 +75,11 @@ const OPTION_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 // the sections a node file may carry, in order (read.mjs SECTION_ORDER): an
 // inserted '## Facts' goes before the first of the sections that follow it.
 const SECTIONS_AFTER_FACTS = ["Recommendation", "Account"];
+// the sidecar brief.mjs writes beside the survey's brief, and the file this
+// script compares every hash against -- never a hash the reviewer copied.
+const PINS_BASENAME = "survey.pins.json";
+
+const USAGE = "usage: node apply.mjs <json file> --replies <file> [--overrides <file>] [--pins <file>] [--date YYYY-MM-DD] [--dry]";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -73,8 +91,8 @@ function isNonEmptyString(x) {
 
 function parseArgs(argv) {
   const files = [];
-  const opts = { repliesFile: null, overridesFile: null, date: null, dry: false };
-  const valueFlags = { "--replies": "repliesFile", "--overrides": "overridesFile", "--date": "date" };
+  const opts = { repliesFile: null, overridesFile: null, pinsFile: null, date: null, dry: false };
+  const valueFlags = { "--replies": "repliesFile", "--overrides": "overridesFile", "--pins": "pinsFile", "--date": "date" };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a in valueFlags) {
@@ -89,47 +107,15 @@ function parseArgs(argv) {
       files.push(a);
     }
   }
-  if (files.length === 0) {
-    throw new Error("usage: node apply.mjs <json file> [<json file> ...] --replies <file> [--overrides <file>] [--date YYYY-MM-DD] [--dry]");
+  if (files.length !== 1) {
+    throw new Error(`${USAGE}\none reading, one file: ${files.length === 0 ? "no input file was given" : `${files.length} were given`}`);
   }
-  return { files, ...opts };
+  return { file: files[0], ...opts };
 }
 
 async function loadJsonMap(file) {
   if (!file) return {};
   return JSON.parse(await readFile(path.resolve(file), "utf8"));
-}
-
-/**
- * Load the positional `<json file>` arguments and decide which shape they
- * are: the batch (one file, a non-array object carrying a `nodes` array) or
- * the old shape (every file is one entry or a JSON list of entries,
- * flattened together).
- *
- * @returns {Promise<{batch: object|null, entries: object[]|null}>} exactly
- *   one of the two is non-null.
- */
-async function loadInput(files) {
-  const raws = [];
-  for (const f of files) {
-    raws.push(JSON.parse(await readFile(path.resolve(f), "utf8")));
-  }
-  if (raws.length === 1 && raws[0] && !Array.isArray(raws[0]) && Array.isArray(raws[0].nodes)) {
-    return { batch: raws[0], entries: null };
-  }
-  const entries = [];
-  for (const raw of raws) {
-    const list = Array.isArray(raw) ? raw : [raw];
-    entries.push(...list);
-  }
-  return { batch: null, entries };
-}
-
-// Applied uniformly whether entries came from `files` or were passed
-// directly as `entries`/`batch.nodes` (the latter used by tests), so no
-// path can forget a default.
-function withDefaults(e) {
-  return { scope: "node", kickback_stage: null, counter_argument: null, facts_check: null, viability: null, ...e };
 }
 
 /**
@@ -156,11 +142,6 @@ function resolveIdToFile(manifest, rootDir, id) {
     }
   }
   throw new Error(`cannot resolve id '${id}' against ${manifest.module}'s declared graphs`);
-}
-
-function extractScalar(text, key) {
-  const m = text.match(new RegExp(`^${key}:[ \\t]*(.*)$`, "m"));
-  return m ? m[1].trim() : null;
 }
 
 /** The names already on a node's answer fact, or an empty set where it has none. */
@@ -326,12 +307,29 @@ function indentOf(line) {
   return (line.match(/^[ \t]*/) || [""])[0];
 }
 
-function renderReviewBlock({ verdict, strength, date, of }) {
-  // an all-digit sha1 would parse as a YAML integer and fail the reader's
-  // `of: <sha1>` check, so it is quoted; every other hash is left bare, as
-  // the record already writes it.
-  const ofText = /^\d+$/.test(of) ? `"${of}"` : of;
-  return ["review:", `  verdict: ${verdict}`, `  strength: ${strength}`, `  date: ${date}`, `  of: ${ofText}`];
+// an all-digit sha1 would parse as a YAML integer and fail the reader's
+// `of: <sha1>` check, so it is quoted; every other hash is left bare, as
+// the record already writes it.
+function hashScalar(of) {
+  return /^\d+$/.test(of) ? `"${of}"` : of;
+}
+
+/**
+ * The `review:` block, in the two readings the review divides into: the four
+ * draft keys, the survey's own `date` and `of`, or either alone -- read.mjs
+ * accepts each half without the other. Whichever half this run does not write
+ * is carried in from the node as it stands, so a draft's forward never
+ * discards the survey's pin and the survey never discards a verdict.
+ */
+function renderReviewBlock({ verdict = null, strength = null, date = null, of = null, survey = null }) {
+  const lines = ["review:"];
+  if (verdict !== null) {
+    lines.push(`  verdict: ${verdict}`, `  strength: ${strength}`, `  date: ${date}`, `  of: ${hashScalar(of)}`);
+  }
+  if (survey !== null) {
+    lines.push("  survey:", `    date: ${survey.date}`, `    of: ${hashScalar(survey.of)}`);
+  }
+  return lines;
 }
 
 /**
@@ -435,7 +433,7 @@ function upsertAnswerOptions(fmLines, options, date) {
  * `dependsAdd` entries (each already rendered `<id>` or `<id>#<option>`) to
  * `depends`, creating the list when absent.
  *
- * `reviewLines` is null for a node touched only by a finding (no verdict of
+ * `reviewLines` is null for a node touched only by a finding (no reading of
  * its own to record): whatever `review:` block it already carries -- from an
  * earlier round, or none at all -- is left exactly as it stands. `stage` is
  * null for a node no entry names a stage for: the top-level `stage:` line, if
@@ -497,14 +495,31 @@ function upsertDialogueFields(rawText, { stage, reviewLines, options = [], date 
 }
 
 // ------------------------------------------------------------------ prose
-function renderSubsection({ scope, date, verdict, kickback_stage: kickbackStage, findings, counter_argument: counterArgument, strength, facts_check: factsCheck, viability, reply }) {
-  const heading = scope === "amendment" ? `### Clean-context review of the amendment, ${date}` : `### Clean-context review, ${date}`;
-  const opening = scope === "amendment"
-    ? "Read in clean context by a subagent given the node, its ancestry, the author's words, and the amendment named in the brief, and nothing of the sitting."
-    : "Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting.";
-  const verdictSentence = verdict === "forward" ? "Verdict: forward to the author's ruling." : `Verdict: kicked back to the ${kickbackStage} stage.`;
 
-  const parts = [heading, "", `${opening} ${verdictSentence}`, "", "Findings:", "", ...(findings || []).map((f) => `- ${f}`)];
+/**
+ * The subsection one reading appends to the node it read: the draft's review,
+ * with its verdict, or the survey's reading of that node, which has none --
+ * the survey forwards nothing, and only its findings move a stage. The fields
+ * are the same in both, and each is omitted where the reading did not produce
+ * it.
+ */
+function renderSubsection({
+  kind = "draft", date, verdict, kickback_stage: kickbackStage, findings,
+  counter_argument: counterArgument, strength, facts_check: factsCheck, viability, reply,
+}) {
+  const parts = kind === "survey"
+    ? [
+      `### Frontier survey, ${date}`,
+      "",
+      "Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.",
+    ]
+    : [
+      `### Clean-context review, ${date}`,
+      "",
+      `Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. ${verdict === "forward" ? "Verdict: forward to the author's ruling." : `Verdict: kicked back to the ${kickbackStage} stage.`}`,
+    ];
+
+  parts.push("", "Findings:", "", ...(findings || []).map((f) => `- ${f}`));
   if (factsCheck) {
     parts.push("", `On the facts and what they recommend: ${factsCheck}`);
   }
@@ -519,10 +534,10 @@ function renderSubsection({ scope, date, verdict, kickback_stage: kickbackStage,
 }
 
 /**
- * The subsection a finding appends to every node it names -- in the batch or
- * outside it. An option the finding proposes is named here as well as
- * recorded on the answer fact, so the node's own account says where the
- * merge or split it proposes went.
+ * The subsection a finding appends to every node it names -- judged or not.
+ * An option the finding proposes is named here as well as recorded on the
+ * answer fact, so the node's own account says where the merge or split it
+ * proposes went.
  */
 function renderFrontierSubsection({ date, kind, finding, proposal, otherIds, options, id }) {
   const namedLine = otherIds.length > 0 ? `Also named: ${otherIds.join(", ")}.` : "Names only this node.";
@@ -625,9 +640,40 @@ function pinFailureMessage(err) {
   return err.parseError ? `does not parse after edit: ${err.message}` : err.message;
 }
 
-// -------------------------------------------------------- old-shape plans
-async function planEntry(entry, ctx) {
-  const { id, scope, verdict, kickback_stage: kickbackStage, findings, counter_argument: counterArgument, strength, facts_check: factsCheck, viability } = entry;
+// -------------------------------------------------- the review of one draft
+
+function validateDraft(input, { replies }) {
+  const problems = [];
+  if (!isNonEmptyString(input.id)) {
+    problems.push("a draft review names the node it read: 'id' is required");
+  }
+  if (input.verdict !== "forward" && input.verdict !== "kickback") {
+    problems.push(`${input.id}: verdict must be 'forward' or 'kickback', found '${JSON.stringify(input.verdict)}'`);
+  }
+  if (input.verdict === "kickback" && !input.kickback_stage) {
+    problems.push(`${input.id}: kickback requires kickback_stage`);
+  }
+  if (input.kickback_stage && !KICKBACK_STAGES.includes(input.kickback_stage)) {
+    problems.push(`${input.id}: kickback_stage must be 'periagogic' (the ground or the author's words are in question) or 'maieutic' (the answer must be redrafted), found '${JSON.stringify(input.kickback_stage)}'`);
+  }
+  if (input.strength === "strong" && !Object.prototype.hasOwnProperty.call(replies, input.id)) {
+    problems.push(`${input.id}: strength 'strong' requires a reply in --replies`);
+  }
+  if (Array.isArray(input.nodes) || Array.isArray(input.frontier)) {
+    problems.push("a draft review reads one node: 'nodes' and 'frontier' belong to the survey, and this file names scope 'draft'");
+  }
+  return problems;
+}
+
+/**
+ * Plan the one node a draft review read: '### Clean-context review, <date>'
+ * on its account, the stage the verdict or an override sets, and the four
+ * draft keys of `review` pinned to the recommendation hash of the node as
+ * edited. A survey pin already on the node is carried into the new block --
+ * the two readings are recorded side by side and neither discards the other.
+ */
+async function planDraft(input, ctx) {
+  const id = input.id;
   let graphName, slug, file;
   try {
     ({ graph: graphName, slug, file } = resolveIdToFile(ctx.manifest, ctx.rootDir, id));
@@ -642,41 +688,7 @@ async function planEntry(entry, ctx) {
     return { id, problems: [`${id}: cannot read ${file}: ${err.message}`] };
   }
 
-  const problems = [];
-  const hasOverride = Object.prototype.hasOwnProperty.call(ctx.overrides, id);
-  const currentStage = extractScalar(rawTextBefore, "stage");
-
-  if (scope === "amendment") {
-    if (currentStage !== "ruling") {
-      problems.push(`${id}: amendment entry requires stage 'ruling', found '${currentStage}'`);
-    }
-  } else if (currentStage !== "review" && !hasOverride) {
-    problems.push(`${id}: node entry requires stage 'review' (or an override), found '${currentStage}'`);
-  }
-
-  if (verdict !== "forward" && verdict !== "kickback") {
-    problems.push(`${id}: verdict must be 'forward' or 'kickback', found '${JSON.stringify(verdict)}'`);
-  }
-  if (verdict === "kickback" && !kickbackStage) {
-    problems.push(`${id}: kickback requires kickback_stage`);
-  }
-  if (scope === "node" && strength === "strong" && !Object.prototype.hasOwnProperty.call(ctx.replies, id)) {
-    problems.push(`${id}: strength 'strong' requires a reply in --replies`);
-  }
-
-  if (problems.length > 0) return { id, problems };
-
-  const reply = Object.prototype.hasOwnProperty.call(ctx.replies, id) ? ctx.replies[id] : null;
-  const subsection = renderSubsection({ scope, date: ctx.date, verdict, kickback_stage: kickbackStage, findings, counter_argument: counterArgument, strength, facts_check: factsCheck, viability, reply });
-
-  if (scope === "amendment") {
-    const rawTextAfter = appendToAccount(rawTextBefore, subsection);
-    return { id, file, scope, verdict, notes: [], oldStage: currentStage, newStage: currentStage, rawTextBefore, rawTextAfter };
-  }
-
-  const newStage = hasOverride ? ctx.overrides[id] : verdict === "forward" ? "ruling" : kickbackStage;
   const parse = (text) => parseNode(text, { id, graph: graphName, slug, path: file });
-
   let parsedBefore;
   try {
     parsedBefore = parse(rawTextBefore);
@@ -684,9 +696,31 @@ async function planEntry(entry, ctx) {
     return { id, problems: [`${id}: does not parse before edit: ${err.message}`] };
   }
 
+  const hasOverride = Object.prototype.hasOwnProperty.call(ctx.overrides, id);
+  const currentStage = parsedBefore.stage;
+  if (currentStage !== "review" && !hasOverride) {
+    return { id, problems: [`${id}: the review of a draft runs on a node at stage 'review' (or an override), found '${currentStage}'`] };
+  }
+
+  const newStage = hasOverride ? ctx.overrides[id] : input.verdict === "forward" ? "ruling" : input.kickback_stage;
+  const reply = Object.prototype.hasOwnProperty.call(ctx.replies, id) ? ctx.replies[id] : null;
+  const subsection = renderSubsection({
+    kind: "draft",
+    date: ctx.date,
+    verdict: input.verdict,
+    kickback_stage: input.kickback_stage ?? null,
+    findings: input.findings,
+    counter_argument: input.counter_argument ?? null,
+    strength: input.strength,
+    facts_check: input.facts_check ?? null,
+    viability: input.viability ?? null,
+    reply,
+  });
+
+  const survey = (parsedBefore.review && parsedBefore.review.survey) || null;
   const build = (of) => upsertDialogueFields(appendToAccount(rawTextBefore, subsection), {
     stage: newStage,
-    reviewLines: renderReviewBlock({ verdict, strength, date: ctx.date, of }),
+    reviewLines: renderReviewBlock({ verdict: input.verdict, strength: input.strength, date: ctx.date, of, survey }),
   });
 
   let settled;
@@ -699,67 +733,89 @@ async function planEntry(entry, ctx) {
     return { id, problems: [`${id}: internal error -- the standing hash changed by the edit (${parsedBefore.standingHash} -> ${settled.parsed.standingHash}); this script writes dialogue state and the account only`] };
   }
 
-  return { id, file, scope, verdict, notes: [], oldStage: currentStage, newStage, rawTextBefore, rawTextAfter: settled.text };
+  const labels = [`Clean-context review (${input.verdict})`];
+  if (survey) labels.push("survey pin kept");
+  return { id, file, labels, notes: [], oldStage: currentStage, newStage, rawTextBefore, rawTextAfter: settled.text };
 }
 
-// ----------------------------------------------------------- batch checks
+async function applyDraft({ rootDir, manifest, input, replies, overrides, date, dry }) {
+  const checkProblems = validateDraft(input, { replies });
+  if (checkProblems.length > 0) throw new Error(checkProblems.join("\n"));
+
+  const ctx = { rootDir, manifest, replies, overrides, date: date ?? input.date ?? todayIso() };
+  const plan = await planDraft(input, ctx);
+  if (plan.problems) throw new Error(plan.problems.join("\n"));
+
+  const plans = [plan];
+  const report = [`${plan.id}: ${plan.labels.join(" + ")}, ${plan.oldStage ?? "no stage"} → ${plan.newStage ?? "no stage"}`];
+
+  if (dry) return { plans, report, validation: null, notes: [] };
+
+  await writeFile(plan.file, plan.rawTextAfter);
+  let validation;
+  try {
+    await readGraph(rootDir);
+    validation = { ok: true };
+  } catch (err) {
+    validation = { ok: false, message: err.message };
+  }
+  return { plans, report, validation, notes: [] };
+}
+
+// ------------------------------------------------------- the survey's pins
+
+/**
+ * The sidecar brief.mjs wrote for this survey: the graph commit it read, the
+ * ids it judged, and the recommendation hash of every node of the graph. The
+ * apply step compares against this file and never against a hash the reviewer
+ * copied, which is what serializes the survey in place of a lock.
+ */
+function checkPinsShape(pins, from) {
+  if (!pins || typeof pins !== "object" || Array.isArray(pins)) {
+    throw new Error(`${from}: not a pins sidecar (expected {commit, dirty, date, judged, pins})`);
+  }
+  if (!Array.isArray(pins.judged)) {
+    throw new Error(`${from}: 'judged' must be the list of ids the survey judged`);
+  }
+  if (!pins.pins || typeof pins.pins !== "object" || Array.isArray(pins.pins)) {
+    throw new Error(`${from}: 'pins' must be an object of node id to recommendation hash`);
+  }
+  return pins;
+}
+
+// ----------------------------------------------------------- survey checks
 //
-// frontier-consistency.md's and clean-context-review.md's own checks, run
-// once over the whole batch before any file is touched: every batch node
-// named in `read`; `nodes` exactly covering the review stage, no more and no
-// fewer; every finding shaped and grounded, its named nodes real (in the
-// batch or outside it); every proposed option shaped, named on a node the
-// finding names, and not already on that node's answer fact; a strong
+// frontier-consistency's and clean-context-review's own checks, run once over
+// the whole reading before any file is touched: every entry naming a node the
+// survey judged, no node twice; every finding shaped and grounded, its named
+// nodes real; every proposed option shaped, named on a node the finding
+// names, and not already on that node's answer fact; a strong
 // counter-argument answered.
-function validateBatch(batch, graph, { replies, overrides }) {
+function validateSurvey(input, graph, { replies, overrides, pins }) {
   const problems = [];
   const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
-  const readSet = new Set(Array.isArray(batch.read) ? batch.read : []);
+  const judged = new Set(pins.judged);
 
-  const expectedIds = graph.nodes.filter((n) => n.stage === "review").map((n) => n.id);
-  const expectedSet = new Set(expectedIds);
-
-  for (const id of expectedIds) {
-    if (!readSet.has(id)) problems.push(`'read' is missing ${id}, which is in the batch (stage review)`);
-  }
-  for (const id of readSet) {
-    if (!nodesById.has(id)) problems.push(`'read' names ${id}, which is not a node`);
-  }
-
-  const nodeEntries = Array.isArray(batch.nodes) ? batch.nodes : [];
-  const gotIds = nodeEntries.map((e) => e && e.id);
+  const nodeEntries = Array.isArray(input.nodes) ? input.nodes : [];
   const seen = new Set();
-  for (const id of gotIds) {
-    if (seen.has(id)) problems.push(`'nodes' has more than one entry for ${id}`);
-    seen.add(id);
-  }
-  for (const id of expectedIds) {
-    if (!seen.has(id)) problems.push(`'nodes' is missing an entry for ${id} (stage review)`);
-  }
-  for (const id of gotIds) {
-    if (expectedSet.has(id)) continue;
-    if (Object.prototype.hasOwnProperty.call(overrides, id)) continue;
-    const stage = nodesById.has(id) ? nodesById.get(id).stage || "none" : "not a node";
-    problems.push(`'nodes' names ${id}, which is not in the batch (stage ${stage}); only the batch receives verdicts`);
-  }
-
   for (const entry of nodeEntries) {
     if (!entry || !isNonEmptyString(entry.id)) {
       problems.push("'nodes' has an entry with no id");
       continue;
     }
-    if (entry.verdict !== "forward" && entry.verdict !== "kickback") {
-      problems.push(`${entry.id}: verdict must be 'forward' or 'kickback', found '${JSON.stringify(entry.verdict)}'`);
-    }
-    if (entry.verdict === "kickback" && !entry.kickback_stage) {
-      problems.push(`${entry.id}: kickback requires kickback_stage`);
+    if (seen.has(entry.id)) problems.push(`'nodes' has more than one entry for ${entry.id}`);
+    seen.add(entry.id);
+    if (!nodesById.has(entry.id)) {
+      problems.push(`'nodes' names ${entry.id}, which is not a node`);
+    } else if (!judged.has(entry.id)) {
+      problems.push(`'nodes' names ${entry.id}, which this survey did not judge (it is not in the pins sidecar's 'judged'); only the judged set receives an entry`);
     }
     if (entry.strength === "strong" && !Object.prototype.hasOwnProperty.call(replies, entry.id)) {
       problems.push(`${entry.id}: strength 'strong' requires a reply in --replies`);
     }
   }
 
-  const frontier = Array.isArray(batch.frontier) ? batch.frontier : [];
+  const frontier = Array.isArray(input.frontier) ? input.frontier : [];
   const proposedNames = new Set();
   frontier.forEach((f, i) => {
     const label = f && isNonEmptyString(f.kind) ? `frontier[${i}] (${f.kind})` : `frontier[${i}]`;
@@ -806,7 +862,7 @@ function validateBatch(batch, graph, { replies, overrides }) {
         if (!isNonEmptyString(a.text)) problems.push(`${optLabel}: 'text' is required`);
         if (isNonEmptyString(a.node) && isNonEmptyString(a.name)) {
           const key = `${a.node}\x00${a.name}`;
-          if (proposedNames.has(key)) problems.push(`${optLabel}: '${a.name}' is proposed on ${a.node} more than once in this batch`);
+          if (proposedNames.has(key)) problems.push(`${optLabel}: '${a.name}' is proposed on ${a.node} more than once in this survey`);
           proposedNames.add(key);
         }
       }
@@ -822,7 +878,7 @@ function validateBatch(batch, graph, { replies, overrides }) {
   // and never on the ancestor. `proposedNames` (built above) lets a side
   // name an option this same run's own `frontier` proposes, not only one the
   // ancestor already lists.
-  const divergences = Array.isArray(batch.subtree_divergences) ? batch.subtree_divergences : [];
+  const divergences = Array.isArray(input.subtree_divergences) ? input.subtree_divergences : [];
   const seenAncestors = new Set();
   divergences.forEach((d, i) => {
     const label = d && isNonEmptyString(d.ancestor) ? `subtree_divergences[${i}] (${d.ancestor})` : `subtree_divergences[${i}]`;
@@ -901,24 +957,22 @@ function stageRank(stage) {
 }
 
 /**
- * Every node the batch touches -- named in `nodes` (a verdict), named by a
- * `frontier` finding (findings only, in the batch or outside it), or both --
- * keyed by id, in the order first encountered (`nodes` first, then `frontier`
- * in array order). A finding's proposed options are collected onto the node
- * each goes on, which the checks above have already required the finding to
- * name.
+ * Every node the survey touches -- named in `nodes` (a judged node's reading),
+ * named by a `frontier` finding (findings only, at any stage), or both --
+ * keyed by id, in the order first encountered. A finding's proposed options
+ * are collected onto the node each goes on, which the checks above have
+ * already required the finding to name.
  */
-function collectTouched(batch) {
+function collectTouched({ nodes, frontier }) {
   const touched = new Map();
   const ensure = (id) => {
     if (!touched.has(id)) touched.set(id, { nodeEntry: null, findings: [], options: [] });
     return touched.get(id);
   };
-  for (const rawEntry of batch.nodes || []) {
-    const entry = withDefaults(rawEntry);
+  for (const entry of nodes || []) {
     ensure(entry.id).nodeEntry = entry;
   }
-  for (const f of batch.frontier || []) {
+  for (const f of frontier || []) {
     const options = Array.isArray(f.options) ? f.options : [];
     for (const id of f.nodes) {
       ensure(id).findings.push({
@@ -943,7 +997,7 @@ function collectTouched(batch) {
  * one of its `sides`), or both -- keyed by id, each occurrence tagged with
  * the index of the entry it came from (so a report line can be built per
  * entry, not per node) and, for a leaf, the option it stands under.
- * `validateBatch` has already checked every entry's shape and grounding; this
+ * `validateSurvey` has already checked every entry's shape and grounding; this
  * only regroups it by node, which is what the write step below needs.
  */
 function collectDivergencePerNode(divergences) {
@@ -965,13 +1019,14 @@ function collectDivergencePerNode(divergences) {
 
 /**
  * Plan one touched node's edit: the final stage (an override, else the
- * earliest stage among every entry naming it -- periagogic < maieutic <
+ * earliest stage among every finding naming it -- periagogic < maieutic <
  * review < ruling -- ignoring a finding that names this node but assigns it
- * no stage; if no entry assigns it one at all, its stage is left exactly as
+ * no stage; if nothing assigns it one at all, its stage is left exactly as
  * it stands), every subsection to append in input order (the node's own
- * verdict first, if it has one, then each finding in the order `frontier`
- * lists it), each proposed option not already on the node's answer fact, and
- * the `review:` block, written only when the node has a verdict of its own.
+ * survey reading first, if it has one, then each finding in the order
+ * `frontier` lists it), each proposed option not already on the node's answer
+ * fact, and, for a judged node, `review.survey` merged into whatever `review`
+ * block the node already carries.
  *
  * The node is parsed before the edit and again after it: a node that does not
  * parse after the write is reported and left unwritten, and so is a node
@@ -1001,16 +1056,16 @@ async function planTouchedNode(id, t, ctx) {
   }
   const currentStage = parsedBefore.stage;
 
+  // The survey forwards nothing: only a finding moves a stage.
   const candidates = [];
-  if (t.nodeEntry) candidates.push(t.nodeEntry.verdict === "forward" ? "ruling" : t.nodeEntry.kickback_stage);
   for (const f of t.findings) {
     if (f.stage !== undefined) candidates.push(f.stage);
   }
 
   const hasOverride = Object.prototype.hasOwnProperty.call(ctx.overrides, id);
-  // No candidate at all means nothing named for this node assigns it a
-  // stage (only findings that omitted it from their `stages`): its stage is
-  // left exactly as it stands, not forced to any value.
+  // No candidate at all means nothing naming this node assigns it a stage
+  // (only findings that omitted it from their `stages`): its stage is left
+  // exactly as it stands, not forced to any value.
   const stageTouched = hasOverride || candidates.length > 0;
   const finalStage = hasOverride
     ? ctx.overrides[id]
@@ -1021,7 +1076,7 @@ async function planTouchedNode(id, t, ctx) {
   if (!stageTouched && currentStage === null) {
     return {
       id,
-      problems: [`${id}: carries no stage, and nothing in this batch names one for it; a finding recorded on a node opens its dialogue, so name its stage in the finding's 'stages' (or in --overrides)`],
+      problems: [`${id}: carries no stage, and nothing in this survey names one for it; a finding recorded on a node opens its dialogue, so name its stage in the finding's 'stages' (or in --overrides)`],
     };
   }
 
@@ -1042,25 +1097,23 @@ async function planTouchedNode(id, t, ctx) {
 
   const subsections = [];
   const labels = [];
-  let reviewMeta = null;
+  let surveyPin = null;
 
   if (t.nodeEntry) {
     const entry = t.nodeEntry;
     const reply = Object.prototype.hasOwnProperty.call(ctx.replies, id) ? ctx.replies[id] : null;
     subsections.push(renderSubsection({
-      scope: "node",
+      kind: "survey",
       date: ctx.date,
-      verdict: entry.verdict,
-      kickback_stage: entry.kickback_stage,
       findings: entry.findings,
-      counter_argument: entry.counter_argument,
-      strength: entry.strength,
-      facts_check: entry.facts_check,
-      viability: entry.viability,
+      counter_argument: entry.counter_argument ?? null,
+      strength: entry.strength ?? null,
+      facts_check: entry.facts_check ?? null,
+      viability: entry.viability ?? null,
       reply,
     }));
-    labels.push("Clean-context review");
-    reviewMeta = { verdict: entry.verdict, strength: entry.strength, date: ctx.date };
+    labels.push("Frontier survey");
+    surveyPin = { date: ctx.date, of: ctx.pinOf(id) };
   }
 
   for (const f of t.findings) {
@@ -1079,28 +1132,43 @@ async function planTouchedNode(id, t, ctx) {
     labels.push(`option${newOptions.length > 1 ? "s" : ""} ${newOptions.map((a) => `'${a.name}'`).join(", ")}`);
   }
 
-  const build = (of) => {
+  // The draft review's own keys are carried in unchanged: the survey writes
+  // its pin beside them and never over them.
+  const draft = parsedBefore.review && parsedBefore.review.verdict !== null
+    ? { verdict: parsedBefore.review.verdict, strength: parsedBefore.review.strength, date: parsedBefore.review.date, of: parsedBefore.review.of }
+    : null;
+  const reviewLines = surveyPin === null
+    ? null
+    : renderReviewBlock({ ...(draft ?? {}), survey: surveyPin });
+  if (surveyPin !== null && draft !== null) labels.push("draft review kept");
+
+  const build = () => {
     let text = appendAnswerOptionSubsections(rawTextBefore, newOptions);
     for (const s of subsections) text = appendToAccount(text, s);
     return upsertDialogueFields(text, {
       stage: stageTouched ? finalStage : null,
-      reviewLines: reviewMeta === null ? null : renderReviewBlock({ ...reviewMeta, of }),
+      reviewLines,
       options: newOptions.map((a) => ({ name: a.name })),
       date: ctx.date,
     });
   };
 
-  let settled;
+  let text;
+  let parsedAfter;
   try {
-    settled = settlePin(build, parse, reviewMeta === null ? null : parsedBefore.recommendationHash);
+    text = build();
+    parsedAfter = parse(text);
   } catch (err) {
-    return { id, problems: [`${id}: ${pinFailureMessage(err)}`] };
+    return { id, problems: [`${id}: does not parse after edit: ${err.message}`] };
   }
-  if (settled.parsed.standingHash !== parsedBefore.standingHash) {
-    return { id, problems: [`${id}: internal error -- the standing hash changed by the edit (${parsedBefore.standingHash} -> ${settled.parsed.standingHash}); this script writes dialogue state and the account only`] };
+  if (parsedAfter.standingHash !== parsedBefore.standingHash) {
+    return { id, problems: [`${id}: internal error -- the standing hash changed by the edit (${parsedBefore.standingHash} -> ${parsedAfter.standingHash}); this script writes dialogue state and the account only`] };
+  }
+  if (surveyPin !== null && parsedAfter.recommendationHash !== surveyPin.of) {
+    return { id, problems: [`${id}: internal error -- the edit moved the recommendation hash (${surveyPin.of} -> ${parsedAfter.recommendationHash}); the survey's pin must name the recommendation as it stands`] };
   }
 
-  return { id, file, labels, notes, oldStage: currentStage, newStage: finalStage, rawTextBefore, rawTextAfter: settled.text };
+  return { id, file, labels, notes, oldStage: currentStage, newStage: finalStage, rawTextBefore, rawTextAfter: text };
 }
 
 /**
@@ -1109,7 +1177,7 @@ async function planTouchedNode(id, t, ctx) {
  * a '### Subtree divergence' subsection per entry it is the ancestor or a
  * leaf of, and, for a leaf, a `depends` entry, unless it already carries
  * exactly that entry (skipped, and reported via `skips`, not refused --
- * `validateBatch` has already refused the run outright over a genuine
+ * `validateSurvey` has already refused the run outright over a genuine
  * conflict, a different option on the same ancestor). A subtree divergence
  * never touches `stage`, the facts, or anything hash-bearing, so
  * `oldStage`/`newStage` are always equal here, and layering these edits onto
@@ -1194,25 +1262,64 @@ async function planDivergenceNode(id, entry, ctx, existingPlan) {
 }
 
 /**
- * Apply the batch: `validateBatch` first, refusing (writing nothing) on any
- * problem; otherwise plan every touched node (verdicts and findings), then
- * layer every subtree divergence onto the same plans (or new ones, for a
- * node only a divergence touches), refusing (still writing nothing) on any
- * planning problem from either pass; otherwise write every plan, remove the
- * lock, and report -- the notes, then one summary line per divergence entry,
- * as its last lines.
+ * Apply the survey: `validateSurvey` first, refusing (writing nothing) on any
+ * problem; then the pin, which serializes this reading in place of a lock --
+ * a judged node whose recommendation still matches what the survey read is
+ * applied, one that has moved receives nothing and is reported, and a finding
+ * naming any node that has moved is discarded and applied to none of its
+ * nodes. Then plan every surviving touched node, layer every subtree
+ * divergence onto the same plans, refuse (still writing nothing) on any
+ * planning problem, and otherwise write every plan and report.
  */
-async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overrides, date, dry }) {
+async function applySurvey({ rootDir, manifest, input, pins, replies, overrides, date, dry }) {
   const graph = await readGraph(rootDir);
-  const checkProblems = validateBatch(batch, graph, { replies, overrides });
+  const checkProblems = validateSurvey(input, graph, { replies, overrides, pins });
   if (checkProblems.length > 0) {
     throw new Error(checkProblems.join("\n"));
   }
 
-  const effectiveDate = date ?? batch.date ?? todayIso();
-  const ctx = { rootDir, manifest, replies, overrides, date: effectiveDate };
+  const effectiveDate = date ?? input.date ?? todayIso();
+  const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
+  const pinOf = (id) => pins.pins[id];
+  const moved = (id) => {
+    const node = nodesById.get(id);
+    const pin = pins.pins[id];
+    if (node === undefined) return { moved: true, pin: pin ?? null, now: null };
+    if (pin === undefined) return { moved: true, pin: null, now: node.recommendationHash };
+    return { moved: pin !== node.recommendationHash, pin, now: node.recommendationHash };
+  };
 
-  const touched = collectTouched(batch);
+  const movedReport = [];
+  const keptNodes = [];
+  for (const entry of Array.isArray(input.nodes) ? input.nodes : []) {
+    const m = moved(entry.id);
+    if (m.moved) {
+      movedReport.push(`${entry.id}: moved since the survey read it (pinned ${m.pin ?? "nothing"}, now ${m.now ?? "gone"}); nothing written, judged again by the next survey`);
+      continue;
+    }
+    keptNodes.push(entry);
+  }
+
+  const discardedReport = [];
+  const keptFrontier = [];
+  (Array.isArray(input.frontier) ? input.frontier : []).forEach((f, i) => {
+    const stale = f.nodes.map((id) => ({ id, ...moved(id) })).filter((m) => m.moved);
+    if (stale.length > 0) {
+      const which = stale.map((m) => `${m.id} (pinned ${m.pin ?? "nothing"}, now ${m.now ?? "gone"})`).join(", ");
+      discardedReport.push(`frontier[${i}] (${f.kind}): discarded — names ${which}, moved since the survey read it; applied to none of its nodes`);
+      return;
+    }
+    keptFrontier.push(f);
+  });
+
+  const notes = [];
+  if (isNonEmptyString(input.commit) && isNonEmptyString(pins.commit) && input.commit !== pins.commit) {
+    notes.push(`note: the survey names graph commit ${input.commit}, the pins sidecar ${pins.commit}; the sidecar's hashes decide, as they are what this run compared against`);
+  }
+
+  const ctx = { rootDir, manifest, replies, overrides, date: effectiveDate, pinOf };
+
+  const touched = collectTouched({ nodes: keptNodes, frontier: keptFrontier });
   const plans = [];
   const planProblems = [];
   for (const [id, t] of touched) {
@@ -1221,7 +1328,7 @@ async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overri
     else plans.push(plan);
   }
 
-  const divergences = Array.isArray(batch.subtree_divergences) ? batch.subtree_divergences : [];
+  const divergences = Array.isArray(input.subtree_divergences) ? input.subtree_divergences : [];
   const perNodeDivergence = collectDivergencePerNode(divergences);
   const plansById = new Map(plans.map((p) => [p.id, p]));
   const divergenceSkips = new Map(); // entryIndex -> id[]
@@ -1248,17 +1355,19 @@ async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overri
     throw new Error(planProblems.join("\n"));
   }
 
-  const report = plans.map((p) => `${p.id}: ${p.labels.join(" + ")}, ${p.oldStage ?? "no stage"} → ${p.newStage ?? "no stage"}`);
-  const notes = plans.flatMap((p) => p.notes || []);
+  const planReport = plans.map((p) => `${p.id}: ${p.labels.join(" + ")}, ${p.oldStage ?? "no stage"} → ${p.newStage ?? "no stage"}`);
+  const planNotes = plans.flatMap((p) => p.notes || []);
   const divergenceReport = divergences.map((d, i) => {
     const counts = Object.entries(d.sides).map(([name, ids]) => `${name} ${ids.length}`).join(", ");
     const skipped = divergenceSkips.get(i) || [];
     const skipText = skipped.length > 0 ? `; already present, skipped: ${skipped.join(", ")}` : "";
     return `subtree divergence on ${d.ancestor}: ${counts}${skipText}`;
   });
+  const allNotes = [...notes, ...planNotes];
+  const report = [...planReport, ...allNotes, ...divergenceReport, ...movedReport, ...discardedReport];
 
   if (dry) {
-    return { plans, report: [...report, ...notes, ...divergenceReport], validation: null, notes };
+    return { plans, report, validation: null, notes: allNotes, moved: movedReport, discarded: discardedReport };
   }
 
   for (const p of plans) {
@@ -1273,29 +1382,25 @@ async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overri
     validation = { ok: false, message: err.message };
   }
 
-  const lockPath = path.join(reviewDir, "frontier.lock");
-  await rm(lockPath, { force: true });
-
-  return { plans, report: [...report, ...notes, ...divergenceReport], validation, notes };
+  return { plans, report, validation, notes: allNotes, moved: movedReport, discarded: discardedReport };
 }
 
 /**
- * Apply every entry across `files` (or a pre-loaded `entries`/`batch`,
- * for tests): verify every entry first and refuse the whole run, writing
- * nothing, if any check fails; otherwise write every node file and, unless
- * `dry`, run `readGraph` once afterward and report (without reverting)
- * whether it still has problems. `batch` (or a loaded file shaped like
- * one -- a `nodes` array) runs the batch flow; otherwise this is the old
- * per-entry flow, kept for its own tests.
+ * Apply one reading, read from the input's own `scope`: the review of one
+ * draft, or the survey of the frontier. Every check runs before any file is
+ * touched, and a run with any problem writes nothing at all; unless `dry`,
+ * `readGraph` runs once afterward and the result reports (without reverting)
+ * whether the graph still validates.
  *
- * @returns {Promise<{plans: object[], report: string[], validation: {ok:boolean, message?:string}|null}>}
+ * @returns {Promise<{plans: object[], report: string[],
+ *   validation: {ok:boolean, message?:string}|null, notes: string[]}>}
  */
 export async function applyReviews({
   rootDir,
-  reviewDir,
-  files = [],
-  entries: providedEntries = null,
-  batch: providedBatch = null,
+  file = null,
+  input: providedInput = null,
+  pins: providedPins = null,
+  pinsFile = null,
   replies = {},
   overrides = {},
   date = null,
@@ -1303,49 +1408,36 @@ export async function applyReviews({
 }) {
   const manifest = await loadManifest(rootDir);
 
-  let batch = providedBatch;
-  let rawEntries = providedEntries;
-  if (batch === null && rawEntries === null) {
-    ({ batch, entries: rawEntries } = await loadInput(files));
+  let input = providedInput;
+  if (input === null) {
+    if (file === null) throw new Error(USAGE);
+    input = JSON.parse(await readFile(path.resolve(file), "utf8"));
+  }
+  if (!input || typeof input !== "object" || Array.isArray(input) || !SCOPES.has(input.scope)) {
+    throw new Error(`the input names no reading: 'scope' must be 'draft' (the review of one draft) or 'survey' (the survey of the frontier), found '${JSON.stringify(input && input.scope)}'`);
   }
 
-  if (batch !== null) {
-    return applyBatch({ rootDir, reviewDir, manifest, batch, replies, overrides, date, dry });
+  if (input.scope === "draft") {
+    return applyDraft({ rootDir, manifest, input, replies, overrides, date, dry });
   }
 
-  const entries = (rawEntries ?? []).map(withDefaults);
-  const ctx = { rootDir, reviewDir, manifest, replies, overrides, date: date ?? todayIso() };
-
-  const plans = [];
-  const problems = [];
-  for (const entry of entries) {
-    const plan = await planEntry(entry, ctx);
-    if (plan.problems) problems.push(...plan.problems);
-    else plans.push(plan);
-  }
-  if (problems.length > 0) {
-    throw new Error(problems.join("\n"));
-  }
-
-  const report = plans.map((p) => `${p.id}: ${p.verdict}, ${p.oldStage} → ${p.newStage}`);
-
-  if (dry) {
-    return { plans, report, validation: null };
+  let pins = providedPins;
+  if (pins === null) {
+    const from = pinsFile ?? (file === null ? null : path.join(path.dirname(path.resolve(file)), PINS_BASENAME));
+    if (from === null) {
+      throw new Error(`the survey is serialized by its pins: give --pins <file>, or put ${PINS_BASENAME} beside the input`);
+    }
+    try {
+      pins = JSON.parse(await readFile(path.resolve(from), "utf8"));
+    } catch (err) {
+      throw new Error(`cannot read the survey's pins at ${from}: ${err.message}\nbrief.mjs --survey writes it beside the brief; a survey applied without it is applied to text no reading attests to`);
+    }
+    checkPinsShape(pins, from);
+  } else {
+    checkPinsShape(pins, "the pins given");
   }
 
-  for (const p of plans) {
-    await writeFile(p.file, p.rawTextAfter);
-  }
-
-  let validation;
-  try {
-    await readGraph(rootDir);
-    validation = { ok: true };
-  } catch (err) {
-    validation = { ok: false, message: err.message };
-  }
-
-  return { plans, report, validation };
+  return applySurvey({ rootDir, manifest, input, pins, replies, overrides, date, dry });
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
@@ -1360,7 +1452,6 @@ if (isMain) {
       return;
     }
     const rootDir = path.resolve(process.cwd(), "disposition");
-    const reviewDir = path.resolve(process.cwd(), "tmp/review");
     try {
       const [replies, overrides] = await Promise.all([
         loadJsonMap(opts.repliesFile),
@@ -1368,8 +1459,8 @@ if (isMain) {
       ]);
       const result = await applyReviews({
         rootDir,
-        reviewDir,
-        files: opts.files,
+        file: opts.file,
+        pinsFile: opts.pinsFile,
         replies,
         overrides,
         date: opts.date,

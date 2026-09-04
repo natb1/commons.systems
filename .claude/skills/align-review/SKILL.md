@@ -1,6 +1,6 @@
 ---
 name: align-review
-description: Clean-context adversarial review of the batch of nodes at the review stage, judged against the full graph. One fresh subagent reads the batch whole and the rest of the graph as its context, and returns a verdict per node of the batch and the findings across the graph; the invoking session validates every finding against the record before applying any as a forward, a kickback, or an option proposed on a node's answer fact. Invoked by the alignment sitting at its review stage or directly; the scope is the same either way. Bootstrap shim declared on clean-context-review; the graph wins on conflict.
+description: Clean-context adversarial review in two readings divided by their object. The review of one draft, invoked by node id the moment that node's recommendation is recorded, judges the draft against its neighbourhood and forwards it or kicks it back; the survey of the frontier, invoked with --survey before the author rules, judges every node whose recommendation has moved since its survey pin against the whole graph. Each reading is one fresh subagent that reads the record and writes nothing; the invoking session validates every finding against the record before applying any as a forward, a kickback, or an option proposed on a node's answer fact. Bootstrap shim declared on clean-context-review; the graph wins on conflict.
 ---
 # Align review
 
@@ -14,11 +14,19 @@ description: Clean-context adversarial review of the batch of nodes at the revie
 > that day for the `viable-options` sitting, onto the facts-with-options
 > encoding: no stamp, the class read off the rulings, an option in place of
 > an alternative, and the viability judgment the `recording` node's first
-> step now asks of the reviewer. The recommendations that reconciliation
-> wrote are unanswered, and this review is what is owed on them.)**
+> step now asks of the reviewer; reconciled once more on 2026-09-04, under
+> the author's grant of that day on `decomposition` ("go, and bootrap
+> authority granted"), to that node's recommended text and to the options
+> `per-draft-and-survey` on `clean-context-review` and
+> `split-survey-from-per-draft` on `frontier-consistency`: the review
+> divided by its object, the draft's reading when its recommendation is
+> recorded and the survey before the ruling, the survey's pin at apply in
+> place of the lock, and the reviewer's model read from the node. Every
+> recommendation these reconciliations wrote is unanswered, and the review
+> is what is owed on them.)**
 > Hand-written from the nodes `clean-context-review`,
 > `frontier-consistency`, `recording`, `dialogue`, `unanswered`,
-> `viable-options`,
+> `viable-options`, `decomposition`,
 > `checkpoint`, `alignment-order`, and `delegation` of
 > `commons.systems/disposition-graph`,
 > none of them carrying a ruling and all of them therefore unanswered, and
@@ -28,20 +36,35 @@ description: Clean-context adversarial review of the batch of nodes at the revie
 > before the author's ruling. This text has no authority of its own; where
 > it conflicts with the graph at `origin/disposition`, the graph wins and
 > the conflict is recorded as an un-aligned disposition on the node it
-> conflicts with. Declared as a shim on `clean-context-review`, with
-> `brief.md`, `brief.mjs`, and `apply.mjs` beside it. Liquidation: the
+> conflicts with. Declared as a shim on `clean-context-review`, with the
+> reviewers' briefs `brief-draft.md` and `brief-survey.md` and the scripts
+> `brief.mjs` and `apply.mjs` beside it. Liquidation: the
 > projector materializes this skill from ratified nodes and these files
 > are deleted.
 
-`/align-review` reviews one batch — the nodes at `stage: review` — against
-the full graph, in one clean context, and applies the result. The alignment
-sitting invokes it when its dialogue reaches the review stage; the author or
-a session invokes it directly. The scope is the same either way
-(`clean-context-review`): no ids are taken, and a sitting's recommendations
-are reviewed among the rest. The reviewer recommends and never writes; the
-session running this skill validates what the reviewer found before it
-applies anything, and decides and answers for the record (`recording`; the
-author, 2026-09-03, quoted on `clean-context-review`).
+`/align-review` runs two readings divided by their object
+(`clean-context-review`, `frontier-consistency`, `decomposition`), each in
+one fresh context that carries nothing of the invoking session and is never
+a fork, each reading the record and writing nothing to it.
+
+**The review of a draft**, `/align-review <node id>`. Its object is one
+node's recommendation, and it runs the moment that recommendation is
+recorded or moved in substance, which is the node's transition to the
+review stage; the alignment sitting invokes it on the node it drafted, and
+the author or a session invokes it on any node at that stage. Its scope is
+that draft against its neighbourhood, and it alone forwards a node to the
+ruling stage.
+
+**The survey**, `/align-review --survey`. Its object is the frontier's
+consistency with itself: the whole graph read in one context, judging every
+node at the review or ruling stage whose recommendation has moved since the
+survey last pinned it. It runs before the author rules, when the frontier
+shows a survey owed, and whenever it is invoked.
+
+The reviewer recommends and never writes; the session running this skill
+validates what the reviewer found before it applies anything, and decides
+and answers for the record (`recording`; the author, 2026-09-03, quoted on
+`clean-context-review`).
 
 ## 0. Currency and serialization
 
@@ -49,85 +72,134 @@ author, 2026-09-03, quoted on `clean-context-review`).
    at it with a clean tree, except the sitting's own uncommitted drafts
    when invoked from a sitting. Run
    `node packages/disposition/validate.mjs disposition`.
-2. One batch at a time (`frontier-consistency`). `brief.mjs` writes
-   `tmp/review/frontier.lock` naming the session and the time, and
-   refuses to run while one exists; a review running in this session or
-   another is waited for, never joined or doubled. A session that finds a
-   lock whose writer is gone removes it and says so. This is the manual
-   serialization the author set at low priority.
-3. Read `clean-context-review` and `frontier-consistency` at their
+2. Read `clean-context-review`, `frontier-consistency`, and
+   `decomposition` at their
    current text; where they differ from this file, follow the node and
    record the difference as an un-aligned disposition.
 
-## 1. Scope: a batch, and the graph as its context
+Nothing is locked. Reviews of drafts never wait on each other, and the
+survey is serialized by the pin its findings carry: a finding is applied
+only where the recommendation still matches what the survey read, and is
+discarded where it is stale (§4, `clean-context-review`).
 
-The **batch** is every node carrying `stage: review`, as the record holds it
-now. Those nodes, and only those, receive a verdict. The **context** is the
-full graph: every other node, ruled or unruled, at every stage. The
-context receives no verdict, but a finding may name a node in it, and a
-finding that does is applied to that node as the kickback flow says
-(`clean-context-review`, the author's words of 2026-09-03: "Adversarial
-review evaluates batch of nodes which are at the review dialogue phase
-against the full graph"). Nothing is excluded from the reading, and no ids
-are given.
+## 1. Scope: one draft, or the frontier
+
+**The review of a draft**, `/align-review <node id>`: the node at
+`stage: review`, and it alone receives a verdict. Its reader is given the
+node whole; the chain of nodes above it; its siblings under the same
+parent, which the checkpoint has landed; the nodes it names; the rules that
+bind everywhere; the author's words on each; and the index of every
+question the record asks, with its class, its stage, its standing answer,
+and the options on its answer fact, so that a draft answering a question
+the record already asks is caught at the draft. It runs validations 1 to 6
+and 15 of `frontier-consistency`, judges whether every option on the node's
+facts is viable and whether a viable one is missing, and returns the
+strongest counter-argument with its strength.
+
+**The survey**, `/align-review --survey`: the context is the whole graph,
+answered and unanswered at every stage, without its `## Account` sections,
+which are the dialogue's history and not its text. The judged set is every
+node at the review or ruling stage whose recommendation hash differs from
+its survey pin or which carries none. It runs validations 7 to 15 of
+`frontier-consistency`, each node against every other, and its findings
+name the graph commit read. A finding may name a node at any stage, and it
+is applied to that node as the kickback flow says (the author, 2026-09-03:
+"Adversarial review evaluates batch of nodes which are at the review
+dialogue phase against the full graph").
 
 `node packages/disposition/project.mjs disposition --frontier -` shows the
 whole graph with each node's stage, settling count, class, what its facts
-recommend, and its review, headed by the alignment frontier in the ruling
-order (`alignment-order`); `brief.mjs` takes the batch from the same
-reading.
+recommend, its review and survey state, and whether it is ready to rule,
+headed by the alignment frontier in the ruling order (`alignment-order`);
+`brief.mjs` takes the judged set from the same reading. A node is ready for
+the author's ruling when it carries a forward verdict pinned to the
+recommendation as it stands and a survey pin on the same; the frontier and
+the alignment page show which of the two is owed, and no ruling is recorded
+while either is (`clean-context-review`).
 
-## 2. One brief for the batch
+## 2. One brief for the reading
 
-`node .claude/skills/align-review/brief.mjs [--date YYYY-MM-DD] [--dry]`
-writes `tmp/review/frontier.brief.md` from `brief.md` beside this file, and
-writes the lock. It fills `{{date}}`, `{{repo}}`, `{{batch_count}}` and
-`{{context_count}}`, `{{batch_index}}` and `{{context_index}}` (one line per
-node: id, stage, rank, settling count, class and where it comes from, file;
-the batch in the ruling order, the context by rank), `{{batch}}`
-(each batch node whole: question, `## Disposition`, the `## Answer` that
+**A draft.** `node .claude/skills/align-review/brief.mjs --node <id>
+[--date YYYY-MM-DD] [--dry]` writes `tmp/review/draft-<slug>.brief.md` from
+`brief-draft.md` beside this file, names `tmp/review/draft-<slug>.json` as
+the reviewer's output file, and prints the reviewer's model it computed
+from the node, `fable` or `opus`, by the rule in §3. It fills `{{date}}`,
+`{{repo}}`, `{{node}}`
+(the node whole: question, `## Disposition`, the `## Answer` that
 stands, `## Rationale`, every fact with every option it holds viable — its
 source and `ref`, its prose, the readings that bear on it, and whether it is
 the recommended one, the one that stands, or the ruled one — the
 `## Recommendation` fence when there is one, the review state with its
 staleness, `depends` as `<id>#<option>`, `bears` on a reading, and the
-`## Account`), `{{context}}` (every other node with its class, stage,
-question, standing answer, and the other options on its answer fact, so the
-reviewer can find a question the record already asks), `{{nav}}` (the
-brief's own line count and where its parts begin), and `{{out}}`
-(`tmp/review/frontier.json`).
+`## Account`), `{{ancestry}}` (the chain of nodes above it and the rules
+that bind everywhere, in the same shape without their `## Account`
+sections, which are the dialogue's history and not its text),
+`{{siblings}}` (the nodes under the same parent, in that shape, taken from
+the record and never from a set the session names), `{{cited}}` (the nodes
+it names, in that shape), `{{index}}` (every question the
+record asks, one line each: id, class, stage, standing answer, and the
+other options on its answer fact, so the reviewer can find a question the
+record already asks), `{{nav}}` (the brief's own line count and where its
+parts begin), and `{{out}}`.
 
-The brief carries the fifteen validations from `frontier-consistency`, the
-sixteenth — viability, which the `recording` node's first step asks for as
-the author amended it on 2026-09-04: whether every option on a node's facts
-is viable and whether a viable one is missing — and the judging criteria
-from `recording`, and nothing of the session: no drafts of the
+**The survey.** `node .claude/skills/align-review/brief.mjs --survey
+[--date YYYY-MM-DD] [--dry]` writes `tmp/review/survey.brief.md` from
+`brief-survey.md` beside this file and names `tmp/review/survey.json`. It
+fills `{{date}}`, `{{repo}}`, `{{commit}}` (the graph commit it read, which
+the survey's findings carry), `{{batch_count}}` and `{{context_count}}`,
+`{{batch_index}}` and `{{context_index}}` (one line per node: id, stage,
+rank, settling count, class and where it comes from, file; the judged set
+in the ruling order, the context by rank), `{{batch}}` (each judged node
+whole, in the shape above), `{{context}}` (every other node with its class,
+stage, question, standing answer, and the other options on its answer
+fact), `{{nav}}`, and `{{out}}`. No `## Account` section goes into the
+survey's brief. Beside the brief it writes `tmp/review/survey.pins.json`,
+the hash of every node's recommendation as the survey read it, judged and
+context alike, with the graph commit: the pins the apply step compares
+against, never a hash the reviewer copied.
+
+Each brief carries the validations its reading runs — 1 to 6 and 15 for a
+draft, 7 to 15 for the survey (`frontier-consistency`) — the viability
+judgment the `recording` node's first step asks of a draft's reviewer as
+the author amended it on 2026-09-04, whether every option on the node's
+facts is viable and whether a viable one is missing, and the judging
+criteria from `recording`, and nothing of the session: no drafts of the
 reply, no account of the sitting, no verdict hoped for. What is isolated is
-the session's framing, never the record: the graph is read whole because the
-drift the review exists to catch is between its nodes. `tmp/` is gitignored
+the session's framing, never the record: the survey reads the graph whole
+because the drift it exists to catch is between its nodes, and a draft's
+reader is given its neighbourhood from the record. `tmp/` is gitignored
 scratch.
 
-## 3. One subagent for the batch
+## 3. One subagent for the reading
 
-Launch one reviewer with the Agent tool: type `general-purpose`, model
-`opus`, effort high, the prompt "Read and follow
-`tmp/review/frontier.brief.md` exactly; you are a clean-context reviewer
-with no context but the record; never run state-changing git; write only
-the output file the brief names." Never a fork: a forked context carries
-the session's framing and is not clean. Read the result's conclusion,
-never its transcript. A reviewer that fails is relaunched once with the
-same brief; a second failure is reported, the lock removed, and every node
-stays at its stage. The brief is long: when `brief.mjs` says so, ask the
-reviewer to report what it could not read, and treat an unread part as a
-gap in the reading rather than as a finding of nothing.
+Launch one reviewer per invocation with the Agent tool: type
+`general-purpose`, effort high, model the one `brief.mjs` printed for a
+draft and `opus` for the survey, the prompt "Read and follow
+`<the brief the previous step wrote>` exactly; you are a clean-context
+reviewer with no context but the record; never run state-changing git;
+write only the output file the brief names." A draft's reviewer runs on a
+model never smaller than the drafter's, and on `fable` when the
+recommendation's boldness is not low, the node is global-tier, or a ruling
+on it would settle other nodes; the skill reads that from the node and no
+brief argues it (`clean-context-review`, `decomposition`). Never a fork: a
+forked context carries the session's framing and is not clean. Read the
+result's conclusion, never its transcript. A reviewer that fails is
+relaunched once with the same brief; a second failure is reported and every
+node stays at its stage. The brief may be long: when `brief.mjs` says so,
+ask the reviewer to report what it could not read, and treat an unread part
+as a gap in the reading rather than as a finding of nothing.
 
 ## 4. Apply
 
-1. Read `tmp/review/frontier.json`: `nodes`, one entry per node of the
-   batch (its verdict, findings, facts check, viability judgment, and
-   counter-argument), `subtree_divergences`, the tangles between subtrees
-   the reviewer found, and `frontier`, the findings across the graph, each
-   with the ids it names (in the batch or outside it), the finding, the
+1. Read the output file the brief named. For a draft,
+   `tmp/review/draft-<slug>.json`: one entry for the node, its verdict,
+   findings, facts check, viability judgment, and counter-argument. For the
+   survey, `tmp/review/survey.json`: the graph commit it read, `nodes`, one
+   entry per judged node with its id and that node's findings, the hash the
+   survey read being in `tmp/review/survey.pins.json`, `subtree_divergences`, the tangles
+   between subtrees the reviewer found, and `frontier`, the findings across
+   the graph, each
+   with the ids it names, the finding, the
    stage it recommends for each node whose text must change, the edit,
    merge, or split it proposes, and the `options` it proposes — `{node,
    name, text}` each. Validate every finding before any is applied, on this
@@ -145,8 +217,9 @@ gap in the reading rather than as a finding of nothing.
    still recorded on the node with the reply, as the dialogue's history,
    and the author sees both on the alignment page. Nothing is applied
    unvalidated.
-2. `node .claude/skills/align-review/apply.mjs tmp/review/frontier.json --replies tmp/review/replies.json [--overrides tmp/review/overrides.json] [--date YYYY-MM-DD]`.
-   For each node entry it verifies that the node is in the batch, appends
+2. `node .claude/skills/align-review/apply.mjs <json> --replies tmp/review/replies.json [--overrides tmp/review/overrides.json] [--date YYYY-MM-DD]`.
+   **For a draft review**, on the one node: it verifies that the node is at
+   the review stage, appends
    `### Clean-context review, <date>` to `## Account` (creating the section
    when absent) with the verdict, the findings, the facts check, the
    viability judgment, the counter-argument with its strength, and the
@@ -155,9 +228,17 @@ gap in the reading rather than as a finding of nothing.
    `deriveRecommendationHash` for the node as edited — the pin that goes
    stale when any fact's recommendation moves; on `kickback` sets the stage
    the reviewer named and writes the same `review` with the kickback
-   verdict. For each finding it appends
-   `### Frontier finding, <date>` to every node the finding names, in the
-   batch or outside it, with the kind, the finding, the other nodes named,
+   verdict.
+   **For the survey**: for each judged node whose current recommendation
+   hash equals the hash the survey read, it writes `review.survey` with its
+   `date` and its `of`, that same hash, and applies that node's findings; a
+   judged node whose recommendation moved since the survey read it receives
+   nothing, is reported, and is judged again by the next survey. A finding
+   naming a node whose recommendation has moved since the survey's graph
+   commit is discarded with a note, for the same reason: a review attests
+   to the text it read. For each finding it appends
+   `### Frontier finding, <date>` to every node the finding names, at
+   whatever stage, with the kind, the finding, the other nodes named,
    the proposed edit, and where any proposed option was recorded; it
    sets each node's stage to the stage the finding recommends for it, never
    forward of a stage another entry of the same run set (a node kicked back
@@ -199,18 +280,19 @@ gap in the reading rather than as a finding of nothing.
    it, and a reviewer that named the other way round is corrected in the
    reply and applied the right way round (`alignment-order`). Amend any node the
    reply says the session accepts, then, when the amendment changes
-   substance, set that node back to `stage: review` for the next batch
-   (`recording`); a batch is not re-run for one amendment, and the frontier
+   substance, set that node back to `stage: review` and run the review of
+   that draft again
+   (`recording`); the frontier
    flags a review whose pin no longer matches what the node recommends
    (`reviewStale`), as it flags a ruled node whose recommendation has moved
    since the ruling (`moved`, a proposal). The earlier review's subsection
    stays in the account as the dialogue's history.
-4. Remove the lock.
 
 ## 5. Land
 
 `node packages/disposition/validate.mjs disposition`; from `disposition/`,
-commit the nodes changed with the message `review: frontier <date>` and
+commit the nodes changed with the message `review: <node slug> <date>` for
+a draft or `review: survey <date>` for the survey, and
 the trailers the harness asks for, `git push origin disposition` (fetch,
 rebase, and push again on rejection); then rebuild and republish the
 alignment page as the alignment skill's §4 says. When invoked from a
@@ -219,7 +301,14 @@ transition (`checkpoint`).
 
 ## Model and delegation
 
-The reviewer runs on `opus` at high effort (`delegation`: judgment). The
+The survey's reviewer runs on `opus` at high effort (`delegation`:
+judgment). A draft's reviewer runs at high effort on the model this skill
+reads from the node, never smaller than the drafter's, `fable` when the
+recommendation's boldness is not low, the node is global-tier, or a ruling
+on it would settle other nodes, and `opus` otherwise
+(`clean-context-review`, `decomposition`): a reader weaker than the writer
+finds what the writer already saw, and the most capable model on every
+simple draft is the cost `delegation`'s rule exists to avoid. The
 orchestration runs on whatever model invoked the skill; the validation of
 the findings, the replies, the overrides, and what is put to the author
 from a merge or a split are the session's judgment and are never

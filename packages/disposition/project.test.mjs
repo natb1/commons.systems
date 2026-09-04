@@ -393,7 +393,10 @@ test("excludeUnaligned also drops the id from every remaining node's children, a
 test("renderFrontier lists every node in descending rank order with stage/settles/under/instrument/shim lines", async () => {
   const graph = await readGraph(resolve(HERE, "fixtures/valid-unaligned"));
   const listing = renderFrontier(graph);
-  assert.ok(listing.startsWith(`# Frontier of ${graph.module}\n\n## Ruling order\n`));
+  assert.ok(
+    listing.startsWith(`# Frontier of ${graph.module}\n\nReady to rule: 0 of 1 at the ruling stage. Awaiting the survey: 1.\n\n## Ruling order\n`),
+    "the head counts what the two readings leave outstanding, above the ruling order",
+  );
   assert.ok(listing.includes("\n\n## Every node, by rank\n"), "the two sections, in order");
 
   const root = graph.nodes.find((n) => n.slug === "root");
@@ -626,6 +629,48 @@ test("renderFrontier flags a review whose pin no longer matches the recommendati
   const listing = renderFrontier(graph);
   assert.ok(listing.includes("  review: forward (weak, 2026-09-03), changed since its review"));
   assert.ok(listing.includes("  review: forward (strong, 2026-09-03)\n"), "a current review carries no flag");
+});
+
+test("renderFrontier prints each node's survey state and marks the ready ones, and heads the listing with both counts", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-survey"));
+  const listing = renderFrontier(graph);
+  const blockFor = (slug) => {
+    const node = graph.nodes.find((n) => n.slug === slug);
+    assert.ok(node, `fixture has no node ${slug}`);
+    const start = listing.indexOf(`- ${node.id}`);
+    const next = listing.indexOf("\n- ", start + 1);
+    return listing.slice(start, next === -1 ? listing.length : next);
+  };
+
+  // Two of the five stand at the ruling stage; one of those carries both
+  // pins. Two owe the survey: one whose pin the recommendation moved past,
+  // one that has never been read.
+  assert.ok(
+    listing.startsWith("# Frontier of example.test\n\nReady to rule: 1 of 2 at the ruling stage. Awaiting the survey: 2.\n"),
+    "the head counts the ready and the awaited",
+  );
+
+  const ready = blockFor("ready-node");
+  assert.ok(ready.includes("  review: forward (moderate, 2026-09-04)\n"), "a current draft review carries no flag");
+  assert.ok(ready.includes("  survey: surveyed 2026-09-04\n"), "and a current survey prints when it read");
+  assert.ok(ready.includes("  ready to rule"), "neither reading owed, at the ruling stage");
+
+  const stale = blockFor("stale-survey");
+  assert.ok(stale.includes("  review: forward (weak, 2026-09-03)\n"), "the draft review is untouched by the survey's staleness");
+  assert.ok(stale.includes("  survey: surveyed 2026-09-03, changed since its survey; survey owed"));
+  assert.ok(!stale.includes("ready to rule"), "a forward verdict alone is not readiness");
+
+  const unsurveyed = blockFor("unsurveyed");
+  assert.ok(!unsurveyed.includes("  review:"), "no review at all");
+  assert.ok(unsurveyed.includes("  survey: owed"));
+
+  const only = blockFor("survey-only");
+  assert.ok(!only.includes("  review:"), "a survey pin alone prints no review line");
+  assert.ok(only.includes("  survey: surveyed 2026-09-04\n"));
+  assert.ok(!only.includes("ready to rule"), "the draft review is still owed");
+
+  const kicked = blockFor("kicked-back");
+  assert.ok(kicked.includes("  survey: surveyed 2026-09-03, changed since its survey\n"), "stale, but not owed below the review stage");
 });
 
 test("renderFrontier's option counts ride the settles breakdown, singular and plural", async () => {
@@ -1854,6 +1899,51 @@ test("--alignment renders the review's pills, marks a stale one, and says when t
   assert.ok(unreviewed.includes("Not yet reviewed."));
 });
 
+test("--alignment shows both readings, says which is owed, and marks a node ready to rule", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-survey"));
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  // The review section alone: these fixtures talk about the two readings in
+  // their own prose, and an assertion about the section must not match that.
+  const item = (slug) => {
+    const article = itemHtml(html, nodeBySlug(graph, slug).id);
+    const start = article.indexOf('<section class="rev">');
+    assert.ok(start > 0, `no review section rendered for ${slug}`);
+    return article.slice(start, article.indexOf("</section>", start));
+  };
+
+  const ready = item("ready-node");
+  assert.ok(ready.includes("The review, in its two readings"), "one section carries both");
+  assert.ok(ready.includes(">forwarded<") && ready.includes("counter-argument: moderate"));
+  assert.ok(ready.includes("surveyed 2026-09-04"), "the survey's own pin, with its date");
+  assert.ok(!ready.includes("is owed"), "neither reading is owed");
+  assert.ok(ready.includes(">ready to rule<"));
+
+  const stale = item("stale-survey");
+  assert.ok(!stale.includes("changed since its review"), "the draft review is current");
+  assert.ok(stale.includes("changed since its survey"), "and the survey is not");
+  assert.ok(stale.includes("the survey of the frontier is owed"));
+  assert.ok(!stale.includes("the review of this draft is owed"));
+  assert.ok(!stale.includes(">ready to rule<"));
+
+  const unsurveyed = item("unsurveyed");
+  assert.ok(unsurveyed.includes("Not yet reviewed.") && unsurveyed.includes("Not yet surveyed."));
+  assert.ok(unsurveyed.includes("the review of this draft is owed"));
+  assert.ok(unsurveyed.includes("the survey of the frontier is owed"), "both, on a node with neither pin");
+
+  const only = item("survey-only");
+  assert.ok(only.includes("Not yet reviewed."), "a survey pin alone leaves the draft review unrun");
+  assert.ok(only.includes("surveyed 2026-09-04"));
+  assert.ok(only.includes("the review of this draft is owed"));
+  assert.ok(!only.includes("the survey of the frontier is owed"));
+
+  // Below the review stage neither reading is owed yet, so the page says
+  // nothing about what is owed and marks nothing ready.
+  const kicked = item("kicked-back");
+  assert.ok(kicked.includes("changed since its survey"), "the stale pin still shows");
+  assert.ok(!kicked.includes("is owed") && !kicked.includes("neither reading is owed"));
+  assert.ok(!kicked.includes(">ready to rule<"));
+});
+
 test("--alignment offers the three responses on every item, with the stage's hint and no placeholder on the whole-node control", () => {
   const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
   for (const label of ["Confirm", "Confirm with edits", "Deny with feedback"]) {
@@ -2005,11 +2095,17 @@ test("the alignment header carries the title and the module, and the rail's metr
   }
   assert.ok(!html.includes("<dt>items</dt>"), "no item total");
 
-  // Four metrics, each a signal of a recorded disposition, in the rail.
+  // Five metrics, each a signal of a recorded disposition, in the rail.
+  // "ready to rule" replaced the old "ruleable": a node at the ruling stage
+  // is ruleable only with both readings pinned to the recommendation as it
+  // stands, and "survey owed" counts the ruling-stage nodes still missing
+  // the second (commons.systems/disposition-graph/clean-context-review).
   assert.ok(html.includes('<dl class="metrics">'), "the metrics sit at the top of the rail");
+  assert.ok(!html.includes("<dt>ruleable</dt>"), "the ruling stage alone is no longer the count");
   const instruments = [
     ["open", "commons.systems/disposition-graph/unanswered"],
-    ["ruleable", "commons.systems/disposition-graph/clean-context-review"],
+    ["ready to rule", "commons.systems/disposition-graph/clean-context-review"],
+    ["survey owed", "commons.systems/disposition-graph/frontier-consistency"],
     ["next settles", "commons.systems/disposition-graph/alignment-order"],
     ["stale", "commons.systems/disposition-graph/frontier-consistency"],
   ];
@@ -2017,7 +2113,7 @@ test("the alignment header carries the title and the module, and the rail's metr
     assert.ok(html.includes(`<dt>${key}</dt>`), `the ${key} metric`);
     assert.ok(html.includes(`Instruments ${of}.`), `${key} names the disposition it instruments`);
   }
-  assert.equal(html.split('class="metric"').length - 1, 4, "four and no more");
+  assert.equal(html.split('class="metric"').length - 1, 5, "five and no more");
 
   // With no shim naming the browser there is nowhere to link, and a metric
   // renders unlinked rather than pointing nowhere.
@@ -2038,7 +2134,7 @@ test("the alignment header carries the title and the module, and the rail's metr
       }],
     } : n)),
   });
-  assert.equal(withBrowser.split('<a class="metric"').length - 1, 4, "all four link");
+  assert.equal(withBrowser.split('<a class="metric"').length - 1, 5, "all five link");
   for (const [, of] of instruments) {
     assert.ok(
       withBrowser.includes(`href="https://example.test/artifact/abc123def#${of}"`),

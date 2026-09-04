@@ -93,6 +93,20 @@ export const INSTRUMENT_KINDS = ['check', 'assessment'];
 export const STAGES = ['periagogic', 'maieutic', 'ruling', 'review'];
 export const REVIEW_VERDICTS = ['forward', 'kickback'];
 export const REVIEW_STRENGTHS = ['strong', 'moderate', 'weak', 'none'];
+// The `review` field carries the two readings the clean-context review
+// divides into (commons.systems/disposition-graph/clean-context-review, the
+// option `per-draft-and-survey`; the field's shape is
+// commons.systems/disposition-graph/dialogue's `survey-pin-in-review`).
+// `REVIEW_DRAFT_KEYS` are the review of one draft, written together or not
+// at all; `survey` is the survey of the whole frontier, its date and the
+// hash of the recommendation it read, and it may stand alone on a node the
+// survey judged before that node's draft review ran.
+export const REVIEW_DRAFT_KEYS = ['verdict', 'strength', 'date', 'of'];
+export const REVIEW_SURVEY_KEYS = ['date', 'of'];
+// The two stages the survey judges: a node is ruled from the ruling stage,
+// and reaches it from the review stage, so those are where the frontier's
+// consistency with itself is what the author is about to rule on.
+export const SURVEY_STAGES = ['review', 'ruling'];
 export const SECTION_ORDER = ['Disposition', 'Answer', 'Rationale', 'Facts', 'Recommendation', 'Account'];
 export const SHIM_KEYS = ['artifact', 'liquidation', 'declared', 'for'];
 // The keys a '## Recommendation' fence may not carry: the fence holds the
@@ -118,6 +132,8 @@ const INSTRUMENT_KIND_SET = new Set(INSTRUMENT_KINDS);
 const STAGE_SET = new Set(STAGES);
 const REVIEW_VERDICT_SET = new Set(REVIEW_VERDICTS);
 const REVIEW_STRENGTH_SET = new Set(REVIEW_STRENGTHS);
+const REVIEW_KEY_SET = new Set([...REVIEW_DRAFT_KEYS, 'survey']);
+const SURVEY_STAGE_SET = new Set(SURVEY_STAGES);
 const SHIM_KEY_SET = new Set(SHIM_KEYS);
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -856,6 +872,74 @@ function parseFence(fenceText, question, ctx, problems) {
 }
 
 // ---------------------------------------------------------------------------
+// the survey's pin, and the readiness it decides
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether the survey's pin on a node reads a recommendation that has since
+ * moved: the same test `reviewStale` makes of the draft review's pin, made
+ * of the survey's. False with no survey pin at all -- nothing has been read
+ * for a move to overtake -- which is what `surveyOwed` says instead.
+ *
+ * @param {{review?: object|null, facts?: object[]}} node
+ * @returns {boolean}
+ */
+export function surveyStale(node) {
+  const survey = node?.review?.survey ?? null;
+  return survey !== null && survey.of !== deriveRecommendationHash(node);
+}
+
+/**
+ * Whether the survey is owed on a node: it stands at a stage the survey
+ * judges -- review or ruling, where the frontier is what the author is about
+ * to rule on -- and carries no survey pin, or one its recommendation has
+ * moved past. This is the per-node form of `surveyJudges`.
+ *
+ * @param {{stage?: string|null, review?: object|null, facts?: object[]}} node
+ * @returns {boolean}
+ */
+export function surveyOwed(node) {
+  if (!SURVEY_STAGE_SET.has(node?.stage)) return false;
+  return (node?.review?.survey ?? null) === null || surveyStale(node);
+}
+
+/**
+ * Whether a node is ready for the author's ruling: it stands at the ruling
+ * stage with a forward verdict, and both readings -- the review of its draft
+ * and the survey of the frontier -- pin the recommendation as it stands
+ * (commons.systems/disposition-graph/clean-context-review: "A node is ready
+ * for the author's ruling when it carries a forward verdict pinned to the
+ * recommendation as it stands and a survey pin on the same").
+ *
+ * @param {{stage?: string|null, review?: object|null, facts?: object[]}} node
+ * @returns {boolean}
+ */
+export function readyToRule(node) {
+  if (node?.stage !== 'ruling') return false;
+  const review = node?.review ?? null;
+  if (review === null || review.verdict !== 'forward') return false;
+  const survey = review.survey ?? null;
+  if (survey === null) return false;
+  const hash = deriveRecommendationHash(node);
+  return review.of === hash && survey.of === hash;
+}
+
+/**
+ * The nodes one survey judges: every node at the review or ruling stage
+ * whose current recommendation differs from what the survey last pinned on
+ * it, and every such node the survey has never pinned. Input order is kept,
+ * so a caller that has already ordered the frontier keeps its order.
+ *
+ * @param {{nodes?: object[]}|object[]} graph - a graph as `readGraph`
+ *   returns it, or the node list alone.
+ * @returns {object[]}
+ */
+export function surveyJudges(graph) {
+  const nodes = Array.isArray(graph) ? graph : (graph?.nodes ?? []);
+  return nodes.filter((node) => surveyOwed(node));
+}
+
+// ---------------------------------------------------------------------------
 // one node file
 // ---------------------------------------------------------------------------
 
@@ -937,24 +1021,52 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   const answerFact = facts.find((f) => f.name === ANSWER_FACT) ?? null;
 
   // review: the state of the clean-context review of what the node
-  // recommends. One combined message on any shape problem. Exactly four
-  // keys; an unknown key (the former `siblings`, the other drafts a
-  // per-node reviewer was given -- gone now that every review is a batch
-  // over the whole frontier and needs no such field) fails this check like
-  // any other malformed shape.
+  // recommends, in the two readings that review divides into -- the review
+  // of this one draft, which writes `verdict`, `strength`, `date` and `of`,
+  // and the survey of the whole frontier, which writes `survey: {date, of}`
+  // where `of` is the same recommendation hash the draft review pins. Either
+  // reading may stand without the other: the survey pins a node it judged
+  // before that node's draft review ran, and a draft review is recorded
+  // before any survey has read it. One combined message on any shape
+  // problem. The five keys are the whole vocabulary; an unknown key (the
+  // former `siblings`, the other drafts a per-node reviewer was given --
+  // gone now that the survey is what reads the whole frontier) fails this
+  // check like any other malformed shape.
   let review = null;
   if (!isAbsent(fm.review)) {
     const r = fm.review;
+    const has = (k) => isPlainObject(r) && Object.prototype.hasOwnProperty.call(r, k) && !isAbsent(r[k]);
+    const drafted = REVIEW_DRAFT_KEYS.some(has);
+    const surveyed = has('survey');
+    const surveyOk = (s) => isPlainObject(s)
+      && Object.keys(s).length === REVIEW_SURVEY_KEYS.length
+      && REVIEW_SURVEY_KEYS.every((k) => Object.prototype.hasOwnProperty.call(s, k))
+      && typeof s.date === 'string' && isValidDate(s.date)
+      && typeof s.of === 'string' && HASH_RE.test(s.of);
     const ok = isPlainObject(r)
-      && Object.keys(r).length === 4
-      && REVIEW_VERDICT_SET.has(r.verdict)
-      && REVIEW_STRENGTH_SET.has(r.strength)
-      && typeof r.date === 'string' && isValidDate(r.date)
-      && typeof r.of === 'string' && HASH_RE.test(r.of);
+      && Object.keys(r).every((k) => REVIEW_KEY_SET.has(k))
+      && (drafted || surveyed)
+      && (!drafted || (
+        REVIEW_DRAFT_KEYS.every(has)
+        && REVIEW_VERDICT_SET.has(r.verdict)
+        && REVIEW_STRENGTH_SET.has(r.strength)
+        && typeof r.date === 'string' && isValidDate(r.date)
+        && typeof r.of === 'string' && HASH_RE.test(r.of)))
+      && (!surveyed || surveyOk(r.survey));
     if (!ok) {
-      problems.push(`'review' must be {verdict: ${REVIEW_VERDICTS.join('|')}, strength: ${REVIEW_STRENGTHS.join('|')}, date: YYYY-MM-DD, of: <sha1>}`);
+      problems.push(
+        `'review' must be {verdict: ${REVIEW_VERDICTS.join('|')}, strength: ${REVIEW_STRENGTHS.join('|')}, date: YYYY-MM-DD, of: <sha1>}`
+        + ', with an optional survey: {date: YYYY-MM-DD, of: <sha1>};'
+        + ' the four draft-review keys are given together or not at all, and the survey may stand alone',
+      );
     } else {
-      review = { verdict: r.verdict, strength: r.strength, date: r.date, of: r.of };
+      review = {
+        verdict: drafted ? r.verdict : null,
+        strength: drafted ? r.strength : null,
+        date: drafted ? r.date : null,
+        of: drafted ? r.of : null,
+        survey: surveyed ? { date: r.survey.date, of: r.survey.of } : null,
+      };
     }
   }
 
@@ -1279,7 +1391,15 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     facts,
     answerFact,
     review,
-    reviewStale: reviewStale(hashParts),
+    // A `review` carrying only the survey's pin has no draft verdict for a
+    // move to overtake, so `reviewStale` is asked only where a draft review
+    // was actually recorded; `surveyStale` is its counterpart on the other
+    // pin, and `surveyOwed` and `readyToRule` are what the two decide
+    // together.
+    reviewStale: review !== null && review.of !== null && reviewStale(hashParts),
+    surveyStale: surveyStale(hashParts),
+    surveyOwed: surveyOwed(hashParts),
+    readyToRule: readyToRule(hashParts),
     fence,
     fmText,
     standingHash,

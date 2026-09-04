@@ -1,6 +1,8 @@
 ---
 question: Once the ground is settled, what does the node answer?
 stage: maieutic
+depends:
+  - align-review.test/main/review-settles
 ---
 
 ## Disposition
