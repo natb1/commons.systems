@@ -34,6 +34,9 @@ The author, 2026-09-03, on the first maieutic draft and the fork of three option
 The author, 2026-09-03, on the probe whether an ancestor ruling suffices for a divergent subtree or the divergence should be named:
 > What is the downside for naming the divergence? It seems like better context during ruling is better.
 
+The author, 2026-09-03, choosing between naming a divergence on the leaves and deriving it at the ancestor (1) and naming it on the ancestor with a new field (2):
+> 1
+
 ## Account
 
 An un-aligned disposition, recorded at its sitting's opening on 2026-09-03 and not yet answered. The question it asks is distinct from its parents': alignment-target says what a session given nothing takes up, and attention says how rank is computed and read; this node asks whether rank is the right order for the alignment frontier at all, and if not, what is, and whether the dialogue's state should carry something the order can be derived from.
