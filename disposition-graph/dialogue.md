@@ -2,11 +2,11 @@
 question: What does an unanswered node carry?
 stage: maieutic
 recommendation:
-  adopts: standing
+  adopts: aspects-are-nodes
   class: ratified
-  boldness: high
+  boldness: low
   amends: "163f5ee5130f88f160523f95c72381f26751e96d"
-  at: "9e3a66240872d3512a3acf085f3154b9004028a2"
+  at: "e228e67e"
 review:
   verdict: forward
   strength: strong
@@ -327,6 +327,73 @@ Its cost, stated as a consequence and not as a reason: the graph holds more
 nodes, and the page must render a subtree as one disposition. Settling counts
 grow, which the ruling order already absorbs, since an ancestor's unanswered
 subtree contains its descendants' by construction.
+
+## Recommendation
+
+```markdown
+---
+question: What does an unanswered node carry?
+form: rule
+authority:
+  class: ratified
+  by: Nathan Buesgens
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/unanswered
+defines:
+  - dialogue
+  - dialogue state
+  - stage
+  - alternative
+  - standing answer
+  - draft
+  - recommendation
+  - review state
+  - account
+  - fact
+  - choice
+  - ruling
+---
+## Answer
+
+Its question, its fields, and its standing answer with its stamp when it has one; and, while a dialogue is active on it, the dialogue state. A dialogue is active on every unanswered node and on any answered node with an alternative pending on it. The status unanswered stays derived from the stamp, as the unanswered node says, and a standing answer of any class, ratified, delegated, or deferred, keeps its full authority while the dialogue is active, until an alternative is confirmed. Confirmed dialogue state folds into the node at the recording, into the answer, into the rationale as a rejected alternative with the ruling quoted, or into nothing; unconfirmed, it survives only in version control. Three requirements fix what the state must be: it must survive the session that held it, so that a session which loses its context resumes every node from its stage; it must hold the author's intention against the account that accumulates around it, the requirement the fidelity node asks; and it must give the author, at the moment of ruling, the context to see how this question stands to the rest of the unanswered frontier, and, reading a node that already has an answer, whether alternatives are pending on it and where each came from. It has these parts, each holding only what cannot be re-derived.
+
+One rule governs where a decision lives, and it is the node node's and not a new one. A decision the author is to rule on separately is a question, and a question is a node: "If a text answers two questions, it is two nodes." So a text carrying several such decisions is decomposed into children, not into an inner structure that would repeat inside the node what the node already is. The record already provides for the children of an open question, since "a reading, a refinement, or any other node may sit under an open question, and does not have to wait for the question to be answered", and it already makes the result legible, since "a node's ceiling is its nearest ratified ancestor", so a ratified child under an unstamped parent is exactly a decision the author has confirmed inside a question they have not. What remains on the node itself are the decisions that are not questions under it but facts about its answer, and those are the `facts` below.
+
+`stage`, the next movement owed: periagogic, maieutic, review, or ruling. The movements come in that order, so the stage also says what is behind the node, and a kickback moves it back. A proposal from outside alignment, as the authority node defines it, opens the dialogue on its node at the periagogic stage.
+
+`## Disposition`, the author's words, verbatim and dated, accumulating through the dialogue.
+
+`alternatives`, the candidate answers to this node's own question, pending the author's ruling, as data: each with a `name`; its `source`, the author's words in the disposition, the AI in alignment, the clean-context review, or a proposal from outside alignment; and a `ref`, the date of the words or of the review, or the instrument or node that raised the proposal. `## Alternatives` holds one subsection per name, in the same order, saying in prose what the alternative would answer and why it is on the table. The node as it stands is always a candidate and is never listed; its name is `standing`. An alternative that has been ruled on is no longer one: it is the answer, or a rejected line in the rationale.
+
+`facts`, the decisions about the answer that are not questions under it, as data, each with a `name`, its `choices`, the one it `adopts`, its `boldness`, and its `ruling` once the author has given one. Three names are reserved and no others are minted without a ruling here: `authority`, the class a confirmation would confer, ratified or delegated, which is why the recommendation carries no class of its own; `existence`, keep or prune, which is where a proposal to prune the node is recorded rather than as an alternative of a special shape that answers no question; and `persistence`, present only where the recommendation would change the node's shape, declaring or liquidating a shim or adding or dropping evidence, its choices being those shapes, and otherwise derived from the shape as before and asking nothing. `## Facts` holds one subsection per fact whose choices need explaining and is omitted where they do not. A fact's `ruling` carries the `response`, confirm, edit or deny, the `choice` confirmed, the `date`, and `of`, the hash of the choice text ruled, so that a later amendment to the node shows the ruling as given against text that has moved, as the recommendation's own pin does.
+
+`recommendation`, the AI's recommendation among the alternatives, as data: `adopts`, the name of the alternative it adopts, or `standing`; `boldness`, low, moderate, or high, how much of it rests on the AI's own knowledge against the record and the author's words; and its pin, `amends`, the hash of the standing text it amends, the node stripped of its dialogue state, and `at`, the graph commit it was drafted at. It may be recorded at any stage of the dialogue, as the author ruled on 2026-09-04, and is required from the review stage on, since a node cannot be reviewed without one; a recommendation withheld until a stage boundary is a recommendation held in a session, which the first requirement above forbids. It may change on a kickback or as the frontier evolves; the pin is what shows that the standing text has moved under it, which the frontier and the page flag as they flag a stale review. The reasoning behind the recommendation and behind each fact is prose in the account.
+
+`## Recommendation`, the recommended text when the recommendation adopts an alternative: one fenced markdown block holding the whole proposed node, frontmatter and sections, so that the same reader parses it and the projections derive the edit, field by field and word by word, beside the whole. A recommendation that adopts the standing text has no such section, and a confirmation ratifies the node as it stands. While nothing is answered every recommendation is a whole node; a diff is derived from it and never stored. The draft, elsewhere in the record, is this text. It may be invalid under the doctrine of the day, as when it presumes a ruling not yet given; the validator parses it and checks only that it answers the same question.
+
+A ruling that gives a node its first answer is not a ruling that amends one, and the projections say which is in front of the author. Where the node's stamp confers authority to amend, of any class, they may lead with the edit and say that the node as it stands is what remains if the author denies. Where the node has no stamp, they lead with the recommended text whole, name the ruling a first answer, and say what a denial actually leaves: the question open, with nothing behind it that holds. The pin is unaffected and stays required, since the hash of an absent answer is computable and its work is staleness, not standing; and `standing` stays the name of the node as it stands on every node, since what an unanswered disposition lacks is authority and not standing, as the un-aligned-children node says.
+
+`review`, the state of the clean-context review of the recommendation: `verdict`, forward or kickback; `strength`, of the counter-argument, strong, moderate, weak, or none; `date`; `of`, the hash of the recommended text the reviewer read, the fence when there is one and the standing text otherwise, so that a recommendation changed since the review shows as changed on the frontier and the page. What the reviewer saw is the whole unanswered frontier at the review's date, as the clean-context-review node says, and needs no field. A node reaches the ruling stage only with a forward verdict.
+
+`depends`, the open questions whose rulings this one waits on, as data: the ids of unanswered nodes that must be answered before this node can be, or a node id and an alternative on it, written as the id and the alternative's name, so the page can order the author's queue, show what a ruling here would unblock, and refuse to put a question before the one it rests on. It is also what carries coherence between decisions, within a subtree as between subtrees, so no separate exclusion field is minted. The inverse, what this question feeds, is derived from it and never stored, as is the rest of the node's position in the frontier: rank, order, and the ancestry, which `under`, `after`, `order` and `cites` already carry as data for the answered graph. `depends` is dialogue state and not one of those, because it holds only while both questions are open and is removed with the rest of the dialogue at the recording.
+
+`## Account`, the AI's account in prose: the evidence, the findings, the reasoning behind the recommendation and behind each fact, the review's findings and its counter-argument with the session's reply, and what is open for the author. It is not a proposal and does not carry that name: a proposal is the alternative that arose outside alignment, as the authority node defines it.
+
+The validator holds the parts together: a stage on every unanswered node and on every answered node with dialogue state, and every part of the dialogue state requiring a stage; a recommendation from the review stage on, adopting `standing` or a listed alternative, with its pin; a `## Recommendation` fence exactly when the recommendation adopts an alternative, parsing and answering the node's question; the alternatives' names unique and their subsections matching; the facts' names drawn from the reserved three, each adopting one of its own listed choices, and `## Facts` subsections matching the facts that have them; a ruling's `of` resolving to the choice it names; a forward verdict at ruling; every `depends` entry resolving to a node that is still unanswered, and to an alternative on it where one is named. Everything else is derived: the status, the persistence where no fact carries it, the queue and its order, whether the standing text has changed since the recommendation and whether the recommendation has changed since the review, the edit the page shows, and the counts. The projections that show a node with a standing answer, the browser and the alignment page, show its pending alternatives beside the answer with their sources, and say that the answer keeps its authority until one is confirmed.
+
+## Rationale
+
+The author's question of 2026-09-03, quoted above, answered greenfield that day and re-answered the same day under the author's second disposition, quoted above, which asked for the unanswered frontier to be encoded as a recommendation with dialogue state and a list of alternatives, and delegated the encoding's details. What the dialogue must carry is fixed by what cannot be re-derived once the session that held it is gone: the author's words, the position reached, the alternatives on the table and where each came from, the recommended text, the facts the presentation rule requires, and what the reviewer found. Each of those was in the record on 2026-09-03, but most as prose conventions inside the account: a "Facts:" line, a "Proposed text" block, a review subsection with a verdict and a strength, an alternatives list nobody could render, and two conventions for the draft. Prose conventions drift, and the page could not read them; the reviewer had already flagged that "as shown" was ambiguous between the node and the draft. This answer makes the alternatives, the facts, the pin, the verdict, and the draft data where a projection or the validator reads them, and keeps them prose where only a person does; the stage stays one field, since the movements are ordered and a date per movement would store what version control already holds.
+
+The re-answer's decisions. The flip of an answered node to unanswered while an alternative is pending was the author's first suggestion and was retracted by the author on 2026-09-03 as a hack; what the author wants at a functional level, in their words, is to see when reading an answered node whether alternate proposals from outside alignment or alternate answers from within it are pending, which the alternatives list with its sources gives beside the standing answer with no change of status. That a standing answer of any class keeps its full authority while an alternative is pending, and that a proposal from outside alignment opens the dialogue on its node, are the author's rulings of 2026-09-03, quoted above. The pin answers the author's observation that a whole node goes stale as easily as a diff: the hash of the standing text the recommendation amends, checked as the review's hash is, and the graph commit it was drafted at. The vocabulary follows the author's ruling on the authority node the same day: the AI's account loses the name proposal, and a conflicting answer that arises in alignment is an alternative. The encoding was written under the author's bootstrap grant, quoted above, after the periagogic and maieutic movements on this node and before the clean-context review, which runs on what the reconciliation wrote.
+
+The decision per aspect, the author's ruling of 2026-09-03. The author ruled that the record carry a decision per aspect, each aspect with its choices and its own boldness, so that the author confirms what needs confirming and the rest simply renders. Two designs for it were drafted and both were withdrawn, and the rejected lines below say why. What survived is that the record already had the unit: a decision to be ruled on separately is a question, a question is a node, and the node, un-aligned-children and under nodes between them already give the child under an open parent and the partial ratification that follows. What the node keeps is the small set of decisions that are not questions about anything but its own answer, which is the `facts` field. The alternative that the record instead carry aspects inside the node was rejected because it rebuilds the node model in miniature: a choice would be an alternative, a ruling a stamp, a ruling's pin a review pin, an exclusion a `depends`, and every rule on authority, quotes, rejected, checkpoint and clean-context-review would be stated twice.
+
+The first answer and the amendment. The author found on 2026-09-03 that nodes read as edits to confirmed dispositions when nothing is confirmed. Measured then, twenty-six nodes carried no stamp and ten of those carried both a body answer and a recommendation pin, so the page derived an edit between two texts neither of which anything had confirmed and captioned it as an amendment to what stands. The record could obey its own answer exactly and still mislead, because the answer said the node as it stands is always a candidate and the pin is always required, both without condition, and said nothing about the difference between a ruling that gives a first answer and one that amends. The rule above is that missing sentence. It does not touch the pin or the name `standing`, both of which an earlier draft proposed to make conditional and both of which the record refused: the author's ruling on un-aligned-children that an unanswered disposition lacks authority and not standing, and the fact that the standing hash is computable over an absent answer, so the pin's work is staleness and never standing.
+
+Rejected: the state as prose only, since the page would keep guessing; a date per movement, since it duplicates history; a separate draft file per node, since a node is one file and the draft is parseable inside it; a stored diff, since it is derived from the draft and the node; persistence as a stored fact in general, since a node is always standing and its shims are declared, kept only as a fact where the recommendation would change the node's shape; a validator that refuses a draft changed since the review, since the session decides whether a change is substance, as the recording node says, and the flag gives it the fact; a status field or a fourth class for a node with pending alternatives, the retracted flip; alternatives as prose only in the account, since the page could not show them beside the answer; a node per alternative, since an alternative is a candidate answer to this question and not a question of its own, which is the distinction the decision-per-aspect ruling turns on, a separate question being a node and a rival answer to one question being an alternative; aspects as slots carved into the answer, since tested against the alternatives the record holds a section-sized slot collapses most of them into one and a paragraph-sized slot requires carved prose to compose; the answer composed from its aspects and derived rather than written, since aspects would then be dialogue state that the recording removes, leaving an answered node's answer with no source, and since it rebuilds the node model inside the node; ranges marked on whole-node alternatives with the page grouping them, since it stores the answer and derives the question and leaves a decision on which no textual rival was recorded, the authority class among them, with no row at all; and a separate exclusion field for coherence between choices, since `depends` naming a node and an alternative on it already carries it and is checked. Traditions, recorded as readings under this node or owed under the stub-traditions ruling: architecture decision records in the MADR form, the reading under this node, whose considered options with their sources, chosen option, and status this encoding adopts, with the status derived here where MADR stores it; the RFC and PEP processes, a status field on a prose document with a fixed order of states; review approvals pinned to a revision in code review, where a new revision marks the approval stale; and the review of a change as a diff against what stands.
+```
 
 ## Account
 
@@ -1162,4 +1229,55 @@ alternative requires the `## Recommendation` fence, the whole proposed node, and
 drafting that for this node is the maieutic movement the author has scheduled
 for after compaction. What is recorded is what the sitting recommends, named
 here and set out in full in the two alternatives.
+
+### The fence drafted, 2026-09-04
+
+The author asked whether drafting the fence would de-risk context loss, and it
+does, so it is drafted. Until now `aspects-are-nodes` existed as a description
+of a design; a session resuming from a description has to re-derive the text
+the design implies, and that is where drift enters. The fence is the text
+itself, so what survives compaction is the recommendation and not an account of
+one.
+
+What the fence carries, stated because the `adopts` field cannot. It is the
+whole proposed node under two recommendations at once, `aspects-are-nodes` and
+`first-answer-is-not-an-amendment`, which are orthogonal and neither of which
+decides the other. `adopts` names the first because it is the structural
+change; the second is the paragraph on a first answer against an amendment, and
+the rationale's account of it. A confirmation of this recommendation therefore
+confirms both, and the author should deny or edit if they want them apart. That
+one field cannot say what two sentences of prose must is the encoding defect
+already recorded here, and the ruling in the fence is what would fix it.
+
+Also folded in, being the author's own words and not the sitting's judgment:
+the revision of 2026-09-04 that a recommendation may be recorded at any stage,
+written into the `recommendation` paragraph with the floor kept, since a node
+cannot be reviewed without one.
+
+Three things the fence settles that the alternatives' prose had left loose. The
+reserved `facts` are exactly three, `authority`, `existence` and `persistence`,
+and no others are minted without a ruling on this node, which closes the obvious
+route by which the facts set would have grown back into the aspects model.
+`class` leaves the recommendation, since it is the `authority` fact's adopted
+choice, so the recommendation carries `adopts`, `boldness` and its pin alone;
+the field in this node's own frontmatter still carries `class`, because the
+node is written under the doctrine of the day and the fence is what would change
+it. And coherence between decisions is `depends` extended to name an
+alternative, not a new exclusion field, which is the `depends-names-an-alternative`
+alternative already on this node arriving as a consequence.
+
+The rationale's rejected lines now carry the four designs this sitting killed,
+each with the reason: aspects as slots carved into the answer, the answer
+composed from its aspects and derived, ranges marked on whole-node alternatives,
+and a separate exclusion field. The existing rejected line "a node per
+alternative" is kept and sharpened, since the decision-per-aspect ruling turns
+on exactly that distinction: a separate question is a node, a rival answer to
+one question is an alternative.
+
+The recommendation's boldness is set to low, in the direction the author uses
+the term. Its three load-bearing sentences are quoted from `node`,
+`un-aligned-children` and `under`, and the rest follows the author's words of
+2026-09-03 and 2026-09-04. The pin is the standing text at `163f5ee5` and the
+graph commit `e228e67e`. The clean-context review is owed and has not run; the
+fence is what it will read.
 
