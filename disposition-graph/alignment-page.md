@@ -38,6 +38,12 @@ The author, 2026-09-03, on how the recommendation is to be evaluated:
 
 > Make recommendation based on best greenfield design - not brownfield cost savings. Nothing is doctrine yet, barely anything is materialized. Does the recommendatino survive?
 
+The author, 2026-09-04, on what list A holds under `aspects-are-nodes`:
+
+> > list A is the node's asking facts plus its unanswered children
+>
+> We already have multiple pages for working through trees in alignment order. Evaluate whether list A needs to/should include unanswered children? It sounds like list A is a list of facts per node. Maybe the child questions are indicated in the right aligned context pane under the node preview (so that the navigation pane can remain alignment order sorted).
+
 ## Account
 
 An un-aligned disposition, recorded at the author's direction on 2026-09-03 and not yet answered. The question is the alignment page's own: what the author reads when they rule, what it must show of each unanswered node, in what order, and how their ruling returns to the record. The page exists and the author rules on it daily, and until now no node asked its question. It was recorded only inside other answers: a shim on `growth` naming the artifact, the projector flag that writes it, its published address, and its liquidation; one sentence of `growth`'s answer saying what it lists; one clause of `projection`'s answer and of its recommended text naming it the projection of the open dialogue; and the three responses defined on `unanswered`. So the page would have been ratified incidentally, by clauses inside larger rulings, and never put to the author as a question of its own, where the browser has this node's parent and `self-documentation` beside it.
@@ -265,14 +271,12 @@ subject matter, the authority class, the node's existence, and its persistence
 where its shape would change, stay on the node as a small reserved set.
 
 What this page becomes under it, and it is simpler than either earlier account.
-List A is the node's asking facts together with its unanswered children. List B
-under a child is that child's own alternatives, each with the recommendation
-among them and its boldness, both of which the record already carries per node.
-The right-hand pane is the parent's answer with its subtree rendered in
-`order`: it composes because each child answers its own question in its own
-whole prose, so there is nothing to assemble and no fragment grammar. The
-selection in the left rail selects the parent, and the subtree is the
-disposition the author reads.
+List A is the decisions on this node and nothing else, corrected by the author
+on 2026-09-04: see "List A holds no children" below. List B under a row is
+that decision's choices, each with the recommendation among them and its
+boldness, both of which the record already carries per node. The right-hand
+pane is the node's answer as it would stand, with its unanswered children shown
+beneath it as context and not as rows.
 
 Three warnings this account carried are withdrawn, because the design that
 caused them is withdrawn. The quote drill-down needed an anchor rather than a
@@ -286,4 +290,54 @@ assembler, which it now does not have.
 What remains open for this node is unchanged and is the page itself: the
 metrics at the top of the rail with their justifications, the single-selection
 rail, and the three columns.
+
+### List A holds no children, 2026-09-04
+
+The author's words are above. The evaluation they asked for, and the answer is
+that list A must not include the node's unanswered children. Two sentences of
+`alignment-order` decide it and the sitting's account had contradicted both.
+
+The first is that the order is one order: "The order is one order over the
+whole alignment frontier, the manifest's graphs taken together ... and the
+alignment page pages in the order flat, showing each node's graph beside it."
+A parent screen that lists its unanswered children as confirmable rows does not
+page flat. It nests, and in nesting it creates a second ordering, the parent's
+row order, over nodes the one ruling order has already placed. The author's
+objection, that the navigation pane should stay alignment-order sorted, is that
+consequence seen from the rail: a child ruled from inside its parent's screen
+has been taken out of the order the projector computes and nothing else does.
+
+The second is that the record already has the mechanism for showing an
+ancestor what hangs beneath it, and it is not a list of rows: "the page inverts
+that at the ancestor, showing beside each alternative the nodes a ruling for it
+keeps and the nodes it discards." That is context for the ruling in hand, not a
+place to rule. The author's proposal, that child questions be indicated in the
+right-hand pane under the node preview, is that same mechanism given its place
+on the page.
+
+So list A is the decisions on this node: its own answer, when alternatives are
+pending on it, and its asking facts, the authority class a confirmation would
+confer, the node's existence, and its persistence where the recommendation
+would change its shape. Every decision that is a question is a node, and a node
+is ruled in the ruling order, from the rail, on its own screen. The right-hand
+pane carries the node as it would stand and, beneath it, the unanswered
+children as indications: what they ask, what a ruling here unblocks, and what
+the settling count already counts.
+
+This is closer to the author's first statement than the sitting's reading of it
+was. The examples given on 2026-09-03 were "authority and permanence", both
+facts about the answer and neither a question under it, and the sitting
+generalised from them to children on no warrant. The correction is recorded on
+this node and on the `aspects-are-nodes` alternative on
+`commons.systems/disposition-graph/dialogue`, whose text carried the same
+sentence.
+
+One thing the correction sharpens rather than settles. A node whose children
+are all unanswered has a pane full of indications and a list A of facts alone,
+which is a thin screen; the author rules on the parent's own answer and its
+class, and the substance is on the children's screens, each in its turn in the
+order. That is the design working as intended, since the ancestor comes before
+its descendants precisely because ruling it makes theirs decidable, but it is
+worth the author seeing before they confirm, because it means the parent's
+screen will often ask little and show much.
 

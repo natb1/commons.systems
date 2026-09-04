@@ -301,14 +301,16 @@ shape, are facts about the answer rather than questions under it. Those are a
 small reserved `facts` set on the node, each with its `choices`, the one it
 adopts, its `boldness`, and its `ruling`.
 
-The author's page follows without a new mechanism. List A is the node's asking
-facts together with its unanswered children. List B under a child is that
-child's own alternatives, which are short because the child is small, each with
-the recommendation among them and its boldness, both of which the record
-already carries per node. The right-hand pane is the parent's answer with its
-subtree rendered in `order`, which composes because each child answers its own
-question in its own whole prose, so there is no fragment grammar and nothing to
-assemble. A ruling on an aspect is the child's stamp, dated and quoted where
+The author's page follows without a new mechanism. List A is the decisions on
+the node itself: its own answer, where alternatives are pending on it, and its
+asking facts. It holds no children, the author having ruled on 2026-09-04 that
+it must not, since the ruling order is one order the page pages flat and a
+child ruled from inside its parent's screen leaves it. List B under a row is
+that decision's choices, each with the recommendation among them and its
+boldness, both of which the record already carries per node. The right-hand
+pane is the node's answer as it would stand, with its unanswered children
+beneath it as indications, which is the inversion `alignment-order` already
+prescribes at an ancestor and not a second place to rule. A ruling on an aspect is the child's stamp, dated and quoted where
 `quotes` already requires it. Cross-decision coherence is `depends`, which the
 record already defines as naming a node and an alternative on it.
 
