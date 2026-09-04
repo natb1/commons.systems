@@ -672,8 +672,16 @@ list. The alternative that survives the steelman is
 ### Tested against the record it joins, 2026-09-04
 
 The `under` chain to the ceiling: `projection`, this node's parent, whose one
-clause naming the page this answer refines rather than contradicts; `scope`;
-`purpose`; and `commons.systems/public/agency` at the root. The global-tier
+clause naming the page this answer refines rather than contradicts; `model`;
+`purpose`; and `commons.systems/public/agency` at the root. (Corrected
+2026-09-04: this section named `scope` as the second link. It is not one.
+`projection` sits under `model`, and `scope` is `model`'s sibling under
+`purpose`, so the chain never passes through it. The clause below testing this
+answer against the chain was therefore tested against the wrong ancestor, and
+`model`'s binding sentence, that a reading's relation is on the answer, is the
+one it should have met: the relation is per option since 2026-09-04, so
+`model` carries a sentence the record has already moved past and is at the
+ruling stage carrying it.) The global-tier
 nodes: `materialization`, under which this page is the projection of this
 node's answer and the shim is the stopgap until the projector writes it;
 `session-context`, which this answer does not touch, since the page is not one
@@ -1318,3 +1326,127 @@ second comment below it saying there is no reason to reorder. Both are
 unsupported implementation.
 
 **The suite is green**: 303 tests pass, 20 of them titled for the alignment page.
+
+### What the record says, and what it costs in changed sentences, 2026-09-04
+
+**The fold's real cost is twelve nodes, not twenty-seven facts.** On nine
+nodes every decision folds, so the page prints "Nothing on this node is asked
+separately: every decision on it folded in at low boldness" and asks the
+author nothing at all: `audience`, `capture`, `checkpoint`, `growth`,
+`knowledge-store`, `materialization`, `purpose-criteria`, `session-context`,
+`un-aligned-children`. Two of those are global-tier rules. Three more carry no
+facts at all and print the same sentence where it is simply false, since
+nothing folded and nothing was ever proposed: `assumption-form`,
+`frontier-metrics`, `lockfile`. That is what removing the fold rule buys.
+
+**The chain above binds in two places and contradicts nowhere.**
+`projection`'s one clause naming the page says it lists every unanswered node,
+which this answer refines rather than contradicts, and its rule that every
+tradition's name links to the node defining it already requires the href the
+author asks for, so that part needs no disposition. `model` binds harder and
+is already behind: its answer puts a reading's relation on the answer, where
+`readings` puts it per option and all fourteen `bears` entries in the graph
+encode it per option, and `model` stands at the ruling stage carrying the
+superseded sentence. `model` also sets the constraint this answer has to
+respect, that everything but the facts is computed and never stored, and three
+things the new layout wants are not computed today: per-option prose on the
+reserved facts, the per-option tradition indicator, and the author's per-option
+reason.
+
+**The ceiling is strengthened and its citation is spent.** This node's
+recommendation of the ratified class rests on the argument that a page folding
+a decision away is a page taking it, which is capture-shaped under
+`public/agency`. Removing the fold removes the page's one capture-shaped
+mechanism, which strengthens the archē and leaves the class recommendation
+needing a different ground.
+
+**Two live contradictions inside the graph that the author's second item lands
+on exactly.** `viable-options` says an option carries "in prose what it would
+answer" — every option of every fact — while `dialogue` exempts the reserved
+facts and the option that stands, and the reader implements the exemption.
+Measured, 168 of 407 options carry no prose: 114 on the authority fact, 38 the
+standing option, 12 existence, 4 persistence. And the projector papers over the
+gap with a hardcoded sentence table, which is implementation no disposition
+justifies. The second contradiction is on the tradition relation, `model`
+against `readings`, above.
+
+**The tradition indicator is blank on 393 of 407 options.** Thirteen reading
+nodes carry fourteen `bears` entries. The author wrote "if applicable", and the
+answer has to say what a row shows when nothing bears on it.
+
+**The facts are not uniform, and the ruling on the whole was covering for it.**
+The answer fact is on 72 of 75 nodes, authority on 57, existence on 6,
+persistence on 2. Sixteen nodes carry fewer than two facts and three carry
+none, so on those three the whole-node control is the only response surface
+there is.
+
+**Three answers provide for a response on the node**, and liquidating the
+control retires the route each names: `unanswered`'s "on a node, or on one of
+the decisions", `recording`'s restatement of it, and this answer's own
+composition rule.
+
+**The kick-back's destination contradicts `recording` and its name adds a
+fourth vocabulary.** `recording` classifies a denial three ways, and the author
+fixes it at maieutic. The row itself is already in the answer and in the
+projector, labelled "Reject all of these, with feedback", so only its name and
+its destination are new; and `growth`'s option `cite-unanswered-for-responses`
+already records that three nodes state the response vocabulary and that
+`unanswered` should be the survivor, which a fourth word worsens.
+
+**The per-option reason has no home anywhere in the record.** `authority`,
+`dialogue` and `viable-options` each give a ruling three parts, response, date
+and pin, and no fourth. `quotes` puts the author's words in `## Disposition`,
+per node and dated, never per option. `transience` and `ruling-transport` both
+hold that the page's database is a buffer and never the record, so a per-option
+input written today lands nowhere. That is the strongest reason this
+disposition needs a companion ruling on `dialogue`.
+
+**`growth`'s shim carries three false clauses** in its description of this
+page: rank order, superseded by the ruling order; the AI's account "with its
+three facts", which are the presentation rule's and not the node's; and the
+three responses "on any subset", which is now per fact plus a kick-back. The
+two persistence facts already rule together to move the shim here, and this
+makes the move mandatory rather than tidy.
+
+**The prose audit, and the finding that reverses the obvious reading.** Thirty-
+three nodes carry a rejected list in a rationale, across thirty-seven places,
+holding about a hundred and nineteen entries. Seventeen of them duplicate a
+recorded option and are safe to strike; six nodes are duplicates end to end,
+`quotes`, `rationale-edge`, `traditions-home`, `model`, `hexis` and
+`purpose-criteria`. The other hundred and two have no structural home and are
+disjoint from `options` by design, because `dialogue` and `rejected` both hold
+that an option the AI stops holding viable leaves the list, so the prose
+lists are exactly the dominated candidates the structure excludes. What
+liquidating them would destroy is specific: the nine designs `dialogue`
+considered for the encoding and four traditions named nowhere else; the nine
+`viable-options` rejected and the eight traditions recorded only in its
+rationale; the four founding rejections on `purpose`, which are the author's
+own; the legacy record's measured evidence on `transience`; the ratify command
+with the author's words on `authority`; and both rejected readings of the root
+archē on `agency`. So the author's diagnosis holds for seventeen entries and
+inverts for a hundred and two, and the rule that would make the rest safe to
+strike does not exist yet. That is `prose-and-structure`'s question and not
+this node's.
+
+**Three more prose restatements, for that node's scope**: fifty of seventy-five
+nodes carry a `Facts:` line restating the frontmatter, sixteen of which
+`growth` measured as contradicting it; nine carry an `Options:` block; and
+thirty-four restate the three responses.
+
+**The fold rule's provenance is one sentence of the author's and four steps of
+the AI's.** The author, 2026-09-03: "Very high confidence or default
+disposition elements can just be included in the final render." Everything
+after is derivation, correction of an incoherence found in clean context, the
+strict low-boldness form, the inversion note, and the sentence in this answer.
+"List each fact without exceptions" supersedes the author's own earlier words,
+and this node's `## Disposition` now carries both.
+
+**Boldness survives the fold's death with three jobs, none of them on the
+page's asking.** It is the "status of AI recommendation" the author's own item
+asks for, it sets the clean-context reviewer's model floor, and
+`frontier-consistency`'s third validation reads it. So `growth`'s
+`boldness-reversed` still needs ruling: the direction still decides which
+drafts get the larger reviewer.
+
+**Only two answers name the fold**, this one and `progressive-disclosure`'s.
+The latter's is falsified, as the tradition pass found.
