@@ -401,11 +401,13 @@ vocabulary rather than slugs and to need no gloss, and the projector's answer
 to that was a hardcoded sentence table, which is implementation no disposition
 justifies; the sentence belongs to the node that defines the fact and is
 projected from there. The option that stands was held to need none since its
-text is the answer, and that is why it renders on the alignment page as a bare
-name beside options that render their sentences, offering the author the least
-safe choice on the page with the least said about it: on a node no ruling
-reaches, confirming it ratifies a draft nobody has confirmed, which the record
-requires be said in as many words. (Raised on
+text is the answer, and that exemption holds: its sentence is the answer's own
+first sentences, which a projection reads from `## Answer` exactly as it reads
+every other option's from its subsection, so no field is added and the row is
+no longer bare. What the page adds beside it is the standing the text has,
+which is a status and not a sentence: on a node no ruling reaches, confirming
+it ratifies a draft nobody has confirmed, which the record requires be said in
+as many words. So this option strikes one exemption and keeps the other. (Raised on
 commons.systems/disposition-graph/alignment-page, from the author's words of
 2026-09-04 recorded there: "For each fact, list all options... For each option
 (other than kick back) provide short text summary of option and/or

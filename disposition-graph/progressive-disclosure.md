@@ -27,6 +27,9 @@ bears:
   - fact: answer
     option: three-column-ruling-screen
     relation: adopted
+  - fact: answer
+    option: every-fact-every-option
+    relation: adopted
 ---
 ## Answer
 
