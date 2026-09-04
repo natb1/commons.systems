@@ -185,3 +185,39 @@ On the three facts: The frontmatter recommendation (adopts standing, ratified, m
 Strongest counter-argument (moderate): Reclassifying every deferred answer as unanswered loses nothing formally and changes what the record is while the record is in use: sixty-eight nodes now sit in one queue with no distinction between an answer written that morning from the author's quoted words and one written two days earlier from the AI's own knowledge, and the author must rule on all of them through a dialogue whose own rules are in the queue. The session's reply — that the stage says what each is owed where the deferred stamp did not — is a real gain and is now visible in the frontier and the page. What is unanswered is the volume: forty-three nodes stand at review or ruling in one sitting, and the record offers a ruling order only as a review's recommendation that nothing consumes.
 
 The session's reply: Forward accepted. The retraction and the authority-keeping rule are the author's in quoted words; what happens to review-stale pins at the first ratification is accepted as a finding for the author.
+### The author's dispositions of 2026-09-03, and where they fall
+
+The words are in the Disposition section above and in full on
+`commons.systems/disposition-graph/alignment-page`. Two halves reach this node
+and they resolve differently.
+
+The encoding half, that nodes read as edits to confirmed dispositions when
+nothing is confirmed, is not a defect in this node's answer. This node already
+enumerates the three carrying-states of an unanswered node, "an answer stamped
+deferred, an answer with no stamp, or no answer at all", and already says the
+status is derived and never a field. The defect is that
+`commons.systems/disposition-graph/dialogue` gives every recommendation an
+`amends` pin against a standing text and names the node as it stands an
+unlisted candidate, unconditionally, so nothing downstream can tell the second
+state from the third. It is recorded there, as the finding "the record has no
+way to say that nothing stands" and the alternative
+`no-standing-without-a-stamp`.
+
+The confirmation half does fall here. This node's answer opens confirm, confirm
+with edits, and deny with feedback "on any subset of them, at once", where they
+are the unanswered nodes. The author now asks for confirmation on a subset of
+the aspects within one node, with a rejection open on each aspect and a second
+rejection open on the whole as it renders. That is an amendment to this
+sentence, and it is why this node has gone back from ruling to maieutic. What
+it will say depends on the probe outstanding on `alignment-page`: whether the
+aspects are derived from what the record already carries, in which case this
+answer gains a clause about the granularity of a response and nothing else, or
+recorded on the node, in which case this answer and `dialogue`'s both change
+and the review of 2026-09-03 on each is spent. The clean-context review had
+already raised the question as `partial-ratification` on
+`commons.systems/disposition-graph/growth`, where it is unruled.
+
+The standing `recommendation` on this node, adopting `standing` with a forward
+review of 2026-09-03, is superseded by the author's words of the same day and
+is left in place only so its review pin is not lost.
+

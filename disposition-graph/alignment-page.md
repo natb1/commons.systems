@@ -47,3 +47,85 @@ Adding this node under `projection` divided that node's rank one more way and dr
 
 This is worth the sitting's attention and `alignment-order`'s: minting one question at the bottom of the frontier required hand-adjusting a number that carries the author's order elsewhere in the graph, which is the cost `attention`'s clean-context review named when it said one scalar cannot carry two orders and that the `order` field is the record's admission of it.
 
+### The sitting of 2026-09-03: five dispositions on the page
+
+The author's words are in the Disposition section above. Four of the five are
+this node's own question, what the author reads to rule; the fifth is the
+encoding beneath it and falls elsewhere. What each would amend, and the state
+of the movement owed on it:
+
+**The metrics and the pagehead.** The page as built puts a `.counts` list, one
+number per stage plus a total, and a `.lede` sentence, and one line per graph
+with its count, in a `.pagehead` at the top of the main column, with the nav
+rail holding a flat list of questions. The disposition moves the metrics to the
+top of the rail and drops the rest, and gives the reason in the record's own
+vocabulary: the lede "liquidates without disposition", which is the
+materialization rule applied to this page, that anything no disposition
+justifies is unsupported implementation. The standard the metrics must meet is
+already recorded, on `commons.systems/disposition-graph/frontier-metrics`,
+where the author asked for the same thing of the browser's graph headings:
+"maintain a clear functional justication for each - don't just dump raw data
+... these metrics are signals/instruments/criteria of some disposition. Each
+metric should hyperlink to that disposition." That node's question is the
+browser's headings and this one's is the alignment page, so the two are not the
+same question and neither is an alternative to the other; the criterion is
+shared and is cited here, not copied. Which metrics meet it on this page is
+open, and the AI's candidates are held back: the stage counts the page now
+shows are raw data by that standard, and the settling count the ruling order is
+built on is not shown at all.
+
+**One disposition at a time.** The page renders every unanswered node into one
+scrolling column and the rail anchors into it. The disposition makes the rail a
+selector: one item shown, the selection marked in the rail. Nothing in the
+record answers for the page's shape, which is why this node was minted.
+
+**List A, list B, and progressive disclosure.** This is the disposition with
+reach beyond the page, and the author said so: it "may have cascading effects
+on disposition for unanswered data model". What it asks for is a ruling
+decomposed into the aspects that need confirming, each aspect carrying its
+summarized options, the AI's recommendation among them, and a confidence; with
+quotes and full text as drill-down, a simple input per aspect, and a final
+option on every aspect that rejects all of them with feedback. The record as it
+stands has no aspect: `commons.systems/disposition-graph/dialogue` makes the
+recommendation one whole-node adoption with one class and one boldness, and
+`commons.systems/disposition-graph/unanswered` opens the three responses "on
+any subset of them", where "them" is the unanswered nodes and not the aspects
+within one. The clean-context review of 2026-09-03 had already put the same
+question on the table as the alternative `partial-ratification` on
+`commons.systems/disposition-graph/growth`, unruled. Whether the aspects are
+derived by the page from what the record already carries, or recorded on the
+node, is the question the sitting cannot answer for the author, and it is the
+probe outstanding. Both nodes have gone back from ruling to maieutic and wait
+on it.
+
+**Confidence.** The author renames boldness to confidence. The term is defined
+on `commons.systems/disposition-graph/growth`, which carries the words, and is
+a field on every recommendation, which is `dialogue`'s. A rename touches the
+answers of `growth`, `dialogue`, `recording`, `scope`, and the presentation
+rule wherever the three facts are listed, and it is a rename and not a change
+of meaning unless the author says otherwise, which is part of the probe.
+
+**Full detail after list A, and rejecting the final render.** The page would
+close with the whole disposition as it would stand under the choices made
+above, live, with the high-confidence and default elements simply present and
+never asked about, and one more rejection with feedback against the whole. Read
+against the record this is a second thing the author is asking for and not a
+restatement of the first: list A is confirmation aspect by aspect, and the
+final render is confirmation of the result, which is the whole-node ruling the
+record already has. What the record does not have is the rule that decides
+which aspects reach list A at all; the author names very high confidence and
+"default disposition elements" as the ones that do not.
+
+**The encoding artifact.** The fifth disposition is not this node's. It is
+recorded and answered on `commons.systems/disposition-graph/dialogue`, as the
+finding "the record has no way to say that nothing stands" and the alternative
+`no-standing-without-a-stamp`. In short: ten unstamped nodes carry both a body
+answer and an `amends` pin, so the page derives an edit between two texts
+neither of which anything has confirmed and captions it as an amendment to what
+stands; `purpose`, the author's example, is second in the ruling order. This
+page is where the author sees it, and whatever this node answers about the
+render must show a first answer as a first answer.
+
+The movement owed here is still periagogic: one probe is with the author, and
+the AI's account of what the page should be is held back behind it.
+
