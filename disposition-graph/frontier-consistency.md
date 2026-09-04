@@ -3,7 +3,6 @@ question: How is the unanswered frontier kept consistent with itself?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: moderate
   amends: "a870b3a1ce42036ac4ddc5422ca46bb8176838f0"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -24,6 +23,13 @@ alternatives:
   - name: placement-feeds-the-order
     source: author
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

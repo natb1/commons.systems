@@ -3,7 +3,6 @@ question: How is attention allocated?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: moderate
   amends: "989b0c57e87d5795bcd6082b62f46d37144ab633"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -22,6 +21,13 @@ alternatives:
   - name: rank-orders-reconciliation-only
     source: author
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

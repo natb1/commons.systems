@@ -3,7 +3,6 @@ question: Who may change an answer?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: moderate
   amends: "0a273ae3449272b35acc7d47e266cf3cb1b3c571"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -22,6 +21,13 @@ alternatives:
   - name: ceiling-moves-here
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

@@ -3,7 +3,6 @@ question: Does spec-driven development support this repository's purpose?
 stage: ruling
 recommendation:
   adopts: standing
-  class: delegated
   boldness: high
   amends: "3d9e3b26cabec954290ca3c081d8c118bfbad14c"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -19,6 +18,13 @@ alternatives:
   - name: split-sources
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: high
 form: reading
 authority:
   class: deferred

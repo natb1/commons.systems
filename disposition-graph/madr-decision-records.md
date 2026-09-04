@@ -3,7 +3,6 @@ question: Do architecture decision records in the MADR form support encoding the
 stage: ruling
 recommendation:
   adopts: standing
-  class: delegated
   boldness: high
   amends: "67e9eb68c573831ea8445c23e1e3069c4ce9b056"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -12,6 +11,13 @@ review:
   strength: moderate
   date: 2026-09-03
   of: 67e9eb68c573831ea8445c23e1e3069c4ce9b056
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: high
 form: reading
 authority:
   class: deferred

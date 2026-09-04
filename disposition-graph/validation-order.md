@@ -3,7 +3,6 @@ question: In what order is a landing validated?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: moderate
   amends: "8cefe40587eca1be05c749fcf976173d4f6e7016"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -22,6 +21,13 @@ alternatives:
   - name: smaller-contract-instead-of-ordering
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

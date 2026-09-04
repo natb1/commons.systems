@@ -3,7 +3,6 @@ question: Does the same discipline help manage capture of the author's intention
 stage: maieutic
 recommendation:
   adopts: draft
-  class: ratified
   boldness: low
   amends: "07c0229c90e260f37e184cde73afaf1add1e6aa1"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -21,6 +20,13 @@ alternatives:
   - name: cite-forms
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 form: assumption
 authority:
   class: deferred

@@ -3,7 +3,6 @@ question: What is materialized implementation, and where does it live?
 stage: review
 recommendation:
   adopts: standing
-  class: ratified
   boldness: low
   amends: "3761c42b60b37303531ba6485d8d648a081885b5"
   at: "ec82504388014303d7a1b889d42d02e8814abd25"
@@ -22,6 +21,13 @@ alternatives:
   - name: traditions-to-readings
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 form: rule
 authority:
   class: deferred

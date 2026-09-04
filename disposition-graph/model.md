@@ -3,7 +3,6 @@ question: How is intent recorded here?
 stage: ruling
 recommendation:
   adopts: draft
-  class: ratified
   boldness: moderate
   amends: "194966b07144904d820896a7cf3428680b9fe4f3"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -21,6 +20,13 @@ alternatives:
   - name: primer-node
     source: ai
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

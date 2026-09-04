@@ -3,7 +3,6 @@ question: How are nodes named across graphs?
 stage: ruling
 recommendation:
   adopts: draft
-  class: ratified
   boldness: moderate
   amends: "75b18577aced0fec1e9425504e2d9e25328ef48c"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -18,6 +17,13 @@ alternatives:
   - name: traditions-graph-declares-move
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

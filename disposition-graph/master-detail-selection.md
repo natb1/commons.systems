@@ -3,10 +3,16 @@ question: Does the master-detail tradition support ruling one node at a time fro
 stage: maieutic
 recommendation:
   adopts: standing
-  class: delegated
   boldness: moderate
   amends: "454a29622e5eac6b87849147545d0c51f987bae2"
   at: "919cea3b"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: moderate
 form: reading
 authority:
   class: deferred

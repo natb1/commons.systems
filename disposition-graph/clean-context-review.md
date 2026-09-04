@@ -3,7 +3,6 @@ question: How is the clean-context review run?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: moderate
   amends: "ed187b8bb3bc8ec9a6fe41a12722dab24a6f82c5"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -18,6 +17,13 @@ alternatives:
     ref: "2026-09-03"
   - name: rerun-earlier-reviews
     source: ai
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

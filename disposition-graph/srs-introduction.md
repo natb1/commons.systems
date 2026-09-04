@@ -3,7 +3,6 @@ question: Does the requirements-specification tradition support opening with pur
 stage: ruling
 recommendation:
   adopts: draft
-  class: delegated
   boldness: moderate
   amends: "686388606159b2b7c10aacf520c592e38d170982"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -18,6 +17,13 @@ alternatives:
   - name: record-overview-divergence
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: moderate
 form: reading
 authority:
   class: deferred

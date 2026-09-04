@@ -3,7 +3,6 @@ question: Does the software-factory tradition support this repository's purpose?
 stage: ruling
 recommendation:
   adopts: standing
-  class: delegated
   boldness: moderate
   amends: "b0e69687251e57fc7db912dde66beb28e1515ef5"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -19,6 +18,13 @@ alternatives:
   - name: divergence-of-ownership
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: moderate
 form: reading
 authority:
   class: deferred

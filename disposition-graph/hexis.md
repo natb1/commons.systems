@@ -3,7 +3,6 @@ question: In the purpose answer, is the hexis claim stated first and the knowled
 stage: ruling
 recommendation:
   adopts: hexis-first
-  class: ratified
   boldness: moderate
   amends: "08108baa5fb010e1a2baf2d430b7a75af73de656"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -17,13 +16,22 @@ alternatives:
     source: ai
   - name: knowledge-store-first
     source: ai
-  - name: fold-into-purpose
-    source: review
-    ref: "2026-09-03"
-    prune: true
   - name: sub-ruling-of-purpose
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
+  - name: existence
+    choices:
+      - keep
+      - prune
+    adopts: keep
+    boldness: moderate
 under:
   - commons.systems/disposition-graph/purpose
 ---
@@ -37,13 +45,15 @@ State the hexis claim first in the purpose answer with the knowledge store as it
 
 Keep the order the page had, a knowledge store, a projection of its author's hexis, of low boldness. The reviews' counter-argument backs it: purpose is the onboarding entry point and the README's source, no node's defines carries hexis so the browser cannot link it, and the apposition teaches the term instead of assuming it, the philosophical precision belonging on knowledge-store where the hypothesis and its reading live.
 
-### fold-into-purpose
-
-Prune: The redundancy finding notes that this node decides a clause purpose's draft already contains, so a confirmation of purpose as shown decides it by that act and a contrary ruling here would reopen purpose's draft. Its alternative to keeping the option-node is to fold the option into purpose's Proposal as an explicit alternative, which is what the first option on rejected would make structural, that decision being itself unruled.
-
 ### sub-ruling-of-purpose
 
 Hexis decides a clause purpose's recommended text already contains, that the record is a projection of its author's hexis, which is what a knowledge store would hold. The finding proposes hexis carry one line saying it is a sub-ruling of purpose's text and must be ruled first, or be folded into purpose's account as an alternative, since confirming purpose as shown would decide hexis by that act. (Raised on commons.systems/disposition-graph/purpose.)
+
+## Facts
+
+### existence
+
+Prune: The redundancy finding notes that this node decides a clause purpose's draft already contains, so a confirmation of purpose as shown decides it by that act and a contrary ruling here would reopen purpose's draft. Its alternative to keeping the option-node is to fold the option into purpose's Proposal as an explicit alternative, which is what the first option on rejected would make structural, that decision being itself unruled.
 
 ## Recommendation
 

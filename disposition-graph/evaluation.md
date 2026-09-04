@@ -3,7 +3,6 @@ question: How is a design or a proposal evaluated?
 stage: maieutic
 recommendation:
   adopts: standing
-  class: ratified
   boldness: moderate
   amends: "54fcdf876c5d7d56c3911d0ea0e0ee80df17052e"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -25,6 +24,13 @@ alternatives:
   - name: bounded-overrule
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

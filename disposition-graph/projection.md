@@ -3,7 +3,6 @@ question: How is the record read?
 stage: ruling
 recommendation:
   adopts: draft
-  class: ratified
   boldness: moderate
   amends: "cf07e99b282ef5c28b81af1f8865ee1ae2d366ca"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -36,6 +35,13 @@ alternatives:
   - name: shim-carries-framed-viewer
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

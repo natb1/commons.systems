@@ -3,7 +3,6 @@ question: Does freedom as non-domination support the modal reading of this root?
 stage: maieutic
 recommendation:
   adopts: standing
-  class: delegated
   boldness: high
   amends: "d8e9b465fe722085ad7a3c570357d87947718e5b"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -22,6 +21,13 @@ alternatives:
   - name: disclose-unstated-arche
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: high
 form: reading
 authority:
   class: deferred

@@ -3,7 +3,6 @@ question: How is transient disposition recorded?
 stage: maieutic
 recommendation:
   adopts: standing
-  class: ratified
   boldness: high
   amends: "e1f5fea813e4b060aeb470ef0faf78417b32c728"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -28,6 +27,13 @@ alternatives:
   - name: reduce-un-aligned-paragraph
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: high
 form: rule
 authority:
   class: deferred

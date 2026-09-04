@@ -3,7 +3,6 @@ question: How is work divided between the main thread and subagents?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: low
   amends: "f502a72fb724801305671c884e3c090573471853"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -12,6 +11,13 @@ review:
   strength: weak
   date: 2026-09-03
   of: f502a72fb724801305671c884e3c090573471853
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 form: rule
 authority:
   class: deferred

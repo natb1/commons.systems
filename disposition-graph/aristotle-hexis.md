@@ -3,7 +3,6 @@ question: Does Aristotle's hexis support reading this record as a projection of 
 stage: ruling
 recommendation:
   adopts: standing
-  class: delegated
   boldness: high
   amends: "2b2f43f9f4df2093a9f0a8182145295cd84f71f9"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -22,6 +21,13 @@ alternatives:
   - name: hold-for-knowledge-store
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: high
 form: reading
 authority:
   class: deferred

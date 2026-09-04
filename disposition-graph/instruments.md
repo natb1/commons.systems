@@ -3,7 +3,6 @@ question: How would we know an answer still holds?
 stage: maieutic
 recommendation:
   adopts: criteria-draft
-  class: ratified
   boldness: moderate
   amends: "11ed21e08230f8aec15782655434a2bce7946e68"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -34,6 +33,13 @@ alternatives:
   - name: one-ruling-for-the-word
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

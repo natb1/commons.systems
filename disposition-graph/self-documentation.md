@@ -5,10 +5,13 @@ alternatives:
   - name: section-of-its-own
     source: author
     ref: "2026-09-03"
-  - name: fold-into-projection
-    source: ai
-    ref: "2026-09-03"
-    prune: true
+facts:
+  - name: existence
+    choices:
+      - keep
+      - prune
+    adopts: keep
+    boldness: moderate
 under:
   - commons.systems/disposition-graph/purpose
 ---
@@ -23,7 +26,9 @@ The author, 2026-09-03, in the high-level order recorded on the scope node:
 
 Self-documentation is a section of its own, this node under purpose, answering that the record is its own documentation, read through the graph browser in rank order, with a boost equal to scope's so that the equality the author stated is exact and scope's order field names this node in its first step. The browser's own disposition, owed by projection's shim, would then live under it. This is what the author's own words place in the high-level order, self documentation via the graph browser, equal with scope; the session also noted the author's remark that the browser may need a high-ranking disposition of its own.
 
-### fold-into-projection
+## Facts
+
+### existence
 
 Prune: The session's mapping of the author's self-documentation section to the projection node stands, on the ground that projection's answer already makes the browser the human projection of the record, and this node is pruned. The cost is that the equality the author stated cannot be exact, since projection's rank is a share of model's and scope's a share of purpose's, and is realized only as each being outranked by nothing but its own ancestors. Scope's order field already encodes this mapping.
 

@@ -3,7 +3,6 @@ question: What orders the unanswered frontier for alignment?
 stage: maieutic
 recommendation:
   adopts: settle-counts-nodes-only
-  class: ratified
   boldness: moderate
   amends: "4fa0c9e7b71f62087b2953d6a5ba212e3cc3368a"
   at: "919cea3b"
@@ -14,6 +13,13 @@ alternatives:
   - name: settle-counts-nodes-only
     source: ai
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 under:
   - commons.systems/disposition-graph/alignment-target
   - commons.systems/disposition-graph/attention

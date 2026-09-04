@@ -3,7 +3,6 @@ question: When is a disposition answered?
 stage: maieutic
 recommendation:
   adopts: responses-on-decisions-and-children
-  class: ratified
   boldness: low
   amends: "b5717e656b723368acf1ad6f3609c7ab85c6a1a3"
   at: "919cea3b"
@@ -22,6 +21,13 @@ alternatives:
   - name: child-ruling-held-until-the-parent
     source: ai
     ref: "2026-09-04"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 depends:
   - commons.systems/disposition-graph/alignment-page
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes

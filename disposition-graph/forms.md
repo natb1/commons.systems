@@ -3,7 +3,6 @@ question: Which forms may an answer take?
 stage: ruling
 recommendation:
   adopts: rule-beside-disposition
-  class: ratified
   boldness: moderate
   amends: "2443bdd51f8aad4c8b45db6d5276e12aceebd5e5"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -26,6 +25,13 @@ alternatives:
   - name: assumption-is-instrumentation
     source: author
     ref: "2026-09-02"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 under:
   - commons.systems/disposition-graph/node
 ---

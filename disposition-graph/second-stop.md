@@ -3,7 +3,6 @@ question: What does a newcomer read after purpose?
 stage: ruling
 recommendation:
   adopts: rewrite-model
-  class: ratified
   boldness: moderate
   amends: "b5c872a03ea888a605ea0ed45211099a5205ec47"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -19,10 +18,19 @@ alternatives:
   - name: primer-node
     source: ai
     ref: "2026-09-03"
-  - name: fold-into-model
-    source: review
-    ref: "2026-09-03"
-    prune: true
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
+  - name: existence
+    choices:
+      - keep
+      - prune
+    adopts: keep
+    boldness: moderate
 under:
   - commons.systems/disposition-graph/model
 ---
@@ -36,7 +44,9 @@ The model node's answer is rewritten for the reader arriving from purpose, witho
 
 A new primer node sits between purpose and model, introducing the graph primitives, and model's answer is left as it stands. Model's draft rationale rejects this on the ground that such a node would answer no question model does not.
 
-### fold-into-model
+## Facts
+
+### existence
 
 Prune: This node is pruned and its two options are carried on model as alternatives in model's own dialogue state, so the author rules once rather than on two screens with no ordering shown. The redundancy finding of 2026-09-03 offers this against keeping the option-node as the survivor of its question, and observes that confirming model's draft as shown decides this question by that act.
 

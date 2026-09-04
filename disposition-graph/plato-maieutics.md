@@ -3,7 +3,6 @@ question: Does Plato's midwifery ground the maieutic conduct of the interview?
 stage: ruling
 recommendation:
   adopts: standing
-  class: delegated
   boldness: high
   amends: "14b35991f614846973e8e1b3ce3a4c1cb929aabe"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -19,6 +18,13 @@ alternatives:
   - name: propose-and-critique
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: high
 form: reading
 authority:
   class: deferred

@@ -3,7 +3,6 @@ question: What is a node?
 stage: maieutic
 recommendation:
   adopts: four-form-draft
-  class: ratified
   boldness: moderate
   amends: "7f819037912b5f0a31a839f35624b060e4ba9c6a"
   at: "9e3a66240872d3512a3acf085f3154b9004028a2"
@@ -24,6 +23,13 @@ alternatives:
   - name: absorb-form-vocabulary
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

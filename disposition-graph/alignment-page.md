@@ -3,7 +3,6 @@ question: What does the author read to rule?
 stage: maieutic
 recommendation:
   adopts: three-column-ruling-screen
-  class: ratified
   boldness: moderate
   amends: "58feba8753e69fc8f557f0a318735219940f5272"
   at: "919cea3b"
@@ -20,6 +19,19 @@ alternatives:
   - name: decisions-are-the-widest-column
     source: ai
     ref: "2026-09-04"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
+  - name: persistence
+    choices:
+      - with the page's shim
+      - without it
+    adopts: with the page's shim
+    boldness: low
 depends:
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
 under:
@@ -90,6 +102,12 @@ Each metric links to the first node on this page that it counts, keeping the aut
 ### decisions-are-the-widest-column
 
 The decisions take the widest column and the node as it would stand sits in a narrow pane beside them, which is the plainer reading of the author's own phrase, "right aligned context pane". Against it: the reason the author gave for moving the detail there was that the result should be in view while the list is worked, and a whole node's text in a narrow pane is not in view. The answer takes the reason over the noun and lets the pane expand to the whole screen on demand; a ruling for this alternative takes the noun.
+
+## Facts
+
+### persistence
+
+The recommendation declares a shim on this node that the node does not carry today: the alignment page itself, moved here from `growth` with its declaration date of 2026-09-03 intact and its liquidation condition unchanged, its `for:` line rewritten to name this node's answer. Confirming it makes this node the shim's home; denying it leaves the shim on `growth`, where it describes a page that no node's ruling settles. The two nodes rule together, and `growth` carries the matching decision.
 
 ## Recommendation
 
@@ -715,4 +733,51 @@ encoding and the new reader rejects the old. The implementation lands first and
 the graph immediately after, so there is a window in which `origin/disposition`
 and `origin/greenfield` disagree. It cannot be closed by ordering, only made
 short.
+
+### The reconciliation, under the grant of 2026-09-04
+
+What was written, and the judgments inside it that are the AI's rather than
+the record's, so the review and the author can see them.
+
+**The graph's re-encoding.** Fifty-six nodes gained `facts`. The
+`authority` fact was written on every node carrying a recommendation, its
+`adopts` taken from the `class` that recommendation carried and its
+`boldness` from the recommendation's own; where a node carries a prune
+alternative but no recommendation, the boldness defaults to `moderate`,
+which is a mechanical default and not a judgment about that node. Fifty-four
+`class` keys left the recommendation. Six nodes carried a prune alternative,
+which became the `existence` fact with the alternative's prose moved into a
+`## Facts` subsection; only `audience`, whose recommendation adopted the
+prune, carries `existence: prune`, and the other five carry `keep` with the
+prune as the choice beside it. Two nodes gained `persistence`, `growth` and
+this one, because the recommendation on each changes the node's shape by
+moving the alignment page's shim; those two were written by hand and their
+choices are named in their `## Facts`.
+
+**The verification that mattered.** The finding recorded on `dialogue`, that
+`facts` had to join `stripDialogueFrontmatterLines` or every pin in the
+record would go stale at once, was fixed and then checked rather than
+assumed: the graph at `ea34be71` read by the old reader and the graph after
+the re-encoding read by the new one give the same standing hash for all
+seventy-two nodes, none moved, and no recommendation pin is stale in either.
+The encoding change is invisible to the standing text, which is what the
+answer requires of dialogue state.
+
+**The implementation.** The reader validates the three reserved names, a
+fact adopting one of its own choices, a ruling naming one too, the
+`authority` fact's choices drawn only from the classes a confirmation
+confers, and `## Facts` subsections as a subsequence of the facts in order;
+the prune exception on the fence is gone, since every adopted alternative
+now has a text to quote. The projector's alignment page is the three-column
+screen this node's answer describes, and the browser and the frontier both
+show the facts. The alignment and review skills carry the reversed direction
+of boldness, the recommendation recordable at any stage, responses on
+decisions and on children, the stamp taken from the `authority` fact, and
+the page's description cited rather than restated. `.claude/rules/evaluation.md`
+was regenerated; it was the only rule projection behind.
+
+**What the reconciliation did not do.** It wrote no answer onto any node and
+stamped nothing. Every recommendation from this sitting is still
+unanswered, and the clean-context review of the batch has not run. The grant
+is spent with this landing.
 

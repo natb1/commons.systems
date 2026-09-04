@@ -3,7 +3,6 @@ question: How are rejected alternatives recorded?
 stage: maieutic
 recommendation:
   adopts: rejected-list-on-node
-  class: ratified
   boldness: moderate
   amends: "a690b78059fc71af0d30081475052a0b71ce3460"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -28,6 +27,13 @@ alternatives:
   - name: record-rejected-dispositions
     source: author
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 under:
   - commons.systems/disposition-graph/node
 ---

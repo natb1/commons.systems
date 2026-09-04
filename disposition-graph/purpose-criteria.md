@@ -3,7 +3,6 @@ question: What criteria guard the purpose node?
 stage: ruling
 recommendation:
   adopts: unguarded
-  class: ratified
   boldness: low
   amends: "344adc6d0c702185eb7c60d50d6523d171c5a3a6"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -19,10 +18,19 @@ alternatives:
   - name: drafted-criteria
     source: ai
     ref: "2026-09-03"
-  - name: fold-into-purpose
-    source: review
-    ref: "2026-09-03"
-    prune: true
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
+  - name: existence
+    choices:
+      - keep
+      - prune
+    adopts: keep
+    boldness: low
 under:
   - commons.systems/disposition-graph/purpose
 ---
@@ -36,7 +44,9 @@ Criteria are deferred to a later sitting and purpose shows as unguarded, the rec
 
 Purpose carries the two criteria as drafted: a check that every unit of work the harness dispatches cites the node it serves, and an assessment that work done in the author's name since the last sitting traces to a recorded disposition. The session withdrew it after the review, on the ground that the check names a harness that does not exist and the assessment has no failure condition, so it cannot fail and cannot guard; the Options block nevertheless still lists it. It remains on the table as the option the author may take.
 
-### fold-into-purpose
+## Facts
+
+### existence
 
 Prune: The redundancy finding holds that this node decides a clause purpose's own recommended text contains, so confirming purpose as shown would decide it by that act. Its second branch folds the option into purpose's account as an explicit alternative and prunes this node, which is what the new encoding makes structural; its first branch keeps the node with one line saying it is a sub-ruling of purpose that must be ruled first.
 

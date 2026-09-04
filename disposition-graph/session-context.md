@@ -3,7 +3,6 @@ question: What does a session load, and where does it come from?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: low
   amends: "fc0acbfe47326951c44a94172df883ddae557aad"
   at: "92b5423bde90a0d3031d176acbcfeb8956a7557e"
@@ -25,6 +24,13 @@ alternatives:
   - name: shim-names-an-existing-artifact
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 form: rule
 authority:
   class: deferred

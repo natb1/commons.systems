@@ -3,10 +3,16 @@ question: What does progressive disclosure say about which decisions the page as
 stage: maieutic
 recommendation:
   adopts: standing
-  class: delegated
   boldness: moderate
   amends: "fc0f9325998248c689c8b084cf094597e50f7edb"
   at: "919cea3b"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: moderate
 form: reading
 authority:
   class: deferred

@@ -3,7 +3,6 @@ question: How are references to tradition recorded?
 stage: ruling
 recommendation:
   adopts: draft
-  class: ratified
   boldness: moderate
   amends: "8029e1b5968e7e2801b1396b631c2e23d3e52adf"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -24,6 +23,13 @@ alternatives:
   - name: hold-for-traditions-home
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

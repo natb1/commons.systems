@@ -3,7 +3,6 @@ question: Where does the record live, and how does a write land?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: moderate
   amends: "72caff41dffaf05f1c6495c7238db8874c82883b"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -19,6 +18,13 @@ alternatives:
   - name: deferred-recommendation
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

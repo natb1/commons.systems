@@ -5,10 +5,13 @@ alternatives:
   - name: vocabulary-stays-with-the-owning-nodes
     source: ai
     ref: "2026-09-03"
-  - name: fold-into-node-and-prune
-    source: review
-    ref: "2026-09-03"
-    prune: true
+facts:
+  - name: existence
+    choices:
+      - keep
+      - prune
+    adopts: keep
+    boldness: moderate
 under:
   - commons.systems/disposition-graph/node
 ---
@@ -23,7 +26,9 @@ The author, 2026-09-02:
 
 The sitting's proposed answer, never stamped and still open for the ruling: no new nodes, each term defined by the node that owns it through the defines field, disposition by model, arche by agency, reading and tradition by readings, criterion and assumption by instruments. The term index links every use in prose to that node, and a term no node defines is not linked, which is how drift shows.
 
-### fold-into-node-and-prune
+## Facts
+
+### existence
 
 Prune: The redundancy finding holds that this node restates two other nodes' answers, projection's on linking every defined term and readings' on reaching a tradition through the name it defines, and adds one decision that is a rejected alternative rather than a question. It proposes folding the node into node's rationale as a rejected alternative, one node per form rejected because each would restate the definition its owning node already carries, and pruning this node, which is what its own facts already say with persistence not recorded. The author's quotation it carries is already carried verbatim on node. Also raised on commons.systems/disposition-graph/readings.
 

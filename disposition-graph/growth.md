@@ -3,7 +3,6 @@ question: How does the graph grow?
 stage: maieutic
 recommendation:
   adopts: boldness-reversed
-  class: ratified
   boldness: low
   amends: "2f75c4a5f319a25611a615e86d33499292c12b6e"
   at: "919cea3b"
@@ -43,6 +42,19 @@ alternatives:
   - name: boldness-left-and-dialogue-corrected
     source: ai
     ref: "2026-09-04"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
+  - name: persistence
+    choices:
+      - both shims kept
+      - the page's shim moved out
+    adopts: the page's shim moved out
+    boldness: low
 depends:
   - commons.systems/disposition-graph/alignment-page
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
@@ -152,6 +164,12 @@ This node's definition sentence is reversed, so that boldness is how much of a r
 ### boldness-left-and-dialogue-corrected
 
 The inverse repair: this node's definition stands and the dialogue node, the alignment skill, and every boldness stamp in the record are corrected to match it. Against it: the author's own words give the direction, "I want to know how much rests on the AI's own knowledge against the record", so the correction would be against the author; and the stamps were written under the usage, so it would silently reverse the meaning of every one of them.
+
+## Facts
+
+### persistence
+
+The recommendation drops one of this node's two shims: the alignment page, which moves to `commons.systems/disposition-graph/alignment-page` with its declaration date and its liquidation condition intact. The skill shim stays, because this node is still what the alignment skill projects. Confirming it leaves one shim here; denying it leaves the page described in two places, which is what minting the page's own node was for. The two nodes rule together, and `alignment-page` carries the matching decision.
 
 ## Recommendation
 

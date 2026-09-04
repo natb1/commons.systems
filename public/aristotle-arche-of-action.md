@@ -3,7 +3,6 @@ question: Does Aristotle's account of the agent as archē support this root?
 stage: maieutic
 recommendation:
   adopts: standing
-  class: delegated
   boldness: high
   amends: "0acb85683a8d46d0b6fc7eecea8c602915370b39"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -19,6 +18,13 @@ alternatives:
   - name: disclose-unstated-arche
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: high
 form: reading
 authority:
   class: deferred

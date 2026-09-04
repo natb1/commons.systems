@@ -2,8 +2,7 @@
 question: Who is this repository for?
 stage: ruling
 recommendation:
-  adopts: prune
-  class: ratified
+  adopts: standing
   boldness: low
   amends: "7e0658e014ebf7b9b751a068f9e930037a776ca4"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -12,11 +11,19 @@ review:
   strength: weak
   date: 2026-09-03
   of: 7e0658e014ebf7b9b751a068f9e930037a776ca4
-alternatives:
-  - name: prune
-    source: author
-    ref: "2026-09-02"
-    prune: true
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
+  - name: existence
+    choices:
+      - keep
+      - prune
+    adopts: prune
+    boldness: low
 form: rule
 authority:
   class: deferred
@@ -38,9 +45,9 @@ Humans who want to manage the alignment of long-horizon AI agent workflows, or s
 
 The author's words, 2026-09-02. Purpose, scope, audience, and definitions are the first four things a requirements specification states, in that order, and the onboarding walk of this graph follows the same order (the reading under the purpose node). That the audience may arrive via an AI is why the onboarding pages must be legible to a model as well as to a person: plain statements, defined vocabulary, and stable ids.
 
-## Alternatives
+## Facts
 
-### prune
+### existence
 
 Prune: in the author's own words, the question is handled by the purpose node already and can be pruned. Purpose states its readers, as the requirements tradition states them inside its purpose section; the five-audience finding moves to coverage, which carries the author's words on the audience verbatim; and projection no longer names audience as a source of the description and tags. The coverage finding of 2026-09-03 verified that those words are carried verbatim on both audience and coverage, so one disposition is answered twice while audience still stands at the review stage recommending a ratified answer of its own, and proposes the double answer be resolved in coverage's favour. Its persistence is 'not recorded', naming purpose and coverage as the destinations. Raised on commons.systems/disposition-graph/scope.
 

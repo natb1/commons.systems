@@ -3,7 +3,6 @@ question: What does an unanswered node carry?
 stage: maieutic
 recommendation:
   adopts: aspects-are-nodes
-  class: ratified
   boldness: low
   amends: "163f5ee5130f88f160523f95c72381f26751e96d"
   at: "e228e67e"
@@ -40,6 +39,13 @@ alternatives:
   - name: aspects-are-nodes
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 form: rule
 authority:
   class: deferred

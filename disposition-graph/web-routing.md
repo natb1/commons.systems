@@ -3,7 +3,6 @@ question: Does the web-routing tradition support addressing every node of the br
 stage: ruling
 recommendation:
   adopts: standing
-  class: delegated
   boldness: moderate
   amends: "74904a88c15edb6ed067605b3ee2c0fe1f5216de"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -22,6 +21,13 @@ alternatives:
   - name: divergence-as-shim
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: moderate
 form: reading
 authority:
   class: deferred

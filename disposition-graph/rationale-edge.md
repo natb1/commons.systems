@@ -3,7 +3,6 @@ question: Is the rationale the prose of the under edge?
 stage: ruling
 recommendation:
   adopts: rationale-stays-with-node
-  class: ratified
   boldness: moderate
   amends: "04432816cb452ea70552fab00ede5f8a21071c1f"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -28,6 +27,13 @@ alternatives:
   - name: rationale-as-the-edge-prose
     source: author
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 under:
   - commons.systems/disposition-graph/under
 ---

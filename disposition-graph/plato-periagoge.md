@@ -3,7 +3,6 @@ question: Does Plato's turning of the soul ground the periagogic conduct of the 
 stage: ruling
 recommendation:
   adopts: standing
-  class: delegated
   boldness: high
   amends: "0f30a15c1ff956bcde006cef7e51516c58570a67"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -19,6 +18,13 @@ alternatives:
   - name: citation-once
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: delegated
+    boldness: high
 form: reading
 authority:
   class: deferred

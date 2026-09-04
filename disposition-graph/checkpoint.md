@@ -3,7 +3,6 @@ question: When is the dialogue's state written to the record?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: low
   amends: "5f7995b74efc284666ec9eb8ea218e1b6eb3977b"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -22,6 +21,13 @@ alternatives:
   - name: drop-unpinned-evidence
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 form: rule
 authority:
   class: deferred

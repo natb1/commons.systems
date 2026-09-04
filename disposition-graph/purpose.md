@@ -3,7 +3,6 @@ question: What is this repository for?
 stage: ruling
 recommendation:
   adopts: draft
-  class: ratified
   boldness: moderate
   amends: "2266ff6ab8146396366abd0d87850c26a4db9d08"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -31,6 +30,13 @@ alternatives:
   - name: keep-the-authors-words
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: target
 under:
   - commons.systems/public/agency

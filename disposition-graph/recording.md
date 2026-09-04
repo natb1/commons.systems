@@ -3,7 +3,6 @@ question: How is a disposition confirmed and recorded?
 stage: maieutic
 recommendation:
   adopts: responses-classified-per-decision
-  class: ratified
   boldness: low
   amends: "75336fcff7555274971f7db32a861b19c5651f4e"
   at: "919cea3b"
@@ -34,6 +33,13 @@ alternatives:
   - name: stage-per-decision
     source: ai
     ref: "2026-09-04"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 depends:
   - commons.systems/disposition-graph/unanswered
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes

@@ -3,7 +3,6 @@ question: Does the same record serve as a knowledge store?
 stage: ruling
 recommendation:
   adopts: criterion-draft
-  class: ratified
   boldness: low
   amends: "cdf3ee5e6bebfb505979e42af0b6e66490192646"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -28,6 +27,13 @@ alternatives:
   - name: cite-forms
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: low
 form: assumption
 authority:
   class: deferred

@@ -3,7 +3,6 @@ question: How is materialized implementation reviewed before it lands?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: high
   amends: "dab5283611f8c4500c3aaef7eb48e3a1338b922c"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -25,6 +24,13 @@ alternatives:
   - name: deferred-not-ratified
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: high
 form: rule
 authority:
   class: deferred

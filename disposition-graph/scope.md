@@ -3,7 +3,6 @@ question: What does this repository cover, and in what order?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: moderate
   amends: "261ffa74ad0d8e02d42c421649e8996036cace9c"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -23,6 +22,13 @@ alternatives:
   - name: order-names-self-documentation
     source: ai
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

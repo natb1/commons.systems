@@ -3,7 +3,6 @@ question: Where does a tradition node live?
 stage: ruling
 recommendation:
   adopts: one-traditions-graph
-  class: ratified
   boldness: moderate
   amends: "848aff5b9ecff9467e39717cc2fdb272394a3233"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -25,6 +24,13 @@ alternatives:
   - name: show-the-manifest-entry
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 under:
   - commons.systems/disposition-graph/readings
 ---

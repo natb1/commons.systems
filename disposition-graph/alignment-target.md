@@ -3,7 +3,6 @@ question: What does the alignment session take up when given nothing?
 stage: ruling
 recommendation:
   adopts: standing
-  class: ratified
   boldness: moderate
   amends: "cf7380d981f78d72c48354ded418402738858428"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -16,6 +15,13 @@ alternatives:
   - name: ruling-order-not-rank
     source: author
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 form: rule
 authority:
   class: deferred

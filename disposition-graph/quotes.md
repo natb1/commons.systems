@@ -3,7 +3,6 @@ question: How are the author's words retained when a ruling is recorded?
 stage: ruling
 recommendation:
   adopts: ruling-stays-in-node
-  class: ratified
   boldness: moderate
   amends: "6d201558a0f7a7edbc82636c72a3cd4852d90562"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
@@ -34,6 +33,13 @@ alternatives:
   - name: one-ruling-for-the-unquoted-stamp
     source: review
     ref: "2026-09-03"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
 under:
   - commons.systems/disposition-graph/authority
 ---
