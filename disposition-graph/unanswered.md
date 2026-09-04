@@ -21,6 +21,9 @@ alternatives:
   - name: child-ruling-held-until-the-parent
     source: ai
     ref: "2026-09-04"
+  - name: unanswered-is-no-ruling
+    source: author
+    ref: "2026-09-04"
 facts:
   - name: authority
     choices:
@@ -31,6 +34,7 @@ facts:
 depends:
   - commons.systems/disposition-graph/alignment-page
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
+  - commons.systems/disposition-graph/viable-options
 form: rule
 authority:
   class: deferred
@@ -102,6 +106,10 @@ The description of the alignment page leaves this answer for the node that asks 
 ### child-ruling-held-until-the-parent
 
 A confirmation on a child given while the parent is open is held and recorded when the parent is ruled, by analogy with the confirmation held until the review runs. Against it: the review is a step in producing the draft the author is confirming, so a confirmation before it confirms something unfinished, while a parent's ruling is no part of producing the child's draft. Holding a ruling the author gave would make their ratification wait on a question they did not ask about, and the alignment-order node is explicit that the author's choice of what comes next is their own order.
+
+### unanswered-is-no-ruling
+
+Unanswered is the state of a node no ruling grants: nothing on it acts, and it is reconciled only on an explicit grant. Deferred is not that state but a class the author confers on the authority fact, beside ratified and delegated, under which the recommendation acts and the node stays on the alignment frontier; the answer's ground for rejecting a fourth response, that leaving a node unconfirmed is the deferral, no longer holds, and no fourth response is needed, since the deferral is a choice on a fact. The alignment frontier becomes every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling. The three responses and the status derived rather than stored are unchanged. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
 ## Recommendation
 

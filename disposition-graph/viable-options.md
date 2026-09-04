@@ -1,6 +1,30 @@
 ---
 question: Is authority a projection of the state of a node's viable options?
-stage: maieutic
+stage: review
+recommendation:
+  adopts: grant-from-a-ruling
+  boldness: moderate
+  amends: "5fbba085c9eee209f9164ba08987100ccb28dc1d"
+  at: "4ad06dab"
+alternatives:
+  - name: authority-derived
+    source: author
+    ref: "2026-09-04"
+  - name: grant-from-a-ruling
+    source: ai
+    ref: "2026-09-04"
+  - name: grant-from-a-recommendation
+    source: ai
+    ref: "2026-09-04"
+facts:
+  - name: authority
+    choices:
+      - ratified
+      - delegated
+    adopts: ratified
+    boldness: moderate
+depends:
+  - commons.systems/disposition-graph/dialogue#aspects-are-nodes
 form: rule
 under:
   - commons.systems/disposition-graph/authority
@@ -19,6 +43,99 @@ The author, 2026-09-04:
 > Under this model the prior statement that "reconciliation never edits the graph" is incomplete. Whatever persistent state reconciliation requires for reconciliation operations (if any) is stored outside the graph - true. But, AI has the authority record untracked but viable alternative options and to change its recommendation during either reconciliation or rsi. If the recommendation is on ratified node then that triggers the alignment frontier projection described above. Subject to attenuation/breakout controls - if the change of recommendation is on delegated or deffered node then it changes the shape of the reconciliation frontier.
 >
 > Progress this dialogue through meiutic and stop before adversarial review.
+
+## Alternatives
+
+### authority-derived
+
+The model as the author's words state it, put on the table by them on
+2026-09-04: every fact on a node carries a list of viable options, each with
+the AI's recommendation and why, the traditions for and against it, and the
+confirmed choice and why where there is one; the class is read off that state
+rather than written as a stamp; a proposal is a ratified node whose
+recommendation has moved from its confirmed choice; delegated and deferred
+both let the recommendation act and differ in whether the node stays on the
+alignment frontier; the options persist after confirmation; and reconciliation
+and rsi may add options and move recommendations. The words leave open who
+grants a class, whether "after" is a matter of clock or content, and what
+"attenuation/breakout controls" are. The two alternatives below are the AI's
+two readings of the first of those; a ruling for this one as stated leaves it
+open.
+
+### grant-from-a-ruling
+
+The model with the grant traced to the author's ruling. A class follows from a
+ruling recorded on the node's facts, on the node itself or on an ancestor whose
+scope covers the decision: ratified where the answer fact carries a ruling,
+delegated or deferred where the authority fact does, and unanswered where none
+does, in which state nothing acts and reconciliation takes an explicit grant.
+Deferred is therefore a class the author confers, a third choice on the
+authority fact, and the deferred stamps the bootstrap wrote for itself remain
+unanswered as the author classified them. Adopted by the recommendation and set
+out in the fence, with the pin by content, the delegated node held off the
+alignment frontier on a move within its scope, and re-confirmation resuming at
+the movement the recording node's classification calls for.
+
+### grant-from-a-recommendation
+
+The model with the grant read off the recommendation. A reviewed
+recommendation acts as deferred by default, the author's review owed on it,
+until a ruling ratifies or delegates it; unanswered is the state before a
+recommendation has been reviewed. It is the reading under which the record's
+forty-six deferred stamps would act, and under which the clean-context
+review's repeated counter-argument, that deferred answers act while the
+record calls them unanswered, is answered by letting them. Against it: the AI
+would then confer authority on itself by writing a recommendation and passing
+its own review, and no node the AI had drafted could ever be held unanswered,
+which is the state the author reclassified the whole record into on
+2026-09-03; the authority node holds that no command confers a class, and a
+review that stamps is a command.
+
+## Facts
+
+### authority
+
+Ratified. The answer redefines what authority is in this record and opens a
+write path from reconciliation into the graph, which is the capture-shaped
+case the alignment skill escalates toward ratified; a delegation of this
+decision would be a delegation of the definition of delegation.
+
+## Recommendation
+
+```markdown
+---
+question: Is authority a projection of the state of a node's viable options?
+form: rule
+authority:
+  class: ratified
+  by: Nathan Buesgens
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/authority
+  - commons.systems/disposition-graph/dialogue
+defines:
+  - option
+  - viable
+  - grant
+---
+## Answer
+
+Yes. A node's authority is read off the rulings recorded on its facts, and no stamp is written beside them. Every decision on a node is a fact with a list of viable options, possibly one: the answer, whose options are the candidate answers to the node's question, and the reserved three the dialogue node names, authority, existence, and persistence; any other decision the author would rule on separately is a question and a node under this one. An option carries its name, its source and reference, in prose what it would answer, and in full the text where it would stand as the answer and differs from what stands; the readings that bear on it, each saying whether the tradition supports or contradicts it; and, on the one option of each fact the AI recommends, why and with what boldness. A ruling is the author's act on the option they chose, recorded on it: the response, the date, and a pin of the recommendation it answered. Only the author rules, on the alignment page or in prose, and the AI writes no ruling and no class for itself.
+
+The class follows from the rulings. Ratified: the answer fact carries a ruling, and the confirmed choice acts. Delegated: the authority fact carries the ruling delegated, the recommendation acts, the delegation covers the class of decision it names below the node, and the author does not want to be asked again. Deferred: the authority fact carries the ruling deferred, the recommendation acts, and the node stays on the alignment frontier until the author returns to it. Unanswered: no fact carries a ruling, nothing on the node acts, and reconciling anything under it takes an explicit grant from the author for that reconciliation, given in their words and never assumed; that is a standing rule of this record, not a shim, and it does not expire. A ruling on an ancestor grants the decisions its scope covers to the nodes beneath it, and authority only narrows on the way down. A class the AI wrote for itself is not a grant: the deferred stamps the bootstrap wrote are unanswered, as the author classified them on 2026-09-03, until a ruling grants them.
+
+The facts persist after the ruling: the confirmed choice with the author's reason, the recommendation with its reason, the readings on each option, and every option the AI holds viable, so that a later session meets what was considered and why before proposing it again. Viable means not dominated on the record's criteria, in the AI's judgment, which is what the evaluation node's solution frontier means for one decision; an option the AI no longer holds viable leaves the list, and the option that displaced it says why. What dies at the recording is the dialogue: the stage, the review, the dependencies, and the account; the author's words stay as the quotes node decides. A rejected alternative is a viable option not chosen. The projections show a node's confirmed choice first and, beneath it, the recommendation, the other options, and what each tradition says.
+
+The AI may add a viable option to any fact and may move a fact's recommendation, in alignment, in reconciliation, and in the loop on itself, and may not rule, edit a ruling or the author's words, or recommend beyond the scope a delegation confers. What a move does is read from the class. On a ratified node the confirmed choice keeps its full authority and the node returns to the alignment frontier for re-confirmation, at the movement the recording node's classification calls for, the review where only the recommendation moved; that state is what proposal names here: a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source. On a deferred node the recommendation acts, the reconciliation frontier changes with it, and the node was on the alignment frontier already. On a delegated node the recommendation acts within the delegation's scope and the node stays off the alignment frontier, since that is what the author asked for; a move that would leave the scope is not the AI's to recommend, is recorded as an option, and returns the node to the author with its class intact. On an unanswered node nothing acts and the move is dialogue. Moved is a matter of content and not of clock: the ruling pins the recommendation it answered, and the frontier flags the node when the recommended option or its reason has changed since. The frontiers are projections of the same state, and the record stores neither: the alignment frontier is every node with no ruling, every deferred node, and every proposal; the reconciliation frontier is every node whose acting option's instrument fails.
+
+## Rationale
+
+The author's disposition of 2026-09-04, quoted above: "Is 'unanswered' just an authority - as in no authority granted for reconciliation ... explicit bootstrap authority required for reconciliation - in this way bootstrap authority is not a shim, but a persistent disposition about reconciliation authority"; "Each fact on a node, regardless of authority, has viable options list"; "Proposals are just nodes with ratified authority and a fact with confirmed choice that deviates from AI recommendation"; "'delegated' and 'deferred' authority mean reconciliation authority is granted for AI recommendation without requiring confirmation. Delegated means the node is removed from the alignment frontier and deferred means it remains"; "the prior statement that 'reconciliation never edits the graph' is incomplete". The words leave one thing open that the answer decides: who grants. Every authority this record knows comes from the author's ruling, as the authority node says, "Ratification happens only through that dialogue ... no command does", so a class must trace to a ruling, on the node or on an ancestor whose scope covers it; the reading under which a reviewed recommendation acts as deferred by default is rejected because it would leave no node the AI could ever hold unanswered, which is the state the author reclassified the whole record into on 2026-09-03.
+
+Why a projection and not a stamp: the record already stores the ruling on a fact with its response, choice, date, and pin, so a stamp beside it is a copy, and a copy drifts, which is the reason the unanswered node gave for deriving the status; the same reason derives the class. Why the options persist: the author's reason, regression, and the tradition the encoding already adopts, which keeps every considered option beside the decision; what persists is judgment that re-derivation cannot reconstruct, the author's rulings, the AI's recommendations and viability calls, and the readings, while the account, which re-running the review reconstructs, still dies, so the minimal-state principle on the dialogue node is kept by its own test. Why the line on reconciliation falls where it does: the record is the sole carrier, and a divergence found in reconciliation and held on a derived frontier until an alignment session transcribes it is a decision outside the record; as an option it is in the record at once, changes nothing the author confirmed, and returns a ratified node to the author by the same projection that returns any proposal; operational state stays outside the graph, as the author said. Why a delegated node stays off the alignment frontier on a move within scope: delegated means the author does not want to be asked again, and a rule that asks them anyway on every change, as the evaluation node's did, delegates nothing; the bound that rule wanted is the scope, and a move beyond it does return the node. Why the pin is content: a clock cannot tell a recommendation re-affirmed from one changed, and the record pins by hash everywhere else.
+
+Rejected: a stored stamp beside the rulings, since it is a copy and drifts; deferred conferred by the AI on itself, the second reading of the author's words, since it empties unanswered; a fourth response, defer, on the page, since deferred is a choice on the authority fact and the three responses stand; a timestamp as the pin, since content is what changes; the report-and-wait path for a reconciliation divergence, since it holds a decision outside the record; a delegated node returned to the author on every moved recommendation, since it un-delegates; re-confirmation opening at the periagogic movement in every case, since the classification the recording node already makes says where a dialogue resumes and only the recommendation moved; options folded into the rationale as prose at the recording, since the author found the prose ad hoc and the structure is what regression needs; keeping every option ever recorded whether or not viable, since the list would grow without a reason and version control holds what left. Traditions, recorded as readings under this node or owed under the stub-traditions ruling: architecture decision records in the MADR form, adopted for the considered options kept beside the decision, the divergence narrowing to the stage stored and the status derived; IBIS, adopted for positions with the arguments for and against each; event sourcing and the derived view, adopted for the class as a projection of recorded rulings, with the warning that every reader must derive it the same way; the spec and status of level-triggered reconciliation, adopted for the two frontiers as the difference between the AI's recommendation and what stands; attenuation in object-capability systems, adopted for what reconciliation may write; the recorded dissent and the motion to reconsider, adopted for the proposal state, a decision in force with the contrary recommendation on the record; the Pareto frontier, adopted for what viable means; and approval-directed agents, adopted for deferred as action under a review owed.
+```
 
 ## Account
 
@@ -275,3 +392,235 @@ whether the disposition is a new question or a new answer to one the record
 already asks, is given in the minting section above and is not repeated: it
 is a new answer to eleven questions bound by one premise no node asks, and the
 premise is this node.
+
+### The maieutic movement, 2026-09-04
+
+The conduct: the answer lives in the author, unrecorded, and the AI draws it
+out with visible, refusable drafts. What the probes leave is one model whose
+core the author's words fix and whose edges they leave open, and the
+movement's work is to say which is which and to draft the edges so the author
+can refuse them one at a time.
+
+The core, fixed by the words: every decision is a fact with viable options;
+the class is read off the state and not stamped; a proposal is a ratified node
+whose recommendation has moved; delegated and deferred both let the
+recommendation act and differ in frontier membership; the options persist
+after confirmation; reconciliation and rsi may add options and move
+recommendations, within controls. The edges, open in the words: who grants a
+class (probe 1); whether the grant for an unanswered node expires (probe 2);
+where the line falls between what reconciliation writes and what it may not
+(probe 3); what re-confirmation re-opens (probe 5); whether the answer is a
+fact and `aspects-are-nodes` stands (probe 6); which parts of the dialogue
+die (probe 7); whether a reading's relation moves to the option (probe 8);
+what happens on a delegated node (probe 9); the pin (probe 10); and rsi
+(probe 11). Each edge is decided in the fence, and each decision is listed in
+the rationale as a rejected line so that the author can strike it without
+striking the core.
+
+### The three classes of finding, 2026-09-04
+
+**Contradictions within the graph.** Most of what the model touches is a
+contradiction the record already carries and has not resolved.
+
+- The record holds that a deferred answer is unanswered and grounds no work
+  (`authority`, `unanswered`, `un-aligned-children`), and every rule under
+  `.claude/rules/` is projected from deferred nodes and binds every session.
+  The clean-context review raised this as its strongest counter-argument
+  three times on `authority` and twice on `unanswered`, and each time the
+  session replied that deferred answers act as shims act. The model resolves
+  it without the reply: deferred is a class the author confers, unanswered
+  is the absence of one, the forty-six stamps are unanswered because no one
+  granted them, and the rules bind by the stopgap shims `CLAUDE.md` names
+  and not by their stamps.
+- `bootstrap-authority-as-class` on `authority` and `two-kinds-of-shim` on
+  `evaluation` are the two halves of one question the record says is
+  undecided: a permission that does nothing until invoked is not a shim under
+  `evaluation`'s rule that a shim is applied by default. The model decides
+  it: the explicit grant for an unanswered node is a standing rule and not a
+  shim, and the shim on `authority` liquidates by becoming that rule. Against
+  the author's own words of 2026-09-03 that the authority "expires on
+  bootstrap exit", which is probe 2: the fence drops the expiry, because a
+  rule that reconciles an unanswered node only on the author's explicit word
+  is the right rule at any time and not a bootstrap expedient, and the
+  rejected line says so for the author to strike.
+- `work-loop`, `delegation` and the reconciliation skill hold that a
+  reconciliation session never writes the graph, by the author's ruling of
+  2026-09-03; the model contradicts it, and the author's new words say so.
+  The fence draws the line where probe 3 puts it, between operational state
+  and decision state, and adds the attenuation: an option and a
+  recommendation, within scope, never a ruling, a ruling's text, or the
+  author's words, and never by a subagent.
+- `evaluation` holds that a delegated answer overruled becomes deferred; the
+  author's new words hold that a moved recommendation on a delegated node
+  re-shapes the reconciliation frontier and leaves the node off the alignment
+  frontier. The fence keeps `evaluation`'s rule for the one case it was for,
+  a move that would leave the delegation's scope, and otherwise takes the
+  author's words, which is also what `bounded-overrule` on `evaluation` was
+  asking for.
+- `unanswered` rejects a fourth response, defer, on the ground that leaving a
+  node unconfirmed is the deferral. Under the model unconfirmed is
+  unanswered and deferred is a grant, so the ground fails; the fence needs no
+  fourth response either, since deferred is a third choice on the authority
+  fact and the three responses stand.
+- `rejected` recommends a structured list while its own reply favours prose,
+  the discrepancy that earned its kickback. The model settles it from
+  outside: a rejected alternative is a viable option not chosen, structure on
+  every fact, and the projector's heading match no longer decides anything.
+- `transience` holds that an alternative "dies at the ruling, into the
+  answer, into the rationale as a rejected alternative, or into nothing"; the
+  model keeps it as an option. `dialogue` owns what a node carries and the
+  alternative is recorded there; `transience`'s sentence follows it.
+- `madr-decision-records` records one divergence from the tradition it
+  reads, that the status is derived where MADR stores it, and the review found
+  it half wrong; under the model the considered options are kept as MADR
+  keeps them, and the divergence narrows to what is stored.
+
+**Contradictions between the graph and the AI's knowledge.**
+
+- A stamp stored beside the rulings it summarises is a denormalised copy, and
+  the record already stores a ruling on a fact with its response, choice,
+  date and pin; the stamp `{class, by, date}` is that ruling's projection. The
+  unanswered node's own rationale rejects a stored copy of the status because
+  it drifts; the argument applies to the class without change.
+- "After" by timestamp cannot be trusted in a record written by many
+  sessions and rebased on landing, and cannot tell a recommendation
+  re-affirmed from one changed; the record pins by content everywhere else,
+  and the fence pins by content here.
+- "Viable" is not defined in the record and the author's words use it as a
+  category the AI applies. `evaluation`'s solution frontier gives it a
+  meaning that is already doctrine-in-waiting: an option is viable when
+  nothing on the list dominates it on the record's criteria.
+
+**Redundant seams.** Six, and the model closes all six with one structure:
+alternatives beside facts, two shapes for one thing, a decision with
+choices; proposal beside alternative-with-a-source, when the source already
+says where an answer came from; rejected lines in the rationale beside
+alternatives, the same options written twice at different times; the stamp
+beside the authority fact's ruling; the bootstrap-authority shim beside the
+scope rule it stands in for; and the node-level `recommendation` field beside
+each fact's adopted choice and boldness. What remains after the model is the
+fact, its options, and the rulings on them.
+
+### Evaluated twice, 2026-09-04
+
+**Fresh judgment.** Written from scratch with nothing to preserve: a node is
+a question; each decision on it is a list of options; the author's rulings
+are recorded on the options they chose; the AI's recommendation is a mark on
+an option with its reasons and its boldness; traditions bear on options.
+Everything the record needs follows: the class, the status, both frontiers,
+what is pending, what was considered. Nothing is stored twice and nothing is
+stored that a session would decide again the same way. The one thing the
+model needs that the author's words do not supply is where a grant comes
+from, and greenfield the answer is not a design choice: the only source of
+authority the record admits is the author's ruling, so a class traces to a
+ruling or it is not a class. That is `grant-from-a-ruling`, and it is the
+whole of the recommendation's departure from the words as stated; the rest
+of the fence is the words made precise at the edges the probes found.
+
+**With reference to tradition.** Nine traditions bear, and each is recorded
+in the fence's rationale with the resolution it informed: MADR and Nygard's
+decision records, IBIS, event sourcing and the derived view, the spec and
+status of level-triggered reconciliation, attenuation in object-capability
+systems, the recorded dissent and the motion to reconsider, the Pareto
+frontier, Chesterton's fence, and approval-directed agents. Four of them are
+already traditions the record names on `authority`, `evaluation`, `work-loop`
+and `dialogue`; the model does not add a tradition to the record so much as
+make the record keep the ones it cites. Each is a reading owed under
+`stub-traditions`.
+
+**The steelman, from tradition.** Every tradition of stamped documents, the
+RFC and PEP status field, the signed approval, MADR's own status, stores the
+mark of authority on the document, because the mark is a speech act by the
+authority and not a summary of the document's state, and because a reader
+must see it without reconstructing it. On that argument the model does not
+remove the stamp at all: a ruling recorded on a fact with response, choice,
+date and pin is a stamp, moved from the node to the fact. The reply is that
+the steelman is right and the record should say so plainly: authority is a
+projection of the rulings, and a ruling is the author's act stored once, so
+what the model removes is the second copy and what it adds is the derivation
+every reader shares. The gain is not less storage; it is that the class can
+never disagree with the rulings, that deferred has a meaning, that the
+options outlive the ruling, and that proposal is mechanical. The second
+steelman is the record's own: `minimal-dialogue-state` on `dialogue`, twice
+found strong, holds that the dialogue should store only what re-derivation
+cannot reconstruct, and the model stores more after confirmation, not less.
+The reply is in the rationale: what persists is judgment, the author's
+rulings, the AI's recommendations and viability calls, and the readings; what
+dies is the account, which re-running the review reconstructs; and that is
+the minimal principle applied by its own test.
+
+### Tested against the record it joins, 2026-09-04
+
+The `under` chain runs `authority` to `model` to `purpose` to `agency`, and
+`dialogue` to `unanswered` to `growth` to `model`; the global-tier nodes are
+`authority`, `evaluation`, `delegation`, `materialization` and
+`session-context`. Nothing is ratified, so nothing is doctrine and no draft
+here is written as an answer over one; each contradiction the model makes
+with a standing text is recorded, by the ruling-order rule for a lateral
+tangle, as an alternative on the earlier node with this node as its source,
+and each such node names this one in `depends`, so that one ruling here
+settles them and the order counts it. Eleven nodes are so marked: `authority`
+(`authority-derived`), `unanswered` (`unanswered-is-no-ruling`), `dialogue`
+(`facts-carry-options`), `recording` (`options-persist-at-the-recording`),
+`rejected` (`non-chosen-viable-options`), `readings` (`relation-per-option`),
+`work-loop` (`reconciliation-writes-options`), `delegation`
+(`reconciliation-session-writes-options`), `evaluation`
+(`overrule-by-class`), `rsi` (`loop-writes-options`), and
+`madr-decision-records` (`divergence-narrows`). This node in turn depends on
+`dialogue#aspects-are-nodes`, since the fence keeps the reserved facts and
+puts every other decision in a child, which is that alternative's rule.
+
+Against the traditions the record cites: MADR is adopted more fully than
+before and no new divergence is recorded; the readings rule is amended and
+the amendment is recorded on `readings`. Against the mechanics the record
+runs on: the ruling order's settle count is unchanged, since unanswered is
+still derived and a deferred node still carries a stage; the page's list A
+becomes the facts themselves, one structure where it read two; the
+ruling-stage gate stands; the review reads each fact's recommended option
+where it read one recommendation. No unrecorded conflict is left that the
+session can find.
+
+### The recommendation and its three facts, 2026-09-04
+
+Adopts `grant-from-a-ruling`. Authority ratified, for the reason the Facts
+section gives. Boldness moderate: the model is the author's in their own
+words and the departures are the AI's, of which one is substantive, the
+grantor, and the rest are edges the words left open; the tradition readings
+rest on the AI's knowledge and are owed as readings. Persistence standing,
+no shim declared. `depends`: `dialogue#aspects-are-nodes`.
+
+The three exits stay open. Amend: the author strikes any rejected line and
+the fence changes with it. Defer: the node stays unanswered at this stage,
+which under its own answer is the state in which nothing acts. Claim: the
+author may take `authority-derived` as stated and rule the grantor question
+themselves, or `grant-from-a-recommendation`, whose case is recorded.
+
+The cost, stated as a consequence and not weighed: the schema folds
+`alternatives` and `recommendation` into `facts`, each fact gaining its
+options with source, reference, prose, readings, the recommended mark with
+its boldness, and a ruling; the `authority` stamp is derived and the
+`CONFERRABLE_CLASSES` gain deferred; the reader, the validator, the
+frontier, the browser, the alignment page, and both skills change; every node
+in the record is re-encoded, its alternatives becoming the answer fact's
+options and its forty-six deferred stamps going, which is the reclassification
+the author already made; and the reconciliation skill gains a write path to
+the disposition ref that lands by the compare-and-swap the persistence node
+already prescribes. Under the model's own rule that reconciliation of an
+unanswered node takes an explicit grant, none of it is done here: no grant
+was given for it, the sitting stops before the review as directed, and the
+rules under `.claude/rules/` are unchanged.
+
+### The sitting closed at maieutic, 2026-09-04
+
+The author directed the dialogue to run through the maieutic movement and
+stop before the clean-context review. The node stands at the review stage
+with the review owed; `/align-review` has not been invoked, and no grant for
+reconciliation was given or assumed. The map of the round's decisions to
+fields: the author's words, `## Disposition`; the classification as a new
+answer to eleven questions bound by one premise, the minting section and
+`under`; the probes, the periagogic section; the three alternatives and the
+two readings, `alternatives` and `## Alternatives`; the class a confirmation
+confers, `facts` and `## Facts`; the recommendation, `recommendation` and the
+fence; the consequences for the eleven nodes, their `alternatives` and
+`depends`; the traditions, the fence's rationale, each a reading owed. Nothing
+of the round is held only in this session.

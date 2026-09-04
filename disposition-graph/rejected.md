@@ -27,6 +27,9 @@ alternatives:
   - name: record-rejected-dispositions
     source: author
     ref: "2026-09-03"
+  - name: non-chosen-viable-options
+    source: author
+    ref: "2026-09-04"
 facts:
   - name: authority
     choices:
@@ -36,6 +39,8 @@ facts:
     boldness: moderate
 under:
   - commons.systems/disposition-graph/node
+depends:
+  - commons.systems/disposition-graph/viable-options
 ---
 ## Disposition
 
@@ -63,6 +68,10 @@ The author's words of 2026-09-02 asking what the rejected section is a projectio
 ### record-rejected-dispositions
 
 The author's words carried here say that listing rejected alternatives as prose under the rationale is too ad hoc and that recording rejected dispositions may make sense. Rejected carries the same words and its recommended option is the structured list, but its second review established that the browser already renders a rejected section from rationale prose, which materially favours keeping the prose. (Raised on commons.systems/disposition-graph/under.)
+
+### non-chosen-viable-options
+
+A rejected alternative is a viable option the author did not choose, kept on the fact beside the confirmed choice with the reason it was not taken and the traditions bearing on it; the projector reads the structure and the rationale cites it. It is `rejected-list-on-node` generalised to every fact, and the fact the second review established, that the projector already reads a rationale heading, no longer decides the question, since the structure exists for regression and for the browser's drill-down and not for the projector alone. The author's objection carried above, that prose under the rationale seems too ad hoc, is what the structure answers. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
 ## Recommendation
 

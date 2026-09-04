@@ -24,6 +24,9 @@ alternatives:
   - name: bounded-overrule
     source: review
     ref: "2026-09-03"
+  - name: overrule-by-class
+    source: author
+    ref: "2026-09-04"
 facts:
   - name: authority
     choices:
@@ -42,6 +45,8 @@ tier: global
 defines:
   - greenfield
   - adversarial review
+depends:
+  - commons.systems/disposition-graph/viable-options
 ---
 ## Disposition
 
@@ -76,6 +81,10 @@ This node's own rule is that every tradition surfaced is recorded as a reading w
 ### bounded-overrule
 
 The answer lets the AI overrule delegated and deferred answers on its best judgment without limit, and since nothing is ratified that is the whole record between two sittings. The brake the session named, that an overrule at the ruling stage sends the node back to review and shows on the frontier, is real but covers only that stage; an overrule at the review or maieutic stage leaves no review state to go stale. The alternative bounds the rule so that an overrule of any unanswered node re-opens its dialogue at the stage the change touches, which is also what the amendment review asked authority to add.
+
+### overrule-by-class
+
+What an overrule does is read from the node's class rather than stated as one rule. On a ratified node the confirmed choice keeps its full authority and the node returns to the author for re-confirmation. On a deferred node the recommendation acts and the node is on the alignment frontier already. On a delegated node the recommendation moves freely within the delegation's scope and the node stays off the alignment frontier, since the author asked not to be asked again; a move that would leave the scope is an option, not a recommendation, and returns the node to the author with its class intact. This replaces "a delegated answer overruled becoming deferred", keeps it for the one case it was for, and gives `bounded-overrule` its bound. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
 ## Account
 

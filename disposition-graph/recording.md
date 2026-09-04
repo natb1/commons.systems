@@ -33,6 +33,9 @@ alternatives:
   - name: stage-per-decision
     source: ai
     ref: "2026-09-04"
+  - name: options-persist-at-the-recording
+    source: author
+    ref: "2026-09-04"
 facts:
   - name: authority
     choices:
@@ -43,6 +46,7 @@ facts:
 depends:
   - commons.systems/disposition-graph/unanswered
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
+  - commons.systems/disposition-graph/viable-options
 form: rule
 authority:
   class: deferred
@@ -97,6 +101,10 @@ The classification step takes a response given on one of the decisions a node's 
 ### stage-per-decision
 
 Each decision carries its own stage, so a kickback on one leaves the others where they were and the author is not shown a node returned wholesale to the maieutic stage over one row. Against it: the dialogue node makes the stage the node's, the single next movement owed on it, and a node carrying four stages cannot answer what is owed; the ruling order and the frontier both read one stage per node, and the alignment page's rail shows one. The answer keeps one stage and gets the same benefit by keeping the other decisions' rulings.
+
+### options-persist-at-the-recording
+
+The third step removes the dialogue and not the facts: the stage, the review, depends and the account go, and the facts stay with their options, their recommendation, their readings, and the rulings the author gave, so that a later session meets what was considered and why. The stamp is read from those rulings rather than written. A ruling given on the page is recorded on the option chosen, with the pin of the recommendation it answered. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
 ## Recommendation
 

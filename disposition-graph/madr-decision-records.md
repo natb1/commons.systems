@@ -27,6 +27,12 @@ under:
   - commons.systems/disposition-graph/dialogue
 source: Markdown Architectural Decision Records (MADR), the template at adr.github.io/madr, version 4 (Context and Problem Statement, Decision Drivers, Considered Options, Decision Outcome with its chosen option, consequences, and confirmation, Pros and Cons of the Options, More Information; a status of proposed, rejected, accepted, deprecated, or superseded by another record; decision-makers, consulted, and informed), descending from Michael Nygard's architecture decision records of 2011 (Context, Decision, Status, Consequences).
 relation: adopted
+alternatives:
+  - name: divergence-narrows
+    source: ai
+    ref: "2026-09-04"
+depends:
+  - commons.systems/disposition-graph/viable-options
 ---
 ## Answer
 
@@ -35,6 +41,12 @@ Supports it, and the dialogue state adopts its form. A MADR record lists the con
 ## Rationale
 
 Surfaced in the sitting on the dialogue node on 2026-09-03, when the author asked for the unanswered frontier to be encoded as a recommendation with dialogue state and a list of alternatives, and recorded under that node's rationale as the tradition the encoding adopts. Validated by the AI from its own knowledge of the template; deferred until the author reads it. Divergence recorded: the status is derived, not stored.
+
+## Alternatives
+
+### divergence-narrows
+
+Under the viable-options model the considered options persist after the decision as MADR keeps them, with the reasons each was not taken, so the recorded divergence narrows to what is stored: the stage is stored and the status is derived from the rulings on the facts, where MADR stores the status. The review's finding that the divergence as written was half wrong is met by the same narrowing. Raised on commons.systems/disposition-graph/viable-options.
 
 ## Account
 

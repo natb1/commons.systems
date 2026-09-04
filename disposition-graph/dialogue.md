@@ -39,6 +39,9 @@ alternatives:
   - name: aspects-are-nodes
     source: review
     ref: "2026-09-03"
+  - name: facts-carry-options
+    source: author
+    ref: "2026-09-04"
 facts:
   - name: authority
     choices:
@@ -63,6 +66,8 @@ defines:
   - recommendation
   - review state
   - account
+depends:
+  - commons.systems/disposition-graph/viable-options
 ---
 ## Disposition
 
@@ -333,6 +338,10 @@ Its cost, stated as a consequence and not as a reason: the graph holds more
 nodes, and the page must render a subtree as one disposition. Settling counts
 grow, which the ruling order already absorbs, since an ancestor's unanswered
 subtree contains its descendants' by construction.
+
+### facts-carry-options
+
+Alternatives and facts become one structure: every decision on a node is a fact with viable options, the answer among them, its options the candidate answers this answer lists as alternatives. The node-level recommendation field goes, each fact carrying its recommended option with why and boldness; each option carries its source, its reference, the readings bearing on it, and a ruling once the author has given one. The options persist after the recording, which amends the sentence that confirmed dialogue state folds and unconfirmed state survives only in version control: what folds is the dialogue, the stage, the review, depends and the account, and what persists is the facts with their options. `aspects-are-nodes` stands: the facts are the answer and the reserved three, and any other decision is a child. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
 ## Recommendation
 

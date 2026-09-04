@@ -21,6 +21,9 @@ alternatives:
   - name: ceiling-moves-here
     source: review
     ref: "2026-09-03"
+  - name: authority-derived
+    source: author
+    ref: "2026-09-04"
 facts:
   - name: authority
     choices:
@@ -49,6 +52,8 @@ shims:
     for: the scope rule of this node during bootstrap, when nothing is ratified and so no answer has a ratified ancestor to be answered under
     liquidation: bootstrap exit, at the swap of the implementation ref with the main branch, after which the grant expires and an unanswered node is reconciled only through the dialectic
     declared: 2026-09-03
+depends:
+  - commons.systems/disposition-graph/viable-options
 ---
 ## Disposition
 
@@ -95,6 +100,10 @@ A frontier finding carried on this node observes that the author ruled clause by
 ### ceiling-moves-here
 
 The decomposition finding proposes that under survive as the edge alone and that three of the four terms it defines move to the nodes that answer them, rank to attention, context to session-context, and ceiling to authority, whose answer already carries the scope rule the term names: that a node's ceiling is its nearest ratified ancestor and nothing recorded under it may contradict it. Verified: under's defines carries ceiling and authority's does not, and authority is not among the nodes the finding names, so the proposed change to its defines is recorded nowhere on it. The cross-reference finding adds that ceiling and up-to-the-roots are two different rules for the reviewer's world, coinciding today only because nothing is ratified. Raised on commons.systems/disposition-graph/rationale-edge, commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/attention, commons.systems/disposition-graph/under.
+
+### authority-derived
+
+The class is read off the rulings recorded on the node's facts and no stamp is written beside them: ratified where the answer fact carries a ruling, delegated or deferred where the authority fact does, unanswered where none does, and a class the AI writes for itself is not a grant. Deferred becomes a class the author confers, a third choice on the authority fact. The explicit grant for reconciling an unanswered node becomes a standing rule of this node and not a shim, which decides `bootstrap-authority-as-class` in favour of the rule and strikes the shim's expiry at bootstrap exit, against the author's words of 2026-09-03 quoted above. A proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source; the periagogic re-opening this answer prescribes gives way to the recording node's classification of where the dialogue resumes. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
 ## Account
 

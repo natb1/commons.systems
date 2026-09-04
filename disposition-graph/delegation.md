@@ -30,6 +30,12 @@ defines:
   - main thread
   - unit
   - subagent
+alternatives:
+  - name: reconciliation-session-writes-options
+    source: author
+    ref: "2026-09-04"
+depends:
+  - commons.systems/disposition-graph/viable-options
 ---
 ## Disposition
 
@@ -43,6 +49,12 @@ The main thread is the session that holds the interview and the record: it inter
 ## Rationale
 
 The author's rulings of 2026-09-02, that implementation is delegated by unit, model, and effort, and of 2026-09-03: "new disposition (should affect both alignment and bootstrap/reconciliation shims): debugging activities like those are prime candidates for subagents - driving a browser with max effort fable is very expensive. Debugging context can be verbose and pollute the main thread." The rule binds the alignment session and the reconciliation sessions alike; during bootstrap it is projected into the operations document and the alignment skill. Rejected: a fixed model for every task, because the cost is set by the most capable model at full effort and most units do not need it; letting the main thread investigate when a question seems small, because the size of a debugging context is unknown until it has been read.
+
+## Alternatives
+
+### reconciliation-session-writes-options
+
+The sentence binding a reconciliation session never to write the graph is amended as work-loop's is: the session's main thread may record a viable option on a fact and move its recommendation, within scope, and never rules, edits a ruling, or edits the author's words. A subagent still never edits a node. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
 ## Account
 

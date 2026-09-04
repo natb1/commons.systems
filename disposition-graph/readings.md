@@ -23,6 +23,9 @@ alternatives:
   - name: hold-for-traditions-home
     source: review
     ref: "2026-09-03"
+  - name: relation-per-option
+    source: author
+    ref: "2026-09-04"
 facts:
   - name: authority
     choices:
@@ -43,6 +46,8 @@ defines:
   - adopted
   - diverged
   - chosen over
+depends:
+  - commons.systems/disposition-graph/viable-options
 ---
 ## Disposition
 
@@ -80,6 +85,10 @@ Readings' answer says that the class rule it states governs every reading node w
 ### hold-for-traditions-home
 
 Readings says on the node that its tradition-as-mount rule rests on traditions-home, which is unruled, and is not confirmed before it. Verified that readings stands at the ruling stage while traditions-home stands at review with two pending alternatives under which readings' sentence 'a tradition is a mount, one root node in a traditions graph until it has a graph of its own' would be false, and that the manifest carries no traditions graph for it to name. It is on the table because frontier-consistency requires a node not to rest silently on unruled ground and because the placement finding of 2026-09-03 proposed exactly this for readings and recorded an alternative on every other node it named but this one.
+
+### relation-per-option
+
+A reading stays a node under the disposition it bears on, with its own stamp, and its relation attaches to the options of the fact it bears on rather than to the answer: adopted on the options the tradition supports, diverged on those it contradicts, so that "chosen over" becomes a tradition adopted on an option not chosen. The tradition's page still shows every reading that cites it, and the projections show on each option what tradition says. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
 ## Recommendation
 

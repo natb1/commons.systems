@@ -21,6 +21,9 @@ alternatives:
   - name: say-instrument-not-criterion
     source: review
     ref: "2026-09-03"
+  - name: reconciliation-writes-options
+    source: author
+    ref: "2026-09-04"
 facts:
   - name: authority
     choices:
@@ -46,6 +49,8 @@ shims:
     for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
     liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
     declared: 2026-09-03
+depends:
+  - commons.systems/disposition-graph/viable-options
 ---
 ## Disposition
 
@@ -94,6 +99,10 @@ Reconciliation persists nothing of its own between invocations and re-derives th
 ### say-instrument-not-criterion
 
 The answer's phrase, each stage a reconciliation of the criteria the node carries, says instrument instead, the term the instruments node actually defines, or discloses that the term arrives with instruments until instruments is ruled. The vocabulary finding of 2026-09-03 verified that criterion is defined by no node outside instruments' own draft and is not a schema key, while four ruling-stage answers depend on the word. Raised on commons.systems/disposition-graph/instruments.
+
+### reconciliation-writes-options
+
+The sentence that a reconciliation session never writes the graph is incomplete, by the author's words of 2026-09-04 amending their ruling of 2026-09-03 quoted above: operational state stays outside the graph, and decision state goes in. A reconciliation session may record a viable option on a fact and move its recommendation, within the node's scope, and may never rule, edit a ruling, or edit the author's words. A divergence that needs the author is then recorded as an option on the node it conflicts with, which is what returns a ratified node to the author, and the path on which it is reported and stays on the derived frontier until alignment records it goes. The open question of reconciliation's own state between invocations is unchanged. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
 ## Account
 

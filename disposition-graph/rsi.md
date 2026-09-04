@@ -11,8 +11,13 @@ alternatives:
   - name: bound-by-ratification
     source: ai
     ref: "2026-09-03"
+  - name: loop-writes-options
+    source: author
+    ref: "2026-09-04"
 under:
   - commons.systems/disposition-graph/model
+depends:
+  - commons.systems/disposition-graph/viable-options
 ---
 ## Disposition
 
@@ -32,6 +37,10 @@ Recursive self-improvement is not a section but the name of what the loop alread
 ### bound-by-ratification
 
 Whichever reading stands, a bound is owed: every change to a node the loop uses to change itself requires the author's ratification. The account raises this as the question of what bounds the term here, and records no recommendation on it.
+
+### loop-writes-options
+
+The loop on itself has the same authority over the record as reconciliation, to record viable options and move recommendations, within scope. On a ratified loop node a moved recommendation acts on nothing until the author re-confirms it, which is the bound `bound-by-ratification` asks for; on a delegated one it acts within the delegation. This reads rsi as `rsi-as-loop-on-itself`. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
 
 ## Account
 
