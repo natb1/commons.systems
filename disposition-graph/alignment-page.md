@@ -1725,3 +1725,50 @@ parallel: the design units, the main thread's adversarial reading, the
 recommendations recorded and sent to review, then the reconciliation the
 author granted immediately after maieutic, then their reviews.
 
+### The migration under the grant, 2026-09-04
+
+Landed at graph commit 3bd99e91, after the compaction. Prose lists of
+rejected candidates became options with the status passed on 34 nodes, by the
+migration unit's script over its own census: 44 passages, 26 in a node's own
+rationale and 18 in a fence, 121 entries, 103 options added, and 18 that
+duplicated an option already on the fact struck with their prose. The unit's
+judgment calls, checked and accepted: a fence's passages are in scope, since
+the fence is the node as it would stand; only a passage that enumerates
+candidates under a lead-in migrates, and a single candidate argued in the
+prose of an argument stays, on the six nodes the unit names; growth's eight
+are incumbent mechanics, migrated as candidates for how the loop runs; and
+purpose's four carry the source author, on the record's own word that the
+founding rejections are the author's. Thirteen tradition lists on thirteen
+nodes are readings and not options, and were left; viable-options' eight
+became the readings below. Nineteen readings drafted from the two tradition
+passes, this sitting's and the viable-options sitting's, entered the graph:
+eleven under this node (scholastic-articulus, hansard-verbatim-record,
+montgomery-informed-consent, bentham-publicity, anchoring-and-adjustment,
+non-liquet, roberts-rules-commit-or-refer, nielsen-user-control-and-freedom,
+none-of-the-above-ballot, not-proven-third-verdict, chenery-reasoned-decision),
+codd-update-anomaly under prose-and-structure, and seven under viable-options
+(ibis-issue-based-information, event-sourcing-derived-view,
+level-triggered-reconciliation, ocap-attenuation, dissent-and-reconsideration,
+pareto-frontier, approval-directed-agents), with bears entries added on
+madr-decision-records, twice on pettit-non-domination, on plato-maieutics, and
+on pareto-frontier for evaluation, which the unit had left owed; the sentence
+of viable-options' rationale that the seven replace was struck. The readings
+unit's marks stand as the nodes record them: four traditions merged in pairs,
+three relations forced by the two-word vocabulary whose gap the readings node
+carries as an option, and loci marked to be checked. three-column-ruling-screen
+carries the status passed on this node, dominated by the author's words.
+Glosses were written for ratified, delegated and deferred on authority, in its
+own sentences, and for existence, keep and prune on dialogue.
+
+What the migration cost, measured by the frontier before and after it: the
+answer pin covers the standing rationale and the fence, so every node written
+moved its pin; seventeen forwarded drafts are newly flagged as changed since
+their review (alignment-target, attention, checkpoint, forms, hexis, model,
+pettit-non-domination, plato-maieutics, projection, purpose, purpose-criteria,
+quotes, rationale-edge, scope, second-stop, traditions-home,
+un-aligned-children), thirty-nine in all, and the survey owed on forty-two
+nodes is unchanged. The conflict this exposes between the dialogue node's rule
+that only a change of substance is reviewed again and the readiness rule that
+both pins name the recommendation as it stands is recorded on
+clean-context-review as the option moved-draft-re-read-by-the-survey, which
+recommends nothing.
