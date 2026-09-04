@@ -1,6 +1,6 @@
 ---
 question: How is a design or a proposal evaluated?
-stage: ruling
+stage: maieutic
 recommendation:
   adopts: standing
   class: ratified
@@ -37,9 +37,17 @@ defines:
   - greenfield
   - adversarial review
 ---
+## Disposition
+
+The author, 2026-09-03, during the sitting on the alignment page, directing that this node's definition be made operational:
+
+> disposition: always make recommendations from this greenfield perspective - record this definition of greenfield you provided.
+
+The definition the author refers to is the one the sitting stated when briefing the greenfield validation of `commons.systems/disposition-graph/dialogue`'s recommendation the same day, and it is written into the answer above.
+
 ## Answer
 
-Against the full solution frontier. Nothing is sacred: no doctrine is implied by what exists, least of all by the incumbent implementation, which is evidence of past decisions and never authority over future ones; that is what greenfield means here. A ratified answer is not unchangeable; changing it takes an interview with the author, and the alignment skill is that interview. Delegated and deferred answers need no interview: the AI may overrule them on its best judgment, and every such overrule enters the author's review, a delegated answer overruled becoming deferred and a deferred answer staying deferred. An overrule of a draft at the ruling stage sends the node back to the review stage, and the frontier and the alignment page show the draft as changed since its review. Every evaluation runs twice, once as fresh best judgment and once with reference to tradition, including traditions shelved by pre-agent constraints, and every tradition surfaced is recorded as a reading with the resolution it informed. Work under an answer that cites a tradition is grounded in the tradition itself within its recorded support scope; a recorded divergence is the author's decision, which the tradition cannot overrule, and an unrecorded conflict is a frontier item deferred to neither side. Adversarial review of one's own recorded output is part of producing it, and a disposition recommended to the author is reviewed once more, in clean context, before the author rules on it, as the recording node describes. A shim declared on the record is applied by default; a prompt is required only to bypass it.
+Against the full solution frontier. Nothing is sacred: no doctrine is implied by what exists, least of all by the incumbent implementation, which is evidence of past decisions and never authority over future ones; that is what greenfield means here. Greenfield is the lens every recommendation is made through, not an occasional one, and it is operational rather than a sentiment. A class of argument is struck from the choosing: what a change would cost to migrate, how many files or nodes it touches, what reviews or assessments it would spend, what tooling it would rework, and that the incumbent already does it the other way. None of those bear on whether a design is right, and a recommendation resting on one of them has not been made. The positive test replaces them: judge the design as if the record were being written from scratch, with nothing in it to preserve. The error to hunt is an incumbent fact doing the work of a design constraint, which is the failure this lens exists to catch; a recommendation found resting on one is named as such and redrawn. Cost is not thereby unsayable, and a recommendation still states what its design will cost: it is a consequence of a design chosen on its merits and never a reason for choosing it. A ratified answer is not unchangeable; changing it takes an interview with the author, and the alignment skill is that interview. Delegated and deferred answers need no interview: the AI may overrule them on its best judgment, and every such overrule enters the author's review, a delegated answer overruled becoming deferred and a deferred answer staying deferred. An overrule of a draft at the ruling stage sends the node back to the review stage, and the frontier and the alignment page show the draft as changed since its review. Every evaluation runs twice, once as fresh best judgment and once with reference to tradition, including traditions shelved by pre-agent constraints, and every tradition surfaced is recorded as a reading with the resolution it informed. Work under an answer that cites a tradition is grounded in the tradition itself within its recorded support scope; a recorded divergence is the author's decision, which the tradition cannot overrule, and an unrecorded conflict is a frontier item deferred to neither side. Adversarial review of one's own recorded output is part of producing it, and a disposition recommended to the author is reviewed once more, in clean context, before the author rules on it, as the recording node describes. A shim declared on the record is applied by default; a prompt is required only to bypass it.
 
 ## Rationale
 
@@ -144,3 +152,45 @@ Recorded as a pending alternative on commons.systems/disposition-graph/readings:
 Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+### The greenfield lens made operational, 2026-09-03
+
+Recorded at the author's direction, quoted above, during the sitting on
+`commons.systems/disposition-graph/alignment-page`. Authority class: deferred,
+as this node already stands, since the dialectic on it has not concluded and
+the author directed the recording without ruling on the node. Boldness: low, in
+the direction this node's `dialogue` sibling and the author use the term; the
+addition restates in operational form what this node's answer already held, and
+what it adds beyond that came from the sitting's own use of the lens, which the
+author watched and directed to be kept. Persistence: standing, as part of this
+node's answer.
+
+Why the addition is not redundant with the sentence it follows. That sentence
+told a session that the incumbent implementation is evidence and never
+authority. It did not say what a session does with an argument that smuggles
+the incumbent back in as a cost, and in this sitting one did: the recommended
+data model on `dialogue` was held back by the finding that prose written whole
+does not decompose, and that finding rested on the incumbent record having been
+written whole before there were aspects to write it as. A brownfield fact was
+doing the work of a design constraint, and the sentence as it stood did not
+catch it. The author's instruction, "not brownfield cost savings", did. The
+addition records the test that caught it so the next session does not need the
+author to supply it.
+
+The three parts do different work. The struck class names the arguments that
+must not appear, which makes the failure checkable rather than a matter of
+taste. The positive test says what to do instead. The error to hunt is the one
+that survives both, because it does not look like a cost argument: an incumbent
+fact wearing the clothes of a design constraint. The last sentence guards the
+other way, so that this does not become a rule against ever mentioning cost;
+what is forbidden is cost as a reason for choosing, not cost as a consequence
+of what was chosen.
+
+This node is global-tier, so its rule projection under `.claude/rules/` is now
+behind the answer. Regenerating it is the reconciliation skill's and not this
+one's.
+
+The strong forward review of 2026-09-03 on this node is spent: it read the
+standing text, which has changed. The node goes back from the ruling stage to
+maieutic, and the clean-context review is owed on the changed answer before the
+author rules.
+
