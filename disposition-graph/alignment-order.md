@@ -61,6 +61,9 @@ The author, 2026-09-03, at the checkpoint before the review, on what follows the
 The author, 2026-09-03, granting bootstrap authority for the reconciliation announced above:
 > Do not proceed with review. Instead you are granted bootstrap authority to reconcile the align skill, the align-review skill (if necessary), and the alignment artifact with unanswered alignment order (and related) disposition. reconcile now
 
+The author, 2026-09-03, on the finding that the count puts a node ahead of its own ancestor:
+> it's not necessarily wrong, just help me understand the rationale. If the alignment priority is based on now "pulling the rug" from a confirmed node by altering the node under it, then how does "alternatives" fit in?
+
 ## Alternatives
 
 ### draft
@@ -84,6 +87,20 @@ ruling closes, and a node thick with alternatives is genuinely more entangled
 than a bare one. A third answer is open to the author and not drafted here:
 keep the sum and order ancestors before descendants outright, the count
 deciding only between nodes neither of which is under the other.
+
+Refined by the author's question of 2026-09-03, which named the criterion as
+not pulling the rug from a confirmed node by altering the node under it. On
+that criterion the two terms are different relations. Reach is what a ruling
+makes decidable elsewhere, the unanswered nodes under it and the nodes naming
+it in `depends`, and it is the rug-pulling measure exactly. Load is what is
+unresolved at the node, its pending alternatives, which the ruling closes on
+itself and which make no other node decidable. Reach is monotone up the
+`under` tree, an ancestor's unanswered-descendant set containing its child's
+and the child besides, so ordering on reach alone makes ancestor-before-
+descendant a theorem rather than the claim the recommended text makes and
+does not deliver, and it makes the third answer above unnecessary. The
+alternatives count stays on the page as a displayed fact, since it is what
+tells the author how much a sitting will cost, and orders nothing.
 
 ## Recommendation
 
@@ -112,6 +129,32 @@ The author's words of 2026-09-03, quoted in the dialogue that produced this node
 ```
 
 ## Account
+
+### How alternatives fit the rug-pulling criterion, 2026-09-03
+
+The author's question above, answered in the sitting and recorded here
+because the answer is the alternative's rationale. The steelman for counting
+alternatives is not weak and is stated first: on a frontier with no
+authority, an unresolved fork at a node can pull the rug even where nobody
+recorded it, since confirming its second alternative undermines everything
+written while the first was assumed, whether or not the review noticed the
+divergence and wrote it down; the raw count is then a proxy for unrecorded
+divergence risk. What answers it is the recommended text's own rule, that a
+tangle is recorded and never computed in a session. The route by which an
+alternative reaches the order already exists and is `depends`: a leaf
+standing under `<ancestor>#<alternative>` is the rug itself, and it enters
+the count as that leaf's reach on the ancestor. A bare alternative no leaf
+stands under is a fork nothing has been built on, with no rug beneath it.
+Counting the raw list therefore double-counts the alternatives that carry a
+divergence and inflates for the ones that do not. That the anomaly is at its
+largest today follows: no node carries `depends`, so the whole alternatives
+term is load with no dependency content in it, and it decides the head of the
+queue by one point.
+
+The trade the author rules on is whether to rely on the recorded divergence,
+which is exact but only as complete as the review's noticing, or on the raw
+count, which is inexact but needs no one to notice. This session's judgment
+is the first, on the recommended text's own ground.
 
 ### Ancestor overtaken at the head of the order, 2026-09-03
 
