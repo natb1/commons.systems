@@ -1,3 +1,10 @@
+<!-- The publish wrapper supplies the doctype and head, so this file carries
+     none of its own; the charset is repeated here because the same file is
+     read from disk at dist/, where nothing wraps it and the page would
+     otherwise decode as windows-1252 and mojibake every long dash, ellipsis
+     and Greek word in the record. A duplicate meta in the published page is
+     harmless; an undecodable local one is not. -->
+<meta charset="utf-8">
 <title>Alignment</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -321,7 +328,9 @@
 
   /* ================= the ruling screen =================================
    * commons.systems/disposition-graph/alignment-page: one node at a time,
-   * three columns, the node as it would stand the widest of them.
+   * three columns. The rail is fixed and narrow; the middle holds
+   * everything the ruling asks; the right holds the rendered disposition
+   * and nothing else, and takes the whole screen on demand.
    */
   .shell { max-width: 1680px; }
   @media (min-width: 940px) { .shell { grid-template-columns: minmax(230px, 288px) minmax(0, 1fr); gap: 0 36px; } }
@@ -342,11 +351,25 @@
 
   /* ---------- one node, two columns ---------- */
   .item { border-top: 0; padding: 22px 0 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 36px; align-items: start; }
+  /* Near enough evenly. The right-hand column was the widest while it held
+     the node and the apparatus both; the author's refinement of 2026-09-04
+     moved the apparatus to the middle, so a working column starved to a
+     third would now be the worse failure. The disposition still takes the
+     whole screen on demand (commons.systems/disposition-graph/alignment-page). */
   @media (min-width: 1240px) {
-    .item { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); }
+    .item { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); }
   }
   .shell.wide .item { grid-template-columns: minmax(0, 1fr); }
   .shell.wide .col-ask { display: none; }
+  /* Widened, the column has the whole screen and prose would run to about
+     130 characters a line without this. The button is for reading a long
+     node, so the measure is what it is for. */
+  .shell.wide .col-pane { max-width: 84ch; margin: 0 auto; }
+  /* Nothing to render on the right: the item is one column and the one-line
+     pane follows the asking column instead of sitting beside it in a half
+     screen of white. */
+  .item.nostand { grid-template-columns: minmax(0, 1fr) !important; }
+  .item.nostand .col-pane { position: static; max-height: none; margin-top: 20px; }
   .col-ask, .col-pane { min-width: 0; }
   .col-pane { position: relative; }
   @media (min-width: 1240px) {
@@ -354,6 +377,25 @@
   }
   .col-pane section { max-width: none; }
   .col-ask section { max-width: none; }
+
+  /* ---------- the stage's own ask ---------- */
+  /* The stage names the movement owed, so it heads the asking column. */
+  .stagelead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; }
+  .stagehint { font-size: 13px; color: var(--ink-2); font-style: italic; }
+  .locked { font-size: 12.5px; color: var(--ink-2); margin: 0 0 16px; padding: 8px 10px; border-left: 2px solid var(--line); background: var(--paper-2); }
+  /* The stage, with the two routes into the dialogue embedded in it. */
+  .chip { display: inline-flex; align-items: stretch; gap: 0; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; vertical-align: middle; }
+  .chipname { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; padding: 3px 9px; display: inline-flex; align-items: center; }
+  .chipbtn { font-size: 12px; line-height: 1; padding: 3px 8px; border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--ink-2); cursor: pointer; display: inline-flex; align-items: center; text-decoration: none; }
+  .chipbtn:hover { background: var(--paper-3); color: var(--ink); }
+  .chipbtn.stub { color: var(--ink-3); }
+  .chipbtn.stub::after { content: "\2217"; font-size: 9px; vertical-align: super; margin-left: 1px; }
+  .foot-acts { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+  .sbtn.stub { text-decoration: none; display: inline-flex; align-items: center; gap: 4px; opacity: .72; }
+  .nowords { font-size: 13px; color: var(--ink-2); font-style: italic; margin: 12px 0 0; }
+  .controls .caption { margin: 8px 0 12px; }
+  .controls .recline { margin: 6px 0 0; }
+  .controls .persist, .controls .shims { font-size: 12.5px; color: var(--ink-3); }
 
   /* ---------- the decisions ---------- */
   .decisions { margin: 20px 0 0; }
@@ -364,8 +406,13 @@
   .choice { margin: 0 0 4px; padding: 5px 6px; border-radius: 3px; }
   .choice.adopted { background: var(--paper-2); }
   .choice.reject { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 9px; }
-  .choicelbl { display: inline-flex; align-items: baseline; gap: 7px; cursor: pointer; }
+  .choicelbl { display: flex; align-items: baseline; gap: 8px; cursor: pointer; }
+  .choicelbl input { flex: none; margin-top: 1px; }
   .choicename { font-size: 13.5px; color: var(--ink); overflow-wrap: anywhere; }
+  /* What the choice would answer leads the row; its name follows as the
+     handle the record files a ruling under, never in place of it. */
+  .choicesays { font-size: 13.5px; color: var(--ink); }
+  .choicename.handle { font-size: 11px; color: var(--ink-3); letter-spacing: .04em; white-space: nowrap; }
   .drill { margin: 4px 0 0 22px; }
   .drill summary { font-size: 12px; color: var(--ink-3); cursor: pointer; }
   .drill summary:hover { color: var(--ink-2); }
@@ -455,19 +502,34 @@ function alFootNote(text) {
 
 /* ------------------------------------------------ reading the controls */
 
+/* The whole-node control, and never a decision inside the same item. Both
+   the decisions and this control are radios under the one `[data-item]`, so
+   an unscoped `input[type="radio"]:checked` returned whichever came first in
+   the document: with the decisions ahead of the control, choosing an
+   alternative was read back as the node's own ruling and stored as
+   `ruling: "<alternative name>"` on the response document, where `confirm`,
+   `edit` or `deny` was meant. Scope every read and write of it to
+   `[data-controls]`, which is the control's own fieldset and holds no
+   decision. */
+function alControlScope(el) {
+  return el.querySelector("[data-controls]") || el;
+}
+
 function alReadControl(el) {
-  var radio = el.querySelector('input[type="radio"]:checked');
-  var noteEl = el.querySelector('[data-field="text"]');
+  var scope = alControlScope(el);
+  var radio = scope.querySelector('input[type="radio"]:checked');
+  var noteEl = scope.querySelector('[data-field="text"]');
   return { ruling: radio ? radio.value : null, text: noteEl ? noteEl.value : "" };
 }
 
 function alApplyControl(el, data) {
   if (!data) return;
+  var scope = alControlScope(el);
   if (data.ruling) {
-    var radio = el.querySelector('input[type="radio"][value="' + String(data.ruling).replace(/["\\]/g, "\\$&") + '"]');
+    var radio = scope.querySelector('input[type="radio"][value="' + String(data.ruling).replace(/["\\]/g, "\\$&") + '"]');
     if (radio) radio.checked = true;
   }
-  var noteEl = el.querySelector('[data-field="text"]');
+  var noteEl = scope.querySelector('[data-field="text"]');
   if (noteEl && typeof data.text === "string") noteEl.value = data.text;
 }
 
@@ -475,9 +537,10 @@ function alApplyControl(el, data) {
 // edits, or feedback -- so the author is never asked for one and writing
 // another.
 function alSyncNoteLabel(el) {
-  var lbl = el.querySelector("[data-note-lbl]");
+  var scope = alControlScope(el);
+  var lbl = scope.querySelector("[data-note-lbl]");
   if (!lbl) return;
-  var radio = el.querySelector('input[type="radio"]:checked');
+  var radio = scope.querySelector('input[type="radio"]:checked');
   lbl.textContent = radio
     ? (radio.getAttribute("data-note-label") || "A note, edits, or feedback")
     : "A note, edits, or feedback";
@@ -586,10 +649,18 @@ function alRenderItem(el) {
   var controls = el.querySelector("[data-controls]");
   var mark = AL.rail[doc];
 
+  // A node off the ruling stage takes no response at all, and its inputs
+  // carry their own `disabled` from the render. An element's own disabled
+  // attribute is never lifted by an ancestor fieldset, so the "change"
+  // affordance below cannot work on one of these and is not offered: a
+  // control that visibly does nothing is worse than none
+  // (commons.systems/disposition-graph/alignment-page).
+  var locked = el.getAttribute("data-stage") !== "ruling";
+
   // A submitted response is locked until the author asks to change it, and
   // stays open from then on -- clearing the box mid-edit must not lock it
   // again under the author's hands.
-  if (controls) controls.disabled = !staged && !AL.changing[doc] && alHasResponse(submitted);
+  if (controls) controls.disabled = locked || (!staged && !AL.changing[doc] && alHasResponse(submitted));
   if (mark) mark.textContent = staged ? "\u25CF" : alHasResponse(submitted) ? "\u2713" : "";
 
   if (!state) return;
@@ -597,13 +668,21 @@ function alRenderItem(el) {
     state.textContent = "Staged, not yet submitted.";
     state.hidden = false;
   } else if (alHasResponse(submitted)) {
-    state.textContent = "Submitted " + alWhen(submitted.updated) + " ";
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "linkish";
-    btn.setAttribute("data-change", "");
-    btn.textContent = "change";
-    state.appendChild(btn);
+    if (locked) {
+      // Recorded while the node was at the ruling stage, and the dialogue has
+      // since moved it back. The response stands in the record and is said so;
+      // it cannot be changed here, because this node cannot take one at all.
+      state.textContent = "Recorded " + alWhen(submitted.updated)
+        + ", when this node was at the ruling stage. It has moved back since, so it takes no response here.";
+    } else {
+      state.textContent = "Submitted " + alWhen(submitted.updated) + " ";
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "linkish";
+      btn.setAttribute("data-change", "");
+      btn.textContent = "change";
+      state.appendChild(btn);
+    }
     state.hidden = false;
   } else {
     state.textContent = "";
@@ -617,7 +696,10 @@ function alRender() {
   if (count) count.textContent = n + " response" + (n === 1 ? "" : "s") + " staged";
   var btn = document.getElementById("btn-submit");
   if (btn) {
-    btn.textContent = "Submit " + n + " response" + (n === 1 ? "" : "s");
+    // Say what it does. "Submit" read as starting a session; it writes the
+    // staged responses into this artifact's own record, where a session reads
+    // them back (commons.systems/disposition-graph/ruling-transport).
+    btn.textContent = "Record " + n + " for a session";
     btn.disabled = n === 0;
   }
   alItemEls().forEach(alRenderItem);
@@ -689,8 +771,35 @@ async function alSubmit() {
 
 /* ------------------------------------------------------------- digest */
 
-function alCopyAll() {
-  var lines = [];
+/* One instruction, whichever route carries it. The copy control and the
+   launch link must never emit different text: two controls claiming to do the
+   same thing and saying different things is the defect this exists to prevent
+   (commons.systems/disposition-graph/ruling-transport). The launch link
+   carries the bare `/align`, because a whole sitting does not fit in a URL,
+   and this is what the author pastes. */
+function alInstructionAll() {
+  var mod = document.getElementById("module-name");
+  var lines = ["/align", ""];
+  var n = 0;
+  alItemEls().forEach(function (el) {
+    var doc = el.getAttribute("data-doc");
+    var staged = AL.staged[doc];
+    var r = staged || AL.submitted[doc];
+    if (!alHasResponse(r)) return;
+    n++;
+  });
+  if (n === 0) {
+    lines.push("I have ruled on nothing yet on the alignment page"
+      + (mod && mod.textContent ? " for " + mod.textContent : "") + ".");
+    return lines.join("\n");
+  }
+  lines.push("I have ruled on " + n + (n === 1 ? " node" : " nodes")
+    + " on the alignment page"
+    + (mod && mod.textContent ? " for " + mod.textContent : "")
+    + ". Act on every response below before anything else, as the skill's step 0.4 says,"
+    + " then resume each sitting at its stage. Each response names the node, the stage it"
+    + " was at when I ruled, my ruling on the whole, and my ruling on any decision within it.");
+  lines.push("");
   alItemEls().forEach(function (el) {
     var doc = el.getAttribute("data-doc");
     var staged = AL.staged[doc];
@@ -699,11 +808,11 @@ function alCopyAll() {
     lines.push(
       el.getAttribute("data-id")
       + " [" + el.getAttribute("data-stage") + "] "
-      + (r.ruling || "no ruling")
-      + (staged ? " (staged)" : " (submitted)")
+      + (r.ruling || "no ruling on the whole")
+      + (staged ? " (staged, not recorded)" : " (recorded)")
     );
     var text = (r.text || "").trim();
-    if (text) lines.push(text);
+    if (text) lines.push("  " + text);
     var decisions = r.decisions || {};
     Object.keys(decisions).forEach(function (name) {
       var d = decisions[name] || {};
@@ -713,12 +822,15 @@ function alCopyAll() {
     });
     lines.push("");
   });
-  var text = lines.length ? lines.join("\n") : "No responses yet.";
-  var btn = document.getElementById("btn-copy");
+  return lines.join("\n");
+}
+
+/* Put text on the clipboard and say so on the button that asked for it. */
+function alCopyText(text, btn, label) {
   var done = function () {
     if (!btn) return;
     var old = btn.textContent;
-    btn.textContent = "Copied";
+    btn.textContent = label || "Copied";
     window.setTimeout(function () { btn.textContent = old; }, 1400);
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -726,6 +838,10 @@ function alCopyAll() {
   } else {
     alNotice("The clipboard is unavailable in this view.");
   }
+}
+
+function alCopyAll() {
+  alCopyText(alInstructionAll(), document.getElementById("btn-copy"), "Copied");
 }
 
 /* --------------------------------------------------------------- boot */
@@ -777,6 +893,10 @@ async function alBoot() {
     el.addEventListener("click", function (ev) {
       var t = ev.target;
       if (!t || !t.hasAttribute || !t.hasAttribute("data-change")) return;
+      // Never reachable from a locked item, which renders no change button;
+      // guarded anyway, since opening the fieldset there would suggest an
+      // edit the individually-disabled inputs cannot accept.
+      if (el.getAttribute("data-stage") !== "ruling") return;
       AL.changing[doc] = true;
       var controls = el.querySelector("[data-controls]");
       if (controls) controls.disabled = false;
@@ -796,6 +916,16 @@ async function alBoot() {
 
   var copyBtn = document.getElementById("btn-copy");
   if (copyBtn) copyBtn.addEventListener("click", alCopyAll);
+
+  /* The per-node copy on every stage chip: the instruction that opens the
+     dialogue on that node, the same text its launch link carries. Delegated
+     from the document so one listener serves all of them. */
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target && ev.target.closest ? ev.target.closest("[data-copy]") : null;
+    if (!btn) return;
+    ev.preventDefault();
+    alCopyText(btn.getAttribute("data-copy"), btn, "\u2713");
+  });
 
   // The rail selects; the node in view takes the whole screen on demand,
   // because a whole node's text in a third of a screen is skimmed and the

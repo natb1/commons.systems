@@ -10,9 +10,14 @@ description: Record or revise one node of the disposition graph by interview wit
 > `alignment-order`, the second for its amended count; reconciled again on
 > 2026-09-04 under the author's grant for the alignment-page sitting, to
 > the `facts` encoding, the reversed direction of boldness, and the
-> alignment page's own node. Every recommendation this reconciliation
-> wrote is unanswered, and the clean-context review of the batch is owed
-> before the author rules on any of it.)** Hand-materialized from
+> alignment page's own node; and once more the same day, under the
+> author's grant "granted, reconcile it", for the refinement dividing the
+> ruling screen's two columns and for the four defects the author found on
+> `commons.systems/public/agency`, which is where the rule below on
+> presenting a recommendation to keep the standing text comes from. Every
+> recommendation these reconciliations wrote is unanswered, and the
+> clean-context review of the batch is owed before the author rules on any
+> of it.)** Hand-materialized from
 > the nodes `growth`, `recording`, `unanswered`, `dialogue`,
 > `clean-context-review`, `frontier-consistency`, `checkpoint`,
 > `alignment-target`, `alignment-order`, `alignment-page`, `authority`,
@@ -302,6 +307,20 @@ skill only when the session starts in the checkout that carries it.
   irreversible, or capture-shaped. Deliver a question's context where the
   author will read it, the alignment page or the prose turn, never the
   AI's own preamble.
+- A recommendation to keep the text already in the record is presented for
+  the authority that text has and never for more. `adopts: standing` names
+  the node's own text unchanged, which is what it means in the record and
+  what the review reads it as; put to the author it is a different thing at
+  each class. Where the answer is ratified, keeping it is what it sounds
+  like. Where the stamp is deferred or absent the text is a draft the author
+  has never confirmed, since a deferred answer is unanswered until they
+  rule, so a confirmation ratifies the AI's own draft and is said that way.
+  Calling it the node as it stands puts a standing on it that it does not
+  have and makes it read as the safe and ordinary choice, when on a draft
+  written in the author's voice by the AI it is the least safe one on offer.
+  During bootstrap nothing is ratified, so this is every node
+  (`authority`, `unanswered`; the author's finding of 2026-09-04 on
+  `commons.systems/public/agency`, recorded on `alignment-page`).
 - The AI's own authority over the record (`evaluation`, `authority`). A
   ratified answer changes only by interview. Delegated and deferred
   answers need no interview: the AI may overrule them on its best

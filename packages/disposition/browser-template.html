@@ -1,3 +1,10 @@
+<!-- The publish wrapper supplies the doctype and head, so this file carries
+     none of its own; the charset is repeated here because the same file is
+     read from disk at dist/, where nothing wraps it and the page would
+     otherwise decode as windows-1252 and mojibake every long dash, ellipsis
+     and Greek word in the record. A duplicate meta in the published page is
+     harmless; an undecodable local one is not. -->
+<meta charset="utf-8">
 <title>Disposition Graph</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
