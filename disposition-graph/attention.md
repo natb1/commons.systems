@@ -19,6 +19,9 @@ alternatives:
   - name: rank-moves-here
     source: review
     ref: "2026-09-03"
+  - name: rank-orders-reconciliation-only
+    source: author
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -55,6 +58,10 @@ The reviewer's strongest counter-argument, made twice: one scalar cannot carry a
 ### rank-moves-here
 
 The decomposition finding proposes that 'rank' move from under's `defines` to attention's, since attention already answers how rank is computed and read, leaving under as the edge alone. Under answers four questions at once and stands at the maieutic stage with no drafted text, while four ruling-stage nodes rest on the term. Verified: under's defines carries rank and attention's carries only boost and the onboarding path. The session accepted the substance and left the ruling to under's sitting. Raised on commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/under.
+
+### rank-orders-reconciliation-only
+
+The author's words on alignment-order, 2026-09-03: attention's second reading of rank, "where work goes first", originally referred to the reconciliation frontier and predates the alignment frontier. The alternative amends the second reading to say so: rank orders the reconciliation frontier and the onboarding path, and the alignment frontier is ordered by the ruling order the alignment-order node defines, with rank as its tie-break. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 
 ## Account
 

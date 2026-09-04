@@ -12,6 +12,10 @@ review:
   strength: moderate
   date: 2026-09-03
   of: b5717e656b723368acf1ad6f3609c7ab85c6a1a3
+alternatives:
+  - name: page-in-ruling-order
+    source: author
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -55,6 +59,12 @@ The author rules on the alignment page or in prose. The page lists every unanswe
 The author's ruling of 2026-09-03, quoted above. The bootstrap wrote its answers stamped deferred because the dialogue that alone confers a stamp in the author's name did not yet exist, and the author's ruling on the authority node of 2026-09-02, that the first valid ratifications will be the outputs of this first alignment dialogue, already said that none of them was answered. What changed on 2026-09-03 is the classification. The record had two words for two things: "un-aligned disposition" for a node with no answer, hidden from the browser and listed by the alignment page, and the stamp's class for everything else, so that a deferred answer read as an answer in every projection although the author had not ruled on it. Re-evaluated at the author's direction the same day, the encoding needed one status derived from the stamp and the answer, answered or unanswered, and one rule, that an unanswered node carries its stage, so that the review queue is a listed dialogue the validator holds rather than a reading of the stamps. The un-aligned disposition keeps its name and its shape: it is the unanswered node with no answer yet, which the browser hides because it has nothing to show; every other unanswered node shows in the browser as the draft it is, marked with its stage, because the browser is the record's own documentation and the draft the author reads there is the draft the author rules on.
 
 Why a confirmation ratifies: the recording node makes the confirmation the last movement before the stamp, and the three responses the author asked for are the ruling's three outcomes as that node classifies them, recorded, refined, or kicked back; a fourth response, defer, is not needed, because leaving a node unconfirmed is the deferral. Why the purpose node first: rank alone puts the public graph's root above this project's, since the purpose node stands under it, while the author's order recorded on the scope node begins at purpose; listing each graph in the manifest's order, by rank within it, gives the author's order without touching a rank. Rejected: reading the earlier ruling that unanswered nodes are hidden from the browser as covering every unanswered node, which would empty the browser of the record it documents; that ruling was made of nodes with no answer and is kept for them. Rejected: a fourth authority class, or a field, for unanswered, since the status is derived from the stamp and the answer and a stored copy would drift; marking an answered node unanswered while an alternative is pending, the author's own first suggestion of 2026-09-03, retracted by the author the same day, since a pending alternative is dialogue state beside the answer and the answer's authority does not lapse until one is confirmed, as the author ruled that day, quoted above. Rejected: leaving the deferred answers without a stage, which would keep the queue a reading of the stamps instead of a dialogue the page lists. Not adopted from the incumbent record: review-item nodes and a curriculum, since the queue is the unanswered nodes themselves.
+
+## Alternatives
+
+### page-in-ruling-order
+
+This answer lists every unanswered node on the alignment page in rank order, the purpose node first. The alignment-order draft orders the alignment frontier by the ruling order, the node whose ruling settles the most first, with rank as tie-break; the alternative amends the page order accordingly, the purpose node remaining first while it is unanswered, since its ruling settles the whole graph. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 
 ## Account
 

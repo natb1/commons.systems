@@ -21,6 +21,9 @@ alternatives:
     ref: "2026-09-03"
   - name: cite-run-mechanics
     source: ai
+  - name: placement-feeds-the-order
+    source: author
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -98,6 +101,10 @@ The review's counter-argument, which the session's reply left standing as a prop
 ### cite-run-mechanics
 
 Both nodes state the same two run rules in full: that every invocation is one batch over the whole frontier read in one context, and that one review runs at a time by the invoking session's discipline until a lock exists. Clean-context-review is the survivor of the run mechanics, since its question is how the review is run and it is the node the skill implements. Frontier-consistency cites it for the batch scope and the serialization and keeps what is its own, the fifteen validations and the kickback flow, so that drift between the two restatements cannot open. (Raised on commons.systems/disposition-graph/clean-context-review.)
+
+### placement-feeds-the-order
+
+Validation 13, placement and order, has the review recommend the order in which the author rules, and nothing consumed the recommendation of 2026-09-03. The alignment-order draft gives it a consumer: the review's findings of contradiction, supersession, and redundancy between unanswered nodes are recorded as alternatives on the earlier-recorded survivor, and its findings of divergence between subtrees as `depends` on the leaves, and the ruling order is derived from that data rather than recommended in prose. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 
 ## Account
 

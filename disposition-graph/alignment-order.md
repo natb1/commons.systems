@@ -1,6 +1,16 @@
 ---
 question: What orders the unanswered frontier for alignment?
-stage: maieutic
+stage: review
+recommendation:
+  adopts: draft
+  class: ratified
+  boldness: moderate
+  amends: "4fa0c9e7b71f62087b2953d6a5ba212e3cc3368a"
+  at: "5e87aa8d717dc0e3bccd15b0bc078a558db128dd"
+alternatives:
+  - name: draft
+    source: ai
+    ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/alignment-target
   - commons.systems/disposition-graph/attention
@@ -37,6 +47,41 @@ The author, 2026-09-03, on the probe whether an ancestor ruling suffices for a d
 The author, 2026-09-03, choosing between naming a divergence on the leaves and deriving it at the ancestor (1) and naming it on the ancestor with a new field (2):
 > 1
 
+The author, 2026-09-03, on the whole draft and the three steers (survivor rule, name, rank on this frontier), taking the first of each: earlier-recorded stands; the problem is settling and the order is the ruling order; rank breaks ties only:
+> go
+
+## Alternatives
+
+### draft
+
+The recommended text answers the question with the ruling order in place of rank: tangles between unanswered nodes recorded as alternatives on the earlier-recorded survivor, divergences between subtrees recorded on the leaves in `depends` and derived at the ancestor, a ruling settling every node it makes mechanically decidable, and the order putting first the node whose ruling settles the most, rank breaking ties. The node as it stands has no answer, so there is no standing text to adopt.
+
+## Recommendation
+
+```markdown
+---
+question: What orders the unanswered frontier for alignment?
+form: rule
+authority:
+  class: deferred
+  by: claude
+  date: <the date of the ruling>
+under:
+  - commons.systems/disposition-graph/alignment-target
+  - commons.systems/disposition-graph/attention
+defines:
+  - ruling order
+  - settle
+---
+## Answer
+
+The ruling order, derived from the tangle the record carries, and not rank. The alignment frontier is a set of nodes none of which has authority over another, so a recording on it may contradict, duplicate, or diverge from any other and nothing can reject it; the order's work is to untangle it, by asking for the rulings that settle the most first. A tangle is recorded, never computed in a session. A lateral tangle between unanswered nodes, the same idea twice, its opposite, or adjacent nodes that would merge, is recorded as an alternative on the earlier-recorded node, which stands by that rule alone, with the later one as the alternative carrying its source and date. A divergence between subtrees is recorded on the leaves: each node the review finds to stand under one side names, in `depends`, the ancestor and the alternative on it that it stands under; the page inverts that at the ancestor, showing beside each alternative the nodes a ruling for it keeps and the nodes it discards, which then liquidate by the standing rules, each a proposal against its ratified ancestor and its implementation unsupported. A ruling settles a node when it makes that node mechanically decidable: every unanswered node under the ruled node, every alternative the ruling closes, and every node naming it in `depends`. The ruling order puts first the node whose ruling settles the most; ancestors come before descendants by that count and not by hand; rank breaks ties and orders nothing else on this frontier. `/align` with nothing takes the first node of the ruling order; `/align <node id>` is the author's order and needs no boost. Rank remains what the attention node says it is for the reconciliation frontier and the onboarding path.
+
+## Rationale
+
+The author's words of 2026-09-03, quoted in the dialogue that produced this node: attention's second reading of rank, "where work goes first", referred to the reconciliation frontier and predates the alignment frontier; rank was "the only order the record had to hand" when alignment-target was ruled, and every statement applying it to alignment is reconsidered; the alignment frontier "has no confirmed authority, so all mutations of the alignment frontier potentially supercede or modify all other nodes on the alignment frontier", and "a greedy rank based approach isn't necessarily optimal for untangling" it; the examples are recording the opposite of an unconfirmed disposition, or the same one again, which with authority on one side "could be mechanically rejected or recorded as an alternative"; the frontier is a graph, so adjacent nodes may merge and whole subtrees may diverge; and, choosing between naming a divergence on the ancestor and on the leaves, the author chose the leaves, with the divergence derived at the ancestor, then took the survivor rule, the name, and rank as tie-break as recommended. Greedy-by-rank fails on this frontier because rank is importance and the frontier's problem is dependency: an important leaf ruled before its ground is reopened when the ground is ruled. The settling count is dependency-first with importance as the tie-break, and ancestor-first falls out of it, since a ruling's reach by the authority node's scope rule is its whole unanswered subtree; the record's three orphaned devices for the same problem, the heuristics alignment-target rejected on the premise that rank was already the order, the `depends` field dialogue defined and no node carried, and the placement validation frontier-consistency runs and nothing consumed, become one mechanism. The divergence is named on the leaves and not the ancestor because an alternative is a candidate answer to its own node's question and a divergence answers nothing, because an ancestor edited at every review finding is re-reviewed at every round, because the pins would live on what moves, and because the subtree under a node is structure and derived; only the judgment which side a leaf stands under is not derivable, and that is what the leaf records. Rejected: rank as the alignment order, the standing answers of alignment-target and attention's second reading, on the author's words above; computing the order in a session from the review's findings without recording the tangle, which the transience node forbids; the author stating the order, which `/align <node id>` already is; naming the divergence on the ancestor; the review naming the survivor of a lateral tangle, and the node nearer the root standing, in favour of the earlier-recorded node, the rule the queue already applies to the author's words; striking rank from this frontier entirely, with ties broken by date, since the tie-break costs nothing and keeps one scalar for the page to fall back on. Readings owed as nodes under this one: Aristotle, Posterior Analytics I.2, 71b33 to 72a5, prior by nature against prior to us, the ruling order taking what is prior by nature first where rank took what is nearest to us; and the three-way merge, which resolves a divergence relative to the merge base, the lowest common ancestor, and never leaf against leaf. Both support the answer and neither is diverged from. What the answer amends elsewhere is recorded as an alternative of source author on each node: alignment-target's choice by rank, attention's second reading, dialogue's `depends` target, the page order on unanswered and growth, and the consumer of frontier-consistency's placement validation; the projector, the alignment page, and the alignment skill's no-argument usage follow at reconciliation.
+```
+
 ## Account
 
 An un-aligned disposition, recorded at its sitting's opening on 2026-09-03 and not yet answered. The question it asks is distinct from its parents': alignment-target says what a session given nothing takes up, and attention says how rank is computed and read; this node asks whether rank is the right order for the alignment frontier at all, and if not, what is, and whether the dialogue's state should carry something the order can be derived from.
@@ -52,6 +97,14 @@ What the sitting would amend, read before anything is changed:
 The implementation their criteria point to: the frontier projection of `packages/disposition/project.mjs`, one rank order across both graphs; the alignment page's ordering, which groups by graph and then by rank; and the no-argument usage of the alignment skill, hand-materialized from alignment-target.
 
 The periagogic object of this sitting is those five nodes and that implementation. The movement owed is periagogic: the author's account of what the record says rank is, and of what the alignment frontier is for, before the AI's account enters.
+
+### Review owed, 2026-09-03
+
+The clean-context review has not run on this recommendation: the author stopped the sitting before it, at the checkpoint, to prepare for compaction. A session resuming this node invokes `/align-review` on the batch at the review stage, this node among it, and applies its verdict; nothing else is owed before the ruling. The alternatives this draft raises on alignment-target, attention, dialogue, unanswered, growth, and frontier-consistency were recorded in the same landing, each of source author and dated 2026-09-03.
+
+### Maieutic movement closed, 2026-09-03
+
+Drafted over four turns from the author's words above. The three classes of finding: within the graph, alignment-target, attention's second reading, and the page order on unanswered and growth apply rank to alignment and the draft contradicts each, recorded as alternatives of source author on those nodes; between the graph and the AI's knowledge, none the draft does not state; redundant seams, the three orphaned devices named in the rationale, folded into one mechanism, and `depends` needing a target beyond a node id, an alternative on dialogue. Evaluated twice: best judgment, dependency before importance; tradition, the two readings named in the rationale, both supporting. Tested against the record it joins: nothing above it is ratified, so nothing is doctrine, and it contradicts no global-tier node; it amends the projector, the alignment page, and the alignment skill's no-argument usage, which is reconciliation's work after the ruling. Facts: authority ratified, capture-shaped since it decides what the author is asked first; boldness moderate, the problem, the lack of authority, the greedy failure, and the leaf-recording choice being the author's and the survivor rule, the settling count, and rank as tie-break the AI's; persistence standing. Stage review.
 
 ### Periagogic movement closed, 2026-09-03
 

@@ -22,6 +22,9 @@ alternatives:
   - name: depends-migration-named
     source: review
     ref: "2026-09-03"
+  - name: depends-names-an-alternative
+    source: author
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -134,6 +137,10 @@ The finding that the review pin covers only the draft and not the standing answe
 ### depends-migration-named
 
 The answer names the migration that `depends` orders and drops the claim that the frontier shows the gap. Verified that zero nodes carry the field, twenty-three carry the `Depends on:` prose it replaces, the projector reads it nowhere, and the frontier prints nothing about it, so a confirmation today ratifies a seventh part of the dialogue state that no node uses and no projection reads. On this alternative the answer says that the field is defined and not yet carried, that the prose conventions stand until the migration lands, and that the migration is part of what the confirmation orders — which is what dialogue's own account calls 'a reconciliation with the author's ruling on each' rather than a landing inside one sitting.
+
+### depends-names-an-alternative
+
+The alignment-order draft records a divergence between subtrees on the leaves: each node the review finds to stand under one side names, in `depends`, the ancestor and the alternative on it that it stands under, and the page derives the divergence at the ancestor by inversion. `depends` as this node defines it carries node ids only; the alternative extends its target to an alternative on the named node, keeping the inverse derived and never stored. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 
 ## Account
 

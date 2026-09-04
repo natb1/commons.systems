@@ -34,6 +34,9 @@ alternatives:
   - name: cite-the-reading
     source: review
     ref: "2026-09-03"
+  - name: queue-in-ruling-order
+    source: author
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -108,6 +111,10 @@ The cross-reference finding carried on session-context proposes that growth's tw
 ### cite-the-reading
 
 Growth's answer drops its own Republic citation for the periagogic movement and cites this reading instead, so the loci are stated in one place. The review of 2026-09-03 found the two citations disagreeing in extent, growth naming 518b to d while the reading names 518b to 518d plus 521c and 515c to 516a. (Raised on commons.systems/disposition-graph/plato-periagoge.)
+
+### queue-in-ruling-order
+
+This node's queue, the set of unanswered nodes in rank order, and its list of what the alignment page carries, every unanswered node in rank order, are amended by the alignment-order draft to the ruling order, with rank as tie-break; the author's choice of what comes next remains `/align <node id>` and needs no boost. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
 
 ## Account
 
