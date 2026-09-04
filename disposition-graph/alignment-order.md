@@ -13,6 +13,9 @@ The author, 2026-09-03:
 The author, 2026-09-03, refining:
 > Or, is there better unanswered alignment state that would help with prioritization of alignment?
 
+The author, 2026-09-03, answering the periagogic probe on attention's second reading of rank, "frontier attention, where work goes first":
+> It originally referred to the reconciliation frontier, but that predated the alignment frontier. attention "for where work goes first" refers to the reconciliation process (shimmed as a skill, but codified before bootstrap exit).
+
 ## Account
 
 An un-aligned disposition, recorded at its sitting's opening on 2026-09-03 and not yet answered. The question it asks is distinct from its parents': alignment-target says what a session given nothing takes up, and attention says how rank is computed and read; this node asks whether rank is the right order for the alignment frontier at all, and if not, what is, and whether the dialogue's state should carry something the order can be derived from.
