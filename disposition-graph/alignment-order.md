@@ -116,6 +116,35 @@ alignment page is written by it. That widening is disclosed here rather than
 assumed: it is the least that makes the three named artifacts work, and the
 author may strike it at the ruling.
 
+What was reconciled, landed on `greenfield` as
+c6046115e2b45a9022d95d06aeaa44b94d619fcc against this node at graph commit
+6ca8da2679591c5dad61a664338d48062230d808. The alignment skill: the three
+usages, the frontier reading, the ruling stage's account of the page, the
+queue, the `depends` clause of the dialogue state, the no-argument rule,
+and a new clause stating the ruling order whole. The align-review skill:
+validation 13 no longer asks the reviewer to recommend an order but to
+record the tangle, with an explicit test for which of two unanswered nodes
+was recorded earlier; `ruling_order` in the reviewer's output is replaced
+by `subtree_divergences`, which the apply step writes into the leaves'
+`depends` and records on the ancestor and the leaves; the brief indexes the
+batch in the ruling order. The alignment page pages in the ruling order
+within each graph, carries each node's settling count, and inverts a
+divergence at the ancestor into what a ruling for each alternative keeps
+and what it discards. The reader parses `<id>#<alternative>` and validates
+it, and `deriveSettles` computes the count. The reconciliation session's
+tests: 246 pass, and the graph validates at seventy nodes.
+
+What the reconciliation did not do, and what a ruling for the standing
+recommendation would still leave open: no node in the record carries
+`depends` yet, so the divergence device is implemented and unexercised, as
+the frontier finding of 2026-09-03 on `dialogue` says of the field itself,
+and the twenty-three nodes carrying the `Depends on:` prose convention are
+unmigrated. The alternatives this draft raised on `alignment-target`,
+`attention`, `dialogue`, `unanswered`, `growth`, and `frontier-consistency`
+are still pending the author's ruling; the implementation follows this
+node's recommendation, which those alternatives would amend, and it follows
+the ruling if the ruling differs.
+
 An un-aligned disposition, recorded at its sitting's opening on 2026-09-03 and not yet answered. The question it asks is distinct from its parents': alignment-target says what a session given nothing takes up, and attention says how rank is computed and read; this node asks whether rank is the right order for the alignment frontier at all, and if not, what is, and whether the dialogue's state should carry something the order can be derived from.
 
 What the sitting would amend, read before anything is changed:
