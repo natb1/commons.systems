@@ -22,6 +22,10 @@ The author, 2026-09-03, opening this sitting on the alignment page:
 > - Not all aspects of the disposition need to be confirmed individually. After the list A of confirmation requests is the full disposition detail. It dynamically reflects choices made in the confirmation request list. Very high confidence or default disposition elements can just be included in the final render. After the final render is an option to reject final render with text input for feedback.
 > - nodes (eg. commons.systems/disposition-graph/purpose) still indicate that they are edits to confirmed dispositions (there appears to be a ground version that is being diffed) even though no node is yet confirmed. This appears to be bootstrap encoding artifact. purpose node is a confirmation ruling for a node that does not yet exist on the reconciliation frontier (only on the alignment frontier). After drafting recommendation for this item, and/or identifying issue with bootstrap reconciliation of disposition for unanswered data structure, launch an ad-hoc fable subagent to validate just this recommendation/reconciliation issue (not a full alignment review).
 
+The author, 2026-09-03, amending the fourth disposition above:
+
+> change to the original disposition: full disposition detail renders in a right aligned context pane rather than rendering below the confirmation requests.
+
 ## Account
 
 An un-aligned disposition, recorded at the author's direction on 2026-09-03 and not yet answered. The question is the alignment page's own: what the author reads when they rule, what it must show of each unanswered node, in what order, and how their ruling returns to the record. The page exists and the author rules on it daily, and until now no node asked its question. It was recorded only inside other answers: a shim on `growth` naming the artifact, the projector flag that writes it, its published address, and its liquidation; one sentence of `growth`'s answer saying what it lists; one clause of `projection`'s answer and of its recommended text naming it the projection of the open dialogue; and the three responses defined on `unanswered`. So the page would have been ratified incidentally, by clauses inside larger rulings, and never put to the author as a question of its own, where the browser has this node's parent and `self-documentation` beside it.
@@ -105,10 +109,19 @@ answers of `growth`, `dialogue`, `recording`, `scope`, and the presentation
 rule wherever the three facts are listed, and it is a rename and not a change
 of meaning unless the author says otherwise, which is part of the probe.
 
-**Full detail after list A, and rejecting the final render.** The page would
-close with the whole disposition as it would stand under the choices made
-above, live, with the high-confidence and default elements simply present and
-never asked about, and one more rejection with feedback against the whole. Read
+**Full detail beside list A, and rejecting the final render.** The whole
+disposition as it would stand under the choices made above renders live, with
+the high-confidence and default elements simply present and never asked about,
+and one more rejection with feedback against the whole. The author amended the
+placement the same day: it renders in a right-aligned context pane, not below
+the confirmation requests. That makes the page three columns, the rail on the
+left carrying the metrics and the selection, the confirmation requests in the
+middle, and the disposition as it would stand on the right, and it changes what
+the arrangement is for: the result is not the reward for working down a list
+but the thing in view while the list is worked, so the author sees each choice
+land in the disposition as they make it. It also decides a question the first
+statement left open, whether the final render is reached by scrolling past
+list A or is always present; it is always present. Read
 against the record this is a second thing the author is asking for and not a
 restatement of the first: list A is confirmation aspect by aspect, and the
 final render is confirmation of the result, which is the whole-node ruling the
