@@ -112,6 +112,16 @@ The author, 2026-09-03, during the reconciliation under the bootstrap grant on t
 The author, 2026-09-03, during the reconciliation:
 > prepare for compaction then stop
 
+The author, 2026-09-03, answering the probe on the unit of a ruling, which this node encodes:
+
+> the revised record is to carry a decision per aspect. each aspect of a disposition may have choices that require confirmation. each aspect has a recommendation with confidence.
+
+The author, 2026-09-03, retracting the rename put to them earlier the same day:
+
+> stick with boldness then, I want to know how much rests on the AI's own knowledge against the record.
+
+The words in full are on `commons.systems/disposition-graph/alignment-page`.
+
 ## Answer
 
 Its question, its fields, and its standing answer with its stamp when it has one; and, while a dialogue is active on it, the dialogue state. A dialogue is active on every unanswered node and on any answered node with an alternative pending on it. The status unanswered stays derived from the stamp, as the unanswered node says, and a standing answer of any class, ratified, delegated, or deferred, keeps its full authority while the dialogue is active, until an alternative is confirmed. Confirmed dialogue state folds into the node at the recording, into the answer, into the rationale as a rejected alternative with the ruling quoted, or into nothing; unconfirmed, it survives only in version control. Three requirements fix what the state must be: it must survive the session that held it, so that a session which loses its context resumes every node from its stage; it must hold the author's intention against the account that accumulates around it, the requirement the fidelity node asks; and it must give the author, at the moment of ruling, the context to see how this question stands to the rest of the unanswered frontier, and, reading a node that already has an answer, whether alternatives are pending on it and where each came from. It has these parts, each holding only what cannot be re-derived.

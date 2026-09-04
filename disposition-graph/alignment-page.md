@@ -26,6 +26,14 @@ The author, 2026-09-03, amending the fourth disposition above:
 
 > change to the original disposition: full disposition detail renders in a right aligned context pane rather than rendering below the confirmation requests.
 
+The author, 2026-09-03, answering the periagogic probe on the unit of a ruling:
+
+> the revised record is to carry a decision per aspect. each aspect of a disposition may have choices that require confirmation. each aspect has a recommendation with confidence. after analysis of cascading effects on the alignment frontier and esp. the data model have a fable subagent validate the analysis and the data model.
+
+The author, 2026-09-03, on the two vocabulary questions put with the probe:
+
+> I said permanence but I meant persistence. stick with boldness then, I want to know how much rests on the AI's own knowledge against the record.
+
 ## Account
 
 An un-aligned disposition, recorded at the author's direction on 2026-09-03 and not yet answered. The question is the alignment page's own: what the author reads when they rule, what it must show of each unanswered node, in what order, and how their ruling returns to the record. The page exists and the author rules on it daily, and until now no node asked its question. It was recorded only inside other answers: a shim on `growth` naming the artifact, the projector flag that writes it, its published address, and its liquidation; one sentence of `growth`'s answer saying what it lists; one clause of `projection`'s answer and of its recommended text naming it the projection of the open dialogue; and the three responses defined on `unanswered`. So the page would have been ratified incidentally, by clauses inside larger rulings, and never put to the author as a question of its own, where the browser has this node's parent and `self-documentation` beside it.
