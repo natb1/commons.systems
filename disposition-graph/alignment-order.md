@@ -16,6 +16,11 @@ The author, 2026-09-03, refining:
 The author, 2026-09-03, answering the periagogic probe on attention's second reading of rank, "frontier attention, where work goes first":
 > It originally referred to the reconciliation frontier, but that predated the alignment frontier. attention "for where work goes first" refers to the reconciliation process (shimmed as a skill, but codified before bootstrap exit).
 
+The author, 2026-09-03, answering the periagogic probe on alignment-target's answer, whether rank ordering alignment was a decision or the only order to hand:
+> Yes, all of these statements are being reconsidered on the basis of new thinking about how the alignment frontier has different properties than the reconciliation frontier. In particular the alignment frontier has no confirmed authority, so all mutations of the alignment frontier potentially supercede or modify all other nodes on the alignment frontier. A greedy rank based approach isn't necessarily optimal for "untangling" the alignment frontier.
+>
+> rank was the "only order the record had to hand". `/align` with nothing chooses the top priority node using priority order TBD that best addresses the "untangling" problem (what's a better way to describe this problem?)
+
 ## Account
 
 An un-aligned disposition, recorded at its sitting's opening on 2026-09-03 and not yet answered. The question it asks is distinct from its parents': alignment-target says what a session given nothing takes up, and attention says how rank is computed and read; this node asks whether rank is the right order for the alignment frontier at all, and if not, what is, and whether the dialogue's state should carry something the order can be derived from.
