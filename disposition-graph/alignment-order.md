@@ -1,6 +1,6 @@
 ---
 question: What orders the unanswered frontier for alignment?
-stage: periagogic
+stage: maieutic
 under:
   - commons.systems/disposition-graph/alignment-target
   - commons.systems/disposition-graph/attention
@@ -21,6 +21,11 @@ The author, 2026-09-03, answering the periagogic probe on alignment-target's ans
 >
 > rank was the "only order the record had to hand". `/align` with nothing chooses the top priority node using priority order TBD that best addresses the "untangling" problem (what's a better way to describe this problem?)
 
+The author, 2026-09-03, answering the periagogic probe on whether `depends` as dialogue defines it names the relation they mean:
+> Does "settling" the ground imply that ruling order is just "under" edge topological order?
+>
+> periagogic response: I'm not sure. Examples would include recording an unanswered disposition then before it's confirmed forgetting the original idea and recording the opposite idea, or recording the same idea again. If the first idea had confirmed authority the latter idea could be mechanically rejected or recorded as an alternative. Without the authority these must be "untangled".
+
 ## Account
 
 An un-aligned disposition, recorded at its sitting's opening on 2026-09-03 and not yet answered. The question it asks is distinct from its parents': alignment-target says what a session given nothing takes up, and attention says how rank is computed and read; this node asks whether rank is the right order for the alignment frontier at all, and if not, what is, and whether the dialogue's state should carry something the order can be derived from.
@@ -37,7 +42,11 @@ The implementation their criteria point to: the frontier projection of `packages
 
 The periagogic object of this sitting is those five nodes and that implementation. The movement owed is periagogic: the author's account of what the record says rank is, and of what the alignment frontier is for, before the AI's account enters.
 
-### Probe outstanding, 2026-09-03
+### Periagogic movement closed, 2026-09-03
+
+The periagogic movement ran over three probes, on attention's second reading of rank, on alignment-target's answer, and on the relation `depends` names, and closed with the author's account in the record: attention's "where work goes first" is the reconciliation frontier and predates the alignment frontier; rank was the only order the record had to hand when alignment-target was ruled, and every statement applying it to alignment is reconsidered; the alignment frontier has no confirmed authority, so any recording on it may supersede or duplicate any other, which authority's mechanism (a conflicting answer recorded as an alternative on the node it conflicts with) resolves mechanically only where one side has authority; whether `under` order settles that is open. The stage advances to maieutic.
+
+### Probe outstanding, 2026-09-03 (closed above)
 
 The periagogic movement is open on one probe, put to the author and not yet answered, and the sitting stands behind the sitting on dialogue by the author's choice. The probe, on attention's answer alone: it says rank is "one fact with three readings" and names the second as "frontier attention, where work goes first"; as that sentence stands, does it distinguish an alignment frontier from a reconciliation frontier at all, and whose attention does the record say the word names there, the author's, the session's, or the newcomer's. The AI's findings on the record are held back until the author commits to it.
 
