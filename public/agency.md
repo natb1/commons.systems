@@ -110,3 +110,73 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Alternatives pending, with their sources: `structural-test` (review, 2026-09-03); `authors-own-arche` (review, 2026-09-03, from commons.systems/public/pettit-non-domination).
 Moved to other nodes as alternatives: `restate-as-record-not-capacity` on commons.systems/disposition-graph/capture; `rests-on-unstated-arche` on commons.systems/disposition-graph/purpose; `reread-after-arche` on commons.systems/public/aristotle-arche-of-action; `reread-after-arche` on commons.systems/public/pettit-non-domination.
 The census unit's note: The node carries no `recommendation` field, so `adopts` is null, and it has no `## Disposition` section at all, so `dispositions` is empty — which is precisely what the review's kickback is about: the answer to 'Who is the origin of what is done in my name?' is written in the author's first person by the AI, and the author's own account has never been elicited. The one alternative I recorded is the counter-argument's structural test; I judged it borderline, since it is framed as an objection rather than as a proposed text, but it is a genuinely different answer to the graph's root question and the author should see it beside the draft. The review's proposals about the facts line and about moving the node to periagogic are process, not candidate answers, and the stage move is already applied. The redundancy and placement findings are moved to capture, purpose, and the two readings.
+
+### Systemic, residue, or unfinished dialogue, 2026-09-04
+
+Recorded from the sitting on `commons.systems/disposition-graph/alignment-page`,
+which the author opened in order to draw this distinction before taking this
+node through confirmation. Ten findings, measured against the graph at
+`4229857c`, in three classes.
+
+**Systemic, and already answered.** Four of the faults the author read on this
+node in the earlier sitting of 2026-09-04 were the page's and not this node's,
+and the reconciliation under that day's grant fixed all four: the word
+`standing` claiming a ratification no node in the record has, since none is
+ratified; the caption saying nothing else is proposed while the column beside
+it proposed up to five things; a choice row leading with the option's slug and
+folding its sentence into a closed drill-down; and a full ruling surface
+offered on a node at the periagogic stage. None of that was this node's
+encoding.
+
+**Systemic, and open.** Three remain, and each is a property of the model
+rather than of this node.
+
+This node carries no `authority` fact, and seventeen other nodes carrying a
+stage carry none either. The `dialogue` node states the conditionality of
+`existence` and of `persistence` and states none for `authority`, so the
+absence is a gap against the record's own text and not a design choice, and
+the validator does not catch it. What it costs here is not cosmetic: the
+authority fact is how the author confers delegated or deferred, so on this
+node, which is the graph's root question, the only class the page can offer is
+ratified, and the author's third exit is closed by an encoding accident.
+
+The option this node `stands` on has no summary and cannot have one, because
+`dialogue` says the option named by `stands` needs no subsection since its text
+is the answer. That is why `standing` renders as a name and a generic caption
+where the other two options render their sentences. Under the disposition the
+author stated in the alignment-page sitting, that every option carries a short
+summary, the exemption goes, and the sentence this one needs is the one the
+record already requires in prose: that confirming ratifies a draft no one has
+confirmed.
+
+This node's answer fact carries no recommendation, as fourteen others do not.
+All fifteen are at the periagogic or the maieutic stage, so the model is
+satisfied, and what the page owes is to say that no recommendation stands
+rather than to render an unmarked list of options as though one did.
+
+**Residue of this node's own encoding, measured.** The `### Rejected` block in
+the rationale is byte-identical in all eight commits that have touched this
+file, from `1920badc`, the first graph write, through both encoding migrations,
+`9e3a6624` and `db23d5b1`. Neither migration read it. Its two entries,
+detachment as retention and forced detachment, were never carried into
+`options`, and both are rejected on the merits rather than held viable, so
+`viable-options` would not admit them today. This is exactly the residue the
+author suspected, and the question of where such an entry belongs is now
+`commons.systems/disposition-graph/prose-and-structure`.
+
+The stub note in the same rationale still reads "Deferred until the author
+ratifies it". No node carries a stamp: the author's ruling of 2026-09-03
+struck the deferred stamps the bootstrap wrote, and the class is read off the
+rulings. This node's own clean-context review found that sentence on
+2026-09-03, called it dialogue state and owed work sitting in the rationale,
+and nothing consumed the finding.
+
+**Unfinished dialogue, and it is the reason this node is where it is.** There
+is no `## Disposition` section on this node and no words of the author's
+anywhere on it, while the answer is written in the author's first person by the
+AI and every node at the review or the ruling stage descends from it. That is
+not residue and no encoding change reaches it. The review of 2026-09-03 kicked
+the node back to the periagogic stage for this and nothing else, and the
+movement it named is still owed: the author's own account of who is the origin
+of what is done in their name, in their words, before the two readings under
+this node are re-read.
