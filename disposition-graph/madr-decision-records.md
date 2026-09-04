@@ -1,6 +1,6 @@
 ---
 question: Do architecture decision records in the MADR form support encoding the dialogue state as alternatives with a recommendation among them?
-stage: ruling
+stage: review
 review:
   verdict: forward
   strength: moderate
@@ -9,15 +9,15 @@ review:
 facts:
   - name: answer
     options:
-      - name: standing
+      - name: status-derived-from-stamp
         source: ai
         ref: "2026-09-03"
       - name: divergence-narrows
         source: ai
         ref: "2026-09-04"
-    recommends: standing
+    recommends: divergence-narrows
     boldness: high
-    stands: standing
+    stands: divergence-narrows
   - name: authority
     options:
       - name: ratified
@@ -30,22 +30,31 @@ under:
 source: Markdown Architectural Decision Records (MADR), the template at adr.github.io/madr, version 4 (Context and Problem Statement, Decision Drivers, Considered Options, Decision Outcome with its chosen option, consequences, and confirmation, Pros and Cons of the Options, More Information; a status of proposed, rejected, accepted, deprecated, or superseded by another record; decision-makers, consulted, and informed), descending from Michael Nygard's architecture decision records of 2011 (Context, Decision, Status, Consequences).
 bears:
   - fact: answer
-    option: standing
+    option: facts-carry-options
+    relation: adopted
+  - fact: answer
+    option: alternatives-beside-facts
     relation: adopted
 depends:
   - commons.systems/disposition-graph/viable-options
 ---
 ## Answer
 
-Supports it, and the dialogue state adopts its form. A MADR record lists the considered options, states the chosen option with the reasons that decided it, keeps the pros and cons of every option beside the decision, and carries a status that moves from proposed through accepted, rejected, deprecated, or superseded. The dialogue state on a node is that record kept live: the alternatives with their sources are the considered options, the recommendation naming the alternative it adopts is the decision outcome as proposed, the rationale's rejected lines are the options' cons after the ruling, and the stage is the status. Two differences are recorded as this project's own. MADR stores the status, and this record derives it from the stamp and the stage, since a stored status drifts from the stamp that confers it. MADR's decision-makers, consulted, and informed are one person and one AI here, and the source of each alternative, the author, the AI, the review, or a proposal from outside alignment, carries what those fields carry.
+Supports it, and the record adopts its form. A MADR record lists the considered options, states the chosen option with the reasons that decided it, keeps the pros and cons of every option beside the decision, and carries a status that moves from proposed through accepted, rejected, deprecated, or superseded. A fact on a node is that record kept live: the options with their sources are the considered options, the recommended option is the decision outcome as proposed, the confirmed choice with the author's reason is the outcome as accepted, the options that persist after the ruling with the reasons they were not taken are the pros and cons kept beside the decision, and the stage is the status while the dialogue is open. One difference is recorded as this project's own: MADR stores the status, and this record stores the stage and derives the status and the class from the rulings on the facts, since a stored status drifts from the rulings that confer it. MADR's decision-makers, consulted, and informed are one person and one AI here, and the source of each option, the author, the AI, the review, or the instrument or node that raised it, carries what those fields carry.
 
 ## Rationale
 
 Surfaced in the sitting on the dialogue node on 2026-09-03, when the author asked for the unanswered frontier to be encoded as a recommendation with dialogue state and a list of alternatives, and recorded under that node's rationale as the tradition the encoding adopts. Validated by the AI from its own knowledge of the template; deferred until the author reads it. Divergence recorded: the status is derived, not stored.
 
+Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, whose model keeps the considered options after the decision as MADR keeps them, so the divergence narrows to what is stored: the stage, where MADR stores the status. The review's finding that the divergence as written was half wrong is met by the same narrowing. The reading as it stood is kept as the option `status-derived-from-stamp`; this reading is still validated from the AI's own knowledge of the template and its review is owed.
+
 ## Facts
 
 ### answer
+
+#### status-derived-from-stamp
+
+The reading as it stood from 2026-09-03: MADR supports the dialogue state, whose alternatives with their sources are the considered options and whose rejected lines in the rationale are the options' cons after the ruling, with two divergences, the status derived from the stamp and the stage, and the decision-makers folded into the source. Viable if the author prefers the options folded into the rationale at the recording.
 
 #### divergence-narrows
 

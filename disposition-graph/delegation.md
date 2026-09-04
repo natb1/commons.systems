@@ -1,6 +1,6 @@
 ---
 question: How is work divided between the main thread and subagents?
-stage: ruling
+stage: review
 review:
   verdict: forward
   strength: weak
@@ -9,15 +9,15 @@ review:
 facts:
   - name: answer
     options:
-      - name: standing
+      - name: never-writes-the-graph
         source: ai
         ref: "2026-09-03"
       - name: reconciliation-session-writes-options
         source: author
         ref: "2026-09-04"
-    recommends: standing
-    boldness: low
-    stands: standing
+    recommends: reconciliation-session-writes-options
+    boldness: moderate
+    stands: reconciliation-session-writes-options
   - name: authority
     options:
       - name: ratified
@@ -42,15 +42,21 @@ The author, 2026-09-03:
 
 ## Answer
 
-The main thread is the session that holds the interview and the record: it interviews the author, writes and amends nodes, reviews what subagents return, and lands. It runs on the most capable model at full effort, so everything else is delegated: a lookup needs only its question and its answer, and anything larger is a unit. A unit is one deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output; a unit that needs a second contract is two units. Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys. The subagent reports a conclusion and the exact commands it ran; the main thread reads the conclusion and never the context. The model follows the kind of work: the smaller model for mechanical tooling, tests, format work, and anything whose contract determines the answer; the larger model for design and judgment, such as a layout or a survey that classifies what it reads; the smallest for lookups. The effort is stated in the brief. A subagent never runs state-changing version control, never edits a node or the record's scaffolding, writes only the files its brief names, and works only in the worktree it was given. A reconciliation session is bound the same way toward the record: it never writes the graph, which is alignment's alone, as the author ruled on 2026-09-03 on the work-loop node.
+The main thread is the session that holds the interview and the record: it interviews the author, writes and amends nodes, reviews what subagents return, and lands. It runs on the most capable model at full effort, so everything else is delegated: a lookup needs only its question and its answer, and anything larger is a unit. A unit is one deliverable with a written contract, inputs, outputs, the files it may write, and its error behaviour, with a test or a verifiable output; a unit that needs a second contract is two units. Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys. The subagent reports a conclusion and the exact commands it ran; the main thread reads the conclusion and never the context. The model follows the kind of work: the smaller model for mechanical tooling, tests, format work, and anything whose contract determines the answer; the larger model for design and judgment, such as a layout or a survey that classifies what it reads; the smallest for lookups. The effort is stated in the brief. A subagent never runs state-changing version control, never edits a node or the record's scaffolding, writes only the files its brief names, and works only in the worktree it was given. A reconciliation session is bound the same way toward the record: its main thread writes the graph only as the work-loop node says, recording a viable option on a fact or moving a fact's recommendation within the node's scope, and never rules, edits a ruling, or edits the author's words, as the author amended on 2026-09-04 their ruling of 2026-09-03 on the work-loop node; a subagent never edits a node.
 
 ## Rationale
 
 The author's rulings of 2026-09-02, that implementation is delegated by unit, model, and effort, and of 2026-09-03: "new disposition (should affect both alignment and bootstrap/reconciliation shims): debugging activities like those are prime candidates for subagents - driving a browser with max effort fable is very expensive. Debugging context can be verbose and pollute the main thread." The rule binds the alignment session and the reconciliation sessions alike; during bootstrap it is projected into the operations document and the alignment skill. Rejected: a fixed model for every task, because the cost is set by the most capable model at full effort and most units do not need it; letting the main thread investigate when a question seems small, because the size of a debugging context is unknown until it has been read.
 
+Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there amending their ruling of 2026-09-03, quoted on the work-loop node: "the prior statement that 'reconciliation never edits the graph' is incomplete." The bound on the reconciliation session narrows to the write the work-loop node allows and keeps the subagent's bound whole. The answer as it stood is kept as the option `never-writes-the-graph`, and the review of this text is owed.
+
 ## Facts
 
 ### answer
+
+#### never-writes-the-graph
+
+The answer as it stood from 2026-09-03: the main thread, the unit, the model by kind of work, the subagent's bounds, and a reconciliation session that never writes the graph, which is alignment's alone. Viable if the author prefers the graph written by alignment alone.
 
 #### reconciliation-session-writes-options
 

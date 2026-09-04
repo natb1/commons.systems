@@ -9,10 +9,10 @@ review:
 facts:
   - name: answer
     options:
-      - name: standing
+      - name: relation-on-the-node
         source: ai
         ref: "2026-09-02"
-      - name: draft
+      - name: traditions-as-mounts
         source: ai
         ref: "2026-09-03"
       - name: incomplete-enumeration-in-facts
@@ -27,9 +27,9 @@ facts:
       - name: relation-per-option
         source: author
         ref: "2026-09-04"
-    recommends: draft
+    recommends: relation-per-option
     boldness: moderate
-    stands: standing
+    stands: relation-per-option
   - name: authority
     options:
       - name: ratified
@@ -61,17 +61,23 @@ The author, 2026-09-02:
 
 ## Answer
 
-As readings, which are nodes. A reading answers the question what a tradition says about the answer above it: its source is the primary text and locus, its relation is adopted, diverged, or chosen over, and its answer says how the text supports or contradicts the disposition and where the disposition deliberately departs. A reading carries a stamp like any node: ratified when the author has read the primary source and judges the relation, delegated when the AI's reading stands and the author declines to review it, deferred when the author accepts it for now and queues the primary reading. Deferred reading is recursive: one source leads to another, and a reading may sit under a reading. A reading whose verdict changes on re-reading is a re-grasp trigger for the node it grounds, not an automatic failure of it.
+As readings under the node that refers, and traditions they refer to. A tradition is a mount: a philosophical tradition, a body of research, or another repository, which could be a disposition graph of its own with its own archē and its own readings, and until it is articulated is one root node in the traditions graph, carrying the name it defines and its primary references. A reading is a node under the disposition it bears on, naming the tradition it reads, its source and locus, and what it bears on: for each option of a fact on that node that the tradition speaks to, adopted, where the tradition supports the option, or diverged, where the option departs from it and the reading says why. A tradition adopted on an option not chosen is what chosen over names, and it is derived and never stored; the option's readings are the derived inverse of what the readings bear on. A reading has a class like any node, read from the rulings on its own facts: ratified when the author has read the primary source or understands the mounted graph and confirms the relations, delegated when the AI's reading stands and the author declines to review it, deferred when the author accepts it for now and queues the primary reading. Deferred reading is recursive: one source leads to another, and a reading may sit under a reading. A reading whose verdict changes on re-reading is a re-grasp trigger for the node it grounds, not an automatic failure of it. Many questions that read one tradition are many readings naming that tradition, and the tradition's page shows every reading that cites it, as each option shows every reading that bears on it. Prose reaches a tradition through the name it defines, and the rationale of a node never repeats its readings.
 
 ## Rationale
 
 The author's ruling of 2026-09-02 that tradition references carry authority classes. Making them nodes rather than field entries buys four things: one reading of a shared source is stored once and refined under each node it grounds; readings nest, which is what recursion needs; a reading has its own hash and pin, so a changed reading is distinguishable from a changed answer; and there is one write path, one queue, and one stamp vocabulary. The alternative, stamped entries in a field with a derived reading frontier, is workable and was the author's framing; the difference is parsimony of mechanism against parsimony of files.
 
+Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Each fact on a node ... has viable options list ... with ... b) support or divergence from tradition for each option". The reading stays a node with its own class, as the author ruled on 2026-09-02, and its relation moves from the node to the options it bears on, so that a tradition can support one option and contradict another on the same fact, and so that chosen over is derived rather than stored. The answer as it stood is kept as the option `relation-on-the-node`, and `traditions-as-mounts` is that answer with the mount, which this one includes. The review of this text is owed.
+
 ## Facts
 
 ### answer
 
-#### draft
+#### relation-on-the-node
+
+The answer as it stood from 2026-09-02: a reading is a node under the disposition it bears on, with a source, a locus, and one relation to the answer, adopted, diverged, or chosen over, and a stamp like any node. Viable if the author prefers one relation per reading.
+
+#### traditions-as-mounts
 
 The Draft distinguishes tradition from reading where the standing answer runs them together: a tradition is a mount, one root node in a traditions graph until it has a graph of its own, carrying the name it defines and its primary references, and a reading is a node under the disposition it bears on, naming the tradition it reads with its source, locus and relation. It adds that many questions reading one tradition are many readings naming one tradition, that the tradition's page shows every reading citing it, that prose reaches a tradition through the name it defines, and that a rationale never repeats its readings. Its own reviews record that ratifying it makes fourteen existing rationales non-conforming at once, that the ten reading nodes name no tradition and no traditions graph exists in the manifest, and that no migration is named.
 
@@ -90,30 +96,6 @@ Readings says on the node that its tradition-as-mount rule rests on traditions-h
 #### relation-per-option
 
 A reading stays a node under the disposition it bears on, with its own stamp, and its relation attaches to the options of the fact it bears on rather than to the answer: adopted on the options the tradition supports, diverged on those it contradicts, so that "chosen over" becomes a tradition adopted on an option not chosen. The tradition's page still shows every reading that cites it, and the projections show on each option what tradition says. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
-
-## Recommendation
-
-```markdown
----
-question: How are references to tradition recorded?
-form: rule
-under:
-  - commons.systems/disposition-graph/model
-defines:
-  - reading
-  - tradition
-  - adopted
-  - diverged
-  - chosen over
----
-## Answer
-
-As readings under the node that refers, and traditions they refer to. A tradition is a mount: a philosophical tradition, a body of research, or another repository, which could be a disposition graph of its own with its own archē and its own readings, and until it is articulated is one root node in the traditions graph, carrying the name it defines and its primary references. A reading is a node under the disposition it bears on, naming the tradition it reads, its source and locus, and its relation: adopted, where the tradition supports the answer; diverged, where the answer departs and says why; or chosen over, where a rival tradition was weighed. A reading carries a stamp like any node: ratified when the author has read the primary source or understands the mounted graph and confirms the relation, delegated when the AI's reading stands and the author declines to review it, deferred when the author accepts it for now and queues the primary reading. Deferred reading is recursive: one source leads to another, and a reading may sit under a reading. A reading whose verdict changes on re-reading is a re-grasp trigger for the node it grounds, not an automatic failure of it. Many questions that read one tradition are many readings naming that tradition, and the tradition's page shows every reading that cites it. Prose reaches a tradition through the name it defines, and the rationale of a node never repeats its readings.
-
-## Rationale
-
-The author's rulings of 2026-09-02 that tradition references carry authority classes and that a tradition is a mount. Making readings nodes rather than field entries buys four things: one tradition is stored once and read under each node it grounds; readings nest, which is what recursion needs; a reading has its own hash and pin, so a changed reading is distinguishable from a changed answer; and there is one write path, one queue, and one stamp vocabulary. Rejected: stamped entries in a field with a derived reading frontier, workable and the author's first framing, parsimony of mechanism against parsimony of files; readings in the rationale prose, which drift and cannot carry a stamp; one node per tradition inside this graph, because a tradition is not a disposition of this project and is mounted rather than held.
-```
 
 ## Account
 

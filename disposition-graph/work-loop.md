@@ -1,6 +1,6 @@
 ---
 question: How does work happen?
-stage: ruling
+stage: review
 review:
   verdict: forward
   strength: strong
@@ -9,7 +9,7 @@ review:
 facts:
   - name: answer
     options:
-      - name: standing
+      - name: never-writes-the-graph
         source: ai
         ref: "2026-09-02"
       - name: split-the-shim
@@ -24,9 +24,9 @@ facts:
       - name: reconciliation-writes-options
         source: author
         ref: "2026-09-04"
-    recommends: standing
+    recommends: reconciliation-writes-options
     boldness: moderate
-    stands: standing
+    stands: reconciliation-writes-options
   - name: authority
     options:
       - name: ratified
@@ -43,7 +43,7 @@ defines:
   - reconcile
   - variance
 shims:
-  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, never writes the graph, and skips functional validation, non-functional validation, and validation in use on the main branch"
+  - artifact: "`.claude/skills/reconcile/SKILL.md` on the implementation ref, the reconciliation skill hand-written from this node and its siblings, run by a session that takes one bite per invocation from the answered frontier in rank order, from disposition to implementation only, writes to it only the options and recommendations the delegation node bounds and never rules on it, and skips functional validation, non-functional validation, and validation in use on the main branch"
     for: the reconciliation orchestrator and the skills for each kind of bite that this node and its children will project
     liquidation: the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch; and every rule this project runs under is a node or a declared shim, dispatch selects from this graph, the alignment skill is the only path by which a node is recorded, and nothing live reads the legacy record; and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered
     declared: 2026-09-03
@@ -72,9 +72,13 @@ The author, 2026-09-03, the same exchange, on the summary's item that the author
 The author, 2026-09-03, the same exchange, on what follows from that:
 > Since reconciliation does not edit the graph it may need to persist some other metadata to track reconciliation state
 
+The author, 2026-09-04, on the viable-options node, amending the ruling above:
+
+> Under this model the prior statement that "reconciliation never edits the graph" is incomplete. Whatever persistent state reconciliation requires for reconciliation operations (if any) is stored outside the graph - true. But, AI has the authority record untracked but viable alternative options and to change its recommendation during either reconciliation or rsi. If the recommendation is on ratified node then that triggers the alignment frontier projection described above. Subject to attenuation/breakout controls - if the change of recommendation is on delegated or deffered node then it changes the shape of the reconciliation frontier.
+
 ## Answer
 
-By reconciliation in both directions. The frontier is derived, never stored: every answer whose instrument fails is on it, ranked by the node's rank. In the first direction a session claims a frontier item, takes a bite, materializes what the disposition requires, records evidence, and the instrument reads the result. In the second direction any materialized artifact with no supporting disposition, code, a skill, a rule, the README, or a node of the legacy record, is itself a frontier item: the reconciler proposes a disposition that would support it, citing the artifact as evidence, or proposes pruning it, and the author rules at review. Coverage ranks that direction: an artifact no disposition cites or instruments is a prune-by-default proposal. A bite on materialized implementation passes through implementation, functional validation, non-functional validation, landing on the main branch, and validation in use there, each a reconciliation of the criteria the node carries and never a phase of a dispatcher: the frontier re-derives after every landing, and what the instruments still fail is the next bite. Sessions divide by ref: an alignment session writes the graph, and only alignment writes it; a reconciliation session writes the implementation ref and never the graph. A divergence that needs the author is reported by the session that found it, with its recommendation, and stays on the frontier, derived and never stored, until the alignment dialogue records it; a shim whose condition reconciliation has met keeps its declaration until alignment removes it. Un-aligned dispositions are alignment's work, never reconciliation's. Whether reconciliation keeps state of its own between invocations, the divergences it has reported, a bite in flight, is open; the recommendation is that such state lives on the implementation ref as committed files a disposition justifies, never in the graph, so that the frontier derives from the graph, the implementation, and that state together.
+By reconciliation in both directions. The frontier is derived, never stored: every node whose acting option's instrument fails is on it, ranked by the node's rank. In the first direction a session claims a frontier item, takes a bite, materializes what the disposition requires, records evidence, and the instrument reads the result. In the second direction any materialized artifact with no supporting disposition, code, a skill, a rule, the README, or a node of the legacy record, is itself a frontier item: the reconciler proposes a disposition that would support it, citing the artifact as evidence, or proposes pruning it, and the author rules at review. Coverage ranks that direction: an artifact no disposition cites or instruments is a prune-by-default proposal. A bite on materialized implementation passes through implementation, functional validation, non-functional validation, landing on the main branch, and validation in use there, each a reconciliation of the criteria the node carries and never a phase of a dispatcher: the frontier re-derives after every landing, and what the instruments still fail is the next bite. Sessions divide by ref: an alignment session writes the graph and holds its dialogue, and only the author rules on it; a reconciliation session writes the implementation ref, and writes the graph only as the delegation node bounds it: its main thread may record a viable option on a fact and move a fact's recommendation, within the node's scope, and may never rule, edit a ruling, or edit the author's words, since operational state stays outside the graph and decision state goes in, as the author amended their ruling on 2026-09-04. Such a write lands on the disposition ref one node at a time by compare-and-swap, as the persistence node prescribes, and never over another session's landing. A divergence that needs the author is recorded as an option on the node it conflicts with by the session that found it; what the move does follows the node's class, as the evaluation node says, and on a ratified node it returns the node to the author with the confirmed choice's authority intact. A shim whose condition reconciliation has met keeps its declaration until alignment removes it. Un-aligned dispositions are alignment's work, never reconciliation's. Whether reconciliation keeps state of its own between invocations, the divergences it has recorded, a bite in flight, is open; the recommendation is that such state lives on the implementation ref as committed files a disposition justifies, never in the graph, so that the frontier derives from the graph, the implementation, and that state together.
 
 ## Rationale
 
@@ -84,9 +88,15 @@ The author, 2026-09-03, on bootstrap operations: "I will check out the greenfiel
 
 Evaluated adversarially before recording, 2026-09-03. One rank, two orders: the record had one rank serving onboarding, and reconciliation in rank order needs the same rank to serve the author's bite order; the boosts now transcribe that order (attention), and a walk that meets projection before growth costs onboarding nothing. A browser node is not needed for rank, since a child's rank is a share of its parent's: the browser bite ranks first through projection's boost, and the browser node is owed by projection's own shim at its sitting. Batching validation to exit lets defects surface late; the mitigation is that tests and use still gate every landing, that the exit list is the liquidation condition of a declared shim, derived onto the frontier and never a checklist, and that the alignment sessions exercise the alignment skill every day it is used. Two sessions on one checkout: the graph and the implementation are separate refs with separate worktrees and indexes, so an alignment session and a reconciliation session collide only when both write the graph, which the reconciliation session does for one file at a time, committed by pathspec and pushed at once. On the model: selecting a bite and writing its unit's contract from prose criteria is judgment, so the shim runs on the larger model and its units on the smaller until every frontier node carries an executable check and each kind of bite has a skill, the last bite in the author's order; a skill's model field holds only for the turn that invokes it, and the loop runs within that turn. Rejected: a stored bite list or plan for the shim, forbidden by the transience node; a worktree of the shim's own, because its landings go straight to the ref and a worktree would only add a merge. The derivation of unsupported artifacts onto the frontier, the second direction, is not yet materialized; until it is, the coverage node's survey is the list, and the swap waits on the coverage ruling, as materialization's shim says.
 
+Amended 2026-09-04 under the author's bootstrap grant of that day, from the author's words quoted above amending their ruling of 2026-09-03. The line falls between operational state, which stays outside the graph, and decision state, an option found viable and a recommendation moved, which goes in: a divergence held on a derived frontier until an alignment session transcribes it is a decision outside the record, and as an option it is in the record at once, changes nothing the author confirmed, and returns a ratified node to the author by the same projection that returns any moved recommendation. The attenuation is the class: what a move does is read from it, and a subagent never writes a node. The answer as it stood is kept as the option `never-writes-the-graph`, and the review of this text is owed.
+
 ## Facts
 
 ### answer
+
+#### never-writes-the-graph
+
+The answer as it stood from 2026-09-03, under the author's ruling of that day quoted above: a reconciliation session writes the implementation ref and never the graph, and a divergence that needs the author is reported by the session that found it and stays on the derived frontier until the alignment dialogue records it. Viable if the author prefers the graph written by alignment alone.
 
 #### split-the-shim
 

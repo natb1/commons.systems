@@ -1,5 +1,6 @@
 ---
 question: How are rejected alternatives recorded?
+form: rule
 stage: maieutic
 review:
   verdict: kickback
@@ -27,8 +28,9 @@ facts:
       - name: non-chosen-viable-options
         source: author
         ref: "2026-09-04"
-    recommends: rejected-list-on-node
+    recommends: non-chosen-viable-options
     boldness: moderate
+    stands: non-chosen-viable-options
   - name: authority
     options:
       - name: ratified
@@ -44,6 +46,14 @@ depends:
 
 The author, 2026-09-03:
 > The under edge disposition lists 'rejected' as prose under 'rationale' - it may make sense to record rejected dispositions, but this seems too ad-hoc.
+
+## Answer
+
+As viable options not chosen, kept on the fact beside the confirmed choice. Every decision on a node is a fact with a list of viable options, as the dialogue node says, and a rejected alternative is an option the author did not choose, or that the recommendation passed over, which stays on the list with the reason it was not taken and the readings bearing on it for as long as the AI holds it viable; an option no longer viable leaves the list, the option that displaced it says why, and version control holds what left. The projections read the structure: the browser shows the confirmed choice first and, on drilling down, the recommendation, the other options, and what each tradition says of each, so what was considered is shown with what was decided rather than recovered from prose by matching a heading. The rationale keeps why the standing answer stands and may cite the options it argues against, since a rationale that argues by elimination has no argument left without them. An option is not a page: an answer that was not taken has no standing and earns no node of its own. When an option is later chosen it becomes the answer, and what it replaced stays on the list while it is still viable.
+
+## Rationale
+
+Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "any non-chosen option which is categorized as 'viable' by the AI - these are all is persisted after confirmation to mitigate regression. This gives a clear mechanical encoding for ADR style 'alternatives considered' documentation." This is `rejected-list-on-node` generalised to every fact and kept after the ruling, and the objection the author carried above, that prose under the rationale seems too ad hoc, is what the structure answers; the fact the second review established, that the projector already reads a rationale heading, no longer decides anything, since the structure exists for regression and the browser's drill-down and not for the projector alone. The options `rejected-list-on-node` and `prose-in-rationale` stay viable as the narrower answers. The review of this text is owed.
 
 ## Facts
 
@@ -72,26 +82,6 @@ The author's words carried here say that listing rejected alternatives as prose 
 #### non-chosen-viable-options
 
 A rejected alternative is a viable option the author did not choose, kept on the fact beside the confirmed choice with the reason it was not taken and the traditions bearing on it; the projector reads the structure and the rationale cites it. It is `rejected-list-on-node` generalised to every fact, and the fact the second review established, that the projector already reads a rationale heading, no longer decides the question, since the structure exists for regression and for the browser's drill-down and not for the projector alone. The author's objection carried above, that prose under the rationale seems too ad hoc, is what the structure answers. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
-
-## Recommendation
-
-```markdown
----
-question: How are rejected alternatives recorded?
-form: rule
-under:
-  - commons.systems/disposition-graph/node
-defines:
-  - rejected alternative
----
-## Answer
-
-As a rejected list on the node, one entry for each alternative answer that was weighed and lost, each naming the alternative as it was put and the reason it lost. The projector reads the list into the authority section beside the stamp, so what was considered is shown with what was decided, rather than recovered from prose by matching a heading. The rationale keeps why the standing answer stands and may cite its rejected entries, since a rationale that argues by elimination has no argument left without them. An entry is not a page: an answer that was not taken has no standing and earns no node of its own. When an alternative is later adopted it leaves the list and becomes the answer, and version control holds what it replaced.
-
-## Rationale
-
-Decision records keep the considered options as structure with the reason each lost, and structure is what a projection can rely on. The browser today finds the rejected alternatives by matching a heading in the rationale, which works and is an accident of the template rather than a contract, and it is that ad-hoc quality the author objected to; a list makes the contract explicit at the price of a schema change and of rewriting the drafts in this batch before any of them is recorded, which is paid once. Rejected: rejected alternatives as nodes of their own with a rejected class, because an answer with no standing does not earn a page and the record would grow a node for every discarded option; and prose in the rationale as now, which needs no schema change and which the projector already reads, but which leaves the projection resting on a heading convention nothing checks. The author, 2026-09-03: "The under edge disposition lists 'rejected' as prose under 'rationale' - it may make sense to record rejected dispositions, but this seems too ad-hoc."
-```
 
 ## Account
 

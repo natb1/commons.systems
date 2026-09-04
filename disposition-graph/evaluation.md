@@ -9,7 +9,7 @@ review:
 facts:
   - name: answer
     options:
-      - name: standing
+      - name: overrule-to-deferred
         source: ai
         ref: "2026-09-02"
       - name: deferred-until-ruling-quoted
@@ -27,9 +27,9 @@ facts:
       - name: overrule-by-class
         source: author
         ref: "2026-09-04"
-    recommends: standing
+    recommends: overrule-by-class
     boldness: moderate
-    stands: standing
+    stands: overrule-by-class
   - name: authority
     options:
       - name: ratified
@@ -56,15 +56,21 @@ The definition the author refers to is the one the sitting stated when briefing 
 
 ## Answer
 
-Against the full solution frontier. Nothing is sacred: no doctrine is implied by what exists, least of all by the incumbent implementation, which is evidence of past decisions and never authority over future ones; that is what greenfield means here. Greenfield is the lens every recommendation is made through, not an occasional one, and it is operational rather than a sentiment. A class of argument is struck from the choosing: what a change would cost to migrate, how many files or nodes it touches, what reviews or assessments it would spend, what tooling it would rework, and that the incumbent already does it the other way. None of those bear on whether a design is right, and a recommendation resting on one of them has not been made. The positive test replaces them: judge the design as if the record were being written from scratch, with nothing in it to preserve. The error to hunt is an incumbent fact doing the work of a design constraint, which is the failure this lens exists to catch; a recommendation found resting on one is named as such and redrawn. Cost is not thereby unsayable, and a recommendation still states what its design will cost: it is a consequence of a design chosen on its merits and never a reason for choosing it. A ratified answer is not unchangeable; changing it takes an interview with the author, and the alignment skill is that interview. Delegated and deferred answers need no interview: the AI may overrule them on its best judgment, and every such overrule enters the author's review, a delegated answer overruled becoming deferred and a deferred answer staying deferred. An overrule of a draft at the ruling stage sends the node back to the review stage, and the frontier and the alignment page show the draft as changed since its review. Every evaluation runs twice, once as fresh best judgment and once with reference to tradition, including traditions shelved by pre-agent constraints, and every tradition surfaced is recorded as a reading with the resolution it informed. Work under an answer that cites a tradition is grounded in the tradition itself within its recorded support scope; a recorded divergence is the author's decision, which the tradition cannot overrule, and an unrecorded conflict is a frontier item deferred to neither side. Adversarial review of one's own recorded output is part of producing it, and a disposition recommended to the author is reviewed once more, in clean context, before the author rules on it, as the recording node describes. A shim declared on the record is applied by default; a prompt is required only to bypass it.
+Against the full solution frontier. Nothing is sacred: no doctrine is implied by what exists, least of all by the incumbent implementation, which is evidence of past decisions and never authority over future ones; that is what greenfield means here. Greenfield is the lens every recommendation is made through, not an occasional one, and it is operational rather than a sentiment. A class of argument is struck from the choosing: what a change would cost to migrate, how many files or nodes it touches, what reviews or assessments it would spend, what tooling it would rework, and that the incumbent already does it the other way. None of those bear on whether a design is right, and a recommendation resting on one of them has not been made. The positive test replaces them: judge the design as if the record were being written from scratch, with nothing in it to preserve. The error to hunt is an incumbent fact doing the work of a design constraint, which is the failure this lens exists to catch; a recommendation found resting on one is named as such and redrawn. Cost is not thereby unsayable, and a recommendation still states what its design will cost: it is a consequence of a design chosen on its merits and never a reason for choosing it. A ratified answer is not unchangeable; changing it takes an interview with the author, and the alignment skill is that interview. Delegated and deferred answers need no interview: the AI may move their recommendation on its best judgment, and what a move does is read from the node's class. On a ratified node the confirmed choice keeps its full authority and the node returns to the author for re-confirmation, at the review stage where only the recommendation moved. On a deferred node the recommendation acts, the reconciliation frontier changes with it, and the node is on the alignment frontier already. On a delegated node the recommendation moves freely within the delegation's scope and the node stays off the alignment frontier, since the author asked not to be asked again; a move that would leave the scope is not the AI's to recommend, is recorded as an option, and returns the node to the author with its class intact. On an unanswered node nothing acts and the move is dialogue. A recommendation moved at the ruling stage sends the node back to the review stage, and the frontier and the alignment page show it as changed since its review. Every evaluation runs twice, once as fresh best judgment and once with reference to tradition, including traditions shelved by pre-agent constraints, and every tradition surfaced is recorded as a reading with the resolution it informed. Work under an answer that cites a tradition is grounded in the tradition itself within its recorded support scope; a recorded divergence is the author's decision, which the tradition cannot overrule, and an unrecorded conflict is a frontier item deferred to neither side. Adversarial review of one's own recorded output is part of producing it, and a disposition recommended to the author is reviewed once more, in clean context, before the author rules on it, as the recording node describes. A shim declared on the record is applied by default; a prompt is required only to bypass it.
 
 ## Rationale
 
 The author's rulings in the legacy bootstrap of 2026-08-31 to 2026-09-02, given again to this bootstrap as the standing rule for the AI's evaluations: reference the incumbent for principles, never as authority. The legacy rule projection on `main` and the ratified clarifications behind it are the evidence. The overrule rules are the authority node's attenuation seen from the evaluator's side. Traditions to record as readings: the Pareto frontier of multi-objective choice, adopted for the sense of "frontier"; Chesterton's fence (The Thing, 1929), diverged from in part, since here the record, not the fence, carries the reason, and a fence without a recorded reason is a prune-by-default proposal. The clean-context review is the author's disposition of 2026-09-03, recorded on the recording node under growth.
 
+Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Delegated means the node is removed from the alignment frontier and deferred means it remains"; "Subject to attenuation/breakout controls - if the change of recommendation is on delegated or deffered node then it changes the shape of the reconciliation frontier." A rule that returned a delegated node to the author on every change delegated nothing; the bound that rule wanted is the delegation's scope, which is what `bounded-overrule` asked for, and a move that would leave it does return the node. The shim sentence at the end now holds without exception, since the explicit grant for an unanswered node is a standing rule of the authority node and no longer a shim, which is what `two-kinds-of-shim` was asking about. The answer as it stood is kept as the option `overrule-to-deferred`, and the review of this text is owed.
+
 ## Facts
 
 ### answer
+
+#### overrule-to-deferred
+
+The answer as it stood from 2026-09-02: the greenfield lens, the struck class of argument, the positive test, and an overrule rule stated once for every class, a delegated answer overruled becoming deferred and a deferred answer staying deferred. Viable if the author prefers every overrule to return the node to them.
 
 #### deferred-until-ruling-quoted
 
