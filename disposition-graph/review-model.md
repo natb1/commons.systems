@@ -507,3 +507,5 @@ the status passed and its subsection says the question moved here. The
 reading found nothing to redraw: the three arguments stand alone, the
 options are the frontier the traditions and the record give, and the
 boldness is right for what rests on the AI.
+
+At the second compaction of 2026-09-04 the reconciliation unit was briefed at the job's tmp/briefs/unit-split-review-skills.md and not launched, waiting on the unit reconciling the review scripts to the new encodings, since both write the same files; the readings unit for both nodes was running, to tmp/review-sitting/readings/; and the order that remains is on alignment-page's account.

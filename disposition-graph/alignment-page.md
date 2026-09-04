@@ -1773,3 +1773,61 @@ that only a change of substance is reviewed again and the readiness rule that
 both pins name the recommendation as it stands is recorded on
 clean-context-review as the option moved-draft-re-read-by-the-survey, which
 recommends nothing.
+
+### State at the second compaction, 2026-09-04, the reconciliation under the grant
+
+The graph is at ce1aeb85 on origin/disposition. Landed since the first
+compaction: 3bd99e91, the migration to passed-over options with the
+nineteen readings, the glosses and the fold's option passed; 417b8335, the
+census above; 0a0bcb9c, agency's stub note struck; 9cba6f5c, the review's
+counter-argument backfilled as review.against on fifty-four reviewed nodes
+from their accounts, by a unit's extraction checked against each node's
+review date; 78988706, review-model and review-skills recorded at the review
+stage after the main thread's reading of their designs; ce1aeb85,
+clean-context-review and decomposition amended under the grant to cite the
+two, with the parent's shim's supersession recorded as a persistence fact.
+Every page response was read before the work began: none had been staged.
+
+The implementation ref carries the local checkpoint 193ae91f, unpushed over
+origin/greenfield at ed725297, and its working tree holds the uncommitted
+edits of two units still running at the compaction: the page unit, on
+project.mjs's alignment functions, alignment-template.html, the alignment
+tests and a fixture graph under fixtures/alignment/, briefed at the job's
+tmp/briefs/unit-page.md; and the browser unit, on browser-template.html,
+project.mjs's browser and frontier functions, the browser tests, and the
+review skill's scripts, tests, fixtures and briefs, briefed at
+tmp/briefs/unit-browser.md. Their reports arrive as task notifications; a
+session that has lost them reads the working tree against those briefs. A
+detached worktree of the implementation at tmp/gf-clean, moved to 193ae91f,
+is the stable projector while they edit project.mjs.
+
+Units running at the compaction, each writing only under the job's scratch:
+the design units for dialogue's composed option (tmp/drafts/dialogue.md and
+dialogue-report.md, which names the composed option), recording
+(tmp/drafts/recording.md), the passed-over pair (tmp/drafts/viable-options.md,
+rejected.md, passed-report.md), and prose-and-structure's redraft
+(tmp/drafts/prose-and-structure.md), briefed at tmp/briefs/unit-design-*.md
+over the shared encoding fragment tmp/briefs/encoding-draft.md; and the
+readings unit for the review sitting, fourteen readings and one bears entry
+to tmp/review-sitting/readings/. Briefed and not launched: the split of the
+review into two skills and one package on the model review-model decides,
+tmp/briefs/unit-split-review-skills.md, which waits on the browser unit
+because both write the review scripts.
+
+The order that remains. Each design draft is read adversarially on the main
+thread and copied over its node, alignment-page's depends entry for dialogue
+moved to the composed option the dialogue report names, validated and
+landed. When the page and browser units report, the tests run green
+(node --test packages/disposition/*.test.mjs and the review skill's tests),
+greenfield is committed, the split unit is launched and its result committed,
+and at that landing the three shims of review-skills' fence are declared on
+its node frontmatter and clean-context-review's shim struck, as its
+persistence fact recommends, with account notes on both; greenfield is
+pushed, the rules regenerated, and both pages projected and published, the
+alignment page with its database capability. The review sitting's readings
+are copied in with their bears entry. Then the clean-context reviews on
+fable through the new review skill, on alignment-page, prose-and-structure,
+dialogue, recording, progressive-disclosure, viable-options, rejected,
+review-skills, review-model, and on clean-context-review and decomposition,
+whose recommendations moved today; then the survey; then the final report
+naming every node written.
