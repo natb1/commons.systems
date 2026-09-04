@@ -1039,3 +1039,92 @@ holds in the record and lapses where two mechanisms meet. The first was the
 whole-node radio reading a decision's; both were latent, both were found by
 building rather than by reading, and neither would have shown up until the
 author used the page.
+
+### What the record measures, 2026-09-04
+
+Established on the main thread before the design, because the author's
+disposition rests on a premise about the data model and the premise is half
+true. Measured against the graph at `4102fd4b`.
+
+**The facts are bound but not consistent.** Seventy-five nodes carry six
+distinct fact sets: fifty-one `answer` and `authority`, thirteen `answer`
+alone, four with `existence`, two with `persistence`, two `answer` and
+`existence`, and three carrying no `facts` block at all. Eighteen nodes that
+carry a stage carry no `authority` fact, `commons.systems/public/agency`
+among them, and three carry no fact of any kind: `assumption-form`,
+`frontier-metrics`, `lockfile`. The `dialogue` node states the conditionality
+of `existence` and of `persistence` and states none for `authority`, so the
+eighteen are a gap against the record's own text rather than a design choice,
+and the validator does not catch it. What the gap costs is not cosmetic: the
+`authority` fact is how the author confers delegated or deferred, so on those
+eighteen nodes the only classes the page can offer are ratified and nothing.
+A page that lists every fact without exception exposes this on the first
+node the author opens.
+
+**The per-option text exists and the page hides it.** Every one of the
+answer-fact options across the graph carries its `####` subsection; none is
+missing. So the bare identifiers the author read on `agency` are not sparse
+state and not migration residue. They are the rendering: the row leads with
+the option's name and folds the sentence into a closed drill-down. The
+answer this node already carries says the opposite should happen, and the
+implementation does not do it.
+
+**The exception is the option that stands.** `dialogue` says the option named
+by `stands` needs no subsection, since its text is the answer. That is why
+`standing` on `agency` renders as a name and nothing else: the model
+deliberately holds no summary for it. Under `list all options with a short
+summary` the exemption has to go, and the sentence it needs is the one the
+record already requires in prose, that confirming ratifies a draft no one has
+confirmed.
+
+**A hundred and thirty options carry no text at all.** Those are the choices
+on the non-answer facts, `ratified` and `delegated` on the authority fact,
+`keep` and `prune` on existence, and the two persistence choices. No
+`####` subsection is written for them anywhere, because their names are
+vocabulary rather than slugs and looked finished.
+
+**Fifteen nodes carry no recommendation on the answer fact**, `agency` among
+them; all fifteen are at the periagogic or the maieutic stage, so the model is
+satisfied, and what the page owes on them is to say that no recommendation
+stands rather than to render an unmarked list.
+
+**The prose carries more structure than the structure does.** Thirty-two of
+the seventy-five nodes carry a `Rejected:` passage in a `## Rationale`, four
+of them as a bulleted list and twenty-eight as a prose sentence naming each
+alternative with a clause of reason. Across those thirty-two the passages hold
+roughly a hundred and forty rejected candidates against a hundred and
+forty-five recorded answer-fact options, and the two sets barely intersect:
+`viable-options` names nine in prose and records three options, `alignment-order`
+twelve against two, `clean-context-review` twelve against three. `viable-options`
+carries a second parallel structure in the same paragraph, eight traditions
+with what each is adopted for, which is what a reading node and its `bears`
+entries exist to hold. So the author's diagnosis is right in kind and
+understated in degree: the residue is not only rejected options, and
+liquidating the prose without a home for what it holds would discard about a
+hundred recorded rejections.
+
+**`agency`'s prose is untouched pre-model residue, measured.** Its
+`### Rejected` block is byte-identical in all eight commits that touched the
+file, from `1920badc`, the first graph write, through both encoding
+migrations, `9e3a6624` and `db23d5b1`. Neither migration read it. Its two
+entries were never carried into `options`, and its stub note still says
+"Deferred until the author ratifies it", a stamp the author's ruling of
+2026-09-03 struck from the record. The node's own clean-context review found
+that stub note on 2026-09-03 and nothing consumed the finding.
+
+**Three encoding gaps the disposition opens, read from the reader's own
+schema.** `OPTION_KEYS` is `name`, `source`, `ref`, `ruling`: an option holds
+no summary, no viability status, and no reason for having been passed over.
+`RULING_KEYS` is `response`, `date`, `of`: a ruling holds no reason of the
+author's, though `viable-options` says the confirmed choice persists with the
+author's reason. `REVIEW_DRAFT_KEYS` is `verdict`, `strength`, `date`, `of`,
+all node-scoped, and the review's counter-argument is prose in the account
+with nothing tying it to the option it argues against. Against those,
+`BEARS_KEYS` is `node`, `fact`, `option`, `relation`, so the tradition
+relation the author asks for per option is already in the model and only the
+rendering is missing.
+
+**The eyebrow's graph is redundant against the id directly above it.** The
+projector writes the node's full id and then, on the next line, the graph
+name. The rail row carries no id, so the author's reason holds of the eyebrow
+and not of the rail, and the two are treated differently below.
