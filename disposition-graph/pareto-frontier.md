@@ -30,6 +30,10 @@ bears:
     fact: answer
     option: overrule-by-class
     relation: adopted
+  - node: commons.systems/disposition-graph/viable-options
+    fact: answer
+    option: passed-over-options-stay
+    relation: adopted
 ---
 ## Answer
 
@@ -61,3 +65,14 @@ take.
 ## Account
 
 Minted at reconciliation on 2026-09-04 under the author's bootstrap grant of that day, from the paragraph of `viable-options`' rationale that names eight traditions in prose, which under `prose-and-structure` becomes readings with `bears` entries: "the Pareto frontier, adopted for what viable means". Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
+
+### One relation added, 2026-09-04
+
+The reading bore on `grant-from-a-ruling`, the option that stands on
+`commons.systems/disposition-graph/viable-options`, and its answer argues the
+recommended option in as many words: everything not dominated is on the
+frontier and stays there. The design unit of 2026-09-04 found the gap, and the
+entry is added as adopted on `passed-over-options-stay`. The tradition also
+supplies the case against passing an option over on a criterion where it is
+better, which is why `viable-not-chosen-as-it-stands` carries no status on
+that fact.

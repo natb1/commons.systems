@@ -30,6 +30,18 @@ bears:
     fact: answer
     option: every-fact-every-option
     relation: adopted
+  - node: commons.systems/disposition-graph/review-skills
+    fact: answer
+    option: two-skills-one-package
+    relation: adopted
+  - node: commons.systems/disposition-graph/dialogue
+    fact: answer
+    option: every-part-in-the-record
+    relation: adopted
+  - node: commons.systems/disposition-graph/recording
+    fact: answer
+    option: per-fact-after-two-readings
+    relation: adopted
 ---
 ## Answer
 
@@ -63,3 +75,18 @@ take.
 ## Account
 
 Minted at reconciliation on 2026-09-04 under the author's bootstrap grant of that day, from the tradition pass of the alignment-page sitting, which recorded it as one of four rediscoveries: "The rule that structure must not be re-encoded in prose is Codd's update anomaly, and the record has already suffered one: the hand-maintained enumeration on `stub-traditions` was found short by three nodes and long by one." Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
+
+### Three relations added, 2026-09-04
+
+The reading was minted under `commons.systems/disposition-graph/prose-and-structure`
+and three sittings of 2026-09-04 named it as the ground of their own answers,
+each asking for a `bears` entry rather than a second reading of the same
+tradition. On `commons.systems/disposition-graph/review-skills`, adopted for
+the drift answer's condition: two projections of one source cannot drift, and
+the two hand-written skill files of the interim are the anomaly the option
+declares as a shim rather than denies. On
+`commons.systems/disposition-graph/dialogue`, adopted for the rule that a
+term's sentence lives in the gloss on the node that defines it and no
+projection carries one of its own; the projector's table of class sentences was
+the second copy. On `commons.systems/disposition-graph/recording`, adopted for
+the class read off the rulings and never stored beside them.

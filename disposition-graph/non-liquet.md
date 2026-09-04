@@ -25,6 +25,10 @@ bears:
   - fact: answer
     option: every-fact-every-option
     relation: adopted
+  - node: commons.systems/disposition-graph/recording
+    fact: answer
+    option: per-fact-after-two-readings
+    relation: adopted
 ---
 ## Answer
 
@@ -56,3 +60,11 @@ take.
 ## Account
 
 Minted at reconciliation on 2026-09-04 under the author's bootstrap grant of that day, from the tradition pass of the alignment-page sitting: "*Non liquet*, the third disposition of the Roman judge, is a statement about the decider's own ground: it is not clear to me. The author's kick-back is a statement about the options: none of these is acceptable. The first calls for the periagogic movement, where the author's account is taken; the second for the maieutic, where options are drafted, which is the destination the author named." Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
+
+### One relation added, 2026-09-04
+
+Adopted on `commons.systems/disposition-graph/recording`'s recommended option,
+whose typing of the kick-back this reading's account is the ground of: a
+refusal about the options calls for the maieutic movement and a refusal about
+the decider's own ground calls for the periagogic, which is why the row is
+typed to the first and free prose is still classified for the second.

@@ -25,6 +25,14 @@ bears:
   - fact: answer
     option: every-fact-every-option
     relation: diverged
+  - node: commons.systems/disposition-graph/dialogue
+    fact: answer
+    option: every-part-in-the-record
+    relation: adopted
+  - node: commons.systems/disposition-graph/recording
+    fact: answer
+    option: per-fact-after-two-readings
+    relation: adopted
 ---
 ## Answer
 
@@ -58,3 +66,17 @@ take.
 ## Account
 
 Minted at reconciliation on 2026-09-04 under the author's bootstrap grant of that day, from the tradition pass of the alignment-page sitting: "The rationale field's optionality is a divergence from every tradition of reasoned decision. `Chenery` holds that an action stands on the reason its decider gave at the time, which is what `authority` already enforces on the author's words, and the APA duty makes the reason a condition of validity. Against it, forced open-ended fields produce filler. The author's ground, that the ruler here is the principal and not an agent under review, partly fails: the record exists so that agents act on it later, so the author is accountable to a reader. Recorded as a divergence with that counter attached." Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
+
+### Two relations added, 2026-09-04
+
+The reading was minted under `commons.systems/disposition-graph/alignment-page`,
+where the record diverges from it by leaving the reason for a choice optional.
+Two sittings of 2026-09-04 adopted it on the point it is strongest: on
+`commons.systems/disposition-graph/dialogue`, for giving the author's reason
+for a ruling a field of its own on the option they chose, separate from the
+words they said to the record; and on
+`commons.systems/disposition-graph/recording`, for a ruling that carries the
+author's own reason rather than one supplied afterwards. The divergence
+recorded under the page stands beside them: a field that may be left empty is
+not the tradition's duty, and the record's answer to that is on the page's
+fact and not here.
