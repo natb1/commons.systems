@@ -57,10 +57,11 @@ describe("writeFrontierBrief", () => {
     // {{batch_index}}: one line per review-stage node, in the given format.
     // Every node in this fixture is a root with the default boost, so all
     // six tie at rank 0.1667, and none carries an authority stamp except
-    // the answered one.
+    // the answered one. review-a has no alternatives and settles nothing;
+    // review-b has one pending alternative ('narrower'), so it settles 1.
     for (const line of [
-      `- ${REVIEW_A} | stage review | rank 0.1667 | no stamp | disposition/main/review-a.md`,
-      `- ${REVIEW_B} | stage review | rank 0.1667 | no stamp | disposition/main/review-b.md`,
+      `- ${REVIEW_A} | stage review | rank 0.1667 | settles 0 | no stamp | disposition/main/review-a.md`,
+      `- ${REVIEW_B} | stage review | rank 0.1667 | settles 1 | no stamp | disposition/main/review-b.md`,
     ]) {
       assert.ok(brief.includes(line), `missing batch index line:\n${line}`);
     }
@@ -148,7 +149,7 @@ describe("writeFrontierBrief", () => {
     assert.ok(brief.includes("STALE: the standing text has changed since this recommendation was drafted (`recommendationStale`)"));
   });
 
-  test("frontier order equals renderFrontier's own order, within the batch and within the context", async () => {
+  test("the context index is the frontier's own order; the batch (whole, {{batch}}) is too", async () => {
     const rootDir = await freshFrontierFixture("brief-order-");
     const reviewDir = path.join(rootDir, "_review");
     const graph = await readGraph(rootDir);
@@ -164,13 +165,41 @@ describe("writeFrontierBrief", () => {
 
     const result = await writeFrontierBrief({ rootDir, reviewDir, date: "2026-09-03" });
     const brief = await readFile(result.briefPath, "utf8");
-    const gotBatch = [...brief.matchAll(/^- (\S+) \| stage review \| /gm)].map((m) => m[1]);
-    assert.deepEqual(gotBatch, wantOrder.filter((id) => byId.get(id).stage === "review"));
+
+    // The batch's own presentation ({{batch}}, the '### <id>' headings) is
+    // still in the frontier's order; only its index is re-sorted (the next
+    // test below).
+    const batchSection = brief.slice(brief.indexOf("\n## The batch"), brief.indexOf("\n## The full graph, as context"));
+    const gotBatchHeadings = [...batchSection.matchAll(/^### (\S+)$/gm)].map((m) => m[1]);
+    assert.deepEqual(gotBatchHeadings, wantOrder.filter((id) => byId.get(id).stage === "review"));
 
     const contextIndexStart = brief.indexOf("\n## The full graph, as context");
     const contextIndex = brief.slice(contextIndexStart, brief.indexOf("\n### ", contextIndexStart));
     const gotContext = [...contextIndex.matchAll(/^- (\S+) \| /gm)].map((m) => m[1]);
     assert.deepEqual(gotContext, wantOrder.filter((id) => byId.get(id).stage !== "review"));
+  });
+
+  test("the batch index is the ruling order (settles descending, then rank descending, then id ascending), not the frontier's rank order", async () => {
+    const rootDir = await freshFrontierFixture("brief-ruling-order-");
+    const reviewDir = path.join(rootDir, "_review");
+    const graph = await readGraph(rootDir);
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+
+    // Precondition: review-b settles more than review-a (it carries one
+    // pending alternative, review-a carries none), while both tie on rank --
+    // so the ruling order and the rank order actually differ in this
+    // fixture, and a test that happened to pass under rank order too would
+    // not catch a regression to it.
+    assert.ok(byId.get(REVIEW_B).settles > byId.get(REVIEW_A).settles, "fixture precondition: review-b settles more than review-a");
+    const rankOrder = [REVIEW_A, REVIEW_B].sort((a, b) => (a < b ? -1 : 1)); // both rank 0.1667: id order
+    const rulingOrder = [REVIEW_B, REVIEW_A]; // settles 1 before settles 0
+
+    const result = await writeFrontierBrief({ rootDir, reviewDir, date: "2026-09-03" });
+    const brief = await readFile(result.briefPath, "utf8");
+    const gotBatchIndex = [...brief.matchAll(/^- (\S+) \| stage review \| /gm)].map((m) => m[1]);
+
+    assert.deepEqual(gotBatchIndex, rulingOrder);
+    assert.notDeepEqual(gotBatchIndex, rankOrder, "the batch index is not simply the rank/frontier order");
   });
 
   test("the lock is written, and a second run refuses while it stands", async () => {

@@ -4,11 +4,15 @@ description: Clean-context adversarial review of the batch of nodes at the revie
 ---
 # Align review
 
-> **Shim notice (2026-09-03, revised twice the same day: for the batch
-> scope, the fifteenth validation, and the dialogue-state encoding).**
+> **Shim notice (2026-09-03, revised three times the same day: for the
+> batch scope, the fifteenth validation, the dialogue-state encoding, and
+> the ruling order, the last under the author's bootstrap grant on
+> `alignment-order`, whose recommendation is unanswered and whose review
+> and ruling are both still owed).**
 > Hand-written from the nodes `clean-context-review`,
 > `frontier-consistency`, `recording`, `dialogue`, `unanswered`,
-> `checkpoint`, and `delegation` of `commons.systems/disposition-graph`,
+> `checkpoint`, `alignment-order`, and `delegation` of
+> `commons.systems/disposition-graph`,
 > all stamped deferred and unanswered, and from the author's words quoted
 > on `clean-context-review` and `frontier-consistency`, among them the
 > bootstrap grant of 2026-09-03 under which this shim was materialized
@@ -59,8 +63,9 @@ against the full graph"). Nothing is excluded from the reading, and no ids
 are given.
 
 `node packages/disposition/project.mjs disposition --frontier -` shows the
-whole graph in rank order with each node's stage, recommendation, and review;
-`brief.mjs` takes the batch from the same reading.
+whole graph with each node's stage, settling count, recommendation, and
+review, headed by the alignment frontier in the ruling order
+(`alignment-order`); `brief.mjs` takes the batch from the same reading.
 
 ## 2. One brief for the batch
 
@@ -68,7 +73,8 @@ whole graph in rank order with each node's stage, recommendation, and review;
 writes `tmp/review/frontier.brief.md` from `brief.md` beside this file, and
 writes the lock. It fills `{{date}}`, `{{repo}}`, `{{batch_count}}` and
 `{{context_count}}`, `{{batch_index}}` and `{{context_index}}` (one line per
-node: id, stage, rank, stamp, file, in the frontier's order), `{{batch}}`
+node: id, stage, rank, settling count, stamp, file; the batch in the
+ruling order, the context by rank), `{{batch}}`
 (each batch node whole: question, `## Disposition`, `## Answer`,
 `## Rationale`, every pending alternative with its prose, the
 `recommendation` with its `adopts`, class, boldness and whether it is stale,
@@ -102,7 +108,8 @@ gap in the reading rather than as a finding of nothing.
 ## 4. Apply
 
 1. Read `tmp/review/frontier.json`: `nodes`, one entry per node of the
-   batch, and `frontier`, the findings across the graph, each with the ids
+   batch, `subtree_divergences`, the tangles between subtrees the reviewer
+   found, and `frontier`, the findings across the graph, each with the ids
    it names (in the batch or outside it), the finding, the stage it
    recommends for each node whose text must change, the edit, merge, or
    split it proposes, and the `alternatives` it proposes — `{node, name,
@@ -144,6 +151,16 @@ gap in the reading rather than as a finding of nothing.
    subsection appended to `## Alternatives` (creating the section, before
    `## Recommendation`/`## Account`, when absent); a name already listed on
    that node is skipped with a note, and the finding is still recorded.
+   For each entry of `subtree_divergences` it writes the divergence on the
+   leaves and never on the ancestor (`alignment-order`): each node named
+   under a side gains `<ancestor>#<alternative>` in its `depends`, and the
+   entry's finding is recorded as `### Subtree divergence, <date>` on the
+   ancestor and on every node named, so the author reads at the ancestor, on the
+   alignment page, what a ruling for each alternative keeps and what it
+   discards. A divergence naming an alternative the ancestor does not
+   carry, a node that is answered, a node that is the ancestor, or the
+   same node under two sides of one ancestor is refused, and a refused
+   divergence writes nothing at all.
    Every node is parsed before and after its write: a node that would not
    validate after the write is reported and left unwritten, and a run with
    any problem writes nothing at all. An override wins on the stage.
@@ -152,7 +169,11 @@ gap in the reading rather than as a finding of nothing.
 3. The session's judgment on the findings: a merge, split, or fold is a
    proposal to the author, recorded by the apply step as a pending
    alternative on the node it would change and put to the author on the
-   alignment page; the session never merges or splits. Amend any node the
+   alignment page; the session never merges or splits. A lateral tangle
+   between two unanswered nodes is not a judgment call either: the
+   earlier-recorded node stands and the later becomes an alternative on
+   it, and a reviewer that named the other way round is corrected in the
+   reply and applied the right way round (`alignment-order`). Amend any node the
    reply says the session accepts, then, when the amendment changes
    substance, set that node back to `stage: review` for the next batch
    (`recording`); a batch is not re-run for one amendment, and the frontier

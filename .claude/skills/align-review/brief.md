@@ -12,7 +12,7 @@ Both are carried in this brief, whole for the batch and by stamp, stage, questio
 
 ## The record
 
-The disposition graph is at `disposition/` (manifest `disposition/disposition.yaml`; a node `commons.systems/<graph>/<slug>` is the file `disposition/<graph>/<slug>.md`). A node is one question and its standing answer, with frontmatter (`question`, `form`, `authority` stamp, `under` parents, `defines`, `shims`, `instrument`, `order`, `boost`, and, while a dialogue is open on it, `stage`, `alternatives`, `recommendation`, `review`, `depends`) and sections in this order:
+The disposition graph is at `disposition/` (manifest `disposition/disposition.yaml`; a node `commons.systems/<graph>/<slug>` is the file `disposition/<graph>/<slug>.md`). A node is one question and its standing answer, with frontmatter (`question`, `form`, `authority` stamp, `under` parents, `defines`, `shims`, `instrument`, `order`, `boost`, and, while a dialogue is open on it, `stage`, `alternatives`, `recommendation`, `review`, `depends`, whose entries are either a node id or a node id and an alternative on it written `<id>#<alternative>`) and sections in this order:
 
 - `## Disposition` — the author's words, verbatim and dated.
 - `## Answer` — the node as it stands.
@@ -40,13 +40,13 @@ On each node of the batch, the draft being the text its recommendation adopts �
 
 Across the graph — each node of the batch against every other node, answered or unanswered, at whatever stage — validations 7 to 15, the survey:
 
-7. **Contradiction.** Two nodes whose answers, recommended texts, or author's words touch the same matter and disagree.
+7. **Contradiction.** Two nodes whose answers, recommended texts, or author's words touch the same matter and disagree. Between two *unanswered* nodes this is a lateral tangle, and validation 13 says how it is recorded.
 8. **Supersession.** The author's words on one node superseded by later words on another while the earlier node still answers the superseded words.
-9. **Redundancy.** Two nodes answering the same question, defining the same term, or restating each other; propose the merge, naming the survivor and what moves.
+9. **Redundancy.** Two nodes answering the same question, defining the same term, or restating each other; propose the merge, naming the survivor and what moves. Between two *unanswered* nodes the survivor is not yours to choose: it is the earlier-recorded node, by validation 13's rule.
 10. **Decomposition.** A node answering more than one question or carrying what another node owns, or a node that is a fragment of its parent; propose the split or the fold.
 11. **Vocabulary.** Every term used with one meaning across the graph, each definition made once (`defines`), and no term used by a node that has no path to the node defining it.
 12. **Cross-reference.** Every prose reference to another node ("as the X node says") points at a node that still says what is attributed to it.
-13. **Placement and order.** `under` and `order` agree with the answers' dependencies; a draft that presupposes another node's answer is under it or after it; no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so. Recommend the order in which the author should rule.
+13. **Placement and tangle.** `under` and `order` agree with the answers' dependencies; a draft that presupposes another node's answer is under it or after it; no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so. The order in which the author rules is not yours to recommend: it is the ruling order, which the projector computes from the tangle you record (`alignment-order`). Record the tangle, in two kinds. A **lateral tangle** — two unanswered nodes carrying the same idea, its opposite, or adjacent ideas that would merge — is recorded as an alternative on the earlier-recorded of the two, which stands by that rule alone and by no judgment of yours about which is better, the later one becoming the alternative with its source and date; report it as a `contradiction` or `redundancy` finding whose `alternatives` puts the later node's answer on the earlier node, and say in the finding which is earlier and how you know. Earlier means the earlier date the node's own record carries, its stamp date or the earliest date in its `## Disposition`, and, when those tie or are absent, the earlier addition to the graph's history (`git -C disposition log --diff-filter=A --format=%ad --date=short -- <file> | tail -1`). A **subtree divergence** — a set of unanswered nodes that stands under one side of an alternative pending on an ancestor, and that a ruling for another side would discard — is recorded on the leaves and never on the ancestor: report it in `subtree_divergences`, naming the ancestor, the alternative each node stands under, and what diverges. Nothing you record here computes an order; the projector does that, and the alignment page shows the author, at the ancestor, what each ruling keeps and what it discards.
 14. **Coverage.** Each part of every disposition the author has given in the record (each `## Disposition` quotation, and the rulings quoted in rationales) is answered by exactly one node: none unanswered, none answered twice. A quotation may be carried on a child as the ground of the part it answers; the violation is two nodes answering the same part.
 15. **Merge.** For each unanswered node, and each alternative pending on one, ask whether it is a **new question** or a **new answer to a question the record already asks**, answered or unanswered. A new answer standing as its own node belongs on the node whose question it answers, as an alternative with its source; a new question carried on another node's dialogue belongs in a node of its own. Report each as a `merge` finding and give the alternative you propose: the node it goes on, the name it takes, and its prose. The review proposes; it never merges, splits, or edits a node.
 
@@ -106,11 +106,17 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
       ]
     }
   ],
-  "ruling_order": ["<node ids in the order you recommend the author rule, dependencies first>"]
+  "subtree_divergences": [
+    {
+      "ancestor": "<the unanswered node whose pending alternatives the subtrees diverge over>",
+      "sides": { "<an alternative name on that ancestor>": ["<id of a node that stands under it>", "..."] },
+      "finding": "<what diverges, quoting the sentences concerned>"
+    }
+  ]
 }
 ```
 
-`nodes` has one entry for every node at `stage: review`, no more and no fewer; a node at any other stage receives no entry, only findings. `strength` is your assessment of the counter-argument; `none` with `counter_argument` null when you found none worth the author's time. `alternatives` is optional on a finding and **required on a `merge` finding**; each name must not already be listed on that node (this brief shows each node's pending alternatives). `frontier` may be empty only if the survey found nothing, and then say so in your report. Check that the file parses (`node -e` with `JSON.parse` on it) before you finish.
+`nodes` has one entry for every node at `stage: review`, no more and no fewer; a node at any other stage receives no entry, only findings. `strength` is your assessment of the counter-argument; `none` with `counter_argument` null when you found none worth the author's time. `alternatives` is optional on a finding and **required on a `merge` finding**; each name must not already be listed on that node (this brief shows each node's pending alternatives). `frontier` may be empty only if the survey found nothing, and then say so in your report. In `subtree_divergences` every alternative name must be one the ancestor already carries or one this file's `alternatives` adds to it, every node named must be unanswered and must not be the ancestor, and no node may stand under two sides of the same ancestor; the apply step refuses the whole run otherwise. Check that the file parses (`node -e` with `JSON.parse` on it) before you finish.
 
 ## Report
 

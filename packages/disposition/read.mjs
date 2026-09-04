@@ -21,6 +21,7 @@ import {
   deriveDescendants,
   deriveDraftHash,
   deriveRank,
+  deriveSettles,
   deriveStandingHash,
   deriveStatus,
 } from './derive.mjs';
@@ -144,6 +145,48 @@ function readIdList(fm, key, problems) {
     return [];
   }
   return list;
+}
+
+/**
+ * Parse and validate the `depends` frontmatter field: each entry is either a
+ * bare node id -- an open question this node's ruling waits on, the
+ * original and still the common form -- or an id qualified with
+ * `#<alternative name>`, naming the alternative on that ancestor this node
+ * stands under: a divergence, recorded here on the leaf and inverted at the
+ * ancestor by the alignment page (see `renderAlternatives` in
+ * `project.mjs`). The list's own shape (a list of non-empty strings) is the
+ * same check `readIdList` already makes for `under` and `after`, so this
+ * reuses it; only the entry syntax is depends' own. Two problems are
+ * structural enough to catch here, one entry at a time, with no need of the
+ * whole graph: more than one `#` in an entry, and a `#` with nothing (or
+ * only whitespace) after it. Whether the id resolves, is answered, is
+ * repeated, or is the node's own id, and whether a named alternative is
+ * actually listed on the ancestor it qualifies, all need the whole graph
+ * and are checked by `readGraph`.
+ *
+ * @param {object} fm
+ * @param {string[]} problems
+ * @returns {{id: string, alternative: string|null}[]}
+ */
+function readDependsList(fm, problems) {
+  const raw = readIdList(fm, 'depends', problems);
+  return raw.map((entry) => {
+    const parts = entry.split('#');
+    if (parts.length > 2) {
+      problems.push(`malformed 'depends' reference: ${entry}`);
+      return { id: entry, alternative: null };
+    }
+    if (parts.length === 1) {
+      return { id: entry, alternative: null };
+    }
+    const [id, altRaw] = parts;
+    const alternative = altRaw.trim();
+    if (alternative.length === 0) {
+      problems.push(`'depends' names an empty alternative on ${id}`);
+      return { id, alternative: null };
+    }
+    return { id, alternative };
+  });
 }
 
 /**
@@ -539,7 +582,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   // under / after / depends
   const under = readIdList(fm, 'under', problems);
   const after = readIdList(fm, 'after', problems);
-  const depends = readIdList(fm, 'depends', problems);
+  const depends = readDependsList(fm, problems);
 
   // tier
   let tier = null;
@@ -1044,7 +1087,7 @@ export async function readGraph(rootDir) {
   for (const node of parsed) {
     node.under = node.under.map((refId) => canonicalizeId(refId, manifest));
     node.after = node.after.map((refId) => canonicalizeId(refId, manifest));
-    node.depends = node.depends.map((refId) => canonicalizeId(refId, manifest));
+    node.depends = node.depends.map((d) => ({ ...d, id: canonicalizeId(d.id, manifest) }));
     node.cites = node.cites.map((c) => ({ ...c, id: canonicalizeId(c.id, manifest) }));
     node.order = node.order.map((step) => step.map((refId) => canonicalizeId(refId, manifest)));
   }
@@ -1055,7 +1098,12 @@ export async function readGraph(rootDir) {
   // `children`); every 'after' entry must also resolve within this graph.
   // every 'depends' entry must resolve within this graph, must not repeat,
   // must not name the node itself, and must name a node whose status is
-  // unanswered -- a dependency is on an open question, not a settled one.
+  // unanswered -- a dependency is on an open question, not a settled one --
+  // keyed on the entry's 'id' part throughout, so the same ancestor named
+  // twice under two different alternatives is still a duplicate. A
+  // qualified entry additionally requires the named alternative to actually
+  // be listed on the ancestor it qualifies, once the ancestor itself
+  // resolves.
   const nodesById = new Map(parsed.map((n) => [n.id, n]));
   const idSet = new Set(nodesById.keys());
   for (const node of parsed) {
@@ -1076,19 +1124,21 @@ export async function readGraph(rootDir) {
     }
     const seenDepends = new Set();
     for (const d of node.depends) {
-      if (d === node.id) {
+      if (d.id === node.id) {
         problems.push(`${node.path}: 'depends' names itself`);
         continue;
       }
-      if (!idSet.has(d)) {
-        problems.push(`${node.path}: unresolved 'depends' reference: ${d}`);
-      } else if (deriveStatus(nodesById.get(d)) === 'answered') {
-        problems.push(`${node.path}: 'depends' names ${d}, which is answered; a dependency is on an open question`);
+      if (!idSet.has(d.id)) {
+        problems.push(`${node.path}: unresolved 'depends' reference: ${d.id}`);
+      } else if (deriveStatus(nodesById.get(d.id)) === 'answered') {
+        problems.push(`${node.path}: 'depends' names ${d.id}, which is answered; a dependency is on an open question`);
+      } else if (d.alternative !== null && !nodesById.get(d.id).alternatives.some((a) => a.name === d.alternative)) {
+        problems.push(`${node.path}: 'depends' names alternative ${d.alternative} on ${d.id}, which has no such alternative`);
       }
-      if (seenDepends.has(d)) {
-        problems.push(`${node.path}: duplicate 'depends' reference: ${d}`);
+      if (seenDepends.has(d.id)) {
+        problems.push(`${node.path}: duplicate 'depends' reference: ${d.id}`);
       }
-      seenDepends.add(d);
+      seenDepends.add(d.id);
     }
   }
 
@@ -1132,6 +1182,7 @@ export async function readGraph(rootDir) {
     throw new Error((byPath.length > 0 ? byPath : [err.message]).join('\n'));
   }
   const childrenMap = deriveChildren(parsed);
+  const settlesMap = deriveSettles(parsed, childrenMap);
 
   // the order rule: only reached once every order-named id is confirmed to
   // exist and be in scope (above), so every rank lookup below resolves.
@@ -1181,13 +1232,18 @@ export async function readGraph(rootDir) {
   }
 
   const nodes = parsed
-    .map((node) => ({
-      ...node,
-      children: childrenMap.get(node.id) ?? [],
-      rank: rankMap.get(node.id) ?? 0,
-      ceiling: deriveCeiling(node.id, nodesById),
-      status: deriveStatus(node),
-    }))
+    .map((node) => {
+      const settled = settlesMap.get(node.id);
+      return {
+        ...node,
+        children: childrenMap.get(node.id) ?? [],
+        rank: rankMap.get(node.id) ?? 0,
+        ceiling: deriveCeiling(node.id, nodesById),
+        status: deriveStatus(node),
+        settles: settled.settles,
+        settledBy: { under: settled.under, alternatives: settled.alternatives, depends: settled.depends },
+      };
+    })
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
   return {

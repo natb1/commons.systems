@@ -68,18 +68,34 @@ function nodeFile(node) {
   return `disposition/${node.graph}/${node.slug}.md`;
 }
 
+// `node.settles` (deriveSettles) is a number for every node the reader
+// returns; the fallback here is only for a shape the reader is not
+// contracted to produce, so this never guesses a count -- it prints the
+// dash instead.
+function settlesText(node) {
+  return typeof node.settles === "number" ? String(node.settles) : "—";
+}
+
 function indexLine(node) {
-  return `- ${node.id} | stage ${node.stage} | rank ${node.rank.toFixed(4)} | ${stampText(node)} | ${nodeFile(node)}`;
+  return `- ${node.id} | stage ${node.stage} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | ${stampText(node)} | ${nodeFile(node)}`;
 }
 
 /**
- * The frontier's order, exactly as `renderFrontier` (descending rank, id
+ * The frontier's own order, exactly as `renderFrontier` (descending rank, id
  * tiebreak) lists it -- recovered from its own rendered listing rather than
  * re-implementing the comparator, since `renderFrontier` does not expose
  * the sorted id list on its own. Every node's own line starts with `- `
  * followed immediately by its id (ids never contain a space); every other
  * line renderFrontier emits is indented, so this cannot mistake one for
  * the other.
+ *
+ * This is the order `{{context_index}}` is written in, and the order
+ * `batchNodes`/`contextNodes` are both drawn from below: the context is read
+ * by rank because it is not what the author rules on. `{{batch_index}}` is
+ * not this order -- it is separately re-sorted into the *ruling order*
+ * (`rulingOrderCompare`), settling count first, since that is the order the
+ * author rules on the batch in (`alignment-order`), and a node's rank alone
+ * does not say how much of the graph a ruling on it would settle.
  *
  * @param {{nodes: object[]}} graph
  * @returns {string[]} every node id, in the frontier's order
@@ -92,6 +108,28 @@ function frontierOrderIds(graph) {
     if (m) ids.push(m[1]);
   }
   return ids;
+}
+
+/**
+ * The batch's *ruling order* (`alignment-order`): settling count
+ * descending -- a node whose ruling would settle more of the graph (more of
+ * it standing under the node itself, depending on it, or riding on one of
+ * its own pending alternatives; `deriveSettles`) is ruled on first -- then
+ * rank descending, then id ascending to break what settling count alone does
+ * not. This is deliberately not the frontier's own order
+ * (`frontierOrderIds`): rank alone ranks by boost and shape, not by how much
+ * of the graph a ruling settles, so the two orders can and do differ.
+ *
+ * `settles` is a number for every node the reader returns (`node.settles`);
+ * a node for which it is not is sorted last, as though it settled nothing,
+ * rather than thrown on.
+ */
+function rulingOrderCompare(a, b) {
+  const aSettles = typeof a.settles === "number" ? a.settles : -Infinity;
+  const bSettles = typeof b.settles === "number" ? b.settles : -Infinity;
+  if (aSettles !== bSettles) return bSettles - aSettles;
+  if (a.rank !== b.rank) return b.rank - a.rank;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
 function recommendationLine(node) {
@@ -138,7 +176,7 @@ function renderBatchNode(node) {
     "",
     `- File: ${nodeFile(node)}`,
     `- Question: ${node.question}`,
-    `- Stage: ${node.stage} | rank ${node.rank.toFixed(4)} | status ${node.status} | stamp: ${stampText(node)}`,
+    `- Stage: ${node.stage} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | status ${node.status} | stamp: ${stampText(node)}`,
     `- Recommendation: ${recommendationLine(node)}`,
     `- Earlier review: ${reviewLine(node)}`,
     `- Alternatives on the table: ${alternativesSummary(node)}`,
@@ -179,7 +217,7 @@ function renderBatchNode(node) {
 /** One context node: what the batch is judged against. */
 function renderContextNode(node) {
   const head = [`### ${node.id}`, "", `- File: ${nodeFile(node)}`, `- Question: ${node.question}`];
-  head.push(`- Status: ${node.status} | stamp: ${stampText(node)} | rank ${node.rank.toFixed(4)} | stage: ${node.stage || "none (no dialogue open)"}`);
+  head.push(`- Status: ${node.status} | stamp: ${stampText(node)} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | stage: ${node.stage || "none (no dialogue open)"}`);
   if (node.recommendation) head.push(`- Recommendation: ${recommendationLine(node)}`);
   head.push(`- Alternatives pending: ${alternativesSummary(node)}`);
   head.push("", "#### Answer", "", node.answer || "(no '## Answer' section: this node has no standing answer yet)", "");
@@ -222,20 +260,27 @@ export async function writeFrontierBrief({ rootDir, reviewDir, date = null, dry 
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const ordered = frontierOrderIds(graph).map((id) => byId.get(id)).filter(Boolean);
 
-  // The batch: the nodes at the review stage, in the frontier's order. The
-  // context: every other node, answered or unanswered, at whatever stage.
+  // The batch: the nodes at the review stage, in the frontier's order (the
+  // order the batch itself, `{{batch}}`, is presented in). The context:
+  // every other node, answered or unanswered, at whatever stage, by rank.
   const batchNodes = ordered.filter((n) => n.stage === "review");
   const contextNodes = ordered.filter((n) => n.stage !== "review");
 
-  const batchIndexText = batchNodes.length > 0
-    ? batchNodes.map(indexLine).join("\n")
+  // The batch *index* alone is re-sorted into the ruling order: the author
+  // rules on the batch in that order, not by rank, so this is the one
+  // listing that must show it (`rulingOrderCompare`). The batch's own
+  // presentation above (`batchText`) stays in the frontier's order.
+  const batchIndexNodes = [...batchNodes].sort(rulingOrderCompare);
+
+  const batchIndexText = batchIndexNodes.length > 0
+    ? batchIndexNodes.map(indexLine).join("\n")
     : "(the batch is empty: no node carries `stage: review`)";
   const batchText = batchNodes.length > 0
     ? batchNodes.map(renderBatchNode).join("\n")
     : "(the batch is empty: no node carries `stage: review`, so there is no verdict to give)";
   const contextIndexText = contextNodes.length > 0
     ? contextNodes
-      .map((n) => `- ${n.id} | ${n.status} | stage ${n.stage || "none"} | rank ${n.rank.toFixed(4)} | ${stampText(n)} | ${nodeFile(n)}`)
+      .map((n) => `- ${n.id} | ${n.status} | stage ${n.stage || "none"} | rank ${n.rank.toFixed(4)} | settles ${settlesText(n)} | ${stampText(n)} | ${nodeFile(n)}`)
       .join("\n")
     : "(no other node: the batch is the whole graph)";
   const contextText = contextNodes.length > 0

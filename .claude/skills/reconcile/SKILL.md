@@ -60,7 +60,9 @@ judgment.
 ## 1. Frontier
 
 `node packages/disposition/project.mjs disposition --frontier -` lists
-every node in rank order with its stamp, instrument, shims, and stage.
+every node in rank order with its stamp, instrument, shims, and stage,
+under a heading of the unanswered nodes in the ruling order, which orders
+alignment and not this loop (`alignment-order`).
 Only an answered node, one with a ratified or delegated stamp, can be
 bitten: an unanswered node carries a draft, not an answer, and a bite
 never pre-empts the author. If no node is answered, report

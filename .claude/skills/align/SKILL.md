@@ -6,10 +6,13 @@ description: Record or revise one node of the disposition graph by interview wit
 
 > **Shim notice (2026-09-02, revised 2026-09-03, reconciled to the
 > dialogue-state encoding the same day under the author's bootstrap grant
-> on `dialogue`).** Hand-materialized from
+> on `dialogue`, and to the ruling order the same day under the author's
+> grant on `alignment-order`, whose recommendation is unanswered and whose
+> clean-context review and ruling are both still owed).** Hand-materialized from
 > the nodes `growth`, `recording`, `unanswered`, `dialogue`,
 > `clean-context-review`, `frontier-consistency`, `checkpoint`,
-> `alignment-target`, `authority`, `node`, `under`, `projection`,
+> `alignment-target`, `alignment-order`, `authority`, `node`, `under`,
+> `projection`,
 > `un-aligned-children`, `fidelity`,
 > `persistence`, `readings`, `review`, `evaluation`, `attention`,
 > `delegation`, and `transience` of `commons.systems/disposition-graph`,
@@ -28,8 +31,8 @@ it; its periagogic object is the nodes the disposition would amend and the
 implementation their criteria point to, read before anything is changed.
 `/align <node id>` runs the sitting on an existing node, to ratify it or to
 review its ratification; its periagogic object is the node's page and the
-readings under it. `/align` with nothing takes up the highest-ranked
-unanswered node (`alignment-target`, §1). A node is one question and its
+readings under it. `/align` with nothing takes up the first unanswered
+node of the ruling order (`alignment-target`, `alignment-order`, §1). A node is one question and its
 standing answer; a round is one node. Every node is unanswered until the
 author confirms it through this dialogue (`unanswered`): a deferred or
 unstamped answer is a draft, and the node carries the dialogue's state
@@ -76,8 +79,9 @@ skill only when the session starts in the checkout that carries it.
    refines, and leave the author's overrule open.
 4. Read the open dialogue before opening a new one:
    `node packages/disposition/project.mjs disposition --frontier -` lists
-   every node with its status, stamp, `stage`, recommendation, and review
-   state, and the alignment page's responses are read with the Artifact
+   every node with its status, stamp, `stage`, recommendation, review
+   state, and settling count, headed by the alignment frontier in the
+   ruling order, and the alignment page's responses are read with the Artifact
    tool (`read_db`, collection `responses`; a document's id is the node id
    with each `/` replaced by `:`; a document carries `node`, `stage`,
    `ruling` as `confirm`, `edit`, or `deny`, `text`, and `updated`). Act
@@ -115,11 +119,13 @@ skill only when the session starts in the checkout that carries it.
      reply, or kicks it back to stage 2 or 3 with findings; a finding
      across nodes kicks back each node it names.
   5. Ruling. The node is put on the alignment page, which lists every
-     unanswered node in rank order, this project's graph before the
+     unanswered node in the ruling order, this project's graph before the
      public graph and so the purpose node first, each item carrying the
-     node's question, its stage, the author's words it rests on with
-     their dates, the node as it stands, the alternatives pending on it
-     with their sources, the recommendation naming the one it adopts with
+     node's question, its stage, its settling count, the author's words it
+     rests on with their dates, the node as it stands, the alternatives
+     pending on it with their sources and, where leaves record a
+     divergence under this node, what a ruling for each alternative keeps
+     and what it discards, the recommendation naming the one it adopts with
      its class, boldness, and pin, the draft and the edit it makes when
      the recommendation adopts an alternative, the review's counter-argument and
      the reply when there is one, and the three responses open on any
@@ -147,9 +153,10 @@ skill only when the session starts in the checkout that carries it.
   owed, `periagogic`, `maieutic`, `review`, or `ruling`; advance it as the
   movements complete and remove it, with the rest of the dialogue's
   fields, at the recording. The queue is the set of unanswered nodes, in
-  rank order; the author's choice of what comes next is a boost
-  (`attention`). Nothing about the queue lives in this session, in
-  memory, or in scratch (`transience`).
+  the ruling order; the author's choice of what comes next is their own
+  order and needs no boost (`alignment-order`, amending `attention`).
+  Nothing about the queue lives in this session, in memory, or in scratch
+  (`transience`).
 - **Checkpoint** (`checkpoint`). At every transition of a node's stage,
   periagogic to maieutic, maieutic to review, review to ruling, or back by
   a kickback, write the node with its new stage and everything the stage
@@ -180,10 +187,12 @@ skill only when the session starts in the checkout that carries it.
   alternative; `review`, the clean-context review's `verdict`, `strength`,
   `date`, and `of`, the hash of the recommended text it read, the fence
   or the standing text, which the frontier flags when that text has
-  changed since; `depends`, the ids of the still-open questions this one's
-  ruling waits on, as data, so the page can order the author's queue and
-  show what a ruling here unblocks, its inverse being derived and never
-  stored; and `## Account`, the account in prose, which is not a proposal
+  changed since; `depends`, the still-open questions this one's ruling waits on, as
+  data, so the page can order the author's queue and show what a ruling
+  here unblocks, its inverse being derived and never stored, each entry
+  either a node id or a node id and an alternative on it, written
+  `<id>#<alternative>`, the second form recording that this node stands
+  under that side of a divergence (`alignment-order`); and `## Account`, the account in prose, which is not a proposal
   and does not carry that name. A ruling-stage node without a forward
   verdict is invalid; a recommendation changed after its review is sent
   through the review again when the change is substance. A proposal from
@@ -197,8 +206,36 @@ skill only when the session starts in the checkout that carries it.
   `fidelity` question asks and the state does not yet do; and give the
   author, at the ruling, the context to see how this question stands to
   the rest of the frontier.
-- No argument (`alignment-target`): take the first unanswered node of the
-  frontier in rank order, this project's graph before the public graph, and
+- **The ruling order** (`alignment-order`, whose recommendation is
+  unanswered and reconciled here under the author's grant of 2026-09-03).
+  The alignment frontier is a set of nodes none of which has authority
+  over another, so a recording on it may contradict, duplicate, or diverge
+  from any other and nothing can reject it; the order's work is to
+  untangle it, by asking for the rulings that settle the most first. A
+  tangle is recorded, never computed in a session (`transience`). A
+  lateral tangle between unanswered nodes, the same idea twice, its
+  opposite, or adjacent nodes that would merge, is recorded as an
+  alternative on the earlier-recorded node, which stands by that rule
+  alone, the later one becoming the alternative and carrying its source
+  and date. A divergence between subtrees is recorded on the leaves: each
+  node found to stand under one side names, in `depends`, the ancestor and
+  the alternative on it that it stands under, and the page inverts that at
+  the ancestor, showing beside each alternative the nodes a ruling for it
+  keeps and the nodes it discards. A ruling settles a node when it makes
+  that node mechanically decidable: every unanswered node under the ruled
+  node, every alternative the ruling closes, and every node naming it in
+  `depends`. The order puts first the node whose ruling settles the most,
+  ancestors ahead of descendants by that count and not by hand, rank
+  breaking ties and ordering nothing else on this frontier. The projector
+  computes it and nothing else does: `--frontier -` prints it as the
+  `## Ruling order` section and the alignment page pages in it. Rank stays
+  what `attention` says it is for the reconciliation frontier and the
+  onboarding path. Finding a tangle is the clean-context review's work
+  (`/align-review`); a sitting records one the turn the author's words
+  show it, and lands it like any other checkpoint.
+- No argument (`alignment-target`, `alignment-order`): take the first
+  unanswered node of the frontier in the ruling order, this project's
+  graph before the public graph, and
   run the sitting from the node's stage, repeating no movement behind it,
   up to the author's confirmation, asked for in the interview when the
   author is present and read from the page otherwise. One node at a time;
@@ -381,7 +418,8 @@ rule projections are regenerated by the next reconciliation run, not here.
   land.
 - Steer: amend the node; the steer enters the rationale as a rejected
   alternative or an amendment; project again.
-- The author's choice of the next node is a boost (`attention`).
+- The author's choice of the next node is their own order and needs no
+  boost (`alignment-order`, amending `attention`).
 
 ## 6. Land
 

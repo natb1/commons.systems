@@ -336,17 +336,20 @@ test("excludeUnaligned also drops the id from every remaining node's children, a
   assert.ok(alignmentHtml.includes(unaligned.id), "the un-aligned node is still present in the alignment output");
 });
 
-test("renderFrontier lists every node in descending rank order with stage/under/instrument/shim lines", async () => {
+test("renderFrontier lists every node in descending rank order with stage/settles/under/instrument/shim lines", async () => {
   const graph = await readGraph(resolve(HERE, "fixtures/valid-unaligned"));
   const listing = renderFrontier(graph);
-  assert.ok(listing.startsWith(`# Frontier of ${graph.module}\n`));
+  assert.ok(listing.startsWith(`# Frontier of ${graph.module}\n\n## Ruling order\n`));
+  assert.ok(listing.includes("\n\n## Every node, by rank\n"), "the two sections, in order");
 
   const root = graph.nodes.find((n) => n.slug === "root");
   const unaligned = graph.nodes.find((n) => n.slug === "child-unaligned");
   const ruling = graph.nodes.find((n) => n.slug === "child-ruling");
 
-  // rank order, descending: root (1.0) > child-unaligned (0.75) > child-ruling (0.25)
-  const at = (id) => listing.indexOf(`- ${id}`);
+  // "Every node, by rank" is unaffected by the ruling order above it: rank
+  // order, descending: root (1.0) > child-unaligned (0.75) > child-ruling (0.25)
+  const everyNodeSection = listing.slice(listing.indexOf("## Every node, by rank"));
+  const at = (id) => everyNodeSection.indexOf(`- ${id}`);
   assert.ok(at(root.id) >= 0 && at(unaligned.id) >= 0 && at(ruling.id) >= 0);
   assert.ok(at(root.id) < at(unaligned.id));
   assert.ok(at(unaligned.id) < at(ruling.id));
@@ -355,18 +358,20 @@ test("renderFrontier lists every node in descending rank order with stage/under/
   // their lines are compared within each node's own block, not by a global
   // substring search that the shared 'under' text would satisfy either way.
   const blockFor = (id) => {
-    const start = listing.indexOf(`- ${id}`);
-    const next = listing.indexOf("\n- ", start + 1);
-    return listing.slice(start, next === -1 ? listing.length : next);
+    const start = everyNodeSection.indexOf(`- ${id}`);
+    const next = everyNodeSection.indexOf("\n- ", start + 1);
+    return everyNodeSection.slice(start, next === -1 ? everyNodeSection.length : next);
   };
 
   const unalignedBlock = blockFor(unaligned.id);
   assert.ok(unalignedBlock.includes(`  stage: ${unaligned.stage}`));
+  assert.ok(unalignedBlock.includes(`  settles: ${unaligned.settles} (${unaligned.settledBy.under} under, ${unaligned.settledBy.alternatives} alternatives, ${unaligned.settledBy.depends} depends)`), "the settles line, right after stage");
   assert.ok(unalignedBlock.includes(`  under: ${unaligned.under.join(", ")}`), "under: lists an un-aligned node's parents");
   assert.ok(unalignedBlock.includes("  instrument: none"));
 
   const rulingBlock = blockFor(ruling.id);
   assert.ok(rulingBlock.includes(`  stage: ${ruling.stage}`));
+  assert.ok(rulingBlock.includes(`  settles: ${ruling.settles} (`));
   assert.ok(!rulingBlock.includes("  under:"), "under: is only for un-aligned nodes");
   assert.ok(
     rulingBlock.includes(`shim (${ruling.shims[0].declared}): ${ruling.shims[0].artifact} — for: unstated — liquidation: ${ruling.shims[0].liquidation}`),
@@ -376,6 +381,107 @@ test("renderFrontier lists every node in descending rank order with stage/under/
   const rootBlock = blockFor(root.id);
   assert.ok(rootBlock.includes(`instrument: ${root.instrument.kind}: ${root.instrument.ref}`), "a real instrument renders");
   assert.ok(!rootBlock.includes("  stage:"), "root has no stage");
+  assert.ok(!rootBlock.includes("  settles:"), "no stage, so no settles line either");
+});
+
+test("renderFrontier's '## Ruling order' lists only the alignment frontier, sorted by settles descending then rank, and prints '_none_' when empty", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-unaligned"));
+  const listing = renderFrontier(graph);
+  const rulingSection = listing.slice(listing.indexOf("## Ruling order"), listing.indexOf("## Every node, by rank"));
+
+  const unaligned = graph.nodes.find((n) => n.slug === "child-unaligned");
+  const ruling = graph.nodes.find((n) => n.slug === "child-ruling");
+  const root = graph.nodes.find((n) => n.slug === "root");
+  assert.equal(root.stage, null, "fixture precondition: root carries no stage");
+  assert.ok(!rulingSection.includes(root.id), "a node with no stage is not in the ruling order");
+
+  assert.equal(unaligned.settles, ruling.settles, "fixture precondition: both leaves settle nothing of their own");
+  assert.ok(unaligned.rank > ruling.rank, "and the settles tie is broken by rank");
+  const ids = [...rulingSection.matchAll(/^\d+\. (\S+) —/gm)].map((m) => m[1]);
+  assert.deepEqual(ids, [unaligned.id, ruling.id]);
+  assert.ok(
+    rulingSection.includes(`1. ${unaligned.id} — settles ${unaligned.settles} (${unaligned.settledBy.under} under, ${unaligned.settledBy.alternatives} alternatives, ${unaligned.settledBy.depends} depends) — rank ${unaligned.rank.toFixed(4)} — stage ${unaligned.stage}`),
+  );
+
+  const emptyListing = renderFrontier({ module: "example.test", nodes: [{ id: "example.test/main/x", stage: null, rank: 1, settles: 0, settledBy: { under: 0, alternatives: 0, depends: 0 }, status: "answered", authority: null }] });
+  const emptyRulingSection = emptyListing.slice(emptyListing.indexOf("## Ruling order"), emptyListing.indexOf("## Every node, by rank"));
+  assert.ok(emptyRulingSection.includes("_none_"));
+});
+
+test("renderFrontier's ruling order sorts by settles descending before rank, and a node's own alternatives count toward it", () => {
+  const mk = (id, stage, rank, settles, settledBy) => ({
+    id, stage, rank, settles, settledBy, status: "unanswered", authority: null,
+  });
+  const graph = {
+    module: "example.test",
+    nodes: [
+      mk("example.test/main/a", "review", 0.1, 5, { under: 3, alternatives: 1, depends: 1 }),
+      mk("example.test/main/b", "ruling", 0.9, 5, { under: 5, alternatives: 0, depends: 0 }),
+      mk("example.test/main/c", "periagogic", 0.5, 9, { under: 9, alternatives: 0, depends: 0 }),
+      mk("example.test/main/d", null, 0.99, 0, { under: 0, alternatives: 0, depends: 0 }),
+    ],
+  };
+  const listing = renderFrontier(graph);
+  const rulingSection = listing.slice(listing.indexOf("## Ruling order"), listing.indexOf("## Every node, by rank"));
+  const ids = [...rulingSection.matchAll(/^\d+\. (\S+) —/gm)].map((m) => m[1]);
+  assert.deepEqual(ids, [
+    "example.test/main/c", // settles 9, the outright highest
+    "example.test/main/b", // ties a on settles (5); rank 0.9 beats a's 0.1
+    "example.test/main/a",
+  ]);
+  assert.ok(!ids.includes("example.test/main/d"), "no stage, so not in the ruling order at all");
+});
+
+test("renderFrontier gains a 'depends:' line, placed after 'alternatives:' when there is one and after 'settles:' otherwise", async () => {
+  const dir = await freshTmpDir("project-frontier-depends-");
+  await mkdir(join(dir, "main"), { recursive: true });
+  await writeFile(join(dir, "disposition.yaml"), "module: example.test\ngraphs:\n  main:\n    about: fixture\n");
+  await writeFile(
+    join(dir, "main", "root.md"),
+    "---\nquestion: Root?\nstage: periagogic\nalternatives:\n  - name: split-it\n    source: author\n    ref: 2026-01-01\n---\n\n## Disposition\n\nOpen.\n\n## Alternatives\n\n### split-it\n\nSplit it.\n",
+  );
+  await writeFile(
+    join(dir, "main", "plain.md"),
+    "---\nquestion: Plain?\nstage: periagogic\ndepends:\n  - example.test/main/root\n---\n\n## Disposition\n\nOpen.\n",
+  );
+  await writeFile(
+    join(dir, "main", "qualified.md"),
+    "---\nquestion: Qualified?\nform: target\nalternatives:\n  - name: own-alt\n    source: author\n    ref: 2026-01-01\ndepends:\n  - example.test/main/root#split-it\nstage: review\nrecommendation:\n  adopts: standing\n  class: delegated\n  boldness: low\n  amends: " + "a".repeat(40) + "\n  at: a1b2c3d\n---\n\n## Answer\n\nAns.\n\n## Alternatives\n\n### own-alt\n\nAn alternative of its own.\n",
+  );
+  const graph = await readGraph(dir);
+  const listing = renderFrontier(graph);
+  const everyNodeSection = listing.slice(listing.indexOf("## Every node, by rank"));
+  const blockFor = (slug) => {
+    const node = graph.nodes.find((n) => n.slug === slug);
+    const start = everyNodeSection.indexOf(`- ${node.id}`);
+    const next = everyNodeSection.indexOf("\n- ", start + 1);
+    return everyNodeSection.slice(start, next === -1 ? everyNodeSection.length : next);
+  };
+
+  // plain: no alternatives of its own, so its 'depends:' line sits right
+  // after 'settles:'.
+  const plainBlock = blockFor("plain");
+  assert.ok(plainBlock.includes("  depends: example.test/main/root"), "a bare entry renders without '#'");
+  const plainSettlesAt = plainBlock.indexOf("  settles:");
+  const plainDependsAt = plainBlock.indexOf("  depends:");
+  assert.ok(
+    plainSettlesAt >= 0 && plainDependsAt === plainBlock.indexOf("\n", plainSettlesAt) + 1,
+    "right after settles: when there is no alternatives: line",
+  );
+
+  // qualified: carries its own alternatives, so its 'depends:' line sits
+  // right after 'alternatives:' instead, past recommendation/review/draft.
+  const qualifiedBlock = blockFor("qualified");
+  assert.ok(qualifiedBlock.includes("  depends: example.test/main/root#split-it"), "a qualified entry keeps its '#alternative'");
+  const qualifiedAltAt = qualifiedBlock.indexOf("  alternatives:");
+  const qualifiedDependsAt = qualifiedBlock.indexOf("  depends:");
+  assert.ok(
+    qualifiedAltAt >= 0 && qualifiedDependsAt === qualifiedBlock.indexOf("\n", qualifiedAltAt) + 1,
+    "right after alternatives: when there is one",
+  );
+
+  const rootBlock = blockFor("root");
+  assert.ok(!rootBlock.includes("  depends:"), "root names no dependency of its own, alternatives of its own notwithstanding");
 });
 
 test("renderFrontier prints an 'order:' line, right after the stamp line, for a node carrying order", async () => {
@@ -822,30 +928,42 @@ test("buildAlignment refuses a template with no marker", () => {
   assert.throws(() => buildAlignment("<title>x</title>", ALIGNMENT_GRAPH), /DG:ITEMS/);
 });
 
-test("orderAlignmentItems keeps the manifest's graph order and ranks descending within a graph", () => {
+test("orderAlignmentItems keeps the manifest's graph order, and orders within a graph by ruling order (settles, then rank)", () => {
   const groups = orderAlignmentItems(TWO_GRAPHS);
-  assert.deepEqual(groups.map((g) => g.graph), ["first", "second"], "manifest order, not rank order");
+  assert.deepEqual(groups.map((g) => g.graph), ["first", "second"], "manifest order, not ruling order");
   assert.deepEqual(groups.map((g) => g.about), [
     "the graph the manifest names first",
     "the graph the manifest names second",
   ]);
-  assert.deepEqual(groups[0].items.map((n) => n.slug), ["leaf-a", "leaf-b"], "rank tie broken by id");
+  // neither leaf carries any alternatives or dependants of its own, so
+  // settles ties at 0 and the tie falls through to rank, then id.
+  assert.equal(groups[0].items[0].settles, groups[0].items[1].settles, "fixture precondition: a settles tie");
+  assert.deepEqual(groups[0].items.map((n) => n.slug), ["leaf-a", "leaf-b"], "settles tie, rank tie, broken by id");
   assert.deepEqual(groups[1].items.map((n) => n.slug), ["root"]);
   // the second graph's single item outranks both of the first graph's, and
-  // still comes after them: rank orders within a graph, never between.
+  // still comes after them: ruling order orders within a graph, never
+  // between graphs, which stays the manifest's own grouping.
   assert.ok(groups[1].items[0].rank > groups[0].items[0].rank);
 
   const one = orderAlignmentItems(ALIGNMENT_GRAPH);
   assert.deepEqual(one.map((g) => g.graph), ["main"]);
+  assert.equal(one[0].items[0].settles, one[0].items[1].settles, "fixture precondition: both leaves settle nothing of their own");
   assert.deepEqual(one[0].items.map((n) => n.slug), ["child-unaligned", "child-ruling"]);
-  assert.ok(one[0].items[0].rank > one[0].items[1].rank, "the higher-ranked item comes first");
+  assert.ok(one[0].items[0].rank > one[0].items[1].rank, "settles ties, so the higher-ranked item comes first");
 });
 
-test("orderAlignmentItems takes only nodes carrying a stage, and appends an undeclared graph rather than dropping it", () => {
+test("orderAlignmentItems takes only nodes carrying a stage, appends an undeclared graph rather than dropping it, and settles outranks rank within a group", () => {
   const groups = orderAlignmentItems(DIALOGUE_GRAPH);
   const slugs = groups.flatMap((g) => g.items.map((n) => n.slug));
   assert.ok(!slugs.includes("answered-no-stage"), "a node with no stage is not an item");
-  assert.deepEqual(slugs, ["answered-with-stage", "review-node", "ruling-node"]);
+  // ruling-node carries one alternative (settles 1) and so leads even
+  // though answered-with-stage and review-node (settles 0 apiece) outrank
+  // it -- the ruling-order change this test exists to cover.
+  const item = (slug) => groups.flatMap((g) => g.items).find((n) => n.slug === slug);
+  assert.equal(item("ruling-node").settles, 1);
+  assert.equal(item("answered-with-stage").settles, 0);
+  assert.equal(item("review-node").settles, 0);
+  assert.deepEqual(slugs, ["ruling-node", "answered-with-stage", "review-node"], "settles 1 leads settles 0, whatever the ranks");
 
   const stray = orderAlignmentItems({
     graphs: { main: { about: "declared" } },
@@ -877,11 +995,16 @@ test("--alignment lays the page out graph by graph then by rank, and leaves out 
   assert.ok(!dialogue.includes(`data-id="${noStage.id}"`));
 });
 
-test("--alignment heads each item with its id, rank, stage pill, stamp and parents", () => {
+test("--alignment heads each item with its id, settles, rank, stage pill, stamp and parents", () => {
   const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
   const ruling = nodeBySlug(ALIGNMENT_GRAPH, "child-ruling");
   const article = itemHtml(html, ruling.id);
   assert.ok(article.includes(`>${ruling.id}<`), "the id is printed");
+  assert.equal(typeof ruling.settles, "number", "fixture precondition: readGraph computed a settles count");
+  assert.ok(article.includes(`class="meta mono num">settles ${ruling.settles}<`), "settles, right before rank");
+  const settlesAt = article.indexOf(`settles ${ruling.settles}`);
+  const rankAt = article.indexOf(`rank ${ruling.rank.toFixed(4)}`);
+  assert.ok(settlesAt >= 0 && settlesAt < rankAt, "settles sits before the rank span");
   assert.ok(article.includes(`rank ${ruling.rank.toFixed(4)}`), "the rank to four decimals");
   assert.ok(article.includes('class="pill stage-ruling">ruling<'), "the stage pill");
   assert.ok(article.includes("deferred · Fixture Author · 2026-01-01"), "the stamp");
@@ -1038,10 +1161,74 @@ test("--alignment lists the alternatives after the node as it stands, marking th
   const followAt = article.indexOf('<span class="mono">follow-the-instrument</span>');
   assert.ok(splitAt < adoptedAt && adoptedAt < followAt, "and it is the one the recommendation names");
   assert.ok(article.includes('class="alt adopted"'), "the adopted entry is marked on its own element too");
+  assert.ok(!article.includes('class="divergence"'), "no leaf depends on this fixture's node, so no divergence paragraph");
 
   // a node with nothing on the table renders no section at all
   const plain = itemHtml(html, nodeBySlug(graph, "stale-node").id);
   assert.ok(!plain.includes("The alternatives"));
+});
+
+test("--alignment inverts a divergence onto the ancestor's alternatives: what a ruling for each keeps and discards", () => {
+  const graph = {
+    module: "example.test", ref: null,
+    graphs: { main: { about: "fixture" } },
+    nodes: [
+      {
+        id: "example.test/main/anc", slug: "anc", graph: "main", question: "Which alternative should the author take?",
+        form: "rule", authority: { class: "deferred", by: "claude", date: "2026-09-03" },
+        under: [], rank: 1, status: "unanswered", stage: "ruling", settles: 2,
+        alternatives: [
+          { name: "alt-a", source: "author", ref: "2026-09-01", prune: false },
+          { name: "alt-b", source: "review", ref: "2026-09-02", prune: false },
+          { name: "alt-c", source: "author", ref: "2026-09-03", prune: false },
+        ],
+        alternativesText: { "alt-a": "Take path A.", "alt-b": "Take path B.", "alt-c": "Take path C, which nothing stands under." },
+        answer: "The standing answer.",
+      },
+      {
+        id: "example.test/main/leaf-a", slug: "leaf-a", graph: "main", question: "What follows under A?",
+        form: "target", under: [], rank: 0.1, status: "unanswered", stage: "maieutic",
+        depends: [{ id: "example.test/main/anc", alternative: "alt-a" }],
+      },
+      {
+        id: "example.test/main/leaf-b", slug: "leaf-b", graph: "main", question: "What follows under B?",
+        form: "target", under: [], rank: 0.1, status: "unanswered", stage: "maieutic",
+        depends: [{ id: "example.test/main/anc", alternative: "alt-b" }],
+      },
+      {
+        id: "example.test/main/leaf-open", slug: "leaf-open", graph: "main", question: "What is still just waiting on the open question?",
+        form: "target", under: [], rank: 0.1, status: "unanswered", stage: "maieutic",
+        depends: [{ id: "example.test/main/anc", alternative: null }],
+      },
+    ],
+  };
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  const article = itemHtml(html, "example.test/main/anc");
+
+  const altAAt = article.indexOf('<span class="mono">alt-a</span>');
+  const altBAt = article.indexOf('<span class="mono">alt-b</span>');
+  const altCAt = article.indexOf('<span class="mono">alt-c</span>');
+  assert.ok(altAAt >= 0 && altAAt < altBAt && altBAt < altCAt, "the three alternatives, in the list's own order");
+  const blockA = article.slice(altAAt, altBAt);
+  const blockB = article.slice(altBAt, altCAt);
+  const blockC = article.slice(altCAt);
+
+  assert.ok(
+    blockA.includes('<p class="divergence">A ruling for this keeps: <em>example.test/main/leaf-a</em>. It discards: <em>example.test/main/leaf-b</em>.</p>'),
+    "alt-a keeps its own leaf and discards the leaf standing under the sibling alternative",
+  );
+  assert.ok(!blockA.includes("leaf-open"), "an unqualified depends entry is neither kept nor discarded by any alternative");
+
+  assert.ok(
+    blockB.includes('<p class="divergence">A ruling for this keeps: <em>example.test/main/leaf-b</em>. It discards: <em>example.test/main/leaf-a</em>.</p>'),
+    "and the inversion holds symmetrically for alt-b",
+  );
+
+  assert.ok(
+    blockC.includes('<p class="divergence">A ruling for this keeps nothing recorded.</p>'),
+    "alt-c has no leaf of its own, but the paragraph still renders since a sibling alternative does",
+  );
+  assert.ok(!blockC.includes("It discards"), "nothing to discard when nothing is kept");
 });
 
 test("--alignment marks a prune alternative and captions what confirming it does", async () => {
@@ -1225,7 +1412,7 @@ test("the alignment header carries the title, the module, the counts per stage, 
   const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
   assert.ok(html.includes(">Alignment<"));
   assert.ok(html.includes(ALIGNMENT_GRAPH.module));
-  assert.ok(html.includes("Every node is unanswered until the author confirms it, here or in prose. Listed by rank, the purpose node first. Respond to any subset and submit; the alignment session reads the responses back."));
+  assert.ok(html.includes("Every node is unanswered until the author confirms it, here or in prose. Listed in ruling order, the ruling that settles the most first, the purpose node's graph before the public graph. Respond to any subset and submit; the alignment session reads the responses back."));
   assert.ok(html.includes("Copy all responses"));
   for (const stage of ["ruling", "review", "maieutic", "periagogic"]) {
     assert.ok(html.includes(`<dt>${stage}</dt>`), `the count for ${stage}`);

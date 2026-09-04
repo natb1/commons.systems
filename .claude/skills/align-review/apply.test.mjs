@@ -559,6 +559,10 @@ describe("apply.mjs: batch shape", () => {
           stages: { [RULING_A]: "maieutic" },
         },
       ],
+      // ruling_order is the superseded field subtree_divergences replaces
+      // (see the dedicated describe block below): present here only to
+      // exercise that it is simply ignored, not echoed, alongside
+      // everything else this end-to-end test already covers.
       ruling_order: [REVIEW_A],
     };
 
@@ -576,7 +580,7 @@ describe("apply.mjs: batch shape", () => {
 
     assert.equal(result.validation.ok, true, result.validation.message);
     assert.equal(await readFile(path.join(reviewDir, "frontier.lock"), "utf8").catch(() => null), null, "the lock is removed after a successful write");
-    assert.equal(result.report.at(-1), REVIEW_A, "ruling_order is printed as the report's last line(s)");
+    assert.ok(!result.report.includes(REVIEW_A), "ruling_order is no longer echoed into the report as its own line");
 
     // review-a: forwarded by its own verdict (-> ruling) but the
     // decomposition finding also names it at maieutic; maieutic is
@@ -1016,5 +1020,236 @@ describe("apply.mjs: batch shape", () => {
     const rootDir3 = await freshFrontierFixture("batch-date-batch-");
     await applyReviews({ rootDir: rootDir3, reviewDir: path.join(rootDir3, "_review"), batch, replies: {} });
     assert.ok((await readFile(nodePath(rootDir3, "review-a"), "utf8")).includes("### Clean-context review, 2020-01-01"), "absent --date, the batch's own date is used");
+  });
+});
+
+// --------------------------------------------------------------------------
+// apply.mjs: subtree_divergences (SKILL.md §4, frontier-consistency.md
+// validation 13, alignment-order): a tangle between two unanswered subtrees
+// standing under different sides of one ancestor's pending alternatives,
+// written on the leaves and never on the ancestor.
+// --------------------------------------------------------------------------
+
+describe("apply.mjs: subtree_divergences", () => {
+  test("writes 'depends' on the leaves and never on the ancestor; the account subsections land on the ancestor and on each leaf with the right keeps/discards; an alternative proposed by this same run satisfies the alternative-exists check", async () => {
+    const rootDir = await freshFrontierFixture("divergence-basic-");
+    const reviewDir = path.join(rootDir, "_review");
+
+    const batch = {
+      date: BATCH_DATE,
+      read: fullReadIds(),
+      nodes: fullNodeEntries(),
+      // ruling-a already lists 'whole-thing'; 'keep-part' is new, proposed
+      // by this same run's own frontier -- the divergence below stands one
+      // side on each, so it exercises both ways an alternative can be "on
+      // the table" (frontier-consistency's own phrase).
+      frontier: [{
+        kind: "redundancy",
+        nodes: [RULING_A],
+        finding: "A second, narrower alternative belongs on ruling-a's table beside 'whole-thing'.",
+        proposal: "Add it as an alternative on ruling-a.",
+        stages: {},
+        alternatives: [{ node: RULING_A, name: "keep-part", text: "Keep only the part the author actually ruled on; split the rest into a node of its own." }],
+      }],
+      subtree_divergences: [{
+        ancestor: RULING_A,
+        sides: { "whole-thing": [MAIEUTIC_NODE], "keep-part": [PERIAGOGIC_NODE] },
+        finding: "maieutic-node stands under 'whole-thing' and periagogic-node stands under 'keep-part'; a ruling for one discards the ground the other rests on.",
+      }],
+    };
+
+    const result = await applyReviews({ rootDir, reviewDir, batch, replies: {} });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const rulingAFile = nodePath(rootDir, "ruling-a");
+    const maieuticFile = nodePath(rootDir, "maieutic-node");
+    const periagogicFile = nodePath(rootDir, "periagogic-node");
+    const rulingAAfter = await readFile(rulingAFile, "utf8");
+    const maieuticAfter = await readFile(maieuticFile, "utf8");
+    const periagogicAfter = await readFile(periagogicFile, "utf8");
+
+    // never on the ancestor
+    assert.ok(!rulingAAfter.includes("depends:"), "the ancestor never gains a 'depends' field");
+    assert.equal(fieldValue(rulingAAfter, "stage"), "ruling", "a subtree divergence never touches stage");
+
+    // on the leaves
+    const maieuticParsed = parseNode(maieuticAfter, { id: MAIEUTIC_NODE, graph: "main", slug: "maieutic-node", path: maieuticFile });
+    const periagogicParsed = parseNode(periagogicAfter, { id: PERIAGOGIC_NODE, graph: "main", slug: "periagogic-node", path: periagogicFile });
+    assert.deepEqual(maieuticParsed.depends, [{ id: RULING_A, alternative: "whole-thing" }]);
+    assert.deepEqual(periagogicParsed.depends, [{ id: RULING_A, alternative: "keep-part" }]);
+    assert.equal(fieldValue(maieuticAfter, "stage"), "maieutic", "a subtree divergence never touches stage");
+    assert.equal(fieldValue(periagogicAfter, "stage"), "periagogic", "a subtree divergence never touches stage");
+
+    // the account subsections: ancestor names both sides' keeps and discards
+    assert.ok(rulingAAfter.includes("### Subtree divergence, 2026-09-03"));
+    assert.ok(rulingAAfter.includes(`\`whole-thing\` keeps ${MAIEUTIC_NODE}; discards ${PERIAGOGIC_NODE}.`));
+    assert.ok(rulingAAfter.includes(`\`keep-part\` keeps ${PERIAGOGIC_NODE}; discards ${MAIEUTIC_NODE}.`));
+    // each leaf names the ancestor and the alternative it stands under
+    assert.ok(maieuticAfter.includes("### Subtree divergence, 2026-09-03"));
+    assert.ok(maieuticAfter.includes(`Stands under ${RULING_A}, alternative \`whole-thing\`.`));
+    assert.ok(periagogicAfter.includes(`Stands under ${RULING_A}, alternative \`keep-part\`.`));
+
+    assert.ok(
+      result.report.some((l) => l === `subtree divergence on ${RULING_A}: whole-thing 1, keep-part 1`),
+      `report is missing the per-entry summary line: ${result.report.join(" | ")}`,
+    );
+  });
+
+  test("an unknown alternative name, an answered leaf, and a leaf equal to its own ancestor are each refused; the run writes nothing", async () => {
+    const rootDir = await freshFrontierFixture("divergence-refuse-basic-");
+    const reviewDir = path.join(rootDir, "_review");
+    const base = { date: BATCH_DATE, read: fullReadIds(), nodes: fullNodeEntries(), frontier: [] };
+    const rulingABefore = await readFile(nodePath(rootDir, "ruling-a"), "utf8");
+    const maieuticBefore = await readFile(nodePath(rootDir, "maieutic-node"), "utf8");
+
+    await assert.rejects(
+      () => applyReviews({
+        rootDir,
+        reviewDir,
+        batch: { ...base, subtree_divergences: [{ ancestor: RULING_A, sides: { "nonexistent-alt": [MAIEUTIC_NODE] }, finding: "x" }] },
+        replies: {},
+      }),
+      /'nonexistent-alt' is not an alternative on .*ruling-a \(not listed, and not added to it by this run's 'frontier'\)/,
+    );
+
+    await assert.rejects(
+      () => applyReviews({
+        rootDir,
+        reviewDir,
+        batch: { ...base, subtree_divergences: [{ ancestor: RULING_A, sides: { "whole-thing": [ANSWERED_NODE] }, finding: "x" }] },
+        replies: {},
+      }),
+      new RegExp(`names ${escapeRe(ANSWERED_NODE)}, which is answered; a subtree divergence stands on unanswered nodes`),
+    );
+
+    await assert.rejects(
+      () => applyReviews({
+        rootDir,
+        reviewDir,
+        batch: { ...base, subtree_divergences: [{ ancestor: RULING_A, sides: { "whole-thing": [RULING_A] }, finding: "x" }] },
+        replies: {},
+      }),
+      new RegExp(`names ${escapeRe(RULING_A)}, which is this entry's own ancestor`),
+    );
+
+    assert.equal(await readFile(nodePath(rootDir, "ruling-a"), "utf8"), rulingABefore, "nothing written on any refusal");
+    assert.equal(await readFile(nodePath(rootDir, "maieutic-node"), "utf8"), maieuticBefore, "nothing written on any refusal");
+  });
+
+  test("a node standing under two sides of the same ancestor is refused; the run writes nothing", async () => {
+    const rootDir = await freshFrontierFixture("divergence-refuse-twosides-");
+    const reviewDir = path.join(rootDir, "_review");
+    const before = await readFile(nodePath(rootDir, "periagogic-node"), "utf8");
+
+    const batch = {
+      date: BATCH_DATE,
+      read: fullReadIds(),
+      nodes: fullNodeEntries(),
+      frontier: [{
+        kind: "decomposition",
+        nodes: [MAIEUTIC_NODE],
+        finding: "maieutic-node's ground splits two ways.",
+        proposal: "Put both ways on the table as alternatives.",
+        stages: {},
+        alternatives: [
+          { node: MAIEUTIC_NODE, name: "alt-x", text: "The first way." },
+          { node: MAIEUTIC_NODE, name: "alt-y", text: "The second way." },
+        ],
+      }],
+      subtree_divergences: [{
+        ancestor: MAIEUTIC_NODE,
+        sides: { "alt-x": [PERIAGOGIC_NODE], "alt-y": [PERIAGOGIC_NODE] },
+        finding: "periagogic-node is cited under both, which cannot be right.",
+      }],
+    };
+
+    await assert.rejects(
+      () => applyReviews({ rootDir, reviewDir, batch, replies: {} }),
+      new RegExp(`${escapeRe(PERIAGOGIC_NODE)} stands under two sides \\('alt-x' and 'alt-y'\\) of the same ancestor`),
+    );
+    assert.equal(await readFile(nodePath(rootDir, "periagogic-node"), "utf8"), before, "nothing written on refusal");
+  });
+
+  test("a leaf that already depends on the ancestor under a different alternative is refused as a conflict, not overwritten; the run writes nothing", async () => {
+    const rootDir = await freshFrontierFixture("divergence-refuse-conflict-");
+    const reviewDir = path.join(rootDir, "_review");
+    const maieuticFile = nodePath(rootDir, "maieutic-node");
+    const seeded = (await readFile(maieuticFile, "utf8")).replace("stage: maieutic\n", `stage: maieutic\ndepends:\n  - ${RULING_A}#whole-thing\n`);
+    assert.ok(seeded.includes(`depends:\n  - ${RULING_A}#whole-thing`), "fixture edit precondition: the seed landed");
+    await writeFile(maieuticFile, seeded);
+
+    const batch = {
+      date: BATCH_DATE,
+      read: fullReadIds(),
+      nodes: fullNodeEntries(),
+      frontier: [{
+        kind: "redundancy",
+        nodes: [RULING_A],
+        finding: "A narrower alternative belongs on the table too.",
+        proposal: "Add it as an alternative on ruling-a.",
+        stages: {},
+        alternatives: [{ node: RULING_A, name: "keep-part", text: "Keep only the part the author actually ruled on." }],
+      }],
+      subtree_divergences: [{
+        ancestor: RULING_A,
+        sides: { "keep-part": [MAIEUTIC_NODE] },
+        finding: "maieutic-node actually stands under 'keep-part', not 'whole-thing'.",
+      }],
+    };
+
+    await assert.rejects(
+      () => applyReviews({ rootDir, reviewDir, batch, replies: {} }),
+      new RegExp(`${escapeRe(MAIEUTIC_NODE)} already depends on ${escapeRe(RULING_A)}#whole-thing, which conflicts with side 'keep-part'; not overwritten, refused`),
+    );
+    assert.equal(await readFile(maieuticFile, "utf8"), seeded, "nothing written on refusal");
+  });
+
+  test("a node that already carries exactly the entry a divergence would write is skipped and noted; the rest of the entry still applies", async () => {
+    const rootDir = await freshFrontierFixture("divergence-skip-");
+    const reviewDir = path.join(rootDir, "_review");
+    const maieuticFile = nodePath(rootDir, "maieutic-node");
+    const seeded = (await readFile(maieuticFile, "utf8")).replace("stage: maieutic\n", `stage: maieutic\ndepends:\n  - ${RULING_A}#whole-thing\n`);
+    await writeFile(maieuticFile, seeded);
+
+    const batch = {
+      date: BATCH_DATE,
+      read: fullReadIds(),
+      nodes: fullNodeEntries(),
+      frontier: [],
+      subtree_divergences: [{
+        ancestor: RULING_A,
+        sides: { "whole-thing": [MAIEUTIC_NODE] },
+        finding: "maieutic-node stands under 'whole-thing', confirmed on a second look.",
+      }],
+    };
+
+    const result = await applyReviews({ rootDir, reviewDir, batch, replies: {} });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const after = await readFile(maieuticFile, "utf8");
+    const parsed = parseNode(after, { id: MAIEUTIC_NODE, graph: "main", slug: "maieutic-node", path: maieuticFile });
+    assert.deepEqual(parsed.depends, [{ id: RULING_A, alternative: "whole-thing" }], "the entry is not duplicated");
+    assert.ok(after.includes("### Subtree divergence, 2026-09-03"), "the divergence is still recorded on the leaf");
+    assert.ok(
+      result.report.some((l) => l === `subtree divergence on ${RULING_A}: whole-thing 1; already present, skipped: ${MAIEUTIC_NODE}`),
+      `report does not carry the skip note: ${result.report.join(" | ")}`,
+    );
+  });
+
+  test("'ruling_order' in an input file is simply ignored", async () => {
+    const rootDir = await freshFrontierFixture("divergence-ruling-order-ignored-");
+    const reviewDir = path.join(rootDir, "_review");
+    const batch = {
+      date: BATCH_DATE,
+      read: fullReadIds(),
+      nodes: fullNodeEntries(),
+      frontier: [],
+      subtree_divergences: [],
+      ruling_order: [REVIEW_B, REVIEW_A],
+    };
+
+    const result = await applyReviews({ rootDir, reviewDir, batch, replies: {} });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.ok(!result.report.includes(REVIEW_A) && !result.report.includes(REVIEW_B), "ruling_order is not echoed as bare id lines");
   });
 });

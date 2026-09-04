@@ -496,6 +496,10 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-duplicate-depends', /duplicate 'depends' reference: example\.test\/main\/root/],
     ['invalid-depends-answered', /'depends' names example\.test\/main\/root, which is answered; a dependency is on an open question/],
     ['invalid-depends-self', /'depends' names itself/],
+    // '<id>#<alternative name>' entries: the alternative must be non-empty,
+    // and, once the ancestor resolves, must actually be listed on it.
+    ['invalid-depends-empty-alternative', /'depends' names an empty alternative on example\.test\/main\/root/],
+    ['invalid-depends-unknown-alternative', /'depends' names alternative nonexistent-alt on example\.test\/main\/root, which has no such alternative/],
     // ledger is no longer a field: a 'ledger:' key is just another unknown key.
     ['invalid-ledger-key', /unknown frontmatter key 'ledger'/],
     ['invalid-shim-missing-liquidation', /'shims\[0\]\.liquidation' is required/],
@@ -738,15 +742,25 @@ describe('readGraph: valid-unanswered-with-child fixture', () => {
 describe('readGraph: valid-depends fixture', () => {
   // 'depends' names a dependency that must itself be an open question: an
   // unanswered node may depend on another unanswered node.
-  test('loads without throwing, and depends resolves to the local canonical id', async () => {
+  test('loads without throwing, and a bare depends entry resolves to {id, alternative: null}', async () => {
     const graph = await readGraph(path.join(FIXTURES, 'valid-depends'));
-    assert.equal(graph.nodes.length, 2);
+    assert.equal(graph.nodes.length, 3);
     const dependent = graph.nodes.find((n) => n.id === 'example.test/main/dependent');
     assert.ok(dependent);
     assert.equal(dependent.status, 'unanswered');
-    assert.deepEqual(dependent.depends, ['example.test/main/prerequisite']);
+    assert.deepEqual(dependent.depends, [{ id: 'example.test/main/prerequisite', alternative: null }]);
     const prerequisite = graph.nodes.find((n) => n.id === 'example.test/main/prerequisite');
     assert.equal(prerequisite.status, 'unanswered');
+  });
+
+  // '<id>#<alternative name>' names a divergence: this node stands under
+  // that named alternative on the ancestor, rather than merely waiting on
+  // the ancestor's open question.
+  test('a qualified depends entry parses to {id, alternative}, with the id part canonicalized like any other reference', async () => {
+    const graph = await readGraph(path.join(FIXTURES, 'valid-depends'));
+    const sibling = graph.nodes.find((n) => n.id === 'example.test/main/sibling');
+    assert.ok(sibling, 'fixture has a third node with a qualified depends entry');
+    assert.deepEqual(sibling.depends, [{ id: 'example.test/main/prerequisite', alternative: 'split-it' }]);
   });
 });
 

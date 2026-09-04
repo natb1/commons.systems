@@ -48,7 +48,8 @@ goal."
 - Read the graph through the browser, the rules, and
   `node packages/disposition/project.mjs disposition --frontier -`, which
   lists every node in rank order with its stamp, instrument, shims, and
-  the stage of any open dialogue.
+  the stage of any open dialogue, headed by the unanswered nodes in the
+  ruling order that `/align` takes them in.
 - Write the graph only through `/align`, the alignment dialogue with the
   author; write the implementation only through `/reconcile`, the
   reconciliation loop. Sessions divide by ref. Graph landings go straight to

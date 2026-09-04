@@ -295,11 +295,29 @@ export function build(template, graph) {
   return template.replace(MARKER, () => block);
 }
 
+// `<id>` for a bare depends entry, `<id>#<alternative>` for a qualified
+// one -- the same syntax `readDependsList` (read.mjs) parses back apart.
+function formatDependsEntry(d) {
+  return d.alternative ? `${d.id}#${d.alternative}` : d.id;
+}
+
+// The parenthetical breakdown shared by the ruling-order line and the
+// per-node "settles:" detail line below, which differ only in the label's
+// punctuation (inline prose there, a "key: value" detail line here).
+function settlesBreakdown(node) {
+  const s = node.settledBy;
+  return `${node.settles} (${s.under} under, ${s.alternatives} alternatives, ${s.depends} depends)`;
+}
+
 /**
- * Render every node in the graph as a flat markdown listing, descending by
- * `rank` (ties broken by id) -- the frontier of un-aligned dispositions (and
- * everything else) that `excludeUnaligned` hides from the browser. Pure and
- * deterministic: nothing but the graph's own data, no dates or timestamps.
+ * Render every node in the graph as a flat markdown listing: first the
+ * ruling order -- the alignment frontier (every node carrying a `stage`)
+ * ranked by `settles` descending, then `rank` descending, then id, the
+ * order in which a ruling settles the most still-open ground first -- then
+ * every node in the graph, descending by `rank` alone (ties broken by id),
+ * which is the frontier of un-aligned dispositions (and everything else)
+ * that `excludeUnaligned` hides from the browser. Pure and deterministic:
+ * nothing but the graph's own data, no dates or timestamps.
  *
  * @param {{module: string, nodes: object[]}} graph
  * @returns {string} markdown, newline-terminated
@@ -310,7 +328,22 @@ export function renderFrontier(graph) {
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 
-  const lines = [`# Frontier of ${graph.module}`];
+  const rulingOrder = graph.nodes.filter((n) => n.stage).sort((a, b) => {
+    if (b.settles !== a.settles) return b.settles - a.settles;
+    if (b.rank !== a.rank) return b.rank - a.rank;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
+  const lines = [`# Frontier of ${graph.module}`, "", "## Ruling order", ""];
+  if (rulingOrder.length === 0) {
+    lines.push("_none_");
+  } else {
+    rulingOrder.forEach((node, i) => {
+      lines.push(`${i + 1}. ${node.id} — settles ${settlesBreakdown(node)} — rank ${node.rank.toFixed(4)} — stage ${node.stage}`);
+    });
+  }
+  lines.push("", "## Every node, by rank", "");
+
   for (const node of nodes) {
     const head = [
       node.id,
@@ -326,7 +359,16 @@ export function renderFrontier(graph) {
       const stepsText = node.order.map((step) => step.join(" = ")).join(" > ");
       lines.push(`  order: ${stepsText}`);
     }
-    if (node.stage) lines.push(`  stage: ${node.stage}`);
+    const hasAlternatives = node.alternatives && node.alternatives.length > 0;
+    const hasDepends = node.depends && node.depends.length > 0;
+    const dependsLine = () => {
+      lines.push(`  depends: ${node.depends.map(formatDependsEntry).join(", ")}`);
+    };
+    if (node.stage) {
+      lines.push(`  stage: ${node.stage}`);
+      lines.push(`  settles: ${settlesBreakdown(node)}`);
+      if (hasDepends && !hasAlternatives) dependsLine();
+    }
     if (node.recommendation) {
       const rec = node.recommendation;
       const adopted = (node.alternatives || []).find((a) => a.name === rec.adopts);
@@ -339,9 +381,10 @@ export function renderFrontier(graph) {
       lines.push(`  review: ${node.review.verdict} (${node.review.strength}, ${node.review.date})${stale}`);
     }
     if (node.draft) lines.push("  draft: yes");
-    if (node.alternatives && node.alternatives.length > 0) {
+    if (hasAlternatives) {
       const named = node.alternatives.map((a) => `${a.name}:${a.source}`).join(", ");
       lines.push(`  alternatives: ${node.alternatives.length} (${named})`);
+      if (hasDepends) dependsLine();
     }
     if (node.answer == null) lines.push(`  under: ${(node.under || []).join(", ")}`);
     if (node.instrument) {
@@ -401,7 +444,7 @@ const PRUNE_CAPTION = "Confirm prunes the node; the node as it stands is what re
 const ADOPTED_MARK = "the recommendation adopts this";
 const PRUNE_MARK = "prune";
 const LEDE =
-  "Every node is unanswered until the author confirms it, here or in prose. Listed by rank, the purpose node first. Respond to any subset and submit; the alignment session reads the responses back.";
+  "Every node is unanswered until the author confirms it, here or in prose. Listed in ruling order, the ruling that settles the most first, the purpose node's graph before the public graph. Respond to any subset and submit; the alignment session reads the responses back.";
 
 function alignEsc(s) {
   return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&quot;"));
@@ -723,6 +766,53 @@ function renderDraft(n) {
 /* --------------------------------------------- the alternatives ----- */
 
 /**
+ * The divergence inversion for one alternative `alternativeName` of node
+ * `n`: every other node's `depends` entry that names `n` is, on the leaf,
+ * a decision the leaf stands under; here, on the ancestor, it is inverted
+ * into what a ruling for this alternative would do. `keeps` is every node
+ * whose `depends` entry names `n` under exactly this alternative -- a
+ * ruling for it leaves that leaf's ground as recorded; `discards` is every
+ * node whose `depends` entry names `n` under some other named alternative
+ * -- a ruling for this one contradicts what that leaf stood under. Neither
+ * list ever includes a plain, unqualified `depends` entry (an open
+ * question waiting on `n`'s ruling generally, not a stand taken under one
+ * particular alternative). Both sorted ascending; this is derived fresh
+ * from the graph each time, never stored on the record.
+ *
+ * @param {{id: string}} n
+ * @param {string} alternativeName
+ * @param {object[]} allNodes - the full node list, `graph.nodes`.
+ * @returns {{keeps: string[], discards: string[]}}
+ */
+function divergenceFor(n, alternativeName, allNodes) {
+  const keeps = [];
+  const discards = [];
+  for (const other of allNodes) {
+    for (const d of other.depends || []) {
+      if (d.id !== n.id || d.alternative == null) continue;
+      if (d.alternative === alternativeName) keeps.push(other.id);
+      else discards.push(other.id);
+    }
+  }
+  return { keeps: keeps.sort(), discards: discards.sort() };
+}
+
+// The one extra paragraph a divergence adds to an alternative's block (see
+// renderAlternatives): what a ruling for this alternative keeps of the
+// leaves standing under it, and, unless there are none, what it discards
+// of the leaves standing under a different alternative of the same node.
+function renderDivergenceParagraph(keeps, discards) {
+  if (keeps.length === 0) {
+    return `<p class="divergence">${alignEsc("A ruling for this keeps nothing recorded.")}</p>`;
+  }
+  let html = `<p class="divergence">A ruling for this keeps: <em>${keeps.map(alignEsc).join(", ")}</em>.`;
+  if (discards.length > 0) {
+    html += ` It discards: <em>${discards.map(alignEsc).join(", ")}</em>.`;
+  }
+  return `${html}</p>`;
+}
+
+/**
  * "The alternatives": every answer on the table beside the one the node
  * stands on, in the `alternatives` list's own order, each with its name,
  * where it came from (`source`, and the `ref` that dates it or names the
@@ -730,26 +820,40 @@ function renderDraft(n) {
  * subsection of the same name. The one the recommendation adopts is
  * marked, and so is one that would prune the node rather than rewrite it.
  *
+ * When at least one of the node's alternatives has a leaf standing under it
+ * (a `depends` entry naming this node with that alternative), every
+ * alternative's block gets one extra paragraph inverting that: what a
+ * ruling for it keeps, and, when there is at least one, what it discards
+ * of the leaves standing under a sibling alternative instead (see
+ * `divergenceFor`). An alternative untouched by any leaf still gets the
+ * paragraph in that case, saying so plainly, since that is itself the fact
+ * a ruling for it would need: nothing is recorded as depending on it.
+ *
  * Nothing is rendered for a node with no alternatives: an empty section on
  * every other item would be noise on a page the author reads top to bottom.
  *
  * @param {object} n - a node as `read.mjs` returns it.
+ * @param {object[]} allNodes - the full node list, `graph.nodes`, for the
+ *   divergence inversion.
  * @returns {string}
  */
-function renderAlternatives(n) {
+function renderAlternatives(n, allNodes) {
   const alts = Array.isArray(n.alternatives) ? n.alternatives : [];
   if (alts.length === 0) return "";
   const adopts = n.recommendation ? n.recommendation.adopts : null;
   const text = n.alternativesText || {};
-  const items = alts.map((a) => {
+  const divergences = alts.map((a) => divergenceFor(n, a.name, allNodes));
+  const showDivergence = divergences.some((d) => d.keeps.length > 0);
+  const items = alts.map((a, i) => {
     const pills = [`<span class="pill alt-src">${alignEsc(a.source)}</span>`];
     if (a.ref) pills.push(`<span class="pill alt-ref mono">${alignEsc(a.ref)}</span>`);
     if (a.prune) pills.push(`<span class="pill alt-prune">${alignEsc(PRUNE_MARK)}</span>`);
     if (a.name === adopts) pills.push(`<span class="pill alt-adopted">${alignEsc(ADOPTED_MARK)}</span>`);
     const body = text[a.name] ? `<div class="mdbody">${alignHtml(text[a.name])}</div>` : "";
+    const divergence = showDivergence ? renderDivergenceParagraph(divergences[i].keeps, divergences[i].discards) : "";
     return `<li class="alt${a.name === adopts ? " adopted" : ""}">`
       + `<p class="altname"><span class="mono">${alignEsc(a.name)}</span>${pills.join("")}</p>`
-      + `${body}</li>`;
+      + `${body}${divergence}</li>`;
   }).join("");
   return `<section class="alts"><p class="lbl">The alternatives</p><ul class="altlist">${items}</ul></section>`;
 }
@@ -824,7 +928,7 @@ function renderResponse(n) {
     + "</div>";
 }
 
-function renderAlignmentItem(n) {
+function renderAlignmentItem(n, allNodes) {
   const hasAnswer = typeof n.answer === "string" && n.answer.length > 0;
   const under = n.under || [];
   const doc = alignDocId(n.id);
@@ -838,6 +942,7 @@ function renderAlignmentItem(n) {
   html += `<p class="idv mono">${alignEsc(n.id)}</p>`;
   html += '<p class="eyebrow">'
     + `<span class="pill stage-${alignEsc(n.stage)}">${alignEsc(n.stage)}</span>`
+    + (typeof n.settles === "number" ? `<span class="meta mono num">settles ${alignEsc(n.settles)}</span>` : "")
     + `<span class="meta mono num">rank ${alignEsc(rank)}</span>`
     + `<span class="meta mono">${alignEsc(stamp)}</span>`
     + `<span class="meta mono parents">${under.length ? `under ${alignEsc(under.join(", "))}` : "a root"}</span>`
@@ -848,7 +953,7 @@ function renderAlignmentItem(n) {
     ? alignHtml(n.answer) + (n.rationale ? alignHtml(n.rationale) : "")
     : `<p class="none">${alignEsc(NO_ANSWER_LINE)}</p>`;
   html += alignSection("The node as it stands", stands, "stands");
-  html += renderAlternatives(n);
+  html += renderAlternatives(n, allNodes);
   if (n.draft) html += renderDraft(n);
   html += renderRecommendation(n);
   html += renderReview(n);
@@ -861,11 +966,14 @@ function renderAlignmentItem(n) {
 /**
  * Every node carrying a `stage`, in the order the unanswered node fixes:
  * one section per graph in the manifest's own order (`disposition-graph`,
- * then `public`), and within a graph by rank descending, ties by id -- the
- * author's order, taken without touching a rank, which puts the purpose
- * node first. A graph a node names but the manifest does not declare is
- * appended after the declared ones rather than dropped, so no open
- * dialogue can go missing from the page.
+ * then `public`) -- this grouping is untouched by the ruling order below;
+ * it is still the manifest's own order, and a graph a node names but the
+ * manifest does not declare is still appended after the declared ones
+ * rather than dropped, so no open dialogue can go missing from the page --
+ * and within a graph by ruling order: `settles` descending, then rank
+ * descending, ties by id. The purpose node still comes first in practice,
+ * since almost nothing settles more than it does, but it is the ruling
+ * that settles the most driving the order now, not the rank alone.
  *
  * Every declared graph is returned, empty or not; the page renders only
  * the ones with items.
@@ -886,7 +994,12 @@ export function orderAlignmentItems(graph) {
       about: typeof entry.about === "string" ? entry.about : null,
       items: items
         .filter((n) => n.graph === name)
-        .sort((a, b) => (b.rank !== a.rank ? b.rank - a.rank : (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))),
+        .sort((a, b) => {
+          const bs = b.settles ?? 0;
+          const as = a.settles ?? 0;
+          if (bs !== as) return bs - as;
+          return b.rank !== a.rank ? b.rank - a.rank : (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+        }),
     };
   });
 }
@@ -915,7 +1028,7 @@ function alignmentPageHtml(graph, groups) {
     `<section class="graphgrp" id="graph-${alignEsc(g.graph)}">`
     + `<h2 class="graphh">${alignEsc(g.label)}</h2>`
     + (g.about ? `<p class="graphsub">${alignInline(g.about)}</p>` : "")
-    + g.items.map(renderAlignmentItem).join("")
+    + g.items.map((n) => renderAlignmentItem(n, graph.nodes)).join("")
     + "</section>"
   )).join("");
 

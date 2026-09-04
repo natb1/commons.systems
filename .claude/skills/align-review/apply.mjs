@@ -18,12 +18,20 @@
 // The one <json file> is normally the batch frontier-consistency.md and
 // clean-context-review.md describe -- the nodes at `stage: review`, judged
 // against the full graph:
-//   { date, read: [id], nodes: [entry], frontier: [finding], ruling_order: [id] }
+//   { date, read: [id], nodes: [entry], frontier: [finding],
+//     subtree_divergences: [divergence] }
 // detected by the presence of a `nodes` array. A `frontier` finding may name
 // any node in the graph, in the batch or outside it, and may propose
 // alternatives:
 //   { kind, nodes: [id], finding, proposal, stages: {id: stage},
 //     alternatives: [{node, name, text}] }
+// A `subtree_divergences` entry names an ancestor whose pending alternatives
+// two unanswered subtrees stand under (`alignment-order`), and is written on
+// the leaves and never on the ancestor:
+//   { ancestor: id, sides: { alternativeName: [id, ...] }, finding }
+// each leaf named under a side gains `<ancestor>#<alternativeName>` in its
+// `depends`.
+//
 // Absent a `nodes` array, the file (or files) are read the old way -- one
 // entry or a JSON list of entries, each
 //   {id, scope?, verdict, kickback_stage?, findings[], counter_argument,
@@ -353,16 +361,25 @@ function renderAlternativeEntry({ name, date }, indent) {
 /**
  * Update `stage:` (inserting the line when the node carries none, which is
  * how a finding opens a dialogue on settled doctrine), unless `stage` is
- * null; replace the `review:` block, unless `reviewLines` is null; and append
- * `alternatives` entries, creating the list when absent.
+ * null; replace the `review:` block, unless `reviewLines` is null; append
+ * `alternatives` entries, creating the list when absent; and append
+ * `dependsAdd` entries (each already rendered `<id>` or `<id>#<alternative>`)
+ * to `depends`, creating the list when absent.
  *
  * `reviewLines` is null for a node touched only by a finding (no verdict of
  * its own to record): whatever `review:` block it already carries -- from an
  * earlier round, or none at all -- is left exactly as it stands. `stage` is
  * null for a node no entry names a stage for: the top-level `stage:` line, if
  * any, is left exactly as it stands.
+ *
+ * A newly created `depends:` list is placed last among the dialogue keys
+ * this function upserts -- after `alternatives`, `recommendation`, and
+ * `review` when any of them is present, else right after `stage` -- which is
+ * where the reader's own declared frontmatter-key order
+ * (`FRONTMATTER_KEYS` in read.mjs) puts it: `stage`, `order`,
+ * `alternatives`, `recommendation`, `review`, `depends`, in that order.
  */
-function upsertDialogueFields(rawText, { stage, reviewLines, alternatives = [] }) {
+function upsertDialogueFields(rawText, { stage, reviewLines, alternatives = [], dependsAdd = [] }) {
   const { fmLines: originalFm, bodyLines } = splitRaw(rawText);
   const fmLines = [...originalFm];
 
@@ -408,6 +425,22 @@ function upsertDialogueFields(rawText, { stage, reviewLines, alternatives = [] }
     }
   }
 
+  if (dependsAdd.length > 0) {
+    const existing = findFrontmatterBlock(fmLines, "depends");
+    if (existing) {
+      const [start, end] = existing;
+      const firstItem = fmLines.slice(start + 1, end).find((l) => /^\s*- /.test(l));
+      const indent = firstItem ? firstItem.match(/^(\s*)- /)[1] : "  ";
+      fmLines.splice(end, 0, ...dependsAdd.map((d) => `${indent}- ${d}`));
+    } else {
+      const alt = findFrontmatterBlock(fmLines, "alternatives");
+      const review = findFrontmatterBlock(fmLines, "review");
+      const rec = findFrontmatterBlock(fmLines, "recommendation");
+      const insertAt = alt ? alt[1] : review ? review[1] : rec ? rec[1] : stageIdx + 1;
+      fmLines.splice(insertAt, 0, "depends:", ...dependsAdd.map((d) => `  - ${d}`));
+    }
+  }
+
   return joinRaw(fmLines, bodyLines);
 }
 
@@ -448,6 +481,34 @@ function renderFrontierSubsection({ date, kind, finding, proposal, otherIds, alt
     );
   }
   return parts.join("\n");
+}
+
+/**
+ * The subsection a subtree divergence appends to its *ancestor*: for each
+ * alternative on the table, the nodes a ruling for it keeps (the side's own
+ * nodes) and the nodes it discards (every node named under every other
+ * side), so the author reads at the ancestor, on the alignment page, what a
+ * ruling for each alternative keeps and what it discards
+ * (`alignment-order`). Quotes the entry's finding.
+ */
+function renderAncestorDivergenceSubsection({ date, sides, finding }) {
+  const names = Object.keys(sides);
+  const lines = names.map((name) => {
+    const keeps = sides[name];
+    const discards = names.filter((n) => n !== name).flatMap((n) => sides[n]);
+    const discardsText = discards.length > 0 ? `; discards ${discards.join(", ")}` : "; discards nothing else named here";
+    return `- \`${name}\` keeps ${keeps.join(", ")}${discardsText}.`;
+  });
+  return [`### Subtree divergence, ${date}`, "", finding, "", ...lines].join("\n");
+}
+
+/**
+ * The subsection a subtree divergence appends to one *leaf*: which ancestor
+ * and which alternative on it this node stands under (the same divergence
+ * recorded as `depends` in the frontmatter). Quotes the entry's finding.
+ */
+function renderLeafDivergenceSubsection({ date, ancestor, alternative, finding }) {
+  return [`### Subtree divergence, ${date}`, "", finding, "", `Stands under ${ancestor}, alternative \`${alternative}\`.`].join("\n");
 }
 
 // -------------------------------------------------------- old-shape plans
@@ -649,7 +710,7 @@ function validateBatch(batch, graph, { replies, overrides }) {
         }
         if (!isNonEmptyString(a.text)) problems.push(`${altLabel}: 'text' is required`);
         if (isNonEmptyString(a.node) && isNonEmptyString(a.name)) {
-          const key = `${a.node} ${a.name}`;
+          const key = `${a.node}\x00${a.name}`;
           if (proposedNames.has(key)) problems.push(`${altLabel}: '${a.name}' is proposed on ${a.node} more than once in this batch`);
           proposedNames.add(key);
         }
@@ -657,6 +718,81 @@ function validateBatch(batch, graph, { replies, overrides }) {
     }
     if (f && f.kind === "merge" && !(Array.isArray(alts) && alts.length > 0)) {
       problems.push(`${label}: a 'merge' finding must propose at least one alternative (the node it goes on, its name, its prose)`);
+    }
+  });
+
+  // subtree_divergences (frontier-consistency's placement validation,
+  // alignment-order): a tangle between two unanswered subtrees standing
+  // under different sides of one ancestor's pending alternatives, recorded
+  // on the leaves and never on the ancestor. `proposedNames` (built above)
+  // lets a side name an alternative this same run's own `frontier` proposes,
+  // not only one the ancestor already lists.
+  const divergences = Array.isArray(batch.subtree_divergences) ? batch.subtree_divergences : [];
+  const seenAncestors = new Set();
+  divergences.forEach((d, i) => {
+    const label = d && isNonEmptyString(d.ancestor) ? `subtree_divergences[${i}] (${d.ancestor})` : `subtree_divergences[${i}]`;
+    if (!d || !isNonEmptyString(d.ancestor)) problems.push(`${label}: 'ancestor' is required`);
+    if (!d || !isNonEmptyString(d.finding)) problems.push(`${label}: 'finding' is required`);
+
+    const sides = d && d.sides;
+    const sideNames = sides && typeof sides === "object" && !Array.isArray(sides) ? Object.keys(sides) : null;
+    if (!sideNames || sideNames.length === 0) {
+      problems.push(`${label}: 'sides' must be a non-empty object of alternative name to a non-empty list of node ids`);
+    }
+
+    const ancestor = d && isNonEmptyString(d.ancestor) ? d.ancestor : null;
+    if (ancestor !== null) {
+      if (seenAncestors.has(ancestor)) {
+        problems.push(`${label}: ${ancestor} is named as the ancestor of more than one entry`);
+      }
+      seenAncestors.add(ancestor);
+      if (!nodesById.has(ancestor)) {
+        problems.push(`${label}: names ${ancestor} as its ancestor, which is not a node`);
+      } else if (nodesById.get(ancestor).status !== "unanswered") {
+        problems.push(`${label}: ${ancestor} is answered; a subtree divergence stands on an ancestor's pending alternatives`);
+      }
+    }
+
+    const idsSeen = new Map();
+    for (const name of sideNames || []) {
+      const sideLabel = `${label}.sides['${JSON.stringify(name)}']`;
+      const ids = sides[name];
+      if (!isNonEmptyString(name)) {
+        problems.push(`${label}: an alternative name in 'sides' must be a non-empty string, found '${JSON.stringify(name)}'`);
+      } else if (ancestor !== null) {
+        const ancestorNode = nodesById.get(ancestor);
+        const alreadyListed = ancestorNode && (ancestorNode.alternatives || []).some((a) => a.name === name);
+        const addedThisRun = proposedNames.has(`${ancestor}\x00${name}`);
+        if (!alreadyListed && !addedThisRun) {
+          problems.push(`${label}: '${name}' is not an alternative on ${ancestor} (not listed, and not added to it by this run's 'frontier')`);
+        }
+      }
+      if (!Array.isArray(ids) || ids.length === 0 || ids.some((x) => !isNonEmptyString(x))) {
+        problems.push(`${sideLabel}: must be a non-empty list of node ids, found '${JSON.stringify(ids)}'`);
+        continue;
+      }
+      for (const id of ids) {
+        if (!nodesById.has(id)) {
+          problems.push(`${sideLabel}: names ${id}, which is not a node`);
+          continue;
+        }
+        const node = nodesById.get(id);
+        if (node.status !== "unanswered") {
+          problems.push(`${sideLabel}: names ${id}, which is answered; a subtree divergence stands on unanswered nodes`);
+        }
+        if (ancestor !== null && id === ancestor) {
+          problems.push(`${sideLabel}: names ${id}, which is this entry's own ancestor`);
+        }
+        if (idsSeen.has(id)) {
+          problems.push(`${label}: ${id} stands under two sides ('${idsSeen.get(id)}' and '${name}') of the same ancestor`);
+        } else {
+          idsSeen.set(id, name);
+        }
+        const conflict = (node.depends || []).find((dep) => dep.id === ancestor && dep.alternative !== name);
+        if (conflict) {
+          problems.push(`${sideLabel}: ${id} already depends on ${ancestor}#${conflict.alternative}, which conflicts with side '${name}'; not overwritten, refused`);
+        }
+      }
     }
   });
 
@@ -704,6 +840,32 @@ function collectTouched(batch) {
     }
   }
   return touched;
+}
+
+/**
+ * Every node one or more `subtree_divergences` entries touch -- an ancestor
+ * (an entry it is the `ancestor` of), a leaf (an entry that names it under
+ * one of its `sides`), or both -- keyed by id, each occurrence tagged with
+ * the index of the entry it came from (so a report line can be built per
+ * entry, not per node) and, for a leaf, the alternative it stands under.
+ * `validateBatch` has already checked every entry's shape and grounding; this
+ * only regroups it by node, which is what the write step below needs.
+ */
+function collectDivergencePerNode(divergences) {
+  const perNode = new Map();
+  const ensure = (id) => {
+    if (!perNode.has(id)) perNode.set(id, { ancestorOf: [], leafOf: [] });
+    return perNode.get(id);
+  };
+  divergences.forEach((d, entryIndex) => {
+    ensure(d.ancestor).ancestorOf.push({ entryIndex, sides: d.sides, finding: d.finding });
+    for (const [altName, ids] of Object.entries(d.sides)) {
+      for (const nodeId of ids) {
+        ensure(nodeId).leafOf.push({ entryIndex, ancestor: d.ancestor, alternative: altName, finding: d.finding });
+      }
+    }
+  });
+  return perNode;
 }
 
 /**
@@ -848,10 +1010,105 @@ async function planTouchedNode(id, t, ctx) {
 }
 
 /**
+ * Plan one node's subtree-divergence edits, layered on top of whatever
+ * `existingPlan` (from `planTouchedNode`, or null) already has for this node:
+ * a '### Subtree divergence' subsection per entry it is the ancestor or a
+ * leaf of, and, for a leaf, a `depends` entry, unless it already carries
+ * exactly that entry (skipped, and reported via `skips`, not refused --
+ * `validateBatch` has already refused the run outright over a genuine
+ * conflict, a different alternative on the same ancestor). A subtree
+ * divergence never touches `stage`, `recommendation`, or anything
+ * hash-bearing (`stripDialogueFrontmatterLines` excludes `depends` from the
+ * draft hash, same as `alternatives`), so `oldStage`/`newStage` are always
+ * equal here, and layering these edits onto an existing plan cannot change
+ * the stage that plan already settled on.
+ *
+ * Parsed before and after, like every other write in this file: a node that
+ * does not parse after the edit, or whose draft hash the edit moved, is
+ * reported and left unwritten.
+ */
+async function planDivergenceNode(id, entry, ctx, existingPlan) {
+  let graphName, slug, file;
+  try {
+    ({ graph: graphName, slug, file } = resolveIdToFile(ctx.manifest, ctx.rootDir, id));
+  } catch (err) {
+    return { id, problems: [err.message] };
+  }
+
+  let rawTextBefore;
+  try {
+    rawTextBefore = existingPlan ? existingPlan.rawTextBefore : await readFile(file, "utf8");
+  } catch (err) {
+    return { id, problems: [`${id}: cannot read ${file}: ${err.message}`] };
+  }
+
+  let parsedBefore;
+  try {
+    parsedBefore = parseNode(rawTextBefore, { id, graph: graphName, slug, path: file });
+  } catch (err) {
+    return { id, problems: [`${id}: does not parse before edit: ${err.message}`] };
+  }
+  const draftHashBefore = parsedBefore.draftHash;
+  const existingDepends = parsedBefore.depends || [];
+
+  const subsections = [];
+  const labels = existingPlan ? [...existingPlan.labels] : [];
+  const dependsAdd = [];
+  const skips = [];
+
+  for (const a of entry.ancestorOf) {
+    subsections.push(renderAncestorDivergenceSubsection({ date: ctx.date, sides: a.sides, finding: a.finding }));
+    labels.push("Subtree divergence");
+  }
+  for (const l of entry.leafOf) {
+    if (existingDepends.some((d) => d.id === l.ancestor && d.alternative === l.alternative)) {
+      skips.push({ entryIndex: l.entryIndex, id });
+    } else {
+      dependsAdd.push(`${l.ancestor}#${l.alternative}`);
+    }
+    subsections.push(renderLeafDivergenceSubsection({ date: ctx.date, ancestor: l.ancestor, alternative: l.alternative, finding: l.finding }));
+    labels.push("Subtree divergence");
+  }
+
+  let text = existingPlan ? existingPlan.rawTextAfter : rawTextBefore;
+  try {
+    for (const s of subsections) text = appendToAccount(text, s);
+    text = upsertDialogueFields(text, { stage: null, reviewLines: null, alternatives: [], dependsAdd });
+  } catch (err) {
+    return { id, problems: [`${id}: ${err.message}`] };
+  }
+
+  let parsedAfter;
+  try {
+    parsedAfter = parseNode(text, { id, graph: graphName, slug, path: file });
+  } catch (err) {
+    return { id, problems: [`${id}: does not parse after edit: ${err.message}`] };
+  }
+  if (parsedAfter.draftHash !== draftHashBefore) {
+    return { id, problems: [`${id}: internal error -- draftHash changed by the edit (${draftHashBefore} -> ${parsedAfter.draftHash}); the account-is-not-part-of-the-hash assumption is violated`] };
+  }
+
+  return {
+    id,
+    file,
+    labels,
+    notes: existingPlan ? existingPlan.notes : [],
+    oldStage: existingPlan ? existingPlan.oldStage : parsedBefore.stage,
+    newStage: existingPlan ? existingPlan.newStage : parsedBefore.stage,
+    rawTextBefore,
+    rawTextAfter: text,
+    skips,
+  };
+}
+
+/**
  * Apply the batch: `validateBatch` first, refusing (writing nothing) on any
- * problem; otherwise plan every touched node, refusing (still writing
- * nothing) on any planning problem; otherwise write every plan, remove the
- * lock, and report, the notes and then the `ruling_order` as its last lines.
+ * problem; otherwise plan every touched node (verdicts and findings), then
+ * layer every subtree divergence onto the same plans (or new ones, for a
+ * node only a divergence touches), refusing (still writing nothing) on any
+ * planning problem from either pass; otherwise write every plan, remove the
+ * lock, and report -- the notes, then one summary line per divergence entry,
+ * as its last lines.
  */
 async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overrides, date, dry }) {
   const graph = await readGraph(rootDir);
@@ -871,16 +1128,45 @@ async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overri
     if (plan.problems) planProblems.push(...plan.problems);
     else plans.push(plan);
   }
+
+  const divergences = Array.isArray(batch.subtree_divergences) ? batch.subtree_divergences : [];
+  const perNodeDivergence = collectDivergencePerNode(divergences);
+  const plansById = new Map(plans.map((p) => [p.id, p]));
+  const divergenceSkips = new Map(); // entryIndex -> id[]
+  for (const [id, entry] of perNodeDivergence) {
+    const existingPlan = plansById.get(id) ?? null;
+    const result = await planDivergenceNode(id, entry, ctx, existingPlan);
+    if (result.problems) {
+      planProblems.push(...result.problems);
+      continue;
+    }
+    for (const sk of result.skips) {
+      if (!divergenceSkips.has(sk.entryIndex)) divergenceSkips.set(sk.entryIndex, []);
+      divergenceSkips.get(sk.entryIndex).push(sk.id);
+    }
+    if (existingPlan) {
+      Object.assign(existingPlan, result);
+    } else {
+      plans.push(result);
+      plansById.set(id, result);
+    }
+  }
+
   if (planProblems.length > 0) {
     throw new Error(planProblems.join("\n"));
   }
 
   const report = plans.map((p) => `${p.id}: ${p.labels.join(" + ")}, ${p.oldStage ?? "no stage"} → ${p.newStage ?? "no stage"}`);
   const notes = plans.flatMap((p) => p.notes || []);
-  const rulingOrder = Array.isArray(batch.ruling_order) ? batch.ruling_order : [];
+  const divergenceReport = divergences.map((d, i) => {
+    const counts = Object.entries(d.sides).map(([name, ids]) => `${name} ${ids.length}`).join(", ");
+    const skipped = divergenceSkips.get(i) || [];
+    const skipText = skipped.length > 0 ? `; already present, skipped: ${skipped.join(", ")}` : "";
+    return `subtree divergence on ${d.ancestor}: ${counts}${skipText}`;
+  });
 
   if (dry) {
-    return { plans, report: [...report, ...notes], validation: null, rulingOrder, notes };
+    return { plans, report: [...report, ...notes, ...divergenceReport], validation: null, notes };
   }
 
   for (const p of plans) {
@@ -898,7 +1184,7 @@ async function applyBatch({ rootDir, reviewDir, manifest, batch, replies, overri
   const lockPath = path.join(reviewDir, "frontier.lock");
   await rm(lockPath, { force: true });
 
-  return { plans, report: [...report, ...notes, ...rulingOrder], validation, rulingOrder, notes };
+  return { plans, report: [...report, ...notes, ...divergenceReport], validation, notes };
 }
 
 /**

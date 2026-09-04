@@ -329,6 +329,57 @@ export function deriveDescendants(parentIds, childrenMap) {
 }
 
 /**
+ * The settling count for the alignment frontier: how many other open
+ * decisions a ruling on this node settles, on top of the node itself. Three
+ * components, named on the returned record:
+ *
+ * - `under`: the node's strict descendants (`deriveDescendants`, following
+ *   `children` transitively) whose status (`deriveStatus`) is unanswered --
+ *   a ruling on the ancestor can move the ceiling a descendant answers
+ *   under, or free the descendant to be ruled on in its own turn.
+ * - `depends`: every node whose `depends` names this one, in any entry
+ *   (qualified by an alternative or not), except one already counted under
+ *   `under` -- a dependant elsewhere in the graph is waiting on this
+ *   node's ruling just as surely as a descendant is.
+ * - `alternatives`: the node's own `alternatives` count -- an answer on the
+ *   table is itself a decision this node's ruling settles, whether or not
+ *   any other node stands under it yet.
+ *
+ * `settles` is the sum of the three. Computed for every node, pure and
+ * deterministic: nothing here is randomized or depends on wall-clock time.
+ *
+ * @param {DeriveNode[]} nodes - each also carrying `alternatives`
+ *   (`{name: string}[]`, or absent) and `depends`
+ *   (`{id: string, alternative: string|null}[]`, or absent).
+ * @param {Map<string, string[]>} childrenMap - as returned by
+ *   `deriveChildren`.
+ * @returns {Map<string, {settles: number, under: number, alternatives: number, depends: number}>}
+ */
+export function deriveSettles(nodes, childrenMap) {
+  const nodesById = new Map(nodes.map((n) => [n.id, n]));
+  const result = new Map();
+  for (const node of nodes) {
+    const descendants = deriveDescendants([node.id], childrenMap);
+    const under = new Set(
+      [...descendants].filter((id) => deriveStatus(nodesById.get(id)) === 'unanswered'),
+    );
+    const dependants = new Set();
+    for (const other of nodes) {
+      if (under.has(other.id)) continue;
+      if ((other.depends ?? []).some((d) => d.id === node.id)) dependants.add(other.id);
+    }
+    const alternatives = (node.alternatives ?? []).length;
+    result.set(node.id, {
+      settles: under.size + dependants.size + alternatives,
+      under: under.size,
+      alternatives,
+      depends: dependants.size,
+    });
+  }
+  return result;
+}
+
+/**
  * Every strict ancestor of one node: everything reachable by following
  * `under` upward from it any number of times. The node itself is never
  * included. Cycle-safe: an id already in the result is not re-expanded.
