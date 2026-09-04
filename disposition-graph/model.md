@@ -1,6 +1,6 @@
 ---
 question: How is intent recorded here?
-stage: review
+stage: ruling
 recommendation:
   adopts: draft
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: e0c2b97382c629a532bf40f75dd73f51cae992c9
+  of: 1b8850f024aaefd700cf2af9fb42aa5f6c971cdb
 alternatives:
   - name: draft
     source: ai
@@ -169,3 +169,20 @@ The census unit's note: The node carries a draft, so the recommendation adopts i
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `alignment-acts-first` absorbs `strike-growth-first-sentence`.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Recommendation fence, frontmatter: 'class: deferred' with 'date: <the date of the ruling>'. A deferred stamp records the date the AI decided; a date supplied by a ruling is a ratified or delegated stamp's date. Two earlier reviews raised this and the session's answer was that the recording replaces the placeholder — but as written the fence pairs a class with a date the class cannot carry, and the alignment page shows the fence. Suggested edit: 2026-09-03, or state in the account what class the recording writes.
+- Recommendation fence, Answer: 'guarded by criteria, each a check, an assessment, or an assumption'. Verified this is instruments' `criteria-draft`, which stands at the maieutic stage — two stages behind this node — and whose own alternatives include `assumption-stays-a-form`, the opposite reading. The second stop of the onboarding walk would teach a vocabulary the record has not settled, and the node names no dependency on instruments.
+- Verified applied since the last review: the fence rationale no longer contains 'growth is first among them because the sitting is the first thing a newcomer does', and the Answer reads 'weighted by boost, which only the author ratifies'. The contradiction with second-stop and attention is discharged.
+- Recommendation fence, Rationale: the list of refinements names 'criteria' and 'transience' among the parts the record defines, while the node's `defines` gains 'disposition', 'disposition graph' and 'node'. No claim here is false, but the rationale enumerates fourteen children by name, which is a list that goes stale with every new child; the record has no rule holding it to the graph.
+
+On the three facts: The frontmatter recommendation (adopts draft, ratified, moderate) states one class and one value and the pin is current. The prose Facts line 'authority deferred; the boost ratified; boldness moderate' is stale in one half: second-stop withdrew the boost, so there is no boost to ratify, and the line should say so. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (moderate): The rewrite answers the author's complaint that the node 'jumps too quickly into reference shaped material', and it is well written for a newcomer — but it is the second page of the walk and every term on it is still being decided: 'criteria' by instruments at maieutic, 'rank' by under at maieutic with no drafted text, readings' tradition mount by traditions-home at review. A newcomer's second page cannot be stable while its whole vocabulary is in flight, so the case for ruling model after those nodes is stronger than its rank suggests. The ruling order below does that, which answers the objection at the cost of putting the record's second-highest-ranked node late.
+
+The session's reply: Forward accepted. The fence's deferred class with a ruling date is a placeholder the recording replaces; the criteria vocabulary is instruments' and the dependence is named by this reply; the fourteen-child list in the rationale is accepted as a list that goes stale and is left for the sitting.

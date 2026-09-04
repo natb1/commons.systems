@@ -1,12 +1,17 @@
 ---
 question: How are rejected alternatives recorded?
-stage: review
+stage: maieutic
 recommendation:
   adopts: rejected-list-on-node
   class: ratified
   boldness: moderate
   amends: "a690b78059fc71af0d30081475052a0b71ce3460"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+review:
+  verdict: kickback
+  strength: moderate
+  date: 2026-09-03
+  of: 49695a1a3eaf51d5cce89877c5e18c25eaa9b29d
 alternatives:
   - name: rejected-list-on-node
     source: ai
@@ -132,3 +137,31 @@ Alternatives pending, with their sources: `rejected-list-on-node` (ai, 2026-09-0
 The recommendation adopts `rejected-list-on-node` and is pinned to the standing text as it was at that commit. The recommended text was drafted at the re-encoding from the option the account marks recommended, so that the recommendation adopts an alternative with a text and not only a name; the earlier review read the options and not this text, so it is removed and the node returns to the review stage for the clean-context review of the batch.
 Merge analysis of the author's words: 2026-09-03, own-question: The under edge disposition lists rejected as prose under rationale; recording rejected dispositions may make sense but this seems too ad hoc.
 The census unit's note: The node has no answer and no draft; its three options are the alternatives and adopts names the one the Options block still marks recommended. I flag a discrepancy the session must resolve: the second review's session reply says the established projector fact favours the third option, yet neither the recommended marker nor the frontmatter recommendation was moved, which is the same clerical hazard quotes' review named and which quotes did fix. If the reply is taken as the recommendation, adopts should be prose-in-rationale instead. I folded the counter-argument's condition, documenting the browser's heading match as a contract, into the third option's text rather than minting a fourth, and left the reviews' three refinements of option one, the entry's contents, versioning, and a rationale citing its entries, inside the first option's text. Nothing goes elsewhere: the eight drafts the first option would rewrite are a consequence of the ruling, not a separate proposal against those nodes.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: kicked back to the maieutic stage.
+
+Findings:
+
+- The recommendation adopts `rejected-list-on-node` while the node's own session reply of 2026-09-03 says the opposite: 'Validated: the browser renders a rejected section from a rationale heading, so the projection the author asked for needs no schema change, which favours the third option; the first option would rewrite eight drafts before recording.' The Options block still marks option 1 '(recommended)'. Verified in the file: `recommendation.adopts` is `rejected-list-on-node` and line 89 carries '(recommended) A rejected list on the node'. The ruling this node opens is 'confirm the recommended option', so an author confirming as shown would take the option the record's own reply argued against. This is why the verdict is a kickback: the recommendation cannot be put to the author as it stands. It is the same clerical hazard that forms, quotes and purpose-criteria all fixed by moving the marker, and it is the one instance left unfixed — the re-encoding's own note flags it and defers it to this review.
+- The recommended text is drafted from the marker rather than from the reply, so the fence is a full answer for option 1 and no text exists for option 3. If the recommendation moves to `prose-in-rationale`, a recommended text must be drafted for it — which is a maieutic act, not an amendment, and is the second reason for the kickback.
+- Recommendation fence, Rationale: 'The browser today finds the rejected alternatives by matching a heading in the rationale, which works and is an accident of the template rather than a contract.' Verified: browser-template.html matches a rationale heading with /^rejected\b/i and renders a '.rejected' section. The fact is stated correctly in the fence and is the fact that decides the question the other way.
+- Adopting option 1 requires rewriting the rejected prose of eight recommendation fences in this same batch before any of them is recorded — purpose, authority, node, instruments, readings, namespaces, projection and model. The fence says the cost is 'paid once'; it does not say that it falls inside this batch and would reopen eight texts the author is about to rule on.
+- The node's answer would define 'rejected alternative', a term the record uses throughout and no node's `defines` carries today. Whichever option is taken, the defines entry is owed and only option 1's fence carries it.
+
+On the three facts: The frontmatter recommendation (adopts rejected-list-on-node, ratified, moderate) states one class and one value and the `amends` pin matches the standing text, so the recommendation is not stale in the pin's sense. It is stale in the sense that matters: the node's own reply moved the argument to option 3 and neither the marker nor the `adopts` field followed, so the data, the marker and the reply give three readings of one recommendation. Persistence standing follows from the node's shape; the fence correctly names option 1 as a schema change.
+
+Strongest counter-argument (moderate): The author's objection was that the rejected section 'seems too ad-hoc' as a projection source, and the projector already reads it, so the schema change buys structure for the projector at the price of a field every node must maintain and that will accumulate entries nobody prunes — the drift the record resists elsewhere. Option 3 answers the author's objection at zero cost provided the browser's heading match is documented as the contract rather than left as an accident of the template, which is what the option's own text now says. The counter to that is thin: a heading convention is exactly what the author called ad hoc, and documenting a convention does not make it checkable.
+
+The session's reply: Kickback to the maieutic stage accepted: the recommendation names option 1 while the node's own reply argues for option 3, and option 3 has no recommended text, so the redraft is the sitting's. The recorded discrepancy is what this review was asked to rule on.
+
+### Frontier finding, 2026-09-03
+
+Kind: contradiction.
+
+Rejected's recommendation adopts `rejected-list-on-node`, its Options block still marks that option '(recommended)', and its own session reply of the same day says the opposite: 'Validated: the browser renders a rejected section from a rationale heading, so the projection the author asked for needs no schema change, which favours the third option; the first option would rewrite eight drafts before recording, and a rationale may cite its rejected entries.' Verified in the file: `recommendation.adopts` is `rejected-list-on-node`, line 89 carries the '(recommended)' marker on option 1, and the re-encoding note flags the discrepancy and hands it to this review — 'If the reply is taken as the recommendation, adopts should be prose-in-rationale instead.' The dialogue node's reconciliation account records the same thing: 'Rejected's account favours its third option while its marker and its recommendation name the first; the recommended text follows the marker, and the discrepancy stands in its account for the review.' The ruling this node opens is to confirm the recommended option, so an author confirming as shown would ratify a schema change the record's own reply argued against, and one that requires rewriting the rejected prose of eight recommendation fences in this same batch before any of them is recorded. Forms, quotes and purpose-criteria each carried the identical hazard and each was fixed by moving the marker; this is the one instance left.
+
+Names only this node.
+
+Proposed: Rejected is kicked back to the maieutic stage, which is where the recommendation is redrafted: either the marker and `adopts` move to `prose-in-rationale`, in which case a recommended text must be written for it, since the fence that exists is a full answer for option 1 and there is none for option 3; or the account says why option 1 stands against the fact its own reply established. The record should not put a recommendation to the author that the node's own reply argues against, and the fix is not an amendment, because the option the reply favours has no text.

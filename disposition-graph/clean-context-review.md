@@ -1,6 +1,6 @@
 ---
 question: How is the clean-context review run?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: strong
   date: 2026-09-03
-  of: cc12bc5e8b31752fb30a2675585d223df09ad155
+  of: ed187b8bb3bc8ec9a6fe41a12722dab24a6f82c5
 alternatives:
   - name: per-node-context
     source: review
@@ -170,3 +170,21 @@ The census unit's note: Two alternatives, both from what the node itself holds o
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: . The merge unit's note: No change. Checked as one of the five redrafted nodes: neither pending alternative is carried by the answer. per-node-context stands against the answer, which says every invocation is one batch 'with nothing isolated by node', and the entry says so itself; rerun-earlier-reviews asks whether the two review batches of 2026-09-03 stand, which the answer nowhere states. What the redraft added, that a finding may name a node outside the batch and that the invoking session validates every finding on its own thread, is not what either entry proposes.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Answer: 'One batch runs at a time: an invocation waits for any review already running.' Partly materialized since the last reading and the answer understates it: .claude/skills/align-review/SKILL.md writes `tmp/review/frontier.lock` naming the session and the time, removes it at step 4, and reports a lock whose writer is gone — and this run's lock file is on disk. The claim 'until a lock is materialized, which the author set at low priority' is now stale in the direction of the record's favour. Suggested edit: say what the lock is and what it does not do (it is advisory and per-checkout).
+- Frontmatter shim: verified all four files exist and are tracked — SKILL.md, brief.md, brief.mjs, apply.mjs, with their tests and fixtures. The two previous readings' central finding, that apply.mjs did not exist, is resolved.
+- Answer: 'the frontier flags a review whose text has changed since, as it flags a recommendation whose standing text has changed since it was drafted'. Verified both are implemented: project.mjs prints ', standing text changed since the recommendation' and ', draft changed since the review', and read.mjs computes `recommendationStale` and `reviewStale`. Verified also that no node in the graph is currently recommendation-stale, and twenty-six are review-stale.
+- Answer: 'the answered nodes they join up to the roots' against the parent recording's 'the nodes it joins up to its ceiling'. Two nodes describe the reviewer's world with two rules, and 'ceiling' is defined by under, at the maieutic stage with no drafted text. The `cite-reviewers-world` alternative is pending on recording; this node is the survivor and its own text is what the skill implements.
+- Answer: 'The session that invoked the skill validates every finding against the record before any is applied, on its own thread and never delegated.' This is the author's ruling and it is the one clause of the answer that no projection or script can check; the applying is scripted, the validating is not, and nothing records which findings were validated and which were overridden.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, moderate) states one class and one value and the pin is current. The prose Facts line in the re-answering section — 'the batch and the clean context are the author's, the mechanics of the run are the AI's' — is well formed and among the most honest in the batch, and it should now add that the shim's four files exist and that the lock is written, since two earlier readings recorded both as missing. Persistence standing with one declared shim follows from the node's shape.
+
+Strongest counter-argument (strong): Reading the whole frontier in one context is what the author asked for and it is what catches drift between nodes — but it guarantees that every verdict in a batch is formed by a reader carrying sixty-eight drafts' framing, which is precisely the leakage the superseded per-node answer existed to prevent and which this node's own rationale argued for at length. The record holds both arguments, adopts the second, and records the first only as history and as a pending alternative. The author should be told plainly that the survey was bought with the independence the earlier answer had, and that the validation step, which is the replacement, is a discipline and not a mechanism.
+
+The session's reply: Forward accepted. The lock is now materialized by the skill, so the sentence deferring it is stale in the answer's favour; accepted as a finding, with the cite-run-mechanics alternative on frontier-consistency as the vehicle.

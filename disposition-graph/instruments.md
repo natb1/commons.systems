@@ -31,6 +31,9 @@ alternatives:
   - name: no-hard-fail-on-an-unratified-answer
     source: ai
     ref: "2026-09-03"
+  - name: one-ruling-for-the-word
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -86,6 +89,10 @@ The vocabulary finding of 2026-09-03 verified that criterion and criteria are us
 ### no-hard-fail-on-an-unratified-answer
 
 This node and transience both leave the same question open on instruments and neither decides it: whether a machine check should ever hard-fail an answer that is not ratified. The no-children rule was enforced by a check that hard-failed, which gave a deferred answer the force of a ratified one and removed in practice the overrule evaluation grants in principle. Instruments carries nothing about it today, so the candidate answer is that a check on an unanswered or deferred answer warns and does not fail. (Raised on commons.systems/disposition-graph/un-aligned-children.)
+
+### one-ruling-for-the-word
+
+Instruments' answer says that its ruling settles the word for every node that uses it, so the four `say-instrument-not-criterion` alternatives now pending on scope, work-loop, transience and purpose are consequences of this ruling rather than four separate ones. Verified that 'criterion' is carried by no node's `defines`, that 'criteria' is not in FRONTMATTER_KEYS, and that three recommendation fences (knowledge-store, capture, node) carry a `criteria:` block the validator's key set would refuse. On this alternative the recording of instruments migrates the four nodes carrying an `instrument:` field, adds 'criterion' and 'unguarded' to `defines`, and adds the schema key, in one landing; it is on the table because the author is otherwise asked the same vocabulary question five times on five pages.
 
 ## Recommendation
 
@@ -199,3 +206,21 @@ The recommendation adopts `criteria-draft` and is pinned to the standing text as
 Merge analysis of the author's words: 2026-09-02, own-question: There is no projected documentation of instrumentation, and every disposition should carry instrumentation or criteria of some kind. 2026-09-02, new-answer on commons.systems/disposition-graph/forms: Assumption may not be a form at all: it started as instrumentation, the condition under which an answer stays valid.
 Moved to other nodes as alternatives: `assumption-is-instrumentation` on commons.systems/disposition-graph/forms; `revert-the-draft-to-five-forms` on commons.systems/disposition-graph/node; `say-instrument-not-criterion` on commons.systems/disposition-graph/scope; `say-instrument-not-criterion` on commons.systems/disposition-graph/work-loop; `say-instrument-not-criterion` on commons.systems/disposition-graph/purpose.
 The census unit's note: The node carries a draft, so the recommendation adopts it and I named it criteria-draft. Its second author block I classified as a new answer for forms rather than for this node: instruments asks how we would know an answer still holds, while the words say where assumption belongs, which is forms' question, and forms' surviving option leaves it unanswered, so the elsewhere entry on forms is the one that matters most here. The two reviews' accepted edits that were already applied, the achieve-or-maintain sentence and the three criterion kinds, I excluded; what remains pending are the unnamed migration, the whole re-read the second counter-argument asks for, and the prose traditions. The criterion vocabulary finding proposes edits to four other nodes, of which transience is mine and carries its own alternative; scope, work-loop and purpose are here.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on this node: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).

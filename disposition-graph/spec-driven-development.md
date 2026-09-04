@@ -1,6 +1,6 @@
 ---
 question: Does spec-driven development support this repository's purpose?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: delegated
@@ -11,15 +11,12 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 7ebb474fc79deb134fa8e93ec67de404f64150bf
+  of: 3d9e3b26cabec954290ca3c081d8c118bfbad14c
 alternatives:
   - name: chosen-over
     source: review
     ref: "2026-09-03"
   - name: split-sources
-    source: review
-    ref: "2026-09-03"
-  - name: delegated-not-ratified
     source: review
     ref: "2026-09-03"
 form: reading
@@ -49,10 +46,6 @@ Both reviews' strongest counter-argument is that the recorded divergence is the 
 ### split-sources
 
 Both reviews find that the `source` field bundles two 2025 products, AWS Kiro and GitHub Spec Kit, with a three-item lineage, Knuth 1984, Meyer 1986 and Adzic 2011, under one `relation: adopted`, while the lineage is a different tradition from the tooling and would divide differently on the divergence recorded. Readings' rule is one tradition per reading. The session's reply records the split as owed at the sitting rather than made, so the alternative is a node whose source is the tooling alone, with the lineage read separately.
-
-### delegated-not-ratified
-
-Same finding: the node recommends ratified while its rationale defers the reading until the author reads the sources, which readings' rule forbids, so the recommendation class changes to delegated and the facts line reads delegated on confirmation, ratified after the author's reading. (Raised on commons.systems/public/pettit-non-domination.)
 
 ## Account
 
@@ -111,3 +104,42 @@ Alternatives pending, with their sources: `chosen-over` (review, 2026-09-03); `s
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 Moved to other nodes as alternatives: `delegated-not-ratified` on commons.systems/disposition-graph/software-factories; `delegated-not-ratified` on commons.systems/disposition-graph/srs-introduction; `delegated-not-ratified` on commons.systems/disposition-graph/web-routing.
 The census unit's note: The node has an answer and no draft; its recommendation was already amended to delegated at high boldness, so it adopts the standing text. Two things are genuinely open for the author and I made them alternatives: whether the relation to the tradition is 'adopted with a recorded divergence' or 'chosen over', which the session's reply hands to the author in as many words, and the split of the bundled source into the tooling and its lineage, which the reply records as owed. The 'standing constitution of principles' point is an observation that the mechanism is unmaterialized, not a candidate answer, so it stays out. The node has no `## Disposition` section, so there is no merge analysis to do on the author's words here. The class-of-reading finding is moved to the three sibling readings it names.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Frontmatter `source` bundles two 2025 products (AWS Kiro, GitHub Spec Kit) with a three-item lineage (Knuth 1984, Meyer 1986, Adzic 2011) under one `relation: adopted`. The lineage is a different tradition from the tooling and would divide differently on the divergence recorded; readings' rule is one tradition per reading. The `split-sources` alternative is the vehicle and the session recorded it as owed.
+- Answer: 'a standing constitution of principles governs every specification' is adopted from Spec Kit. The record's nearest equivalent is doctrine, which authority defines as the ratified answers taken together and which is empty, since nothing is ratified. The node adopts a mechanism the record does not have and nothing marks it as owed.
+- Verified applied since the last review: 'so they cannot go stale' now reads 'so nothing that could go stale is kept', and the recommendation class is delegated at high boldness.
+- The node carries no '## Disposition' section and no quoted ruling; its rationale says the reading was made 'from its own knowledge, not from primary reading', which is the most candid statement of provenance in the batch and should stay in the answer rather than only in the rationale.
+
+On the three facts: The frontmatter recommendation (adopts standing, delegated, high) states one class and one value and the pin is current. High is right and is the correct value here specifically: the node says the reading was not made from primary sources, so nothing in it rests on the record or the author's words. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (moderate): The recorded divergence is the whole of the practice. What makes spec-driven development work in the 2025 tools is exactly the per-feature requirements, design and task documents this reading rejects: they are what the agent reads, and the specification is useful because it is close enough to the work to be executable. Replacing them with a graph of standing answers keeps the name and drops the mechanism, so 'adopted, with a recorded divergence' understates the relation — on the thing the tradition is for, this is nearer to 'chosen over', and purpose leans on the audience's expectation of the name in its first paragraph.
+
+The session's reply: Forward accepted. The split of the sources stays open; the discharged delegated-not-ratified alternative is struck at this landing.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### Alternatives discharged, 2026-09-03
+
+At the clean-context review of 2026-09-03 the session struck the alternatives the record had already discharged: `delegated-not-ratified` dropped, the recommendation already reads delegated, as readings' rule requires.

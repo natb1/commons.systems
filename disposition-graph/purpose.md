@@ -1,6 +1,6 @@
 ---
 question: What is this repository for?
-stage: review
+stage: ruling
 recommendation:
   adopts: draft
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: dbde6b3821fb7aecf1358c0f5ea782a90157b202
+  of: b677169ab7ce29fe858f0d62ada887eb1bc86265
 alternatives:
   - name: draft
     source: ai
@@ -26,6 +26,9 @@ alternatives:
     source: review
     ref: "2026-09-03"
   - name: say-instrument-not-criterion
+    source: review
+    ref: "2026-09-03"
+  - name: keep-the-authors-words
     source: review
     ref: "2026-09-03"
 form: target
@@ -102,6 +105,10 @@ The author's question whether assumption is a form at all, and whether it is cor
 ### say-instrument-not-criterion
 
 The same finding names purpose's draft, which uses criterion and the criteria frontmatter key that the schema does not hold. Until instruments is ruled the draft says instrument or discloses that the term and the key arrive with instruments. (Raised on commons.systems/disposition-graph/instruments.)
+
+### keep-the-authors-words
+
+Purpose's recommended text keeps a '## Disposition' section rather than dropping all nine dated quotations, and its account names for each quotation either the sentence of the answer that absorbs it or the node it moves to. Verified that the fence carries no author quotation of any date and that two of the three quotations answered elsewhere — the form question and the tradition instruction — have no '## Disposition' section on their target nodes to move into. It is on the table because quotes' recommended answer permits only a roll-up of what the answer absorbed, quotes is unruled, and this would be the first and largest application of a rule whose shape no node describes; the author may equally rule that the record's highest-ranked page should carry the answer alone, with version control holding the words.
 
 ## Recommendation
 
@@ -248,3 +255,63 @@ The census unit's note: Purpose carries a Recommendation fence, so it adopts the
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `disclose-unstated-arche` absorbs `rests-on-unstated-arche`; `cite-forms` absorbs `cite-forms-for-the-form-question`, `cite-forms-not-the-quote`. The merge unit's note: fold-option-nodes and say-instrument-not-criterion are different changes and stay.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Recommendation fence, whole: it carries no '## Disposition' section, while the node as it stands carries nine dated author quotations. Quotes' own recommended answer, in this batch, permits only a roll-up of what the answer absorbed — 'each sitting on the node rolls up the quotations its answer has absorbed, version control holding what the roll-up drops' — and this is a drop of all nine, not a roll-up. Verified by reading the fence: `awk '/^## Recommendation/{f=1} f&&/The author, 20/{c++}'` returns 0 for purpose, while rationale-edge, quotes and rejected each keep one or two. Suggested edit: say in the account which quotations the answer absorbs and which move to the node that answers them, or keep the section.
+- Recommendation fence, frontmatter: 'class: ratified' with 'date: <the date of the ruling>' and no ruling quoted anywhere in the fence. Authority, in this batch, holds that 'a ratified stamp whose ruling is not in the record is invalid'. The session's earlier reply answered this — the ruling required is the one given at the sitting — but that answer is quotes', and quotes is unruled and in this same batch. Suggested edit: rule quotes first; the ruling order below does.
+- Recommendation fence, Answer paragraph 2: 'a projection of its author's hexis, which is what a knowledge store would hold'. Verified that no node's `defines` carries 'hexis' (`grep -rn '^  - hexis$' disposition/` returns nothing), so the first Greek term a newcomer meets in the record's highest-ranked answer is one the browser cannot link. The `define-hexis` alternative is pending on knowledge-store, not here.
+- The node's parent, public/agency, stands at the periagogic stage with no '## Disposition' and no author words anywhere on it, and purpose's own text says nothing about that. The `disclose-unstated-arche` alternative is pending and is the vehicle; the answer as it stands still presents itself as refining an archē the author has never stated.
+- Verified resolved since the last review: the 'criteria:' block is gone from the fence, the hypotheses sentence no longer stores the children's validation state ('recorded under this node as hypotheses'), and the ledger reference is gone.
+
+On the three facts: The frontmatter recommendation (adopts draft, ratified, moderate) states one class and one value and the `amends` pin matches the standing text — the frontier reports no staleness on it. Ratified is right for an answer largely in the author's own words; moderate is right for the factory definition and the two hypotheses, which are the AI's. Persistence follows from the node's shape (standing, no shims), and the account no longer claims criteria the record decided against.
+
+Strongest counter-argument (moderate): Purpose is the criterion by which coverage is ruled and by which materialization's swap prunes, and coverage stands at the periagogic stage with four of twelve surveyed functions outside the purpose as worded. The session's answer — that materialization's shim now names the coverage ruling as a condition of the swap — is verified true in the shim text and does close the deletion risk. What remains is that purpose refines an archē that has no author words on it at all: public/agency's answer is written in the author's first person by the AI, and ratifying the child of an unstated first principle fixes the record's why on the AI's draft of it.
+
+The session's reply: Forward accepted. The drop of the nine quotations is recorded as the alternative keep-the-authors-words; quotes rules first, as the ruling order says. The hexis link and the unstated arche are carried by the pending alternatives on knowledge-store and here. The criteria block and the ledger reference are verified gone.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Purpose's recommended text carries no '## Disposition' section, so confirming it as shown drops all nine dated author quotations the node holds today. Quotes' recommended answer, in this same batch, does not sanction that: 'The section accumulates, and each sitting on the node rolls up the quotations its answer has absorbed, version control holding what the roll-up drops.' A roll-up of what the answer absorbed is not a drop of everything, and at least three of purpose's nine are absorbed by no part of purpose's answer — the form question ('Is this correctly encoded as form: assumption vs form: disposition with unvalidated instrumentation? Is assumption a form at all?'), which forms answers; the instruction that the artifact should show the author the edit and let them approve the disposition as a whole, which dialogue answers; and the instruction to reference harnesses as a tradition and not to replicate tradition references in the rationale, which harness-tradition answers. Verified that of those three targets, forms and harness-tradition carry no '## Disposition' section at all, so two of the three quotations survive the drop nowhere in a section the alignment page renders. Verified also that the roll-up rule has no shape anywhere in the record: quotes' own second review recorded that it 'introduces a roll-up whose shape no node describes', and the session's reply deferred it to the answer written after the ruling.
+
+Also named: commons.systems/disposition-graph/quotes.
+
+Proposed: Quotes is the survivor: it rules on what becomes of the author's words at a recording, and it must be ruled before purpose, which the ruling order below does. Until then purpose's recommended text is the first application of a rule that does not exist, and the honest form is that the account name which of the nine quotations the answer absorbs and which move to the node that answers them, with the two that have no home — the form question on forms and the tradition instruction on harness-tradition — moved in the same landing rather than dropped. Quotes' answer, when it is written, should say what a roll-up may drop and what it may not.
+
+Recorded as a pending alternative on this node: `keep-the-authors-words` (source review, 2026-09-03).
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Authority holds that 'a ratified stamp whose ruling is not in the record is invalid', and quotes rules on what that requires. Measured against the graph as it now stands: eleven recommendation fences in this batch carry `class: ratified`, and eight of them quote no ruling of any date anywhere in the fence — purpose, hexis, namespaces, projection, traditions-home, forms, second-stop and purpose-criteria — while three do: rationale-edge, quotes and rejected. Separately, twenty-three of the sixty-eight nodes carry no '## Disposition' section at all (`validate.mjs` reports 'ok: 68 nodes'; the count of nodes with no such section is 23), among them evaluation, persistence, legacy, validation-order, review, recording, forms, traditions-home, purpose-criteria, second-stop and all three public nodes. Quotes' own recommended answer unbars them in one clause — 'the ruling a stamp requires is the one the author gives at that sitting, quoted then; words the author said earlier are the ground a draft rests on and bar no stamp' — so the whole question of whether eight fences and twenty-three nodes can carry a ratified stamp turns on a node that is itself unruled and in this batch. The counts recorded on the batch's own findings are stale against the graph: 'twenty-two of the sixty-two nodes' was measured when the graph held 62.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/namespaces, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/forms, commons.systems/disposition-graph/second-stop, commons.systems/disposition-graph/purpose-criteria.
+
+Proposed: Quotes is the survivor and is ruled first among the nodes of this batch, after the periagogic sitting on public/agency that every one of them descends from. Nothing in the eight fences need change before that ruling, because quotes' recommended answer sanctions them; what must not happen is that any of the eight is recorded with a ratified stamp before quotes is ruled, since under the losing option each such stamp is invalid on landing. Quotes' own facts should state the measured size of the bar at the moment of ruling rather than a count fixed in prose, since the count has already moved once.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `fence-carries-the-ruling` (source review, 2026-09-03).
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).

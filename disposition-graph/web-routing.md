@@ -1,6 +1,6 @@
 ---
 question: Does the web-routing tradition support addressing every node of the browser?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: delegated
@@ -9,9 +9,9 @@ recommendation:
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
-  strength: strong
+  strength: moderate
   date: 2026-09-03
-  of: b3b2840be3a3c909dc10ac8ad49b1ff6aa94ecdb
+  of: 74904a88c15edb6ed067605b3ee2c0fe1f5216de
 alternatives:
   - name: narrow-fielding-citation
     source: review
@@ -20,9 +20,6 @@ alternatives:
     source: review
     ref: "2026-09-03"
   - name: divergence-as-shim
-    source: review
-    ref: "2026-09-03"
-  - name: delegated-not-ratified
     source: review
     ref: "2026-09-03"
 form: reading
@@ -61,10 +58,6 @@ The node's four sources under one relation of adopted are split into separate re
 ### divergence-as-shim
 
 The host's divergence, that a framed page can neither show nor receive its address so the page keeps the reader's place itself, leaves this answer and becomes part of projection's browser shim with a liquidation condition. As a clause in an answer it is a stand-in for an unmade materialization that the frontier cannot read, which transience makes a shim.
-
-### delegated-not-ratified
-
-The same finding names this node as one of the four readings recommending a class the record's own rule forbids, and proposes the recommendation change from ratified to delegated with the prose Facts line rewritten to match. (Raised on commons.systems/disposition-graph/spec-driven-development.) Also raised on commons.systems/public/pettit-non-domination.
 
 ## Account
 
@@ -133,3 +126,42 @@ The recommendation adopts `standing` and is pinned to the standing text as it wa
 Merge analysis of the author's words: 2026-09-03, own-question: Record a reference to the web app routing tradition as disposition, and edit the browser shim to reconcile it.
 Moved to other nodes as alternatives: `shim-carries-framed-viewer` on commons.systems/disposition-graph/projection.
 The census unit's note: The node has an answer and no draft, so it adopts standing, and its recommendation class is already delegated as the readings rule requires. The record's own divergence, the prefix rewrite of the public graph's ids, was accepted and has been written into the answer, and namespaces' shim liquidation now carries the redirect obligation, so that item is closed rather than pending. The three alternatives are the review findings the session said would be settled at a sitting that has not happened: the Fielding narrowing, the four sources under one relation, and the host divergence that belongs in a shim. The last of those proposes a change to projection's shim, which projection does not carry, so it goes elsewhere. The author's single block is quoted more fully on projection; here it is the words that mint this reading.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Verified applied since the last review: the answer now records the record's own divergence — 'the public graph's ids are rewritten by prefix when it moves to natb1.com, and the namespaces node's shim carries the redirect obligation that principle imposes' — and namespaces' shim carries the redirect clause. The unrecorded conflict the counter-argument named is closed on both sides.
+- Frontmatter `source` still lists Fielding chapter 5 first among four sources under one `relation: adopted`. A fragment is resolved client-side and is never seen by a server, so citing Fielding for a fragment scheme is loose; the session accepted the narrowing twice and the field is unchanged. The `narrow-fielding-citation` alternative is the vehicle.
+- Four sources under one relation: readings speaks of a reading's source, locus and relation in the singular, so if one of the four were later diverged from, one relation could not say so. The `split-the-sources` alternative is the vehicle and the session left it to the sitting.
+- Answer, last clause: 'until the browser is published from the implementation ref the page keeps the reader's place itself and shows the address of the node in view'. This is a stand-in for a materialization not yet made, which transience makes a shim with a liquidation condition; here it is a clause in an answer that the frontier cannot read. Verified that projection's browser shim's liquidation names the publication but not this divergence. The `divergence-as-shim` alternative is the vehicle and it changes projection's shim, which projection does not carry.
+
+On the three facts: The frontmatter recommendation (adopts standing, delegated, moderate) states one class and one value and the pin is current; delegated is the class readings' rule requires for a source the author has not read, and this node is one of the four corrected. The prose Facts line still says 'authority deferred until the author reads the sources', which names a third class beside the recommendation's. Persistence standing follows from the node's shape, though the framed-viewer clause is a shim in all but name.
+
+Strongest counter-argument (moderate): The reading adopts 'addresses do not change' and the record then declares two exceptions to it: the public graph's prefix rewrite, now recorded, and the framed viewer's inability to show or receive an address, recorded as a clause in the answer. A principle with two live exceptions, one of which the record imposes on itself and one of which is a stand-in with no liquidation condition anything reads, is adopted more strongly than the record can honour. The honest form is a relation of diverged with both exceptions named, which is what the sibling readings' `relation-diverged` alternatives propose for the same shape.
+
+The session's reply: Forward accepted. The Fielding narrowing and the source split stay as pending alternatives; the framed-viewer clause is accepted as a stand-in the frontier cannot read, for the author.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### Alternatives discharged, 2026-09-03
+
+At the clean-context review of 2026-09-03 the session struck the alternatives the record had already discharged: `delegated-not-ratified` dropped, the recommendation already reads delegated, as readings' rule requires.

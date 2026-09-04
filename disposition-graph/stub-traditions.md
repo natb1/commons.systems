@@ -8,6 +8,9 @@ alternatives:
   - name: regenerate-enumeration
     source: review
     ref: "2026-09-03"
+  - name: one-ruling-for-the-prose-lists
+    source: review
+    ref: "2026-09-03"
 under:
   - commons.systems/disposition-graph/readings
 ---
@@ -25,6 +28,10 @@ Every list of traditions to record as readings in a rationale becomes root nodes
 ### regenerate-enumeration
 
 The cross-reference finding verifies by grep that fourteen nodes carry prose tradition lists and that the enumeration here misses three of them, dialogue, recording and scope, while naming instruments, which carries its traditions without the marker phrase. It proposes that the enumeration be regenerated from the record rather than maintained by hand, the same class of drift the scope node's order field was introduced to prevent, and that until then the three missing nodes be added. Raised on commons.systems/disposition-graph/audience.
+
+### one-ruling-for-the-prose-lists
+
+Stub-traditions' answer says that the ruling on where prose tradition lists go settles it for every rationale that carries one, so the `traditions-to-readings` alternatives pending on materialization, validation-order, instruments and evaluation are consequences of this ruling rather than four separate ones. Verified that fourteen rationales carry such lists while this node's enumeration names twelve and misses dialogue, recording and scope, which is why the node's own `regenerate-enumeration` alternative asks that the enumeration be derived from the record instead of maintained by hand. On this alternative the two are taken together: the enumeration is derived, and the derived list is what the ruling drains, so no rationale needs its own pending alternative to say the same thing.
 
 ## Account
 
@@ -69,3 +76,21 @@ The census unit's note: No recommendation field, so it adopts nothing, and the s
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `regenerate-enumeration` absorbs `regenerated-enumeration`.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on this node: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).

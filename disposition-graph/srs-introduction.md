@@ -1,6 +1,6 @@
 ---
 question: Does the requirements-specification tradition support opening with purpose, then scope, then references?
-stage: review
+stage: ruling
 recommendation:
   adopts: draft
   class: delegated
@@ -11,14 +11,11 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: c7b6a5849e318cdf4efdf5c3071a6c56d7ad12f1
+  of: 52a05465b7b4abe375d21c72131b254b97f59a1e
 alternatives:
   - name: draft
     source: ai
   - name: record-overview-divergence
-    source: review
-    ref: "2026-09-03"
-  - name: delegated-not-ratified
     source: review
     ref: "2026-09-03"
 form: reading
@@ -53,10 +50,6 @@ The draft re-orients the reading on the author's words of 2026-09-02. Where the 
 ### record-overview-divergence
 
 Both readings found a second divergence the draft's rationale does not record: the standard has an Overview section and this graph defers the overview to projections rather than to a node, which evaluation calls an unrecorded conflict with a cited tradition. The session's reply left it owed at the sitting. This alternative is the draft with both divergences recorded, the handling of definitions through links and the deferral of the overview, and the relation stated against them.
-
-### delegated-not-ratified
-
-The same finding names this node as one of the four readings recommending a class the record's own rule forbids, and proposes the recommendation change from ratified to delegated with the prose Facts line rewritten to match. (Raised on commons.systems/disposition-graph/spec-driven-development.) Also raised on commons.systems/public/pettit-non-domination.
 
 ## Recommendation
 
@@ -143,3 +136,42 @@ Alternatives pending, with their sources: `draft` (ai); `record-overview-diverge
 The recommendation adopts `draft` and is pinned to the standing text as it was at that commit.
 Merge analysis of the author's words: 2026-09-02, own-question: The tradition's title alone does not support progressing to audience, which is acceptable; the progression from purpose to scope to reference makes sense, with definitions covered by hyperlinks and the overview by blog-shaped content, and the question should be re-oriented around that.
 The census unit's note: The Draft is the recommendation and is the AI's rewrite rather than a transcription of the author's words, so its source is ai. The second alternative is the one review finding the session left owed rather than applied: I verified the draft now states the standard's order, so that half is discharged, while the overview divergence is still unrecorded in the draft's rationale. The counter-argument that the reading now supports what the author already decided proposes no text and is excluded. The reading-class coverage finding carried here is discharged; the node's prose Facts line still says deferred where the frontmatter says delegated, which is a Facts-line cleanup rather than an alternative.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Recommendation fence, Rationale: it records one divergence — 'a requirements specification is a document about one product release, while this graph is a standing record' — and not the second the answer makes, that the standard has an Overview section which this graph 'left to projections shaped like an introduction rather than to a node'. Evaluation calls an unrecorded conflict with a cited tradition a frontier item deferred to neither side. The `record-overview-divergence` alternative is the vehicle and the session left it owed; the fence still records one divergence.
+- Verified applied since the last review: the fence now states the standard's own order (purpose, scope, definitions, references, overview), correcting the earlier misordering of definitions and references.
+- Recommendation fence, Answer: 'The intended readers are stated inside purpose, as the tradition states them inside its purpose section.' This presumes the audience prune, which is in this same batch as a separate ruling, and the node names no dependency on it. If the author denies the prune, the sentence is false the moment it lands.
+- The node carries a '## Disposition' section with the author's words dated 2026-09-02, which grounds the re-orientation; it is one of the few reading nodes that does. The fence's class is deferred, which matches the rationale's 'deferred until the author reads the sections', while the frontmatter recommendation says delegated — the class the record's own rule confers on a confirmation. The two differ and the account does not say which the author is giving.
+
+On the three facts: The frontmatter recommendation (adopts draft, delegated, moderate) states one class and one value and the pin is current; delegated is the class readings' rule requires. The fence's own frontmatter says 'class: deferred', so the recommended text and the recommendation disagree about the class a confirmation writes, and the account should say which governs. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (weak): The reading now supports what the author already decided rather than testing it: the original question asked whether the tradition supports progressing to audience, the author answered that the title alone does not, and the question was re-oriented to the progression the author preferred. That is legitimate, but the reading's remaining evidential value is small — it says the standard opens with purpose and scope, which was never in doubt — and its one substantive contribution, that definitions and overview are handled differently here, is exactly the divergence the fence still does not record.
+
+The session's reply: Forward accepted. The second divergence and the dependence on the audience prune are accepted as findings for the author; the fence's deferred class against the recommendation's delegated is a placeholder the recording replaces. The discharged delegated-not-ratified alternative is struck.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### Alternatives discharged, 2026-09-03
+
+At the clean-context review of 2026-09-03 the session struck the alternatives the record had already discharged: `delegated-not-ratified` dropped, the recommendation already reads delegated, as readings' rule requires.

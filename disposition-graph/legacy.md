@@ -1,6 +1,6 @@
 ---
 question: What is the legacy record to this graph?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: ed34becb8ac6964e85671226becd828fbb50d45c
+  of: 85155207f04a45efdc5963068dc021e1285d1dac
 alternatives:
   - name: add-a-disposition-section
     source: review
@@ -114,3 +114,38 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Alternatives pending, with their sources: `add-a-disposition-section` (review, 2026-09-03); `deferred-rather-than-ratified` (review, 2026-09-03); `drain-as-an-exit-criterion` (ai, 2026-09-03).
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 The census unit's note: No Disposition section, so the dispositions list is empty; the author's ruling of 2026-09-02 survives only as a paraphrase in the rationale, which is what the first two alternatives are about. The vocabulary scoping the first review asked for was applied before the snapshot, and the second review confirmed the two surveys now cited as evidence, so neither is pending. I recorded the drain answer as an alternative because the session gave a substantive answer in a reply that the node's own text does not carry. The placement finding on this node is the same one carried by recording, so I recorded its proposal for quotes once, from recording, rather than twice.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- The node carries no '## Disposition' section — verified, it is one of the twenty-three — and its ground, 'The author's ruling of 2026-09-02 that this session was over-bound by legacy disposition and that incumbent code is context, never doctrine', is paraphrased rather than quoted. Authority makes a ratified stamp whose ruling is not in the record invalid. The `add-a-disposition-section` and `deferred-rather-than-ratified` alternatives are the two branches.
+- Verified applied since the last review: the vocabulary rule is scoped to the kind vocabulary the sentence enumerates ('that kind vocabulary does not enter this graph'), and the rationale cites bootstrap/transient-disposition-graph-survey.md and bootstrap/transient-disposition-transcript-survey.md as evidence.
+- Answer: 'Doctrine the new record overrules is not amended in place: it appears as a rejected alternative in the new node's rationale.' The rationale now says the mechanism is unexercised, which is the right disclosure; what the required shape is remains unspecified, and rejected — in this batch, and which I am kicking back — may change what a rejected alternative is. The two rulings are coupled and neither node says so.
+- The drain of the legacy record has no owner and no rank: the session's answer, that the author's words after compaction make it an exit criterion on work-loop's shim, is verified in that shim's third clause, but it lives there and not in this node's answer. The `drain-as-an-exit-criterion` alternative is the vehicle.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, moderate) states one class and one value and the pin is current. Ratified cannot be supported as the node stands, since no ruling is quoted anywhere in it; moderate is right for 'nothing carries over by default' and the rejected-alternative mechanism, which are the AI's. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (moderate): The node makes 'read it when a question needs it' the only path in and carries nothing by default, while nothing derives which legacy knowledge a question needs: work-loop assigns the drain to a second direction the frontier does not derive at all, and materialization's shim prunes at the swap whatever no disposition supports. The session's answer — that the swap is gated on the coverage ruling — is verified and does prevent loss by omission. What survives is milder and real: the drain sits on an eleven-clause exit condition that nothing reads, so it will be done at exit under time pressure or not at all.
+
+The session's reply: Forward accepted. The paraphrased ruling and the coupling with rejected are accepted as findings; the drain stays where work-loop's shim carries it and the alternative here stays open.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).

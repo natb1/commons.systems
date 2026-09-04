@@ -5,13 +5,13 @@ recommendation:
   adopts: standing
   class: ratified
   boldness: low
-  amends: "0826bba52cd81cceefb22d57298511ed3e173c38"
-  at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+  amends: "3761c42b60b37303531ba6485d8d648a081885b5"
+  at: "ec82504388014303d7a1b889d42d02e8814abd25"
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
-  of: e47a9f5936f7d8e33eae62c1e0037c69ad3d2f35
+  of: 0826bba52cd81cceefb22d57298511ed3e173c38
 alternatives:
   - name: facts-carry-each-shim-liquidation
     source: review
@@ -21,12 +21,6 @@ alternatives:
     ref: "2026-09-03"
   - name: traditions-to-readings
     source: review
-    ref: "2026-09-03"
-  - name: restate-node-modules-shim
-    source: review
-    ref: "2026-09-03"
-  - name: strike-met-yaml-shim
-    source: ai
     ref: "2026-09-03"
 form: rule
 authority:
@@ -44,10 +38,6 @@ shims:
   - artifact: the `greenfield` ref, carrying the materialized implementation beside the incumbent code on `main`
     for: the implementation ref this node names
     liquidation: "`greenfield` is swapped with `main` at bootstrap exit, after whatever on `main` is to survive has been reconciled into `greenfield` under a supporting disposition, and the coverage node has been ruled on what the record covers"
-    declared: 2026-09-02
-  - artifact: "`packages/disposition` resolving the `yaml` package it declares from an ancestor `node_modules`, the workspace not installing it"
-    for: the package's dependency declaration
-    liquidation: the workspace installs the package's declared dependencies
     declared: 2026-09-02
 ---
 ## Disposition
@@ -76,14 +66,6 @@ The second review asked the account to say that a kickback or an overrule here c
 ### traditions-to-readings
 
 The rationale names Lerna, Yarn workspaces, npm workspaces and Potvin and Levenberg in prose as the monorepo tradition, which readings' draft forbids and which stub-traditions names this node for. The alternative moves the reference to a reading before landing and leaves the rationale with the argument.
-
-### restate-node-modules-shim
-
-The coverage finding carried on session-context proposes that materialization restate its second shim as the ancestor `node_modules` resolution alone, since `packages/disposition/package.json` exists and declares yaml, so the shim's description of the artifact is false and half its liquidation condition is already met. (Raised on commons.systems/disposition-graph/session-context.)
-
-### strike-met-yaml-shim
-
-Materialization's second shim, packages/disposition resolving the yaml package it declares from an ancestor node_modules, is struck, its liquidation condition having been met on 2026-09-03 when the root tree was removed and npm install run at the workspace root, so yaml now resolves from the workspace's own install. Transience makes a shim whose condition is met and which still exists a frontier item. The lockfile node records this rather than applying it, because materialization stands at the review stage with a forward verdict and the amendment would be a change of substance. (Raised on commons.systems/disposition-graph/lockfile.)
 
 ## Account
 
@@ -149,3 +131,55 @@ Alternatives pending, with their sources: `facts-carry-each-shim-liquidation` (r
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 Merge analysis of the author's words: 2026-09-03, own-question: All materialized implementation, the browser included, is a projection of the graph, anything the graph does not justify is subject to liquidation through reconciliation, and the record must not be made to hold transient dispositions in the shape of implementation units.
 The census unit's note: Standing answer, no draft, recommendation of standing. Almost everything the two reviews raised was applied before the snapshot: liquidation is now a pruning proposed for the author's ruling rather than an action, the greenfield shim's condition names the coverage ruling, and the second shim was restated as the ancestor resolution alone, so the shim coverage finding's proposal for this node is met and I did not record it. What is left are three unwritten edits, two of them promised in the session's own replies. The strong counter-argument, that ratifying this node arms an unruled deletion, is answered in the shim's liquidation condition rather than pending, so I did not make it an alternative. The shim coverage finding's proposal for session-context is recorded from transience, which carries the same finding, to avoid a duplicate.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Frontmatter, second shim: '`packages/disposition` resolving the `yaml` package it declares from an ancestor `node_modules`, the workspace not installing it', liquidated when 'the workspace installs the package's declared dependencies'. Verified the condition is now met: a `node_modules` directory exists at the workspace root and `require.resolve('yaml', {paths:['./packages/disposition']})` returns /home/n8/natb1/commons.systems/node_modules/yaml/dist/index.js — the workspace's own install, not an ancestor's. Transience: 'a shim whose condition is met and which still exists is a frontier item.' The `strike-met-yaml-shim` alternative is the vehicle and this review confirms its premise.
+- Frontmatter, first shim: the greenfield swap's liquidation now names 'the coverage node has been ruled on what the record covers' — verified in the shim text, which closes the residual risk the last review named (that the condition named scope while the question moved to coverage).
+- Answer, sentence 3: 'anything no disposition justifies is unsupported implementation, on the frontier and liquidated through reconciliation, where pruning is proposed and the author rules on it'. Verified consistent with work-loop, and verified that nothing derives it: renderFrontier reads the graph alone. The rule the whole swap turns on has no instrument on any node.
+- Rationale carries a prose tradition list — Lerna, Yarn workspaces, npm workspaces, Potvin and Levenberg — which readings' recommended text forbids and which this node's own answer makes unsupported implementation of a kind. The `traditions-to-readings` alternative is pending here and on three other nodes for the same reason; see the merge finding.
+- The `disclose-that-sessions-run-under-this-rule` alternative is still unwritten: this node's projection is one of the five files in .claude/rules/, verified, so a kickback or an overrule here changes what every session is running under today, and the account does not say so.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, low) states one class and one value and the pin is current; low is right for a general disposition the author stated verbatim and which the node quotes with its date. Persistence overstates what exists: the node declares two shims and the second's liquidation condition is now met while the shim still stands, so the record claims an interim that has ended. The prose Facts line says 'two shims' without either liquidation condition, which growth's presentation rule requires.
+
+Strongest counter-argument (strong): Ratifying this node arms a deletion whose scope is unruled: the greenfield shim's liquidation is a swap that prunes whatever no disposition supports, and coverage stands at the periagogic stage naming four recorded functions outside the purpose as worded. The mitigation the session added — the coverage ruling as a condition of the swap — is verified in the shim text and is real. What is not mitigated is that the rule's enforcement is a human reading: no projection walks the implementation ref, so 'unsupported implementation' is a judgment made once, at exit, by whoever is holding the swap.
+
+The session's reply: Forward accepted, and the finding on the yaml shim is taken: verified on this thread that yaml resolves from the workspace's own node_modules, so the shim's liquidation condition is met and transience makes it a frontier item. The shim is struck at this landing, the recommendation re-pinned to the amended standing text, and the node returns to the review stage, since the frontmatter changed; the two alternatives the strike discharges are struck with it.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Two of the record's declared shims fail transience's own requirements, and both failures are new since the last round. Session-context declares '`.claude/settings.json` in the author's checkout and not on the implementation ref, harness configuration the author writes at the transition of 2026-09-03': verified there is no such file anywhere — `ls .claude/settings.json` fails in the author's checkout, `git ls-files .claude/` lists only rules and skills, and the only settings file present is `.claude/settings.local.json`, gitignored and last modified long before the stated date. The restatement made on 2026-09-03, which moved the shim from a file not on the ref to a file 'in the author's checkout', moved it to a file that is not there either, so the shim names no artifact at all. CLAUDE.md, which this same node declares as its other shim, asserts the same file: 'a session that isolates itself branches from this checkout's head when `.claude/settings.json` sets `worktree.baseRef` to `head` (written by the author at the transition of 2026-09-03)'. Separately, materialization's second shim, '`packages/disposition` resolving the `yaml` package it declares from an ancestor `node_modules`, the workspace not installing it', has had its liquidation condition met: `node_modules` now exists at the workspace root and `require.resolve('yaml', {paths:['./packages/disposition']})` returns /home/n8/natb1/commons.systems/node_modules/yaml/dist/index.js, the workspace's own install. Transience: 'a shim whose condition is met and which still exists is a frontier item', and the flagging of a met condition is itself unmaterialized, so neither shows anywhere.
+
+Also named: commons.systems/disposition-graph/session-context, commons.systems/disposition-graph/transience.
+
+Proposed: Transience is the survivor of the shim rule and is unruled; nothing in its text need change for this finding. Session-context's shim either names an artifact that exists — `.claude/settings.local.json`, with its exclusion from the ref as part of the liquidation — or the author writes `.claude/settings.json` and the shim stands as it reads, which is a change to the world and not to the record; the alternative below carries the record branch, and either way CLAUDE.md's claim about the file should be checked before the next session relies on it. Materialization's already-pending `strike-met-yaml-shim` is confirmed by this reading and should be taken rather than left as an option: the condition is met and the declaration is a frontier item by transience's own rule. Transience's `instrument-note-as-a-declared-shim` alternative is what would make both visible, since the note recording that a met condition is not flagged is itself the stand-in transience calls a shim.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/session-context: `shim-names-an-existing-artifact` (source review, 2026-09-03).
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### Alternatives discharged, 2026-09-03
+
+At the clean-context review of 2026-09-03 the session struck the alternatives the record had already discharged: `restate-node-modules-shim` dropped, the shim it would restate is struck; `strike-met-yaml-shim` dropped, taken: the shim is struck from the frontmatter at this landing, its liquidation condition verified met, the recommendation re-pinned to the amended standing text, and the node returned to the review stage since its frontmatter changed. The merge unit's note: Verified on this thread that yaml resolves from the workspace's own node_modules under packages/disposition.

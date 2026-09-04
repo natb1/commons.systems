@@ -1,18 +1,26 @@
 ---
 question: What does an unanswered node carry?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
   boldness: high
   amends: "163f5ee5130f88f160523f95c72381f26751e96d"
-  at: "9e3a6624"
+  at: "9e3a66240872d3512a3acf085f3154b9004028a2"
+review:
+  verdict: forward
+  strength: strong
+  date: 2026-09-03
+  of: 163f5ee5130f88f160523f95c72381f26751e96d
 alternatives:
   - name: minimal-dialogue-state
     source: review
     ref: "2026-09-03"
   - name: freeze-standing-under-recommendation
     source: ai
+    ref: "2026-09-03"
+  - name: depends-migration-named
+    source: review
     ref: "2026-09-03"
 form: rule
 authority:
@@ -123,6 +131,10 @@ The clean-context review's strongest counter-argument, twice recorded as strong,
 
 The finding that the review pin covers only the draft and not the standing answer names three answers and adopts none: pin both texts, pin the whole node, or hold that a node's standing answer may not be amended at all while a recommendation on it stands. The author's maieutic ruling took the pinning route, adding the standing hash and the graph commit, so what is still open is the third: forbid the amendment rather than flag it. The finding was explicitly left for the ruling rather than decided in the sitting.
 
+### depends-migration-named
+
+The answer names the migration that `depends` orders and drops the claim that the frontier shows the gap. Verified that zero nodes carry the field, twenty-three carry the `Depends on:` prose it replaces, the projector reads it nowhere, and the frontier prints nothing about it, so a confirmation today ratifies a seventh part of the dialogue state that no node uses and no projection reads. On this alternative the answer says that the field is defined and not yet carried, that the prose conventions stand until the migration lands, and that the migration is part of what the confirmation orders — which is what dialogue's own account calls 'a reconciliation with the author's ruling on each' rather than a landing inside one sitting.
+
 ## Account
 
 ### Finding: the review pin does not cover the standing answer, 2026-09-03
@@ -145,7 +157,7 @@ Three requirements, and the answer met one of them. Persistence across sessions 
 
 **The frontier relation.** The answer's own principle is that what a projection or the validator must read is data and what only a person reads is prose. It applied that to the facts, the verdict and the draft, and left the node's relation to the open frontier as prose conventions inside the account: verified on 2026-09-03, `Depends on:` on 21 nodes, `Feeds:` on 9, `Also named:` on 54, and the projector reads none of them. That is the same drift the rationale below indicts, in the same section, unfixed. `depends` is added as the seventh part, and only `depends`: what a question feeds is its inverse and derives from it, and the node's place in the answered graph is already carried by `under`, `after`, `order` and `cites`. The prose conventions are then unsupported and are liquidated through reconciliation, where the author rules on the pruning.
 
-Consequences not taken here. Migrating the 21 `Depends on:` conventions into `depends` reads and rewrites a third of the graph, which is a reconciliation with the author's ruling on each, not a landing inside this sitting; `Also named:`, which is the AI's cross-reference rather than a dependency, may want a different home or none. The projector and the alignment page do not yet read `depends`, so the field is recorded before its instrument exists, which the frontier will show.
+Consequences not taken here. Migrating the 21 `Depends on:` conventions into `depends` reads and rewrites a third of the graph, which is a reconciliation with the author's ruling on each, not a landing inside this sitting; `Also named:`, which is the AI's cross-reference rather than a dependency, may want a different home or none. The projector and the alignment page do not yet read `depends`, so the field is recorded before its instrument exists, which the frontier does not yet show: the projector reads the field nowhere, and the twenty-three prose conventions stand until the migration is ruled, as the review of 2026-09-03 found.
 
 The answer changed after its review of 2026-09-03, so the review is owed again on the changed text, and the recommendation's class is unchanged.
 
@@ -239,8 +251,58 @@ Not begun. The grant is in force and the reconciliation runs after the session's
 
 ### Reconciliation, 2026-09-03
 
-Run under the author's bootstrap grant on this node after the session's compaction, at the author's direction. What the graph landing carries. Every node is re-encoded: the account section, formerly named the proposal, and the recommended text, formerly the draft, renamed; the alternatives pending on each node written as data from a census of the sixty-seven nodes taken in six cohorts, each alternative with its source, and each node's account closing with a re-encoding subsection naming its alternatives, what its recommendation adopts, the merge analysis of the author's words on it, and what was moved to other nodes; every recommendation given `adopts`, `amends`, and `at`, pinned to the standing text at graph commit 6d21d356, whose hashes the re-encoding preserved exactly, so that no recommendation is stale against its standing text and every review's pin is what it was. The eight option nodes of the sitting on purpose, forms, hexis, purpose-criteria, quotes, rationale-edge, rejected, second-stop, and traditions-home, had a recommendation with no answer and no text; each now carries a `## Recommendation` fence drafted from the option its account marked recommended, and each returns from the ruling stage to the review stage with its review removed, since that review read the options and not the text. Audience's recommendation is a prune, encoded as a prune alternative in the author's words with no fence; an alternative that folds a node into another is marked a prune as well. Alternatives the six cohorts raised on one node under different names were merged, thirty merges over twenty-four nodes, and alternatives the redrafts of this day had already carried into a standing answer were removed, seven on authority, dialogue, and unanswered; the merges are recorded on each node's account. The specification the units worked from, the census, the option drafts, the merge plan, and the scripts are scaffolding in `tmp/reencode-2026-09-03/` on the implementation checkout and are not the record.
+Run under the author's bootstrap grant on this node after the session's compaction, at the author's direction. What the graph landing carries. Every node is re-encoded: the account section, formerly named the proposal, and the recommended text, formerly the draft, renamed; the alternatives pending on each node written as data from a census of the sixty-seven nodes taken in six cohorts, each alternative with its source, and each node's account closing with a re-encoding subsection naming its alternatives, what its recommendation adopts, the merge analysis of the author's words on it, and what was moved to other nodes; every recommendation given `adopts`, `amends`, and `at`, pinned to the standing text at graph commit 6d21d356, whose hashes the re-encoding preserved exactly, so that no recommendation is stale against its standing text and every review's pin is what it was; this node and node were re-pinned once more at 9e3a6624, after their defines were amended to end two vocabulary collisions. The eight option nodes of the sitting on purpose, forms, hexis, purpose-criteria, quotes, rationale-edge, rejected, second-stop, and traditions-home, had a recommendation with no answer and no text; each now carries a `## Recommendation` fence drafted from the option its account marked recommended, and each returns from the ruling stage to the review stage with its review removed, since that review read the options and not the text. Audience's recommendation is a prune, encoded as a prune alternative in the author's words with no fence; an alternative that folds a node into another is marked a prune as well. Alternatives the six cohorts raised on one node under different names were merged, thirty merges over twenty-four nodes, and alternatives the redrafts of this day had already carried into a standing answer were removed, seven on authority, dialogue, and unanswered; the merges are recorded on each node's account. The specification the units worked from, the census, the option drafts, the merge plan, and the scripts are scaffolding in `tmp/reencode-2026-09-03/` on the implementation checkout and are not the record.
 
 Two things the landing leaves as they are, for the author's sight. Twenty-six nodes carry a review whose pin no longer matches the text it read, because the sitting amended them after their review; the frontier flagged them before this reconciliation and flags them still, and the clean-context review of the batch re-reads those at the review stage. Rejected's account favours its third option while its marker and its recommendation name the first; the recommended text follows the marker, and the discrepancy stands in its account for the review.
 
 The implementation landing that follows names this grant and the graph commit: the reader, validator, and hashing to the encoding; the projector, the alignment page, and the browser to the projections this node's answer describes; the alignment and reconciliation skills to the encoding and the narrowed sense of proposal; the adversarial review skill to the batch scope, the fifteenth validation, and the renamed sections; the tests of each. The rules are regenerated, since authority is global-tier, and both pages republished. Then the clean-context review on the batch. The alignment-order sitting still waits behind.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Answer, the `depends` part: 'the ids of unanswered nodes that must be answered before this node can be, so the page can order the author's queue, show what a ruling here would unblock, and refuse to put a question before the one it rests on.' Verified that no node in the graph carries a `depends` field (`grep -rl '^depends:' disposition/` returns nothing) while twenty-three node files still carry the `Depends on:` prose convention it replaces, and that project.mjs reads the field nowhere. The node's own account says the field is 'recorded before its instrument exists, which the frontier will show'; the frontier shows nothing about it, so the one disclosure that would surface the gap is itself false.
+- Frontmatter, recommendation `at`: '9e3a6624'. Verified this is an eight-character abbreviation where forty-eight other nodes carry the full forty-character sha of 6d21d356, and that dialogue's own reconciliation account says every recommendation is 'pinned to the standing text at graph commit 6d21d356, whose hashes the re-encoding preserved exactly' — which is false of this node and of node.md, both re-pinned at the later commit. The node that defines the pin is one of the two that does not follow the account of how the pins were written. Suggested edit: fix the format and correct the account's blanket claim.
+- Answer, the `## Disposition` part: 'the author's words, verbatim and dated, accumulating through the dialogue', with the removal at the recording made contingent on quotes. Verified the contingency is now in the answer, which the previous review asked for. Quotes is in this batch and unruled, so this node's shape for the most-read section of every node is decided elsewhere.
+- Answer: 'The validator holds the parts together' — verified substantially true: read.mjs enforces stage-on-unanswered, the recommendation requirement from the review stage, the alternatives' names and their subsections, a `## Recommendation` fence exactly when the recommendation adopts an alternative, and every `depends` id resolving. The graph validates at 68 nodes. The claim that a forward verdict is required at ruling is enforced only in the sense that nothing yet reaches ruling by another route.
+- The node carries thirteen dated author quotations, more than any other in the batch, and its answer is the longest. Both are the record working as designed; both are also the strongest instance of the accumulation that quotes' counter-argument names and that this node's own `fidelity` child was minted to measure.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, high) states one class and one value and honestly names the model as the AI's construction from the author's list; high is right. The `amends` pin matches the standing text, so the recommendation is not stale — but the `at` field carries an abbreviated commit where every other node carries a full sha, on the node that defines the field. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (strong): The node's own test for storing anything is that it cannot be re-derived once the session that held it is gone, and three of the seven parts fail it: the recommendation's class and boldness are judgments the next session would make again from the same node, the review's verdict and strength are re-derivable by re-running a review the record already requires be re-run when the text changes, and the recommended text is a copy of the node inside the file that holds it. The session's answer — that the record stores the results of judgments, as it stores a stamp and a boost — is a good answer for the first two and weak for the third, and this batch is the evidence on both sides: the copy did drift on eight nodes, and the pin is what caught it.
+
+The session's reply: Forward accepted, and two findings taken directly: the `at` pin on this node and on node is written as the full sha at this landing, and the account's claim that the frontier shows the depends gap is corrected to say it does not, so the at-pin-format alternative is not recorded. The depends-migration-named alternative is recorded for the author.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Dialogue's answer makes `depends` the seventh part of the dialogue state — 'the ids of unanswered nodes that must be answered before this node can be, so the page can order the author's queue, show what a ruling here would unblock, and refuse to put a question before the one it rests on' — and the validator enforces it ('every `depends` entry must resolve within this graph, must not repeat'). Verified that no node in the graph carries the field: `grep -rl '^depends:' disposition/` returns nothing, while twenty-three node files still carry the `Depends on:` prose convention the field was added to replace, and every batch node in this brief reports 'Depends: none'. Verified further that the projector reads the field nowhere: `depends` appears in project.mjs only in a comment listing the dialogue's own state, so the frontier emits nothing for it. Dialogue's own account says the consequence is disclosed — 'the field is recorded before its instrument exists, which the frontier will show' — and the frontier shows nothing, so the disclosure is itself false. Alignment-order, at the periagogic stage, records the same fact independently: 'No node in the record carries the field, and the projector does not read it; the coverage node carries "Depends on: `audience`" in prose instead.'
+
+Also named: commons.systems/disposition-graph/alignment-order.
+
+Proposed: Dialogue is the survivor of what an unanswered node carries and nothing moves; what is owed is that the node say what it in fact has. Either the migration of the twenty-three prose conventions is named as part of what a confirmation orders, with the projector and the alignment page reading the field, or the answer says the field is defined and unused and that the prose conventions stand until the migration is ruled — which is the honest reading of the record today. The claim that the frontier will show the gap should be struck or made true, since it is the only thing standing between this gap and invisibility.
+
+Recorded as a pending alternative on this node: `depends-migration-named` (source review, 2026-09-03).
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Un-aligned-children's account carries a '### Facts' section stating 'Authority none: an un-aligned disposition in the author's words, recorded at their direction and carrying no answer', 'Persistence open, until the author rules', and, in the paragraph below it, 'The movement owed is periagogic and has not been run'. All three are contradicted by the node's own frontmatter, which carries `authority: class: deferred, by: claude, date: 2026-09-03`, a standing answer, `stage: review`, and `recommendation: adopts standing, class: ratified, boldness: low`. Because the alignment page renders the account beside the recommendation, the author is shown a node that says it carries no answer and owes a periagogic movement, on a page that puts it up for a ruling. This is the sharpest instance of the defect the coverage finding of 2026-09-03 records as the sixteen generic prose Facts lines: dialogue requires 'one class and one boldness value from the review stage on', and here the prose and the data disagree not about the class alone but about whether the node has an answer at all. The node carries no pending alternatives, so nothing on it records the finding.
+
+Also named: commons.systems/disposition-graph/un-aligned-children, commons.systems/disposition-graph/growth.
+
+Proposed: Dialogue is the survivor of the requirement and growth of the presentation rule; neither text need change for this node. Un-aligned-children's stale '### Facts' section is superseded by its own later '### Answered on the author's ruling, 2026-09-03' section and should be struck or marked superseded rather than left standing beside a contradicting frontmatter — the alternative below is the vehicle, since the review proposes and never edits. Growth's already-pending `facts-from-recommendation-field` alternative is what closes the class at its source, by saying the three facts are presented from the recommendation field and the node's shims and never from a prose line; taking it would make this and the sixteen other instances unrepresentable rather than fixed one by one.
+
+### Frontier finding, 2026-09-03
+
+Kind: cross-reference.
+
+Counts and implementation claims recorded across the batch's review sections have moved under them, and several are cited by pending alternatives as though current. Verified against the graph as it stands: `node packages/disposition/validate.mjs disposition` returns 'ok: 68 nodes', not the 62 that eight recorded findings assume; twenty-three nodes carry no '## Disposition' section, not twenty-two; the `defines` fields hold 117 entries, not the 88 the vocabulary findings cite; no node file ends in a bare 'null' (`grep -rn '^null$' disposition/` returns nothing), so the coverage finding of 2026-09-03 on the four bare nulls is discharged; `apply.mjs` and `brief.mjs` exist and are tracked, so the align-review shim's artifact claims hold; and browser-template.html carries an `authorityHtml` function rendering an authority block, so the earlier claim that 'there is no authority section' is stale, while 'unguarded' and 'criteria' still do not occur in it at all. The record's own rule, stated on authority, is that recorded review findings are annotated where they stand rather than rewritten, so none of these is a defect in the sections that carry them; the defect is that quotes' pending `facts-state-the-count` alternative asks the node's facts to state a count, and the count it names is already stale.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/recording.
+
+Proposed: No node's text is wrong and nothing moves. What is owed is that a count the author is asked to ratify be measured at the ruling rather than fixed in prose: quotes' facts state the bar as measured when the author rules, and the review skill's own briefs carry the counts, so the number the author sees is derived. Recording's counter-argument makes the general form of this point — most of what the review checks is mechanical — and frontier-consistency's validations 3, 5 and 11 are the natural home for the checks that would keep these numbers true.

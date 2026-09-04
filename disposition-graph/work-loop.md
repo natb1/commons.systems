@@ -1,6 +1,6 @@
 ---
 question: How does work happen?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
@@ -8,10 +8,10 @@ recommendation:
   amends: "76ee45c91d469c6861239859fa0b66083a0b3dd1"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
-  verdict: kickback
+  verdict: forward
   strength: strong
   date: 2026-09-03
-  of: 2ab46e3e5ed431e37cc78268623ead05324369ad
+  of: 76ee45c91d469c6861239859fa0b66083a0b3dd1
 alternatives:
   - name: split-the-shim
     source: review
@@ -171,3 +171,39 @@ The census unit's note: The node has an answer and no draft, so it adopts standi
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `say-instrument-not-criterion` absorbs `criterion-to-instrument`. The merge unit's note: `say-instrument-not-criterion` was kept over `criterion-to-instrument` because the same alternative is carried under that name on scope, transience and purpose.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Verified applied since the kickback: the Answer now reads 'a reconciliation session writes the implementation ref and never the graph' and 'a divergence that needs the author is reported by the session that found it ... and stays on the frontier, derived and never stored, until the alignment dialogue records it', which is what the author's words on this node require. Delegation's answer carries the matching citation. The contradiction the kickback named is closed on both sides.
+- Answer, second direction: 'any materialized artifact with no supporting disposition ... is itself a frontier item.' Verified still underived: `renderFrontier` in packages/disposition/project.mjs reads only the graph and emits stamps, stages, instruments, shims and the order field; no projection walks the implementation ref. The rationale now discloses this, which is the right disclosure, while the answer still gives the two directions equal weight in its first sentence.
+- Frontmatter shim: the liquidation condition now runs to three long clauses covering all batched validation, four bootstrap exit conditions, the second direction and the legacy drain. Transience forbids 'a node that records a unit of work, a plan, a task, or a step list, whatever it is called' and exempts a shim's liquidation condition; this is the text testing the exemption, and nothing derives which clauses are met — transience's own instrument note says the flagging of a met condition is not materialized. The `split-the-shim` alternative is the vehicle and the session declined to decide it twice.
+- Answer, last sentence: 'Whether reconciliation keeps state of its own between invocations ... is open; the recommendation is that such state lives on the implementation ref as committed files a disposition justifies.' An answer that names its own open question is honest, but it means a confirmation ratifies a rule and an open question together; the `no-persisted-state` alternative is the negative and the author should be told the confirmation covers both.
+- Answer: 'each a reconciliation of the criteria the node carries' — 'criterion' is defined by no node's `defines`; see the merge finding on the four nodes carrying the same alternative.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, moderate) states one class and one value and the pin is current, and the review's own pin is stale, which the frontier flags — correctly, since the answer changed after the kickback. Boldness is nearer high than moderate: the two-direction model, the bite, the coverage ranking and the sessions-divide-by-ref rule are the AI's, and only the transition operations are quoted from the author. Persistence standing with one declared shim follows from the node's shape, but the prose Facts line omits the shim, which growth's presentation rule requires.
+
+Strongest counter-argument (strong): The second direction — every unsupported artifact is a frontier item, supported by a new disposition or pruned — decides the fate of the entire incumbent repository at the swap, and it exists only as prose that nothing derives. The session's answer, that materialization's shim holds the swap until the coverage ruling, is verified in the shim text and does close the deletion risk. What it does not close is the shim itself: an eleven-clause liquidation condition on the node that governs how all work happens, with no projection reading any clause, is the largest unguarded surface in the record, and the node's own review instrument is batched to the exit that the shim's condition gates.
+
+The session's reply: Forward accepted. The second direction stays underived and the answer discloses it; the shim's long liquidation condition is accepted as the case that tests transience's exemption, for the author.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).

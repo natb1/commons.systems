@@ -1,12 +1,17 @@
 ---
 question: How is the unanswered frontier kept consistent with itself?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
   boldness: moderate
   amends: "a870b3a1ce42036ac4ddc5422ca46bb8176838f0"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+review:
+  verdict: forward
+  strength: moderate
+  date: 2026-09-03
+  of: a870b3a1ce42036ac4ddc5422ca46bb8176838f0
 alternatives:
   - name: new-question-or-new-answer
     source: author
@@ -133,3 +138,21 @@ The census unit's note: Two alternatives: the author's own added validation, whi
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: . The merge unit's note: No change proposed. new-question-or-new-answer is only PARTLY carried and stays: the answer now lists fifteen validations, and validation 15 carries the author's words verbatim, so the first half of the alternative is met, but the answer names only the review as running the analysis; the author's words say 'One of the analyses performed by periagoge and adversarial alignment review', and the answer's periagogic sentence covers a draft's inconsistency with the answered graph, not this analysis. The entry's own text is now stale on two facts, that the answer 'lists fourteen validations and no such analysis' and that 'the stage returned to maieutic'; the node stands at the review stage. If the main thread wants it rewritten rather than kept as-is, the remaining alternative is the answer with the analysis named as belonging to the periagogic stage as well as to the review.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- The node carries `stage: review` and no `review:` field: this is its first reading, and it is the node that defines what this reading does. The circularity is live and the author should see it — the fifteen validations this review ran are themselves unratified and were read by the reader they govern, under a skill materialized from them by a bootstrap grant.
+- Answer, validation 3: 'its persistence follows from the node's shape'. Verified that persistence is nowhere stored or derived: dialogue makes it derived and never stored, no projection emits it, and the prose Facts lines state it by convention only. The validation asks the reviewer to check a fact no projection carries, which is why every facts check in this batch states it from the node's shape by hand.
+- Answer, validation 14: verified amended to admit 'a quotation may be carried on a child as the ground of the part it answers', which resolves three of the four duplicate-quotation cases the earlier finding raised. The fourth, the author's form question on knowledge-store, capture and purpose, is a genuine double answer and is pending as `cite-forms` on all three.
+- Answer, validation 15 and the periagogic sentence: the author's words say 'One of the analyses performed by periagoge and adversarial alignment review is whether disposition is a new question or a new answer', and the answer names only the review as running it — its periagogic sentence covers a draft's inconsistency with the answered graph, not this analysis. The `new-question-or-new-answer` alternative is the vehicle and its own text is stale on two facts, which its merge note records.
+- Answer, last paragraph: 'One review runs at a time over the frontier: an invocation waits for any review already running, by the invoking session's discipline until a lock is materialized.' Verified a lock is now written by the skill (tmp/review/frontier.lock, present for this run), so this sentence and clean-context-review's identical one are both stale in the same direction. The `cite-run-mechanics` alternative would remove the duplication that let both go stale together.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, moderate) states one class and one value and the pin is current, and the split it names — the requirement is the author's, the list is the AI's — is honest. It should add that the list is already materialized in the review skill under the bootstrap grant, so the author is ratifying a practice in force, and that this reading was produced under it. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (moderate): Fifteen validations over sixty-eight nodes in one context is an unbounded reading, and the node sets no floor on what a finding must be worth. The author's requirement was that inconsistency within the frontier be surfaced, which validations seven to fifteen do; one to six duplicate what recording already requires of every draft review, so every invocation pays twice for the per-node pass and the cost grows with the frontier rather than with what changed. The session's answer, that the author ruled every invocation a batch, is right about the survey and does not answer the duplication, which the pending `split-survey-from-per-draft` alternative addresses.
+
+The session's reply: Forward accepted. The circularity is real and disclosed here; the lock sentence is stale as clean-context-review's is; validation 3's persistence and the periagogic half of validation 15 stay as pending alternatives.

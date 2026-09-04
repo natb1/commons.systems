@@ -1,12 +1,17 @@
 ---
 question: Which forms may an answer take?
-stage: review
+stage: ruling
 recommendation:
   adopts: rule-beside-disposition
   class: ratified
   boldness: moderate
   amends: "2443bdd51f8aad4c8b45db6d5276e12aceebd5e5"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+review:
+  verdict: forward
+  strength: moderate
+  date: 2026-09-03
+  of: 8acb547a2b064c400bc3d86e9d32ff7ca2ad97fa
 alternatives:
   - name: rule-beside-disposition
     source: ai
@@ -138,3 +143,33 @@ The census unit's note: No Answer and no Draft; the recommendation attaches to t
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `authors-form-questions` absorbs `assumption-as-form-question`. The merge unit's note: assumption-as-form-question also restated the coverage finding's proposal that capture, knowledge-store and purpose cite forms, which is an alternative on those three nodes and not a change to forms, and it restated forms' second review's ask that the assumption half be minted under this node, which mint-assumption-question already carries and which stays separate. assumption-is-instrumentation is a different candidate answer (assumption is instrumentation, not a form) and stays.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Verified fixed since the last review: the Options block marks option 2 '(recommended)' and option 1 'withdrawn after the review below', and the frontmatter recommendation adopts `rule-beside-disposition`, so the data and the prose agree. The same hazard is unresolved on rejected.
+- Recommendation fence, Answer, last sentence: 'Whether assumption is a form at all is not settled here; it stands as its own question under this node.' Verified no such node exists: the graph carries no child of forms asking it, and the question lives instead as the author's words carried verbatim on knowledge-store, capture and purpose. The fence asserts a node the record does not have. Suggested edit: mint it in the same landing, which is what `mint-assumption-question` proposes, or say the question is open and unminted.
+- The node carries no '## Disposition' section — verified — although three of the author's five quotations on `node` are the ground of this whole sitting, including the assumption question. The `authors-form-questions` alternative would move them here; until then the node that rules on the forms carries none of the author's words on them.
+- Recommendation fence, Rationale: 'Rejected: four forms with target and rule merged as disposition and assumption made a criterion kind, because the distinction it removes has no carrier and the migration touches twenty-two nodes and the validator.' Verified the migration count is right in kind: FORMS in read.mjs is target, rule, assumption, arche, reading, and 'disposition' is not accepted, so option 1 was a validator change. Nothing migrates under the recommended option, which is the strongest fact in its favour and is now in the fence.
+- Node's recommended text still states the withdrawn four-form merge, and node stands at the maieutic stage with `five-forms-restored` pending. The two nodes recommend opposite answers to one question and only node's side is flagged; forms is the survivor and its fence does not say so.
+
+On the three facts: The frontmatter recommendation (adopts rule-beside-disposition, ratified, moderate) states one class and one value, matches the option now marked recommended, and the pin is current. Ratified is right, since this is the author's own question; the fence carries no quoted ruling and the node no '## Disposition', so the stamp waits on the quotes ruling like the rest. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (moderate): Option 3, keeping all five forms, deserves the line the node does not give it. The author asked three questions — whether target is synonymous with disposition, what rule adds, and whether assumption is a form at all — and the recommended option answers only the second. Assumption as a form is still doing work: knowledge-store and capture carry `form: assumption` today and both recommended texts keep it, while instruments' recommended text calls assumption a criterion kind, so the record after this ruling holds assumption as a form and as a criterion kind at once. The question the author actually asked is settled by neither surviving option.
+
+The session's reply: Forward accepted, and the finding on the missing child taken: the node assumption-form is minted under forms at this landing, at the periagogic stage, carrying the author's words of 2026-09-02 that knowledge-store, capture, and purpose carry, so the fence's sentence is true. The authors-form-questions alternative stays open.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Authority holds that 'a ratified stamp whose ruling is not in the record is invalid', and quotes rules on what that requires. Measured against the graph as it now stands: eleven recommendation fences in this batch carry `class: ratified`, and eight of them quote no ruling of any date anywhere in the fence — purpose, hexis, namespaces, projection, traditions-home, forms, second-stop and purpose-criteria — while three do: rationale-edge, quotes and rejected. Separately, twenty-three of the sixty-eight nodes carry no '## Disposition' section at all (`validate.mjs` reports 'ok: 68 nodes'; the count of nodes with no such section is 23), among them evaluation, persistence, legacy, validation-order, review, recording, forms, traditions-home, purpose-criteria, second-stop and all three public nodes. Quotes' own recommended answer unbars them in one clause — 'the ruling a stamp requires is the one the author gives at that sitting, quoted then; words the author said earlier are the ground a draft rests on and bar no stamp' — so the whole question of whether eight fences and twenty-three nodes can carry a ratified stamp turns on a node that is itself unruled and in this batch. The counts recorded on the batch's own findings are stale against the graph: 'twenty-two of the sixty-two nodes' was measured when the graph held 62.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/namespaces, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/second-stop, commons.systems/disposition-graph/purpose-criteria.
+
+Proposed: Quotes is the survivor and is ruled first among the nodes of this batch, after the periagogic sitting on public/agency that every one of them descends from. Nothing in the eight fences need change before that ruling, because quotes' recommended answer sanctions them; what must not happen is that any of the eight is recorded with a ratified stamp before quotes is ruled, since under the losing option each such stamp is invalid on landing. Quotes' own facts should state the measured size of the bar at the moment of ruling rather than a count fixed in prose, since the count has already moved once.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `fence-carries-the-ruling` (source review, 2026-09-03).

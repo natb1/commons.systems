@@ -1,6 +1,6 @@
 ---
 question: How is the record read?
-stage: review
+stage: ruling
 recommendation:
   adopts: draft
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: d83b91ee4a1a885cca639b03a3227acecda335bd
+  of: 64c03a8de00a6cd31d538eeb97f5f35ec612f9ea
 alternatives:
   - name: draft
     source: ai
@@ -278,3 +278,43 @@ The census unit's note: The node carries both an answer and a draft, so the reco
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `narrowing-disclosed` absorbs `narrowing-clause`, `say-the-browser-rule-was-narrowed`; `name-what-it-does-not-settle` absorbs `disclose-unsettled-children`. The merge unit's note: hold-for-self-documentation is the other branch of the same finding (do not rule projection at all until self-documentation is answered) and is a different change, so it stays; absorb-self-documentation's own proposal is that projection be the survivor of the self-documentation question, which is a third change, so it stays too, though its text restates the same disjunction.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Recommendation fence, Answer: 'each page showing the question, the answer, the criteria or the word unguarded'. Verified unmaterialized: neither 'unguarded' nor 'criteria' occurs anywhere in packages/disposition/browser-template.html (grep -c returns 0 for both). The browser shim's liquidation condition names the browser's publication and its recording as a node, not these page promises, so nothing on the frontier will surface the gap. Suggested edit: name the two promises in the shim's liquidation condition.
+- Recommendation fence, Answer: 'an authority section projected from the stamp, the ruling behind it, the alternatives the rationale rejected, and, for a deferred node, what is pending for the author'. Partly materialized: browser-template.html carries `authorityHtml` and renders an authority fact from the stamp, so the previous review's claim that 'there is no authority section' is now stale; what is not rendered is the ruling behind it and what is pending. The account should distinguish the half that exists from the half that does not.
+- Recommendation fence, Answer: 'the nodes it cites and the nodes that cite it'. Verified: 'cites' is a schema key and the browser has a cites section, but no node in the graph carries a `cites` field (`grep -rl '^cites:' disposition/` returns nothing), so the projection is empty on every page. The session ruled this is not owed work but an edge that fills as nodes cite; the author should be told it renders nothing today.
+- Verified applied since the last review: the clause linking 'every field name and value on a page' is struck, the amended un-aligned sentence is in the fence ('It shows no un-aligned disposition, a node with no answer ... lists every unanswered node, of both kinds'), and no file ends in a bare 'null' (`grep -rn '^null$' disposition/` returns nothing on all 68 nodes). The coverage finding of 2026-09-03 on the four bare nulls is discharged.
+- The fence carries no '## Disposition' and quotes no ruling, while the node as it stands carries seven dated author quotations including the two the answer rests on (the address rule and the browser-states-nothing rule). Same pattern as purpose; see the placement finding on quotes.
+
+On the three facts: The frontmatter recommendation (adopts draft, ratified, moderate) states one class and one value and the pin is current. The prose Facts line predates the amendment and still omits the browser shim with its liquidation condition, which growth's presentation rule requires and which three reviews have now asked for. Persistence standing with one declared shim follows from the node's shape, but the shim's condition does not cover the three page promises the fence makes.
+
+Strongest counter-argument (moderate): The amendment narrows the author's literal instruction while appearing to record it: the author said unanswered nodes are hidden from the browser and listed by the alignment page, and the record now hides only the nodes with no '## Answer' and shows the rest as drafts. The session's defence is sound and the stage is genuinely rendered, so the reversal is disclosed and mitigated — but the answer still states the narrowed rule as though it were the author's, and the clause that would say plainly 'this narrows what you said' exists only as the pending `narrowing-disclosed` alternative. The author is being asked to confirm a change to their own ruling that the text presents as a restatement of it.
+
+The session's reply: Forward accepted. The unmaterialized page promises, the empty cites projection, and the missing quotation section are recorded here as findings for the author; the narrowing is disclosed in the fence and the alternative narrowing-disclosed stays open.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Authority holds that 'a ratified stamp whose ruling is not in the record is invalid', and quotes rules on what that requires. Measured against the graph as it now stands: eleven recommendation fences in this batch carry `class: ratified`, and eight of them quote no ruling of any date anywhere in the fence — purpose, hexis, namespaces, projection, traditions-home, forms, second-stop and purpose-criteria — while three do: rationale-edge, quotes and rejected. Separately, twenty-three of the sixty-eight nodes carry no '## Disposition' section at all (`validate.mjs` reports 'ok: 68 nodes'; the count of nodes with no such section is 23), among them evaluation, persistence, legacy, validation-order, review, recording, forms, traditions-home, purpose-criteria, second-stop and all three public nodes. Quotes' own recommended answer unbars them in one clause — 'the ruling a stamp requires is the one the author gives at that sitting, quoted then; words the author said earlier are the ground a draft rests on and bar no stamp' — so the whole question of whether eight fences and twenty-three nodes can carry a ratified stamp turns on a node that is itself unruled and in this batch. The counts recorded on the batch's own findings are stale against the graph: 'twenty-two of the sixty-two nodes' was measured when the graph held 62.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/namespaces, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/forms, commons.systems/disposition-graph/second-stop, commons.systems/disposition-graph/purpose-criteria.
+
+Proposed: Quotes is the survivor and is ruled first among the nodes of this batch, after the periagogic sitting on public/agency that every one of them descends from. Nothing in the eight fences need change before that ruling, because quotes' recommended answer sanctions them; what must not happen is that any of the eight is recorded with a ratified stamp before quotes is ruled, since under the losing option each such stamp is invalid on landing. Quotes' own facts should state the measured size of the bar at the moment of ruling rather than a count fixed in prose, since the count has already moved once.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `fence-carries-the-ruling` (source review, 2026-09-03).
+
+### Frontier finding, 2026-09-03
+
+Kind: cross-reference.
+
+Counts and implementation claims recorded across the batch's review sections have moved under them, and several are cited by pending alternatives as though current. Verified against the graph as it stands: `node packages/disposition/validate.mjs disposition` returns 'ok: 68 nodes', not the 62 that eight recorded findings assume; twenty-three nodes carry no '## Disposition' section, not twenty-two; the `defines` fields hold 117 entries, not the 88 the vocabulary findings cite; no node file ends in a bare 'null' (`grep -rn '^null$' disposition/` returns nothing), so the coverage finding of 2026-09-03 on the four bare nulls is discharged; `apply.mjs` and `brief.mjs` exist and are tracked, so the align-review shim's artifact claims hold; and browser-template.html carries an `authorityHtml` function rendering an authority block, so the earlier claim that 'there is no authority section' is stale, while 'unguarded' and 'criteria' still do not occur in it at all. The record's own rule, stated on authority, is that recorded review findings are annotated where they stand rather than rewritten, so none of these is a defect in the sections that carry them; the defect is that quotes' pending `facts-state-the-count` alternative asks the node's facts to state a count, and the count it names is already stale.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/dialogue.
+
+Proposed: No node's text is wrong and nothing moves. What is owed is that a count the author is asked to ratify be measured at the ruling rather than fixed in prose: quotes' facts state the bar as measured when the author rules, and the review skill's own briefs carry the counts, so the number the author sees is derived. Recording's counter-argument makes the general form of this point — most of what the review checks is mechanical — and frontier-consistency's validations 3, 5 and 11 are the natural home for the checks that would keep these numbers true.

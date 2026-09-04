@@ -1,6 +1,6 @@
 ---
 question: How is work divided between the main thread and subagents?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-03
-  of: dff21f8b083ff3f52e86630fc8a85e8a421d901e
+  of: f502a72fb724801305671c884e3c090573471853
 form: rule
 authority:
   class: deferred
@@ -104,3 +104,20 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 Merge analysis of the author's words: 2026-09-03, own-question: Debugging activities are prime candidates for subagents, since driving a browser at max effort is expensive and debugging context is verbose and pollutes the main thread; this should affect both the alignment and the bootstrap or reconciliation shims.
 The census unit's note: Nothing is pending. Both reviews forwarded with a weak counter-argument, that the rule generalises past the author's words and needs a floor on what counts as a unit, and the session met it with the lookup exemption now in the standing text. The contradiction finding proposing that work-loop strike its graph-writing clause and that delegation cite the author's ruling is verified applied on both sides: work-loop's answer now says a reconciliation session never writes the graph, and delegation's last sentence carries the citation. The reviews' remaining asks are that boldness read moderate for the unit contract and that tier's placement be settled; the first changes a recommendation fact, the second is a question with no candidate answer.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Verified applied since the last review: the answer carries the lookup exemption ('a lookup needs only its question and its answer, and anything larger is a unit') and the closing citation ('it never writes the graph, which is alignment's alone, as the author ruled on 2026-09-03 on the work-loop node'). Work-loop's answer carries the matching clause, so the contradiction is closed on both sides and this node's `alternatives` list is correctly empty.
+- Rationale cites 'The author's rulings of 2026-09-02, that implementation is delegated by unit, model, and effort' and quotes nothing of that date; only the 2026-09-03 ruling is quoted. Half the ground of a node recommending ratification is paraphrase.
+- Frontmatter `tier: global` with `under: growth`, while the answer says the rule binds reconciliation sessions, which sit under work-loop. Verified the node is one of the five global-tier nodes and is projected into .claude/rules/, so it does bind everywhere today. Tier stands at the maieutic stage after a kickback with its recommendation withdrawn, and one of its pending alternatives would prune the flag, under which nothing would carry this rule to a reconciliation session.
+- The node has no pending alternatives, so nothing on it carries the two reviews' repeated ask that boldness read moderate for the unit contract, the model tiers and the subagent prohibitions, which are the AI's rather than the author's.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, low) states one class and one value and the pin is current. Low is right for the verbose-investigation clause, which is the author's own and is quoted with its date, but it is wrong for the unit contract, the three model tiers and the four subagent prohibitions, which are the AI's; moderate is the honest value and two reviews have now asked for it. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (weak): The answer generalises well past the author's words: the author named debugging and browser-driving as prime candidates and gave a cost reason, and the answer turns that into a rule that everything but the interview and the record is a contracted unit with inputs, outputs, files and error behaviour. The contract, the report and the main thread's read of the conclusion are a fixed cost per unit, so the lookup exemption is the right floor and it is the only one — 'anything larger is a unit' still catches every three-line investigation. The node's own rejected alternative argues only that some small-looking questions are large, not that all are.
+
+The session's reply: Forward accepted. The paraphrased 2026-09-02 rulings and the boldness of the unit contract are accepted as findings for the author.

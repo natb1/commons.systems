@@ -1,6 +1,6 @@
 ---
 question: What does this repository cover, and in what order?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 708da26c3b97b18e98255c7e6b1cc499049aa303
+  of: 261ffa74ad0d8e02d42c421649e8996036cace9c
 alternatives:
   - name: derived-boosts
     source: ai
@@ -163,3 +163,38 @@ The recommendation adopts `standing` and is pinned to the standing text as it wa
 Merge analysis of the author's words: 2026-09-03, own-question: This node carries the rationale for high-level ranking, sits just after purpose as the scope section and the table of contents, records the order purpose, then scope and self-documentation as equals, then alignment, harness context management, reconciliation and rsi, and materializes high-level rank so it cannot drift.
 Moved to other nodes as alternatives: `define-criterion` on commons.systems/disposition-graph/instruments; `fold-into-coverage` on commons.systems/disposition-graph/audience; `cite-forms-for-the-form-question` on commons.systems/disposition-graph/purpose; `cite-forms-for-the-form-question` on commons.systems/disposition-graph/knowledge-store; `cite-forms-for-the-form-question` on commons.systems/disposition-graph/capture.
 The census unit's note: The two alternatives are the mechanism options the Proposal explicitly puts to the author against the recommended validator rule; I judged them pending rather than rejected because the Proposal says the ruling covers the mechanism, even though the rationale lists them under considered-and-not-recommended. I dropped the other two options there: sibling order is closed by attention's doctrine against the tree carrying priority, and leaving the boosts alone is the drift the disposition exists to stop. The counter-argument about a seventh section is an observation and is excluded. Five elsewhere entries come from this node's two frontier findings; the validation-14 half of the coverage finding is already applied on frontier-consistency and is not repeated.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Answer, item 2: 'self documentation (via the graph browser)' is mapped to `commons.systems/disposition-graph/projection`, and the `order` field materializes that substitution into a validator rule. Verified that self-documentation stands at the maieutic stage with `section-of-its-own` (source author) pending against `fold-into-projection` (prune); if the author takes the first, scope's `order` field must be rewritten before the graph can land. The `order-names-self-documentation` alternative is the vehicle and the answer still says nothing.
+- Answer, last paragraph: 'High-level rank is materialized from this node ... a boost that contradicts it is invalid.' Verified true today: `node packages/disposition/validate.mjs disposition` returns 'ok: 68 nodes', and the frontier prints the order line 'scope = projection > growth > session-context > work-loop > rsi'. This is one of the few instrument claims in the batch that holds, and the account should say so, since the ruling changes what can land rather than describing an intention.
+- Account, 'Traditions consulted for the mechanism and owed as readings under the stub-traditions ruling: the single-source principle of software engineering, and the lint tradition of checking invariants that span records.' A prose tradition list, which readings' recommended text forbids; stub-traditions' enumeration still does not name scope (its `regenerate-enumeration` alternative is the vehicle).
+- Answer: 'each a reconciliation of the criteria the node carries' uses 'criterion', which no node's `defines` carries and which the schema has no key for. Verified: FRONTMATTER_KEYS holds 'instrument' and not 'criteria'. The `say-instrument-not-criterion` alternative is pending here and on three other nodes for the same reason — see the merge finding.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, moderate) states one class and one value and the pin is current. Ratified matches an order given in the author's own words; moderate is right for the section texts and the validator mechanism, which are the AI's. The prose Facts line still says 'authority deferred', which names the stamp rather than the recommendation and reads as a second class beside it.
+
+Strongest counter-argument (moderate): The node fixes the shape of the record before the record knows what it contains: its own answer says 'What it leaves out is open', coverage names four recorded functions outside the purpose as worded, and the order field is now enforced by the validator, so a seventh section would reset every boost the list names. The session's answer — that a seventh section is a new word from the author, recorded then — is honest, but the cost is asymmetric: the order is data the validator refuses to contradict, so the author's next new section is a landing that fails until scope is re-answered.
+
+The session's reply: Forward accepted. The order field's dependence on self-documentation stands as an alternative there; the rank claim is verified to hold and the account now says so by this reply; the prose tradition list and the word criterion are carried by the merge finding's survivors.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).

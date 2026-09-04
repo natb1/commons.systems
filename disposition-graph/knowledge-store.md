@@ -1,6 +1,6 @@
 ---
 question: Does the same record serve as a knowledge store?
-stage: review
+stage: ruling
 recommendation:
   adopts: criterion-draft
   class: ratified
@@ -9,9 +9,9 @@ recommendation:
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
-  strength: weak
+  strength: moderate
   date: 2026-09-03
-  of: f0f2a3f638d234a077592bac4a7bdf10c43fd039
+  of: 63f8868521dce9a63a56f93322b410a250560618
 alternatives:
   - name: criterion-draft
     source: ai
@@ -166,3 +166,21 @@ The census unit's note: The node carries a draft, which the recommendation adopt
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `cite-forms` absorbs `cite-forms-not-the-quote`, `cite-forms-for-the-form-question`. The merge unit's note: keep-the-hedge and unguarded-and-said-so change different sentences and stay separate; define-hexis is a defines change and stays.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Recommendation fence, frontmatter: it carries a `criteria:` block. Verified that 'criteria' is not in FRONTMATTER_KEYS (packages/disposition/read.mjs holds question, form, authority, under, tier, boost, cites, instrument, after, source, relation, defines, shims, stage, order, alternatives, recommendation, review, depends), so the recommended node could not land as written. Dialogue's answer sanctions a recommended text invalid under the doctrine of the day, but nothing on this node says which ruling the key waits on. Suggested edit: name instruments in the account as the ruling the fence presumes.
+- The fence presumes instruments' `criteria-draft`, which stands at the maieutic stage — two stages behind this node — and whose own pending alternative `assumption-stays-a-form` argues the opposite. Frontier-consistency's validation 13 requires a node not to rest on periagogic or maieutic ground 'without saying so'; this node says nothing.
+- Recommendation fence, Answer: it drops the hedge the standing answer carries, 'something like a projection of its author's hexis' becoming 'a projection of its author's hexis'. That is hexis' recommended wording, so the two nodes are coupled and the author must rule hexis first. The `keep-the-hedge` alternative is the vehicle; the account says the coupling, the answer does not.
+- The author's form question — 'Is this correctly encoded as form: assumption vs form: disposition with unvalidated instrumentation? Is assumption a form at all?' — is carried verbatim here, on capture and on purpose, and the node that answers it, forms, carries no '## Disposition' section at all. The `cite-forms` alternative is pending on all three; forms is where the words belong.
+- Recommendation fence, criterion note: 'fails if the record proves useful only while work is in flight, or its answers need a second store to be findable or trusted'. Instruments defines an assessment as a dated human judgment; this one has no date and no threshold, so it cannot fail. The `unguarded-and-said-so` alternative is the honest alternative and the session offered it.
+
+On the three facts: The frontmatter recommendation (adopts criterion-draft, ratified, low) states one class and one value and the pin is current. Low is defensible for the author's own hypothesis but understates the fence, which strengthens the claim by dropping the hedge and adds a criterion in a key the schema does not have; moderate is the honest value. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (moderate): The failure condition is not observable on any timescale a sitting can reach, so the criterion cannot fail and therefore cannot guard, which means the whole change from the standing answer buys nothing operational: an assumption whose failure sends the question back to the author is exactly what the node already is. Purpose-criteria, ruling on the parent, reached the opposite conclusion the same day and now recommends standing unguarded and saying so. The record would ratify an unguarded parent and a criterion-guarded child on the same reasoning, which is a difference the author is not shown.
+
+The session's reply: Forward accepted. The criteria block in the fence is sanctioned by dialogue's answer as a recommended text that presumes a ruling not yet given, and the dependence on instruments is now named by this reply; the hedge, the unguarded alternative, and cite-forms stay open for the author.

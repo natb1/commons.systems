@@ -1,12 +1,17 @@
 ---
 question: May an un-aligned disposition have children?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
   boldness: low
   amends: "2f12ff318a1a0fd5bc4c64e8b2584c88b2672a8c"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+review:
+  verdict: forward
+  strength: moderate
+  date: 2026-09-03
+  of: 2f12ff318a1a0fd5bc4c64e8b2584c88b2672a8c
 form: rule
 authority:
   class: deferred
@@ -63,7 +68,9 @@ The periagogic object is `transience`'s answer and rationale, `node`'s answer, t
 
 `lockfile` was recorded unanswered on the author's direction, and the npm reading owed to it could not be placed under it. The reading went under `materialization` instead, which is defensible on its own terms and is recorded there. Had the rule not bound, the reading would have sat under the question it bears on. This is one instance and is evidence, not an argument: the cost it shows is that a reading owed to an open question must be parked on the question's parent until the question is answered.
 
-### Facts
+### Facts, superseded
+
+Superseded by the section "Answered on the author's ruling, 2026-09-03" below and by the frontmatter, which carry a deferred stamp, a standing answer, and a recommendation; kept as the dialogue's history, as the review of 2026-09-03 found it stale.
 
 Authority none: an un-aligned disposition in the author's words, recorded at their direction and carrying no answer. Boldness low: the rule, its two statements, its instrument, and the legacy evidence are all in the record, and the finding that the rule does not reach the unanswered status generally is verified against the validator's own behaviour. Persistence open, until the author rules.
 
@@ -86,3 +93,30 @@ The recommendation adopts `standing` and is pinned to the standing text as it wa
 Merge analysis of the author's words: 2026-09-03, own-question: Why do un-aligned dispositions have no children: an unanswered disposition should be just a disposition plus alignment dialogue state, a class registered for the dialogue that carries no authority for reconciliation unless bootstrap authority is explicitly granted.
 Moved to other nodes as alternatives: `no-hard-fail-on-an-unratified-answer` on commons.systems/disposition-graph/instruments; `move-under-lockfile` on commons.systems/disposition-graph/npm-committed-lockfile.
 The census unit's note: The node has a standing answer, no draft and a recommendation of standing, and nothing pending on the answer itself: it was answered under the author's bootstrap authority the same day, and the clean-context review on it has not yet run, so no reviewer has proposed a different text. Its two consequences that were deliberately not taken are both changes to other nodes and went to elsewhere, on instruments and on the npm reading. I did not record an entry on node, whose restatement of the no-children rule was already struck in the same landing. One thing the session should see: the node's own Facts section still says 'Authority none' and 'The movement owed is periagogic and has not been run', which the later section and the frontmatter contradict, so the account is stale against its own recommendation.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Account, '### Facts': 'Authority none: an un-aligned disposition in the author's words, recorded at their direction and carrying no answer ... Persistence open, until the author rules', and, below it, 'The movement owed is periagogic and has not been run'. All three are false of the node as it now stands: the frontmatter carries a deferred stamp of 2026-09-03, a standing answer, `stage: review`, and a recommendation of ratified at low boldness. The alignment page renders the account, so the author is shown a node that says it is not ready for a ruling while the page puts it up for one. Suggested edit: strike or supersede the Facts section, which the later '### Answered on the author's ruling' section already contradicts.
+- Answer: 'unless the author grants bootstrap authority explicitly, as the author did on 2026-09-03 for this ruling and for the lockfile'. Verified that authority's bootstrap-authority shim is live and its liquidation is bootstrap exit, so the citation holds. But 'bootstrap authority' is defined only inside that shim's text and is in no node's `defines`, so the term the answer's one exception turns on is unlinked and undefined.
+- The node is the only node in the batch with no pending alternatives at all and no review of any kind: this is its first reading. Its answer strikes a rule that two other nodes stated and an instrument enforced, which is the largest single change in the batch made under a bootstrap grant rather than through the dialectic.
+- Account: 'One consequence is now due and is not taken here: `npm-committed-lockfile` was placed under `materialization` only because this rule blocked its proper parent.' Verified still under materialization, with `reparent-under-lockfile` pending on that node. The consequence is correctly deferred to the author and correctly recorded.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, low) states one class and one value and the pin is current, and low is defensible since the rule struck was an inference the author denies in quoted words. The node's prose Facts section states a different class ('Authority none') and a different persistence ('open'), so the node presents two contradictory accounts of its own three facts — the same defect the coverage finding records on sixteen other nodes, and the sharpest instance of it, since here the two accounts disagree about whether the node is ready to be ruled at all.
+
+Strongest counter-argument (moderate): The rule was struck under a bootstrap grant, without the periagogic movement the node's own account says is owed, on the strength of the author's words about what an unanswered disposition is — words that were about the unanswered status generally and not about this shape. The account itself concedes the AI 'treated a deferred answer as fixed, framed the author's challenge inside that frame, and parked a reading on the wrong parent'; the answer written from that concession removes a guard whose ground was a measured legacy failure, durable content stranded on a vanishing node. The author's model may well be right, but the record now has an answer and an instrument removed on an inference the periagogic movement was supposed to test.
+
+The session's reply: Forward accepted. The stale Facts section is marked superseded at this landing, an edit to the account and not to the answer, so the alternative the finding proposed is not recorded; the finding stands in the account.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Un-aligned-children's account carries a '### Facts' section stating 'Authority none: an un-aligned disposition in the author's words, recorded at their direction and carrying no answer', 'Persistence open, until the author rules', and, in the paragraph below it, 'The movement owed is periagogic and has not been run'. All three are contradicted by the node's own frontmatter, which carries `authority: class: deferred, by: claude, date: 2026-09-03`, a standing answer, `stage: review`, and `recommendation: adopts standing, class: ratified, boldness: low`. Because the alignment page renders the account beside the recommendation, the author is shown a node that says it carries no answer and owes a periagogic movement, on a page that puts it up for a ruling. This is the sharpest instance of the defect the coverage finding of 2026-09-03 records as the sixteen generic prose Facts lines: dialogue requires 'one class and one boldness value from the review stage on', and here the prose and the data disagree not about the class alone but about whether the node has an answer at all. The node carries no pending alternatives, so nothing on it records the finding.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/dialogue.
+
+Proposed: Dialogue is the survivor of the requirement and growth of the presentation rule; neither text need change for this node. Un-aligned-children's stale '### Facts' section is superseded by its own later '### Answered on the author's ruling, 2026-09-03' section and should be struck or marked superseded rather than left standing beside a contradicting frontmatter — the alternative below is the vehicle, since the review proposes and never edits. Growth's already-pending `facts-from-recommendation-field` alternative is what closes the class at its source, by saying the three facts are presented from the recommendation field and the node's shims and never from a prose line; taking it would make this and the sixteen other instances unrepresentable rather than fixed one by one.

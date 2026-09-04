@@ -1,12 +1,17 @@
 ---
 question: Who may change an answer?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
   boldness: moderate
   amends: "0a273ae3449272b35acc7d47e266cf3cb1b3c571"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+review:
+  verdict: forward
+  strength: moderate
+  date: 2026-09-03
+  of: 0a273ae3449272b35acc7d47e266cf3cb1b3c571
 alternatives:
   - name: bootstrap-authority-as-class
     source: ai
@@ -256,3 +261,31 @@ The census unit's note: Turned into alternatives: the draft the recommendation a
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `ceiling-moves-here` absorbs `ceiling-in-defines`, `defines-ceiling`; `draft` dropped, The entry describes 'the recommended text carried in the node's fenced draft', and the node now carries no `## Recommendation` fence: the recommendation adopts standing, so the redraft the entry says the node was standing at the maieutic stage for is the present answer, which carries the draft's distinguishing sentence 'A node without a stamp is unanswered, as the unanswered node says' and, in place of the draft's stale proposal-as-content sentence, the author's narrowing the entry itself records; `narrowed-proposal` dropped, Carried word for word by the answer's sentences 'A proposal is technical vocabulary and is not overloaded: a conflicting answer that arises outside alignment, from evidence, a signal, an instrument, a criterion, or a conflict identified in reconciliation' and 'A conflicting answer that arises in alignment is not a proposal; it is an alternative in the dialogue state, with its source, and is recorded as the dialogue node says.'; `pending-keeps-authority` dropped, Carried by the answer's sentence 'A standing answer of any class keeps its full authority while an alternative to it is pending, until the author confirms an alternative.'; `un-aligned-disposition-term` dropped, The alternative proposes the recommended text drop 'open question' for the defined terms; the answer no longer uses the phrase anywhere ('A node without a stamp is unanswered, as the unanswered node says'), and the node's own reply of 2026-09-03 records the finding as met, 'open question' giving way to unanswered and un-aligned disposition. The merge unit's note: Dropping `draft` is the one judgment call here: the answer does not restate the draft's proposal-as-content definition, it supersedes it with the author's narrowing, and the fenced text the entry names no longer exists. If the main thread wants the superseded definition kept visible to the author, keep `draft` and rewrite its text to say what it now differs on. bootstrap-authority-as-class and clause-level-ratification are distinct open questions and stay.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Verified applied since the kickback: the node carries no '## Recommendation' fence (the recommendation adopts standing), the liquidated LEDGER.md shim is gone, and the standing answer says 'A node without a stamp is unanswered, as the unanswered node says' rather than the withdrawn 'open question' sentence. Verified `grep -rn '^null$' disposition/` returns nothing, so the missing reply to the amendment review is written. The three defects that earned the kickback are closed.
+- Answer: 'a ratified stamp whose ruling is not in the record is invalid'. Verified this is a bar on much of the batch as it stands: twenty-three of the sixty-eight nodes carry no '## Disposition' section at all, and eight of the eleven recommendation fences carrying `class: ratified` quote no ruling. Quotes settles what the rule requires and is unruled; see the placement finding.
+- Frontmatter, bootstrap-authority shim: its liquidation is 'bootstrap exit, at the swap of the implementation ref with the main branch'. The shim is a standing permission exercised only when the author invokes it, which inverts evaluation's rule that 'a shim declared on the record is applied by default; a prompt is required only to bypass it'. The `bootstrap-authority-as-class` alternative here and `two-kinds-of-shim` on evaluation are the two halves of one undecided question, and neither node's answer records the tension.
+- Answer: 'A proposal ... opens the dialogue on that node at the periagogic stage, as the dialogue node says.' Verified consistent with dialogue's answer. The vocabulary is now narrowed to the author's sense throughout, and 'open question' no longer appears in this node — though it is still used in nineteen node files and defined by none.
+- The `clause-level-ratification` alternative asks a question this node owns and the record needs: the author ruled 'Ratified on the rule. Ratified on the shim' on growth, and a node has one stamp, so a ruling the author gave is recorded nowhere. Nothing in the answer says whether a clause can carry a stamp.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, moderate) states one class and one value and the pin is current. Moderate is right: the ratification rule and the narrowing of 'proposal' are the author's in quoted words, the attenuation argument and the scope rule are the AI's. Persistence standing with one declared shim follows from the node's shape, but the prose Facts line still names neither the shim nor its liquidation condition, which growth's presentation rule requires.
+
+Strongest counter-argument (moderate): Saying a deferred answer is unanswered puts the record's definition of authority at odds with how the record behaves: deferred answers act — every file under .claude/rules/ is deferred, every session works under them, the projector writes them, and this review was produced under them. The session's reply, that they act as shims act, by default until the author rules, is a good answer and it is in the account rather than the answer. What remains is that the node defining the stamp vocabulary describes the whole operating record as unanswered while every session runs on it, and gives no word for the force those answers plainly have.
+
+The session's reply: Forward accepted. The bar on unquoted ratified stamps is quotes' to settle, first in the ruling order; the bootstrap-authority shim and clause-level ratification stay as pending alternatives.
+
+### Frontier finding, 2026-09-03
+
+Kind: cross-reference.
+
+Counts and implementation claims recorded across the batch's review sections have moved under them, and several are cited by pending alternatives as though current. Verified against the graph as it stands: `node packages/disposition/validate.mjs disposition` returns 'ok: 68 nodes', not the 62 that eight recorded findings assume; twenty-three nodes carry no '## Disposition' section, not twenty-two; the `defines` fields hold 117 entries, not the 88 the vocabulary findings cite; no node file ends in a bare 'null' (`grep -rn '^null$' disposition/` returns nothing), so the coverage finding of 2026-09-03 on the four bare nulls is discharged; `apply.mjs` and `brief.mjs` exist and are tracked, so the align-review shim's artifact claims hold; and browser-template.html carries an `authorityHtml` function rendering an authority block, so the earlier claim that 'there is no authority section' is stale, while 'unguarded' and 'criteria' still do not occur in it at all. The record's own rule, stated on authority, is that recorded review findings are annotated where they stand rather than rewritten, so none of these is a defect in the sections that carry them; the defect is that quotes' pending `facts-state-the-count` alternative asks the node's facts to state a count, and the count it names is already stale.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/dialogue.
+
+Proposed: No node's text is wrong and nothing moves. What is owed is that a count the author is asked to ratify be measured at the ruling rather than fixed in prose: quotes' facts state the bar as measured when the author rules, and the review skill's own briefs carry the counts, so the number the author sees is derived. Recording's counter-argument makes the general form of this point — most of what the review checks is mechanical — and frontier-consistency's validations 3, 5 and 11 are the natural home for the checks that would keep these numbers true.

@@ -18,6 +18,12 @@ alternatives:
   - name: incomplete-enumeration-in-facts
     source: review
     ref: "2026-09-03"
+  - name: one-ruling-for-the-reading-class
+    source: review
+    ref: "2026-09-03"
+  - name: hold-for-traditions-home
+    source: review
+    ref: "2026-09-03"
 form: rule
 authority:
   class: deferred
@@ -60,6 +66,14 @@ The Draft distinguishes tradition from reading where the standing answer runs th
 ### incomplete-enumeration-in-facts
 
 The same finding proposes that readings' facts say the remedy's enumeration is incomplete, so the author knows the size of what ratifying the rule puts on the frontier; readings' draft rests its rule that a rationale never repeats its readings on that enumeration being the remedy. (Raised on commons.systems/disposition-graph/audience.)
+
+### one-ruling-for-the-reading-class
+
+Readings' answer says that the class rule it states governs every reading node without each carrying its own alternative for it. Verified that all four nodes still carrying a `delegated-not-ratified` alternative — software-factories, spec-driven-development, srs-introduction, web-routing — already recommend delegated, so those four entries stand for a change the record has made and would put a settled question in front of the author four times. On this alternative the four entries are struck as discharged and readings' answer says that a reading's class follows from whether the author has read the source, so no reading needs an alternative to say it; it is on the table because the record currently carries four pending rulings on a rule it has already applied.
+
+### hold-for-traditions-home
+
+Readings says on the node that its tradition-as-mount rule rests on traditions-home, which is unruled, and is not confirmed before it. Verified that readings stands at the ruling stage while traditions-home stands at review with two pending alternatives under which readings' sentence 'a tradition is a mount, one root node in a traditions graph until it has a graph of its own' would be false, and that the manifest carries no traditions graph for it to name. It is on the table because frontier-consistency requires a node not to rest silently on unruled ground and because the placement finding of 2026-09-03 proposed exactly this for readings and recorded an alternative on every other node it named but this one.
 
 ## Recommendation
 
@@ -188,3 +202,33 @@ The recommendation adopts `draft` and is pinned to the standing text as it was a
 Merge analysis of the author's words: 2026-09-02, own-question: Re-evaluate the naming and function of the reading form against tradition, with tradition as a mount of another project that could be its own graph, references to it supporting or diverging and carrying an authority class, and a recommendation for how many questions referencing one tradition are encoded. 2026-09-02, new-answer on commons.systems/disposition-graph/projection: References to tradition in the prose of the documentation projection should hyperlink to the tradition node, keeping the way target dispositions are hyperlinked. 2026-09-02, own-question: Do not replicate tradition references in the rationale section, and confirm the tradition section is projected from the references rather than duplicated in the node body; the first half is this node's rule and the second bears on projection.
 Moved to other nodes as alternatives: `hyperlink-traditions-in-prose` on commons.systems/disposition-graph/projection; `fold-into-node-and-prune` on commons.systems/disposition-graph/form-vocabulary.
 The census unit's note: At ruling with a Draft, so the recommendation adopts it and the draft is the only pending alternative; the counter-argument about multiplying files is the trade the rationale already records as rejected, so it was not minted. Two findings here are verified resolved and carried nowhere: the four reading nodes the coverage finding names all carry class delegated today, and the cross-reference finding's audience half is applied. What remains of that finding, the incomplete enumeration, is carried on stub-traditions instead. The author's hyperlink words ground projection's linking rule and sit on no other node, so they move there; the form-vocabulary fold is the redundancy this node's own finding proposes.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on this node: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Readings stands at the ruling stage while the node that creates what its recommended text presumes stands two stages behind it. Readings' recommended text says 'a tradition is a mount, one root node in a traditions graph until it has a graph of its own'; traditions-home, which rules whether that graph exists and in what form, is at the review stage in this batch with `graph-per-tradition` and `nodes-inside-disposition-graph` both pending — two options under which readings' sentence is wrong. Namespaces, also at review, presumes the same graph. Verified that disposition/disposition.yaml carries only `disposition-graph` and `public`, so the graph none of the three can do without does not exist, and the manifest entry that would create it is written on no node. Frontier-consistency's validation 13 requires that no node at the ruling stage rest on periagogic or maieutic ground 'without saying so'; readings rests on review-stage ground and says nothing, and unlike rationale-edge and namespaces it carries no alternative recording the dependency — the placement finding of 2026-09-03 named readings in its proposal and minted an alternative on every other node it named.
+
+Also named: commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/namespaces.
+
+Proposed: Traditions-home is the survivor of where a tradition node lives and is ruled before readings and namespaces, which the ruling order below does; the manifest entry it creates is shown on it, since that is what the ruling makes. Readings takes the alternative below, saying on the node that its tradition-as-mount sentence stands only if traditions-home's recommended option is taken — the gap the earlier finding left when it recorded its proposal on every named node but this one.
+
+Recorded as a pending alternative on this node: `hold-for-traditions-home` (source review, 2026-09-03).

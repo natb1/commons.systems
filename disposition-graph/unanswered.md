@@ -1,12 +1,17 @@
 ---
 question: When is a disposition answered?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
   boldness: moderate
   amends: "b5717e656b723368acf1ad6f3609c7ab85c6a1a3"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+review:
+  verdict: forward
+  strength: moderate
+  date: 2026-09-03
+  of: b5717e656b723368acf1ad6f3609c7ab85c6a1a3
 form: rule
 authority:
   class: deferred
@@ -144,3 +149,21 @@ The census unit's note: The node carries an answer and no draft, so the recommen
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `pending-alternative-keeps-stamp` dropped, Carried by the answer's sentence 'an answered node carries one while an alternative is pending on it, from the alignment dialogue or from a proposal outside it, keeping its stamp and its full authority, whatever its class, until an alternative is confirmed; the author's first suggestion, that such a node be marked unanswered until confirmed, was retracted by the author on 2026-09-03 as a hack, and the projections show the pending alternatives beside the answer instead', together with the page listing 'the alternatives pending with their sources'; `standing-keeps-authority` dropped, Carried by the same sentence: an answered node with an alternative pending keeps 'its stamp and its full authority, whatever its class, until an alternative is confirmed', which is the author's words that a pending alternative does not unanswer a node. The merge unit's note: Both entries drop, so the `alternatives` list becomes empty and the `## Alternatives` section must be removed with it: the validator requires the section present iff the list is non-empty. The node keeps its stage and its recommendation of `standing`.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Verified true, all four of the previous readings' open claims: `read.mjs` raises '<id> is unanswered and must carry stage', `deriveStatus` returns 'unanswered' and the frontier and browser print it, the page offers exactly the three responses the answer names, and `orderAlignmentItems` lists this project's graph in rank order before the public graph's. The node's 'Done the same day' account is now accurate where a previous reading found three of four claims false.
+- Answer, paragraph 2: 'an answered node carries one while an alternative is pending on it ... keeping its stamp and its full authority, whatever its class, until an alternative is confirmed'. This is the author's ruling in quoted words and it is untestable today, since no node is answered. It will become live at the first ratification, and nothing in the record says what happens to the twenty-six review-stale pins at that moment.
+- Answer, paragraph 3: 'A confirmation given on a node whose review has not run is held until the review runs and recorded when the review forwards it.' Verified live for this batch: thirty-seven nodes are at the review stage and this rule governs every one of them at the author's next sitting.
+- The node's `alternatives` list is empty and its '## Alternatives' section correctly absent — the two author-sourced entries were dropped at the re-encoding because the standing answer carries them word for word. Verified: the answer does carry both. This is the encoding working as dialogue's answer describes.
+- The node carries five dated author quotations under '## Disposition', including the retraction, so it is one of the better-grounded nodes in the batch for a ratified stamp.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, moderate) states one class and one value and the pin is current, and the split it names — the classification and the three responses the author's, the encoding and the meanings of the responses the AI's — is honest and among the best-formed in the batch. Every implementation claim in the node is verified true as of this reading. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (moderate): Reclassifying every deferred answer as unanswered loses nothing formally and changes what the record is while the record is in use: sixty-eight nodes now sit in one queue with no distinction between an answer written that morning from the author's quoted words and one written two days earlier from the AI's own knowledge, and the author must rule on all of them through a dialogue whose own rules are in the queue. The session's reply — that the stage says what each is owed where the deferred stamp did not — is a real gain and is now visible in the frontier and the page. What is unanswered is the volume: forty-three nodes stand at review or ruling in one sitting, and the record offers a ruling order only as a review's recommendation that nothing consumes.
+
+The session's reply: Forward accepted. The retraction and the authority-keeping rule are the author's in quoted words; what happens to review-stale pins at the first ratification is accepted as a finding for the author.

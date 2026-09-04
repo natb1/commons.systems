@@ -1,6 +1,6 @@
 ---
 question: How is a disposition confirmed and recorded?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 408e9e31c58b5503b0dd10b8bc608295223a91e6
+  of: 75336fcff7555274971f7db32a861b19c5651f4e
 alternatives:
   - name: move-the-quotations-into-a-disposition-section
     source: review
@@ -174,3 +174,49 @@ Alternatives pending, with their sources: `move-the-quotations-into-a-dispositio
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 Moved to other nodes as alternatives: `cite-unanswered-for-the-responses` on commons.systems/disposition-graph/growth; `define-sitting` on commons.systems/disposition-graph/growth; `facts-presented-from-the-recommendation-field` on commons.systems/disposition-graph/growth; `facts-state-the-count` on commons.systems/disposition-graph/quotes.
 The census unit's note: The node has a standing answer, no draft, and no Disposition section at all, so its dispositions list is empty even though its rationale quotes the author three times; that gap is itself the substance of two of its alternatives. Everything the two reviews raised about the answer's text was applied by the session before the snapshot, so the pending items are the placement finding's two branches and the reviewers' shared counter-argument, which I treated as an alternative because it proposes a different answer rather than an observation. The four findings that name other nodes went to growth, three times, and to quotes. I did not record the cross-reference finding on ceiling, whose proposed edit to this node's answer is already applied.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- The node carries no '## Disposition' section although its rationale quotes the author three times with dates — verified, it is one of the twenty-three. Because the alignment page renders the author's words only from that section, the author sees this node with an empty author-words panel and their own quoted rulings buried in the AI's account. The `move-the-quotations-into-a-disposition-section` alternative is the cheapest fix in the batch and has been accepted at two sittings without being made.
+- Verified applied since the last review: the final sentence reads 'none is stamped without the confirmation', the reviewer's world is 'the record as the clean-context-review node names it', the Disposition section is excepted from removal 'as the quotes ruling decides', and the second step classifies the three responses unanswered defines.
+- Answer, first step: 'the whole unanswered frontier among it, whose consistency with itself is the review's to check, as the frontier-consistency node describes.' The two nodes now cite each other for the reviewer's world and the validations, which is the right division; what neither says is which governs when they differ, and the `cite-reviewers-world` alternative would settle it by making clean-context-review the survivor.
+- Rationale carries a prose tradition list — the promotor fidei, blinded peer review, the four-eyes principle, Peirce on paper doubt — which readings' recommended text forbids and which stub-traditions' enumeration does not name this node among. See the merge finding.
+- Answer, second step: the classification of a confirmation with edits sends a substantive edit 'through the review again before the stamp is written'. Verified nothing enforces it: read.mjs computes `reviewStale` and the frontier prints it, but nothing returns a node from ruling to review, so the rule is a discipline the frontier can only report on after the fact.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, moderate) states one class and one value and the pin is current; moderate is right, since the three steps and the non-blocking per-node verdict are the AI's while the ordering and the kickback classification are the author's in quoted words. Ratified is better supported here than on most of the batch, since the rationale does quote three dated rulings — but they are in the rationale and not in a '## Disposition', which is what the alignment page reads. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (moderate): The review is mandatory before every confirmation and unbounded in cost, while what it guards is a draft the author is about to read anyway, and most of what it catches is mechanical: a ruling is quoted with its date or it is not, a shim's artifact exists or it does not, a cited command runs or it does not. This reading is the evidence — its highest-value findings are a shim naming a file absent from the checkout, a shim whose liquidation condition is met, an `at` pin in the wrong format, a `depends` field no node carries, and a Facts section contradicting its own frontmatter, every one of them checkable. The judgment findings are fewer and could be bought with a narrower reading over a smaller set.
+
+The session's reply: Forward accepted. The missing Disposition section, the reviewers'-world citation, and the unenforced re-review stay as pending alternatives and findings.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### Frontier finding, 2026-09-03
+
+Kind: cross-reference.
+
+Counts and implementation claims recorded across the batch's review sections have moved under them, and several are cited by pending alternatives as though current. Verified against the graph as it stands: `node packages/disposition/validate.mjs disposition` returns 'ok: 68 nodes', not the 62 that eight recorded findings assume; twenty-three nodes carry no '## Disposition' section, not twenty-two; the `defines` fields hold 117 entries, not the 88 the vocabulary findings cite; no node file ends in a bare 'null' (`grep -rn '^null$' disposition/` returns nothing), so the coverage finding of 2026-09-03 on the four bare nulls is discharged; `apply.mjs` and `brief.mjs` exist and are tracked, so the align-review shim's artifact claims hold; and browser-template.html carries an `authorityHtml` function rendering an authority block, so the earlier claim that 'there is no authority section' is stale, while 'unguarded' and 'criteria' still do not occur in it at all. The record's own rule, stated on authority, is that recorded review findings are annotated where they stand rather than rewritten, so none of these is a defect in the sections that carry them; the defect is that quotes' pending `facts-state-the-count` alternative asks the node's facts to state a count, and the count it names is already stale.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/dialogue.
+
+Proposed: No node's text is wrong and nothing moves. What is owed is that a count the author is asked to ratify be measured at the ruling rather than fixed in prose: quotes' facts state the bar as measured when the author rules, and the review skill's own briefs carry the counts, so the number the author sees is derived. Recording's counter-argument makes the general form of this point — most of what the review checks is mechanical — and frontier-consistency's validations 3, 5 and 11 are the natural home for the checks that would keep these numbers true.

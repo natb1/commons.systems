@@ -1,6 +1,6 @@
 ---
 question: In what order is a landing validated?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: f4e5708ce2c927aa04a7f7c8873d904702899cb7
+  of: 8cefe40587eca1be05c749fcf976173d4f6e7016
 alternatives:
   - name: deferred-until-ruling-quoted
     source: review
@@ -111,3 +111,38 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Alternatives pending, with their sources: `deferred-until-ruling-quoted` (review, 2026-09-03); `traditions-to-readings` (review, 2026-09-03); `smaller-contract-instead-of-ordering` (review, 2026-09-03).
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 The census unit's note: Validation-order has a standing answer, no recommended text and no Disposition section, so it adopts standing with an empty dispositions list. Three alternatives are pending: quoting the author's own ruling or deferring the stamp, moving the prose tradition list to readings, and the reviewer's rival answer that a smaller contract, not a class ordering, is the remedy, which the session answered on one point only. The finding that the six standing non-functional classes name a sanction that does not exist was answered by naming them as owed criteria and is not carried. The quotes proposal carried here is the same one I emit once from evaluation.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- The node carries no '## Disposition' — verified, one of the twenty-three — and its only quotation is from a legacy node, with the answer leaning on that node's ratification: 'ratified 2026-09-01 on the legacy node strategy-graph-native-dispatch, marked author-required there'. Legacy holds that the legacy record is evidence and never authority, and evaluation that no doctrine is implied by what exists. A ratified stamp here would rest on a ratification the record forbids from carrying authority. The `deferred-until-ruling-quoted` alternative is the honest branch.
+- Verified applied since the last review: the six standing non-functional classes are named as owed criteria rather than as a sanction that exists.
+- Answer: 'During bootstrap the non-functional assessment is owed once the disposition the landing materializes is ratified.' Nothing is ratified, so no non-functional assessment is owed for anything landed to date, and work-loop's shim batches all of it to exit. Verified against the frontier: no node carries a ratified stamp. The consequence appears nowhere the author would see it.
+- Rationale carries a four-item prose tradition list — 'make it work, make it right, make it fast', Ohno's seven wastes, ISO/IEC 25010, Deming — which readings' recommended text forbids. The `traditions-to-readings` alternative is pending here and on three other nodes for the same reason; see the merge finding.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, moderate) states one class and one value and the pin is current. Ratified cannot be supported as the node stands, its only quoted ruling being a legacy node's; moderate is right, since the ordering rule is close to the author's 2026-09-02 words (quoted on review, not here) while the class definitions and the six-item list are the AI's transcription. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (moderate): Functional-before-non-functional assumes the two classes are separable, and the node's own examples show they are not: type safety and test integrity are conditions of a functional assessment being meaningful rather than polish applied after it passes, and a security defect found after a landing costs more than the ordering saves. The evidence is one thrash of sixteen rounds, which the sibling review node explains by a growing diff rather than by class ordering, so the rule may be solving with a schedule what a smaller contract solves outright — and ISO/IEC 25010, adopted here for the class axis, separates the characteristics without ordering their assessment.
+
+The session's reply: Forward accepted. The legacy ratification is evidence and not the ruling a ratified stamp needs; that is quotes' to settle and is recorded as a finding here.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/review, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).

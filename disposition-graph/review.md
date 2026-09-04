@@ -1,6 +1,6 @@
 ---
 question: How is materialized implementation reviewed before it lands?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: 0bed315a5649966f5b5862b84365a8f7d81ba263
+  of: dab5283611f8c4500c3aaef7eb48e3a1338b922c
 alternatives:
   - name: cap-from-contract-class
     source: ai
@@ -129,3 +129,39 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Alternatives pending, with their sources: `cap-from-contract-class` (ai, 2026-09-03); `graph-landing-instrument` (ai, 2026-09-03); `shrink-the-contract` (review, 2026-09-03); `deferred-not-ratified` (review, 2026-09-03).
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 The census unit's note: The node has an answer and no draft, so it adopts standing. Its own account already holds two questions open for the author at ratification and a review asked that they be minted or turned into options, so I made both alternatives; that is exactly what the new encoding is for. The counter-argument the session answered but explicitly left for the author, shrinking the contract instead of capping the loop, is the third. The fourth comes from the placement finding, which offers this node a real choice of ruling rather than an observation. I excluded the settled edits, the instrument note that duplicates the shim, the graph-landing sentence already amended, and the shim's path on main. There is no Disposition section at all, so the merge analysis is empty, which is itself the ground of the fourth alternative; the placement finding names eight other nodes but is carried on each of them, so nothing goes elsewhere.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Frontmatter shim: the artifact is 'the detached code-review instrument on `main`, `.claude/skills/dispatch-propagate/scripts/dispatch-code-review`'. Verified it exists on that branch: `git cat-file -e main:.claude/skills/dispatch-propagate/scripts/dispatch-code-review` succeeds. The previous review's finding that the artifact is unverifiable from this ref is answered — the frontier still cannot read it, but the shim names something real, which is more than session-context's second shim does.
+- Frontmatter carries both an `instrument:` whose note says 'not yet materialized; the shim below stands in for it' and the shim itself. The author's ruling quoted on transience asks for no redundancy between shims and other records, and the note duplicates the shim's account. The session sent this to the sitting and the node still carries both.
+- Verified applied since the last review: the answer now reads 'A graph landing is reviewed by the interview that produced it and by the clean-context review, never by this instrument', which names the independent reader the previous finding asked for.
+- Answer: the operating numbers — 'at most twice per landing', 'a defect class repaired twice is cut rather than repaired a third time', 'high for code on a write path, one medium assessment for a diff of documents' — are transcribed from legacy measurements. Legacy holds that the legacy record is evidence and 'never authority', and evaluation that no doctrine is implied by what exists. The rationale frames them correctly as measurement; the answer states them as doctrine with no criterion that would re-measure them here.
+- Answer: 'During bootstrap, review is required once the disposition a landing materializes is ratified.' Nothing is ratified, so no review has been owed for anything landed to date, and work-loop's shim batches all of it to exit. The consequence is real and appears nowhere the author would see it.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, high) states one class and one value and the pin is current, and high is the right value: every number and gate in the answer is transcribed from the legacy record, which the author has not ruled on in this graph. Ratified cannot be supported as the node stands, since it carries no '## Disposition' and no quoted ruling. Persistence standing with one declared shim follows from the node's shape, but the prose Facts line omits the shim's liquidation condition.
+
+Strongest counter-argument (moderate): The whole answer is a defence against one measured pathology — review loops that never converge — and every mechanism in it trades correctness for termination. Stated as doctrine that means a landing with a real blocking defect at the cap 'parks the landing for the author, over which nothing lands', converting a review failure into a full stop of the work queue, and 'Review never settles on zero findings' makes a clean diff evidence of a bad review rather than of good code. The cheaper answer the node never adopts is to shrink the contract so a review can finish: its own evidence blames a diff that grew between rounds, which is a scope defect, and delegation already requires one deliverable per unit.
+
+The session's reply: Forward accepted. The shim's artifact is verified to exist on main; the redundancy of the instrument note with the shim and the transcription of legacy numbers stay as findings for the author.
+
+### Frontier finding, 2026-09-03
+
+Kind: merge.
+
+Four questions are each pending as the same alternative on four to six different nodes, so the author would rule one question up to six times. Verified from the frontier's alternatives lists: (i) `say-instrument-not-criterion` is pending on scope, work-loop, transience and purpose, and each entry says the same thing — that until instruments is ruled the answer says 'instrument', the term instruments actually defines, since 'criterion' is in no node's `defines` and 'criteria' is not in FRONTMATTER_KEYS; instruments owns the question and stands at the maieutic stage with `define-criterion` pending. (ii) `delegated-not-ratified` is pending on software-factories, spec-driven-development, srs-introduction and web-routing, each saying that a reading whose source the author has not read is delegated and not ratified; readings owns the rule and all four recommendations have in fact already been corrected to delegated, so four alternatives now stand for a change already made. (iii) `traditions-to-readings` is pending on materialization, validation-order, instruments and evaluation, each saying the node's prose tradition list goes to readings under the stub-traditions ruling; stub-traditions owns the enumeration and its own `regenerate-enumeration` alternative says the enumeration is incomplete and should be derived rather than maintained by hand. (iv) The same ruling appears as `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, and `deferred-not-ratified` on review and persistence — six nodes, three names, one question: whether a node recommending ratification with no ruling quoted in it should drop to deferred instead; quotes owns that question. Under validation 15 each of these is a new answer to a question the record already asks, standing as its own alternative on a node that does not own the question.
+
+Also named: commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/scope, commons.systems/disposition-graph/work-loop, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/software-factories, commons.systems/disposition-graph/spec-driven-development, commons.systems/disposition-graph/srs-introduction, commons.systems/disposition-graph/web-routing, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/recording.
+
+Proposed: Instruments is the survivor of the criterion vocabulary, readings of a reading's class, stub-traditions of the prose tradition lists, and quotes of what an unquoted ratified stamp becomes. Each survivor takes one alternative saying that its ruling settles the question for every node that carries the per-node entry, and each per-node alternative is then a consequence of the survivor's ruling rather than a separate ruling — which is what the record already does for the four readings, whose class was changed once and recorded four times. The four per-node families stay listed so the author can see the blast radius, but the ruling order puts the survivor first and the alignment page should say that confirming the survivor discharges them. Case (ii) is the clearest: all four recommendations already read delegated, so those four alternatives are discharged and should be struck rather than ruled.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/instruments: `one-ruling-for-the-word` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `one-ruling-for-the-reading-class` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).

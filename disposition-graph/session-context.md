@@ -1,6 +1,6 @@
 ---
 question: What does a session load, and where does it come from?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
@@ -9,9 +9,9 @@ recommendation:
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
 review:
   verdict: forward
-  strength: weak
+  strength: strong
   date: 2026-09-03
-  of: 10154f9fe3509c5c036bc68fba0ff5b4c0b1953c
+  of: 5022100045d3fec87a66697115d238de6eead5cc
 alternatives:
   - name: commit-settings-json
     source: review
@@ -20,6 +20,9 @@ alternatives:
     source: review
     ref: "2026-09-03"
   - name: strike-ledger-sunset-dependency
+    source: review
+    ref: "2026-09-03"
+  - name: shim-names-an-existing-artifact
     source: review
     ref: "2026-09-03"
 form: rule
@@ -70,6 +73,10 @@ The decomposition finding on `under` proposes that the term 'context' move from 
 ### strike-ledger-sunset-dependency
 
 Session-context's account carries 'Depends on: ledger-sunset', which names no node; the ledger was liquidated on 2026-09-03, so the dependency is met. The finding proposes striking it, as growth's own two dangling dependencies were struck, since a question that lives only on a page beside the record is what transience rejects. (Raised on commons.systems/disposition-graph/growth.)
+
+### shim-names-an-existing-artifact
+
+The harness-configuration shim names an artifact that exists. Verified on 2026-09-03 that `.claude/settings.json` is in neither the implementation ref nor the author's checkout, so the shim as restated names nothing a reader or the frontier can reach, while `.claude/settings.local.json` is present and gitignored. On this alternative the shim's artifact becomes the settings file that exists, with its exclusion from the ref stated as part of the liquidation condition, and CLAUDE.md's sentence about `worktree.baseRef` is reconciled to whatever file actually carries it. The alternative to it is that the author writes the file the shim names, which changes no text; the choice is the author's because it decides whether the harness configuration is a projected artifact of the record or a fact of the author's machine.
 
 ## Account
 
@@ -162,3 +169,32 @@ The census unit's note: The node has an answer and no draft, so the recommendati
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `commit-settings-json` absorbs `restate-the-settings-shim`; `context-moves-here` absorbs `defines-context`. The merge unit's note: The two settings entries are the two branches of one finding and one branch is already taken, so they are merged into the single live alternative; if the main thread would rather keep the restatement visible as an alternative the author could still rule against, keep them apart.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Frontmatter, second shim: the artifact is '`.claude/settings.json` in the author's checkout and not on the implementation ref, harness configuration the author writes at the transition of 2026-09-03'. Verified absent from the checkout as well as from the ref: `ls .claude/settings.json` fails, and the only settings file present is `.claude/settings.local.json`, gitignored and last modified long before the stated date. Transience requires a shim to 'name the artifact'; this one names a file that exists nowhere the frontier or a reader can reach. The restatement made on 2026-09-03 moved the shim from an untracked file to a nonexistent one. Suggested edit: name the file that exists, or the author writes the one the shim names.
+- The same file is asserted by CLAUDE.md, which this node declares as its first shim: 'a session that isolates itself branches from this checkout's head when `.claude/settings.json` sets `worktree.baseRef` to `head` (written by the author at the transition of 2026-09-03)'. The orientation page an arriving session reads first states a configuration fact that cannot be verified from the checkout.
+- Answer, sentence 2: 'Rules, one file per global-tier node under `.claude/rules/`'. Verified true: five nodes carry `tier: global` (authority, delegation, evaluation, materialization, session-context) and `.claude/rules/` holds exactly those five files. The earlier finding is resolved.
+- Rationale cites 'The author's ruling of 2026-09-02 that `CLAUDE.md` must be justified and materialized by disposition' but quotes no ruling of that date; the only quotation on the node is the 2026-09-03 one about shims. Same pattern as the other nodes recommending ratified without a quoted ruling.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, low) states one class and one value and the pin is current; low is right for a rule close to the author's words. Persistence as stated overstates what exists: the node declares two shims and one of them names an artifact that is not in the checkout, so the record claims an interim materialization that is not there. The prose Facts line still says 'the shim', singular, where the node declares two.
+
+Strongest counter-argument (strong): The node's rule is right and its second shim is the counter-example to it. Session-context says a session loads three projections 'and nothing else', and that anything in them no node projects is a prune-by-default proposal — yet the harness configuration that decides the permissions and the worktree base every session runs with is declared as a shim over a file that is not in the checkout, is not on the ref, and no projection reads. The one surface with the most operational force over a session is the one the record cannot see, and the node ratifies that state as a declared interim rather than naming it as the gap it is.
+
+The session's reply: Forward accepted, with the strong counter-argument standing. Verified on this thread that `.claude/settings.json` exists neither on the ref nor in the checkout, and that the user-level settings carry no worktree base either, so the shim names nothing; the alternative shim-names-an-existing-artifact is recorded and the author rules. CLAUDE.md's sentence is an implementation matter for the reconciliation skill and is reported to the author.
+
+### Frontier finding, 2026-09-03
+
+Kind: coverage.
+
+Two of the record's declared shims fail transience's own requirements, and both failures are new since the last round. Session-context declares '`.claude/settings.json` in the author's checkout and not on the implementation ref, harness configuration the author writes at the transition of 2026-09-03': verified there is no such file anywhere — `ls .claude/settings.json` fails in the author's checkout, `git ls-files .claude/` lists only rules and skills, and the only settings file present is `.claude/settings.local.json`, gitignored and last modified long before the stated date. The restatement made on 2026-09-03, which moved the shim from a file not on the ref to a file 'in the author's checkout', moved it to a file that is not there either, so the shim names no artifact at all. CLAUDE.md, which this same node declares as its other shim, asserts the same file: 'a session that isolates itself branches from this checkout's head when `.claude/settings.json` sets `worktree.baseRef` to `head` (written by the author at the transition of 2026-09-03)'. Separately, materialization's second shim, '`packages/disposition` resolving the `yaml` package it declares from an ancestor `node_modules`, the workspace not installing it', has had its liquidation condition met: `node_modules` now exists at the workspace root and `require.resolve('yaml', {paths:['./packages/disposition']})` returns /home/n8/natb1/commons.systems/node_modules/yaml/dist/index.js, the workspace's own install. Transience: 'a shim whose condition is met and which still exists is a frontier item', and the flagging of a met condition is itself unmaterialized, so neither shows anywhere.
+
+Also named: commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/transience.
+
+Proposed: Transience is the survivor of the shim rule and is unruled; nothing in its text need change for this finding. Session-context's shim either names an artifact that exists — `.claude/settings.local.json`, with its exclusion from the ref as part of the liquidation — or the author writes `.claude/settings.json` and the shim stands as it reads, which is a change to the world and not to the record; the alternative below carries the record branch, and either way CLAUDE.md's claim about the file should be checked before the next session relies on it. Materialization's already-pending `strike-met-yaml-shim` is confirmed by this reading and should be taken rather than left as an option: the condition is met and the declaration is a frontier item by transience's own rule. Transience's `instrument-note-as-a-declared-shim` alternative is what would make both visible, since the note recording that a met condition is not flagged is itself the stand-in transience calls a shim.
+
+Recorded as a pending alternative on this node: `shim-names-an-existing-artifact` (source review, 2026-09-03).

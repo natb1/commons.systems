@@ -1,12 +1,17 @@
 ---
 question: What criteria guard the purpose node?
-stage: review
+stage: ruling
 recommendation:
   adopts: unguarded
   class: ratified
   boldness: low
   amends: "344adc6d0c702185eb7c60d50d6523d171c5a3a6"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+review:
+  verdict: forward
+  strength: moderate
+  date: 2026-09-03
+  of: 23758b0c5affc8dfab4abf370ea5ba7b22321807
 alternatives:
   - name: unguarded
     source: ai
@@ -132,3 +137,32 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Alternatives pending, with their sources: `unguarded` (ai, 2026-09-03); `drafted-criteria` (ai, 2026-09-03); `fold-into-purpose` (review, 2026-09-03).
 The recommendation adopts `unguarded` and is pinned to the standing text as it was at that commit. The recommended text was drafted at the re-encoding from the option the account marks recommended, so that the recommendation adopts an alternative with a text and not only a name; the earlier review read the options and not this text, so it is removed and the node returns to the review stage for the clean-context review of the batch.
 The census unit's note: This node has a recommendation but no standing answer and no recommended text: it is an options node, and the recommendation matches option 2, so it adopts the alternative I named unguarded. Option 1 stays listed and is carried as a pending alternative, since nothing rejects it in a rationale, and the fold proposed by the redundancy finding is the third. The stale recommended marker on option 1 and purpose's criteria block are both fixed in the snapshot, so the contradiction finding is resolved. The counter-argument's residue, that purpose stays unguarded with no date to re-propose, is answered in prose and I did not raise it to an alternative. The fold is recorded here and, from purpose's side, as its fold-option-nodes alternative.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Verified fixed since the last review: the Options block now marks option 2 '(recommended)' and option 1 'withdrawn after the review below', and the frontmatter recommendation adopts `unguarded`, so the data and the prose agree. The executor hazard the previous review called the sharpest in the batch is resolved here — but the same hazard is unresolved on rejected, where the marker and the reply still disagree.
+- Recommendation fence, Answer: 'a criterion that would need a stamp of its own is a question of its own and becomes a node then' is quoted from instruments' rejected list. Instruments stands at the maieutic stage, so this fence rests its closing argument on an unruled node and does not say so.
+- Recommendation fence, Rationale: 'The author's words behind this question were a question of their own, whether every disposition has instrumentation or criteria or something like that, and not a direction that the purpose node must carry criteria.' The words are paraphrased, not quoted, and the node carries no '## Disposition' section — verified, purpose-criteria is one of the twenty-three nodes with none. A ratified stamp here would rest on a paraphrase.
+- The node decides a clause of purpose's recommended text and purpose's fence no longer carries criteria, so the two agree today. What neither says is that this ruling leaves the record's highest-ranked node permanently unguarded with no date at which the two withdrawn criteria return; the fence says 'when the reconciliation harness exists', which is a condition no instrument reads.
+
+On the three facts: The frontmatter recommendation (adopts unguarded, ratified, low) states one class and one value, matches the option now marked recommended, and the pin is current. Low is right: the answer withdraws two AI-drafted criteria and asserts nothing new. Persistence standing follows from the node's shape; what the facts should add is that the ruling leaves the record's first node unguarded with no dated return.
+
+Strongest counter-argument (moderate): Standing unguarded is the right answer and the record has already conceded it, so the residual risk is the opposite of the one the reviews chased: purpose is ratified, unguarded, and the two criteria return only 'when the reconciliation harness exists' — a condition nothing on the frontier derives and no shim carries. The record's own rule is that a shim with no liquidation condition is an undeclared permanent; an unguarded root with an unwatched promise to guard it later is the same shape without the vocabulary.
+
+The session's reply: Forward accepted. The marker and the recommendation agree; the dependence of the closing sentence on instruments is named here; the unwatched return condition is accepted as a finding for the author.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Authority holds that 'a ratified stamp whose ruling is not in the record is invalid', and quotes rules on what that requires. Measured against the graph as it now stands: eleven recommendation fences in this batch carry `class: ratified`, and eight of them quote no ruling of any date anywhere in the fence — purpose, hexis, namespaces, projection, traditions-home, forms, second-stop and purpose-criteria — while three do: rationale-edge, quotes and rejected. Separately, twenty-three of the sixty-eight nodes carry no '## Disposition' section at all (`validate.mjs` reports 'ok: 68 nodes'; the count of nodes with no such section is 23), among them evaluation, persistence, legacy, validation-order, review, recording, forms, traditions-home, purpose-criteria, second-stop and all three public nodes. Quotes' own recommended answer unbars them in one clause — 'the ruling a stamp requires is the one the author gives at that sitting, quoted then; words the author said earlier are the ground a draft rests on and bar no stamp' — so the whole question of whether eight fences and twenty-three nodes can carry a ratified stamp turns on a node that is itself unruled and in this batch. The counts recorded on the batch's own findings are stale against the graph: 'twenty-two of the sixty-two nodes' was measured when the graph held 62.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/namespaces, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/traditions-home, commons.systems/disposition-graph/forms, commons.systems/disposition-graph/second-stop.
+
+Proposed: Quotes is the survivor and is ruled first among the nodes of this batch, after the periagogic sitting on public/agency that every one of them descends from. Nothing in the eight fences need change before that ruling, because quotes' recommended answer sanctions them; what must not happen is that any of the eight is recorded with a ratified stamp before quotes is ruled, since under the losing option each such stamp is invalid on landing. Quotes' own facts should state the measured size of the bar at the moment of ruling rather than a count fixed in prose, since the count has already moved once.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `fence-carries-the-ruling` (source review, 2026-09-03).

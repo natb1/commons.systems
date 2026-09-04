@@ -1,12 +1,17 @@
 ---
 question: Is the rationale the prose of the under edge?
-stage: review
+stage: ruling
 recommendation:
   adopts: rationale-stays-with-node
   class: ratified
   boldness: moderate
   amends: "04432816cb452ea70552fab00ede5f8a21071c1f"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+review:
+  verdict: forward
+  strength: weak
+  date: 2026-09-03
+  of: 4028e2c02834b9114514f5f378a78859e8cc323b
 alternatives:
   - name: rationale-stays-with-node
     source: ai
@@ -158,3 +163,20 @@ The census unit's note: No Answer and no Draft, but a recommendation and an Opti
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `disclose-unanswered-parent` absorbs `parent-unanswered-clause`, `say-the-parent-is-unanswered`. The merge unit's note: rationale-as-the-edge-prose is the author's own words re-raised from under; it does not name one change but says the author's leaning corresponds to the second and third options (because-clause-on-edge, rationale-on-edge), so it is not merged with either.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- The node stands at the review stage under `under`, which is at the maieutic stage with no drafted text and whose own account plans a draft 'after q14, q15, and q16 are ruled' — one of which, tier, was kicked back with its recommendation withdrawn, so under cannot be drafted as planned. Frontier-consistency's validation 13 requires that no node resting on periagogic or maieutic ground do so without saying so; the fence says nothing. The `disclose-unanswered-parent` alternative is the vehicle.
+- Recommendation fence, Answer, second clause: 'Where it is not evident, the rationale's first sentence says why the question hangs where it does.' A convention with no criterion and nothing to check it, raised by both readings and unchanged. The `drop-convention-clause` alternative offers both branches — strike it, or make it a validator rule so it can fail.
+- Recommendation fence, Rationale: it quotes the author's question with its date, which makes this one of only three fences in the batch carrying `class: ratified` that quotes a ruling at all. That is the shape the other eight should follow.
+- The author's own leaning in the quoted words runs toward the options the recommendation rejects: 'does it make sense to make the rationale the prose property of the under edge?' The `rationale-as-the-edge-prose` alternative records that, sourced to the author, and the fence's rationale answers it in one clause ('it does not always, and it should not'). The author is being told their own leaning was considered and rejected, which is right, and the fence should say which of the three options the leaning corresponds to.
+
+On the three facts: The frontmatter recommendation (adopts rationale-stays-with-node, ratified, moderate) states one class and one value and the pin is current, and the option's own facts correctly distinguish the recommended option (no schema change) from the two that are. The facts should add that the parent this ruling feeds is at the maieutic stage and cannot be drafted until tier is re-answered. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (weak): Option 2, a because clause on each under entry, is cheap and would put the refinement in structure exactly where the two questions do not show it — the case the recommendation leaves to a convention nothing checks. Toulmin separates warrant from backing, but a warrant is still written down; the recommendation writes it down only sometimes and only in prose, so the projector can never show why a node hangs where it does, which is the navigation the author asked for when they asked for cites to be projected. Against it, a clause on every edge will be filled with restatements of the two questions in the common case.
+
+The session's reply: Forward accepted. The dependence on under and the author's own leaning toward the edge prose are carried by the pending alternatives.

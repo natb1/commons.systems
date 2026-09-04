@@ -1,6 +1,6 @@
 ---
 question: Who is this repository for?
-stage: review
+stage: ruling
 recommendation:
   adopts: prune
   class: ratified
@@ -124,3 +124,19 @@ The census unit's note: The mechanical rule would make `adopts` 'standing' becau
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `prune` absorbs `fold-into-coverage`. The merge unit's note: Both entries are prunes of this node and `prune` is the one the recommendation adopts, so it is the survivor; the merged text keeps the coverage finding's verification and coverage as the second destination.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Verified: the prune's destination is now coverage, not scope, and coverage carries the author's words on the audience verbatim, so the '## Disposition' quotation survives the prune. The earlier stale cross-reference is resolved.
+- Persistence is 'not recorded', naming purpose and coverage as the destinations — which is right for a node being deleted and is the only node in the batch whose persistence is anything but standing. Nothing else in the record depends on this node: projection's fence now names purpose alone as the source of the README, description and tags.
+- The prune leaves the record with no node whose question is 'Who is this repository for?', and coverage — where the question goes — stands at the periagogic stage with two AI-drafted alternatives and no author account. The prune is the author's own word, so this is an ordering note rather than an objection: after the prune the audience question is answerable only through a periagogic sitting on coverage.
+
+On the three facts: The frontmatter recommendation (adopts prune, ratified, low) is right: the author asked for the prune in their own words, quoted on the node with a date, so this is the one node in the batch whose ratified stamp already has its ruling in the record. Persistence 'not recorded' with two named destinations is correct for a deletion and follows from the node's shape.
+
+Strongest counter-argument (weak): Pruning removes the only node whose question is who the repository is for, and purpose answers it in one subordinate clause that purpose-criteria now recommends leaving permanently unguarded. The requirements tradition the record adopts does state the intended audience inside the purpose section, so the prune is well grounded; the residue is that the audience question was where coverage's survey found the most divergence, and after the prune it can be re-asked only at a periagogic sitting the record has not scheduled.
+
+The session's reply: Forward accepted. The prune is the author's own word; the ordering note that the audience question returns at coverage's periagogic sitting is accepted.

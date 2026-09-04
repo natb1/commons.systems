@@ -1,6 +1,6 @@
 ---
 question: When is the dialogue's state written to the record?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
-  of: e012b0dbf43c5aa369d0c26c0430c1e5e691f1f7
+  of: 5f7995b74efc284666ec9eb8ea218e1b6eb3977b
 alternatives:
   - name: words-only-checkpoint
     source: review
@@ -87,3 +87,20 @@ Alternatives pending, with their sources: `words-only-checkpoint` (review, 2026-
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 Merge analysis of the author's words: 2026-09-03, own-question: The alignment skill must checkpoint and persist every unanswered question at each dialogue phase transition, from periagoge to maieutic to adversarial review to confirmation, so that the state survives compaction.
 The census unit's note: Checkpoint has a standing answer and no recommended text, so it adopts standing. Three alternatives are pending: the reviewer's rival that only the author's words be checkpointed, the unlanded-write criterion which is the branch the session did not take, and striking the unpinned evidence sentence, which the session left to the sitting. The author's single block answers this node's own question and needs no move. Nothing on the node proposes a change to another node, so the elsewhere list is empty; the review's verification that the words-first rule is live on work-loop is an observation, not a proposal.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Verified applied since the first reading: the answer now says an unlanded write 'is reported to the author in the same turn, never held back in context until it can land'. The `unlanded-write-as-criterion` alternative keeps the second branch open — carrying it as a criterion so the failure is measured rather than reported by convention — and nothing detects a node written to a worktree and never landed.
+- Rationale: 'Evidence: the bootstrap session of 2026-09-03 kept a resume note in scratch space in place of this rule and survived a compaction that afternoon by it.' Transience requires evidence to be 'cited by the node it bears on with a pin of what was read'; this is prose with no pin and the scratch file is gone, so the claim cannot be checked by anyone. The `drop-unpinned-evidence` alternative is the vehicle and the session left it to the sitting.
+- Answer: 'The author's words are written the turn they are said, before anything is drafted from them.' Verified exercised: work-loop's account says 'The author's words above are recorded the turn they were said, as the checkpoint node requires', and work-loop's '## Disposition' carries five dated quotations. The rule is live and the facts should say so.
+- Answer: 'writes the node with its new stage and everything the stage carries ... validates the graph, lands it on the record's ref, and only then continues.' Nothing enforces the landing; the git log of the disposition ref shows checkpoint commits, which is evidence the rule is followed and not that it is held.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, low) states one class and one value and the pin is current. Low is right for a rule that transcribes the author's stated position, which the node quotes with its date; the same-turn rule and the conduct when validation fails are the AI's and are nearer moderate, and the account says so in prose without adjusting the value. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (moderate): The rule lands a graph commit at every stage transition of every node, which for a sixty-eight-node frontier moving through four stages is roughly two hundred and seventy landings on a ref whose history persistence calls the trail of the record. Transience's test is that only what re-derivation cannot reconstruct is stored, and three of the four things this rule checkpoints — the recommended text, the recommendation's facts, the review's state — are re-derivable by re-running the movement that produced them. The author's instruction was to survive compaction, which the author's words alone achieve; checkpointing the rest turns the record's history into a movement log, and the pending `words-only-checkpoint` alternative is the narrower rule that meets the instruction.
+
+The session's reply: Forward accepted. The unpinned evidence and the unenforced landing stay as pending alternative and finding.

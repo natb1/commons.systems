@@ -1,6 +1,6 @@
 ---
 question: How is attention allocated?
-stage: review
+stage: ruling
 recommendation:
   adopts: standing
   class: ratified
@@ -11,7 +11,7 @@ review:
   verdict: forward
   strength: strong
   date: 2026-09-03
-  of: 6a5e093e68be10a9caaaae8af36ea7f1f5b30ecc
+  of: 989b0c57e87d5795bcd6082b62f46d37144ab633
 alternatives:
   - name: author-states-the-order
     source: review
@@ -140,3 +140,20 @@ The census unit's note: Attention has a standing answer and no recommended text,
 ### Alternatives merged, 2026-09-03
 
 The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `rank-moves-here` absorbs `attention-defines-rank`, `defines-rank`. The merge unit's note: author-states-the-order is a different answer to the same question (the author states the order and nothing is derived) and stays separate.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Verified applied since the last review: the node now carries a '## Disposition' section with the author's two dated quotations, so the alignment page will show the author's own words rather than burying them in the account; and the answer says 'every boost in the record today is the AI's and unratified' and marks the compaction-floor reading as owed.
+- Answer: 'The high-level order ... is recorded once on the scope node, and the boosts of the nodes it names are held to that order.' Verified true: read.mjs enforces both the step rule and the first-step rule and `validate.mjs` returns 'ok: 68 nodes'. This claim holds.
+- Answer: the node uses 'rank' throughout and defines only 'boost' and 'onboarding path'. 'rank' is defined by under, which stands at the maieutic stage with no drafted text and two pending alternatives, one of which (`the-edge-alone`) would move the term here. Four nodes recommending ratification rest on a term whose defining node has no answer. The `rank-moves-here` alternative is the vehicle and the session left the ruling to under's sitting.
+- Answer: 'the compaction floor, what stays in a session's context when it is trimmed, which nothing reads yet and which is owed' — the disclosure is correct and is the model the batch's other unmaterialized claims should follow, but 'owed' is carried as prose on a node with no instrument, so nothing on the frontier will ever surface it.
+
+On the three facts: The frontmatter recommendation (adopts standing, ratified, moderate) states one class and one value and the pin is current. Moderate is right: 'priority is encoded as rank' and the bite order are the author's, while the three readings of rank and the claim that the pedagogical and priority orders coincide are the AI's. Persistence standing follows from the node's shape; the facts should keep saying that every boost this answer governs is unratified.
+
+Strongest counter-argument (strong): The node asserts that a teaching order, a work order and a compaction floor coincide because prerequisites come from `under` and importance from rank; they came apart within a day, and this node records it — session-context at boost 2 ranked below the work loop against the author's order of the same day, and the fix was a hand-raised boost and then a whole new field on another node. That is direct evidence that one scalar cannot carry two orders, and scope's `order` field is the admission. The alternative the answer never adopts, that the author states the order and nothing is derived, is the one that actually worked, and it is pending as `author-states-the-order`.
+
+The session's reply: Forward accepted. Rank's definition on under is the pending rank-moves-here alternative; the compaction-floor disclosure stands as prose until an instrument exists.

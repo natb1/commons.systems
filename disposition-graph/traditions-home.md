@@ -1,12 +1,17 @@
 ---
 question: Where does a tradition node live?
-stage: review
+stage: ruling
 recommendation:
   adopts: one-traditions-graph
   class: ratified
   boldness: moderate
   amends: "848aff5b9ecff9467e39717cc2fdb272394a3233"
   at: "6d21d356d65f5fa206cb60bc3e923c462acc920e"
+review:
+  verdict: forward
+  strength: moderate
+  date: 2026-09-03
+  of: edf82b1e7f8640877cffe37a106d44b293a0a850
 alternatives:
   - name: one-traditions-graph
     source: ai
@@ -128,3 +133,44 @@ Alternatives pending, with their sources: `one-traditions-graph` (ai, 2026-09-03
 The recommendation adopts `one-traditions-graph` and is pinned to the standing text as it was at that commit. The recommended text was drafted at the re-encoding from the option the account marks recommended, so that the recommendation adopts an alternative with a text and not only a name; the earlier review read the options and not this text, so it is removed and the node returns to the review stage for the clean-context review of the batch.
 Moved to other nodes as alternatives: `parent-unanswered-clause` on commons.systems/disposition-graph/rationale-edge; `draft-after-three-rulings` on commons.systems/disposition-graph/under.
 The census unit's note: The node has no `## Answer` and no draft fence: its recommendation is one of three options listed in the account, so I named all three as alternatives and made the recommendation adopt the one marked recommended. Both reviews' findings — that the option does not say what a tradition root contains or what it does to the author's queue, and that the manifest edit is part of the option and is shown nowhere — were answered in the session's reply and are folded into the recommended option's text rather than minted as separate candidates. Whether a tradition is itself a form is left open by forms, node and this node's reply; I judged it a different question and did not make it an alternative here. The node has no `## Disposition` section, so there is no author text to merge. The placement finding's proposals for rationale-edge and under are moved to those nodes.
+
+### Clean-context review, 2026-09-03
+
+Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Findings:
+
+- Recommendation fence, Answer: 'declared in the manifest beside the disposition and public graphs'. Verified that disposition/disposition.yaml carries only `disposition-graph` and `public`, and that the manifest entry the author would be creating is written on no node — neither here, where the session's reply promised it, nor on namespaces or readings, both of whose recommended texts presume the graph exists. The `show-the-manifest-entry` alternative records the obligation; nothing discharges it. Suggested edit: put the entry in the fence, since it is what the ruling creates.
+- Recommendation fence, Answer: 'the roots the stub-traditions node proposes join the author's queue in rank order like any other node'. Verified the queue is already large — thirty-seven nodes at review and six at ruling — and stub-traditions proposes about thirty more roots, so this ruling roughly doubles what the alignment page shows the author. The consequence is stated in the fence, which is right, and it is stated as a fact rather than as the cost of the option.
+- The fence carries `class: ratified` and quotes no ruling; the node has no '## Disposition' section at all — verified, one of the twenty-three — so the whole ground of the option is the AI's reading of the author's words on namespaces, which are quoted there and not here.
+- The fence says a traditions graph's manifest entry 'carries no target and no liquidation condition, because the graph declares no move', while the author's model is that a tradition 'could theoretically be represented by its own graph'. The fence answers this in its last sentence ('the record pays the move then, with redirects from the ids it had'), which is the honest form; namespaces' `traditions-graph-declares-move` alternative would put the same thing in the manifest instead.
+
+On the three facts: The frontmatter recommendation (adopts one-traditions-graph, ratified, moderate) states one class and one value and the pin is current. The facts should carry the two consequences the fence states but the account does not price: the manifest edit, which is shown nowhere, and roughly thirty new roots entering the author's queue, which is the ruling's largest effect and lands on the surface the author reads. Persistence standing follows from the node's shape.
+
+Strongest counter-argument (moderate): Option 2, a graph per tradition, matches the author's stated model exactly — a mount that could be represented by its own graph with its own archē and its own references — and under it a tradition that later acquires its own repository needs no migration, because it already is one. The recommended option pays a directory move and a prefix rewrite instead, which is the liquidation the public graph carries and which the record has just adopted a principle to make owe redirects. The cost of the alternative is many near-empty manifests, which is real and cheap next to a migration the record has now priced twice.
+
+The session's reply: Forward accepted. The manifest entry the ruling makes and the size of the queue it opens are carried by show-the-manifest-entry and stated in the fence; the ruling order puts this node before readings and namespaces.
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Authority holds that 'a ratified stamp whose ruling is not in the record is invalid', and quotes rules on what that requires. Measured against the graph as it now stands: eleven recommendation fences in this batch carry `class: ratified`, and eight of them quote no ruling of any date anywhere in the fence — purpose, hexis, namespaces, projection, traditions-home, forms, second-stop and purpose-criteria — while three do: rationale-edge, quotes and rejected. Separately, twenty-three of the sixty-eight nodes carry no '## Disposition' section at all (`validate.mjs` reports 'ok: 68 nodes'; the count of nodes with no such section is 23), among them evaluation, persistence, legacy, validation-order, review, recording, forms, traditions-home, purpose-criteria, second-stop and all three public nodes. Quotes' own recommended answer unbars them in one clause — 'the ruling a stamp requires is the one the author gives at that sitting, quoted then; words the author said earlier are the ground a draft rests on and bar no stamp' — so the whole question of whether eight fences and twenty-three nodes can carry a ratified stamp turns on a node that is itself unruled and in this batch. The counts recorded on the batch's own findings are stale against the graph: 'twenty-two of the sixty-two nodes' was measured when the graph held 62.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/namespaces, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/forms, commons.systems/disposition-graph/second-stop, commons.systems/disposition-graph/purpose-criteria.
+
+Proposed: Quotes is the survivor and is ruled first among the nodes of this batch, after the periagogic sitting on public/agency that every one of them descends from. Nothing in the eight fences need change before that ruling, because quotes' recommended answer sanctions them; what must not happen is that any of the eight is recorded with a ratified stamp before quotes is ruled, since under the losing option each such stamp is invalid on landing. Quotes' own facts should state the measured size of the bar at the moment of ruling rather than a count fixed in prose, since the count has already moved once.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `fence-carries-the-ruling` (source review, 2026-09-03).
+
+### Frontier finding, 2026-09-03
+
+Kind: placement.
+
+Readings stands at the ruling stage while the node that creates what its recommended text presumes stands two stages behind it. Readings' recommended text says 'a tradition is a mount, one root node in a traditions graph until it has a graph of its own'; traditions-home, which rules whether that graph exists and in what form, is at the review stage in this batch with `graph-per-tradition` and `nodes-inside-disposition-graph` both pending — two options under which readings' sentence is wrong. Namespaces, also at review, presumes the same graph. Verified that disposition/disposition.yaml carries only `disposition-graph` and `public`, so the graph none of the three can do without does not exist, and the manifest entry that would create it is written on no node. Frontier-consistency's validation 13 requires that no node at the ruling stage rest on periagogic or maieutic ground 'without saying so'; readings rests on review-stage ground and says nothing, and unlike rationale-edge and namespaces it carries no alternative recording the dependency — the placement finding of 2026-09-03 named readings in its proposal and minted an alternative on every other node it named.
+
+Also named: commons.systems/disposition-graph/readings, commons.systems/disposition-graph/namespaces.
+
+Proposed: Traditions-home is the survivor of where a tradition node lives and is ruled before readings and namespaces, which the ruling order below does; the manifest entry it creates is shown on it, since that is what the ruling makes. Readings takes the alternative below, saying on the node that its tradition-as-mount sentence stands only if traditions-home's recommended option is taken — the gap the earlier finding left when it recorded its proposal on every named node but this one.
+
+Recorded as a pending alternative on commons.systems/disposition-graph/readings: `hold-for-traditions-home` (source review, 2026-09-03).
