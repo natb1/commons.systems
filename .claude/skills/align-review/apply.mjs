@@ -316,15 +316,18 @@ function hashScalar(of) {
 
 /**
  * The `review:` block, in the two readings the review divides into: the four
- * draft keys, the survey's own `date` and `of`, or either alone -- read.mjs
- * accepts each half without the other. Whichever half this run does not write
- * is carried in from the node as it stands, so a draft's forward never
- * discards the survey's pin and the survey never discards a verdict.
+ * draft keys plus the draft's own optional `against` (this reading's
+ * strongest counter-argument, beside its `strength`), the survey's own
+ * `date` and `of`, or either alone -- read.mjs accepts each half without the
+ * other. Whichever half this run does not write is carried in from the node
+ * as it stands, so a draft's forward never discards the survey's pin and the
+ * survey never discards a verdict (or the counter-argument beside it).
  */
-function renderReviewBlock({ verdict = null, strength = null, date = null, of = null, survey = null }) {
+function renderReviewBlock({ verdict = null, strength = null, date = null, of = null, against = null, survey = null }) {
   const lines = ["review:"];
   if (verdict !== null) {
     lines.push(`  verdict: ${verdict}`, `  strength: ${strength}`, `  date: ${date}`, `  of: ${hashScalar(of)}`);
+    if (against !== null) lines.push(`  against: ${against}`);
   }
   if (survey !== null) {
     lines.push("  survey:", `    date: ${survey.date}`, `    of: ${hashScalar(survey.of)}`);
@@ -718,9 +721,10 @@ async function planDraft(input, ctx) {
   });
 
   const survey = (parsedBefore.review && parsedBefore.review.survey) || null;
+  const against = input.counter_argument ?? null;
   const build = (of) => upsertDialogueFields(appendToAccount(rawTextBefore, subsection), {
     stage: newStage,
-    reviewLines: renderReviewBlock({ verdict: input.verdict, strength: input.strength, date: ctx.date, of, survey }),
+    reviewLines: renderReviewBlock({ verdict: input.verdict, strength: input.strength, date: ctx.date, of, against, survey }),
   });
 
   let settled;
@@ -1135,7 +1139,13 @@ async function planTouchedNode(id, t, ctx) {
   // The draft review's own keys are carried in unchanged: the survey writes
   // its pin beside them and never over them.
   const draft = parsedBefore.review && parsedBefore.review.verdict !== null
-    ? { verdict: parsedBefore.review.verdict, strength: parsedBefore.review.strength, date: parsedBefore.review.date, of: parsedBefore.review.of }
+    ? {
+      verdict: parsedBefore.review.verdict,
+      strength: parsedBefore.review.strength,
+      date: parsedBefore.review.date,
+      of: parsedBefore.review.of,
+      against: parsedBefore.review.against,
+    }
     : null;
   const reviewLines = surveyPin === null
     ? null

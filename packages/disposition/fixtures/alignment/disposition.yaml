@@ -1,0 +1,4 @@
+module: example.test
+graphs:
+  main:
+    about: the fixture the alignment page's own tests read

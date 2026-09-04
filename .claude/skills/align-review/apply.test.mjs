@@ -163,6 +163,11 @@ describe("apply.mjs: draft, forward", () => {
     assert.equal(fieldValue(block, "strength"), "moderate");
     assert.equal(fieldValue(block, "date"), DATE);
     assert.equal(fieldValue(block, "of"), wantHash, "'review.of' pins the node's recommendation hash");
+    assert.equal(
+      fieldValue(block, "against"),
+      "A boldness gate could miss low-boldness drafts that are wrong for other reasons.",
+      "'review.against' is written from the non-null counter_argument, beside strength",
+    );
     assert.ok(!block.includes("survey:"), "no survey pin is invented where the node carried none");
 
     // The review block goes after the facts, which is where the reader's own
@@ -267,6 +272,36 @@ describe("apply.mjs: draft, kickback", () => {
     assert.ok(!afterText.includes("On the facts and what they recommend:"), "facts_check omitted when null");
     assert.ok(!afterText.includes("On the viability of the options:"), "viability omitted when null");
     assert.ok(!afterText.includes("The session's reply:"), "reply line omitted when none given");
+    assert.ok(!block.includes("against:"), "'review.against' omitted when counter_argument is null");
+  });
+
+  test("writes 'review.against' from a non-null counter_argument on a kickback too, beside strength", async () => {
+    const rootDir = await freshFixture("kick-against-");
+    const file = reviewNodePath(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "draft",
+        id: REVIEW_NODE,
+        verdict: "kickback",
+        kickback_stage: "periagogic",
+        findings: ["Disposition: the ground itself needs redrawing."],
+        counter_argument: "The ground may already be settled elsewhere and this redraws it needlessly.",
+        strength: "weak",
+      },
+      replies: {},
+      date: DATE,
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const block = reviewBlockOf(await readFile(file, "utf8"));
+    assert.equal(fieldValue(block, "verdict"), "kickback");
+    assert.equal(fieldValue(block, "strength"), "weak");
+    assert.equal(
+      fieldValue(block, "against"),
+      "The ground may already be settled elsewhere and this redraws it needlessly.",
+    );
   });
 
   test("a kickback to a stage no reading may send a node back to is refused", async () => {
@@ -357,7 +392,8 @@ describe("apply.mjs: draft, override", () => {
     const block = reviewBlockOf(afterText);
     assert.equal(fieldValue(block, "verdict"), "forward");
     assert.equal(fieldValue(block, "strength"), "strong");
-    assert.deepEqual(topKeys(block), ["verdict", "strength", "date", "of"], "review block is exactly these four keys");
+    assert.equal(fieldValue(block, "against"), "The fixture's own record is thin, so 'sound' rests on little evidence.");
+    assert.deepEqual(topKeys(block), ["verdict", "strength", "date", "of", "against"], "review block is exactly these five keys, 'against' from the non-null counter_argument");
 
     // the recommendation hash is independent of stage, review and the
     // account text, so the pin this edit writes is the one already there.
@@ -557,6 +593,30 @@ describe("apply.mjs: survey", () => {
     assert.ok(text.includes(SURVEY_OPENING));
     assert.ok(!text.includes("### Clean-context review, 2026-09-03"), "the survey writes no draft review");
     assert.ok(result.report.some((l) => l === `${REVIEW_A}: Frontier survey + draft review kept, review → review`));
+  });
+
+  test("preserves the draft review's own 'against' when the survey merges its pin in beside it", async () => {
+    const rootDir = await freshFrontierFixture("survey-against-");
+    const file = nodePath(rootDir, "review-a");
+    const before = await readFile(file, "utf8");
+    const withAgainst = before.replace(
+      "  of: 0586c577f9126f9c1f3b74b1a98f9e542a19b869\n",
+      "  of: 0586c577f9126f9c1f3b74b1a98f9e542a19b869\n  against: A stands only on a provisional reading; a fuller one may not agree.\n",
+    );
+    assert.notEqual(withAgainst, before, "fixture precondition: the review block matched");
+    await writeFile(file, withAgainst);
+    const pins = await pinsFor(rootDir);
+
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {} });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const reviewA = await parseAt(rootDir, "review-a", REVIEW_A);
+    assert.equal(
+      reviewA.review.against,
+      "A stands only on a provisional reading; a fuller one may not agree.",
+      "the draft review's own case against survives the survey's own write",
+    );
+    assert.deepEqual(reviewA.review.survey, { date: SURVEY_DATE, of: pins.pins[REVIEW_A] }, "and the survey's pin is written beside it");
   });
 
   test("a judged node whose recommendation moved since the survey read it receives nothing and is reported", async () => {

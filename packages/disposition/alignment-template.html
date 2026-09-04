@@ -169,17 +169,7 @@
   .nav { padding: 18px 0 22px; border-bottom: 1px solid var(--line); }
   @media (min-width: 940px) { .nav { border-bottom: 0; } }
 
-  /* ---------- page head ---------- */
-  .pagehead { margin: 0 0 30px; }
-  .counts { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 0 0 18px; padding: 0 0 16px; border-bottom: 1px solid var(--line); }
-  .counts > div { min-width: 0; }
-  .counts dt { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 2px; }
-  .counts dd { margin: 0; font-size: 17px; }
-  .lede { font-family: var(--serif); font-size: 19px; line-height: 1.45; color: var(--ink-2); max-width: 38em; margin: 0; text-wrap: pretty; }
-
   /* ---------- nav rail ---------- */
-  .grp { margin: 0 0 20px; }
-  .grp-h { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
   .tree { list-style: none; margin: 0; padding: 0; }
   .tree li { margin: 0 0 1px; }
   .tree a {
@@ -202,33 +192,27 @@
   .pill.stage-review { background: var(--stage-review-soft); color: var(--stage-review); }
   .pill.stage-maieutic { background: var(--stage-maieutic-soft); color: var(--stage-maieutic); }
   .pill.stage-periagogic { background: var(--stage-periagogic-soft); color: var(--stage-periagogic); }
-  .pill.rec-class-ratified { background: var(--ratified-soft); color: var(--ratified); }
-  .pill.rec-class-delegated { background: var(--delegated-soft); color: var(--delegated); }
-  .pill.rec-class-deferred { background: var(--deferred-soft); color: var(--deferred); }
   .pill.rec-bold-low, .pill.rec-bold-moderate, .pill.rec-bold-high { background: var(--paper-3); color: var(--ink-2); }
   .pill.rec-bold-high { background: var(--deferred-soft); color: var(--deferred); }
   .pill.rev-forward { background: var(--ratified-soft); color: var(--ratified); }
   .pill.rev-kickback { background: var(--proposal-soft); color: var(--proposal); }
-  .pill.rev-strength, .pill.rev-date { background: var(--paper-3); color: var(--ink-2); }
-  .pill.rev-stale, .pill.rec-moved { background: var(--deferred-soft); color: var(--deferred); }
-  .pill.rec-diverges { background: var(--proposal-soft); color: var(--proposal); }
+  .pill.rev-strength, .pill.rev-date, .pill.rev-none { background: var(--paper-3); color: var(--ink-2); }
+  .pill.rev-stale { background: var(--deferred-soft); color: var(--deferred); }
   .pill.alt-ruled { background: var(--ratified-soft); color: var(--ratified); }
-  .pill.rec-adopts { background: var(--accent-soft); color: var(--accent-ink); }
-  .pill.alt-src, .pill.alt-ref { background: var(--paper-3); color: var(--ink-2); }
+  .pill.alt-src { background: var(--paper-3); color: var(--ink-2); text-transform: none; letter-spacing: .02em; }
   .pill.alt-stands { background: var(--paper-2); color: var(--ink-3); border: 1px solid var(--line); }
-  .pill.alt-ref { text-transform: none; letter-spacing: .02em; }
-  .pill.alt-prune { background: var(--proposal-soft); color: var(--proposal); }
+  .pill.alt-passed { background: var(--proposal-soft); color: var(--proposal); text-transform: none; letter-spacing: .02em; }
   .pill.alt-adopted { background: var(--accent-soft); color: var(--accent-ink); }
+  /* What a tradition says of this option, on the option's row: a reading
+     bears on an option and not on the node. */
+  .pill.alt-reading { text-transform: none; letter-spacing: .02em; text-decoration: none; }
+  .pill.alt-reading.adopted { background: var(--ratified-soft); color: var(--ratified); }
+  .pill.alt-reading.diverged { background: var(--deferred-soft); color: var(--deferred); }
+  a.pill.alt-reading:hover { text-decoration: underline; }
   .pills { margin: 0 0 8px; }
 
   .notice { font-size: 13.5px; color: var(--proposal); background: var(--proposal-soft); border-radius: 4px; padding: 8px 12px; margin: 0 0 18px; }
   .empty { color: var(--ink-3); font-size: 15px; }
-
-  /* ---------- graph sections ---------- */
-  .graphgrp { margin: 0 0 44px; }
-  .graphh { font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 4px; padding: 10px 0 0; border-top: 1px solid var(--line); }
-  .graphgrp:first-of-type .graphh { border-top: 0; padding-top: 0; }
-  .graphsub { font-family: var(--serif); font-size: 15px; color: var(--ink-3); margin: 0 0 18px; max-width: var(--measure); }
 
   /* ---------- items ---------- */
   .item { padding: 26px 0; border-top: 1px solid var(--line); scroll-margin-top: calc(var(--mast-h) + 12px); }
@@ -256,20 +240,10 @@
   pre code { background: none; padding: 0; font-size: inherit; }
   .none { color: var(--ink-3); font-style: italic; margin: 0; }
 
-  .disposition { border-left: 2px solid var(--accent); padding-left: 14px; }
   .stands { border-left: 2px solid var(--line); padding-left: 14px; }
   .quoted { margin: 10px 0; padding: 10px 12px; background: var(--paper-2); border: 1px dashed var(--ink-3); border-radius: 4px; }
   .quoted .blk-label { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 8px; }
   .quoted pre { margin: 0; }
-  .account { padding: 14px 16px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; }
-
-  /* ---------- the options on a decision ---------- */
-  .altlist { list-style: none; margin: 0; padding: 0; }
-  .alt { margin: 0 0 14px; padding: 10px 0 0 14px; border-left: 2px solid var(--line); }
-  .alt:last-child { margin-bottom: 0; }
-  .alt.adopted { border-left-color: var(--accent-ink); }
-  .altname { margin: 0 0 8px; font-size: 14px; }
-  .altname .mono { font-family: var(--mono); font-size: 12.5px; color: var(--ink); margin-right: 10px; overflow-wrap: anywhere; }
 
   /* ---------- the recommended text and the edit ---------- */
   .edit-lbl { margin-top: 18px; }
@@ -284,27 +258,14 @@
   .diff { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15.5px; line-height: 1.6; margin: 0 0 4px; }
   ins { background: var(--ins-soft); color: var(--ins); text-decoration: none; border-radius: 2px; padding: 0 1px; box-shadow: inset 0 -1px 0 var(--ins); }
   del { background: var(--del-soft); color: var(--del); text-decoration: line-through; border-radius: 2px; padding: 0 1px; }
-  .caption { font-size: 14px; color: var(--ink-3); font-style: italic; margin: 12px 0 0; }
-
-  .persist { font-size: 14.5px; color: var(--ink-2); margin: 0; }
-  .shims { margin: 6px 0 0; padding-left: 20px; font-size: 14px; color: var(--ink-2); }
-  .shims li { margin: 0 0 4px; }
-
-  /* ---------- response ---------- */
-  .response { margin: 20px 0 0; max-width: var(--measure); }
+  /* ---------- what the ruling asks ---------- */
+  /* One fieldset over everything the item can take, so a recorded response
+     locks whole and reopens whole. It draws nothing of its own. */
+  .inputs { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .inputs[disabled] { opacity: .68; }
   .hint { font-size: 14px; color: var(--ink-2); background: var(--paper-2); border-left: 2px solid var(--ink-3); border-radius: 0 4px 4px 0; padding: 8px 12px; margin: 0 0 12px; }
-  .controls { margin: 0; padding: 14px 16px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 4px; }
-  .controls[disabled] { opacity: .68; }
-  .seg { display: flex; flex-wrap: wrap; gap: 0; margin: 4px 0 14px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--paper); width: fit-content; max-width: 100%; }
-  .segopt { position: relative; display: block; }
-  .segopt input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
-  .segopt span { display: block; padding: 7px 14px; font-size: 14px; color: var(--ink-2); cursor: pointer; border-right: 1px solid var(--line); white-space: nowrap; }
-  .segopt:last-child span { border-right: 0; }
-  .segopt input:checked + span { background: var(--accent); color: #fff; font-weight: 500; }
-  :root[data-theme="dark"] .segopt input:checked + span { color: #0F1720; }
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .segopt input:checked + span { color: #0F1720; } }
-  .segopt input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .note-lbl { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px; }
+  .hint-sm { font-size: 12px; color: var(--ink-3); margin: 6px 0 0; }
+  .note-lbl { display: block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 8px 0 6px; }
   .note {
     display: block; width: 100%; font: inherit; font-size: 14.5px; font-family: var(--sans);
     background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: 4px;
@@ -345,6 +306,9 @@
   .metric dt { font-family: var(--mono); font-size: 10px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 1px; }
   .metric dd { margin: 0; font-size: 19px; line-height: 1.1; color: var(--ink); }
   a.metric dt { text-decoration: underline dotted var(--line); text-underline-offset: 3px; }
+  /* A metric whose node the browser does not render carries the id instead of
+     a link, so the author can still address the disposition it instruments. */
+  .metric-of { display: block; font-size: 9px; line-height: 1.2; color: var(--ink-3); overflow-wrap: anywhere; margin-top: 2px; }
 
   /* ---------- the rail ---------- */
   .tree { list-style: none; margin: 0; padding: 0; counter-reset: none; }
@@ -384,7 +348,6 @@
   /* ---------- the stage's own ask ---------- */
   /* The stage names the movement owed, so it heads the asking column. */
   .stagelead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; }
-  .stagehint { font-size: 13px; color: var(--ink-2); font-style: italic; }
   .locked { font-size: 12.5px; color: var(--ink-2); margin: 0 0 16px; padding: 8px 10px; border-left: 2px solid var(--line); background: var(--paper-2); }
   /* The stage, with the two routes into the dialogue embedded in it. */
   .chip { display: inline-flex; align-items: stretch; gap: 0; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; vertical-align: middle; }
@@ -396,20 +359,27 @@
   .foot-acts { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
   .sbtn.stub { text-decoration: none; display: inline-flex; align-items: center; gap: 4px; opacity: .72; }
   .nowords { font-size: 13px; color: var(--ink-2); font-style: italic; margin: 12px 0 0; }
-  .controls .caption { margin: 8px 0 12px; }
-  .controls .recline { margin: 6px 0 0; }
-  .controls .persist, .controls .shims { font-size: 12.5px; color: var(--ink-3); }
+  .nopane { margin: 12px 0 0; font-size: 13px; }
+  /* The node's readiness, beside the two controls that move it: the chip is
+     the node's one status object, and the review keeps no section. */
+  .readiness { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0; }
+  .readiness .pill { margin: 0 6px 4px 0; text-transform: none; letter-spacing: .02em; }
 
-  /* ---------- the decisions ---------- */
-  .decisions { margin: 20px 0 0; }
-  .decision { border: 1px solid var(--line); border-radius: 5px; padding: 12px 14px 10px; margin: 0 0 14px; }
-  .declbl { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); padding: 0 6px; }
-  .declbl .pill { margin-left: 8px; }
+  /* ---------- the facts, and the options under each ---------- */
+  .facts { margin: 20px 0 0; }
+  .fact { border: 1px solid var(--line); border-radius: 5px; padding: 12px 14px 10px; margin: 0 0 14px; min-width: 0; }
+  .factlbl { font-family: var(--serif); font-size: 16px; line-height: 1.3; color: var(--ink); padding: 0 6px; }
+  .factlbl .pill { margin-left: 8px; font-family: var(--mono); }
   .choices { list-style: none; margin: 6px 0 0; padding: 0; }
-  .choice { margin: 0 0 4px; padding: 5px 6px; border-radius: 3px; }
+  .choice { margin: 0 0 4px; padding: 6px; border-radius: 3px; }
   .choice.adopted { background: var(--paper-2); }
   .choice.ruled { box-shadow: inset 2px 0 0 var(--ratified); }
-  .choice.reject { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 9px; }
+  .choice.passed .choicesays { color: var(--ink-2); }
+  /* The kick-back is not an option and is marked as what it does to the
+     node; its feedback opens with the row and never in a drill-down. */
+  .choice.kickback { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 10px; background: none; }
+  .kbnote { font-size: 12px; color: var(--ink-3); margin: 4px 0 0 22px; }
+  .kb-note { width: 100%; margin: 0 0 2px; }
   .choicelbl { display: flex; align-items: baseline; gap: 8px; cursor: pointer; }
   .choicelbl input { flex: none; margin-top: 1px; }
   .choicename { font-size: 13.5px; color: var(--ink); overflow-wrap: anywhere; }
@@ -417,22 +387,29 @@
      handle the record files a ruling under, never in place of it. */
   .choicesays { font-size: 13.5px; color: var(--ink); }
   .choicename.handle { font-size: 11px; color: var(--ink-3); letter-spacing: .04em; white-space: nowrap; }
+  .optpills { margin: 4px 0 0 22px; }
+  /* The case against the recommended option, on its row and at the first
+     level: a case against that is folded is a case the author never reads
+     before choosing. */
+  .against { font-size: 13px; color: var(--ink-2); margin: 4px 0 0 22px; padding-left: 10px; border-left: 2px solid var(--proposal); }
+  .against.none { color: var(--ink-3); font-style: italic; border-left-color: var(--line); }
+  .againstlbl { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-right: 6px; }
+  .against .pill { margin-left: 8px; }
   .drill { margin: 4px 0 0 22px; }
   .drill summary { font-size: 12px; color: var(--ink-3); cursor: pointer; }
   .drill summary:hover { color: var(--ink-2); }
   .drill .mdbody { font-size: 13.5px; }
-  .optreadings { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
-  .optreadings li { display: flex; gap: 6px; align-items: baseline; }
-  .optreadings .mono { font-family: var(--mono); font-size: 11px; color: var(--ink-3); overflow-wrap: anywhere; }
+  .drilllbl { font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 10px 0 4px; }
+  .readacct { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; color: var(--ink-2); }
+  .readacct li { margin: 0 0 6px; }
   .badge { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; border: 1px solid; }
   .badge.adopted { color: var(--ratified); border-color: var(--ratified); }
   .badge.diverged { color: var(--deferred); border-color: var(--deferred); }
-  .recline { margin: 10px 0 0; }
-  .recline.none { color: var(--ink-3); font-size: 13px; }
+  .divergence { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; }
   .pill.rec-bold-none { background: var(--paper-3); color: var(--ink-3); }
-  .decwhy { font-size: 13px; color: var(--ink-2); margin: 6px 0 2px; }
-  .dec-note { width: 100%; margin: 8px 0 2px; }
-  .folded { font-size: 12.5px; color: var(--ink-3); margin: 10px 0 0; }
+  .opt-note { width: 100%; margin: 0 0 2px; }
+  .words-note { width: 100%; }
+  .stageask { margin: 0 0 18px; }
   .ruled { font-size: 12.5px; color: var(--ink-2); margin: 4px 0 0; }
 
   /* ---------- the indications ---------- */
@@ -445,9 +422,6 @@
   /* `display: grid` on .item beats the browser's own `[hidden]` rule, so
      the unselected nodes would stay visible without this. */
   [hidden] { display: none !important; }
-
-  /* the pagehead is gone: it liquidated without a disposition */
-  .pagehead, .counts, .lede, .graphgrp { display: none !important; }
 </style>
 
 <a class="skip" href="#main">Skip to the items</a>
@@ -512,57 +486,81 @@ function alFootNote(text) {
 
 /* ------------------------------------------------ reading the controls */
 
-/* The whole-node control, and never a decision inside the same item. Both
-   the decisions and this control are radios under the one `[data-item]`, so
-   an unscoped `input[type="radio"]:checked` returned whichever came first in
-   the document: with the decisions ahead of the control, choosing an option
-   was read back as the node's own ruling and stored as
-   `ruling: "<option name>"` on the response document, where `confirm`,
-   `edit` or `deny` was meant. Scope every read and write of it to
-   `[data-controls]`, which is the control's own fieldset and holds no
-   decision. */
-function alControlScope(el) {
-  return el.querySelector("[data-controls]") || el;
+// A value inside an attribute selector.
+function alQuote(v) {
+  return String(v).replace(/["\\]/g, "\\$&");
 }
 
-function alReadControl(el) {
-  var scope = alControlScope(el);
-  var radio = scope.querySelector('input[type="radio"]:checked');
-  var noteEl = scope.querySelector('[data-field="text"]');
-  return { ruling: radio ? radio.value : null, text: noteEl ? noteEl.value : "" };
+/* Every response is given on a fact, since nothing on the page stages a ruling
+   on the node as a whole: choosing an option and leaving its text empty is a
+   confirmation of that option, choosing one and writing in its text is a
+   confirmation with text, and the kick-back row is a denial with feedback on
+   that decision (commons.systems/disposition-graph/alignment-page). The words
+   the two earlier stages ask for are the node's own and belong to no fact. */
+function alReadWords(el) {
+  var box = el.querySelector("[data-words]");
+  return box ? box.value : "";
 }
 
-function alApplyControl(el, data) {
+function alReadFacts(el) {
+  var out = [];
+  Array.prototype.slice.call(el.querySelectorAll("[data-fact]")).forEach(function (f) {
+    var radio = f.querySelector('input[type="radio"]:checked');
+    var kick = !!radio && radio.hasAttribute("data-kickback");
+    var box = null;
+    if (kick) box = f.querySelector("[data-kickback-text]");
+    else if (radio) box = f.querySelector('[data-option-text="' + alQuote(radio.value) + '"]');
+    var text = box ? box.value : "";
+    if (!radio) {
+      // Nothing chosen: keep whatever the author has written rather than
+      // dropping it, so a half-finished response survives the next keystroke.
+      var written = Array.prototype.slice.call(f.querySelectorAll("textarea")).filter(function (t) {
+        return String(t.value).trim();
+      });
+      if (written.length === 0) return;
+      text = written[0].value;
+    }
+    out.push({
+      name: f.getAttribute("data-fact"),
+      option: kick || !radio ? null : radio.value,
+      kickback: kick,
+      text: text
+    });
+  });
+  return out;
+}
+
+function alApplyResponse(el, data) {
   if (!data) return;
-  var scope = alControlScope(el);
-  if (data.ruling) {
-    var radio = scope.querySelector('input[type="radio"][value="' + String(data.ruling).replace(/["\\]/g, "\\$&") + '"]');
+  var words = el.querySelector("[data-words]");
+  if (words && typeof data.words === "string") words.value = data.words;
+  (data.facts || []).forEach(function (r) {
+    if (!r || !r.name) return;
+    var f = el.querySelector('[data-fact="' + alQuote(r.name) + '"]');
+    if (!f) return;
+    var radio = r.kickback
+      ? f.querySelector("[data-kickback]")
+      : (r.option ? f.querySelector('input[type="radio"][value="' + alQuote(r.option) + '"]') : null);
     if (radio) radio.checked = true;
-  }
-  var noteEl = scope.querySelector('[data-field="text"]');
-  if (noteEl && typeof data.text === "string") noteEl.value = data.text;
+    var box = r.kickback
+      ? f.querySelector("[data-kickback-text]")
+      : (r.option ? f.querySelector('[data-option-text="' + alQuote(r.option) + '"]') : null);
+    if (box && typeof r.text === "string") box.value = r.text;
+    // An option's own words live in its drill-down, so open it: a response
+    // the author cannot see is a response they cannot correct.
+    if (box && String(box.value).trim() && box.closest) {
+      var drill = box.closest("details");
+      if (drill) drill.open = true;
+    }
+  });
 }
 
-// The textarea takes the label of whichever response is chosen -- a note,
-// edits, or feedback -- so the author is never asked for one and writing
-// another.
-function alSyncNoteLabel(el) {
-  var scope = alControlScope(el);
-  var lbl = scope.querySelector("[data-note-lbl]");
-  if (!lbl) return;
-  var radio = scope.querySelector('input[type="radio"]:checked');
-  lbl.textContent = radio
-    ? (radio.getAttribute("data-note-label") || "A note, edits, or feedback")
-    : "A note, edits, or feedback";
-}
-
-// A response counts when the author ruled on the whole node or on any one
-// of the decisions it asks (commons.systems/disposition-graph/unanswered:
-// the three responses are open on any subset at once).
+// A response counts when the author has answered any one of the facts, or
+// written the words the node's stage asks for.
 function alHasResponse(r) {
   if (!r) return false;
-  if (r.ruling || (typeof r.text === "string" && r.text.trim())) return true;
-  return !!(r.decisions && Object.keys(r.decisions).length > 0);
+  if (typeof r.words === "string" && r.words.trim()) return true;
+  return !!(r.facts && r.facts.length > 0);
 }
 
 function alWhen(iso) {
@@ -605,50 +603,6 @@ function alDocFromHash() {
   return h.indexOf("#item-") === 0 ? h.slice(6) : null;
 }
 
-/* ------------------------------------------- the per-decision rows */
-
-function alReadDecisions(el) {
-  var out = {};
-  Array.prototype.slice.call(el.querySelectorAll("[data-decision]")).forEach(function (f) {
-    var name = f.getAttribute("data-decision");
-    var radio = f.querySelector('input[type="radio"]:checked');
-    var note = f.querySelector("[data-decision-text]");
-    var text = note ? note.value : "";
-    if (!radio && !String(text).trim()) return;
-    var value = radio ? radio.value : null;
-    out[name] = value === "__reject"
-      ? { ruling: "deny", choice: null, text: text }
-      : { ruling: "confirm", choice: value, text: text };
-  });
-  return out;
-}
-
-function alApplyDecisions(el, decisions) {
-  if (!decisions) return;
-  Array.prototype.slice.call(el.querySelectorAll("[data-decision]")).forEach(function (f) {
-    var d = decisions[f.getAttribute("data-decision")];
-    if (!d) return;
-    var value = d.ruling === "deny" ? "__reject" : d.choice;
-    if (value) {
-      var radio = f.querySelector('input[type="radio"][value="' + String(value).replace(/["\\]/g, "\\$&") + '"]');
-      if (radio) radio.checked = true;
-    }
-    var note = f.querySelector("[data-decision-text]");
-    if (note && typeof d.text === "string") note.value = d.text;
-  });
-}
-
-// A rejection asks for feedback, so its box opens; a confirmation does not.
-function alSyncDecisionNotes(el) {
-  Array.prototype.slice.call(el.querySelectorAll("[data-decision]")).forEach(function (f) {
-    var radio = f.querySelector('input[type="radio"]:checked');
-    var note = f.querySelector("[data-decision-text]");
-    if (!note) return;
-    var wants = !!radio && radio.value === "__reject";
-    note.hidden = !wants && !String(note.value).trim();
-  });
-}
-
 /* ---------------------------------------------------------- rendering */
 
 function alRenderItem(el) {
@@ -656,21 +610,27 @@ function alRenderItem(el) {
   var staged = AL.staged[doc];
   var submitted = AL.submitted[doc];
   var state = el.querySelector("[data-state]");
-  var controls = el.querySelector("[data-controls]");
+  var controls = el.querySelector("[data-inputs]");
   var mark = AL.rail[doc];
 
-  // A node off the ruling stage takes no response at all, and its inputs
-  // carry their own `disabled` from the render. An element's own disabled
-  // attribute is never lifted by an ancestor fieldset, so the "change"
-  // affordance below cannot work on one of these and is not offered: a
-  // control that visibly does nothing is worse than none
+  // What a node takes is its stage's own ask: the ruling stage takes a
+  // response on the facts, the two earlier stages take the words they ask
+  // for, and the review stage takes nothing at all
   // (commons.systems/disposition-graph/alignment-page).
-  var locked = el.getAttribute("data-stage") !== "ruling";
+  var stage = el.getAttribute("data-stage");
+  var takesNothing = stage === "review";
+
+  // Recorded while the node was at the ruling stage, on a node the dialogue
+  // has since moved back. Its fact inputs carry their own `disabled` from the
+  // render, and an element's own disabled attribute is never lifted by an
+  // ancestor fieldset, so the "change" affordance cannot work on one of these
+  // and is not offered: a control that visibly does nothing is worse than none.
+  var movedBack = alHasResponse(submitted) && submitted.stage === "ruling" && stage !== "ruling";
 
   // A submitted response is locked until the author asks to change it, and
   // stays open from then on -- clearing the box mid-edit must not lock it
   // again under the author's hands.
-  if (controls) controls.disabled = locked || (!staged && !AL.changing[doc] && alHasResponse(submitted));
+  if (controls) controls.disabled = takesNothing || (!staged && !AL.changing[doc] && alHasResponse(submitted));
   if (mark) mark.textContent = staged ? "\u25CF" : alHasResponse(submitted) ? "\u2713" : "";
 
   if (!state) return;
@@ -678,12 +638,14 @@ function alRenderItem(el) {
     state.textContent = "Staged, not yet submitted.";
     state.hidden = false;
   } else if (alHasResponse(submitted)) {
-    if (locked) {
-      // Recorded while the node was at the ruling stage, and the dialogue has
-      // since moved it back. The response stands in the record and is said so;
-      // it cannot be changed here, because this node cannot take one at all.
+    if (movedBack) {
+      // The response stands in the record and is said so; it cannot be
+      // changed here, because this node no longer takes the one it carries.
       state.textContent = "Recorded " + alWhen(submitted.updated)
         + ", when this node was at the ruling stage. It has moved back since, so it takes no response here.";
+    } else if (takesNothing) {
+      state.textContent = "Recorded " + alWhen(submitted.updated)
+        + ". This node is with the review and takes no response here.";
     } else {
       state.textContent = "Submitted " + alWhen(submitted.updated) + " ";
       var btn = document.createElement("button");
@@ -712,6 +674,7 @@ function alRender() {
     btn.textContent = "Record " + n + " for a session";
     btn.disabled = n === 0;
   }
+  alUpdateLaunch();
   alItemEls().forEach(alRenderItem);
 }
 
@@ -719,18 +682,14 @@ function alRender() {
 
 function alStage(el) {
   var doc = el.getAttribute("data-doc");
-  var reading = alReadControl(el);
-  alSyncNoteLabel(el);
-  alSyncDecisionNotes(el);
-  reading.decisions = alReadDecisions(el);
+  var reading = { words: alReadWords(el), facts: alReadFacts(el) };
   if (!alHasResponse(reading)) delete AL.staged[doc];
   else AL.staged[doc] = {
     node: el.getAttribute("data-id"),
     stage: el.getAttribute("data-stage"),
-    ruling: reading.ruling,
-    text: reading.text,
-    decisions: reading.decisions,
-    updated: new Date().toISOString()
+    updated: new Date().toISOString(),
+    words: reading.words,
+    facts: reading.facts
   };
   alWriteJson(alStagedKey(), AL.staged);
   alRender();
@@ -782,57 +741,47 @@ async function alSubmit() {
 /* ------------------------------------------------------------- digest */
 
 /* One instruction, whichever route carries it. The copy control and the
-   launch link must never emit different text: two controls claiming to do the
-   same thing and saying different things is the defect this exists to prevent
-   (commons.systems/disposition-graph/ruling-transport). The launch link
-   carries the bare `/align`, because a whole sitting does not fit in a URL,
-   and this is what the author pastes. */
+   launch link emit the same text and cannot drift apart: two controls claiming
+   to do the same thing and saying different things is the defect this exists
+   to prevent (commons.systems/disposition-graph/ruling-transport, whose
+   recommendation makes the instruction canonical and the record an optional
+   buffer). It is `/align <the node's id>` for every node carrying a response,
+   with the words that node's stage asked for and one line per fact answered. */
 function alInstructionAll() {
-  var mod = document.getElementById("module-name");
-  var lines = ["/align", ""];
-  var n = 0;
+  var lines = [];
   alItemEls().forEach(function (el) {
     var doc = el.getAttribute("data-doc");
-    var staged = AL.staged[doc];
-    var r = staged || AL.submitted[doc];
+    var r = AL.staged[doc] || AL.submitted[doc];
     if (!alHasResponse(r)) return;
-    n++;
-  });
-  if (n === 0) {
-    lines.push("I have ruled on nothing yet on the alignment page"
-      + (mod && mod.textContent ? " for " + mod.textContent : "") + ".");
-    return lines.join("\n");
-  }
-  lines.push("I have ruled on " + n + (n === 1 ? " node" : " nodes")
-    + " on the alignment page"
-    + (mod && mod.textContent ? " for " + mod.textContent : "")
-    + ". Act on every response below before anything else, as the skill's step 0.4 says,"
-    + " then resume each sitting at its stage. Each response names the node, the stage it"
-    + " was at when I ruled, my ruling on the whole, and my ruling on any decision within it.");
-  lines.push("");
-  alItemEls().forEach(function (el) {
-    var doc = el.getAttribute("data-doc");
-    var staged = AL.staged[doc];
-    var r = staged || AL.submitted[doc];
-    if (!alHasResponse(r)) return;
-    lines.push(
-      el.getAttribute("data-id")
-      + " [" + el.getAttribute("data-stage") + "] "
-      + (r.ruling || "no ruling on the whole")
-      + (staged ? " (staged, not recorded)" : " (recorded)")
-    );
-    var text = (r.text || "").trim();
-    if (text) lines.push("  " + text);
-    var decisions = r.decisions || {};
-    Object.keys(decisions).forEach(function (name) {
-      var d = decisions[name] || {};
-      lines.push("  " + name + ": " + (d.ruling || "no ruling")
-        + (d.choice ? " " + d.choice : "")
-        + (String(d.text || "").trim() ? " -- " + String(d.text).trim() : ""));
+    if (lines.length) lines.push("");
+    lines.push("/align " + el.getAttribute("data-id"));
+    var words = String(r.words || "").trim();
+    if (words) {
+      lines.push("");
+      lines.push(words);
+    }
+    var facts = r.facts || [];
+    if (facts.length) lines.push("");
+    facts.forEach(function (f) {
+      var head = f.name + ": " + (f.kickback ? "kick back" : (f.option || "no option chosen"));
+      var text = String(f.text || "").trim();
+      lines.push(text ? head + " — " + text : head);
     });
-    lines.push("");
   });
-  return lines.join("\n");
+  return lines.length === 0 ? "/align" : lines.join("\n");
+}
+
+/* The launch link carries whatever the copy control would put on the
+   clipboard, so it is rebuilt whenever a response is staged. The address's
+   shape is the projector's (see `seedBase`): the base holds everything but the
+   prompt. */
+function alUpdateLaunch() {
+  var a = document.getElementById("btn-launch");
+  if (!a) return;
+  var base = a.getAttribute("data-seed-base") || "";
+  if (!base) return;
+  a.href = base + (base.indexOf("?") >= 0 ? "&" : "?")
+    + "prompt=" + encodeURIComponent(alInstructionAll());
 }
 
 /* Put text on the clipboard and say so on the button that asked for it. */
@@ -894,24 +843,21 @@ async function alBoot() {
     var doc = el.getAttribute("data-doc");
     // A staged response is the later of the two, and stands whole: it is
     // what the author has written since the last submission.
-    alApplyControl(el, AL.staged[doc] || AL.submitted[doc]);
-    alApplyDecisions(el, (AL.staged[doc] || AL.submitted[doc] || {}).decisions);
-    alSyncNoteLabel(el);
-    alSyncDecisionNotes(el);
+    alApplyResponse(el, AL.staged[doc] || AL.submitted[doc]);
     el.addEventListener("change", function () { alStage(el); });
     el.addEventListener("input", function () { alStage(el); });
     el.addEventListener("click", function (ev) {
       var t = ev.target;
       if (!t || !t.hasAttribute || !t.hasAttribute("data-change")) return;
-      // Never reachable from a locked item, which renders no change button;
-      // guarded anyway, since opening the fieldset there would suggest an
-      // edit the individually-disabled inputs cannot accept.
-      if (el.getAttribute("data-stage") !== "ruling") return;
+      // Never reachable from an item that takes no response, which renders no
+      // change button; guarded anyway, since opening the fieldset there would
+      // suggest an edit the individually-disabled inputs cannot accept.
+      if (el.getAttribute("data-stage") === "review") return;
       AL.changing[doc] = true;
-      var controls = el.querySelector("[data-controls]");
+      var controls = el.querySelector("[data-inputs]");
       if (controls) controls.disabled = false;
       alStage(el);
-      var note = el.querySelector('[data-field="text"]');
+      var note = el.querySelector("[data-words]") || el.querySelector("textarea:not([disabled])");
       if (note) note.focus();
     });
   });

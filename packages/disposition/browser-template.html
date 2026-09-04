@@ -221,10 +221,6 @@
 
   /* ---------- role-specific blocks ---------- */
   .unruled { border-left: 2px dashed var(--proposal); padding-left: 16px; }
-  .rejected { margin: 22px 0 0; padding: 14px 18px; background: var(--paper-2); border-left: 2px solid var(--proposal); border-radius: 0 3px 3px 0; }
-  .rejected > .blk-label { font-family: var(--mono); font-size: 10.5px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--proposal); margin: 0 0 8px; }
-  .rejected p, .rejected li { font-size: 15.5px; }
-  .rejected > :last-child { margin-bottom: 0; }
   .propblock { padding: 16px 18px; background: var(--proposal-soft); border: 1px dashed var(--proposal); border-radius: 4px; max-width: var(--measure); }
   .propblock .blk-label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--proposal); margin: 0 0 10px; }
   .propblock .mdbody { font-size: 16px; }
@@ -244,6 +240,7 @@
   .optlist > li.stands { border-left-color: var(--ink-3); }
   .optlist > li.ruled { border-left-color: var(--ratified); }
   .optlist > li.adopted { border-left-color: var(--accent-ink); }
+  .optlist > li.passed { border-left-color: var(--proposal); }
   .optreadings { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
   .optreadings .mono { font-family: var(--mono); font-size: 11px; color: var(--ink-3); overflow-wrap: anywhere; }
   .pill.prune { background: var(--proposal-soft); color: var(--proposal); }
@@ -459,29 +456,6 @@ function mdHtml(src) {
   return mdBlocks(src).map(function (b) { return b.html; }).join("");
 }
 
-/* Wrap a "### Rejected" run in its own labelled block. */
-function groupRejected(blocks) {
-  var out = [];
-  var i = 0;
-  while (i < blocks.length) {
-    var b = blocks[i];
-    if (b.type === "heading" && /^rejected\b/i.test(b.text)) {
-      var level = b.level;
-      var inner = [];
-      i++;
-      while (i < blocks.length && !(blocks[i].type === "heading" && blocks[i].level <= level)) {
-        inner.push(blocks[i].html);
-        i++;
-      }
-      out.push('<section class="rejected"><h3 class="blk-label">' + esc(b.text) + "</h3>" + inner.join("") + "</section>");
-      continue;
-    }
-    out.push(b.html);
-    i++;
-  }
-  return out.join("");
-}
-
 /* Plain text of one markdown line, for tooltips and sentences. */
 function plain(s) {
   return String(s == null ? "" : s)
@@ -527,6 +501,12 @@ function truncate(s, n) {
 
 function reEsc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 
+/* A `defines` entry is a bare term, with no sentence recorded for it, or a
+   {term, gloss} pair -- the sentence written once on the node that defines
+   the term (packages/disposition/derive.mjs's `glossary`). The gloss is the
+   term's sentence where the node recorded one; a bare term, or one recorded
+   without a gloss yet, falls back to the node's own opening sentence, as
+   every term did before a gloss had anywhere to live. */
 function termIndex(nodes) {
   var map = new Map();
   var terms = [];
@@ -534,11 +514,13 @@ function termIndex(nodes) {
     var n = nodes[i];
     var defs = n.defines || [];
     for (var j = 0; j < defs.length; j++) {
-      var raw = String(defs[j]).trim();
+      var d = defs[j];
+      var raw = String(typeof d === "string" ? d : (d && d.term) || "").trim();
       if (!raw) continue;
       var key = raw.toLowerCase();
       if (map.has(key)) continue;
-      map.set(key, { term: raw, id: n.id, question: n.question, sentence: firstSentence(n.answer) });
+      var gloss = typeof d === "object" && d && d.gloss ? String(d.gloss).trim() : "";
+      map.set(key, { term: raw, id: n.id, question: n.question, sentence: gloss || firstSentence(n.answer) });
       terms.push(raw);
     }
   }
@@ -714,12 +696,31 @@ function optionReadings(o, chosen) {
   }).join("") + "</ul>";
 }
 
-function optionHtml(f, o) {
+/* The case against the recommended option: the fact's own, and the
+   clean-context review's beside its strength. Shown only on the option a
+   fact recommends -- the one thing either case is against -- and only when
+   the record carries one; there is no dominated-option or unreviewed-node
+   case to show otherwise. */
+function optionAgainstHtml(n, f, o) {
+  if (o.name !== f.recommends) return "";
+  var parts = [];
+  if (f.against) parts.push('<p><span class="lead">Against.</span> ' + esc(f.against) + "</p>");
+  if (n.review && n.review.against) {
+    parts.push('<p><span class="lead">' + esc("Review (" + n.review.strength + ").") + "</span> " + esc(n.review.against) + "</p>");
+  }
+  return parts.length ? '<div class="mdbody">' + parts.join("") + "</div>" : "";
+}
+
+function optionHtml(n, f, o) {
   var marks = [];
   var cls = [];
   if (f.name === "answer" && o.name === f.stands) { marks.push('<span class="pill sm none">stands</span>'); cls.push("stands"); }
+  if (o.status === "passed") {
+    marks.push('<span class="pill sm pro">' + esc("passed over" + (o.reason ? " · " + o.reason : "")) + "</span>");
+    cls.push("passed");
+  }
   if (o.ruling) {
-    marks.push('<span class="pill sm ruled">' + esc("confirmed · " + o.ruling.response + " · " + o.ruling.date) + "</span>");
+    marks.push('<span class="pill sm ruled">' + esc("confirmed · " + o.ruling.response + " · " + o.ruling.date + (o.ruling.reason ? " · " + o.ruling.reason : "")) + "</span>");
     cls.push("ruled");
   }
   if (o.name === f.recommends) {
@@ -733,7 +734,8 @@ function optionHtml(f, o) {
     '<p class="altname"><span class="mono">' + esc(o.name) + "</span>" +
     (meta.length ? '<span class="altmeta">' + esc(meta.join(" · ")) + "</span>" : "") +
     marks.join("") + "</p>" +
-    (o.prose ? '<div class="mdbody">' + mdHtml(o.prose) + "</div>" : "") +
+    (o.sentence ? '<div class="mdbody">' + mdHtml(o.sentence.text) + "</div>" : "") +
+    optionAgainstHtml(n, f, o) +
     optionReadings(o, f.ruled) +
     "</li>";
 }
@@ -746,7 +748,7 @@ function factsHtml(n) {
       '<p class="altname"><span class="mono">' + esc(f.name) + "</span>" +
       '<span class="altmeta">' + esc(FACT_TITLES[f.name] || "") + "</span></p>" +
       (f.prose ? '<div class="mdbody">' + mdHtml(f.prose) + "</div>" : "") +
-      '<ul class="optlist">' + orderedOptions(f).map(function (o) { return optionHtml(f, o); }).join("") + "</ul>" +
+      '<ul class="optlist">' + orderedOptions(f).map(function (o) { return optionHtml(n, f, o); }).join("") + "</ul>" +
       "</li>";
   }).join("");
   var pending = (n.answerFact ? n.answerFact.options.length - (n.answerFact.stands ? 1 : 0) : 0);
@@ -1001,7 +1003,7 @@ function answerSection(n) {
 
 function rationaleSection(n) {
   if (!n.rationale) return "";
-  return '<section><h2 class="sect">Rationale</h2><div class="mdbody">' + groupRejected(mdBlocks(n.rationale)) + "</div></section>";
+  return '<section><h2 class="sect">Rationale</h2><div class="mdbody">' + mdHtml(n.rationale) + "</div></section>";
 }
 
 function accountSection(n) {

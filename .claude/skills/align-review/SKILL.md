@@ -240,7 +240,7 @@ as a gap in the reading rather than as a finding of nothing.
    when absent) with the verdict, the findings, the facts check, the
    viability judgment, the counter-argument with its strength, and the
    reply; on `forward` sets `stage: ruling` and writes `review` with
-   `verdict`, `strength`, `date`, and `of`, the reader's
+   `verdict`, `strength`, `date`, `against`, and `of`, the reader's
    `deriveRecommendationHash` for the node as edited — the pin that goes
    stale when any fact's recommendation moves; on `kickback` sets the stage
    the reviewer named and writes the same `review` with the kickback

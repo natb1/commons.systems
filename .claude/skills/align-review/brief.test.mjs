@@ -397,7 +397,7 @@ describe("reviewLine", () => {
 
     const surveyOnly = reviewLine(byId.get(SURVEY_PINNED));
     assert.ok(!surveyOnly.includes("null"), `a survey-only review must not print nulls: ${surveyOnly}`);
-    assert.match(surveyOnly, /^draft review: none \(this draft has not been reviewed\); survey: surveyed 2026-08-02, of 99a302ea296a6324291a06687d671d3d32949504$/);
+    assert.match(surveyOnly, /^draft review: none \(this draft has not been reviewed\); survey: surveyed 2026-08-02, of 556a7fe535f582386cc3cdaacaad2c7f0b507539$/);
 
     const draftOnly = reviewLine(byId.get(REVIEW_A));
     assert.match(draftOnly, /^draft review: forward \(weak, 2026-08-01, of [0-9a-f]{40}\); survey: none \(no survey has pinned this node\)$/);
@@ -435,5 +435,68 @@ describe("frontierOrderIds", () => {
     const ids = frontierOrderIds(graph);
     assert.equal(ids.length, graph.nodes.length);
     assert.deepEqual([...ids].sort(), graph.nodes.map((n) => n.id).sort());
+  });
+});
+
+// -------------------------------- against, passed-over, ruling reason, defines
+
+describe("writeDraftBrief: a fact's own case against, a passed-over option, a ruling's reason, and a glossed term", () => {
+  test("all four reach the brief text, on the node under review and on an ancestor carried into it", async () => {
+    const rootDir = await freshFrontierFixture("new-fields-");
+    const reviewDir = path.join(rootDir, "_review");
+
+    // review-b: a case against its own recommendation, a passed-over option
+    // with its reason, and a term this node defines with its gloss.
+    const reviewBFile = path.join(rootDir, "main", "review-b.md");
+    const reviewBBefore = await readFile(reviewBFile, "utf8");
+    const reviewBAfter = reviewBBefore
+      .replace(
+        '      - name: narrower\n        source: ai\n        ref: "2026-08-01"\n',
+        '      - name: narrower\n        source: ai\n        ref: "2026-08-01"\n        status: passed\n        reason: Covers less than the author\'s words ask for.\n',
+      )
+      .replace(
+        "    recommends: standing\n    boldness: high\n    stands: standing\n",
+        "    recommends: standing\n    boldness: high\n    against: The narrower reading would have covered fewer cases, at less risk.\n    stands: standing\n",
+      )
+      .replace(
+        "form: rule\nstage: review\nfacts:",
+        "form: rule\nstage: review\ndefines:\n  - term: narrower-reading\n    gloss: Answering only the case the author named.\nfacts:",
+      );
+    assert.notEqual(reviewBAfter, reviewBBefore, "fixture precondition: every replacement matched");
+    await writeFile(reviewBFile, reviewBAfter);
+
+    const bResult = await writeDraftBrief({ rootDir, reviewDir, id: REVIEW_B, date: "2026-09-04" });
+    const bBrief = await readFile(bResult.briefPath, "utf8");
+    assert.ok(
+      bBrief.includes("against: The narrower reading would have covered fewer cases, at less risk."),
+      "the fact's own case against its recommendation",
+    );
+    assert.ok(
+      bBrief.includes("passed over — Covers less than the author's words ask for."),
+      "the passed-over option's status and reason",
+    );
+    assert.ok(
+      bBrief.includes("`narrower-reading` — Answering only the case the author named."),
+      "the term this node defines, with its gloss",
+    );
+
+    // answered-ratified: a reason on the author's own ruling, carried into
+    // review-low's brief as an ancestor (draftNeighbourhood's own test pins
+    // its ancestry as [ANSWERED, REVIEW_GLOBAL]).
+    const answeredFile = path.join(rootDir, "main", "answered-ratified.md");
+    const answeredBefore = await readFile(answeredFile, "utf8");
+    const answeredAfter = answeredBefore.replace(
+      "          of: 70edb8ce8610630d55750558a972541c6f05b677\n",
+      "          of: 70edb8ce8610630d55750558a972541c6f05b677\n          reason: Nothing has come up since to reopen it.\n",
+    );
+    assert.notEqual(answeredAfter, answeredBefore, "fixture precondition: the ruling block matched");
+    await writeFile(answeredFile, answeredAfter);
+
+    const lowResult = await writeDraftBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-04" });
+    const lowBrief = await readFile(lowResult.briefPath, "utf8");
+    assert.ok(
+      lowBrief.includes("reason: Nothing has come up since to reopen it."),
+      "the author's own reason for the ruling, beside its response and date",
+    );
   });
 });

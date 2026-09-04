@@ -279,6 +279,23 @@ function dependsText(node) {
   return entries.map((d) => (d.option ? `${d.id}#${d.option}` : d.id)).join(", ");
 }
 
+/**
+ * The terms one node defines, each with the gloss it wrote for it -- the
+ * one sentence a vocabulary fact's option (`authority`/`existence`) shows
+ * wherever that term is offered, so a passed-over or missing gloss here is
+ * a gap this brief should catch. `(no gloss yet)` where the node named the
+ * term but wrote no sentence for it.
+ */
+function definesText(node) {
+  const entries = node.defines || [];
+  if (entries.length === 0) return null;
+  return entries.map((d) => {
+    const term = typeof d === "string" ? d : d.term;
+    const gloss = typeof d === "string" ? null : d.gloss;
+    return gloss ? `\`${term}\` — ${gloss}` : `\`${term}\` (no gloss yet)`;
+  }).join("; ");
+}
+
 /** A reading's `bears`: the options of other nodes the tradition bears on. */
 function bearsText(node) {
   const entries = node.bears || [];
@@ -300,17 +317,20 @@ function ruledOptionName(fact) {
 
 /**
  * One fact in one line, for an index or a context node: what it recommends,
- * out of which options, with what boldness, what stands, and what was ruled.
+ * out of which options, with what boldness, the AI's own case against that
+ * recommendation where one is on record, what stands, and what was ruled.
  */
 function factDetail(fact) {
   const options = (fact.options || []).map((o) => o.name).join("|");
   const bits = [fact.recommends ? `recommends ${fact.recommends} (${fact.boldness})` : "recommends nothing yet"];
   bits.push(` of ${options}`);
+  if (fact.against) bits.push(`; against: ${fact.against}`);
   if (fact.stands) bits.push(`, stands ${fact.stands}`);
   const ruled = ruledOptionName(fact);
   if (ruled) {
     const ruling = fact.options.find((o) => o.name === ruled).ruling;
-    bits.push(`, ruled ${ruling.response} on ${ruled} (${ruling.date})${fact.moved ? " — MOVED since that ruling" : ""}`);
+    const reason = ruling.reason ? `, reason: ${ruling.reason}` : "";
+    bits.push(`, ruled ${ruling.response} on ${ruled} (${ruling.date})${fact.moved ? " — MOVED since that ruling" : ""}${reason}`);
   }
   return bits.join("");
 }
@@ -350,8 +370,12 @@ function renderFacts(node, headingPrefix) {
     for (const option of fact.options || []) {
       const marks = [];
       if (fact.recommends === option.name) marks.push(`recommended, boldness ${fact.boldness}`);
+      if (option.status === "passed") marks.push(`passed over${option.reason ? ` — ${option.reason}` : ""}`);
       if (fact.stands === option.name) marks.push("stands (its text is the '## Answer' above)");
-      if (option.ruling) marks.push(`ruled ${option.ruling.response} on ${option.ruling.date}, pinning ${option.ruling.of}`);
+      if (option.ruling) {
+        const reason = option.ruling.reason ? `, reason: ${option.ruling.reason}` : "";
+        marks.push(`ruled ${option.ruling.response} on ${option.ruling.date}, pinning ${option.ruling.of}${reason}`);
+      }
       const origin = [option.source ? `source ${option.source}` : null, option.ref ? `ref ${option.ref}` : null]
         .filter(Boolean).join(", ") || "no source recorded (a reserved fact's option needs none)";
       out.push(`- \`${option.name}\` — ${origin}${marks.length > 0 ? ` — ${marks.join("; ")}` : ""}`);
@@ -387,6 +411,8 @@ function renderWholeNode(node, { account = true } = {}) {
     `- Review state: ${reviewLine(node)}`,
     `- Depends: ${dependsText(node)} | under: ${(node.under || []).join(", ") || "none"}`,
   ];
+  const defines = definesText(node);
+  if (defines) parts.push(`- Defines: ${defines}`);
   const bears = bearsText(node);
   if (bears) parts.push(`- Bears on (this node is a reading): ${bears}`);
   parts.push(

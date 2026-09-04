@@ -14,6 +14,11 @@ facts:
     recommends: standing
     boldness: moderate
     stands: standing
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
 ---
 
 ## Answer

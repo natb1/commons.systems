@@ -5,7 +5,7 @@ stage: review
 review:
   survey:
     date: 2026-08-02
-    of: 99a302ea296a6324291a06687d671d3d32949504
+    of: 556a7fe535f582386cc3cdaacaad2c7f0b507539
 facts:
   - name: answer
     options:
@@ -15,6 +15,13 @@ facts:
     recommends: standing
     boldness: moderate
     stands: standing
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
+    recommends: ratified
+    boldness: low
 ---
 
 ## Answer
