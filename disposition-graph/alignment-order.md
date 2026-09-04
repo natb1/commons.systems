@@ -67,6 +67,9 @@ The author, 2026-09-03, on the finding that the count puts a node ahead of its o
 The author, 2026-09-03, on the reach-and-load answer:
 > does this change your recommendation?
 
+The author, 2026-09-03, granting bootstrap authority a second time, for the amended recommendation:
+> reconcile (bootstrap authority) align/align-review/alignment artifact with new recommendation
+
 ## Alternatives
 
 ### draft
@@ -132,6 +135,23 @@ The author's words of 2026-09-03, quoted in the dialogue that produced this node
 ```
 
 ## Account
+
+### Reconciled to the amended recommendation, 2026-09-03
+
+A second bootstrap grant, in the author's words quoted above, for the same
+three artifacts and the recommendation as amended. It is a separate grant
+from the first and is recorded as one: the first was spent on the draft that
+counted alternatives, and this skill reads no grant as standing. It answers
+this node no more than the first did. The stamp stays absent, the stage stays
+`review`, and the clean-context review and the ruling are both still owed on
+the recommendation as it now stands.
+
+The reconciliation drops the alternatives term from the settling count in the
+reader's derivation, leaves the count of alternatives in the breakdown as a
+displayed fact on the frontier line and beside the settling count on the
+alignment page, and restates the settle rule and the ancestor rule in the
+alignment skill. The implementation commit on `greenfield` names this grant
+and the graph commit it reconciles to.
 
 ### Recommendation changed to settle-counts-nodes-only, 2026-09-03
 
