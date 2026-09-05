@@ -25,6 +25,9 @@ facts:
       - name: shim-names-an-existing-artifact
         source: review
         ref: "2026-09-03"
+      - name: rules-projection-declared-a-shim
+        source: commons.systems/disposition-graph/what-acts-during-bootstrap
+        ref: "2026-09-05"
       - name: delete-claude-md
         source: ai
         ref: "d078c119"
@@ -95,6 +98,26 @@ Session-context's account carries 'Depends on: ledger-sunset', which names no no
 #### shim-names-an-existing-artifact
 
 The harness-configuration shim names an artifact that exists. Verified on 2026-09-03 that `.claude/settings.json` is in neither the implementation ref nor the author's checkout, so the shim as restated names nothing a reader or the frontier can reach, while `.claude/settings.local.json` is present and gitignored. On this alternative the shim's artifact becomes the settings file that exists, with its exclusion from the ref stated as part of the liquidation condition, and CLAUDE.md's sentence about `worktree.baseRef` is reconciled to whatever file actually carries it. The alternative to it is that the author writes the file the shim names, which changes no text; the choice is the author's because it decides whether the harness configuration is a projected artifact of the record or a fact of the author's machine.
+
+#### rules-projection-declared-a-shim
+
+The rules projection is declared a shim on this node beside `CLAUDE.md` and the
+harness configuration: the files under `.claude/rules/` stand in for the
+doctrine each node's ruling will supply, so that the rule files every session
+loads act as this record's interim doctrine while the nodes they project are
+unruled, and each falls away as the node it projects is ruled. It answers, at
+the node that owns the projection, the case the `what-acts-during-bootstrap`
+node records against its own answer: that nothing that answer names is what the
+doctrine the machine is running on is, since eight rule files are projected from
+eight nodes no ruling reaches, and by that node's "Nothing else acts by right"
+they are neither of the two things that act. Against it, a shim over eight files
+projected from eight unruled nodes is one declaration standing in for the whole
+of the record's present operation, which is the thing a shim is least well
+shaped to be. Raised by the clean-context reading of
+`commons.systems/disposition-graph/what-acts-during-bootstrap` on 2026-09-05,
+which found that half of that node's option `projected-doctrine-acts` was never
+that node's to carry, this node's frontmatter being what would hold the
+declaration.
 
 #### delete-claude-md
 
@@ -260,3 +283,16 @@ Unrelated and still open on this node: the shim asserting `.claude/settings.json
 in the author's checkout, which the review of 2026-09-03 found names no file.
 Verified again on 2026-09-04 and it still names no file; CLAUDE.md repeats the
 claim. The grant does not reach it and it is left for the ruling.
+
+### An option from what-acts-during-bootstrap's reading, 2026-09-05
+
+That node's option `projected-doctrine-acts` offers two places for its third
+limb, the node's own answer or a shim declared here over the rules projection,
+and says the option covers both. The second is not that node's to decide: the
+shims this node's answer governs are declared in this node's frontmatter, which
+carries two, over `CLAUDE.md` and over the harness configuration, and neither
+reaches `.claude/rules/`. The alternative is recorded here as
+`rules-projection-declared-a-shim` so the author has a row at the node that
+would carry the declaration. It is not recommended and nothing is settled by
+recording it; adding it moves no pin, this node recommending `standing`, which
+carries no subsection.

@@ -1,6 +1,6 @@
 ---
 question: What acts while nothing in the record is ratified, and when does that state end?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -38,12 +38,12 @@ facts:
     recommends: ratified
     boldness: moderate
 review:
-  verdict: kickback
+  verdict: forward
   strength: strong
   date: 2026-09-05
-  of: 91e7cffbfbce2028fab5012e4afeb06bed5047c3
-  commit: da9492948cae22dd2a238af90fd542d48008ba04
-  against: "The term this node mints is the one every stopgap in the record dates itself by - CLAUDE.md's own notice, materialization's greenfield shim, work-loop's reconciliation shim, review's instrument - and the answer fixes the state while handing the moment to a child that is itself unruled, whose answer in turn gathers its conditions from six further unruled nodes. Ratifying this therefore buys the author less than it looks like: a session still cannot compute whether it is in bootstrap or out of it, and the two clauses this reading found wrong are both in the half that tries to say when the state ends, which is the half the record cannot yet settle. Beside that stands the objection the fact already records and this reading re-verified with the count corrected: eight rule files under `.claude/rules/`, this answer's own projection among them, direct every session, and none of them is a shim any node declares or a grant given for one reconciliation, so the answer names nothing that the doctrine the machine is actually running on is. The option that would answer it, `projected-doctrine-acts`, is listed and not recommended, which is honest, but it leaves the author choosing between a rule that describes a machine nobody is running and an option the AI will not stand behind - and choosing while reading the rule in question inside a file the rule says acts on nothing."
+  of: 9c96ce471cfe5f437c3586c400dd8d14c5d4b72b
+  commit: 1c8931f91054305fb2121f236a1f294fb88accad
+  against: "The answer names nothing that the doctrine the machine is actually running on is, and the author is asked to ratify it inside one of the files it fails to name. I verified eight rule files under `.claude/rules/` — authority, class-recommendation, delegation, delegation-bounds-and-sizing, evaluation, materialization, session-context and what-acts-during-bootstrap — each projected from one of the eight nodes carrying `tier: global`, none of which any ruling reaches, and session-context declares its two shims over `CLAUDE.md` and `.claude/settings.json` and over neither the rules projection nor this file. By the first paragraph's own 'Nothing else acts by right', those eight are neither of the two things that act: a projection of an unruled node stands in for no materialization the record has not made, the projection being made and what it lacks being authority, and it is no grant, a grant being given for one named reconciliation. The redraft's gain is real but negative — the second paragraph no longer condemns those files as unsupported, because it now cites materialization's and session-context's own tests instead of a test about authority — and what replaces the false condemnation is a hole: the answer says what does not make the rule files unsupported and never says what makes them binding. `projected-doctrine-acts` is listed and not recommended, honestly and by the AI's own rule against answering a case against itself, but the effect is that the recommendation put to the author is the one that leaves the hole, and ratifying it makes the hole doctrine."
 form: rule
 under:
   - commons.systems/disposition-graph/authority
@@ -68,44 +68,47 @@ The author, 2026-09-04, on the viable-options node, on what unanswered is:
 
 ## Answer
 
-Two things act by right, and no class acts until a ruling confers one; from
-that ruling the class acts, as the authority node says, and what acts by right
-shrinks with every ruling. A shim declared on the record is applied
-by default, as the evaluation node says, and it stands in for a materialization
-the record has not yet made, as the transience node defines it; a prompt is
-required only to bypass one. And a grant is the author's word, given for one
-named reconciliation of one unanswered node, never assumed, never carried over
-from an earlier grant, and never read from the announcement of one, as the
-authority node says; the grant is what the author's words call bootstrap
+Two things act by right, and no class acts until a ruling confers one; from that
+ruling the class acts, as the authority node says, whose own sentence that no
+class acts during bootstrap was written of the narrower state and stands with
+the author as the option `a-conferred-class-acts-during-bootstrap`; and what
+acts by right shrinks with every ruling. A shim declared on the record is
+applied by default, as the evaluation node says, and it stands in for a
+materialization the record has not yet made, as the transience node defines it;
+a prompt is required only to bypass one. And a grant is the author's word, given
+for one named reconciliation of one unanswered node, never assumed, never
+carried over from an earlier grant, and never read from the announcement of one,
+as the authority node says; the grant is what the author's words call bootstrap
 authority, and the two names are one thing. Nothing else acts by right: a
-recommendation on an unanswered node is a draft and grounds no work, and a
-class the AI writes for itself is not a grant.
+recommendation on an unanswered node is a draft and grounds no work, and a class
+the AI writes for itself is not a grant.
 
 Bootstrap is the state of this record until bootstrap exit, and it is not a
 licence: what a session may do in it is exactly what the two rules above allow,
 together with what each class a ruling has already conferred allows. What an
 artifact standing outside them is, this node does not decide: the record's test
 for unsupported implementation is the materialization node's, whether a
-disposition justifies the artifact, and the session-context node's for this
-directory, whether a node projects the rule, and neither test reads the
-authority under which anything acted. An artifact that fails one of those tests
-is unsupported implementation, which the second direction of reconciliation puts
-on the frontier for the author's ruling; the work-loop node holds that direction
-back until the dispositions that state it are answered, and no instrument
-derives that frontier today. The state does not end in one act, and it does not
-relax all at once. It relaxes node by node, as rulings accumulate and each
-node's class begins to act in place of the shim or the grant that carried it, so
-that what acts by right shrinks with every ruling until the last one leaves
-nothing for it to carry. Bootstrap exit is the
-moment every condition the record declares for it is met; which conditions
-those are is the question of the node beneath this one,
-`bootstrap-exit-conditions`, and this node mints none of them and lists none.
-The swap of `greenfield` with `main` is what happens at exit and is no
-condition of it. The grant does not expire at exit: reconciling an unanswered
-node on the author's explicit word is the rule at any time, as the authority
-node holds, and that strikes the expiry the author's words of 2026-09-03 gave
-it, quoted above; the divergence is recorded here, and `grant-expires-at-exit`
-keeps the author's own side of it on the list.
+disposition justifies the artifact, and the session-context node's for what a
+session loads, whether a node projects it, and neither test reads the authority
+under which anything acted. An artifact that fails one of those tests is
+unsupported implementation, which the second direction of reconciliation puts on
+the frontier for the author's ruling; the work-loop node's declared shim holds
+that direction back until the dispositions that state it are answered, that
+node's own answer putting the direction only at exit and standing before the
+author as `second-direction-begins-when-its-disposition-is-answered`; and no
+instrument derives that frontier today. The state does not end in one act, and
+it does not relax all at once. It relaxes node by node, as rulings accumulate
+and each node's class begins to act in place of the shim or the grant that
+carried it, so that what acts by right shrinks with every ruling until the last
+one leaves nothing for it to carry. Bootstrap exit is the moment every condition
+the record declares for it is met; which conditions those are is the question of
+the node beneath this one, `bootstrap-exit-conditions`, and this node mints none
+of them and lists none. The swap of `greenfield` with `main` is what happens at
+exit and is no condition of it. The grant does not expire at exit: reconciling
+an unanswered node on the author's explicit word is the rule at any time, as the
+authority node holds, and that strikes the expiry the author's words of
+2026-09-03 gave it, quoted above; the divergence is recorded here, and
+`grant-expires-at-exit` keeps the author's own side of it on the list.
 
 ## Rationale
 
@@ -566,3 +569,76 @@ while reading the rule inside a file the rule says acts on nothing.
 `projected-doctrine-acts` is the option that would answer it, and it stays listed
 and not recommended, because the AI does not answer a case against itself by
 ruling on it.
+
+### Clean-context review, 2026-09-05
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Recommended at this reading: `shim-and-grant`.
+
+Findings:
+
+- ## Answer, first paragraph, first sentence (validations 2 and 3; the ancestor is cited for the position its own standing answer denies, and the divergence is unnamed in the text). 'Two things act by right, and no class acts until a ruling confers one; from that ruling the class acts, as the authority node says, and what acts by right shrinks with every ruling.' The clause is true of authority's definitions of the three classes, but the last sentence of authority's standing answer says the contrary of the state this node now defines: disposition/disposition-graph/authority.md:125, 'During bootstrap no class acts; neither a declared shim nor the author's grant names a class, and what does act while nothing is ratified, and how that state ends, is the question of the node beneath this one, what-acts-during-bootstrap.' The divergence is properly on the record — authority.md:62 and :217 carry the option `a-conferred-class-acts-during-bootstrap` and authority.md:651-660 accounts for it — but the draft's own text says nothing of it, while the same paragraph pair names the other divergence it takes in as many words ('the divergence is recorded here, and `grant-expires-at-exit` keeps the author's own side of it on the list'). The two texts are loaded together as rules: `.claude/rules/authority.md` carries 'During bootstrap no class acts' and `.claude/rules/what-acts-during-bootstrap.md:4-5` carries 'no class acts until a ruling confers one; from that ruling the class acts, as the authority node says'. No executor is wrong today, no ruling existing; the first ruling makes the two files a session loads disagree with no notice in either. Suggested edit: after 'as the authority node says', add 'whose own sentence that no class acts during bootstrap was written of the narrower state and stands with the author as the option `a-conferred-class-acts-during-bootstrap`'.
+- ## Answer, second paragraph (validations 2 and 3; the same shape on work-loop, one side of a conflict inside the cited node stated as that node's position). 'An artifact that fails one of those tests is unsupported implementation, which the second direction of reconciliation puts on the frontier for the author's ruling; the work-loop node holds that direction back until the dispositions that state it are answered, and no instrument derives that frontier today.' I verified the clause against the shim: disposition/disposition-graph/work-loop.md:72, the reconciliation shim's `liquidation` field, reads '... and the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered', so the attribution holds of the declared shim. It does not hold of the node's standing answer, which opens 'By reconciliation in both directions, the second begun only at exit', and that divergence is recorded on that node as `second-direction-begins-when-its-disposition-is-answered`, sourced here. As written, text projected verbatim into a rule file every session loads names 'the work-loop node' as holding one position while the answer of that node states the other, and a session sent to work-loop finds no notice that the clause is contested. Suggested edit: 'the work-loop node's declared shim holds that direction back until the dispositions that state it are answered, that node's own clause putting the direction only at exit being before the author as `second-direction-begins-when-its-disposition-is-answered`'. I re-verified the last limb: `grep -n "greenfield\|unsupported" packages/disposition/*.mjs` returns nothing, so no instrument derives that frontier.
+- ## Answer, second paragraph (validation 3; a citation that names no locus in the text a session reads). 'and the session-context node's for this directory, whether a node projects the rule'. session-context.md:73 states the test over the three projections it names, `.claude/rules/`, `CLAUDE.local.md` and `CLAUDE.md`: 'a rule no node projects is unsupported implementation', and 'Anything in any of the three that no node projects is on the frontier as a prune-by-default proposal'. 'This directory' names no directory: on the disposition ref the phrase reads as the graph's own directory, and in `.claude/rules/what-acts-during-bootstrap.md`, which is where a session actually meets the sentence, it reads as either `.claude/rules/` or the repository root — three readings, of which only one is session-context's. Suggested edit: 'and the session-context node's for what a session loads, whether a node projects it'.
+- ## Answer, both paragraphs (editorial; the broken wrap the last reading raised is still in the text the projector carries). Measured on disposition/disposition-graph/what-acts-during-bootstrap.md, the paragraphs wrap at 71 to 80 columns and three mid-paragraph lines break short: line 73 at 67 columns, 'shrinks with every ruling. A shim declared on the record is applied'; line 99 at 46, 'nothing for it to carry. Bootstrap exit is the'; and line 101 at 55, 'those are is the question of the node beneath this one,'. The same three stand in the projection at `.claude/rules/what-acts-during-bootstrap.md` lines 6, 32 and 34. This is the fifth finding of the reading of 2026-09-05, whose reply reads 'Validated: the ragged pair stands in the rule file. The paragraph is re-wrapped': the pair that reading named was re-wrapped and the edits made in the same pass were not. Suggested edit: re-wrap both paragraphs whole, then regenerate with `node packages/disposition/project.mjs disposition --rules .claude/rules`.
+- Validation 15, merge, concerning commons.systems/disposition-graph/session-context. The option `projected-doctrine-acts` on this node's answer fact says its third limb may be written here 'or declared as a shim on the `session-context` node over the rules projection', and that 'the option covers both'. Half of it is not this node's to carry: whether the rules projection is a declared shim is a decision on session-context, the node whose answer the projection realizes and whose frontmatter (session-context.md:56-64) declares exactly two shims, on `CLAUDE.md` and on `.claude/settings.json` — which I verified, and which is what this node's own case against says. As the record stands, a ruling for `projected-doctrine-acts` here would declare that shim nowhere, and the author has no row at the node that would carry it. Proposed as an option on commons.systems/disposition-graph/session-context, on its answer fact (its shims being frontmatter that answer governs), named `rules-projection-declared-a-shim`, source commons.systems/disposition-graph/what-acts-during-bootstrap, prose: 'The rules projection is declared a shim on this node beside `CLAUDE.md` and `.claude/settings.json`: the files under `.claude/rules/` stand in for the doctrine each node's ruling will supply, so that the rule files every session loads act as this record's interim doctrine while the nodes they project are unruled, and each falls away as the node it projects is ruled. It answers at the node that owns the projection the case the `what-acts-during-bootstrap` node records against its own answer, that nothing that answer names is what the doctrine the machine is running on is; against it, a shim over eight files projected from eight unruled nodes is one declaration standing in for the whole of the record's present operation, which is the thing a shim is least well shaped to be.' The review proposes and neither merges, splits, nor edits.
+
+On the facts and what they recommend: The answer fact recommends `shim-and-grant`, which `stands` also names, so no `## Recommendation` fence is present and none is owed; I confirmed the node's sections are Disposition, Answer, Rationale, Facts and Account, with no fence among them. High boldness, which here is low confidence, is right: the first paragraph is gathered from evaluation ('A shim declared on the record is applied by default; a prompt is required only to bypass it'), transience ('when an artifact or a text stands in for a materialization not yet made') and authority (the grant clause), each verified at its node, while the second paragraph is the AI's and two of its citations are findings 1 and 2 above. The authority fact recommends `ratified` at moderate, which I agree with: what an agent may act on while the rulings that would carry the work are still owed is capture-shaped on its face, class-recommendation's third limb, and the `### authority` subsection now gives that reading of the state this answer actually defines. No `existence` or `persistence` fact is owed, the node declaring no shim and changing no shape; the `review` block pins 91e7cffb with a kickback verdict, which the recommendation has moved past — that staleness is why this reading runs, and this reading replaces it.
+
+On the viability of the options: On the answer fact all six options are viable or correctly passed over: `deferred-as-the-resting-state` is not dominated and is now stated as a divergence from the `approval-directed-agents` reading rather than as its support, with a `bears` entry of relation diverged; `projected-doctrine-acts` puts the recorded counter-argument's own answer where the author can rule for it; `grant-expires-at-exit` puts the author's struck words of 2026-09-03 on the list; and the two passed-over reasons check out, `a-bootstrap-class` on the ground authority passed the same option over and `nothing-acts` on the first-sitting argument. The authority fact's three options are the reserved vocabulary and are complete. I find no viable option missing on this node's facts: the one candidate I weighed and did not name as missing here is a grant of wider scope than one named reconciliation, which would sit between `shim-and-grant` and `deferred-as-the-resting-state` on the author's attention, but the per-reconciliation narrowing is authority's own clause, quoted here from the parent, so a candidate that widened it would be an option on authority and not a second answer to that clause on this node.
+
+Strongest counter-argument (strong): The answer names nothing that the doctrine the machine is actually running on is, and the author is asked to ratify it inside one of the files it fails to name. I verified eight rule files under `.claude/rules/` — authority, class-recommendation, delegation, delegation-bounds-and-sizing, evaluation, materialization, session-context and what-acts-during-bootstrap — each projected from one of the eight nodes carrying `tier: global`, none of which any ruling reaches, and session-context declares its two shims over `CLAUDE.md` and `.claude/settings.json` and over neither the rules projection nor this file. By the first paragraph's own 'Nothing else acts by right', those eight are neither of the two things that act: a projection of an unruled node stands in for no materialization the record has not made, the projection being made and what it lacks being authority, and it is no grant, a grant being given for one named reconciliation. The redraft's gain is real but negative — the second paragraph no longer condemns those files as unsupported, because it now cites materialization's and session-context's own tests instead of a test about authority — and what replaces the false condemnation is a hole: the answer says what does not make the rule files unsupported and never says what makes them binding. `projected-doctrine-acts` is listed and not recommended, honestly and by the AI's own rule against answering a case against itself, but the effect is that the recommendation put to the author is the one that leaves the hole, and ratifying it makes the hole doctrine.
+
+The session's reply: All five findings taken. On 1: the answer now names the divergence it takes from `authority`'s standing answer where it cites that node, as the same paragraph pair already names the divergence over the grant's expiry. The clause "During bootstrap no class acts" was written of the narrower state and is before the author as the option `a-conferred-class-acts-during-bootstrap`, recorded on `authority` by the previous reading of this node; what the finding catches is that the two rule files a session loads would disagree at the first ruling with no notice in either. On 2: the attribution is corrected to the shim that holds the position. `work-loop`'s standing answer opens "By reconciliation in both directions, the second begun only at exit", and the clause the draft cited is the reconciliation shim's `liquidation` field. The divergence is on that node as `second-direction-begins-when-its-disposition-is-answered`, sourced here, and the answer now says so rather than naming the node for one side of its own conflict. On 3: "this directory" named no directory in the text a session actually meets, since the rule file is read from `.claude/rules/` and the phrase reads three ways there. `session-context`'s test is over what a session loads, and the citation now says that. On 4: both paragraphs are re-wrapped whole. The previous reading's fifth finding was answered by re-wrapping the pair it named, and the edits made in the same pass left three fresh short lines, at 67, 46 and 55 columns; the rules are regenerated after this lands. On 5: the option is recorded on `session-context`, on its answer fact, as `rules-projection-declared-a-shim`, with the reader's prose and its own case against it. The half of `projected-doctrine-acts` that would declare a shim on another node was never this node's to carry, and the author now has the row at the node whose frontmatter would hold it. The counter-argument is recorded and not answered. It is right that the answer says what does not make the eight rule files unsupported and never says what makes them binding, and that ratifying the recommendation makes that hole doctrine. The remedy is on the fact as `projected-doctrine-acts`, and with the option now recorded on `session-context` the author can rule for it at either end. The AI does not move its recommendation onto it: nothing on an unanswered node acts, and which of the two the record takes is the author's.
+
+### The fresh reading applied, 2026-09-05
+
+Forward at strong counter-argument, five findings, all taken. Two of the five
+are the same error: the answer cited a node for a position that node's own text
+contests, and said nothing of the contest, while the same paragraph pair named
+the other divergence it takes in as many words. `authority`'s standing answer
+says "During bootstrap no class acts", written of the narrower state, and the
+divergence is before the author as `a-conferred-class-acts-during-bootstrap` on
+that node; `work-loop`'s standing answer opens "By reconciliation in both
+directions, the second begun only at exit", and the clause this answer cited is
+that node's reconciliation shim, with the divergence before the author as
+`second-direction-begins-when-its-disposition-is-answered`. Both are now named
+where they are cited. What the finding measured is not a defect of the record's
+bookkeeping but of the two rule files a session loads: at the first ruling they
+would disagree with no notice in either.
+
+"This directory" named no directory in the text a session actually meets, since
+the sentence is read from `.claude/rules/` and the phrase reads three ways
+there. The citation now says what `session-context`'s test is over, what a
+session loads.
+
+Both paragraphs are re-wrapped whole. The previous reading's fifth finding was
+answered by re-wrapping the pair it named, and the edits made in the same pass
+left three short lines behind, at 67, 46 and 55 columns, which stood in the rule
+file as well. The rules are regenerated on the implementation ref after this
+lands, which is the third time in one day that an amendment of a `tier: global`
+node has owed a regeneration; that the two acts are separate is carried to the
+reconciliation of the review package.
+
+The fifth finding is recorded and not answered here. Half of the option
+`projected-doctrine-acts` was never this node's to carry: whether the rules
+projection is a declared shim is a decision on `session-context`, whose
+frontmatter would hold the declaration and today declares two shims reaching
+neither `.claude/rules/` nor this file. The alternative is recorded there as
+`rules-projection-declared-a-shim`, with the reader's own case against it, so
+the author has a row at either end.
+
+The counter-argument is recorded on the review block and is not answered. It is
+right, and it is the sharpest thing said of this node: the answer says what does
+not make the eight rule files unsupported implementation, citing the
+materialization and session-context tests rather than a test about authority,
+and never says what makes them binding. Ratifying the recommendation would make
+that hole doctrine. The remedy is on the fact as `projected-doctrine-acts` and
+now at `session-context` as well. The AI does not move its recommendation onto
+it: nothing on an unanswered node acts, and which of the two the record takes is
+the author's.
+
+This reading is the first of the two `review-cost` allows this answer. The
+amendment moves the pin, so a delta re-reading is owed and is what would leave
+the node with a pin naming the recommendation that stands.
