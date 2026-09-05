@@ -34,6 +34,10 @@ bears:
     fact: answer
     option: two-skills-one-package
     relation: adopted
+  - node: commons.systems/disposition-graph/review-skills
+    fact: answer
+    option: two-skills-one-package
+    relation: adopted
   - node: commons.systems/disposition-graph/dialogue
     fact: answer
     option: every-part-in-the-record
@@ -90,3 +94,7 @@ term's sentence lives in the gloss on the node that defines it and no
 projection carries one of its own; the projector's table of class sentences was
 the second copy. On `commons.systems/disposition-graph/recording`, adopted for
 the class read off the rulings and never stored beside them.
+
+### Bears on review-skills, 2026-09-05
+
+The entry on `two-skills-one-package` the review-skills node's account said was owed here is recorded: the drift answer's condition, that a derived copy is no anomaly while it is never edited by hand and says so on its face, and that two hand-written copies are one, is this reading's.
