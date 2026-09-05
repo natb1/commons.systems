@@ -26,6 +26,10 @@ bears:
     fact: answer
     option: grant-from-a-ruling
     relation: adopted
+  - node: commons.systems/disposition-graph/work-loop
+    fact: answer
+    option: reconciliation-writes-options
+    relation: diverged
 ---
 ## Answer
 
