@@ -32,6 +32,9 @@ facts:
       - name: cite-persistence-for-the-disposition-ref
         source: review
         ref: "2026-09-05"
+      - name: unsupported-where-authority-is-missing
+        source: commons.systems/disposition-graph/what-acts-during-bootstrap
+        ref: "2026-09-05"
     recommends: standing
     boldness: low
     against: "Ratifying this text arms a deletion whose scope no one has ruled: the shim's liquidation prunes at the swap whatever no disposition supports, nothing derives unsupported implementation onto the frontier, the gate is the coverage node at the periagogic stage, and what survives on main is decided by a census the author has instructed sessions not to repeat. The reading of 2026-09-05 sharpened it: the rule is already contradicted where it is automated, `writeRules` in `packages/disposition/project.mjs` deleting a rule file with no proposal and no ruling, so a rule no instrument guards is being asked for at the record's highest class while its own projector prunes without one."
@@ -115,6 +118,22 @@ implementation lives; `codd-update-anomaly` and `dry-single-source-of-truth`
 are the readings that bear on it. It is not taken here because the review
 proposes and never merges, and which of the two nodes keeps the sentence is a
 question for whichever is ruled second.
+
+#### unsupported-where-authority-is-missing
+
+An artifact is unsupported implementation not only where no disposition
+justifies it, but also where the disposition that justifies it is a node no
+ruling reaches and no shim covers the artifact, so that the record's own
+projections of unruled nodes, the six files under `.claude/rules/`, the browser
+and the alignment page among them, are unsupported until a ruling or a shim
+reaches them. It widens the test from a structural relation to a node into a
+test on the authority behind that node. Raised by the reading of the
+`what-acts-during-bootstrap` node on 2026-09-05, which found that node's draft
+stating the wider test as a clause of its own answer, where it is a second
+answer to this node's question; it is recorded here so the author rules on it
+where it belongs, and that node cites this one rather than restating it. What
+it would cost, if ruled: on the day it lands, every projection of an unruled
+node is unsupported implementation, which today is nearly all of them.
 
 ### authority
 

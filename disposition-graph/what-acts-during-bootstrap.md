@@ -1,5 +1,5 @@
 ---
-question: What acts while nothing in the record is ratified?
+question: What acts while nothing in the record is ratified, and when does that state end?
 stage: review
 facts:
   - name: answer
@@ -8,6 +8,9 @@ facts:
         source: commons.systems/disposition-graph/authority
         ref: "2026-09-05"
       - name: deferred-as-the-resting-state
+        source: review
+        ref: "2026-09-05"
+      - name: projected-doctrine-acts
         source: review
         ref: "2026-09-05"
       - name: grant-expires-at-exit
@@ -25,7 +28,7 @@ facts:
         reason: "the author's words of 2026-09-04 make the grant a persistent rule of the authority node and no class, and the authority node passed the same option over on that ground"
     recommends: shim-and-grant
     boldness: high
-    against: "The six rule files under `.claude/rules/` that every session loads, this node's own projection among them, are projections of unanswered nodes and are declared as no shim, so this answer says the doctrine the record is running on today acts on nothing and is on the frontier for liquidation, and says it in a file that binds every session while saying it."
+    against: "The six rule files under `.claude/rules/` that every session loads, this node's own projection among them, are projections of unanswered nodes, and the `session-context` node declares a shim on `CLAUDE.md` and on `.claude/settings.json` and on neither the rules projection nor this file, so this answer says the doctrine the record is running on today acts on nothing, and says it in a file that binds every session while saying it. It leaves a session no account at all of what the six files it loads bind it to, and the option that would give one is `projected-doctrine-acts`."
     stands: shim-and-grant
   - name: authority
     options:
@@ -38,9 +41,9 @@ review:
   verdict: kickback
   strength: strong
   date: 2026-09-05
-  of: 741d2e9bbf27bdee63b22664b4a85864a87a8d8e
-  commit: 9bf7b2fe1f7f8e6f7f446e09756be5da10a6c55b
-  against: "The doctrine the machine is running on today is grounded by neither of the two things this answer says act: six rule files under `.claude/rules/`, projected from nodes no ruling reaches, over which no node declares a shim, plus the two operating skills and the 'How a recommendation is made' section of CLAUDE.md. By this answer's own second paragraph they are therefore 'every artifact standing outside them', which is 'unsupported implementation, on the frontier and liquidated through reconciliation'. So the rule the author is asked to ratify describes a machine that is not the one running, and it is itself being run as one of those six files while unruled. The two listed options that could account for the status quo are a resting state the `approval-directed-agents` reading expressly refuses and the author's own struck expiry, neither of which grounds a projected rule; the third way, declaring the rules projection a shim so that the doctrine acts as an interim materialization under this answer's own first limb, is not on the list, so the author cannot rule for it."
+  of: b405911d3851fb1f437c7c2798a4c28ef4aa9e38
+  commit: 02287a281ab53c4afc9bed51c3947148109d4484
+  against: "The answer describes a machine no one is running, and is itself carried to every session by a thing it says acts on nothing. Six rule files under `.claude/rules/` direct every session, this reading included, and by this answer's own terms none of them acts: a projection of an unruled node is not a shim, nothing standing in for a materialization not yet made, since the projection is made and what it lacks is authority; and it is not a grant, which is given for one named reconciliation. The same is true of the 'How a recommendation is made' section of `CLAUDE.md`. So the rule the author is asked to ratify leaves the record with no word for what a projected rule does, while being one of the six files that does it, and the two options that could account for the running machine cannot: a resting deferred state the `approval-directed-agents` reading expressly refuses, and the author's own struck expiry. Worse than unanswered, the objection is unrulable as the fact stands, because the one option that would answer it is on no list."
 form: rule
 under:
   - commons.systems/disposition-graph/authority
@@ -49,7 +52,7 @@ depends:
   - commons.systems/disposition-graph/authority
 defines:
   - term: bootstrap
-    gloss: "The state of this record until bootstrap exit, in which a declared shim and the author's grant are the only things that act."
+    gloss: "The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred."
   - term: bootstrap exit
     gloss: "The moment every condition the record declares for it is met, the conditions being the bootstrap-exit-conditions node's question, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
@@ -77,9 +80,15 @@ recommendation on an unanswered node is a draft and grounds no work, and a
 class the AI writes for itself is not a grant.
 
 Bootstrap is the state of this record until bootstrap exit, and it is not a
-licence: what a session may do in it is exactly what the two rules above allow,
-and every artifact standing outside them is unsupported implementation, on the
-frontier and liquidated through reconciliation. The state does not end in one
+licence: what a session may do in it is exactly what the two rules above
+allow. What an artifact standing outside them is, this node does not decide:
+the record's test for unsupported implementation is the materialization node's,
+whether a disposition justifies the artifact, and the session-context node's for
+this directory, whether a node projects the rule, and neither test reads the
+authority under which anything acted. An artifact that fails one of those tests
+is put on the frontier by the second direction of reconciliation, which the
+work-loop node begins only at exit, and no instrument derives that frontier
+today. The state does not end in one
 act, and it does not relax all at once. It relaxes node by node, as rulings
 accumulate and each node's class begins to act in place of the shim or the
 grant that carried it, so that what acts under this answer shrinks with every
@@ -131,7 +140,11 @@ ruling of the author's fixes either, and the record's stopgaps date themselves
 by this term, so a wrong answer here mis-dates every one of them. The one place
 the answer departs from the author's words is the expiry, which is why their
 side of it is on the list as `grant-expires-at-exit` and the case against the
-whole answer is on the fact.
+whole answer is on the fact. The case against has one option that answers it
+and the answer does not, `projected-doctrine-acts`, which would make the
+doctrine the record projects into `.claude/rules/` a third thing that acts; it
+is listed and not recommended, because whether the six files a session loads
+bind it is the author's to say and not the AI's.
 
 #### deferred-as-the-resting-state
 
@@ -149,6 +162,23 @@ per reconciliation, which is the cost this answer accepts, and the author's
 own remedy of 2026-09-02 for unearned authority was a rollback to deferred
 for review, not a halt. It is not dominated, and the choice between the two
 is the author's.
+
+#### projected-doctrine-acts
+
+Three things act, and no class does: a declared shim, the author's grant, and
+the doctrine the record projects from its own nodes into `.claude/rules/`,
+which binds every session as the record's interim doctrine until each node it
+projects is ruled. Whether that is written as a third limb here or declared as
+a shim on the `session-context` node over the rules projection is the same
+answer reached two ways, and the option covers both. It is not dominated by
+either live alternative: `deferred-as-the-resting-state` would give every
+recommendation of the AI's the force of an answer, which this does not, and
+`grant-expires-at-exit` grounds nothing that runs today. It is the only way on
+this list for the author to rule that the six files every session loads bind
+it, which is what the case against the recommendation says the answer leaves
+unaccounted; the reading of 2026-09-05 named it, and it is recorded here and
+not answered, because the AI may not answer a case against itself by ruling
+on it.
 
 #### grant-expires-at-exit
 
@@ -331,3 +361,108 @@ recommendation does not move: refusing a resting state the AI writes for itself
 and paying for the refusal in the author's attention is the author's choice to
 make.
 
+### Clean-context review, 2026-09-05
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `shim-and-grant`.
+
+Findings:
+
+- ## Answer, second paragraph, second clause (validations 2 and 3; the test for unsupported implementation is replaced, silently, by a stricter one). 'what a session may do in it is exactly what the two rules above allow, and every artifact standing outside them is unsupported implementation, on the frontier and liquidated through reconciliation'. The two global-tier rules that own the term state a different antecedent. materialization: 'each artifact is the instrument or the projection of the node whose answer it checks or renders, and anything no disposition justifies is unsupported implementation, on the frontier and liquidated through reconciliation, where pruning is proposed and the author rules on it' — the test is whether a disposition justifies the artifact, a structural relation to a node, and not the authority under which anything acted. session-context is narrower still for this very directory: 'a rule no node projects is unsupported implementation'. This draft substitutes 'standing outside [a declared shim and the author's grant]' for both, and the tests come apart exactly on the files at issue: all six of `.claude/rules/` are projected by a `tier: global` node, so each is supported under session-context and under materialization and unsupported under this draft — which is then asserted as fact in the answer fact's own `against`. Suggested edit: keep the licence clause and the support clause apart — 'what a session may do in it is exactly what the two rules above allow, and an artifact no disposition justifies is unsupported implementation, on the frontier and liquidated through reconciliation, as materialization says' — or, if the stricter test is meant, say that it diverges from materialization and record it there as an option (merge finding below).
+- ## Answer, second paragraph, same clause (validations 2, 3 and 5; a liquidation the record says does not run during the state this node defines, and that nothing derives). 'on the frontier and liquidated through reconciliation'. work-loop.md:108 opens 'By reconciliation in both directions, the second begun only at exit', and the second direction is the one where 'any materialized artifact with no supporting disposition, code, a skill, a rule, the README, or a node of the legacy record, is itself a frontier item'. The author's own words on that node, work-loop.md:91: "'Resolves in both directions' this is required for bootstrap exit, but not transition. Disposition must me answered before this is shimmed or materialized . Only resolved from graph to implementation". So throughout bootstrap nothing puts an unsupported artifact on a frontier and nothing liquidates one. work-loop.md:112 says the same of the derivation — 'It is not derived yet: `renderFrontier` reads the graph alone and walks no implementation ref' — and I verified it: `grep -n "greenfield\|unsupported" packages/disposition/*.mjs` returns nothing. materialization's `### answer` prose now carries the caveat ('Nothing checks this rule today, as a cost and not a reason: no instrument walks the implementation ref for unsupported artifacts, so what is unsupported is found by a session and not by the frontier'); this draft states the consequence without it, in text projected verbatim into `.claude/rules/what-acts-during-bootstrap.md`, so a reconciliation session reading it would hold prunes due now that the author reserved for exit. Suggested edit: '... is unsupported implementation, which the second direction of reconciliation, begun only at exit as work-loop says, puts on the frontier for the author's ruling; no instrument derives that frontier today.'
+- Frontmatter `defines`, the `bootstrap` gloss (validations 1 and 3; the gloss contradicts the answer, and an executor would refuse to act on a ruling). 'bootstrap — The state of this record until bootstrap exit, in which a declared shim and the author's grant are the only things that act', against `## Answer`: 'It relaxes node by node, as rulings accumulate and each node's class begins to act in place of the shim or the grant that carried it'. Now that bootstrap runs to exit rather than to the first ruling, most of the state has classes acting in it, so 'the only things that act' is false of it, and the gloss is what the browser shows as the definition of the record's central term. A session reading it would hold that a ratified node's confirmed choice does not act until the swap. Suggested edit: 'The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred.'
+- Frontmatter `facts[0].against` and `## Facts`, `### answer` (validation 3; the case against the author is asked to weigh is half unsupported by the record). 'so this answer says the doctrine the record is running on today acts on nothing and is on the frontier for liquidation, and says it in a file that binds every session while saying it'. The first half is exact and is the live objection: I verified six files in `.claude/rules/` (authority, delegation, evaluation, materialization, session-context, what-acts-during-bootstrap), each projected from a node no ruling reaches, and session-context declares only two shims, `CLAUDE.md` and `.claude/settings.json`, neither of them the rules projection. The second half falls with findings 1 and 2: no test the record states makes a projected rule unsupported, and no frontier the record derives carries an artifact at all. Suggested edit: end the clause at 'acts on nothing', and put in its place what the record does say — that no node declares the rules projection a shim, so this answer leaves a session no account of what the six files it loads bind it to.
+- Frontmatter `question`, against `## Answer`'s second paragraph and the node beneath it (validation 1; the question is narrower than the answer and than the child it now parents). The question is 'What acts while nothing in the record is ratified?'; the second paragraph defines `bootstrap` and `bootstrap exit` and says when the state is over, and `commons.systems/disposition-graph/bootstrap-exit-conditions` now sits `under` this node asking 'What are the conditions of bootstrap exit?', a question the parent question does not reach. The parent hands this node both halves — authority: 'what does act while nothing is ratified, and how that state ends, is the question of the node beneath this one, what-acts-during-bootstrap' — so the widening is the record's own and only the question line is out of step; the author rules from a page headed by that line. The reply that declined this at the last reading rests on 'a reworded question being a new question on the node node's rule', and no such rule is on that node: `grep -rn "reworded|a new question" disposition/disposition-graph/node.md disposition/disposition-graph/growth.md` returns one line, growth.md:498, a census note about classing the author's words and not a rule about rewording. Suggested edit: 'What acts while nothing in the record is ratified, and when does that state end?'
+- ## Facts, `### answer`, option list (validation 3 and the viability judgment; the option that answers the recorded counter-argument is on no list). The fact carries `shim-and-grant`, `deferred-as-the-resting-state`, `grant-expires-at-exit`, and two passed over. The reading of 2026-09-05 named `projected-rules-act-as-a-shim` as a viable option missing; the session's reply to that reading answers its eight findings and the counter-argument and says nothing of it, and the option is neither listed nor passed over with a reason. viable-options: 'a candidate the AI holds dominated is passed over: it keeps its place on the fact, carries the status passed with the one clause saying why', and a candidate never listed is one the author cannot rule for at all. The gap is exactly the one the fact's own `against` names, and neither listed alternative fills it: `deferred-as-the-resting-state` grounds every recommendation and not the projection, and `grant-expires-at-exit` grounds nothing running today. Suggested edit: list it, with the prose given in this reading's viability judgment, or pass it over with the reason it is dominated.
+- Validation 15, merge, concerning commons.systems/disposition-graph/materialization. The clause finding 1 names is a new answer to a question the record already asks — 'What is materialized implementation, and where does it live?', whose answer states the record's test for unsupported implementation — carried here as a clause of another node's answer. Proposed as an option on materialization's answer fact, named `unsupported-where-authority-is-missing`, prose: 'an artifact is unsupported implementation not only where no disposition justifies it, but also where the disposition that justifies it is a node no ruling reaches and no shim covers the artifact, so that the record's own projections of unruled nodes — the six files under `.claude/rules/`, the browser, the alignment page — are unsupported until a ruling or a shim reaches them.' Recording it there lets the author rule on the wider test at the node that owns it, and lets this node cite rather than restate. The review proposes and neither merges, splits, nor edits.
+
+On the facts and what they recommend: The answer fact recommends `shim-and-grant`, which `stands` also names, so the absence of a `## Recommendation` fence is right and none is owed; high boldness (low confidence) is right, since the first paragraph is gathered word for word in substance from evaluation, transience and authority, while the whole second paragraph is the AI's and findings 1 to 3 show two of its clauses still wrong against the two global-tier rules that own their terms. The authority fact recommends `ratified` at moderate, which I agree with: what an agent may act on while nothing is ruled is capture-shaped on its face, the class-recommendation node's third limb, and moderate is right because the two rules gathered are the author's while the definitions of `bootstrap`, `bootstrap exit` and `bootstrap authority` are new here. No `existence` or `persistence` fact is owed, the node declaring no shim and changing no shape; the `review` block pins 741d2e9b, which the recommendation has moved past, and this reading replaces it.
+
+On the viability of the options: On the answer fact the five listed options are each viable or correctly passed: `deferred-as-the-resting-state` is not dominated, `grant-expires-at-exit` rightly puts the author's own struck words back on the list, and the two passed-over reasons check out (authority's `bootstrap-authority-as-class` is passed on the same ground; the first-sitting argument holds against `nothing-acts`), and the authority fact's three options are the reserved vocabulary and are complete. One viable option is missing, the same one the last reading named and the record shows neither listed nor passed over: `projected-doctrine-acts`, prose — 'Three things act, and no class does: a declared shim, the author's grant, and the doctrine the record projects from its own nodes into `.claude/rules/`, which binds every session as the record's interim doctrine until each node it projects is ruled, whether that is written as a third limb here or declared as a shim on session-context over the rules projection.' It is not dominated by either listed alternative — `deferred-as-the-resting-state` grants every recommendation of the AI's the force of an answer, which this option does not, and `grant-expires-at-exit` grounds nothing that runs today — and it is the only listed way for the author to rule that the six files every session loads bind it, which is the counter-argument this node records against itself and answers nowhere.
+
+Strongest counter-argument (strong): The answer describes a machine no one is running, and is itself carried to every session by a thing it says acts on nothing. Six rule files under `.claude/rules/` direct every session, this reading included, and by this answer's own terms none of them acts: a projection of an unruled node is not a shim, nothing standing in for a materialization not yet made, since the projection is made and what it lacks is authority; and it is not a grant, which is given for one named reconciliation. The same is true of the 'How a recommendation is made' section of `CLAUDE.md`. So the rule the author is asked to ratify leaves the record with no word for what a projected rule does, while being one of the six files that does it, and the two options that could account for the running machine cannot: a resting deferred state the `approval-directed-agents` reading expressly refuses, and the author's own struck expiry. Worse than unanswered, the objection is unrulable as the fact stands, because the one option that would answer it is on no list.
+
+The session's reply: Second kickback taken and the maieutic work done on this thread; seven findings and one missing option, all validated at their loci and all accepted. The counter-argument is strong and is not answered here, because answering it is the author's: it is recorded as the option the fact was missing.
+
+The support test was wrong, and wrong in the direction that condemned the record's own doctrine. The two global-tier rules that own the term state different antecedents from the one this draft wrote: materialization, 'anything no disposition justifies is unsupported implementation', a structural relation to a node; session-context, narrower for this very directory, 'a rule no node projects is unsupported implementation'. This draft substituted 'standing outside a declared shim and the author's grant', which is a test about authority and not about support, and the six files under .claude/rules/ are supported under both of the record's tests and unsupported under this one. The licence clause and the support clause are now separate, and the support clause cites materialization instead of restating it.
+
+The liquidation clause was worse than stale: it described a machine the record says does not run yet. work-loop's answer opens 'By reconciliation in both directions, the second begun only at exit', and the author's own words on that node, of 2026-09-03, say the second direction 'is required for bootstrap exit, but not transition'. So nothing puts an unsupported artifact on a frontier during the state this node defines. Re-verified on the field: grep -n 'greenfield\|unsupported' packages/disposition/*.mjs returns nothing, so no instrument derives that frontier at all. The clause now says which direction of reconciliation does it, when that direction begins, and that nothing derives it today.
+
+The defines gloss for 'bootstrap' contradicted the answer above it: 'the only things that act' against 'each node's class begins to act in place of the shim or the grant that carried it'. Once the state runs to exit rather than to the first ruling, classes act inside it. The gloss now reads 'in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred'.
+
+The answer fact's case against was half unsupported. Its first half is exact and is the live objection, and I re-verified it: six files under .claude/rules/, each projected from a node no ruling reaches, and session-context declares only two shims, CLAUDE.md and .claude/settings.json, neither of them the rules projection. The second half rested on findings 1 and 2 and falls with them. The clause now ends where the record supports it and says what the record does say: no node declares the rules projection a shim, so this answer leaves a session no account of what the six files it loads bind it to.
+
+The question line is widened to 'What acts while nothing in the record is ratified, and when does that state end?'. The reply that declined this at the last reading cited a rule of the node node about rewording, and the reading is right that no such rule is there; what is there is authority's own hand-off, 'what does act while nothing is ratified, and how that state ends, is the question of the node beneath this one', so the widening is the record's and only the question line was out of step. bootstrap-exit-conditions now sits under this node asking the second half in its own right, and the parent question has to reach it.
+
+The missing option is listed as projected-doctrine-acts, source review, ref 2026-09-05, with the reading's own prose: three things act and no class does, the third being the doctrine the record projects from its own nodes into .claude/rules/, binding every session as interim doctrine until each node it projects is ruled, whether written as a third limb here or declared as a shim on session-context over the rules projection. It is not dominated by either listed alternative and it is the only way on the list for the author to rule that the six files every session loads bind it. Listing it is the whole of what this thread may do with the counter-argument: the AI does not answer it.
+
+The merge proposal is taken as proposed. unsupported-where-authority-is-missing is recorded as an option on materialization's answer fact, source this node, ref 2026-09-05, so the wider test is ruled at the node that owns it and this node cites rather than restates.
+
+The recommendation moved, so the node returns to the review stage; the pin this reading settles names the text it read and not the amendment, which is the live option pin-names-the-text-the-reader-read on review-cost.
+
+### Redrawn after the second kickback, 2026-09-05
+
+Seven findings and one missing option, all validated at their loci on the
+alignment thread and all accepted. What changed, and what each change rests on.
+
+The support test was wrong, and wrong in the direction that condemned the
+record's own doctrine. The two global-tier rules that own the term state
+different antecedents from the one this draft wrote: the materialization node,
+"anything no disposition justifies is unsupported implementation", a structural
+relation to a node; the session-context node, narrower for this very directory,
+"a rule no node projects is unsupported implementation". This draft had
+substituted "standing outside a declared shim and the author's grant", which is
+a test about authority and not about support, and the six files under
+`.claude/rules/` are supported under both of the record's tests and unsupported
+under this one. The licence clause and the support clause are now separate, and
+the support clause cites the two nodes that own it rather than restating either.
+
+The liquidation clause described a machine the record says does not run yet.
+The work-loop node's answer opens "By reconciliation in both directions, the
+second begun only at exit", and the author's own words on that node, of
+2026-09-03, say the second direction "is required for bootstrap exit, but not
+transition". So nothing puts an unsupported artifact on a frontier during the
+state this node defines. Verified on the field at implementation commit
+8bb72b17: `grep -n "greenfield\|unsupported" packages/disposition/*.mjs`
+returns nothing, so no instrument derives that frontier at all. The clause now
+names the direction, when it begins, and that nothing derives it today.
+
+The `bootstrap` gloss contradicted the answer above it, "the only things that
+act" against "each node's class begins to act in place of the shim or the grant
+that carried it". Once the state runs to exit rather than to the first ruling,
+classes act inside it, and the gloss is what the browser shows as the definition
+of the record's central term. It now reads that nothing acts by right but a
+declared shim, the author's grant, and each class a ruling has already conferred.
+
+The case against was half unsupported. Its first half is exact and is the live
+objection, re-verified here: six files under `.claude/rules/`, each projected
+from a node no ruling reaches, and the session-context node declares only two
+shims, `CLAUDE.md` and `.claude/settings.json`, neither of them the rules
+projection. The second half rested on the two findings above and falls with
+them. The clause now ends where the record supports it and says what the record
+does say, that this answer leaves a session no account of what the six files it
+loads bind it to.
+
+The question line is widened to "What acts while nothing in the record is
+ratified, and when does that state end?". The reply that declined this at the
+last reading cited a rule of the node node about rewording, and the reading is
+right that no such rule is there; what is there is the authority node's own
+hand-off, "what does act while nothing is ratified, and how that state ends, is
+the question of the node beneath this one". The widening is the record's and
+only the question line was out of step, and `bootstrap-exit-conditions` now
+sits under this node asking the second half in its own right.
+
+The missing option is listed as `projected-doctrine-acts`, in the reading's own
+prose. It was named by the reading of 2026-09-05 and the reply to that reading
+answered its eight findings and its counter-argument and said nothing of the
+option, so the author could not have ruled for it. Listing it is the whole of
+what this thread may do with a counter-argument it cannot answer.
+
+The merge proposal is taken as proposed: `unsupported-where-authority-is-missing`
+is recorded as an option on the materialization node's answer fact, so the wider
+test is ruled at the node that owns it and this node cites rather than restates.
+
+The recommendation moved, so the node returns to the review stage. The pin this
+reading settled names the text it read and not this amendment, which is the live
+option `pin-names-the-text-the-reader-read` on the review-cost node.
