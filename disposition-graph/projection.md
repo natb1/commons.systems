@@ -77,6 +77,9 @@ facts:
       - name: tradition-linking-cited-to-readings
         source: review
         ref: "2026-09-05"
+      - name: rejected-alternative-is-an-option
+        source: commons.systems/disposition-graph/rejected
+        ref: "2026-09-05"
     recommends: draft
     boldness: moderate
     stands: standing
@@ -196,6 +199,21 @@ rule and readings for the tradition rule. Both texts still carry the tradition
 half, so one question has two standing answers on the frontier at once. Raised by
 the second clean-context reading of `readings` on 2026-09-05, under validation 15,
 as an option and not a merge.
+
+#### rejected-alternative-is-an-option
+
+Strike "the alternatives the rationale rejected" from the authority section the
+draft proposes, and have the browser show a rejection where the record keeps
+it, as a row on the fact it answers carrying its status and reason. The
+`rejected` node's recommended answer decides that the record holds no rejected
+list, no rejected section and no rejected node, and that the projections read
+that structure and never a heading; the draft here still proposes a second home
+for the same thing, so one question has two standing answers on the frontier.
+Raised by the second clean-context reading of `rejected` on 2026-09-05, which
+found that the answer's claim that the record keeps no second home was not yet
+true of the record and named this text; recorded as an option and not a merge,
+since which of the two texts gives way is the author's, and the pair is ruled
+together.
 
 ## Recommendation
 
