@@ -26,6 +26,9 @@ facts:
         ref: "cbabf108"
         status: passed
         reason: "a validator holds ids, edges, ranks and shapes, and whether two answers disagree is judgment"
+      - name: probe-is-not-a-mintable-question
+        source: commons.systems/disposition-graph/author-questions
+        ref: "2026-09-04"
       - name: survey-at-reconciliation-time
         source: ai
         ref: "cbabf108"
@@ -126,6 +129,10 @@ frontier's drift.
 The frontier's self-consistency is enforced by a validator rule rather than by
 a review. It was passed over because a validator holds ids, edges, ranks and
 shapes, and whether two answers disagree is judgment.
+
+#### probe-is-not-a-mintable-question
+
+Everything the recommendation says, with one clause added to the fifteenth validation: a probe is not a question of the kind that is proposed a node of its own, and a question carried on another node's dialogue whose answer would itself stand as an answer to a question of the record still is. Read with `probe` defined on `commons.systems/disposition-graph/author-questions`, the validation already excludes a probe, because the question it means is one the record would answer with a disposition and a probe's answer is a fact about what the author meant; but a reader should not have to draw that unaided, and every use of the `probes` field is otherwise a survey finding against itself. The clause is the admission test's third limb read from the survey's side, and it keeps the finding of 2026-09-03 in force for everything disposition-shaped rather than overturning it. Raised by the `author-questions` sitting of 2026-09-04, whose answer requires the amendment by name.
 
 #### survey-at-reconciliation-time
 

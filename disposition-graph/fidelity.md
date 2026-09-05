@@ -16,6 +16,9 @@ facts:
       - name: compacted-account
         source: ai
         ref: "2026-09-03"
+      - name: the-probe-list
+        source: commons.systems/disposition-graph/author-questions
+        ref: "2026-09-04"
       - name: no-mechanism
         source: ai
         ref: "2026-09-03"
@@ -51,6 +54,10 @@ A signal measure on the frontier, whatever the right one is, surfaced beside ran
 #### compacted-account
 
 Compaction of the account: superseded review sections collapse at each recording, so that the node's account does not grow without bound while the author's words stay fixed. This bounds the dilution at its source rather than measuring or checking it, and would change what a node carries, which is dialogue's question.
+
+#### the-probe-list
+
+What preserves the author's intention is the list of probes each node carries: the questions the AI needs the author to answer before it can recommend, recorded on the node, collected at every movement, and asked in the maieutic session. It answers this question from the other side. Every other candidate on this fact protects an intention already stated, by checking it, by returning to it, by measuring drift from it or by compacting what has accumulated around it; the probe list is the only mechanism in the record that makes the author's contribution grow, because it records where the dialogue's rationalization has outrun what the author actually said and asks rather than fills the gap. Raised by the `author-questions` sitting of 2026-09-04, which ran the merge of that node into this one and rejected it: that node answers what a node carries and where a probe is asked, which is its own parent's question narrowed to one part of the dialogue's state, so the two are not one node and the relation is recorded here as a candidate instead.
 
 #### no-mechanism
 

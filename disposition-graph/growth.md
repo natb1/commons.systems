@@ -106,6 +106,9 @@ form: rule
 boost: 4
 under:
   - commons.systems/disposition-graph/model
+cites:
+  - id: commons.systems/disposition-graph/author-questions
+    hash: 09ede4f7b4d568c5365071083c59d60cfe57e20e
 defines:
   - propose
   - project
@@ -275,6 +278,9 @@ form: rule
 boost: 4
 under:
   - commons.systems/disposition-graph/model
+cites:
+  - id: commons.systems/disposition-graph/author-questions
+    hash: 09ede4f7b4d568c5365071083c59d60cfe57e20e
 defines:
   - propose
   - project
@@ -548,3 +554,20 @@ Persistence standing, with one shim kept and one moved.
 Not reviewed. The clean-context review is owed on this and on the rest of the
 batch.
 
+
+### The term "probe" given a definition, 2026-09-04
+
+This node's periagogic conduct is where "probe" entered the record — one probe
+per turn, in prose, from the page and not from memory — and it defines nine
+terms without defining that one. Fourteen nodes now use the word in the same
+sense and none defines it. The `author-questions` sitting of 2026-09-04 mints
+the definition on its own node, whose answer constitutes the thing, and its
+answer requires the citation added here so that every node using the word has a
+path to the node defining it, which the eleventh frontier validation requires
+and which the definition's placement does not by itself supply. The citation is
+pinned to that node's text as it stood at this commit, and that node is
+unanswered, so the pin will move as its dialogue does. Defining the term here
+instead was considered and not recorded as an option: it would put the
+constitution of the instrument on a node whose question is how the graph grows,
+and `defines` is a field rather than a fact, so a placement disagreement is a
+finding for the survey and not a ruling for the author.

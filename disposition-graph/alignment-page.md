@@ -93,6 +93,9 @@ facts:
       - name: eyebrow-settles-and-pending-only
         source: ai
         ref: "2026-09-04"
+      - name: open-probe-count-on-the-chip
+        source: commons.systems/disposition-graph/author-questions
+        ref: "2026-09-04"
       - name: standing-sentence-stored
         source: ai
         ref: "2026-09-04"
@@ -260,6 +263,10 @@ The recommended answer with one clause changed: the kick-back's feedback control
 #### eyebrow-settles-and-pending-only
 
 The recommended answer with one clause changed: the line beneath the question carries the settling count and the options pending, which `alignment-order` names, and not the nodes this one stands under, which no answer names. Against it, the nodes it stands under are whose grant a ruling here falls within and whose rulings made this one decidable, and the line is where the author reads why the node is where it is.
+
+#### open-probe-count-on-the-chip
+
+Everything the recommendation says, with the stage chip carrying the number of probes open on the node beside the readiness it already renders, and the page carrying nothing of a probe's text, its `why` or its `discharges`. Raised by the `author-questions` sitting of 2026-09-04, whose answer requires it: the author's words exclude the list from this page, and the two readings under this node hold that the recommender does not decide what the decider sees, which is the reasoning this record used to kill the boldness fold here. The count reconciles them so far as they can be reconciled, and the divergence that remains, the probe's text, is recorded on that node rather than argued away. Its work is at the maieutic stage, where this page asks the author for their intention and an author writing into that control with probes open and no sign of them is answering questions they cannot see; by the ruling stage no node with an open probe arrives at all.
 
 #### standing-sentence-stored
 
