@@ -32,7 +32,7 @@ Against, on the evidence rather than on principle, and the record takes it as a 
 
 Here the kick-back is on every fact of every node, so the condition holds at full strength: the author will meet the third disposition more often than a juror does, on every decision rather than once a trial. The prediction is that finely balanced rulings land on the kick-back rather than on an option, and the cost is not paid at the ruling but afterwards, in the sittings that redraft the options the author declined to choose between.
 
-The record diverges and says why. The kick-back is there for the author's own reason, that a list of options with no way to reject all of them forces a choice the author does not hold, and a forced ruling is worse for this record than a slow one. What the tradition earns is a measurement rather than a change: kick-backs per node and per sitting instruments a recorded disposition and meets the standard `frontier-metrics` sets, so the effect the study predicts becomes something the record can watch instead of something it argues about.
+The record diverges and says why. The kick-back is there at the placement the author chose, for which the sitting supplies the affordance reason, that a list of options with no way to reject all of them forces a choice the author does not hold, and a forced ruling is worse for this record than a slow one. What the tradition earns is a measurement rather than a change: kick-backs per node and per sitting instruments a recorded disposition and meets the standard `frontier-metrics` sets, so the effect the study predicts becomes something the record can watch instead of something it argues about.
 
 ## Rationale
 

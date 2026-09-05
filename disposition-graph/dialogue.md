@@ -167,6 +167,9 @@ facts:
       - name: account-carries-the-sitting-minutes
         source: commons.systems/disposition-graph/recording
         ref: "2026-09-04"
+      - name: standing-option-carries-a-subsection
+        source: commons.systems/disposition-graph/alignment-page
+        ref: "2026-09-04"
     recommends: every-part-in-the-record
     boldness: moderate
     against: "It puts six decisions in one row, the standing encoding and the five clauses adopted into it, so a confirmation confers together what the author examined and what they did not, which is the bundling this node's own rule that a text answering two questions is two nodes exists to prevent."
@@ -794,6 +797,10 @@ not a question of its own.
 #### account-carries-the-sitting-minutes
 
 The account also carries the conclusion of every unit the sitting delegated with the commands it ran, and the author's response as it was given with the session's classification of it, so that a session resuming the node meets what the last one decided from and how it read the author. Recorded on 2026-09-04 with the recording node as its source: that node's recommended text had carried a second, longer definition of `## Account`, which its reading found to be a new answer to this node's question, and the addition is recorded here where the section is defined.
+
+#### standing-option-carries-a-subsection
+
+The option named by `stands` carries a `####` subsection of its own, a stored sentence, in place of the answer's first sentences read from `## Answer`; against it, the answer's first sentences said twice drift. Recorded on 2026-09-04 with the alignment-page node as its source, where it had stood as `standing-sentence-stored` until that node's reading found it to be a candidate answer to this question, the clause `every-option-carries-its-sentence` deciding it the other way.
 
 ### authority
 

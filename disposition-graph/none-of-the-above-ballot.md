@@ -28,7 +28,7 @@ bears:
 ---
 ## Answer
 
-Supports the placement the author chose, and fails its own conditions in both places it is actually practised. It is the one tradition that does what the disposition does, put the refusal in the list of choices, on the ground that a refusal a voter has to express somewhere else is a refusal most voters never express. That is the author's affordance reason arrived at independently, and it is why the kick-back is the last row on the fact rather than a separate control elsewhere on the page.
+Supports the placement the author chose, and fails its own conditions in both places it is actually practised. It is the one tradition that does what the disposition does, put the refusal in the list of choices, on the ground that a refusal a voter has to express somewhere else is a refusal most voters never express. That is the affordance reason the sitting supplies for the placement the author chose, the kick-back as the last row on the fact rather than a separate control elsewhere on the page; the author's words fix the placement and give no reason.
 
 Where the tradition fails is on force. In both major implementations the none line is advisory: the votes are counted, published, and then set aside, and the candidate with the most votes wins whatever the none line polled. A refusal that changes nothing is a recorded complaint, and the affordance is theatre, which is the strongest argument a critic of this tradition makes and the reading records it rather than passing over it.
 
