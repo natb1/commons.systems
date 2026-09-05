@@ -1,6 +1,28 @@
 ---
 question: What do the browser's graph headings say about the frontier?
 stage: periagogic
+probes:
+  - id: which-queue-the-heading-summarizes
+    asks: >-
+      Which queue does a graph heading's metric summarize — the reconciliation
+      frontier, the review the author is owed, or both?
+    why: >-
+      The record derives two queues and calls only one of them the frontier.
+      `work-loop`'s answer derives the reconciliation frontier, every node whose
+      acting option's instrument fails, ranked; `authority` and `transience`
+      between them give the review the author is owed, every deferred answer and
+      every un-aligned disposition; `viable-options`' answer now names both as
+      "the frontiers" and stores neither. The author's disposition of 2026-09-03
+      names one "frontier" whose breadth a heading summarizes, and no node says
+      which.
+    discharges: >-
+      Which nodes a heading's metric counts, and therefore what the metrics are.
+      The node carries no fact and no recommendation at all today because the
+      AI's account and its candidate metrics are held back until this is
+      answered; an answer produces the node's first recommendation and the
+      criteria the author's words say each metric instruments.
+    source: ai
+    raised: 2026-09-03
 under:
   - commons.systems/disposition-graph/projection
 ---

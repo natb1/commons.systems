@@ -1,6 +1,47 @@
 ---
 question: How is materialized implementation reviewed before it lands?
-stage: ruling
+stage: maieutic
+probes:
+  - id: cap-and-effort-from-the-contract
+    asks: >-
+      What fixes a landing's review cap and its effort tier?
+    fact: answer
+    why: >-
+      The answer states both as numbers, and the rationale says where the
+      numbers came from, the legacy bootstrap's measurements of 2026-09-02;
+      `legacy` holds that the legacy record is evidence and never authority, and
+      `evaluation` that no doctrine is implied by what exists, so the record
+      supplies the figures and withholds their standing. Nothing in the record
+      defines a class of contract: `delegation` fixes what a unit's contract
+      must carry and gives it no class, and `decomposition` divides a sitting by
+      seam and not by class. Read on this node's answer and rationale, on
+      `delegation`, on `decomposition`, and on `legacy`.
+    discharges: >-
+      Whether the cap and the effort tiers stay stated in this node's answer or
+      are derived from the class of the contract the landing serves, which moves
+      the answer fact's recommendation off `standing`.
+    source: ai
+    raised: 2026-09-03
+  - id: graph-landing-review-at-scale
+    asks: >-
+      What reviews a graph landing once landings arrive from many sessions?
+    fact: answer
+    why: >-
+      The answer excludes graph landings from this instrument outright, on the
+      ground that the interview and the clean-context review suffice; the record
+      has never had more than one session landing on the graph at a time, so
+      nothing in it tests the ground, and no node says what happens when the
+      premise fails. `persistence` gives the graph a compare-and-swap landing
+      and no reviewer; `clean-context-review` and `frontier-consistency` give
+      the two readings and neither is scoped to concurrency. Read on this node's
+      answer, on `persistence`, `clean-context-review` and
+      `frontier-consistency`.
+    discharges: >-
+      Whether the answer's last sentence stands or a graph landing gets an
+      instrument of its own, which moves the answer fact's recommendation off
+      `standing`.
+    source: ai
+    raised: 2026-09-03
 review:
   verdict: forward
   strength: moderate
@@ -13,12 +54,6 @@ facts:
       - name: standing
         source: ai
         ref: "2026-09-02"
-      - name: cap-from-contract-class
-        source: ai
-        ref: "2026-09-03"
-      - name: graph-landing-instrument
-        source: ai
-        ref: "2026-09-03"
       - name: shrink-the-contract
         source: review
         ref: "2026-09-03"
@@ -63,14 +98,6 @@ The author's ruling of 2026-09-02 that every bootstrap landing requires shimmed 
 
 ### answer
 
-#### cap-from-contract-class
-
-The review cap and the effort tiers are not stated on this node but derived from the class of the contract the landing serves, which is what the legacy exit doctrine proposed. The node's own account puts this to the author at ratification, and a clean-context review asked that it be minted as its own question or folded into the ruling's options so the author can answer it.
-
-#### graph-landing-instrument
-
-Once landings arrive from many sessions the interview and the clean-context review no longer suffice as the review of a graph landing, and a graph landing gets an instrument of its own. The answer as it stands excludes graph landings from this instrument outright, and the node's account puts the sufficiency question to the author at ratification.
-
 #### shrink-the-contract
 
 The two-round cap and its consequence, that a blocking finding still open at the cap parks the landing and nothing lands over it, are dropped in favour of shrinking the unit's contract so a review can finish. The counter-argument notes that the node's own evidence blames a diff that grew between rounds, which is a scope defect rather than a review defect, and that delegation already requires one deliverable per unit. The session replied that delegation's rule is the floor and the cap remains for a contract that still thrashes, and left it to the author whether both stand.
@@ -80,8 +107,6 @@ The two-round cap and its consequence, that a blocking finding still open at the
 The recommendation changes from ratified to deferred, since this node carries no Disposition section and therefore no quoted ruling, which authority makes a ratified stamp invalid without. The placement finding of 2026-09-03 names review among twenty-two such nodes and offers the alternative of adding a Disposition section carrying the ruling it rests on with its date.
 
 ## Account
-
-For the author at ratification: whether the review cap and effort tiers stay stated here or derive from the class of the contract the landing serves, which is what the legacy exit doctrine proposed; and whether the interview suffices as the review of a graph landing once landings arrive from many sessions.
 
 ### Recording of 2026-09-03
 
@@ -184,7 +209,12 @@ alignment artifact". `cap-from-contract-class` and `graph-landing-instrument`
 are therefore questions the AI needs the author to answer and not candidate
 answers this node's answer fact should offer; each sentence says as much on its
 face, ending by noting that this node's account puts the matter to the author at
-ratification. They stand where they are for now, and
-`commons.systems/disposition-graph/author-questions` declares the shim that
-covers them: at its liquidation they are written as probes on this node and
-struck from the answer fact. Nothing here rules on them or on this node.
+ratification. That liquidation was performed the same day: they are now the probes
+`cap-and-effort-from-the-contract` and `graph-landing-review-at-scale` in this
+node's `probes`, struck from the answer fact and from `## Facts`, and the
+account paragraph that put both to the author at ratification is removed with
+them. Both stand open, so this node returns from the ruling stage to the
+maieutic, which is where its probes are asked. The recorded review of
+2026-09-03 still names the two option slugs where it stands, and is left
+exactly as written: `authority` says a recorded finding is annotated where it
+sits and never rewritten. Nothing here rules on the probes or on this node.

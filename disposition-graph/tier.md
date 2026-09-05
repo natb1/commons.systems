@@ -1,6 +1,46 @@
 ---
 question: What gives a rule its scope?
 stage: maieutic
+probes:
+  - id: a-rule-narrower-than-global
+    asks: >-
+      Does the author want the record to be able to express a rule whose scope
+      is narrower than global?
+    fact: answer
+    why: >-
+      The author's words of 2026-09-03 on this node say "Even cross-cutting
+      non-functional concerns have scope. A static typing convention doesn't
+      apply to the purpose node", which reads as asking for one; but the
+      clean-context review of 2026-09-03 verified against the record that no
+      such convention has ever been recorded here and that all five global-tier
+      nodes genuinely do bind every session, so the record contains no instance
+      of the thing the words describe and cannot say from itself whether the
+      author is asking for a mechanism or for an explanation.
+    discharges: >-
+      Whether the answer fact recommends a mechanism at all. On "yes" the answer
+      must supply one and `keep-tier-as-a-stored-flag` falls; on "no"
+      `record-what-makes-a-rule-global` is the cheaper answer the reviewer named
+      and the flag stays as its projection. The node carries no recommendation
+      today because this is unanswered — the session withdrew the one it had.
+    source: review
+    raised: 2026-09-03
+  - id: an-instance-of-a-narrower-rule
+    asks: >-
+      What rule of this record would have a scope narrower than global?
+    fact: answer
+    why: >-
+      The reviewer asked for one and the record supplies none: `.claude/rules/`
+      holds one file per global-tier node and nothing else, `tier` is carried on
+      exactly the nodes that bind every session, and the sitting's own reasoning
+      conceded that neither topology nor citations suffices alone, so the AI has
+      no example to design against.
+    discharges: >-
+      The shape of any mechanism the first probe's answer calls for, and with it
+      whether `scope-by-under-alone` is viable — the sitting rejected it because
+      a rule's home question and its scope differ, and one instance would show
+      whether that case is real or hypothetical.
+    source: review
+    raised: 2026-09-03
 review:
   verdict: kickback
   strength: strong

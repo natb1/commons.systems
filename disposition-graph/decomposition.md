@@ -1,6 +1,30 @@
 ---
 question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
 stage: review
+probes:
+  - id: bundled-disposition-as-queued-questions
+    asks: >-
+      Is a bundled disposition read as questions queued under the node it
+      refines?
+    fact: answer
+    why: >-
+      The author's opening words hand the sitting two multi-part examples and
+      ask for the seams by which such dispositions are decomposed; the record's
+      ground for the decomposition, the `node` node's rule that a text answering
+      two questions is two nodes, is not cited in the author's words, and the
+      account names that rule as the probe the periagogic stage put.
+    discharges: >-
+      Whether the decomposition's first seam holds, which moves the answer
+      fact's recommendation off `seams-and-split-review`.
+    source: ai
+    raised: 2026-09-04
+    status: discharged
+    reason: >-
+      The author answered on 2026-09-04, "go, and bootrap authority granted",
+      quoted under this node's `## Disposition`; the `### Grant of 2026-09-04`
+      records that the "go" takes the recommendation as presented, its reading
+      of a bundled disposition as questions queued under the node it refines
+      included.
 facts:
   - name: answer
     options:

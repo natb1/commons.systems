@@ -1,6 +1,28 @@
 ---
 question: How is the record read?
-stage: ruling
+stage: maieutic
+probes:
+  - id: scope-of-hiding-unanswered-nodes
+    asks: >-
+      In what sense of "unanswered" did the author rule that unanswered nodes
+      are hidden from the browser?
+    fact: answer
+    why: >-
+      The author's words, quoted on `transience`, are "Unanswered nodes are
+      hidden from the browser artifact and listed by the alignment artifact";
+      later the same day the author classified every disposition as unanswered,
+      which applied literally empties the browser. The record narrows the rule
+      to the un-aligned node, one with no `## Answer`, on the AI's reading that
+      the earlier words were said under the narrower sense, and the session's
+      reply of 2026-09-03 says in terms that the author rules between the two.
+      Nothing the author has said since decides it. Read on this node's answer
+      and its recorded amendment review, on `transience`, and on `unanswered`.
+    discharges: >-
+      Which nodes the browser hides, which moves the answer fact's
+      recommendation off `draft`; the literal reading has no option on the fact
+      today, so the answer also decides whether one is owed.
+    source: review
+    raised: 2026-09-03
 review:
   verdict: forward
   strength: moderate

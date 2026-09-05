@@ -1,6 +1,36 @@
 ---
 question: What does a newcomer read after purpose?
 stage: ruling
+probes:
+  - id: onboarding-walk-against-bite-order
+    asks: >-
+      Should the onboarding walk and the reconciliation bite order diverge, so
+      that rank no longer serves both, or should the model node say where a
+      newcomer acts first without changing rank at all?
+    fact: answer
+    why: >-
+      the author's words behind this question ask for navigation and not rank —
+      "Consider how an onboarding person will navigate from purpose, to graph
+      concepts, to /align usage" — and neither attention's answer nor
+      work-loop's rationale says whether one scalar was meant to carry both
+      orders; the boost half of the recommendation was the AI's inference from
+      words that point the other way.
+    discharges: >-
+      the boost half of `rewrite-model`, and with it whether projection or
+      growth stands first among model's children; it moves the answer fact's
+      recommendation.
+    source: review
+    raised: 2026-09-03
+    status: discharged
+    reason: >-
+      the author's own high-level order, recorded on `scope` on 2026-09-03,
+      answers it — self-documentation through the browser before alignment. The
+      session's reply on this node records the discharge: "the high-level order
+      recorded on the scope node on 2026-09-03 places self-documentation through
+      the browser before alignment, so projection stays first among model's
+      children and the boost half of the recommendation is withdrawn." The
+      option `boost-growth-first-among-models-children` carries `status: passed`
+      with that reason.
 review:
   verdict: forward
   strength: moderate

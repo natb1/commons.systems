@@ -1,6 +1,63 @@
 ---
 question: What does the author read to rule?
 stage: review
+probes:
+  - id: unit-of-a-ruling
+    asks: >-
+      What is the unit the author confirms when they rule on a node?
+    fact: answer
+    why: >-
+      The author asked for a ruling decomposed into aspects, each with its own
+      choices and recommendation, and the record as it stood made a
+      recommendation one whole-node adoption with one class and one boldness;
+      whether the aspects are derived by the page from what the record carries
+      or recorded on the node was not derivable from anything in it.
+    discharges: >-
+      What list A holds, which moves the answer fact's recommendation.
+    source: ai
+    raised: 2026-09-03
+    status: discharged
+    reason: >-
+      The author answered on 2026-09-03, quoted under this node's `##
+      Disposition`, that the revised record carries a decision per aspect, each
+      aspect with choices requiring confirmation and a recommendation with
+      confidence; the node's `### The probe answered, 2026-09-03` records what
+      the ruling settles for the page.
+  - id: permanence-or-persistence
+    asks: >-
+      Which fact did the author mean by "permanence"?
+    fact: persistence
+    why: >-
+      The author's words of 2026-09-03 named permanence, and the record's
+      reserved fact is persistence; nothing in the record decided whether a
+      fifth fact was intended.
+    discharges: >-
+      Whether a fact is owed, which moves the persistence fact.
+    source: ai
+    raised: 2026-09-03
+    status: discharged
+    reason: >-
+      The author answered on 2026-09-03, quoted under this node's `##
+      Disposition`, "I said permanence but I meant persistence".
+  - id: boldness-renamed-to-confidence
+    asks: >-
+      Is boldness renamed to confidence, and is the rename a change of meaning?
+    fact: answer
+    why: >-
+      The author's words of 2026-09-03 called the field confidence; boldness is
+      defined on `growth` and is a field on every recommendation, and a rename
+      touches four answers, so whether it was a rename or a change of the
+      measured quantity could not be read off the words.
+    discharges: >-
+      What the page shows beside a recommendation and what `growth` defines,
+      which moves this node's answer fact and `growth`'s.
+    source: ai
+    raised: 2026-09-03
+    status: discharged
+    reason: >-
+      The author answered on 2026-09-03, quoted under this node's `##
+      Disposition`, "stick with boldness then, I want to know how much rests on
+      the AI's own knowledge against the record"; the rename is retracted.
 facts:
   - name: answer
     options:

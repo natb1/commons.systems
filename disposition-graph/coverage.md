@@ -1,6 +1,85 @@
 ---
 question: Which of the recorded functions fall within the purpose?
 stage: periagogic
+probes:
+  - id: personal-software-maintenance
+    asks: >-
+      Does the purpose cover maintaining the software the author uses
+      personally, or only the intention behind building it?
+    fact: answer
+    why: >-
+      The purpose node's answer names what the repository is for and says
+      nothing about maintenance of the author's own daily-use software; the
+      coverage node's own account records that the twelve-function survey
+      "contradicts the purpose disposition as worded and requires the author's
+      clarification", and the census unit of 2026-09-03 recorded the four
+      questions as open questions with no candidate answer, so nothing on the
+      answer fact reaches them.
+    discharges: >-
+      Whether functions 9 (three consumer apps, their shared libraries and the
+      Firebase backend) fall inside the purpose; it is the largest single block
+      of implementation the ruling decides, and it produces the first
+      recommendation the answer fact has ever carried. Until it is answered
+      `materialization`'s greenfield shim cannot liquidate, its condition naming
+      this node.
+    source: ai
+    raised: 2026-09-03
+  - id: host-and-shared-infrastructure
+    asks: >-
+      Is the author's own computing environment one more institution of daily
+      life the purpose should name, or infrastructure with no purpose of its
+      own?
+    fact: answer
+    why: >-
+      Same locus. The purpose node's answer distinguishes the record from the
+      factory that acts on it and says nothing about the machinery either runs
+      on; nothing in the record classifies about twenty shared libraries, the
+      Firebase backend and its rules tests, or the author's machine
+      configuration, backups and monitoring.
+    discharges: >-
+      Whether function 12 falls inside the purpose; second largest block, and it
+      partly overlaps function 9's backend, so the two are answered against each
+      other. Also gates the swap.
+    source: ai
+    raised: 2026-09-03
+  - id: marketing-and-portfolio-content
+    asks: >-
+      Is marketing and portfolio content part of what this repository is for, or
+      a separate function to be named or excluded?
+    fact: answer
+    why: >-
+      Same locus. The purpose node names its readers and the audience question
+      moved here when `audience` was recommended for pruning; the two options
+      that moved with it decide who is served, not whether the surfaces built to
+      reach them are in scope, and the account records the About page, the
+      project showcase and the posts as outside the purpose as worded.
+    discharges: >-
+      Whether function 10 falls inside the purpose. Ranked below the two above
+      because the node's two existing options bear on it obliquely (an answer
+      for `name-excluded-audiences` would name the public site's About page as
+      excluded), so the record is not wholly silent.
+    source: ai
+    raised: 2026-09-03
+  - id: indirect-promotion-of-values
+    asks: >-
+      Is the indirect promotion of the author's values through unrelated content
+      within the purpose, or a hobby a legacy node happened to rationalize?
+    fact: answer
+    why: >-
+      Same locus as the three above; the purpose node's answer is silent on it.
+    discharges: >-
+      Whether function 11 falls inside the purpose.
+    source: ai
+    raised: 2026-09-03
+    status: discharged
+    reason: >-
+      Withdrawn on the ranking, not on the merits: it did not survive the cap of
+      three. It is the smallest of the four by what an answer would move, one
+      blog against three consumer apps, twenty libraries and a public site, and
+      it is the only one of the four whose own wording already leans ("or a
+      hobby that a legacy node happened to rationalize"). It stays in the record
+      as a discharged probe and the author may raise it; a later movement that
+      frees a slot should take it first.
 facts:
   - name: answer
     options:

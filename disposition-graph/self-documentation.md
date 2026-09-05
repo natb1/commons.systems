@@ -1,6 +1,27 @@
 ---
 question: How does this repository document itself?
 stage: maieutic
+probes:
+  - id: what-equal-means-in-the-order
+    asks: >-
+      What does the author mean by self-documentation and scope standing equal
+      in the high-level order?
+    why: >-
+      The author's words give the order "purpose -> [scope, self documentation
+      (via the graph browser)] (equal) -> ..." and nothing else on this
+      question. Rank in this record is a share of a parent's rank split among
+      siblings, so two nodes under different parents cannot be made equal in it;
+      `attention`'s rule and `scope`'s `order` field realize the equality only
+      as each being outranked by nothing but its own ancestors, and the record
+      nowhere says which of the two the author meant. Read on this node's `##
+      Account`, on `scope`'s `order` field, on `attention`, and on `projection`.
+    discharges: >-
+      Whether an exact equality is owed, which decides whether this node is a
+      section of its own with a boost equal to scope's or the mapping to
+      `projection` stands; it moves the existence fact's recommendation off
+      `keep` and the answer fact's off `section-of-its-own`.
+    source: ai
+    raised: 2026-09-03
 facts:
   - name: answer
     options:

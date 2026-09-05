@@ -1,6 +1,57 @@
 ---
 question: What does an unanswered node carry?
-stage: review
+stage: maieutic
+probes:
+  - id: option-text-per-node-or-per-option
+    asks: >-
+      In the author's sentence on viable-options that an option carries in full
+      the text where it would stand as the answer, is one text held per node or
+      one text per option?
+    fact: answer
+    why: >-
+      viable-options' answer sentence admits both readings on its face; this
+      node's own facts prose says it "is read here as the fence, one text per
+      node and the recommended option's" and that the other reading "is a change
+      to this encoding and nothing in the record carries it today". Read for an
+      answer: viable-options' `## Answer` and its `## Facts`, this node's fence
+      (the `## Recommendation` paragraph on `## Recommendation`, "the
+      recommended text when the answer fact recommends an option other than the
+      one that stands ... one fenced markdown block holding the whole proposed
+      node"), and alignment-page's option list. None of the three settles which
+      reading the author's sentence carries; the AI recorded that it chose one.
+    discharges: >-
+      whether the `## Recommendation` fence holds one text or a text per option,
+      and therefore what the reader, the validator and both projections must
+      accept. It moves the answer fact's recommendation
+      `every-part-in-the-record`, whose fence states the one-text rule in terms.
+    source: ai
+    raised: 2026-09-04
+  - id: proposal-at-two-loci
+    asks: >-
+      Does the record anywhere say the dialogue's own section is a proposal in
+      the authority node's sense, or is the collision only in the name, and does
+      the author's note that a conflicting answer arising outside alignment is a
+      proposal state authority's definition as written or narrow it?
+    fact: answer
+    why: >-
+      authority's sentence defines a proposal as what would contradict doctrine
+      or exceed its scope and says nothing about where the answer arose, while
+      this node's seventh part carried the same word for the AI's account in
+      prose.
+    discharges: >-
+      whether the seventh part keeps the name, and whether authority's
+      definition is narrowed; it moved the answer fact's recommendation and
+      authority's.
+    source: ai
+    raised: 2026-09-03
+    status: discharged
+    reason: >-
+      the author answered it on 2026-09-03, in the words recorded under this
+      node's `## Disposition` and on `authority` — "closer to the second
+      meaning. A conflicting answer that arises outside of alignment is a
+      proposal. eg. via some evidence/signal/instrument/criteria or because a
+      conflict is identified outside of alignment. The term must not be
+      overloaded - it is technical vocabulary."
 review:
   verdict: forward
   strength: strong

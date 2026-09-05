@@ -1,6 +1,29 @@
 ---
 question: What may a node's prose restate of what the record already carries as data?
-stage: review
+stage: maieutic
+probes:
+  - id: scope-of-the-residue-diagnosis
+    asks: >-
+      How far does the author intend the rule against re-encoding structured
+      data into prose to reach?
+    fact: answer
+    why: >-
+      The author's words here are one sentence, naming one example, rejected
+      options, and diagnosing residue of prose written before the data model
+      recorded them. The migration's census at graph commit 3bd99e91 found 18 of
+      121 entries duplicating an option already on a fact, so on the residue
+      reading the diagnosis reaches about one entry in seven, and the
+      recommended answer rests on a qualification the author has not engaged,
+      that the diagnosis is right in kind and understated in degree; it also
+      reaches the accounts, which the example did not name. Read on this node's
+      `## Disposition`, its `### The migration's census, 2026-09-04`, and the
+      account of `alignment-page`, where the words were said.
+    discharges: >-
+      The rule's scope, which moves the answer fact's recommendation between
+      `prose-argues-structure-records`, `duplicates-only` and
+      `answer-and-rationale-only`.
+    source: ai
+    raised: 2026-09-04
 facts:
   - name: answer
     options:

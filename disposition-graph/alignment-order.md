@@ -1,6 +1,34 @@
 ---
 question: What orders the unanswered frontier for alignment?
 stage: maieutic
+probes:
+  - id: rank-second-reading-frontier
+    asks: >-
+      Does attention's second reading of rank, "frontier attention, where work
+      goes first", distinguish an alignment frontier from a reconciliation
+      frontier at all, and whose attention does the record say the word names
+      there?
+    fact: answer
+    why: >-
+      attention's answer names rank as "one fact with three readings" and names
+      the second as "frontier attention, where work goes first" without saying
+      which frontier or whose attention; the alignment frontier did not exist
+      when the sentence was written, and nothing in attention, alignment-target
+      or scope settles it.
+    discharges: >-
+      whether rank orders the alignment frontier at all, which decides whether
+      this node's answer replaces rank or refines it. It moved this node's
+      answer fact from `rank-as-the-alignment-order` and raised
+      `rank-orders-reconciliation-only` on attention.
+    source: ai
+    raised: 2026-09-03
+    status: discharged
+    reason: >-
+      the author answered it on 2026-09-03, in the words recorded under this
+      node's `## Disposition` — "It originally referred to the reconciliation
+      frontier, but that predated the alignment frontier. attention 'for where
+      work goes first' refers to the reconciliation process (shimmed as a skill,
+      but codified before bootstrap exit)."
 facts:
   - name: answer
     options:
