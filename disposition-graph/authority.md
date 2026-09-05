@@ -59,6 +59,9 @@ facts:
       - name: authority-per-clause-by-a-child-node
         source: commons.systems/disposition-graph/delegation-bounds-and-sizing
         ref: "2026-09-05"
+      - name: a-conferred-class-acts-during-bootstrap
+        source: commons.systems/disposition-graph/what-acts-during-bootstrap
+        ref: "2026-09-05"
     recommends: authority-derived
     boldness: moderate
     stands: authority-derived
@@ -210,6 +213,20 @@ A measurement of the record does not go in the text that stands: a count belongs
 #### authority-per-clause-by-a-child-node
 
 A ruling stays per fact, and a child node may name which clauses of its parent's answer that ruling reaches, so a rule whose clauses differ in kind can be ratified in part without a stamp on a clause. Raised by the sizing division the `delegation-bounds-and-sizing` node draws; it is the case the passed-over `clause-level-ratification` did not consider, since it is a node and not a stamp that does the naming. Against it stands the rule this node's own answer states, that authority only narrows on the way down, and `ocap-attenuation`, adopted on `authority-derived`, under which a holder passes on a strictly weaker reference and never a stronger one: a child naming how far its parent's ruling went is redistributing from below what the parent's ruling did. The node that raised it recommends moving the text instead, so that the division is made by a ruling per fact and this option is not needed; it is recorded because that node keeps `ratify-the-bounds-delegate-the-sizing` viable and the author may rule for it, and that option cannot be recorded without this encoding.
+
+#### a-conferred-class-acts-during-bootstrap
+
+During bootstrap a class acts from the ruling that confers it and not before;
+what neither a declared shim nor the author's grant does is name a class, which
+is the half of this answer's sentence that is its own. The state the
+`what-acts-during-bootstrap` node defines runs to bootstrap exit and not to the
+first ruling, so a sentence saying that no class acts during it is false of every
+day after the first ruling, and that node's own gloss on `bootstrap` already says
+the other thing: nothing acts by right but a declared shim, the author's grant,
+and each class a ruling has already conferred. Raised by the clean-context
+reading of that node on 2026-09-05, which found the answer and the gloss
+contradicting each other in the text `.claude/rules/` carries, and recorded here
+because the sentence is this node's and the author rules on it here.
 
 ### authority
 
@@ -630,3 +647,14 @@ that node's passed-over recommendation needs. It is not recommended: that node's
 own recommendation moved to taking the clauses out of the parent's answer
 altogether, which needs no new encoding. The option acts on nothing, and this
 node's recommendation, pin and stage are unmoved.
+
+### An option from what-acts-during-bootstrap's reading, 2026-09-05
+
+That node's fresh reading found this answer's "During bootstrap no class acts;
+neither a declared shim nor the author's grant names a class" true of the state
+as it was defined when the sentence was written and false of the state the child
+now defines, which runs to bootstrap exit rather than to the first ruling. The
+child's own gloss says a conferred class acts. Recorded as the option
+`a-conferred-class-acts-during-bootstrap` and not written into the answer: the
+sentence is this node's, and what a ruling elsewhere does to it is the author's
+to decide. The recommendation and the pin do not move.

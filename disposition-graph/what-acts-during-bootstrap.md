@@ -28,7 +28,7 @@ facts:
         reason: "the author's words of 2026-09-04 make the grant a persistent rule of the authority node and no class, and the authority node passed the same option over on that ground"
     recommends: shim-and-grant
     boldness: high
-    against: "The six rule files under `.claude/rules/` that every session loads, this node's own projection among them, are projections of unanswered nodes, and the `session-context` node declares a shim on `CLAUDE.md` and on `.claude/settings.json` and on neither the rules projection nor this file, so this answer says the doctrine the record is running on today acts on nothing, and says it in a file that binds every session while saying it. It leaves a session no account at all of what the six files it loads bind it to, and the option that would give one is `projected-doctrine-acts`."
+    against: "Every rule file under `.claude/rules/` that a session loads, this node's own projection among them, is the projection of a node no ruling reaches, and the `session-context` node declares a shim on `CLAUDE.md` and on `.claude/settings.json` and on neither the rules projection nor this file, so this answer says the doctrine the record is running on today acts on nothing, and says it in a file that binds every session while saying it. It leaves a session no account at all of what those files bind it to, and the option that would give one is `projected-doctrine-acts`."
     stands: shim-and-grant
   - name: authority
     options:
@@ -41,9 +41,9 @@ review:
   verdict: kickback
   strength: strong
   date: 2026-09-05
-  of: b405911d3851fb1f437c7c2798a4c28ef4aa9e38
-  commit: 02287a281ab53c4afc9bed51c3947148109d4484
-  against: "The answer describes a machine no one is running, and is itself carried to every session by a thing it says acts on nothing. Six rule files under `.claude/rules/` direct every session, this reading included, and by this answer's own terms none of them acts: a projection of an unruled node is not a shim, nothing standing in for a materialization not yet made, since the projection is made and what it lacks is authority; and it is not a grant, which is given for one named reconciliation. The same is true of the 'How a recommendation is made' section of `CLAUDE.md`. So the rule the author is asked to ratify leaves the record with no word for what a projected rule does, while being one of the six files that does it, and the two options that could account for the running machine cannot: a resting deferred state the `approval-directed-agents` reading expressly refuses, and the author's own struck expiry. Worse than unanswered, the objection is unrulable as the fact stands, because the one option that would answer it is on no list."
+  of: 91e7cffbfbce2028fab5012e4afeb06bed5047c3
+  commit: da9492948cae22dd2a238af90fd542d48008ba04
+  against: "The term this node mints is the one every stopgap in the record dates itself by - CLAUDE.md's own notice, materialization's greenfield shim, work-loop's reconciliation shim, review's instrument - and the answer fixes the state while handing the moment to a child that is itself unruled, whose answer in turn gathers its conditions from six further unruled nodes. Ratifying this therefore buys the author less than it looks like: a session still cannot compute whether it is in bootstrap or out of it, and the two clauses this reading found wrong are both in the half that tries to say when the state ends, which is the half the record cannot yet settle. Beside that stands the objection the fact already records and this reading re-verified with the count corrected: eight rule files under `.claude/rules/`, this answer's own projection among them, direct every session, and none of them is a shim any node declares or a grant given for one reconciliation, so the answer names nothing that the doctrine the machine is actually running on is. The option that would answer it, `projected-doctrine-acts`, is listed and not recommended, which is honest, but it leaves the author choosing between a rule that describes a machine nobody is running and an option the AI will not stand behind - and choosing while reading the rule in question inside a file the rule says acts on nothing."
 form: rule
 under:
   - commons.systems/disposition-graph/authority
@@ -54,7 +54,7 @@ defines:
   - term: bootstrap
     gloss: "The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred."
   - term: bootstrap exit
-    gloss: "The moment every condition the record declares for it is met, the conditions being the bootstrap-exit-conditions node's question, at which `greenfield` is swapped with `main`."
+    gloss: "The moment every condition the record declares for it is met, the conditions being those the `bootstrap-exit-conditions` node gathers, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
     gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
 ---
@@ -68,7 +68,9 @@ The author, 2026-09-04, on the viable-options node, on what unanswered is:
 
 ## Answer
 
-Two things act, and no class does. A shim declared on the record is applied
+Two things act by right, and no class acts until a ruling confers one; from
+that ruling the class acts, as the authority node says, and what acts by right
+shrinks with every ruling. A shim declared on the record is applied
 by default, as the evaluation node says, and it stands in for a materialization
 the record has not yet made, as the transience node defines it; a prompt is
 required only to bypass one. And a grant is the author's word, given for one
@@ -80,19 +82,21 @@ recommendation on an unanswered node is a draft and grounds no work, and a
 class the AI writes for itself is not a grant.
 
 Bootstrap is the state of this record until bootstrap exit, and it is not a
-licence: what a session may do in it is exactly what the two rules above
-allow. What an artifact standing outside them is, this node does not decide:
-the record's test for unsupported implementation is the materialization node's,
-whether a disposition justifies the artifact, and the session-context node's for
-this directory, whether a node projects the rule, and neither test reads the
+licence: what a session may do in it is exactly what the two rules above allow,
+together with what each class a ruling has already conferred allows. What an
+artifact standing outside them is, this node does not decide: the record's test
+for unsupported implementation is the materialization node's, whether a
+disposition justifies the artifact, and the session-context node's for this
+directory, whether a node projects the rule, and neither test reads the
 authority under which anything acted. An artifact that fails one of those tests
-is put on the frontier by the second direction of reconciliation, which the
-work-loop node begins only at exit, and no instrument derives that frontier
-today. The state does not end in one
-act, and it does not relax all at once. It relaxes node by node, as rulings
-accumulate and each node's class begins to act in place of the shim or the
-grant that carried it, so that what acts under this answer shrinks with every
-ruling until the last one leaves nothing for it to carry. Bootstrap exit is the
+is unsupported implementation, which the second direction of reconciliation puts
+on the frontier for the author's ruling; the work-loop node holds that direction
+back until the dispositions that state it are answered, and no instrument
+derives that frontier today. The state does not end in one act, and it does not
+relax all at once. It relaxes node by node, as rulings accumulate and each
+node's class begins to act in place of the shim or the grant that carried it, so
+that what acts by right shrinks with every ruling until the last one leaves
+nothing for it to carry. Bootstrap exit is the
 moment every condition the record declares for it is met; which conditions
 those are is the question of the node beneath this one,
 `bootstrap-exit-conditions`, and this node mints none of them and lists none.
@@ -143,7 +147,7 @@ side of it is on the list as `grant-expires-at-exit` and the case against the
 whole answer is on the fact. The case against has one option that answers it
 and the answer does not, `projected-doctrine-acts`, which would make the
 doctrine the record projects into `.claude/rules/` a third thing that acts; it
-is listed and not recommended, because whether the six files a session loads
+is listed and not recommended, because whether the rule files a session loads
 bind it is the author's to say and not the AI's.
 
 #### deferred-as-the-resting-state
@@ -174,7 +178,7 @@ answer reached two ways, and the option covers both. It is not dominated by
 either live alternative: `deferred-as-the-resting-state` would give every
 recommendation of the AI's the force of an answer, which this does not, and
 `grant-expires-at-exit` grounds nothing that runs today. It is the only way on
-this list for the author to rule that the six files every session loads bind
+this list for the author to rule that the rule files every session loads bind
 it, which is what the case against the recommendation says the answer leaves
 unaccounted; the reading of 2026-09-05 named it, and it is recorded here and
 not answered, because the AI may not answer a case against itself by ruling
@@ -207,11 +211,12 @@ not a class.
 
 ### authority
 
-Ratified, at moderate boldness: this node says what an agent may act on
-while the record is empty, which is capture-shaped on its face — an answer
-that widened it would let the AI grant itself the authority the rest of the
-record withholds. Moderate because the two rules it gathers are already the
-author's, and only the sentence about how the state ends is new.
+Ratified, at moderate boldness: this node says what an agent may act on by
+right while the rulings that would carry the work are still owed, which is
+capture-shaped on its face — an answer that widened it would let the AI grant
+itself the authority the rest of the record withholds. Moderate because the two
+rules it gathers are already the author's, and what is new is the sentence about
+how the state relaxes and ends.
 
 ## Account
 
@@ -466,3 +471,98 @@ test is ruled at the node that owns it and this node cites rather than restates.
 The recommendation moved, so the node returns to the review stage. The pin this
 reading settled names the text it read and not this amendment, which is the live
 option `pin-names-the-text-the-reader-read` on the review-cost node.
+
+### Clean-context review, 2026-09-05
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `shim-and-grant`.
+
+Findings:
+
+- ## Answer, first sentence and second paragraph's first sentence, against the same answer's third paragraph and the frontmatter `bootstrap` gloss (validations 1, 2 and 3; wrong action by an executor, and a conflict with the parent left unrecorded). 'Two things act, and no class does.' and 'what a session may do in it is exactly what the two rules above allow', against 'It relaxes node by node, as rulings accumulate and each node's class begins to act in place of the shim or the grant that carried it' and against the gloss the last reading asked for, 'bootstrap - The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred.' The gloss was corrected and the answer was not brought with it. Now that `bootstrap` runs to exit rather than to the first ruling, both quoted sentences are false of every day of the state after the first ruling, and they are the sentences the projector puts into `.claude/rules/what-acts-during-bootstrap.md`, which carries the answer text and not the glosses: a session reads the false pair and must reconcile it against one clause three sentences later. A session working in month three of bootstrap, with rulings recorded, would read that no class acts and that what it may do is exactly the two rules, and would refuse to act on a ratified node's confirmed choice, which authority.md:122 says acts. Second limb, the parent: authority's standing answer says 'During bootstrap no class acts; neither a declared shim nor the author's grant names a class', which was true while `bootstrap` meant 'while nothing is ratified' and is false under the definition this node now mints. The gloss adopts the contradicting position and nothing is recorded on `authority`, which validation 2 requires of a recommendation that would contradict a node in its ancestry. Suggested edit: 'Two things act by right, and no class acts until a ruling confers one; from that ruling the class acts, as the authority node says, and what acts by right shrinks with every ruling.' and 'what a session may do in it is exactly what the two rules above allow, together with what each class a ruling has already conferred allows'; and record on `authority` the option named in the merge finding below.
+- ## Facts, `### answer` prose, the `#### projected-doctrine-acts` prose, frontmatter `facts[0].against`, and `## Account` (validation 3; a claim about the implementation that is verified false, and stale for the third reading running). 'The six rule files under `.claude/rules/` that every session loads, this node's own projection among them, are projections of unanswered nodes'; 'whether the six files a session loads bind it is the author's to say and not the AI's'; 'it is the only way on this list for the author to rule that the six files every session loads bind it'; 'It is the sixth of the six rule files'. `ls .claude/rules/` returns eight: authority.md, class-recommendation.md, delegation-bounds-and-sizing.md, delegation.md, evaluation.md, materialization.md, session-context.md, what-acts-during-bootstrap.md. `grep -rn "tier: global" disposition/disposition-graph/` returns the same eight nodes, `class-recommendation` and `delegation-bounds-and-sizing` having taken `tier: global` on 2026-09-05 in this very round, each recording the regeneration on its own account (class-recommendation.md:219, delegation-bounds-and-sizing.md:305). The count was five at the first reading, six at the second, and is eight now, and each correction restated a number that goes stale the next time a node takes the tier. Nothing else in the case against is affected: I verified that each of the eight is projected from a node no ruling reaches, and that `session-context` declares exactly two shims, on `CLAUDE.md` and on `.claude/settings.json` (session-context.md:56-64), neither of them the rules projection. Suggested edit: strike the number from every live locus, 'Every rule file under `.claude/rules/` that a session loads, this node's own projection among them, is the projection of a node no ruling reaches', and leave the measure with its date and commit in `## Account`, which is what `class-recommendation`'s own reading of 2026-09-05 asked of a count in text the author is ruling on. The `against` on the review block of an earlier reading is that reader's words at that date and is not edited.
+- ## Answer, second paragraph (validations 2 and 3; the clause attributes to work-loop what work-loop's own shim contradicts, and with the node beneath this one it makes exit unreachable). 'An artifact that fails one of those tests is put on the frontier by the second direction of reconciliation, which the work-loop node begins only at exit, and no instrument derives that frontier today.' Two things. First the attribution: work-loop's declared shim gates the beginning on something else, work-loop.md:69, 'the second direction, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed to this graph or pruned, are complete, neither begun before the disposition that states them is answered', and the author's words on that node read 'this is required for bootstrap exit, but not transition. Disposition must me answered before this is shimmed or materialized' - required for exit, and gated on the answering of the disposition. 'Begun only at exit' is one clause of work-loop's answer (work-loop.md:108), added there as a light edit, and this draft cites the node for the clause its own shim contradicts. Second the consequence: `bootstrap-exit-conditions`, the node beneath this one, lists as an exit condition 'That the second direction of reconciliation is complete, every artifact on the implementation ref that no node justifies supported by a disposition or pruned, and the drain of every legacy tactic node, transcribed or pruned', so under the parent's own clause the second direction must be complete before the moment at which it begins. That is the circularity the first reading found on the greenfield shim and the second on the reconciliation shim, arriving a third time through the child, and this clause is projected verbatim into a rule file every session loads. Suggested edit: '... is unsupported implementation, which the second direction of reconciliation puts on the frontier for the author's ruling; work-loop holds that direction back until the dispositions that state it are answered, and no instrument derives that frontier today' - the last limb verified again at this reading, `grep -n "greenfield\|unsupported" packages/disposition/*.mjs` returning nothing - and record on `work-loop` the option named in the merge finding below.
+- Frontmatter `defines`, the `bootstrap exit` gloss (validation 1; the gloss says the conditions are a question). 'bootstrap exit - The moment every condition the record declares for it is met, the conditions being the bootstrap-exit-conditions node's question, at which `greenfield` is swapped with `main`.' The conditions are that node's answer; its question is 'What are the conditions of bootstrap exit?'. A gloss is what the browser shows as the definition of the term every stopgap in this record dates itself by, and as written it says the conditions are a question. The `## Answer` says it correctly one sentence at a time ('which conditions those are is the question of the node beneath this one'), so only the gloss is out of step. Suggested edit: 'The moment every condition the record declares for it is met, the conditions being those the `bootstrap-exit-conditions` node gathers, at which `greenfield` is swapped with `main`.'
+- ## Answer, second paragraph (editorial; the projected text carries a broken wrap). 'and no instrument derives that frontier today. The state does not end in one' followed by a line beginning 'act, and it does not relax all at once.' The paragraph was edited without re-wrapping, and the same ragged pair of lines stands in `.claude/rules/what-acts-during-bootstrap.md`, which every session loads. Suggested edit: re-wrap the paragraph.
+- Validation 15, merge, concerning commons.systems/disposition-graph/authority. What finding 1 names is a new answer to a question the record already asks - 'Who may change an answer?', whose answer states 'During bootstrap no class acts' - carried here as a definition that falsifies it, since `bootstrap` now runs to exit and not to the first ruling. Proposed as an option on `authority`'s answer fact, named `a-conferred-class-acts-during-bootstrap`, source commons.systems/disposition-graph/what-acts-during-bootstrap, prose: 'During bootstrap a class acts from the ruling that confers it and not before; what neither a declared shim nor the author's grant does is name a class, which is the half of this sentence that is this node's own. The state the what-acts-during-bootstrap node defines runs to bootstrap exit rather than to the first ruling, so a sentence saying that no class acts during it is false of every day after the first ruling, and the child's own gloss already says the other thing.' Recording it there lets the author rule on the parent's sentence at the node that owns it, and lets this node say plainly that a conferred class acts. The review proposes and neither merges, splits, nor edits.
+- Validation 15, merge, concerning commons.systems/disposition-graph/work-loop. What finding 3 names is a new answer to a question the record already asks - 'How does work happen?', whose answer opens 'By reconciliation in both directions, the second begun only at exit' while the shim declared on the same node says the second direction is 'neither begun before the disposition that states them is answered' and requires it complete. Proposed as an option on `work-loop`'s answer fact, named `second-direction-begins-when-its-disposition-is-answered`, source commons.systems/disposition-graph/what-acts-during-bootstrap, prose: 'The second direction is begun when the dispositions that state it are answered, as the shim declared on this node already says, and it is required complete for bootstrap exit, as the author's words of 2026-09-03 say; the answer's opening clause, that it is begun only at exit, makes a completion the exit conditions require into work that cannot start until the moment it gates.' The other end of the same matter is already on that node as `exit-conditions-cited-not-carried`, which is a different question and is not displaced by this. The review proposes and neither merges, splits, nor edits.
+
+On the facts and what they recommend: The answer fact recommends `shim-and-grant`, which `stands` also names, so no `## Recommendation` fence is present and none is owed; I confirmed the node's sections are Disposition, Answer, Rationale, Facts and Account and no fence stands among them. High boldness, which in this record is low confidence, is right: the first paragraph gathers the record's own words from evaluation, transience and authority and I verified each against its node, while the second paragraph is the AI's and findings 1 and 3 show two of its clauses wrong against the nodes they cite. The authority fact recommends `ratified` at moderate, which I agree with - what an agent may act on while nothing is ruled is capture-shaped on its face, which is class-recommendation's third limb and the reading the `### authority` subsection gives - though that subsection still describes the node as saying what an agent may act on 'while the record is empty', which is no longer the state this answer defines. No `existence` or `persistence` fact is owed, the node declaring no shim and changing no shape; the `review` block pins b405911d, which the recommendation has moved past, and this reading replaces it.
+
+On the viability of the options: On the answer fact all six listed options are viable or correctly passed: `deferred-as-the-resting-state` is genuinely not dominated and is now rightly stated as a divergence from the `approval-directed-agents` reading rather than as its support, `projected-doctrine-acts` puts the counter-argument's own answer on the list where the author can rule for it, `grant-expires-at-exit` puts the author's struck words of 2026-09-03 there, and the two passed-over reasons check out (authority passes `bootstrap-authority-as-class` on the same ground; the first-sitting argument holds against `nothing-acts`). The authority fact's three options are the reserved vocabulary and are complete. I find no viable option missing: what finding 1 names is a defect in the recommended text rather than a candidate answer, since no one would recommend that a class a ruling has conferred not act, and the choice between citing the exit conditions and listing them is already before the author on the node beneath this one, as `left-where-they-stand`.
+
+Strongest counter-argument (strong): The term this node mints is the one every stopgap in the record dates itself by - CLAUDE.md's own notice, materialization's greenfield shim, work-loop's reconciliation shim, review's instrument - and the answer fixes the state while handing the moment to a child that is itself unruled, whose answer in turn gathers its conditions from six further unruled nodes. Ratifying this therefore buys the author less than it looks like: a session still cannot compute whether it is in bootstrap or out of it, and the two clauses this reading found wrong are both in the half that tries to say when the state ends, which is the half the record cannot yet settle. Beside that stands the objection the fact already records and this reading re-verified with the count corrected: eight rule files under `.claude/rules/`, this answer's own projection among them, direct every session, and none of them is a shim any node declares or a grant given for one reconciliation, so the answer names nothing that the doctrine the machine is actually running on is. The option that would answer it, `projected-doctrine-acts`, is listed and not recommended, which is honest, but it leaves the author choosing between a rule that describes a machine nobody is running and an option the AI will not stand behind - and choosing while reading the rule in question inside a file the rule says acts on nothing.
+
+The session's reply: Seven findings, all validated on this thread and all accepted; the kickback to the maieutic stage is accepted and the answer is redrafted in this sitting. (1) Validated at both loci. The gloss the last reading asked for reads "nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred", and the answer's first sentence still read "Two things act, and no class does" with the licence clause to match; the projector carries the answer into `.claude/rules/` and not the glosses, so the false pair is what every session reads, and the executor case is exact: a session in a record with rulings on it would refuse to act on a ratified node's confirmed choice, which `authority` says acts. Both sentences are redrawn in the reading's own words. The parent limb is validated too: `authority`'s standing answer says "During bootstrap no class acts; neither a declared shim nor the author's grant names a class", which was true while bootstrap meant while nothing is ratified and is false under the definition this node now mints. (2) Validated and re-measured here: `ls .claude/rules/` returns eight and `grep -rn "tier: global"` returns the same eight nodes, `class-recommendation` and `delegation-bounds-and-sizing` having taken the tier on 2026-09-05 in this round. The count was five at the first reading, six at the second, eight now, and each correction restated a number that goes stale the next time a node takes the tier -- which is the same defect `class-recommendation`'s own reading of 2026-09-05 named, and it is struck from every live locus rather than corrected again: the fact's `against`, the `### answer` prose, and the `#### projected-doctrine-acts` subsection now say every rule file a session loads, this node's own projection among them. The account keeps its dated measures, and the earlier reader's words on the earlier review block are not edited. (3) Validated at three loci. `work-loop`'s answer opens "By reconciliation in both directions, the second begun only at exit"; its declared shim says the second direction is "neither begun before the disposition that states them is answered" and requires it complete; and `bootstrap-exit-conditions` line 79 lists the second direction's completion as a condition of exit. So the clause this node cited `work-loop` for makes a completion the exit conditions require into work that cannot start until the moment it gates, and it is projected verbatim into a rule file. Redrawn as the reading suggests, and the last limb re-verified: `grep -n "greenfield|unsupported" packages/disposition/*.mjs` returns nothing. (4) Validated: the gloss said the conditions are that node's question, and they are its answer. Corrected to the conditions the `bootstrap-exit-conditions` node gathers. (5) Validated: the ragged pair stands in the rule file. The paragraph is re-wrapped. (6) Recorded on `authority`'s answer fact as `a-conferred-class-acts-during-bootstrap`, source this node, ref 2026-09-05, with the reading's prose, so the author rules on the parent's sentence at the node that owns it. (7) Recorded on `work-loop`'s answer fact as `second-direction-begins-when-its-disposition-is-answered`, source this node, ref 2026-09-05, with the reading's prose; `exit-conditions-cited-not-carried` is a different question and is left standing. Neither option moves its node's pin or stage. One thing the facts check names and the findings do not is taken with them: the `### authority` subsection still described this node as saying what an agent may act on "while the record is empty", which is not the state this answer defines, and it is corrected. The counter-argument is recorded and not answered: the doctrine the machine runs on is eight rule files projected from nodes no ruling reaches, none of them a shim any node declares, so the answer names nothing that the running doctrine is, and the option that would answer it, `projected-doctrine-acts`, is listed and not recommended. That the author must choose while reading the rule inside a file the rule says acts on nothing is the sharpest form the objection has taken, and it is the author's to weigh.
+
+### The fresh reading's kickback taken, 2026-09-05
+
+Kickback to the maieutic stage, seven findings, all validated at their loci on
+the main thread and all accepted. The answer is redrafted here rather than
+amended, which is what a kickback means.
+
+The first is the defect the last redraft created. That reading asked for a gloss
+on `bootstrap`, and the gloss written for it says "nothing acts by right but a
+declared shim, the author's grant, and each class a ruling has already
+conferred" -- correct, and correct because bootstrap now runs to exit and not to
+the first ruling. The answer was not brought with it: its first sentence still
+said "Two things act, and no class does" and its licence clause still said a
+session may do exactly what the two rules allow. The projector carries the answer
+into `.claude/rules/what-acts-during-bootstrap.md` and not the glosses, so the
+false pair is what every session reads, and the executor case is exact: a session
+in a record with rulings on it would read that no class acts and refuse to act on
+a ratified node's confirmed choice, which `authority` says acts. The answer now
+says that two things act by right, that no class acts until a ruling confers one
+and from that ruling the class acts, and that the licence is the two rules
+together with what each conferred class allows.
+
+The same finding has a second limb, and it is recorded and not answered.
+`authority`'s standing answer says "During bootstrap no class acts; neither a
+declared shim nor the author's grant names a class". That was true while
+bootstrap meant while nothing is ratified; it is false under the definition this
+node mints. The option `a-conferred-class-acts-during-bootstrap` is recorded on
+`authority`'s answer fact so the author rules on the parent's sentence at the
+node that owns it.
+
+The third is the circularity arriving a third time, now through the child.
+`work-loop`'s answer opens "By reconciliation in both directions, the second
+begun only at exit", while the shim declared on that same node says the second
+direction is "neither begun before the disposition that states them is answered"
+and requires it complete, and `bootstrap-exit-conditions` lists that completion
+as a condition of exit. So the clause this node cited made work the exit
+conditions require into work that cannot start until the moment it gates, and it
+was projected verbatim. The answer now says the second direction puts unsupported
+implementation on the frontier for the author's ruling and that `work-loop` holds
+it back until the dispositions that state it are answered; the option
+`second-direction-begins-when-its-disposition-is-answered` is recorded on
+`work-loop`, where the clause lives.
+
+The second is the count, and the fix is not another correction. Five at the first
+reading, six at the second, eight now, `class-recommendation` and
+`delegation-bounds-and-sizing` having taken `tier: global` on 2026-09-05 in this
+round. A number restated in the text the author is ruling on goes stale the next
+time a node takes the tier, which is the defect `class-recommendation`'s own
+reading named the same day; the number is struck from the fact's case against,
+from the fact's reason and from `projected-doctrine-acts`, which now say every
+rule file a session loads. The dated measures stay in the account.
+
+The fourth and fifth are small and were both in text the projection carries: the
+`bootstrap exit` gloss said the conditions are the child node's question when
+they are its answer, and the second paragraph carried a broken wrap from an
+earlier edit. One more, from the facts check rather than the findings, is taken
+with them: `### authority` still described the node as saying what an agent may
+act on "while the record is empty", which is not the state this answer defines.
+
+The counter-argument is not answered. Its new edge is that ratifying this buys
+the author less than it looks like, since the state is fixed here while the
+moment is handed to a child that is itself unruled, and the two clauses this
+reading found wrong were both in the half that tries to say when the state ends
+-- the half the record cannot yet settle. Beside it stands the objection the fact
+already carries: the doctrine the machine runs on is the rule files projected
+from nodes no ruling reaches, none of them a shim any node declares, so the
+answer names nothing that the running doctrine is, and the author must choose
+while reading the rule inside a file the rule says acts on nothing.
+`projected-doctrine-acts` is the option that would answer it, and it stays listed
+and not recommended, because the AI does not answer a case against itself by
+ruling on it.

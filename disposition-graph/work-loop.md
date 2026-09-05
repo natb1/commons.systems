@@ -41,6 +41,9 @@ facts:
       - name: exit-conditions-cited-not-carried
         source: review
         ref: "2026-09-05"
+      - name: second-direction-begins-when-its-disposition-is-answered
+        source: commons.systems/disposition-graph/what-acts-during-bootstrap
+        ref: "2026-09-05"
     recommends: reconciliation-writes-options
     boldness: moderate
     against: "On a delegated or deferred node the reconciliation session may move the recommendation and the moved recommendation acts, so the loop writes the desired state it then reconciles to, which the level-triggered reading concedes breaks the controller's clean line; the guard, within the node's scope, is judged by the session that makes the move, and on a delegated node the author never sees it."
@@ -186,6 +189,21 @@ reading that minted the child found it: validation in use after the
 implementation ref is swapped with the main branch is discharged after the swap,
 and `materialization` puts the swap at bootstrap exit, so it is this shim's own
 liquidation condition and never a condition of exit.
+
+#### second-direction-begins-when-its-disposition-is-answered
+
+The second direction is begun when the dispositions that state it are answered,
+as the shim declared on this node already says -- "neither begun before the
+disposition that states them is answered" -- and it is required complete for
+bootstrap exit, as the author's words of 2026-09-03 say. The answer's opening
+clause, that it is begun only at exit, makes a completion the exit conditions
+require into work that cannot start until the moment it gates:
+`bootstrap-exit-conditions` lists that completion as a condition of exit, so the
+two sentences together put the work after the moment it is a condition of.
+Raised by the clean-context reading of `what-acts-during-bootstrap` on
+2026-09-05, whose own answer cited this node for the clause and has been redrawn
+to cite the shim instead. `exit-conditions-cited-not-carried` asks a different
+question, where the shim's exit clauses live, and is not displaced by this.
 
 ### authority
 
@@ -376,3 +394,14 @@ found on seven nodes at once. The test left the `authority` node's answer on
 node. Nothing about the class or the boldness changes. The edit moves this
 node's authority-fact pin without a reading behind the move, which is the live
 option `pin-names-the-text-the-reader-read` on `review-cost`.
+
+### An option from what-acts-during-bootstrap's reading, 2026-09-05
+
+That node's fresh reading found this answer's opening clause, "the second begun
+only at exit", contradicted by the shim declared on this same node, which says
+the second direction is neither begun before the disposition that states it is
+answered, and made unreachable by `bootstrap-exit-conditions`, which lists its
+completion as a condition of exit. Recorded as the option
+`second-direction-begins-when-its-disposition-is-answered`. The child's answer
+cited this node for the clause and has been redrawn to cite the shim; the
+recommendation and the pin here do not move.
