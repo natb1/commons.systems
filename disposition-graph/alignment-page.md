@@ -226,6 +226,10 @@ And, the same turn, on the review:
 
 > launch align-review using the fable model
 
+The author, 2026-09-04, while the wave-one readings were being applied, naming the sitting's final task and granting it:
+
+> the final task for this sitting will be to reconcile the aligment/review/survey skills and alignment artifact against all reviewed (but not yet confirmed) recommendations in the graph. Do not liquidate existing functionality unless it is contradicted by recommended disposition. you have bootstrap authority for this.
+
 ## Facts
 
 ### answer

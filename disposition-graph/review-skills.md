@@ -71,6 +71,10 @@ its reconciliation and while its two clean-context reviews were running:
 > In parallel, progress these adversarial review dispositions through mieutic then you have bootstrap authority to reconcile them immediately:
 > - docompose adversarial review and adversarial review --survey into two skills so that they are differentiated in the telemetry. Recommend how to avoid drift in common instructions (is this resolved naturall by skill reconciliation?)
 
+The author, 2026-09-04, while the wave-one readings were being applied, naming the sitting's final task and granting it:
+
+> the final task for this sitting will be to reconcile the aligment/review/survey skills and alignment artifact against all reviewed (but not yet confirmed) recommendations in the graph. Do not liquidate existing functionality unless it is contradicted by recommended disposition. you have bootstrap authority for this.
+
 ## Facts
 
 ### answer
