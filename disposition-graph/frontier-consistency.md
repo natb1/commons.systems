@@ -52,6 +52,9 @@ facts:
       - name: validations-cited-to-their-owners
         source: review
         ref: "2026-09-05"
+      - name: unread-recommended-option
+        source: review
+        ref: "2026-09-05"
     recommends: split-survey-from-per-draft
     boldness: moderate
     against: "The split answers half of the counter-argument of 2026-09-03: the survey still reads the whole graph on every invocation and is incremental only in what it judges, so its cost and its noise grow with the frontier; the partition is stated in this fence and in the clean-context-review node's, and the merge validation runs at three moments on three objects."
@@ -197,6 +200,23 @@ single day, three validations diverged from their sources, cannot recur. It is
 passed over if the author wants the contract the reader runs under readable in one
 place, which is what the recommended text keeps. Raised by the clean-context review
 of 2026-09-05, as the remedy its counter-argument points at.
+
+#### unread-recommended-option
+
+Validation 4 also asks whether the option a fact recommends has been read
+against the traditions its rivals were read against: a bare recommended option
+beside a well-read rival is a finding, since the projection implies the
+tradition is against it. It is here because the `readings` node's recommended
+answer states the check as though the review already made it, and it does not:
+validation 4 as this node states it asks only that a tradition cited be
+represented accurately within its recorded support scope, and neither brief asks
+its reader for the other half. What it buys is that the per-option relation the
+`readings` node recommends cannot quietly leave the recommended option bare;
+what it costs is a validation whose input is the whole of a fact's readings and
+whose false positives are every fact whose rivals were read for reasons that do
+not bear on the recommendation. Raised by the second clean-context reading of
+`readings` on 2026-09-05, which found the check assigned to this instrument and
+carried by nothing.
 
 ### authority
 

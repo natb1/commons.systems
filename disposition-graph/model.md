@@ -22,6 +22,9 @@ facts:
       - name: primer-node
         source: ai
         ref: "2026-09-03"
+      - name: chosen-over-derived
+        source: review
+        ref: "2026-09-05"
     recommends: draft
     boldness: moderate
     stands: standing
@@ -69,6 +72,16 @@ Model's recommended rationale says growth is first among model's children becaus
 #### primer-node
 
 Model carries the primer-node option as an alternative of its own, a new node between purpose and model introducing the graph primitives, with model's answer left as it stands, and second-stop is folded away. Under the new encoding an option-node whose whole content is a choice between two answers to a sibling's question is that sibling's alternatives list, which is what the redundancy finding of 2026-09-03 offers as the alternative to keeping the option-node. (Raised on commons.systems/disposition-graph/second-stop.)
+
+#### chosen-over-derived
+
+This node's draft names three relations on a reading, "a relation of adopted,
+diverged, or chosen over", where the `readings` node under it makes chosen over
+derived and never stored and the reader accepts two, `RELATIONS` being
+`['adopted', 'diverged']`. Strike "or chosen over" from the clause and let the
+`readings` node's definition stand, since that node defines the term and is the
+survivor of the redundancy. Raised by the second clean-context reading of
+`readings` on 2026-09-05, which proposed it and did not make it.
 
 ## Recommendation
 

@@ -74,6 +74,9 @@ facts:
         ref: "8938e2b7"
         status: passed
         reason: "what was rejected is part of how the answer came to stand"
+      - name: tradition-linking-cited-to-readings
+        source: review
+        ref: "2026-09-05"
     recommends: draft
     boldness: moderate
     stands: standing
@@ -183,6 +186,16 @@ drifts, and the nodes that define the terms are the vocabulary.
 The browser shows the rejected alternatives in a section apart from authority.
 It was passed over because what was rejected is part of how the answer came to
 stand.
+
+#### tradition-linking-cited-to-readings
+
+Strike "and every tradition's name" from the linking clause and cite `readings`,
+which owns how a reference to a tradition is reached, as that node's redundancy
+finding of 2026-09-03 divided them: projection is the survivor for the linking
+rule and readings for the tradition rule. Both texts still carry the tradition
+half, so one question has two standing answers on the frontier at once. Raised by
+the second clean-context reading of `readings` on 2026-09-05, under validation 15,
+as an option and not a merge.
 
 ## Recommendation
 
