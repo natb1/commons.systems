@@ -66,6 +66,24 @@ probes:
       stands as growth's gloss on `boldness`. Growth is not entered in this
       node's `depends` because growth already waits on this node, and a cycle
       is no order.
+  - id: stands-as-a-draft-no-one-has-confirmed
+    asks: >-
+      Is the row status "stands: a draft no one has confirmed" recording
+      anything useful, or does the stands status go with the chips the
+      author's words of 2026-09-04 strike from the row?
+    fact: answer
+    why: >-
+      the phrase is this node's own naming rule for the option that keeps the
+      standing text where no ruling stands on the answer fact, rendered as a
+      pill on every such row; the author asked the question of the AI in the
+      words carried on what-an-option-row-carries, and whether the status is
+      among the three things that node keeps on the row is a fact about what
+      they meant.
+    discharges: >-
+      whether the `stands` status survives on an option's row under
+      what-an-option-row-carries, which decides the row.
+    source: author
+    raised: 2026-09-04
 facts:
   - name: answer
     options:
@@ -242,6 +260,13 @@ And, the same turn, on the review:
 The author, 2026-09-04, while the wave-one readings were being applied, naming the sitting's final task and granting it:
 
 > the final task for this sitting will be to reconcile the aligment/review/survey skills and alignment artifact against all reviewed (but not yet confirmed) recommendations in the graph. Do not liquidate existing functionality unless it is contradicted by recommended disposition. you have bootstrap authority for this.
+
+The author, 2026-09-04, during the sitting on author-questions, queuing the sitting on this page's observations:
+> queue this alignment for after the sweep. I'm turning on autocompact so always be prepared for compaction.
+
+The author, 2026-09-04, opening that sitting, whose nine observations the nodes under this one carry one question each, the first of them carried here because it yields no question:
+> /align observations of the alignment artifact which potentially have cascading effects to other dispositions
+> - next settles metric in the left nav prints a node id, but I suspect it's supposed to work like the other metrics as a link to that node in the browser. probably not a disposition, just a reconciliation error
 
 ## Facts
 

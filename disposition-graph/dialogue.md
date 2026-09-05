@@ -59,6 +59,41 @@ probes:
       author's words are quoted there. Authority is not entered in this node's
       `depends` because authority waits on viable-options, which waits on this
       node, and a cycle is no order.
+  - id: two-facts-or-four
+    asks: >-
+      Does a node carry only the answer and authority facts, with everything
+      else moved under fact options, or does a node such as agency carry no
+      existence or persistence fact only because its dialogue has not reached
+      the ruling?
+    fact: answer
+    why: >-
+      the author asked it on 2026-09-04 of the two facts the alignment page
+      listed on commons.systems/public/agency, and this node's recommended
+      text answers with four reserved names, two unconditional and two
+      conditional, which is neither of the two readings the author offered;
+      what they took the facts model to be is a fact about what they meant.
+    discharges: >-
+      how the author reads the facts model, which which-facts-are-listed rests
+      on when it decides whether the page lists the four reserved names
+      whatever the node carries.
+    source: author
+    raised: 2026-09-04
+  - id: what-the-account-records
+    asks: >-
+      What is "The AI's account" meant to be recording, and is it justified to
+      support the alignment dialogue and the review?
+    fact: answer
+    why: >-
+      the author said on 2026-09-04 that they do not understand what it is
+      meant to record and conditioned keeping it on that justification; this
+      node defines `account` and its answer says what the section holds, so
+      the answer is a reading of this node's answer and not a question of its
+      own, and the-account-on-the-page decides only the presentation.
+    discharges: >-
+      whether `## Account` is kept in the record, which the author's condition
+      makes turn on what it is for.
+    source: author
+    raised: 2026-09-04
 review:
   verdict: forward
   strength: strong
@@ -169,6 +204,9 @@ facts:
         ref: "2026-09-04"
       - name: standing-option-carries-a-subsection
         source: commons.systems/disposition-graph/alignment-page
+        ref: "2026-09-04"
+      - name: instrumentation-is-a-fact
+        source: author
         ref: "2026-09-04"
     recommends: every-part-in-the-record
     boldness: moderate
@@ -282,6 +320,9 @@ The words in full are on `commons.systems/disposition-graph/alignment-page`.
 The author, 2026-09-04, revising the disposition on when a recommendation may be drafted:
 
 > AI recommendations can be recorded at any time during the dialog (not just after the first meiutic).
+
+The author, 2026-09-04, on the alignment page, on the facts a node carries, carried here from the sitting on those observations because this node defines the facts:
+> - there are only 2 facts listed for commons.systems/public/agency - the answer prose and the authority. Is that because dispositions only have two facts (and all other structured data has been moved under fact options) or does agency node not yet have options for other facts because dialogue is not at confirmation phase yet? I expect instrumentation (eg.) would be a fact. Either way, list all facts - even if options have not yet been established.
 
 ## Answer
 
@@ -801,6 +842,10 @@ The account also carries the conclusion of every unit the sitting delegated with
 #### standing-option-carries-a-subsection
 
 The option named by `stands` carries a `####` subsection of its own, a stored sentence, in place of the answer's first sentences read from `## Answer`; against it, the answer's first sentences said twice drift. Recorded on 2026-09-04 with the alignment-page node as its source, where it had stood as `standing-sentence-stored` until that node's reading found it to be a candidate answer to this question, the clause `every-option-carries-its-sentence` deciding it the other way.
+
+#### instrumentation-is-a-fact
+
+Everything the recommendation says, with a fifth reserved name beside the four: `instrumentation`, the decision of how a node's answer is checked, the instrument the instruments node describes, carried as a fact with options and a recommendation so that the author rules on it where they rule on the class. Raised by the author's words of 2026-09-04, quoted above, "I expect instrumentation (eg.) would be a fact"; against it, the instruments node holds the instrument as a field of the node and not a decision the author rules on separately, and this node's rule is that a decision not among the reserved names is a question under the node.
 
 ### authority
 

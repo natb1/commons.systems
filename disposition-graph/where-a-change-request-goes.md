@@ -1,0 +1,18 @@
+---
+question: Where does the author record a change to what is recommended?
+stage: periagogic
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+## Disposition
+
+The author, 2026-09-04, on the alignment page, queued from the sitting on author-questions:
+> - text input in option details is only for author reasoning, not for "changes you want made". All change requests are recorded in the kickback input only (any changes will necessarily require a kickback).
+
+## Account
+
+What the sitting would amend: `commons.systems/disposition-graph/alignment-page`, its answer fact, and in the recommended text three places that make the option's own control the home of an edit. In the drill-down paragraph, "a text control for the author's reason for choosing it and for any edits they want made to it". In the responses paragraph, "choosing an option and writing in its text is a confirmation with text, which the session classifies as the recording node classifies every response given in prose, a reason recorded with the ruling where it is a reason, and a confirmation with edits where it amends the option, applied and recorded as the ruling, the node returning to the review stage where they change substance". And the sentence that removed the older home of an edit on the strength of the new one, "The ruling on the whole, which used to stage the confirmation with edits by itself, goes with nothing lost: the author's edits ride on the option they edit, which is where an edit belongs." The author's parenthesis, that any change will necessarily require a kickback, is the reason the third sentence no longer holds: if a change is a kickback, an edit riding on a confirmed option is a confirmation the record cannot honour, and the page must not offer it. So the question reaches past the page to what a response is, and the sitting has to say whether "confirm with edits" survives as a response at all or collapses into the denial with feedback. In the implementation the change falls on the alignment page's projector in `packages/disposition/project.mjs`, `renderOption`, which writes the `opt-note` textarea under the label `OPTION_NOTE_PLACEHOLDER`, and on `packages/disposition/alignment-template.html`, whose staging script reads that textarea into the response it records and whose instruction text says what the session is to do with it.
+
+Cascades: `commons.systems/disposition-graph/unanswered`, whose answer opens exactly three responses, "confirm, confirm with edits, and deny with feedback", and says that "A confirmation with edits rules for the option with the edits: the session applies them, and where they change substance the draft goes through the review again before the ruling is recorded"; `commons.systems/disposition-graph/recording`, and its option `per-fact-after-two-readings`, which classifies a response given in prose and decides which movement a change returns the node to; `commons.systems/disposition-graph/dialogue`, whose `ruling` carries a `response` that is "confirm or edit" and a `reason`, "why they chose as they did, in their own words and optional", the two being exactly the two purposes the author is separating; `commons.systems/disposition-graph/authority`, on a ruling whose words must be in the record; and `commons.systems/disposition-graph/ruling-transport`, on what the page's buffer carries back to a session.
+
+The periagogic object: the published alignment page at https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 at a node at the ruling stage, with the instruction its controls emit, read against the recommended text of `alignment-page`, the answers of `unanswered` and `recording`, and `renderOption` with the template's staging script, before anything is changed.
