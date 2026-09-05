@@ -59,19 +59,14 @@ facts:
     options:
       - name: with the shim
       - name: without it
-    recommends: with the shim
+    recommends: without it
     boldness: low
-    against: "The prose the shim names sits on eight other nodes and not on this one, so a reader of viable-options, where the eleven probes actually are, finds no declaration there, and the transience node's rule that a shim is declared where it comes into being reads as putting one on each of those nodes rather than one here."
+    against: "The recommendation was `with the shim` when it was drafted and the shim was struck the same day, on the ground that the migration the author ordered had performed its liquidation; but the instrument is not finished, since the review's applying script does not yet write a probe, so a reader may hold that something still stands in for the field and that striking the declaration removed the record's own account of what that was."
 form: rule
 under:
   - commons.systems/disposition-graph/dialogue
 defines:
   - probe
-shims:
-  - artifact: "the probes carried as prose in the accounts of the nodes that already hold them on the disposition ref: the eleven numbered probes under `viable-options`' periagogic movement of 2026-09-04, the four questions on `coverage`, the single probes on `rsi`, `self-documentation` and `alignment-order`, the `### Probe answered` sections on `dialogue` and `alignment-page`, the question `ruling-transport` leaves open in its rationale, and the two probes wearing an option's costume on `review`, `cap-from-contract-class` and `graph-landing-instrument`, which the author classified on 2026-09-04 as maieutic questions"
-    for: the probes of the nodes that carry them today, while the field they belong in is unread by the reader and unrendered by the projections
-    liquidation: the reader parses `probes`, and a maieutic movement on each of those nodes ranks the probes it carries against the admission test and the cap, writes those that survive into the field with their `why`, their `discharges` and their `source`, records the rest as discharged with the reason each was withdrawn, removes the prose that carried them, and on `review` writes the two options the author classified as probes into that node's field and strikes them from its answer fact
-    declared: 2026-09-04
 depends:
   - commons.systems/disposition-graph/dialogue#every-part-in-the-record
   - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey
@@ -190,11 +185,11 @@ The recommendation declares one shim on a node that carries none, so the node's 
 
 #### with the shim
 
-This node declares one shim, the probes carried as prose in the accounts of `viable-options`, `coverage`, `rsi`, `self-documentation` and `alignment-order`, the `### Probe answered` sections on `dialogue` and `alignment-page`, and the question `ruling-transport` leaves open in its rationale, and the two probes wearing an option's costume on `review`, declared 2026-09-04 and liquidated when the reader parses `probes` and a maieutic movement on each of those nodes has ranked what it carries against the admission test and the cap, written the survivors into the field with their `why`, their `discharges` and their `source`, discharged the rest with the reason each was withdrawn, and removed the prose. The liquidation is a movement and not a copy, because `viable-options` carries eleven probes today and the cap admits three open; the eight the ranking does not keep are discharged in the field rather than dropped from the record.
+This node declares one shim over the probes carried as prose on the nodes that held them, liquidated when the reader parses `probes` and a maieutic movement on each of those nodes has ranked what it carries against the admission test and the cap, written the survivors into the field, discharged the rest with a reason, and removed the prose. It was the recommendation as drafted, and it was struck on 2026-09-04 when the migration the author ordered performed exactly that liquidation inside this sitting. What it would answer: the node declares a stand-in while the prose is still the probes' home. Passed over because the prose is no longer their home.
 
 #### without it
 
-This node declares nothing, and the prose on the eight nodes stands as ordinary account until reconciliation reaches it, on the argument that an account section is not an artifact standing in for a materialization but the record of what a movement found, and that the field's absence is already on the reconciliation frontier without a declaration. What it costs is the liquidation condition: nothing then says when the prose goes, and a survey reading those nodes finds prose that restates a field with no declaration explaining why it is still there.
+This node declares no shim, because nothing stands in for the field any longer. The author ordered the migration as part of this node's reconciliation and it ran on 2026-09-04: three units read all 125 nodes in full, twenty probes were written into the field on twelve nodes, and what remains as prose on those nodes is not a probe but the account of the movement that raised it, which is what an account is for. The prose that did carry probes is gone from `viable-options` and from `review`. What this costs is the liquidation condition a shim would have carried: the record now says when each piece of prose went only in the account of the node it went from, and a reader who wants the whole migration in one place reads it here.
 
 ## Account
 
@@ -703,3 +698,76 @@ a probe because it fails the admission test's second limb: on either reading no
 recommendation on this node moves, since the clause the technical sense would
 bear on is about the ruling stage and the alignment page, where under this
 answer no probe appears at all.
+
+### The migration, 2026-09-04
+
+The author ordered it as part of this node's reconciliation, in the words under
+`## Disposition`: look for open maieutic questions recorded elsewhere, record
+what a session cannot answer from the record in the new encoding, and reset the
+dialogue's stage to maieutic where any stands open. It ran the day the answer
+was drafted, so this node's instrument was exercised on the record before the
+author was asked to rule on it.
+
+**How it ran.** Three units, one per third of the graph, read all 125 nodes in
+full rather than grepping for the word: a question can be recorded without a
+question mark, and the richest evidence turned out to be prose recording a
+reading of the author's words the AI could not confirm. Each returned
+candidates with the locus read, and wrote no node. The main thread judged every
+candidate against the admission test and wrote the graph.
+
+**What was written.** Twenty probes on twelve nodes, twelve of them open and
+eight discharged. Open: `review` two, `coverage` three, `tier` two, and one each
+on `prose-and-structure`, `self-documentation`, `projection`, `frontier-metrics`
+and `dialogue`. Discharged: three on `alignment-page` and one each on
+`alignment-order`, `second-stop`, `decomposition`, `dialogue` and `coverage`,
+every one naming either the author's words that answered it or the option that
+now carries its candidate. No node exceeds the cap of three, and one probe on
+`coverage` is discharged on the ranking rather than the merits, which is the cap
+doing the work the answer says it does.
+
+**Four nodes returned to the maieutic**, two of them from the ruling stage:
+`review` and `projection` from ruling, `dialogue` and `prose-and-structure`
+from review. The author's rule did that, and the consequence is that the
+alignment page has fewer nodes waiting to be ruled than it had this morning,
+each of the four because it carries a question the AI could not answer from the
+record.
+
+**What the sweep refused, and the discriminator that sorted it.** More
+candidates were rejected than admitted, on one line the sweep found and the
+answer now states: where the AI holds a candidate answer viable, the record's
+home is an option and the author is asked there; where it holds none and says
+so, the question has no home and is a probe. All eleven numbered probes under
+`viable-options`' periagogic movement fell to it — each had acquired an option
+by the time the migration read it — and so did `rsi`'s account paragraph, which
+is verbatim that node's own question with its four options beneath it, and both
+questions on `madr-decision-records`, which are locus checks anyone with the
+source can answer. `ruling-transport`'s question fell for a different reason
+that the answer also states: it is settled by running one session, and a
+question anyone but the author can answer is not a probe.
+
+**A distinction the migration forced into the answer.** Discharged means a probe
+that was admissible when it was raised and has since been answered. A candidate
+that never met the test is not a probe and is not written at all, because
+recording one in the field to justify deleting the prose that carried it would
+use the field as a tombstone, which is the re-encoding anomaly
+`prose-and-structure` names, pointed the other way. That is why
+`viable-options`' eleven are not eleven discharged entries: the prose is
+replaced by one paragraph saying what each became.
+
+**Prose removed, and prose kept.** Two nodes lost prose. On `viable-options` the
+eleven numbered paragraphs are gone, replaced by one paragraph naming the
+questions and the loci their candidates went to, and the maieutic movement's
+index by number is repointed, since a number renumbers itself whenever a probe
+is discharged. On `review` the two options the author classified are struck from
+the answer fact and from `## Facts`, and the account paragraph that put both to
+the author at ratification goes with them. Everywhere else the prose stayed: it
+records what a movement found, which is what an account is for, and the recorded
+findings of a clean-context review are annotated where they stand and never
+rewritten, as `authority` says.
+
+**The shim is struck and the persistence fact moves with it.** The shim declared
+above was liquidated inside the sitting that declared it, which is unusual and
+is why it is said plainly: the author ordered the migration, the migration is
+the liquidation, and nothing stands in for the field any more. The
+recommendation on the persistence fact moves from `with the shim` to `without
+it`, and the case against the move is on the fact.
