@@ -50,6 +50,9 @@ facts:
       - name: brief-carries-the-recount-command
         source: review
         ref: "2026-09-05"
+      - name: a-cap-on-redraws-per-node-per-sitting
+        source: ai
+        ref: "2026-09-05"
     recommends: neighbourhood-questions-and-delta
     boldness: moderate
     against: "Every clause of it narrows what the reviewer is shown, on measurements taken by the party the review exists to check. A reader that must search for what it is no longer given searches for what it thinks to look for, which is the drafter's own frame, and the failure the index guarded against, a contradiction with a node nobody thought to name, is the one failure a search cannot be aimed at. The answer's reply, that the survey holds the whole graph and is the reader of last resort, is good only while the survey runs before every ruling; this design moves that load onto it, and as of 2026-09-05 the survey has never run once, with forty-eight nodes standing at the review or the ruling stage at graph commit 1cde11f6 and no node in the record carrying a survey pin."
@@ -198,6 +201,28 @@ since it looks checkable. It was the clean-context reading of 2026-09-05's own
 suggestion; this node answered it in the rationale with a recount instruction
 instead, and the second reading found that instruction false in both its limbs,
 which is why the option is on the list rather than in the prose.
+
+#### a-cap-on-redraws-per-node-per-sitting
+
+The cap of two bounds the readings of one answer and is silent on how many
+answers a node may have, because a kickback is a new answer and owes a reading of
+its own. Nothing in the record bounds the cycle those two rules make together:
+draft, reading, kickback, redraw, reading, kickback, and a node can be read any
+number of times while each reading obeys the cap. Measured on this record on
+2026-09-05, at graph commit 73e2a04f: `clean-context-review` has been read seven
+times, `what-acts-during-bootstrap` four, `class-recommendation` three, and each
+of those readings was within the cap. What the option would add is a second
+bound, on redraws of one node within one sitting, past which the node stops being
+redrawn and goes to the author with the reading's findings recorded as options on
+the fact they bear on, which is what the answer already does with a finding that
+survives the second reading. Against it: the two nodes this record has read most
+are the two whose answers were wrong in ways each reading caught and the last
+redraw fixed, so a bound would have shipped a known defect to the author to save
+tokens, and the record's own rule is that a kickback is a new answer precisely
+because a redrawn answer is not the one that was read. Recorded on 2026-09-05, in
+the sitting whose cost raised the question, and not recommended: what the right
+bound is, or whether the right instrument is a bound at all rather than a
+different first draft, is not something this sitting measured.
 
 ### authority
 
@@ -497,3 +522,20 @@ reads as changed since its second reading; under this node's own cap the answer
 has had its two readings and a third is not bought by a sentence about an
 instrument, which is the cost the live option `pin-names-the-text-the-reader-read`
 records.
+
+### The cycle the cap does not reach, 2026-09-05
+
+The sitting that recorded this node went on to spend, on four nodes, four full
+readings and two re-readings after it landed. Counted at graph commit 73e2a04f:
+`clean-context-review` seven readings, `what-acts-during-bootstrap` four,
+`class-recommendation` three, `bootstrap-exit-conditions` and
+`delegation-bounds-and-sizing` two each. Every one of them was inside this node's
+cap, because the cap bounds the readings of one answer and a kickback makes a new
+answer. The two rules compose into a cycle nothing bounds.
+
+Recorded as the option `a-cap-on-redraws-per-node-per-sitting` and not
+recommended. The measurement is the point rather than the remedy: on this record
+the most-read nodes are the ones whose successive readings each found something
+real, so a bound drawn today would have traded a known defect for tokens, and
+what would actually pay is a cheaper first draft rather than a cheaper loop.
+The pin does not move: an option is not in the recommendation's hash.
