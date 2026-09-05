@@ -171,7 +171,8 @@ yet ruled.
 The bootstrap exit clauses of the reconciliation shim's liquidation condition
 move to the node that gathers the conditions of bootstrap exit, and the shim's
 condition cites that node instead of restating them; what stays on the shim is
-the validation the reconciliation loop itself skipped. Raised by the
+the one limb that cannot move, validation in use after the implementation ref is
+swapped with the main branch, which the last paragraph of this option names. Raised by the
 clean-context review of `what-acts-during-bootstrap` on 2026-09-05, under
 validation 15: the question of what the conditions of bootstrap exit are is
 today carried inside this node's shim declaration, and the node that defines the
@@ -405,3 +406,15 @@ completion as a condition of exit. Recorded as the option
 `second-direction-begins-when-its-disposition-is-answered`. The child's answer
 cited this node for the clause and has been redrawn to cite the shim; the
 recommendation and the pin here do not move.
+
+### An option's own two paragraphs reconciled, 2026-09-05
+
+The clean-context reading of `bootstrap-exit-conditions` on 2026-09-05 found
+`exit-conditions-cited-not-carried` contradicting itself: its first paragraph said
+what stays on the shim is the validation the reconciliation loop skipped, and its
+last paragraph says only one limb of that validation cannot move, validation in
+use after the swap. Under the child's answer two of the other limbs are exit
+conditions and would move, so the author could not see which shape they would be
+ruling for. The first paragraph is narrowed to the last paragraph's terms. Nothing
+else moves: this is the option saying one thing where it said two, not a change to
+what it proposes.
