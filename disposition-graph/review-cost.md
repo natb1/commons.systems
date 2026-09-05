@@ -41,6 +41,12 @@ facts:
         ref: "2026-09-05"
         status: passed
         reason: "it stops the reading by the clock, and what it stops is whatever stood last in the queue rather than what was least worth reading"
+      - name: neighbourhood-cited-not-restated
+        source: review
+        ref: "2026-09-05"
+      - name: pin-names-the-text-the-reader-read
+        source: review
+        ref: "2026-09-05"
     recommends: neighbourhood-questions-and-delta
     boldness: moderate
     against: "Every clause of it narrows what the reviewer is shown, on measurements taken by the party the review exists to check. A reader that must search for what it is no longer given searches for what it thinks to look for, which is the drafter's own frame, and the failure the index guarded against, a contradiction with a node nobody thought to name, is the one failure a search cannot be aimed at. The answer's reply, that the survey holds the whole graph and is the reader of last resort, is good only while the survey runs before every ruling; this design moves that load onto it, and as of 2026-09-05 the survey has never run once, with forty-five nodes standing at the review or the ruling stage and no node in the record carrying a survey pin."
@@ -123,6 +129,48 @@ The reading and the amendment repeat until a reading returns no findings. Passed
 #### budget-per-sitting
 
 A token budget for the sitting's reviews, the reading stopping when it is spent. Passed over because it stops the reading by the clock: what goes unread is whatever stood last in the queue, which has nothing to do with what was least worth reading, and the bound this answer wants is on the object of each reading and not on their number.
+
+#### neighbourhood-cited-not-restated
+
+The paragraph "What a draft's reading is given" states the parts of the brief
+in full, and `clean-context-review` states them too; the two enumerations
+disagreed on 2026-09-05 at exactly two points, `depends` against
+names-by-id-or-slug, and the author's words on each neighbour, which this
+node's list excluded and that node's list added. This option keeps here the
+pricing, the measurement, the pointer rule, the re-reading and the cap, and
+cites `clean-context-review` for what a reader is given: "what a reader is
+given is the clean-context-review node's; what it costs and why each part is
+that size is this node's." The case for it is `codd-update-anomaly`, and it is
+measured: two amendments in two days each produced a fresh divergence in the
+same sentence. Against it, the pricing argument is unreadable without the thing
+priced, and a paragraph that says what a part costs while pointing elsewhere
+for what the part is makes the reader hold two files to follow one argument.
+The same option stands on `clean-context-review` from the other side, as
+`state-what-does-not-move-and-cite-review-cost`; the two are one decision about
+where the neighbourhood is stated, and ruling for one is ruling for the other.
+Raised by the clean-context readings of 2026-09-05 on that node, as their
+counter-argument, twice.
+
+#### pin-names-the-text-the-reader-read
+
+The sequencing rule this answer imposes has a consequence it does not state,
+and the consequence decides whether a node can ever become ready to rule. The
+reading is applied first and the amendment written after, so the review's pin
+names the text the reader read; the amendment then moves the recommendation
+past that pin, the frontier prints the node as changed since its review, and
+readiness, which asks that the pin name the recommendation as it stands, is not
+met. Under the cap no third reading is available to re-pin it. The three ways
+out are the option: the second reading's apply settles the pin over the
+amendment it read, which is what the applying script does today and which makes
+the pin attest a forward on text no reader saw; or readiness stops asking the
+draft-review pin to be current once the cap is reached and asks only that the
+two readings have happened; or an amendment after the second reading is
+forbidden outright and every surviving finding becomes an option. This is not
+recorded as settled by any of them. Measured on this sitting: every reading of
+2026-09-04 and 2026-09-05 was applied after its amendment and not before, so no
+review block in the record carries a graph commit except one, every re-reading
+fell back to the full draft brief, and every pin written names text its reader
+had not seen. Raised by the clean-context reading of `authority` on 2026-09-05.
 
 ### authority
 

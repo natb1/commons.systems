@@ -25,6 +25,10 @@ bears:
   - fact: answer
     option: per-fact-after-two-readings
     relation: adopted
+  - node: commons.systems/disposition-graph/clean-context-review
+    fact: answer
+    option: pointers-for-what-grows-with-the-record
+    relation: adopted
 ---
 ## Answer
 

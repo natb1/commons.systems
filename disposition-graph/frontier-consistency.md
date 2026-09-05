@@ -139,7 +139,7 @@ The recommendation moves from the standing text to `split-survey-from-per-draft`
 
 #### split-survey-from-per-draft
 
-The answer the fence holds. The review of a draft runs validations one to six and the fifteenth on one node when its recommendation is recorded, against the draft's neighbourhood and the index of every question the record asks; the survey runs seven to fifteen over the whole graph, judging the nodes whose recommendation changed since its pin, before the author rules; the periagogic stage asks the merge analysis first, as the author's words of 2026-09-03 on the dialogue node say; a tangle or a divergence the survey finds is recorded as the alignment-order node says and the ruling order is derived from it; and how each reading is run, what its reader is given, and how the survey is pinned and serialized are the clean-context-review node's. First raised by the review's counter-argument of 2026-09-03, that the batch paid twice for the per-draft pass; taken up by the decomposition node from the author's words of 2026-09-04.
+The answer the fence holds. The review of a draft runs validations one to six and the fifteenth on one node when its recommendation is recorded, against the draft's neighbourhood and the index of every question the record asks; the survey runs seven to sixteen over the whole graph, judging the nodes at the review or the ruling stage whose recommendation changed since its pin, before the author rules; the periagogic stage asks the merge analysis first, as the author's words of 2026-09-03 on the dialogue node say; a tangle or a divergence the survey finds is recorded as the alignment-order node says and the ruling order is derived from it; and how each reading is run, what its reader is given, and how the survey is pinned and serialized are the clean-context-review node's. First raised by the review's counter-argument of 2026-09-03, that the batch paid twice for the per-draft pass; taken up by the decomposition node from the author's words of 2026-09-04.
 
 #### per-node-review-without-a-survey
 
@@ -378,3 +378,18 @@ F7, the stale option pointer: confirmed. `clean-context-review` now recommends `
 The counter-argument, that the fence copies content the cited nodes own and should cite every validation to its owner rather than restate it, is recorded as the option `validations-cited-to-their-owners` on the answer fact, source review, 2026-09-05, with the reviewer's own measure of the drift: three validations diverged from their sources in a single day. It is not adopted here, because it is the one limb that changes what a ratification of this node would freeze, and that is the author's to rule, not the review's to take. The answer fact's reason now says so.
 
 The two-round warning apply.mjs prints is the miscount recorded on `review-cost`: it counts reading sections since the last kickback rather than readings of the same answer. This is the first reading of this answer since its last kickback and the second of the answer; the cap is reached, the amendment is recorded, and the node goes to the author.
+
+### Corrected after the reading, 2026-09-05
+
+The reading of `clean-context-review`, the same day, found this node's `### answer`
+prose still reading "the survey runs seven to fifteen over the whole graph", the
+off-by-one its own recommended text had corrected, and without the stage
+restriction the fence now carries. Both are corrected here.
+
+The correction moves the answer fact's pin, so the frontier prints this node as
+changed since its review although nothing of substance moved and no reader is
+owed a third reading of it, the cap having been reached. The pin is not
+re-settled by hand. What the record should do in this exact case is recorded as
+`pin-names-the-text-the-reader-read` on the `review-cost` node, with the three
+ways out and none of them taken; until the author rules there, this node carries
+the honest pin and the note.
