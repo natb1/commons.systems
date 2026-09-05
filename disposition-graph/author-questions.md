@@ -177,3 +177,58 @@ body of sources is an anomaly is not obeyed — `srs-introduction` and
 questions — and the rule needs a criterion, the unit plausibly being the question
 put to the source. Ten loci the survey could not verify are named as unverified
 in its report rather than dressed in citations.
+
+### State at the fourth compaction, 2026-09-04
+
+Recorded so the record and not the session carries it. This node stands at the
+maieutic stage with the periagogic movement and the pass with reference to
+tradition written above and landed. Its design unit is running and has not
+returned; it drafts the frontmatter, the answer, the rationale, the facts and a
+maieutic account section as four separate files, never editing this node, so
+that the main thread splices them without dropping anything landed while it
+worked, which the record lost once today.
+
+What the design owes, and what the main thread does with it. The ten decisions
+the design must resolve are, in short: where the list lives and whether it is
+per node or per fact, the author's words admitting both readings; what one
+question carries; the admission test and the cap, which the greenfield pass says
+must be tighter than tradition set them because answering and not asking is now
+the binding constraint; the term, "probe" being already used in fourteen nodes
+in exactly this sense and defined nowhere while "question" is load-bearing in
+two other senses; the kickback rule, which must beat a reader's forward verdict
+and not merely its choice of stage; the pin, a new frontmatter field having to
+join the strip or a question would invalidate the review that raised it; the
+divergence from Montgomery on keeping the list from the decider; the browser,
+which publishes the whole graph into its page source; the fifteenth frontier
+validation, which unamended makes every use of the field a finding against
+itself; and whether `fidelity` is the node's real home. When the design returns,
+the main thread writes it onto this node, runs its own adversarial reading of
+the integrated draft, lands the review-stage checkpoint, and then reconciles the
+implementation under the author's grant of this day: the reader and the pin
+strip in `packages/disposition/`, the two projections, the review's brief
+generator and applying script in `packages/clean-context-review/`, and the three
+skills.
+
+Two divergences recorded rather than passed over. The design ran on the most
+capable general model rather than on `fable`, which the alignment skill names
+for a draft that touches an ancestor, because `fable`'s session limit was
+exhausted when the eleven clean-context readings of this day were launched
+together and had not cleared when the design was launched; the author noted on
+2026-09-04 that the limit has since cleared, for future runs. And the eleven
+readings themselves returned nothing: every one died on that limit before any
+verdict was formed, so no node moved and no verdict was applied, and their
+briefs on disk are stale in any case, since this disposition changes what a
+reader is asked to return.
+
+The order that follows, when the design lands: this node through its own review;
+the implementation reconciled; the briefs regenerated; the readings re-run,
+eleven for the nodes this sitting drafted and a twelfth for this node; then the
+survey once over the whole graph, which is what answers the nodes reading as
+moved since their review; then the pages republished and the final report.
+Seven further nodes stand at the review stage owing a draft reading —
+`work-loop`, `authority`, `materialization`, `readings`, `delegation`,
+`frontier-consistency` and `madr-decision-records` — whose pins moved in the
+migration to the facts encoding without their arguments changing; the survey is
+what reads them, and the conflict is already recorded as the option
+`moved-draft-re-read-by-the-survey` on
+`commons.systems/disposition-graph/clean-context-review`.
