@@ -624,3 +624,16 @@ session standing in for the instrument. A reading now also runs on a
 ruling-stage node whose recommendation has moved since its review's pin, which
 is exactly that state; a ruling-stage node whose pin is current is still
 refused, because it is ready for the author and a reading has nothing to read.
+
+### The skills' claim that this recommendation had not moved, corrected, 2026-09-05
+
+Three loci in two skills said this node's recommendation had not moved for
+`pointers-for-what-grows-with-the-record`. It moved to it earlier the same day,
+and the option's own subsection says the note that it acted on nothing was wrong
+when it was written. The worst locus was `.claude/skills/align-review/SKILL.md`
+§1, the section that tells a reader what the brief contains: it said the pointer
+treatment "acts on nothing until the author rules", which is what the generator
+does. All three now say the answer fact recommends that option, that the node
+stands at the review stage with a forward verdict its recommendation has since
+moved past, and that nothing on it is ruled. Landed on `greenfield` at
+`87e4b24e` under the author's grant of 2026-09-04.

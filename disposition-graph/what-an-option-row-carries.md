@@ -16,3 +16,14 @@ What the sitting would amend: `commons.systems/disposition-graph/alignment-page`
 Cascades: `commons.systems/disposition-graph/dialogue`, whose recommended text puts `source` and `ref` on every answer option, `status: passed` with its `reason` wherever the AI holds an option dominated, and the `ruling` with its response and date on the option the author chose, all of which the page renders as chips today, and whose `stands` is what the probe questions; `commons.systems/disposition-graph/viable-options`, whose gloss the passed-over chip quotes and whose model has each option carry its recommendation, its tradition relation and its confirmed choice; `commons.systems/disposition-graph/readings`, on the tradition relation the author keeps; `commons.systems/disposition-graph/progressive-disclosure`, whose two levels the split is drawn on; and `commons.systems/disposition-graph/recording`, on a recommendation that goes alone having to say that it does, which is the line the row prints when there is no case against.
 
 The periagogic object: the published alignment page at https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 at `commons.systems/public/agency` and at a node carrying a passed option and a ruled one, read against the recommended texts of `alignment-page` and `dialogue`, and `renderOption` in the projector, before anything is changed.
+
+### The parent's clause rendered while this question stands, 2026-09-05
+
+The `choicename mono handle` span this node's account names as the locus was
+struck from `renderOption` on 2026-09-05, landed on `greenfield` at `87e4b24e`,
+under the author's grant of 2026-09-04. That is the parent's clause and not this
+node's: `alignment-page` says the row carries the option's name nowhere, and
+this node stands at the periagogic stage, where nothing on it acts. The four
+pills the author's words of 2026-09-04 also reach are left as they are, because
+whether they belong on the row at the first level is this node's question and
+the parent's answer keeps them there until it is ruled.

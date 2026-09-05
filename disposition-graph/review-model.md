@@ -686,3 +686,30 @@ Findings:
 Strongest counter-argument (strong): The answer binds a role and lets the AI supply the name, so what a ratification pins is a sentence about roles while the model an executor actually launches moves without the author — which is the unit the author's words on `viable-options` handed the AI, and which this node otherwise takes back. On the merits of the flat rule: the per-draft reading re-checks, on the same class of mind, a text the most capable model has just written at full attention, so it pays the top rate where the marginal detection is lowest and buys correlated blind spots where the review wanted independence; and by pricing both readings the same it forecloses the measurement that would show whether that is true. `chosen-for-difference` is the option that answers the correlation objection and it is not the recommendation.
 
 The session's reply: Taken in full, and the correlation objection is the part the session cannot answer: a reader of the same class as the drafter, reading at the same effort, buys correlated blind spots exactly where independence was wanted, and pricing both readings the same forecloses the measurement that would show it. `chosen-for-difference` is on the table and is not the recommendation, and the reason recorded for that — that the record cannot yet measure detection by model — is a reason to defer the choice and not a reason to choose the flat rule. What the session adds is that this sitting ran its readings on the most capable model rather than the one the node names, because the smaller model's session limit was reached, so the record has one day of evidence against its own rule and no measurement of it.
+
+### The three unsupported clauses named where they are carried, and the fourth struck, 2026-09-05
+
+Under the author's grant of 2026-09-04, landed on `greenfield` at `87e4b24e`.
+
+This answer names the substitute clauses the two review skills and the alignment
+skill carry as unsupported implementation until the author rules on
+`fallback-when-the-model-is-unavailable`, and no artifact said so. Each of the
+three now says it where the clause is carried, in the form `CLAUDE.md` set for a
+stopgap: what is applied, which node's ruling liquidates the note, and that it is
+unsupported meanwhile.
+
+The fourth site was a divergence in this node's own text. The second paragraph
+names `brief-bounds.md` among the sites the rule binds but leaves it out of the
+three whose substitute clauses are unsupported, and the fragment carried the same
+clause. Rather than lengthen the enumeration, the clause is struck from the
+fragment: the reader does not choose its model, both review skills already say
+the substitute is named in the launch prompt and written down nowhere in the
+file, and the fragment was the only file that wrote it down. The enumeration is
+now exact as it stands.
+
+With them, the reconciliation skill was reconciled to naming a model by its
+relation. It named harness models four times, in its description line and its
+model section, where the record names them by relation everywhere and where its
+sibling `align/SKILL.md` was already reconciled, so the two operating skills
+stated one rule in two vocabularies. The `model:` frontmatter field stays: it is
+the harness's own interface and a launch fact, and the text now says so.

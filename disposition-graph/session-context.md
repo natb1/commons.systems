@@ -328,3 +328,17 @@ non-zero when any is. The alignment skill runs it in its currency check and
 reports what it finds, and the reconciliation skill keeps the write and gains
 the read-only form. This is the mechanics of the projection this node's answer
 requires and mints no rule of its own.
+
+### `CLAUDE.md` states no rule of its own, 2026-09-05
+
+The stopgap section "How a recommendation is made" met its own liquidation
+condition and was deleted, landed on `greenfield` at `87e4b24e` under the
+author's grant of 2026-09-04. Its notice named the condition: rules reconciled
+and the projector writing the rule from `evaluation` like every other rule.
+`evaluation` is `tier: global`, `.claude/rules/evaluation.md` is projected from
+it, carries the rule in fuller form, and `--rules --check` reports it current. So
+the section had stopped standing in for a projection that does not exist and had
+become a second, hand-maintained copy of one that does — invisible to the check
+and certain to drift at the next amendment of `evaluation`, which is the failure
+this answer's sentence names. The page's shim notice now records the deletion and
+the page states no rule of its own.

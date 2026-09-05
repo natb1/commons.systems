@@ -2114,3 +2114,15 @@ Nine nodes carry, inside `## Facts`, a `#### <option>` subsection for the option
 Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/delegation, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/alignment-page.
 
 Proposed: Rule it once, on `commons.systems/disposition-graph/dialogue`, whose answer states the rule and whose fact already carries the option. If the standing option keeps no subsection, delete the nine subsections — the text is not lost, since `## Answer` carries the answer and the account carries the history of the change. If the standing option is to carry one, the rule in `dialogue`'s answer changes and the nine subsections are rewritten to carry the answer's first sentences rather than a description of a change. Either way the nine conform to one ruling and no node is left implementing the losing side. Until it is ruled, the six whose stored prose the projections render are the urgent half, because those are the ones showing the author the wrong text.
+
+### The review skill names the fifth key, 2026-09-05
+
+`.claude/skills/align-review/SKILL.md` §4.2 listed the four draft keys
+`apply.mjs` writes to `review` and omitted `commit`, which the implementation
+also writes and which this answer's recommended text does not admit, recorded
+here as `commit-in-the-review-block`. The skill now names it and says it is
+unsupported by this node until the option is ruled. The code is unchanged: the
+key is what the re-reading diffs against and it was written under the author's
+grant for that reconciliation, so what removes the divergence is a ruling and not
+an edit. Landed on `greenfield` at `87e4b24e` under the author's grant of
+2026-09-04.

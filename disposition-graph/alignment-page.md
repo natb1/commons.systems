@@ -2244,3 +2244,27 @@ Kind: cross-reference.
 Also named: commons.systems/disposition-graph/which-facts-are-listed.
 
 Proposed: Add `commons.systems/disposition-graph/which-facts-are-listed` to `alignment-page`'s `depends`, beside its nine siblings, so the parent's ruling order accounts for it and the frontier's `settles` count stops reading zero. The child is not folded: its own account shows the question reaches `commons.systems/disposition-graph/dialogue`'s reserved-four rule as well as the page's rendering, so it has content the parent's recommended option does not carry and survives the independence test on that ground.
+
+### The renderer reconciled to the fence, 2026-09-05
+
+Under the author's grant of 2026-09-04, landed on `greenfield` at `87e4b24e`.
+Two clauses of the recommended text the projector did not yet render.
+
+The row carried the option's name in a `choicename mono handle` span on every
+row of every node, where the fence says the row "carries the option's name
+nowhere" and that the author's words of 2026-09-04 strike the id-shaped string
+from it. The span is struck. The bare name survives only where the record holds
+no sentence for an option, which is the case the same clause provides for, and
+the name still reaches the DOM in `data-option` on the radio, so nothing that
+stages a ruling changed. The four pills the author's words also reach —
+`alt-src`, `alt-stands`, `alt-ruled`, `alt-passed` — are not touched: this
+answer keeps them at the first level and sends the rest to the details, and
+reading the author's words further into the row is `what-an-option-row-carries`'
+act and not a reconciliation's.
+
+And an unlinked metric said why it could not link in a `title` attribute. The
+clause is that a node the browser does not render "is named by its id and not
+linked, the metric saying so", and a hover title is not the metric saying so and
+does not exist on touch. The reason is now visible text beneath the id, in both
+unlinked cases, the `why` staying in the title. This is the reconciliation item
+`alignment-page-observations` recorded on the author's first observation.

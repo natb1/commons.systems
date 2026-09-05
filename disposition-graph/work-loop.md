@@ -451,3 +451,16 @@ survey.
 The finding, as the survey wrote it: Three standing texts rest on a frontier that does not exist, and a fourth says so. `commons.systems/disposition-graph/materialization`'s `## Answer` says "anything no disposition justifies is unsupported implementation, on the frontier and liquidated through reconciliation, where pruning is proposed and the author rules on it". `commons.systems/disposition-graph/session-context`'s `## Answer` says "Anything in any of the three that no node projects is on the frontier as a prune-by-default proposal." Both name the second direction of `commons.systems/disposition-graph/work-loop`, whose answer places it in the future: "In the second direction any materialized artifact with no supporting disposition ... is itself a frontier item", begun only at exit. And `commons.systems/disposition-graph/what-acts-during-bootstrap`'s answer states the fact plainly: "An artifact that fails one of those tests is put on the frontier by the second direction of reconciliation, which the work-loop node begins only at exit, and no instrument derives that frontier today." So two nodes at the ruling stage describe a queue as though it existed, one node at the ruling stage defers it to exit, and one node at the review stage records that nothing derives it. The consequence is asymmetric and irreversible in one direction: the liquidation clause in `materialization` is armed at the swap, while the proposal-and-ruling step it promises has no mechanism, so the safeguard is the part that does not exist and the deletion is the part that does. `commons.systems/disposition-graph/coverage`, which `work-loop` names as what ranks the second direction, stands at the periagogic stage.
 
 Its proposal: Say in `materialization` and in `session-context` what is true today: that unsupported implementation is identified by reconciliation's second direction, which begins at exit, and that until then nothing derives it — cited to `work-loop` and `what-acts-during-bootstrap` rather than restated. `work-loop` is the survivor for the mechanism and `coverage` for the ranking. The clause that must not stand as written is `materialization`'s liquidation, which promises a proposal and a ruling that no instrument can produce; either it names the instrument that will exist before the swap, or it says the swap prunes nothing until that instrument does.
+
+### The reconciliation skill names the third act, 2026-09-05
+
+`.claude/skills/reconcile/SKILL.md` §4 said the loop writes the graph "only as
+decision state: a viable option recorded on a fact, and a fact's recommendation
+moved onto one" and then, three sentences later, marked a dominated option passed
+over with its reason. That is the third act this answer's enumeration does not
+carry, recorded here as `reconciliation-passes-an-option-over`. The skill now
+names all three and says the third is unsupported by this node until the option
+is ruled, rather than letting "only" cover it. The act is kept: `viable-options`'
+recommended answer and the projected `authority` rule both grant it generally,
+and dropping it would lose what the loop has found. Landed on `greenfield` at
+`87e4b24e` under the author's grant of 2026-09-04.

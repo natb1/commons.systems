@@ -578,3 +578,26 @@ Findings:
 Strongest counter-argument (strong): Every clause of the recommendation narrows what the reviewer is shown, on measurements taken by the party the review exists to check, and a reader that must search for what it is no longer given searches for what it thinks to look for, which is the drafter's own frame. The answer's reply is that the survey holds the whole graph and is the reader of last resort — a reply that is good only while the survey runs before every ruling. This survey is the first the record has run; it read a brief its own text says a reviewer may not hold whole; and the node moved beneath it while it read. The backstop the narrowing is priced against has now been exercised once, and the exercise is evidence for the counter-argument rather than against it.
 
 The session's reply: Taken, and the disclosure is accepted as accurate: the node moved beneath the reading by an option added beside the recommendation, which by `review-approval-pinned-to-a-revision` does not stale the pin, and the reading judged the pinned text. On the substance the counter-argument is now better evidenced than when the node was drafted: the survey read a brief its own text says a reviewer may not hold whole, and it is the backstop the narrowing was priced against. The session does not move the recommendation and records that the narrowing's defence now rests on a backstop with one exercise, whose one exercise is evidence against it.
+
+### Two clauses of this answer materialized, 2026-09-05
+
+Under the author's grant of 2026-09-04, landed on `greenfield` at `87e4b24e`.
+
+Which of the two readings a brief is written for is the tool's to derive and
+not the session's to name, and the tool could not derive the one case that
+matters: after a kickback the answer was redrawn and owes a fresh reading, and
+`chooseMode` gave such a node the re-reading unless the session passed
+`--fresh`. The review skill claimed the derivation while its own invocation line
+omitted the flag, so an executor following it ran the reading this answer says is
+not owed. `chooseMode` now reads the kickback off the node's own `review` block,
+which the apply step writes on a kickback exactly as on a forward; `--fresh`
+stays only for the case the record cannot show, a redraw whose kickback was never
+applied.
+
+And the brief stated its own size in lines, where this answer's rationale fixes
+the measure in bytes because this record writes a paragraph as one unwrapped
+line and a line count flatters whichever text has the shorter paragraphs. It now
+states bytes over lines — both, because the reader pages by the line numbers the
+same sentence names — taken to a fixed point, since the sentence stating the size
+is part of the size it states. The stdout reports and the too-large warning
+carry the same pair.

@@ -216,3 +216,13 @@ documented at code.claude.com/docs/en/web-quickstart. The link pre-fills the
 form and does not submit it, and Claude Code on the web is a research preview
 requiring a signed-in account, both of which the page should not pretend
 otherwise about.
+
+### The footer's stub marked, 2026-09-05
+
+The per-node chip's stub carried a visible glyph and the footer's launch
+control carried only reduced opacity, which reads as a disabled or secondary
+control and is not a mark. This answer holds that a mark on the control says so
+and that a stub that looks finished is worse than no stub, because the author
+cannot tell which of the two routes they are being offered. Both controls now
+carry the same mark. Landed on `greenfield` at `87e4b24e` under the author's
+grant of 2026-09-04.
