@@ -43,13 +43,13 @@ review:
   verdict: kickback
   strength: strong
   date: 2026-09-05
-  of: ef4aff559b1c0ccec78135d78fe89168e68da849
-  commit: 78ecc2e2e474e02894aaf9ecaf07ef1d52a923c1
-  against: "This node is a derived view stored as prose, and the record has both a name for that failure and a mechanism for the alternative. `prose-and-structure` holds that prose carries never a list a field also carries, and `codd-update-anomaly` records the record already suffering exactly this on `stub-traditions`, where the hand-maintained enumeration was found 'short by three ... and long by one'. The evidence is now two readings deep and it is this node's own: the first reading found the list short by two and mis-sorted on two, and this reading finds the redraw counting `review`'s assessment twice, delivering three quotations where the first sentence promised nine, dropping a clause's trailing condition, and carrying a clause its own stated rule excludes — all before a single one of the six nodes it gathers from has been ruled, and every one of the six still carries a stage. The answer's defence, that 'the citation is checkable and a reader who follows it finds the words', is precisely what this reading falsified: for most of the list the reader following the citation finds different words. `transience`'s standing answer already puts two of these very clauses where the counter-argument would put all of them, as criteria on the nodes they serve that the frontier derives. What holds the recommendation up against this is that both rival shapes cost something the author should weigh: `left-where-they-stand` is how the author's own two conditions came to be reachable from no node that names exit, and the derived shape needs an instrument nothing has built."
+  of: fab9c82d7ee229d0399a0ccafec8b4c2e4d02005
+  commit: 95698b0f214c716bd02bb148757a2c18934e7820
+  against: "This node is a derived view stored as prose, and the record already names that failure: `prose-and-structure` holds that prose carries never a list a field also carries, and `codd-update-anomaly` records the same anomaly striking `stub-traditions`. The evidence is now three readings deep and it is this node's own. The first found the list short by two and mis-sorted; the second found `review`'s assessment counted twice and six of nine items paraphrased; and this reading, of the redraw whose entire promise is verbatim quotation with blob pins, finds the author's own words on `work-loop` uncounted for the second time, the count wrong by one, a concession attributed to the wrong field, and one of the seven pins stale on the same day it was written by the very sitting that wrote it, with no instrument that checks a pin. None of the seven nodes it gathers from has been ruled, and every one still carries a stage, so the list will be amended under it repeatedly before it is ever true. What holds the recommendation up is only that both rivals cost something the author should weigh: `left-where-they-stand` is how the author's own conditions came to be reachable from no node that names exit, and the derived shape needs an instrument nothing has built."
 form: rule
 cites:
   - id: commons.systems/disposition-graph/work-loop
-    hash: 408e1fd9682f40597e2bc6839822c67806951f6f
+    hash: 7d568f0ce07adf37623f69d140d547af54eb8241
   - id: commons.systems/disposition-graph/materialization
     hash: 14d4bc68bb3860cd5657b5fec088020e3dc8eae4
   - id: commons.systems/disposition-graph/review
@@ -72,12 +72,17 @@ depends:
   - commons.systems/disposition-graph/vocabulary-view
   - commons.systems/disposition-graph/attention
   - commons.systems/disposition-graph/alignment-order
+  - commons.systems/disposition-graph/transience
 ---
 ## Answer
 The conditions the record declares, gathered here and minted nowhere. This node
 adds no condition of its own: each one below is quoted verbatim from the field
 that carries it and cited to the node that declares it, and a condition struck or
-amended there is struck or amended here.
+amended there is struck or amended here. The `cites` field carries the pins that
+make that promise checkable, one blob hash per node quoted; no instrument checks
+them, `read.mjs` validating only that a hash is forty hex characters and the
+projector warning only on an unknown id, so what the promise rests on is the
+sitting that writes it and not the machine.
 
 Two rules sort them, and they are applied to every clause alike. A condition of
 exit is anything that must be true before `greenfield` is swapped with `main`;
@@ -87,43 +92,57 @@ it, as the node above this one says. And where the record puts a thing "at exit"
 it is owed before the swap and is on the list; only what the record puts after
 the swap is off it.
 
-The author's words set two. On `vocabulary-view`, 2026-09-02: "Before bootstrap
+The author's words set four, and two of the four are declared a second time by
+`work-loop`'s shim below. On `vocabulary-view`, 2026-09-02: "Before bootstrap
 exit technical repo vocabulary like 'disposition', 'ratified', 'doctine' will
 need to be recorded on the onboarding path of the graph and clearly identified
 with appropriate layout in the documentation projection. References to tradition
 also need to be clearly called out with appropriate layout." On `attention`, and
 in the same words on `alignment-order`, 2026-09-03: the reconciliation process,
-"shimmed as a skill, but codified before bootstrap exit".
+"shimmed as a skill, but codified before bootstrap exit". And twice on
+`work-loop`, 2026-09-03, quoted in that node's `## Disposition`: of the second
+direction, "\"Resolves in both directions\" this is required for bootstrap exit,
+but not transition. Disposition must me answered before this is shimmed or
+materialized . Only resolved from graph to implementation"; and of the drain,
+"\"All legacy tactic nodes are drained during bootstrap\" also required for exit
+but not transition".
 
-`work-loop`'s reconciliation shim declares four, quoted from its `liquidation`
-field. The first: "every rule this project runs under is a node or a declared
-shim, dispatch selects from this graph, the alignment skill is the only path by
-which a node is recorded, and nothing live reads the legacy record".
+`work-loop`'s reconciliation shim carries three clauses in its `liquidation`
+field, taken here in the field's own order and cited by their opening words
+rather than by an ordinal, since the first of the three carries two conditions.
 
-The second: "the second direction, every artifact on the implementation ref that
-no node justifies supported by a disposition or pruned, and the drain of every
-legacy tactic node, transcribed to this graph or pruned, are complete, neither
-begun before the disposition that states them is answered". The trailing words
-are a condition too, and a narrower one than the ruling of the whole global tier:
-the nodes that state the second direction and the drain are answered before
-either begins, and so before exit. `work-loop`'s answer opens "By reconciliation
-in both directions, the second begun only at exit", which would make this
-completion begin at the moment it gates; the divergence is recorded at the node
-that owns that sentence, as the option
-`second-direction-begins-when-its-disposition-is-answered`, and this list follows
-the shim.
+"the orchestrator and the bite skills are materialized from ratified nodes":
+this is the author's condition on `attention` and `alignment-order` with a
+requirement added, that the nodes those artifacts are materialized from be
+ratified. The author's words and this clause declare one condition, counted
+once, and the stronger form governs.
 
-The third: "the orchestrator and the bite skills are materialized from ratified
-nodes". This is the author's condition on `attention` and `alignment-order` with
-a requirement added, that the nodes those artifacts are materialized from be
-ratified. The two loci declare one condition, counted once, and the stronger form
-governs.
+"every landing made under this shim has passed the validation it skipped,
+functional validation against its node's criteria, the review instrument's
+assessment", which is the rest of that same clause. Only its remaining limb,
+"validation in use after the implementation ref is swapped with the main
+branch", is excluded, by the first rule above and by nothing else.
 
-The fourth: "every landing made under this shim has passed the validation it
-skipped, functional validation against its node's criteria, the review
-instrument's assessment". Only the remaining limb of that clause, "validation in
-use after the implementation ref is swapped with the main branch", is excluded,
-by the first rule above and by nothing else.
+"every rule this project runs under is a node or a declared shim, dispatch
+selects from this graph, the alignment skill is the only path by which a node is
+recorded, and nothing live reads the legacy record".
+
+"the second direction, every artifact on the implementation ref that no node
+justifies supported by a disposition or pruned, and the drain of every legacy
+tactic node, transcribed to this graph or pruned, are complete, neither begun
+before the disposition that states them is answered". The shim and the author
+declare this one together: it is the author's two sentences on `work-loop`
+above, and the trailing words are a condition too, and a narrower one than the
+ruling of the whole global tier, since the nodes that state the second direction
+and the drain are answered before either begins, and so before exit.
+`work-loop`'s answer opens "By reconciliation in both directions, the second
+begun only at exit", which would make this completion begin at the moment it
+gates; the author's own words on that node say the direction "is required for
+bootstrap exit, but not transition", with "Only resolved from graph to
+implementation" as the interim, which is what the shim's trailing clause says.
+The divergence is that node's answer against the author's words, it is recorded
+there as the option `second-direction-begins-when-its-disposition-is-answered`,
+and this list follows the shim and the words.
 
 `materialization`'s greenfield shim declares two, quoted from its `liquidation`
 field: "the coverage node has been ruled on what the record covers, which is a
@@ -141,8 +160,21 @@ the reconciliation shim", which is the same assessment, on the same landings, at
 the same moment, as `work-loop`'s fourth clause requires: one condition declared
 in two places, counted once, with both loci named. What is owed is the assessment
 and not the instrument, since the instrument that node describes is not yet
-materialized and the shim stands in for it. So the list is eight conditions and
-not nine.
+materialized and the shim stands in for it.
+
+The list is seven. Eleven declarations reduce to it, and each reduction is one
+condition declared twice: the author's words on the second direction and on the
+drain with the shim clause that carries both; the author's words on `attention`
+and `alignment-order` with the shim's orchestrator clause; and `review`'s
+`artifact` field with the shim's assessment clause. What is left is the
+onboarding vocabulary and the tradition callouts; the codification of the
+reconciliation process, materialized from ratified nodes; every rule a node or a
+declared shim, with dispatch, the alignment skill and the legacy record as that
+clause states them; the second direction and the drain complete, neither begun
+before the dispositions that state them are answered; every landing under the
+reconciliation shim assessed and validated against its node's criteria; the
+coverage node ruled; and the swap made after whatever on `main` is to survive
+has been reconciled into `greenfield`.
 
 Whether the ruling of the global tier is an exit condition is declared by no
 node. The `what-acts-during-bootstrap` node's gloss implied it, by making
@@ -156,8 +188,9 @@ gathering: that node's answer names "Review every landing before exit" and "drai
 the legacy record" as standing obligations belonging as criteria on the nodes
 they serve, derived onto the frontier and never written. This gathering diverges
 from that shape, and the divergence is recorded rather than left to be found:
-nothing derives an unmet exit condition today, as `transience`'s own instrument
-note concedes, and a shape with no instrument would leave the conditions where
+no instrument derives an unmet exit condition today, and `transience`'s own
+instrument `ref` concedes the nearer case, that "the flagging of a met condition
+is not yet materialized", and a shape with no instrument would leave the conditions where
 they were, reachable from no node that names exit. The criterion shape is on this
 fact as `conditions-derived-not-restated` and it is the author's to take.
 
@@ -221,12 +254,12 @@ is on the fact and is unanswered.
 
 The conditions are read where the record declares them and this node lists none:
 three nodes declare them in their own fields, `work-loop`, `materialization` and
-`review`, and the author's words stand on three more, `vocabulary-view`, `attention`
-and `alignment-order`; a session that needs to know whether exit is reachable reads
-those six. It is what the record does today, and it is not dominated: it keeps each
+`review`, and the author's words stand on four more, `vocabulary-view`, `attention`,
+`alignment-order` and `work-loop` itself; a session that needs to know whether exit
+is reachable reads those six. It is what the record does today, and it is not dominated: it keeps each
 condition beside the shim whose liquidation it is, where the person amending that
 shim will see it, and it mints no seventh place to fall stale, which is the case
-against this node's answer. What it costs is that the two conditions in the author's
+against this node's answer. What it costs is that the conditions in the author's
 words are reachable from no node that names exit, which is how they came to be
 missing from the list this node replaces. Raised on
 `commons.systems/disposition-graph/what-acts-during-bootstrap`, whose answer carried
@@ -260,9 +293,14 @@ which found its prose arguing it off the list.
 
 No clause of a shim's liquidation is a condition of exit, whatever the shim says:
 a shim liquidates when the thing it stands in for exists, which is its own event
-and not the record's, so the conditions of exit are the author's words and
-`materialization`'s coverage limb, which its own clause marks a condition of exit
-and not of the swap. It is the position this node held until the reading of
+and not the record's, so the conditions of exit are the author's words on four
+nodes and `materialization`'s coverage limb, which its own clause marks a
+condition of exit and not of the swap. What survives the strike is more than the
+list this option first named: the author's words on `work-loop`, at that node's
+`## Disposition`, make the completion of the second direction and the drain of
+the legacy record conditions of exit in the author's own voice, so those two
+stand whatever becomes of the shim clause that also carries them. It is the
+position this node held until the reading of
 2026-09-05, and it is the shortest list the record can be read to support. Against
 it stands `work-loop`'s rationale, which calls the batched validation "the
 bootstrap exit criteria" in those words, and the author's words on that node, which
@@ -682,3 +720,83 @@ clause carried that the answer's own rule excludes -- all before one of the
 gathered nodes has been ruled. What holds the recommendation up is that both rival
 shapes cost something the author should weigh, and both are now on the fact where
 they can be ruled for.
+
+### Clean-context review, 2026-09-05
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `gathered-and-cited`.
+
+Findings:
+
+- ## Answer, third paragraph, first sentence (validations 1 and 3; the author's words are undercounted, a second time). 'The author's words set two. On `vocabulary-view`, 2026-09-02 ... On `attention`, and in the same words on `alignment-order`, 2026-09-03'. Two further sets of the author's words set exit conditions, both quoted verbatim in `work-loop`'s `## Disposition`, both 2026-09-03. At work-loop.md:94, on the second direction: "'Resolves in both directions' this is required for bootstrap exit, but not transition. Disposition must me answered before this is shimmed or materialized . Only resolved from graph to implementation". At work-loop.md:97, on the drain: "'All legacy tactic nodes are drained during bootstrap' also required for exit but not transition". Both conditions are on this list, but the answer rests them on the shim's `liquidation` field alone and counts the author's words at two. The record has already found this once, in the reading that minted this node: what-acts-during-bootstrap.md:263, 'The author's own words say the same: work-loop.md:77, "Resolves in both directions" this is required for bootstrap exit, but not transition'. The node also contradicts itself, since `#### shim-liquidation-is-never-a-condition` says 'the author's words on that node, which call it "bootstrap/shim exit criteria"'. The same undercount is in `#### left-where-they-stand`: 'the author's words stand on three more, `vocabulary-view`, `attention` and `alignment-order`'. Suggested edit: quote work-loop.md:94 and :97 in the paragraph that gathers the author's words, count the author's words at four, and say of the second clause of `work-loop`'s liquidation that the shim and the author's own words declare it together.
+- ## Facts, `#### shim-liquidation-is-never-a-condition` (validation 3; an option shown to the author misstates its own consequence). 'No clause of a shim's liquidation is a condition of exit, whatever the shim says ... so the conditions of exit are the author's words and `materialization`'s coverage limb'. Under the author's words at work-loop.md:94 and :97 the second direction's completion and the drain of every legacy tactic node are exit conditions in the author's own voice, so they survive this option and do not come off the list with the shim clause. The option's stated 'Against it' names only the author's phrase 'bootstrap/shim exit criteria' from work-loop.md:80, which is about the batched validation, and not the two sentences that actually settle it. As it stands the author would be ruling for a list that excludes two conditions their own words set. Suggested edit: rewrite the option's consequence as the author's words on four nodes plus `materialization`'s coverage limb, naming work-loop.md:94 and :97, so the rival is the shortest list the record can support and not a shorter one than that.
+- ## Answer, paragraph on `work-loop`'s second clause (validation 3; a divergence recorded as open that the author's words already settle). '`work-loop`'s answer opens "By reconciliation in both directions, the second begun only at exit", which would make this completion begin at the moment it gates; the divergence is recorded at the node that owns that sentence, as the option `second-direction-begins-when-its-disposition-is-answered`, and this list follows the shim.' The author settled it at work-loop.md:94: the second direction 'is required for bootstrap exit, but not transition', with 'Only resolved from graph to implementation' as the interim, which is what the shim clause's 'neither begun before the disposition that states them is answered' states. Following the shim is right and the ground is stronger than the answer gives: the divergence is `work-loop`'s answer sentence against the author, not two readings of an open question. Suggested edit: cite work-loop.md:94 in that paragraph as the reason the list follows the shim, and describe the divergence as `work-loop`'s answer sentence against the author's words, which the option on that node carries.
+- ## Answer, ninth paragraph, last sentence (validation 3; the count is wrong by one). 'So the list is eight conditions and not nine.' The answer de-duplicates twice, not once: of `review`, 'one condition declared in two places, counted once, with both loci named', and of `work-loop`'s third clause, 'The two loci declare one condition, counted once, and the stronger form governs'. Nine raw items less two de-duplications is seven: `vocabulary-view`'s onboarding vocabulary; the codification of the orchestrator and the bite skills, `attention` and `alignment-order` merged with `work-loop`'s third clause; `work-loop`'s first clause; `work-loop`'s second clause; `work-loop`'s fourth clause merged with `review`'s `artifact`; `materialization`'s coverage ruling; and `materialization`'s swap after whatever on `main` is to survive has been reconciled. On a node whose content is an enumeration, the count is the first line a reader checks. Suggested edit: 'So the list is seven conditions and not nine', with the seven set out in order so the arithmetic is visible on the page.
+- Frontmatter `cites` (validation 3; the pin that carries the answer's guarantee is stale). `cites` pins `commons.systems/disposition-graph/work-loop` at 408e1fd9682f40597e2bc6839822c67806951f6f; the file hashes to 7d568f0ce07adf37623f69d140d547af54eb8241 (`git hash-object disposition-graph/work-loop.md`, run in the `disposition` worktree). The other six pins match. The staling edit is this same sitting's narrowing of `work-loop`'s `exit-conditions-cited-not-carried` option and an added account subsection; the `liquidation` field the answer quotes is untouched, so no quotation is falsified. But the first paragraph's promise, 'a condition struck or amended there is struck or amended here', is carried by these pins, and nothing checks them: packages/disposition/read.mjs:1243 validates only that a hash is forty hex characters, never that it is the file's, and packages/disposition/project.mjs:114 warns only on an unknown cite id. A pin that went stale on the day it was written, in the sitting that wrote it, is the first live test of the mechanism the answer offers as its defence. Suggested edit: re-pin `work-loop` at 7d568f0ce07adf37623f69d140d547af54eb8241 before the node goes to the author, and record on the answer fact's `against`, or in the account, that no instrument verifies a `cites` hash.
+- ## Answer, eleventh paragraph (validation 3; a concession attributed to the wrong field and widened). 'nothing derives an unmet exit condition today, as `transience`'s own instrument note concedes'. The text relied on is in that node's instrument `ref` and not its `note` (transience.md:83): 'the frontier lists live shims since 2026-09-03, and the flagging of a met condition is not yet materialized'. What it concedes is that a met condition is not flagged, not that an unmet one is not derived. The Facts subsection `#### conditions-derived-not-restated` states it correctly on the same node, '`transience`'s own instrument note concedes that the flagging of a met condition is not yet materialized', so the two texts disagree. On a node whose claim is that every clause is quoted from the field that carries it and cited to it, a paraphrase attributed to the wrong field is the defect it exists to prevent. Suggested edit: quote the `ref` and name it as the `ref`, and make the answer's claim the one the text supports, as the Facts subsection already does.
+- Frontmatter `depends` (validation 3; a node the answer rests on is undeclared). `transience` carries a `cites` entry, an entire paragraph of `## Answer`, and the option `conditions-derived-not-restated`, but `depends` lists only what-acts-during-bootstrap, work-loop, materialization, review, vocabulary-view, attention and alignment-order. Suggested edit: add `commons.systems/disposition-graph/transience` to `depends`.
+- ## Answer, paragraphs four to seven (validation 3; the ordinals do not match the field they cite). '`work-loop`'s reconciliation shim declares four, quoted from its `liquidation` field. The first ...', then 'The second', 'The third', 'The fourth'. That field, work-loop.md:72, holds three semicolon-separated clauses, and the draft's ordinals invert their order: the field's first clause is the draft's third and fourth ('the orchestrator and the bite skills are materialized from ratified nodes, and every landing made under this shim has passed the validation it skipped ...'), the field's second is the draft's first, and the field's third is the draft's second. Each quotation is a verbatim substring and splitting the field's first clause into two conditions is fair, but a reader or a later session resolving '`work-loop`'s fourth clause' against the field finds three clauses in another order, and this node's own citations are what the parent's rule sends a session to. Suggested edit: drop the ordinals and cite each condition by its opening words, or say 'the field's three clauses, the first of which declares two conditions', keeping the field's order.
+- commons.systems/disposition-graph/what-acts-during-bootstrap, frontmatter `defines` (validation 2; a finding on another node, whose text presupposes the ruling asked for here). The gloss reads 'bootstrap exit — The moment every condition the record declares for it is met, the conditions being those the `bootstrap-exit-conditions` node gathers, at which `greenfield` is swapped with `main`.' The clause 'the conditions being those the `bootstrap-exit-conditions` node gathers' is true only under `gathered-and-cited`; on `left-where-they-stand` or `conditions-derived-not-restated` this node gathers nothing and the parent's gloss is false from the moment the ruling lands. The parent stands at the ruling stage and its answer is projected into .claude/rules/what-acts-during-bootstrap.md, which every session loads. Suggested edit on the parent: 'the conditions being those the record declares, which the node beneath this one gathers or derives as its own ruling decides'.
+
+On the facts and what they recommend: The answer fact recommends `gathered-and-cited` at high boldness, which in this record is low confidence, with an `against` saying the gathering is a copy of clauses still being amended and may be a projection the browser should compute; `stands` equals `recommends`, so there is correctly no `## Recommendation` fence, and `minted-here` is the one passed option and carries its `reason`. The authority fact recommends `ratified` at moderate boldness behind an `### authority` reading that names `class-recommendation`'s expensive and irreversible limbs, expressly rejects capture-shaped, and records the case for `deferred` as its `against`, which is the reading that node requires; the three options are the reserved vocabulary and are complete. There is no `existence` or `persistence` fact, which is right for a node nobody proposes pruning and whose shape is not moving, and no `tier`, which is consistent with the answer's last paragraph refusing the rule projection and putting the rival on the fact as `conditions-projected-as-a-rule`.
+
+On the viability of the options: Every option on the answer fact is viable or correctly passed: `left-where-they-stand` is undominated and is what the record does today; `global-tier-ruled-is-a-condition` is the author's to declare and its prose now says why the AI may not; `conditions-derived-not-restated` is what `transience`'s standing answer prescribes for two of these very clauses; `conditions-projected-as-a-rule` is a real rival on where the list is read; and `minted-here` is rightly passed, with the reason on the option. `shim-liquidation-is-never-a-condition` is viable as the shortest list the record supports, but its prose misstates what it would leave standing, which is a finding above and not a viability defect. I found no missing viable option: the shape 'gather, and have an instrument derive the list' is `conditions-derived-not-restated`, and the shape 'follow `work-loop`'s answer and drop the second direction's completion' belongs, by the record's own rule, to the option on the node that owns that sentence.
+
+Strongest counter-argument (strong): This node is a derived view stored as prose, and the record already names that failure: `prose-and-structure` holds that prose carries never a list a field also carries, and `codd-update-anomaly` records the same anomaly striking `stub-traditions`. The evidence is now three readings deep and it is this node's own. The first found the list short by two and mis-sorted; the second found `review`'s assessment counted twice and six of nine items paraphrased; and this reading, of the redraw whose entire promise is verbatim quotation with blob pins, finds the author's own words on `work-loop` uncounted for the second time, the count wrong by one, a concession attributed to the wrong field, and one of the seven pins stale on the same day it was written by the very sitting that wrote it, with no instrument that checks a pin. None of the seven nodes it gathers from has been ruled, and every one still carries a stage, so the list will be amended under it repeatedly before it is ever true. What holds the recommendation up is only that both rivals cost something the author should weigh: `left-where-they-stand` is how the author's own conditions came to be reachable from no node that names exit, and the derived shape needs an instrument nothing has built.
+
+The session's reply: Kickback taken to the maieutic stage; all nine findings validated at their loci on the alignment thread and all nine accepted. The first is the one that carries the rest: the author's words on `work-loop`, quoted verbatim in that node's `## Disposition` at lines 94 and 97, set two more exit conditions in the author's own voice, and the answer rested both on the shim's `liquidation` field alone. The answer now counts the author's words at four and says of the shim's second clause that the shim and the author declare it together. With that, finding 2 is answered: `shim-liquidation-is-never-a-condition` said that striking every liquidation clause would leave the conditions as the author's words and `materialization`'s coverage limb, which would have had the author ruling for a list that drops two conditions their own words set. The option's consequence is restated, and `left-where-they-stand` is corrected the same way. Finding 3: following the shim now rests on the author's words at `work-loop`:94 rather than on a preference between two readings, and the divergence is described as that node's answer against the author. Finding 4: the count was wrong by one. The answer de-duplicated twice and subtracted once. It is set out as eleven declarations reducing to seven, with each pair named, so the arithmetic is checkable rather than asserted. Finding 5: the `cites` pin on `work-loop` was stale on the day it was written, by this sitting's own edit to that node. It is re-pinned at 7d568f0c, and the answer's first paragraph now says that no instrument checks these pins — `read.mjs` validates only that a hash is forty hex characters and the projector warns only on an unknown id — so the guarantee is carried by the sitting and not by the machine. Finding 6: the concession is in `transience`'s instrument `ref` and not its `note`, and it concedes the flagging of a met condition, not the derivation of an unmet one. Both are corrected. Finding 7: `transience` is added to `depends`. Finding 8: the ordinals are dropped. The `liquidation` field holds three semicolon-separated clauses and the draft's four ordinals inverted their order; the clauses are now taken in the field's own order and cited by their opening words, with the note that the first carries two conditions. Finding 9 is on `what-acts-during-bootstrap` and is owed rather than done: its `defines` gloss for bootstrap exit says the conditions are those this node gathers, which is true only under `gathered-and-cited`. That node is under a re-reading as this is written and editing its frontmatter would move the pin the reader is reading against, so the correction is recorded here and made when that reading lands. On the counter-argument, which is taken and not answered away: this is the third kickback on this node, and the evidence that a derived view stored as prose goes wrong is now this node's own, three readings deep. The shape the counter-argument argues for is on the fact as `conditions-derived-not-restated`, and what holds the recommendation where it is, is that nothing in the record derives an unmet condition and the alternative leaves the author's own conditions reachable from no node that names exit. The redraw the kickback asks for owes a fresh reading, and the cycle it belongs to is measured on `review-cost`'s option `a-cap-on-redraws-per-node-per-sitting`.
+
+### The third kickback taken, 2026-09-05
+
+Nine findings, all validated at their loci on the alignment thread and all
+accepted. The first carries the rest: the author's words on `work-loop`, quoted
+in that node's `## Disposition`, set two more exit conditions in the author's own
+voice, and the answer rested both on the shim's `liquidation` field alone. The
+answer counts the author's words at four now, and says of the shim clause that
+carries the second direction and the drain that the shim and the author declare
+it together.
+
+That is what made the option set unrulable, which is what the kickback was for.
+`shim-liquidation-is-never-a-condition` said that striking every liquidation
+clause leaves the author's words and `materialization`'s coverage limb, which
+would have had the author ruling for a list that drops two conditions their own
+words set; its consequence is restated, and `left-where-they-stand` is corrected
+the same way. Following the shim on the second direction now rests on the
+author's words rather than on a preference between two readings, and the
+divergence is described as `work-loop`'s answer against the author.
+
+The count was wrong by one: the answer de-duplicated twice and subtracted once.
+It is set out as eleven declarations reducing to seven, with each pair named, so
+the arithmetic is checkable rather than asserted. The `liquidation` field holds
+three semicolon-separated clauses and the draft's four ordinals inverted their
+order; the ordinals are dropped and the clauses taken in the field's own order,
+cited by their opening words, with the first noted as carrying two conditions.
+The concession borrowed from `transience` is in that node's instrument `ref` and
+not its `note`, and concedes the flagging of a met condition rather than the
+derivation of an unmet one; both are corrected. `transience` is added to
+`depends`.
+
+The `cites` pin on `work-loop` was stale on the day it was written, staled by
+this same sitting's edit to that node. It is re-pinned at `7d568f0c`, and the
+first paragraph now says what the promise rests on: no instrument checks these
+pins, `read.mjs` validating only that a hash is forty hex characters and the
+projector warning only on an unknown id.
+
+One finding is owed and not done. `what-acts-during-bootstrap`'s `defines` gloss
+for bootstrap exit says the conditions are those this node gathers, which is true
+only under `gathered-and-cited`; that node was under a re-reading as this was
+written and editing its frontmatter would have moved the pin the reader was
+reading against.
+
+The counter-argument is taken and not answered away. This is the third kickback
+on this node, and the evidence that a derived view stored as prose goes wrong is
+now this node's own, three readings deep: short by two and mis-sorted, then
+double-counted and paraphrased, and now the author's words uncounted a second
+time, the count wrong by one, a concession attributed to the wrong field, and a
+pin stale on the day it was written. The shape the counter-argument argues for is
+on the fact as `conditions-derived-not-restated`. What holds the recommendation
+where it is, is that no instrument derives an unmet condition and the alternative
+leaves the author's own conditions reachable from no node that names exit. The
+redraw owes a fresh reading, and the cycle it belongs to is measured on
+`review-cost`'s option `a-cap-on-redraws-per-node-per-sitting`.
