@@ -1,6 +1,6 @@
 ---
 question: Does the requirements-specification tradition support opening with purpose, then scope, then references?
-stage: ruling
+stage: review
 review:
   verdict: forward
   strength: weak
@@ -72,7 +72,10 @@ form: reading
 under:
   - commons.systems/disposition-graph/purpose
 source: IEEE Std 830-1998, Recommended Practice for Software Requirements Specifications, section 1 (Purpose, Scope, Definitions, References, Overview); ISO/IEC/IEEE 29148:2018, section 9, the SRS outline (purpose, scope, product overview, definitions).
-relation: adopted
+bears:
+  - fact: answer
+    option: standing
+    relation: adopted
 ---
 ## Answer
 
@@ -183,3 +186,7 @@ Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `
 ### Alternatives discharged, 2026-09-03
 
 At the clean-context review of 2026-09-03 the session struck the alternatives the record had already discharged: `delegated-not-ratified` dropped, the recommendation already reads delegated, as readings' rule requires.
+
+### Fence re-encoded, 2026-09-05
+
+The recommended text carried the node-level `relation: adopted` the reader no longer accepts, found by the reading of the readings node on 2026-09-05; it now carries the `bears` entry the node itself carries. The recommendation's pin moves with the fence, so the node returns to review.
