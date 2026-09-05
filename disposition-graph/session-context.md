@@ -314,3 +314,17 @@ Findings:
 Strongest counter-argument (strong): The answer's discipline — three projections, no rule outside a node, everything else on the frontier as a prune-by-default proposal — is stated in the present tense about a record that does not meet it: `CLAUDE.md` states a rule of its own by its own admission, and the frontier that would carry the residue as a proposal is the second direction of `work-loop`, which begins only at exit and which no instrument derives. Ratifying it makes a description of an intended state read as a description of the actual one, in the one file every session loads first.
 
 The session's reply: Taken, and the finding is the more precise of the two: the answer describes an intended state in the present tense, in the one file every session loads first, while `CLAUDE.md` states a rule of its own by its own admission and the frontier that would carry the residue does not exist. The session records that the answer must either declare the stopgap as a shim with the liquidation the page already names, or say why the orientation page needs none. The option `rules-projection-declared-a-shim` added on 2026-09-05 is a different question and does not cover this one.
+
+### The rules projection can be checked, 2026-09-05
+
+Under the author's grant of 2026-09-04, `project.mjs --rules <dir> --check`
+was added and landed on `greenfield` at `77a45889`. A rule file is a projection
+of a `tier: global` node's answer, and the amendment that stales it lands on the
+`disposition` ref while the projection lands on `greenfield`, so the
+regeneration is owed across a ref boundary and is easy to miss; it was missed
+twice on 2026-09-05. The check writes nothing and names each file that is
+missing, stale, or projected from a node no longer `tier: global`, exiting
+non-zero when any is. The alignment skill runs it in its currency check and
+reports what it finds, and the reconciliation skill keeps the write and gains
+the read-only form. This is the mechanics of the projection this node's answer
+requires and mints no rule of its own.

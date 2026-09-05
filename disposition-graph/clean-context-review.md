@@ -595,3 +595,32 @@ Findings:
 Strongest counter-argument (strong): This answer and `review-cost`'s `neighbourhood-questions-and-delta` between them narrow what the reader is shown, and every measurement behind both narrowings was taken by the party the review exists to check. The answer's defence is that the survey holds the whole graph and is the reader of last resort. That defence was written before any survey had run; this is the first, its brief is 8,674 lines, and the brief itself tells the reader it may not be held whole. So the backstop that makes the narrowing safe has been exercised once, under conditions the design did not anticipate, and the design was ratified against it in advance.
 
 The session's reply: Taken as stated, and the evidence is now on the record's side of the counter-argument: the survey ran once, its brief was 8,674 lines, and the reading reports it may not have been held whole. The session does not move the recommendation, because the alternative on the table is a different narrowing and not an unnarrowed reading, and the measurement that would choose between them is the one `review-cost`'s own option calls for. Both findings are taken: the `persistence` fact turns on a supersession by `review-skills`, which has no standing answer, and that dependency is not in `depends`; and the one-batch rule is a rule with no instrument by this record's own standard.
+
+### Two defects in the instrument, reconciled 2026-09-05
+
+Under the author's grant of 2026-09-04 to reconcile the review skills against
+the recommendations the record has reviewed and not confirmed, two defects this
+sitting hit were fixed in `packages/clean-context-review/`, landed on
+`greenfield` at `77a45889`.
+
+A reading's account subsection was headed by its kind and the date alone, so a
+node read twice in one day carried two identically headed sections and a
+citation by heading resolved to neither. It happened twice on 2026-09-05, on
+`class-recommendation` and on `delegation-bounds-and-sizing`, and this node's
+own account carries the same collision from 2026-09-03 and from 2026-09-05. The
+heading now carries the short pin of the recommendation the reading read, which
+is the record's handle for what was read; a collision surviving the pin is the
+same answer read twice in one day, which the cap forbids, and a roman suffix
+keeps that case addressable. The sections already written are not restamped: the
+heading is an address for citations made after it, and rewriting the old ones
+would move nothing the pin can check.
+
+And the two instruments deadlocked. `apply.mjs` writes `stage: ruling` on a
+forward verdict; `brief.mjs` refused any node not at stage review. The amendment
+a forward reading earns therefore left the node one stage past the re-reading
+that would re-pin it, so the node reached the author with `review.of` naming
+text nobody had read, and the stage was being set back by hand, which is the
+session standing in for the instrument. A reading now also runs on a
+ruling-stage node whose recommendation has moved since its review's pin, which
+is exactly that state; a ruling-stage node whose pin is current is still
+refused, because it is ready for the author and a reading has nothing to read.
