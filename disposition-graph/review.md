@@ -173,3 +173,18 @@ Recorded as a pending alternative on commons.systems/disposition-graph/readings:
 Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### Two options classified as probes, 2026-09-04
+
+The author, in the `author-questions` sitting of this day, on the two options
+the clean-context review of 2026-09-03 produced on this node: "Also, confirm:
+the review finding questions are examples of meiutic questions to be ruled on
+during meiutic dialogue, not the kind of thing to be confirmed as facts in the
+alignment artifact". `cap-from-contract-class` and `graph-landing-instrument`
+are therefore questions the AI needs the author to answer and not candidate
+answers this node's answer fact should offer; each sentence says as much on its
+face, ending by noting that this node's account puts the matter to the author at
+ratification. They stand where they are for now, and
+`commons.systems/disposition-graph/author-questions` declares the shim that
+covers them: at its liquidation they are written as probes on this node and
+struck from the answer fact. Nothing here rules on them or on this node.

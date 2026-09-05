@@ -26,7 +26,7 @@ facts:
         source: review
         ref: "2026-09-03"
         status: passed
-        reason: "an option is a candidate answer and a probe has none, as the coverage node's own census says of its four questions, open questions with no candidate answer and therefore not alternatives; recording one anyway manufactures a candidate the AI does not hold viable, which the viable-options node forbids"
+        reason: "an option is a candidate answer and a probe has none, as the coverage node's own census says of its four questions, open questions with no candidate answer and therefore not alternatives; recording one anyway manufactures a candidate the AI does not hold viable, which the viable-options node forbids, and the record already holds the instance in the two options the review finding of 2026-09-03 produced on the review node, which the author classified on 2026-09-04 as maieutic questions"
       - name: questions-as-the-term
         source: ai
         ref: "2026-09-04"
@@ -68,9 +68,9 @@ under:
 defines:
   - probe
 shims:
-  - artifact: "the probes carried as prose in the accounts of the nodes that already hold them on the disposition ref: the eleven numbered probes under `viable-options`' periagogic movement of 2026-09-04, the four questions on `coverage`, the single probes on `rsi`, `self-documentation` and `alignment-order`, the `### Probe answered` sections on `dialogue` and `alignment-page`, and the question `ruling-transport` leaves open in its rationale"
+  - artifact: "the probes carried as prose in the accounts of the nodes that already hold them on the disposition ref: the eleven numbered probes under `viable-options`' periagogic movement of 2026-09-04, the four questions on `coverage`, the single probes on `rsi`, `self-documentation` and `alignment-order`, the `### Probe answered` sections on `dialogue` and `alignment-page`, the question `ruling-transport` leaves open in its rationale, and the two probes wearing an option's costume on `review`, `cap-from-contract-class` and `graph-landing-instrument`, which the author classified on 2026-09-04 as maieutic questions"
     for: the probes of the nodes that carry them today, while the field they belong in is unread by the reader and unrendered by the projections
-    liquidation: the reader parses `probes`, and a maieutic movement on each of those nodes ranks the probes it carries against the admission test and the cap, writes those that survive into the field with their `why`, their `discharges` and their `source`, records the rest as discharged with the reason each was withdrawn, and removes the prose that carried them
+    liquidation: the reader parses `probes`, and a maieutic movement on each of those nodes ranks the probes it carries against the admission test and the cap, writes those that survive into the field with their `why`, their `discharges` and their `source`, records the rest as discharged with the reason each was withdrawn, removes the prose that carried them, and on `review` writes the two options the author classified as probes into that node's field and strikes them from its answer fact
     declared: 2026-09-04
 depends:
   - commons.systems/disposition-graph/dialogue#every-part-in-the-record
@@ -127,7 +127,7 @@ The author, 2026-09-04, stopping the eleven clean-context readings of that day a
 
 Why the record needs the instrument at all, when it already holds the questions in prose. Two reasons, and neither is that the prose is untidy. The first is that the prose cannot satisfy the author's own constraint: the eleven probes on `viable-options` sit in an account the alignment page renders as a drill-down unconditionally, so they are in front of the author at the ruling today, which is the one place the author said they must not be, and the only way to keep prose off the page is a projection that decides what to hide by matching the text of a heading, which the prose-and-structure node calls unsupported implementation by name. The second is that the AI cannot be trusted to raise these questions at all. The empirical finding is that models recognise ambiguity when asked to judge it and answer anyway, and that retrieved context widens the gap rather than closing it, which is precisely what this record manufactures at every reading. So the obligation to collect probes has to belong to the movement and be checkable in the record, and it can never be a disposition the model is trusted to act on in the moment. Everything else in this answer follows from that: a field a reading can check, an admission test with something behind each limb, a source per probe so that a reader's probe is not the drafter's to drop, and a cap so that the instrument does not defeat itself.
 
-Why the review finding of 2026-09-03 stands, and why this answer does not reverse it. A clean-context review of that day on the review node found two open questions carried as prose in a node at the review stage and asked that they be minted as nodes or folded into the ruling's options; the finding was applied, and the options `cap-from-contract-class` and `graph-landing-instrument` exist today because of it. This sitting put the apparent reversal to the author as one of two findings they would want at the ruling, and their answer of 2026-09-04, quoted above, is the line: a question with an answer that indicates the author's disposition is a node, and it is not to be conflated with a question the AI must ask to disambiguate a disposition or a node. Read with that distinction the two objects are different and the finding was correct about its own, since those two questions have candidate answers and their answers would stand as the node's answer, so they are questions in the record's own sense. The other object has no home the record's rules will accept, because an option is a candidate answer and a node is a question with a standing answer, and a probe is neither; having no such home is what earns it a shape. The admission test's third limb is that line made checkable, and it keeps the finding in force for everything disposition-shaped, which the survey still proposes minting.
+Why the review finding of 2026-09-03 stands, and why this answer does not reverse it. A clean-context review of that day on the review node found two open questions carried as prose in a node at the review stage and asked that they be minted as nodes or folded into the ruling's options; the finding was applied, and the options `cap-from-contract-class` and `graph-landing-instrument` exist today because of it. This sitting put the apparent reversal to the author as one of two findings they would want at the ruling, and their two answers of 2026-09-04, quoted above, settle it. The first is the line: a question with an answer that indicates the author's disposition is a node, and it is not to be conflated with a question the AI must ask to disambiguate a disposition or a node. The second applies the line to the very questions the finding reached, and classifies them as maieutic questions rather than facts for the alignment artifact. So the finding's rule stands and its application to those two was wrong: what the record did in 2026-09-03 was manufacture a candidate answer so that a question would have somewhere to sit, which is what an option must never be, and both sentences say so on their face, each ending by noting that the node's own account puts the matter to the author at ratification. That is a question wearing an option's costume, and it is the failure this answer's `an-option-on-the-fact` option describes, now with an instance in the record rather than only an argument. The other object has no home the record's rules will accept, because an option is a candidate answer and a node is a question with a standing answer, and a probe is neither; having no such home is what earns it a shape of its own. The admission test's third limb is the author's line made checkable, and it keeps the finding in force for everything disposition-shaped, which the survey still proposes minting.
 
 Why the term is `probe` and not `question`. The record uses `probe` in fourteen nodes in exactly this sense and defines it nowhere, and `question` is defined once, on the node node, as one line someone could ask the author, with a second sense on this node's parent under `aspects-are-nodes`, a decision the author would rule on separately. A third sense would be minted on a node that has no path to the one defining the term, on the same node that carries `depends`, which the parent describes as the open questions whose rulings this one waits on. Defining the word the record already uses costs nothing and closes the collision; what it does not close is the placement, since `growth` and the other nodes using the word sit above or beside this one, which is why the answer requires the citation.
 
@@ -157,7 +157,7 @@ The probes kept where they are, in `## Account`, under a heading the record fixe
 
 #### an-option-on-the-fact
 
-Each probe folded into the fact it bears on, as an option with its `source` and its `ref`, which is the record's one named route for something the AI needs the author on and is what the review finding of 2026-09-03 asked for and got. What it would answer: a node carries no probes, because a probe is an option. Passed over because an option is a candidate answer and a probe has none: the coverage node's own census says of its four questions that they are open questions with no candidate answer and therefore not alternatives, and manufacturing a candidate so that the question has somewhere to sit records an option the AI does not hold viable, which the viable-options node forbids. The option is also unavailable at the periagogic and maieutic stages, where a node has no facts.
+Each probe folded into the fact it bears on, as an option with its `source` and its `ref`, which is the record's one named route for something the AI needs the author on and is what the review finding of 2026-09-03 asked for and got on the `review` node. What it would answer: a node carries no probes, because a probe is an option. Passed over because an option is a candidate answer and a probe has none: the coverage node's own census says of its four questions that they are open questions with no candidate answer and therefore not alternatives, and manufacturing a candidate so that the question has somewhere to sit records an option the AI does not hold viable, which the viable-options node forbids. The record holds the instance and not only the argument: the two options that finding produced, `cap-from-contract-class` and `graph-landing-instrument`, each end by saying the node's account puts the matter to the author at ratification, and the author classified them on 2026-09-04 as maieutic questions and not facts for the alignment artifact. The option is also unavailable at the periagogic and maieutic stages, where a node has no facts.
 
 #### questions-as-the-term
 
@@ -185,7 +185,7 @@ The recommendation declares one shim on a node that carries none, so the node's 
 
 #### with the shim
 
-This node declares one shim, the probes carried as prose in the accounts of `viable-options`, `coverage`, `rsi`, `self-documentation` and `alignment-order`, the `### Probe answered` sections on `dialogue` and `alignment-page`, and the question `ruling-transport` leaves open in its rationale, declared 2026-09-04 and liquidated when the reader parses `probes` and a maieutic movement on each of those nodes has ranked what it carries against the admission test and the cap, written the survivors into the field with their `why`, their `discharges` and their `source`, discharged the rest with the reason each was withdrawn, and removed the prose. The liquidation is a movement and not a copy, because `viable-options` carries eleven probes today and the cap admits three open; the eight the ranking does not keep are discharged in the field rather than dropped from the record.
+This node declares one shim, the probes carried as prose in the accounts of `viable-options`, `coverage`, `rsi`, `self-documentation` and `alignment-order`, the `### Probe answered` sections on `dialogue` and `alignment-page`, and the question `ruling-transport` leaves open in its rationale, and the two probes wearing an option's costume on `review`, declared 2026-09-04 and liquidated when the reader parses `probes` and a maieutic movement on each of those nodes has ranked what it carries against the admission test and the cap, written the survivors into the field with their `why`, their `discharges` and their `source`, discharged the rest with the reason each was withdrawn, and removed the prose. The liquidation is a movement and not a copy, because `viable-options` carries eleven probes today and the cap admits three open; the eight the ranking does not keep are discharged in the field rather than dropped from the record.
 
 #### without it
 
@@ -671,3 +671,30 @@ readiness is derived from the stage as well as the pins, so nothing reads as
 ready that is not. And the alignment page is a published artifact like the
 browser, so the count reaches strangers there too; that is not the inversion the
 answer objects to, since the count reaches the decider as well.
+
+**The author's second answer, and what it corrects in this draft.** The draft
+above held that the review finding of 2026-09-03 was correct about the two
+questions it reached, on the ground that their answers would stand as the
+`review` node's answer. The author corrected that the same day: they are
+maieutic questions, not facts for the alignment artifact. Reading the two
+options as they stand confirms it rather than merely accepting it. Each
+sentence ends by saying the node's own account puts the matter to the author at
+ratification, which is the mark of a question and not of a candidate the AI
+holds viable; the finding, having no home for a question, put it in the one
+shape the record offered. So the finding's rule is untouched and its
+application to those two was the failure this node's `an-option-on-the-fact`
+option describes, and the record now holds the instance and not only the
+argument. The shim is widened to cover them, and its liquidation writes them as
+probes on `review` and strikes the costume.
+
+**A seam in the author's words, checked and not raised as a probe.** The author
+says these questions are "ruled on during meiutic dialogue", while this answer
+says a probe is answered and never ruled, and that an answer recorded as a
+ruling is the rubber stamp the record's guard is against. The reading taken is
+that the author's word is the ordinary one for settling a thing in a sitting,
+not the record's technical `ruling`, because the sentence's work is to say where
+the questions belong and not how their answers are recorded. It is not raised as
+a probe because it fails the admission test's second limb: on either reading no
+recommendation on this node moves, since the clause the technical sense would
+bear on is about the ruling stage and the alignment page, where under this
+answer no probe appears at all.
