@@ -1,6 +1,6 @@
 ---
 question: What acts while nothing in the record is ratified, and when does that state end?
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -642,3 +642,11 @@ the author's.
 This reading is the first of the two `review-cost` allows this answer. The
 amendment moves the pin, so a delta re-reading is owed and is what would leave
 the node with a pin naming the recommendation that stands.
+
+The stage is set back to `review` by hand. `apply.mjs` writes `ruling` on a
+forward verdict, before the session has amended anything, and `brief.mjs`
+refuses to generate a reading for a node at `ruling`, so the amendment a forward
+reading earns leaves the node one stage past the re-reading that would re-pin
+it. That is the deadlock on `review-cost`'s option
+`pin-names-the-text-the-reader-read` in its mechanical form, and it is carried
+there.
