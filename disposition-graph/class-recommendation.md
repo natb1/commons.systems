@@ -1,6 +1,6 @@
 ---
 question: What class does the AI recommend on a node's authority fact?
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -37,12 +37,23 @@ review:
   of: 5d924981999cd48668b2d71e8a6287b31a766fbd
   commit: a85f29250ccfcc8a10192dc507a0f1a17de6c2c3
   against: "Three of the previous reading's five findings were findings about `.claude/rules/class-recommendation.md`, the text every session loads, and the amendment answers all three in the node while leaving the projection exactly as that reading found it: the file still says \"escalates toward ratified\", still carries the citation loop, and still states as the ground of a sentence in doctrine the general census rule that `authority` deliberately holds unruled as `no-census-in-a-standing-answer`. So on the day the author is asked to rule, the defect the amendment's own account calls \"the one that changes what a session does\" is still in front of every session, and the amendment's claim that those clauses now sit outside \"a text projected verbatim into `.claude/rules/`\" is true of the node and false of the file. Against that: the fix is a regeneration and not a redrawing. The answer as amended is the right text on all five findings, the two things the amendment adds of its own -- the rationale paragraph and the fifth option -- check out against the record, and what is owed is publication, which is why this is a finding and not a kickback."
+  survey:
+    date: 2026-09-05
+    of: 5d924981999cd48668b2d71e8a6287b31a766fbd
 form: rule
 tier: global
 under:
   - commons.systems/disposition-graph/authority
 depends:
   - commons.systems/disposition-graph/authority#escalate-toward-ratified
+probes:
+  - id: which-classes-of-decision-have-you-said
+    asks: "Which classes of decision have you said you do not want to be asked about again?"
+    why: "The answer's delegated limb turns on it: \"the recommendation is delegated where the author has said they do not want to be asked again about that class of decision, and deferred otherwise.\" The record holds no enumeration of what the author has said that about, and the answer names no locus for one; the phrase appears in the node's own text and in `authority`'s definition of delegated, neither of which points anywhere. So the limb is applied from the AI's recollection of the author's words, which is the one input the same answer's third paragraph forbids elsewhere by requiring a written reading on the node that a reviewer can check."
+    discharges: "It settles which of the two default limbs applies wherever none of expensive, irreversible or capture-shaped holds, and so moves the authority-fact recommendation on every node the escalation test reaches — the back-fill this node's answer already owes. Without it the AI's recommendation on the authority fact is unfalsifiable at exactly the point the counter-argument says a systematic tilt would be invisible."
+    source: review
+    raised: "2026-09-05"
+    fact: answer
 defines:
   - term: expensive
     gloss: "Of a wrong answer: that its cost is paid in work the record cannot take back cheaply."
@@ -622,3 +633,15 @@ recommendation as it stands, and what keeps the node from being ready to rule is
 the survey pin alone, which no node in the record yet carries. The reader's own
 gap goes to `review-cost` with the others: its first read of the brief was truncated at line 433 against
 the brief's discipline of at most 300 lines a read, and it recovered by paging.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The answer's delegated limb reads "the recommendation is delegated where the author has said they do not want to be asked again about that class of decision". The record contains no enumeration of what the author has said that about, and the answer names no locus for it, so the limb is satisfied by the AI's recollection of the author's words rather than by anything a reading can check — which is the opposite of the requirement the same answer imposes two paragraphs later, that "a class recommended with no such reading behind it is a recommendation the reviewer may find unsupported". A probe is raised on this node for it.
+
+Strongest counter-argument (strong): The test decides which questions reach the author at all, and the party applying it is the party a ratification would slow — the capture shape the test itself names, applied to itself, and the answer does not say so. Boldness `high` is recorded, which on this record is low confidence, on a rule that governs every authority fact in the graph. And the escape hatch is unbounded: where none of the three limbs holds, the recommendation is delegated where the author has said they do not want to be asked again, and the record holds no list of what the author has said that about, so the AI supplies both the test and the fact the test turns on.
+
+The session's reply: Taken in full. The test decides which questions reach the author, the party applying it is the party a ratification slows, and the answer does not name that shape when applying itself to itself; that is a gap in the `### authority` reading this node's own third paragraph requires. The escape hatch is the worse half: the delegated limb turns on what the author has said they do not want to be asked about again, the record holds no such list and names no locus for one, so the AI supplies the test and the fact the test turns on. The survey raises the probe that would close it, and the session does not answer the probe.

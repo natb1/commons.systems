@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 3acfddb64b51b8ebf6ef6d02d22ad85e89fec15c
   against: "The divergence claimed — that factory literature is about the factory's own process while this record is about the owner's intent — is the divergence every specification method claims for itself, and Greenfield and Short's factories are organised around a product-line specification playing much the role this record plays. If the distinction is real it is one of ownership and authority rather than of subject matter, which puts it in Pettit's territory and not Cusumano's; if it is not, 'software factories' is a discovery term borrowed for the audience while diverging on nothing load-bearing, which purpose already concedes when it calls the phrase the audience's own vocabulary."
+  survey:
+    date: 2026-09-05
+    of: 3acfddb64b51b8ebf6ef6d02d22ad85e89fec15c
 facts:
   - name: answer
     options:
@@ -153,3 +156,12 @@ Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `
 ### Alternatives discharged, 2026-09-03
 
 At the clean-context review of 2026-09-03 the session struck the alternatives the record had already discharged: `delegated-not-ratified` dropped, the recommendation already reads delegated, as readings' rule requires.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The recorded divergence — that a factory optimises throughput through standardisation and its literature is about the factory's own process, where this repository is about the owner's intent — is a difference of subject, not of doctrine. The tradition says nothing about who owns the intent the factory acts under, so a divergence recorded here claims the record decided against something the source never asserted. `progressive-disclosure`'s counter-argument names the same failure on that node, which makes it the record's pattern rather than this node's slip: a reading that must produce an adopted and a diverged limb will manufacture the second where the source is merely silent. The authority fact recommends `delegated`, so nothing puts that in front of the author.

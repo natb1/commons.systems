@@ -1,6 +1,6 @@
 ---
 question: How is work divided between the main thread and subagents?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: moderate
@@ -8,6 +8,9 @@ review:
   of: 023105757713119b012579ed2d09ca667e831101
   commit: dfded1295e4312c3cdfb1ee03b07e1aad87311eb
   against: "The draft asks the author to ratify a global-tier rule two of whose operative sentences are not in the record. The model a reconciliation session's main thread runs on is delegated to a shim skill's text, and that skill grounds its own choice by citing this node, so ratification would pin a pointer whose target is scheduled for liquidation by a clause that itself reads 'every rule this project runs under is a node or a declared shim'. Beside that, the one ruling on the authority fact covers both the capture-shaped bounds, where ratified is plainly right, and the sizing of units, models and effort, which the author's own quoted words hand to the AI twice ('\"appropriate\" is open question'; right-sized models and effort 'when it would result in token efficiency'), so the author cannot delegate the sizing without denying the bounds. And the oldest objection still stands unmet: the contract, the report and the main thread's read of the conclusion are a fixed cost per unit, the lookup exemption is the only floor, and 'anything larger is a unit' still catches every three-line investigation. What answers all of this is that each defect is an amendment away — state the model here, split the class question into a node beneath, and the rule is the one the author's words already describe."
+  survey:
+    date: 2026-09-05
+    of: 268d70f221d1724cc6c6ac292bc9d2dc14fa0c60
 facts:
   - name: answer
     options:
@@ -320,3 +323,26 @@ stage with a forward pinned. That node is added to `depends`, so the alignment
 page will not put this question before the one it rests on. `depends` is a
 dialogue key and is stripped from the standing hash, so the recommendation and
 its pin are unmoved.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- `## Facts` carries a `#### reconciliation-session-writes-options` subsection for the option named by `stands` (brief line 2502). See the cross-node `contradiction` finding naming nine nodes.
+- This node stands at the ruling stage while `commons.systems/disposition-graph/delegation-bounds-and-sizing`, its child, stands at the ruling stage recommending that clauses be cut out of this node's answer. Ruling the parent first would ratify text the child proposes to remove. Recorded as the `placement` finding.
+
+Strongest counter-argument (strong): The answer generalises past the author's words: they named verbose investigation and gave its cost, and the answer makes everything but the interview and the record a contracted unit, so the fixed cost of a written contract plus a report plus the main thread's read of the conclusion is paid on every three-line investigation, with the lookup exemption as the only floor. And the sizing the answer fixes is the part the author's own words handed to the AI's judgment, which is precisely why `delegation-bounds-and-sizing` exists; a ruling here is a ruling on a text whose child, at the same stage, recommends amputating a third of it.
+
+The session's reply: Taken on the ordering and contested on the generalisation. The order finding is right and is the one that matters: this node must not be ratified before `delegation-bounds-and-sizing` is ruled, or the author ratifies clauses the child proposes to remove and then has to be asked about them twice. On the fixed cost of a contract on a three-line investigation, the answer's own lookup exemption is the floor and the survey does not show it failing; what the survey does show is that the line between a lookup and a unit is applied case by case with nothing recorded, which is the sizing question the child moves out. The standing-option subsection is taken with the other eight.
+
+### Frontier finding, 2026-09-05
+
+Kind: contradiction.
+
+Nine nodes carry, inside `## Facts`, a `#### <option>` subsection for the option their answer fact names in `stands`. The encoding rule is that the standing option omits its subsection because its sentence is the first sentences of `## Answer`, and `commons.systems/disposition-graph/dialogue`'s own recommended answer states it: the option that stands "needs none, since its text is the answer". The nine, each with the standing option whose subsection is stored: `authority` (`authority-derived`), `delegation` (`reconciliation-session-writes-options`), `dialogue` (`facts-carry-options`), `evaluation` (`overrule-by-class`), `readings` (`relation-per-option`), `recording` (`options-persist-at-the-recording`), `rejected` (`non-chosen-viable-options`), `unanswered` (`unanswered-is-no-ruling`), `viable-options` (`grant-from-a-ruling`). `dialogue` is one of the nine, so the node that states the rule breaks it. What is stored is not the answer's first sentences but a description of the change the option made — on `readings` at line 131 it opens "A reading stays a node under one node it bears on, with its own class, and its relation attaches to the options of the fact it bears on rather than to the answer", and elsewhere the prose opens with a raising note of the form "Raised on ... from the author's words of 2026-09-04". Six of the nine render that stored prose in the survey brief in place of the answer's opening (brief lines 559, 846, 1282, 2403, 2502, 3671), so any projection that reads a standing option's subsection shows the author a delta where the answer belongs. The other three (`dialogue`, `evaluation`, `unanswered`) are outside the judged set and their standing rows are not rendered in the brief, so their subsections are dead text nothing reads. The record has the question open and unruled in two places: `dialogue` carries the option `standing-option-carries-a-subsection` (source alignment-page, 2026-09-04) and `alignment-page` carries `standing-sentence-stored`, passed over on 2026-09-04. So nine nodes have implemented an option the author has not ruled, against the rule that stands.
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/alignment-page.
+
+Proposed: Rule it once, on `commons.systems/disposition-graph/dialogue`, whose answer states the rule and whose fact already carries the option. If the standing option keeps no subsection, delete the nine subsections — the text is not lost, since `## Answer` carries the answer and the account carries the history of the change. If the standing option is to carry one, the rule in `dialogue`'s answer changes and the nine subsections are rewritten to carry the answer's first sentences rather than a description of a change. Either way the nine conform to one ruling and no node is left implementing the losing side. Until it is ruled, the six whose stored prose the projections render are the urgent half, because those are the ones showing the author the wrong text.

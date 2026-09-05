@@ -7,6 +7,9 @@ review:
   date: 2026-09-05
   of: 35ef4bc4818d8c7dd4e9aa622449a3fd9e0d1a1b
   against: "Ratifying this node arms a deletion whose scope no one has ruled, and the amendment recorded that objection without answering it. The shim's liquidation prunes at the swap whatever no disposition supports; the gate the record leans on, 'the coverage node has been ruled', is a periagogic node with three open probes and no candidate answer; nothing derives unsupported implementation onto any frontier, so 'unsupported' is one human judgment made once at exit; and what on `main` is to survive is settled by a census the author has since forbidden sessions to repeat. Recording that case on the fact as its `against` is disclosure, not mitigation, and the record's reply still defends the gate rather than the rule. What is new since the last reading sharpens it: the rule the author is asked to ratify is already contradicted in the one place it is automated, `writeRules` in `packages/disposition/project.mjs` deleting rule files on the implementation ref with no proposal and no ruling, so ratification's first effect is an unrecorded divergence between the doctrine and the tooling, in the very class of artifact the rule governs. A rule unguarded by any instrument, already breached by its own projector, and first exercised on an irreversible swap is being asked for at the highest class the record offers."
+  survey:
+    date: 2026-09-05
+    of: cbba0b60e00ca8fe2232504854f0a1840fcacb0c
 facts:
   - name: answer
     options:
@@ -344,3 +347,25 @@ found on seven nodes at once. The test left the `authority` node's answer on
 node. Nothing about the class or the boldness changes. The edit moves this
 node's authority-fact pin without a reading behind the move, which is the live
 option `pin-names-the-text-the-reader-read` on `review-cost`.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The answer says anything no disposition justifies is "on the frontier and liquidated through reconciliation, where pruning is proposed and the author rules on it". No such frontier exists: `commons.systems/disposition-graph/work-loop` begins the second direction only at exit and `commons.systems/disposition-graph/what-acts-during-bootstrap` says "no instrument derives that frontier today". The rule therefore names a queue that is empty by construction, while its liquidation is armed at the swap. Recorded as the cross-node `contradiction` finding.
+
+Strongest counter-argument (strong): Ratifying this text arms a deletion whose scope no one has ruled, and the rule is already contradicted where it is automated: `writeRules` in `packages/disposition/project.mjs` deletes a rule file with no proposal and no ruling, so the record's own projector prunes by the mechanism this answer forbids. Asking for the record's highest class on a rule that no instrument guards, whose gate node (`coverage`) stands at the periagogic stage, and whose first exercise is a deletion at the swap, is the worst ordering available: the class is granted before the check exists and the check's first use is irreversible.
+
+The session's reply: Taken, and the projector measurement is accepted: `writeRules` deletes a rule file with no proposal and no ruling, so the record's own instrument already prunes by the mechanism this answer forbids. The finding's remedy is the one the session records as owed — either the liquidation clause names the instrument that will exist before the swap, or it says the swap prunes nothing until that instrument does. Neither is written here, because writing it is an amendment to a recommendation the survey read, and the session records the item rather than moving the text under the reading.
+
+### Frontier finding, 2026-09-05
+
+Kind: redundancy.
+
+Two nodes maintain a hand-written census of the same population, and they disagree. `commons.systems/disposition-graph/stub-traditions`' option `one-ruling-for-the-prose-lists` says "Verified that fourteen rationales carry such lists while this node's enumeration names twelve and misses dialogue, recording and scope". `commons.systems/disposition-graph/readings`' option `incomplete-enumeration-in-facts` (disposition/disposition-graph/readings.md line 103) says "Measured on 2026-09-05 ... nine rationales carry a prose tradition list, five more carry one only in an account, and `stub-traditions` stands at the maieutic stage with a hand-maintained enumeration naming twelve, which its own `regenerate-enumeration` option already calls stale." Both are counting the rationales that carry prose tradition lists; one says fourteen and one says nine-plus-five, and both concede the third enumeration on `stub-traditions` is stale. This is exactly the failure the `codd-update-anomaly` reading names and cites `stub-traditions` for, reproduced by the two nodes that name it. Downstream of the same population, the option `traditions-to-readings` is pending unruled on four nodes at once — `evaluation`, `instruments`, `materialization` and `validation-order` — so the migration these censuses measure is itself asked four times.
+
+Also named: commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/codd-update-anomaly, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/validation-order.
+
+Proposed: The survivor is `commons.systems/disposition-graph/readings`, which owns how references to tradition are recorded. Its answer already says "the rationale of a node never repeats its readings", which is the rule the censuses are counting violations of, so the count belongs to an instrument and not to an option's prose: derive the list of rationales carrying prose tradition lists rather than writing it down, and have `stub-traditions`' options cite `readings` instead of recounting. Strike the numbers from both option texts. `traditions-to-readings` is settled once, on `readings`, and cited from the four nodes rather than pending on each.

@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 04b24674220938c0568577b2df45eae56c0415ba
   against: "The rewrite answers the author's complaint that the node 'jumps too quickly into reference shaped material', and it is well written for a newcomer — but it is the second page of the walk and every term on it is still being decided: 'criteria' by instruments at maieutic, 'rank' by under at maieutic with no drafted text, readings' tradition mount by traditions-home at review. A newcomer's second page cannot be stable while its whole vocabulary is in flight, so the case for ruling model after those nodes is stronger than its rank suggests. The ruling order below does that, which answers the objection at the cost of putting the record's second-highest-ranked node late."
+  survey:
+    date: 2026-09-05
+    of: bb8fd6059650d7d4175d8d799d0cc314db19b350
 facts:
   - name: answer
     options:
@@ -204,3 +207,13 @@ On the three facts: The frontmatter recommendation (adopts draft, ratified, mode
 Strongest counter-argument (moderate): The rewrite answers the author's complaint that the node 'jumps too quickly into reference shaped material', and it is well written for a newcomer — but it is the second page of the walk and every term on it is still being decided: 'criteria' by instruments at maieutic, 'rank' by under at maieutic with no drafted text, readings' tradition mount by traditions-home at review. A newcomer's second page cannot be stable while its whole vocabulary is in flight, so the case for ruling model after those nodes is stronger than its rank suggests. The ruling order below does that, which answers the objection at the cost of putting the record's second-highest-ranked node late.
 
 The session's reply: Forward accepted. The fence's deferred class with a ruling date is a placeholder the recording replaces; the criteria vocabulary is instruments' and the dependence is named by this reply; the fourteen-child list in the rationale is accepted as a list that goes stale and is left for the sitting.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- `## Answer` (the draft the recommendation `draft` adopts) says "Rank, the context a session loads, the work queue, and the author's review queue are computed from those facts and never stored." Rank is computed from boost, and `commons.systems/disposition-graph/attention`'s `## Answer` says of boost that it is "an allocation only the author may ratify, and every boost in the record today is the AI's and unratified". Boost is a stored frontmatter field. So the sentence's "never stored" is true of the output and false of the input, and the input is the one the author is told they alone may ratify: the ruling order this survey was launched under is computed from unratified stored numbers. The two sentences should be reconciled, either by qualifying this one or by moving the boost claim here.
+
+Strongest counter-argument (moderate): The answer's force rests on "computed from those facts and never stored", and the record does not keep that line: `stage`, `review`, `probes` and `depends` are stored dialogue state written on the node at every transition by `checkpoint`'s own rule, and the ruling order is computed from stored, unratified boosts. What is actually distinctive here is that the *class* is derived, which is `authority`'s claim and not this node's; strip the derivation claim and the model reduces to "one file per standing answer, one edge, version control for history", which is not in dispute and does not need this node's ratification.

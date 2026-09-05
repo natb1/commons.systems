@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: b5cab25eecbb77967324bc260ea5a2d68db896e3
   against: "The node asserts that a teaching order, a work order and a compaction floor coincide because prerequisites come from `under` and importance from rank; they came apart within a day, and this node records it — session-context at boost 2 ranked below the work loop against the author's order of the same day, and the fix was a hand-raised boost and then a whole new field on another node. That is direct evidence that one scalar cannot carry two orders, and scope's `order` field is the admission. The alternative the answer never adopts, that the author states the order and nothing is derived, is the one that actually worked, and it is pending as `author-states-the-order`."
+  survey:
+    date: 2026-09-05
+    of: 4e6da7c5471bd013675743ab6811ef423fb928ee
 facts:
   - name: answer
     options:
@@ -191,3 +194,14 @@ The session's reply: Forward accepted. Rank's definition on under is the pending
 ### The author's words behind an option, 2026-09-04
 
 The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, read the discharged entry `rank-second-reading-frontier` on `commons.systems/disposition-graph/alignment-order`, whose `discharges` says it raised `rank-orders-reconciliation-only` here, and asked whether raising an author-sourced option on a second node is the response reaching beyond its host. The main thread read it as the permitted survival of the author's words, which any movement may record as a candidate on the fact it answers; this node's recommendation did not move, and the entry stays a probe. What the reading found true and cheap is that the option was grounded in words quoted only under alignment-order's `## Disposition`; they are now quoted above, as authority quotes the words that narrowed its definition of a proposal on the sitting of dialogue.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (strong): The answer concedes in its own text that "every boost in the record today is the AI's and unratified", and then makes rank — which orders the author's review queue, the onboarding walk, and the frontier — a function of those boosts. The party that sets the order in which the author is asked is the party the asking exists to check; that is `class-recommendation`'s capture limb exactly, and this node's authority fact recommends ratified without naming it. The reply, that during bootstrap the author's choice of what comes next is itself a boost ratification so order and rank agree by construction, is true only of the nodes the author has chosen, and this survey's own object of forty-eight nodes was ordered by the unratified numbers.
+
+The session's reply: Taken. Rank orders the queue in which the author is asked, boost is its input, every boost on the record is the AI's and unratified, and the node's authority fact recommends ratified without naming the capture limb that `class-recommendation` would apply to exactly that shape. The reply the node offers is good only for the nodes the author chose by name, and this survey's own object of forty-eight was ordered by the unratified numbers, which is the counter-argument demonstrated rather than answered. What is owed is the reading in `### authority` that `class-recommendation` requires, applying the capture limb to this node's own subject.

@@ -1,12 +1,15 @@
 ---
 question: How is the unanswered frontier kept consistent with itself?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-05
   of: dc21722e2c3f748b4371a9ab9e735e3ffc27d866
   against: "The node asks the author to ratify a sixteen-item numbered list whose content is largely owned elsewhere, and the list has already drifted from its sources within a day of the split: from `authority` on what a proposal is (validation 2), from `probe-or-node` and from the survey brief on the independence test (validation 16), and from `clean-context-review` and the author's own words on which nodes the survey judges. Three divergences in one day, found by one reading, are evidence that a copied list is the thing the instrument drifts from, which is the update anomaly this node's own validations 9 and 12 exist to catch, and ratification makes the copy the hardest text in the record to correct, since every amendment to a cited node would then need a ruling here. Deferred, which the authority fact's `against` names, would let the list move with its sources while the node stays in view; the option this reading names as missing would remove the copy altogether. The reply is that the validations are the contract every reading runs under, that a contract which moves without a ruling is no contract, and that the drift is detectable rather than silent because the survey runs 9 and 12 over this node like any other — but that reply concedes that the record's remedy for this node's defect is this node's own instrument, and the fence would be stronger stating what is its own and citing the rest, as it already does for the run mechanics, the ruling order, and the merge validation's reader of last resort."
+  survey:
+    date: 2026-09-05
+    of: a2c2689d209b460072bb623a2c2e7b2a3118cb1a
 facts:
   - name: answer
     options:
@@ -446,3 +449,24 @@ found on seven nodes at once. The test left the `authority` node's answer on
 node. Nothing about the class or the boldness changes. The edit moves this
 node's authority-fact pin without a reading behind the move, which is the live
 option `pin-names-the-text-the-reader-read` on `review-cost`.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (strong): The node asks the author to ratify a sixteen-item numbered list whose content is largely owned elsewhere, and the reading of 2026-09-05 already found three divergences of the copy from its sources within a day of the split — which is the update anomaly this node's own validations 9 and 12 exist to catch. This survey adds the measurement that makes it worse rather than better: two further hand-maintained enumerations in the record, on `quotes` and on `stub-traditions`, are measurably stale at this commit, so the copied-list failure this node models is the record's most reliably reproduced defect. The split's own premise, that the survey catches what the per-draft reading no longer sees, is untested: this is the first survey, and it read a brief its own text says a reviewer may not hold whole.
+
+The session's reply: Taken, and the measurement is worse than the reading of 2026-09-05 had. Two further hand-maintained enumerations, on `quotes` and on `stub-traditions`, are stale at this commit, so the copied-list defect this node models is the record's most reproducible failure and the node that models it holds a sixteen-item copy. The session does not move the recommendation: the validations have to live somewhere, and the alternative on the table is to scatter them back to the nodes that own each subject, which is what produced the copies. What the node owes before ruling is the derivation rule — which validations are copies with an owner elsewhere, and which are its own.
+
+### Frontier finding, 2026-09-05
+
+Kind: redundancy.
+
+Two vocabulary questions are each pending as an unruled option on four separate nodes, and each is already answered in the standing text of a node in the judged set. `rejected-alternative-is-an-option` stands as an option on `growth`, `legacy`, `projection` and `transience`; `commons.systems/disposition-graph/rejected`'s `## Answer` already says "A rejected alternative is a viable option not chosen" and, in as many words, "An option is not a page: an answer that was not taken has no standing and earns no node of its own." `proposal-as-a-state-of-a-ratified-node` stands as an option on `growth`, `node`, `frontier-consistency` and `transience`; `commons.systems/disposition-graph/authority`'s `## Answer` already says "A proposal is technical vocabulary and is not overloaded: it is the state of a ratified node whose recommendation has moved from its confirmed choice." So eight options on six nodes ask the author to settle two things the record has settled, and they will be ruled one at a time on nodes whose questions are about something else. The reading of 2026-09-05 raised the second of these on `frontier-consistency` alone; what the survey adds is that it pends on three further nodes and that the settling text already stands. The record has a working precedent for the remedy: `commons.systems/disposition-graph/instruments` carries `one-ruling-for-the-word` (disposition/disposition-graph/instruments.md line 113) for the instrument-or-criterion question, and its enumeration is accurate — "the author is otherwise asked the same vocabulary question five times on five pages". Neither of these two families has such an option.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/node, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/instruments.
+
+Proposed: Strike the eight options and replace each with a citation. `commons.systems/disposition-graph/rejected` is the survivor for what a rejected alternative is, and `commons.systems/disposition-graph/authority` is the survivor for what a proposal is; each of the six bearer nodes cites the survivor's sentence where it currently carries the option. Where a bearer node believes its option means something the survivor's answer does not cover, that difference is the option, stated as the difference, and everything the survivor already says comes out. If the author would rather rule the two words once explicitly, mint the settling option on the survivor in the shape `instruments`' `one-ruling-for-the-word` takes, without a count in its prose.

@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 7dac080d201b955ceaf38e358b50b5cdd7ad1c29
   against: "A hexis in Nicomachean Ethics II.5 is acquired by acting and is precisely not a set of propositions one holds; Aristotle contrasts it with both feelings and capacities. A written record of standing answers is nearer to a logos of one's dispositions than to the hexis itself. The node's move — that the record is both a projection of the hexis and part of how it is formed — is the strongest form of the claim and also where it stops being Aristotle's: writing answers down is an activity, but not the activity in which the relevant states are habituated. If the reading fails, knowledge-store loses its ground while keeping its name."
+  survey:
+    date: 2026-09-05
+    of: 7dac080d201b955ceaf38e358b50b5cdd7ad1c29
 facts:
   - name: answer
     options:
@@ -121,3 +124,12 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Alternatives pending, with their sources: `drop-the-diathesis-mapping` (review, 2026-09-03); `logos-not-hexis` (review, 2026-09-03); `hold-for-knowledge-store` (review, 2026-09-03).
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 The census unit's note: The reading has a standing answer and no recommended text, so it adopts standing, and it carries no author words, so its dispositions list is empty. Three alternatives are pending: dropping or re-reading the hexis and diathesis mapping that unanswered has falsified, the reviewer's rival that the record is a logos of the dispositions rather than the hexis, and holding the reading until its parent hypothesis is ruled. The stale prose facts line was corrected in the snapshot. The readings coverage finding carried here is identical to the one on pettit-non-domination, from which I emit the four class changes, so this node's elsewhere list is empty.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The mapping is the weak part. Categories 8 distinguishes hexis from diathesis by how firmly a state is held in the person — how hard it is to change and how deeply it has settled — and the reading maps that onto ratified against delegated-or-deferred, which is a distinction about which act may change a record. On this record a ratified answer changes by one interview and a delegated one by one recommendation, and neither is hard in the way a hexis is hard; `evaluation` says in as many words that "a ratified answer is not unchangeable". So the gradation is borrowed for its shape and not for its criterion, and the reading records no divergence where its own source and its subject come apart. Boldness `high` is recorded, and the authority fact recommends `delegated`, so nothing puts the mapping in front of the author.

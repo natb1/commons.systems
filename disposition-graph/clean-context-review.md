@@ -7,6 +7,9 @@ review:
   date: 2026-09-05
   of: d713eea7e60a818ac31e2f819fe8fec3e60fc857
   against: "The last reading told this node that a parent stating a rule its child changes is an update anomaly, and named four false clauses as its symptoms. Three were fixed and the fourth half-fixed, and the anomaly itself was left in place: review-cost still states the whole neighbourhood in its own words, the two statements still disagree on two points, and the disagreement has already produced two new defects in the day since - a clause promising the author's words to a reader that gets none, and a source exception no generator implements, both of them written on this node and both of them contradicted by the child that prices them. Answering an anomaly's symptoms one at a time and calling the pattern answered is what an anomaly does to a record; the frequency here is now measurable, since two amendments in two days have each produced a fresh divergence in the same sentence. The alternative is unchanged and is still not on the fact: this node states what does not move - the object of each reading, the fresh context that is never a fork, that the reader writes nothing, that a forward gates the ruling, that the session validates before applying - and cites review-cost for what a reader is given. That text would have been true yesterday, is true today, and would not have needed either of this reading's first two findings."
+  survey:
+    date: 2026-09-05
+    of: 2be1aaec7b5494e97b4c74de6d66ade15373da92
 facts:
   - name: answer
     options:
@@ -579,3 +582,16 @@ it. The correction is in the recommended text, so the pin moves and the node
 returns to the review stage from the ruling stage, as `evaluation` says a moved
 recommendation does. What moved is one clause about an instrument and not what
 the answer decides, which is what a reading of it would find.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The `persistence` fact recommends "shim superseded by review-skills". `commons.systems/disposition-graph/review-skills` carries no `## Answer` and stands unanswered at the ruling stage with a stale review, so this node's persistence turns on a supersession by a node that has nothing standing to supersede it with. The dependency is not in this node's `depends`.
+- The recommended text says "One batch runs at a time: an invocation waits for any review already running." Nothing in `packages/clean-context-review/` or in the two skills enforces a lock, and no node instruments it; by `commons.systems/disposition-graph/materialization`'s own standard this is a rule with no instrument, presented for ratification.
+
+Strongest counter-argument (strong): This answer and `review-cost`'s `neighbourhood-questions-and-delta` between them narrow what the reader is shown, and every measurement behind both narrowings was taken by the party the review exists to check. The answer's defence is that the survey holds the whole graph and is the reader of last resort. That defence was written before any survey had run; this is the first, its brief is 8,674 lines, and the brief itself tells the reader it may not be held whole. So the backstop that makes the narrowing safe has been exercised once, under conditions the design did not anticipate, and the design was ratified against it in advance.
+
+The session's reply: Taken as stated, and the evidence is now on the record's side of the counter-argument: the survey ran once, its brief was 8,674 lines, and the reading reports it may not have been held whole. The session does not move the recommendation, because the alternative on the table is a different narrowing and not an unnarrowed reading, and the measurement that would choose between them is the one `review-cost`'s own option calls for. Both findings are taken: the `persistence` fact turns on a supersession by `review-skills`, which has no standing answer, and that dependency is not in `depends`; and the one-batch rule is a rule with no instrument by this record's own standard.

@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: fc50b724ed00bf5f9eb4828284f5f7e561bba20b
   against: "The recorded divergence is the whole of the practice. What makes spec-driven development work in the 2025 tools is exactly the per-feature requirements, design and task documents this reading rejects: they are what the agent reads, and the specification is useful because it is close enough to the work to be executable. Replacing them with a graph of standing answers keeps the name and drops the mechanism, so 'adopted, with a recorded divergence' understates the relation — on the thing the tradition is for, this is nearer to 'chosen over', and purpose leans on the audience's expectation of the name in its first paragraph."
+  survey:
+    date: 2026-09-05
+    of: fc50b724ed00bf5f9eb4828284f5f7e561bba20b
 facts:
   - name: answer
     options:
@@ -154,3 +157,14 @@ Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `
 ### Alternatives discharged, 2026-09-03
 
 At the clean-context review of 2026-09-03 the session struck the alternatives the record had already discharged: `delegated-not-ratified` dropped, the recommendation already reads delegated, as readings' rule requires.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (strong): The divergence claims that here "plans and tasks are regenerated from it when work is claimed, so nothing that could go stale is kept", and this survey measured what the record keeps that has gone stale: `quotes`' option `one-ruling-for-the-unquoted-stamp` names a set of nodes it no longer describes; `stub-traditions`' enumeration is stale by its own `regenerate-enumeration` option; forty-seven nodes carry a review pin the projector marks changed since. The claim the reading makes over the tradition is therefore the claim the record is currently failing, and the failure is in the graph itself, not in the plans the graph was supposed to make disposable. Boldness `high` is recorded and the authority fact recommends `delegated`.
+
+The session's reply: Taken. The divergence claims that nothing which could go stale is kept, and the survey measured three populations of kept-and-stale in the graph itself: `quotes`' enumeration, `stub-traditions`' enumeration, and forty-seven review pins the projector marks changed since. The claim is not withdrawn, because it is a claim about plans and tasks and the tradition's own subject, but it is now false of the record that makes it, and the reading should say so rather than let the divergence read as a boast. That is recorded as owed on the reading's text.

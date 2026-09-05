@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 52159a4998c58c1bfd23568bddb5537f47afe196
   against: "Option 3, keeping all five forms, deserves the line the node does not give it. The author asked three questions — whether target is synonymous with disposition, what rule adds, and whether assumption is a form at all — and the recommended option answers only the second. Assumption as a form is still doing work: knowledge-store and capture carry `form: assumption` today and both recommended texts keep it, while instruments' recommended text calls assumption a criterion kind, so the record after this ruling holds assumption as a form and as a criterion kind at once. The question the author actually asked is settled by neither surviving option."
+  survey:
+    date: 2026-09-05
+    of: 833fdba640c9a120173d2e210c8d5cc4bb8ee647
 facts:
   - name: answer
     options:
@@ -191,3 +194,13 @@ Also named: commons.systems/disposition-graph/quotes, commons.systems/dispositio
 Proposed: Quotes is the survivor and is ruled first among the nodes of this batch, after the periagogic sitting on public/agency that every one of them descends from. Nothing in the eight fences need change before that ruling, because quotes' recommended answer sanctions them; what must not happen is that any of the eight is recorded with a ratified stamp before quotes is ruled, since under the losing option each such stamp is invalid on landing. Quotes' own facts should state the measured size of the bar at the moment of ruling rather than a count fixed in prose, since the count has already moved once.
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `fence-carries-the-ruling` (source review, 2026-09-03).
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The question "Which forms may an answer take?" is being asked after the answer has been built: the graph already carries `form: reading` on fifty-nine nodes and `form: rule` on nodes including `commons.systems/disposition-graph/bootstrap-exit-conditions`, and `packages/disposition/validate.mjs` validates the field. By `commons.systems/disposition-graph/evaluation`'s greenfield lens the incumbent encoding is evidence of a past decision and never authority over this one, and the node's recommendation `rule-beside-disposition` is the incumbent set; the node should say why the incumbent is also right, or the recommendation rests on the fact that it exists.
+
+Strongest counter-argument (moderate): Three other nodes — `purpose`, `model` and `node` — carry unruled `cite-forms` options that would point at this node's answer, so the form vocabulary is being settled here and cited from three places that have not adopted the citation, which is the copy this record's own validations 9 and 12 exist to catch, forming before it is ratified. And the recommendation is the shape already implemented and validated, chosen without a stated reason why the alternative sets fail; on the record's own lens that is not yet a recommendation made.

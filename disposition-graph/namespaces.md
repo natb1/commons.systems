@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 472901e1a470cbb9d515cdff48d575e4d05da26a
   against: "The traditions graph inherits the manifest's shape for graphs that move — a target and a liquidation — and has neither, so the manifest would carry a graph of a third kind with no declared future, in a record that has just adopted 'addresses do not change' from Berners-Lee and made namespaces' own shim owe redirects. The author's stated model, a tradition as a mount that could be its own graph, anticipates exactly the move this entry does not, and one line in the manifest entry would settle it."
+  survey:
+    date: 2026-09-05
+    of: 472901e1a470cbb9d515cdff48d575e4d05da26a
 facts:
   - name: answer
     options:
@@ -202,3 +205,12 @@ Also named: commons.systems/disposition-graph/readings, commons.systems/disposit
 Proposed: Traditions-home is the survivor of where a tradition node lives and is ruled before readings and namespaces, which the ruling order below does; the manifest entry it creates is shown on it, since that is what the ruling makes. Readings takes the alternative below, saying on the node that its tradition-as-mount sentence stands only if traditions-home's recommended option is taken — the gap the earlier finding left when it recorded its proposal on every named node but this one.
 
 Recorded as a pending alternative on commons.systems/disposition-graph/readings: `hold-for-traditions-home` (source review, 2026-09-03).
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The Go analogy fixes an id to an import path and then concedes the public graph's ids will be rewritten by prefix when it moves to natb1.com. `web-routing`'s reading adopts as its fourth principle that addresses do not change, and this is the record's own violation of it; the answer's remedy is a shim carrying a redirect obligation, which is a promise rather than a mechanism. So the stability the naming scheme is chosen for holds only for the graph that is not moving, and the graph that is moving is the public one, which is the graph strangers will address.

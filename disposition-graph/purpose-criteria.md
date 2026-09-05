@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 8a450005c1e68f597936f2f11260bcf98629d261
   against: "Standing unguarded is the right answer and the record has already conceded it, so the residual risk is the opposite of the one the reviews chased: purpose is ratified, unguarded, and the two criteria return only 'when the reconciliation harness exists' — a condition nothing on the frontier derives and no shim carries. The record's own rule is that a shim with no liquidation condition is an undeclared permanent; an unguarded root with an unwatched promise to guard it later is the same shape without the vocabulary."
+  survey:
+    date: 2026-09-05
+    of: 71aaa5932eedca8ccc0c29b489f40e6bb2e3bc5e
 facts:
   - name: answer
     options:
@@ -172,3 +175,14 @@ Also named: commons.systems/disposition-graph/quotes, commons.systems/dispositio
 Proposed: Quotes is the survivor and is ruled first among the nodes of this batch, after the periagogic sitting on public/agency that every one of them descends from. Nothing in the eight fences need change before that ruling, because quotes' recommended answer sanctions them; what must not happen is that any of the eight is recorded with a ratified stamp before quotes is ruled, since under the losing option each such stamp is invalid on landing. Quotes' own facts should state the measured size of the bar at the moment of ruling rather than a count fixed in prose, since the count has already moved once.
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `fence-carries-the-ruling` (source review, 2026-09-03).
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (strong): Recommending `unguarded` leaves the record's root with no test, and two nodes prune by that test: `coverage` ranks the second direction by whether an artifact serves the purpose, and `materialization`'s liquidation deletes what no disposition justifies. So `unguarded` is not a neutral finding of fact; it removes the only check on two irreversible operations, and it does so while `instruments`, the node that would say what a criterion even is, stands at the maieutic stage. The honest alternative is not `drafted-criteria` against `unguarded` but a statement that the purpose cannot be ratified until something can test it, which neither option offers.
+
+The session's reply: Taken, and the third alternative the counter-argument names is the honest one: neither `unguarded` nor `drafted-criteria` says that the purpose cannot be ratified until something can test it. The session records that as an option owed on this fact rather than writing it into the recommendation, because minting it is a design act on a node the survey has just read. On the merits `unguarded` remains a finding of fact and not a proposal, and the counter-argument's force is against ruling it while `coverage` and `materialization` prune by a test this node says does not exist.

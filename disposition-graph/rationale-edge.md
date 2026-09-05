@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: dcef237c051b8b1ca92ca7e6baf8189f0b0983a0
   against: "Option 2, a because clause on each under entry, is cheap and would put the refinement in structure exactly where the two questions do not show it — the case the recommendation leaves to a convention nothing checks. Toulmin separates warrant from backing, but a warrant is still written down; the recommendation writes it down only sometimes and only in prose, so the projector can never show why a node hangs where it does, which is the navigation the author asked for when they asked for cites to be projected. Against it, a clause on every edge will be filled with restatements of the two questions in the common case."
+  survey:
+    date: 2026-09-05
+    of: f2af44ceef3d1093687f0f58c40bd99005ac30e5
 facts:
   - name: answer
     options:
@@ -187,3 +190,12 @@ On the three facts: The frontmatter recommendation (adopts rationale-stays-with-
 Strongest counter-argument (weak): Option 2, a because clause on each under entry, is cheap and would put the refinement in structure exactly where the two questions do not show it — the case the recommendation leaves to a convention nothing checks. Toulmin separates warrant from backing, but a warrant is still written down; the recommendation writes it down only sometimes and only in prose, so the projector can never show why a node hangs where it does, which is the navigation the author asked for when they asked for cites to be projected. Against it, a clause on every edge will be filled with restatements of the two questions in the common case.
 
 The session's reply: Forward accepted. The dependence on under and the author's own leaning toward the edge prose are carried by the pending alternatives.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The recommendation `rationale-stays-with-node` is the incumbent shape, and the node offers no reason for it beyond that the alternative would require an edge that carries prose, which `under` does not. `commons.systems/disposition-graph/evaluation` strikes exactly that argument: what a change would cost to build, and that the incumbent already does it the other way, do not bear on whether a design is right, and "a recommendation resting on one of them has not been made". Judged as if the record were being written from scratch, the rationale is a justification of one edge and belongs to it, which is what the question asks and what the recommendation declines without argument.

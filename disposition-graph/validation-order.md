@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: b9ff1d01658ddd46ef76c3368e4112e75a6ef80b
   against: "Functional-before-non-functional assumes the two classes are separable, and the node's own examples show they are not: type safety and test integrity are conditions of a functional assessment being meaningful rather than polish applied after it passes, and a security defect found after a landing costs more than the ordering saves. The evidence is one thrash of sixteen rounds, which the sibling review node explains by a growing diff rather than by class ordering, so the rule may be solving with a schedule what a smaller contract solves outright — and ISO/IEC 25010, adopted here for the class axis, separates the characteristics without ordering their assessment."
+  survey:
+    date: 2026-09-05
+    of: b9ff1d01658ddd46ef76c3368e4112e75a6ef80b
 facts:
   - name: answer
     options:
@@ -154,3 +157,34 @@ Recorded as a pending alternative on commons.systems/disposition-graph/readings:
 Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (strong): The answer's last sentence is the whole of its current effect: "During bootstrap the non-functional assessment is owed once the disposition the landing materializes is ratified." Nothing is ratified, so no non-functional assessment has ever been owed, and the ordering rule has never once ordered anything. Ratifying it now fixes an order whose two terms have never both existed, on evidence entirely from the legacy record on `main`, which `materialization` classifies as evidence only. `smaller-contract-instead-of-ordering` is the option that would test whether the ordering is doing the work or the contract size is, and it is not the recommendation.
+
+The session's reply: Taken. The last sentence is the whole of the rule's current effect, nothing is ratified, so the ordering has never ordered anything, and the evidence behind it is entirely from the legacy record that `materialization` classes as evidence only. The session does not move the recommendation and records that `smaller-contract-instead-of-ordering` is the option that would test whether the ordering or the contract size is doing the work, and that it has not been tested. Ratifying an untested ordering on legacy evidence is a cost the author should be shown at the row.
+
+### Frontier finding, 2026-09-05
+
+Kind: cross-reference.
+
+One question — whether a node whose ruling was never quoted may be classed ratified, or must be deferred until the words are in the node — is pending on six nodes under four different names, and the node that gathers them describes the set wrongly. `commons.systems/disposition-graph/quotes`' option `one-ruling-for-the-unquoted-stamp` (disposition/disposition-graph/quotes.md line 76) says the question is pending "under three different names on six nodes — `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, `deferred-not-ratified` on review and persistence". Measured at this commit: `deferred-not-ratified` is on `review` only; `persistence` carries the same question under a fourth name, `deferred-recommendation` (disposition/disposition-graph/persistence.md line 55). The same option's second measurement is also stale: it says "twenty-three of sixty-eight nodes carry no '## Disposition' section", and the graph now holds 142 nodes, of which 72 carry no `## Disposition` and 12 of those recommend `ratified` on the authority fact — `class-recommendation`, `delegation-bounds-and-sizing`, `persistence`, `forms`, `bootstrap-exit-conditions`, `quotes`, `purpose-criteria`, `hexis`, `review`, `second-stop`, `traditions-home`, `validation-order`. And `persistence`'s own `deferred-recommendation` text repeats the stale figure, naming "this node among twenty-two carrying no Disposition section". Separately, `commons.systems/disposition-graph/evaluation`'s option `deferred-until-ruling-quoted` opens "Evaluation carries no Disposition section and quotes no ruling of any date", and evaluation now does carry a `## Disposition` — the author's words of 2026-09-03, "disposition: always make recommendations from this greenfield perspective - record this definition of greenfield you provided." — so half the option's stated ground is false.
+
+Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/review, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/recording.
+
+Proposed: Settle the question once on `commons.systems/disposition-graph/quotes`, which owns how the author's words are retained, and strike the six local options in favour of a citation to that ruling. In the same movement, remove both measurements from `quotes`' option prose: a count of the record inside the record is what `authority`'s `no-census-in-a-standing-answer` option is about, and both of these counts have already gone false. The set of unquoted-ratified nodes is derivable — nodes with no `## Disposition` whose authority fact recommends `ratified` — so the frontier or the alignment page should compute it and the node should name the rule. `evaluation`'s option is amended to drop the clause about carrying no Disposition section, which is no longer true of it.
+
+### Frontier finding, 2026-09-05
+
+Kind: redundancy.
+
+Two nodes maintain a hand-written census of the same population, and they disagree. `commons.systems/disposition-graph/stub-traditions`' option `one-ruling-for-the-prose-lists` says "Verified that fourteen rationales carry such lists while this node's enumeration names twelve and misses dialogue, recording and scope". `commons.systems/disposition-graph/readings`' option `incomplete-enumeration-in-facts` (disposition/disposition-graph/readings.md line 103) says "Measured on 2026-09-05 ... nine rationales carry a prose tradition list, five more carry one only in an account, and `stub-traditions` stands at the maieutic stage with a hand-maintained enumeration naming twelve, which its own `regenerate-enumeration` option already calls stale." Both are counting the rationales that carry prose tradition lists; one says fourteen and one says nine-plus-five, and both concede the third enumeration on `stub-traditions` is stale. This is exactly the failure the `codd-update-anomaly` reading names and cites `stub-traditions` for, reproduced by the two nodes that name it. Downstream of the same population, the option `traditions-to-readings` is pending unruled on four nodes at once — `evaluation`, `instruments`, `materialization` and `validation-order` — so the migration these censuses measure is itself asked four times.
+
+Also named: commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/codd-update-anomaly, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/materialization.
+
+Proposed: The survivor is `commons.systems/disposition-graph/readings`, which owns how references to tradition are recorded. Its answer already says "the rationale of a node never repeats its readings", which is the rule the censuses are counting violations of, so the count belongs to an instrument and not to an option's prose: derive the list of rationales carrying prose tradition lists rather than writing it down, and have `stub-traditions`' options cite `readings` instead of recounting. Strike the numbers from both option texts. `traditions-to-readings` is settled once, on `readings`, and cited from the four nodes rather than pending on each.

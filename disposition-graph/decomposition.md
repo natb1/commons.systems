@@ -79,6 +79,9 @@ review:
   of: dec0f8270420c2078329363da3f3ca7182c7c866
   commit: fc205d47a672c22d7621078709ff2acc1b2ac9ec
   against: "The author's first-named judge for this design is token and context efficiency, and the measurement of the design as it now runs cuts hard against it, harder than the node's own case against admits. That case says the index was the lever, that `review-cost` pulled it on 2026-09-05, and that what is left is \"the residue, that a sitting still pays a fixed cost of brief and contract per draft where the batch paid it once\". The residue is not small: after the lever was pulled, one draft's brief is 268,598 bytes, about a third of the entire 838,923-byte batch brief of 2026-09-03 that this design replaces, so the cost is not a fixed increment per draft but roughly a third of a batch per draft. Measured on disk today, this sitting's per-draft briefs total 7,709,220 bytes across 22 files, 6,748,728 of them written today, and the survey half is a further 1,083,638 bytes -- itself larger than the whole batch it was said to be a leaner reading of, and more than double the 519,400 the grant's own evidence recorded -- before the second reading each draft is entitled to under `review-cost`'s cap. That is roughly an order of magnitude on the criterion the author named first, and the fence still presents the per-draft read as the smaller one. The disposition stands regardless: the author named attention second and it is real, a finding at the point of writing reaches a main thread still holding the node while a batch finding reaches one that has moved on, and a reader's context is bounded whatever the total spend, so a single brief that fits is worth more than a cheaper one that does not. But the design should be ruled on with its price stated, and the price the record states today is wrong by roughly an order of magnitude."
+  survey:
+    date: 2026-09-05
+    of: 036b9a00cb75d617527ad2193fdc1388cd7d5ed7
 form: rule
 under:
   - commons.systems/disposition-graph/delegation
@@ -389,3 +392,12 @@ found on seven nodes at once. The test left the `authority` node's answer on
 node. Nothing about the class or the boldness changes. The edit moves this
 node's authority-fact pin without a reading behind the move, which is the live
 option `pin-names-the-text-the-reader-read` on `review-cost`.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The design was priced against a batch whose cost driver, the full index carried per draft, `review-cost` removed on 2026-09-05, so the measurement that decided the split no longer describes either side. What remains is the residue the node states: a sitting of several questions pays a fixed brief-and-contract cost per draft where the batch paid it once — and this survey is that residue realised, an 8,674-line brief for one reading of forty-eight drafts. The author's first-named judge is token efficiency, and the node's own case for the split now rests on attention and timing rather than on the judge the author named first.

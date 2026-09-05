@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 4ebb5b6e5e722eb32986b93723f7c618e8adbca0
   against: "Socrates' midwifery rests on his being barren: he delivers nothing of his own, which is what makes the offspring the interlocutor's. The AI is the opposite — it drafts first and the author reacts — so the visible, refusable draft is an anchor, and the known effect of an anchor is that what is delivered is the drafter's. The node names this divergence and keeps 'adopted', which imports a guarantee about whose answer emerges that the mechanism does not provide. Growth compounds it by making the maieutic stage the one where the ruling is taken."
+  survey:
+    date: 2026-09-05
+    of: deccaee9285054304590cec1a3004c383e2f9cf5
 facts:
   - name: answer
     options:
@@ -120,3 +123,14 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Alternatives pending, with their sources: `relation-diverged` (review, 2026-09-03); `propose-and-critique` (review, 2026-09-03).
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 The census unit's note: No Disposition section. The two alternatives are the relation the session explicitly handed to the author and the review's steelman, which is a different answer to the node's question rather than an observation about it. Excluded as editorial: the loci in the answer still differ from the source field and from growth's citation of the same passage, which is a correction owed at the sitting, and the frontmatter names no tradition because traditions-home is unruled. The reading-class coverage finding carried here is discharged: all ten reading nodes now carry recommendation class delegated, and this node's prose Facts line has already been rewritten to match.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (strong): Socrates' claim in the Theaetetus is that he contributes nothing of his own (150c-d), and the conduct this reading grounds proceeds by the AI writing visible drafts that the author may refuse. That is the opposite of contributing nothing: the drafts are the AI's content, offered first, and the author's role is reduced to acceptance or refusal. The record knows this — `growth` carries `boldness-reversed` and the `anchoring-and-adjustment` reading names the anchoring a draft creates — so the tradition is adopted for a practice its own source warns against, and no divergence is recorded. Boldness `high`, authority `delegated`: nothing puts it in front of the author.
+
+The session's reply: Taken, and no divergence is recorded where one is owed. Socrates' claim at Theaetetus 150c-d is that he contributes nothing of his own, and this record's conduct is the AI writing visible drafts first; that is a departure from the source and not an application of it. The record already knows the mechanism — `growth` carries `boldness-reversed` and the `anchoring-and-adjustment` reading names the anchoring a draft creates — so the divergence is derivable from nodes the reading does not cite. The session records the divergence as owed on this reading and does not write it, since a reading's relation is the reading's own text.

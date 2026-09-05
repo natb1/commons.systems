@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 622143928b6827a2708f340e7d789fc8961ed13b
   against: "The rule lands a graph commit at every stage transition of every node, which for a sixty-eight-node frontier moving through four stages is roughly two hundred and seventy landings on a ref whose history persistence calls the trail of the record. Transience's test is that only what re-derivation cannot reconstruct is stored, and three of the four things this rule checkpoints — the recommended text, the recommendation's facts, the review's state — are re-derivable by re-running the movement that produced them. The author's instruction was to survive compaction, which the author's words alone achieve; checkpointing the rest turns the record's history into a movement log, and the pending `words-only-checkpoint` alternative is the narrower rule that meets the instruction."
+  survey:
+    date: 2026-09-05
+    of: fd4bc63169ddce9046f308ee57cf90987096ee65
 facts:
   - name: answer
     options:
@@ -144,3 +147,12 @@ On the three facts: The frontmatter recommendation (adopts standing, ratified, l
 Strongest counter-argument (moderate): The rule lands a graph commit at every stage transition of every node, which for a sixty-eight-node frontier moving through four stages is roughly two hundred and seventy landings on a ref whose history persistence calls the trail of the record. Transience's test is that only what re-derivation cannot reconstruct is stored, and three of the four things this rule checkpoints — the recommended text, the recommendation's facts, the review's state — are re-derivable by re-running the movement that produced them. The author's instruction was to survive compaction, which the author's words alone achieve; checkpointing the rest turns the record's history into a movement log, and the pending `words-only-checkpoint` alternative is the narrower rule that meets the instruction.
 
 The session's reply: Forward accepted. The unpinned evidence and the unenforced landing stay as pending alternative and finding.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The answer makes the record, not the session's context, the dialogue's memory, and the field that carries that memory is `stage`. This survey measured what the record's own instruments say about that field: thirty of the forty-four nodes at the ruling stage carry a review the projector marks changed since, and `evaluation`'s answer says a recommendation moved at the ruling stage sends the node back to review. So the checkpoint has been faithfully writing a field the record's rules say is currently wrong on two thirds of the ruling-stage graph, and a session resuming from it, as `alignment-target` instructs, resumes into a movement that has already been invalidated. The checkpoint is not the cause, but it is what makes the wrong value durable.

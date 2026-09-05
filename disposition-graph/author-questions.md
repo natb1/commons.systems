@@ -77,6 +77,9 @@ review:
   of: a94fb70c5d5bf96f23c30127610d81148537a7f1
   commit: 92f56ba1ac28f25ad8fd44c946e171a49793c0c3
   against: "The one quantitative bound this answer puts on the author's attention, three open probes on a node, is the one part of it that nothing enforces, and the answer chooses that deliberately: \"The cap binds the movement and is checked by the readings ... and not by the graph's reader\". The tree agrees — read.mjs checks only a probe's shape (line 1387), and apply.mjs, the single actor that sees every probe any reading returns and writes it into the node, says at line 818 \"The cap of three open probes is not checked\" and at line 643 that \"the cap binds the movement and not this mechanical step\". So the bound is kept by whichever session is doing the asking; each reading counts only the node it was handed (this brief: \"Check it on the node you read\"), while the answer itself routes a survey's probe onto nodes the survey is not judging, which is exactly where no reading has counted the list. The refusal is argued against making the cap a parse error, but that is not the only mechanism the record has: apply.mjs already emits a non-fatal message when a write would exceed another of the record's caps, two readings on one answer (line 932), so the instrument that could count for free exists, is precedented, and has been told not to. Two nodes, dialogue and coverage, sit at exactly three open probes on the day of this reading, so the bound is live rather than theoretical, and the failure the answer's own economics predict — asking is free, answering costs the one author — is the one it declines to instrument."
+  survey:
+    date: 2026-09-05
+    of: 3e9ece922ab3f53c55b88a5d838c4e0b0685993e
 form: rule
 under:
   - commons.systems/disposition-graph/dialogue
@@ -1100,3 +1103,14 @@ fact as `cap-warned-by-the-instrument`, with both sides.
 The pin this reading recorded names the draft the reader read and is not
 re-settled: this is the second reading of this answer and the cap is reached.
 What that costs is on `review-cost` as `pin-names-the-text-the-reader-read`.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (strong): The record already carries every function of this field in the accounts, and the failure the field cannot see is the one that matters: the probe a drafting session did not raise because it liked its recommendation is exactly as invisible in a structured list as in prose, because the same session writes both. This survey measured the field's first day of use: fourteen of one hundred and forty-two nodes carry a `probes` block, the maximum open count anywhere is three (on `coverage` and on `dialogue`), and the cap the answer spends most of a paragraph defending has therefore never bound. What was bought is a frontmatter key, a term, a change to what the pin strips, a branch in the applying script and an amendment to the fifteenth validation; what was demonstrated in a day of use is a list on a tenth of the record whose limiting rule is inert.
+
+The session's reply: Taken, and the measurement is the reply's own evidence against it: fourteen nodes of a hundred and forty-two carry a `probes` block, the maximum open count is three, and the cap the answer defends at length has never bound. The session does not withdraw the field, because the failure the counter-argument names — the probe a drafting session did not raise — is not made worse by the field, and this survey raised two probes on nodes whose drafting sessions did not. What is owed is that the cap's defence come out of the answer until something makes it bind, since a rule that has never applied is being ratified on its rationale alone.

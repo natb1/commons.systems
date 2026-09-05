@@ -1,6 +1,6 @@
 ---
 question: Is authority a projection of the state of a node's viable options?
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -91,8 +91,19 @@ review:
   date: 2026-09-05
   of: fbb64810ef5d0f02ebdf49a60bcc2d530632914e
   against: "The author scoped what persists to 'any non-chosen option which is categorized as \"viable\" by the AI', and the recommendation reverses that scoping on the AI's own reading of the regression purpose those same words gave, at the one decision where the trade being made, how much of the AI's account the author must read, is the author's and not the recommender's. The price is not stable and the draft does not say so: it prices the change at a hundred and four rows across twenty-nine nodes, and at the graph's head one day later the record carries a hundred and forty-one across thirty-eight, a third more in a single day, with no bound of any kind in the design. That is precisely the failure `deprecation-not-deletion`, a reading recorded under this node, says the mark decays into once the window is dropped, and the reply the record has, that only the author strikes, makes the author the only bound there is, on a page the same recommendation has just lengthened. And the discretion the change was bought to remove is untouched: the AI still decides which candidates it names at all, so what the status buys is visibility of the AI's second judgment and never of its first."
+  survey:
+    date: 2026-09-05
+    of: 1598c6ec57c8e88ac3a80b15f46d69ba69f93eb2
 depends:
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
+probes:
+  - id: when-you-scoped-what-persists-to-the-opt
+    asks: "When you scoped what persists to the options the AI categorizes as viable, what did you mean viable to exclude?"
+    why: "The node's answer fact recommends `passed-over-options-stay`, and its own recorded `against` says the recommendation \"reverses the author's words on the AI's reading of the regression purpose those same words gave\": the author's scoping phrase is \"categorized as viable by the AI\", and the node's rationale had earlier rejected keeping the rest. The record does not say whether an option the AI passed over is still viable in the author's sense or is exactly what the scoping was meant to drop. Everything the record has on it is the AI's reading of the author's phrase, in the node's own rationale and in its `against`, which read it in opposite directions."
+    discharges: "It settles the answer fact's recommendation between `passed-over-options-stay` and `grant-from-a-ruling`, which stands, and with it the price the node itself gives at a hundred and forty-one option rows across thirty-eight nodes on the alignment page. It also settles `commons.systems/disposition-graph/rejected`'s recommendation, whose own `against` says that node \"has no ground of its own if the author rules the other way one node earlier\"."
+    source: review
+    raised: "2026-09-05"
+    fact: answer
 form: rule
 defines:
   - option
@@ -1237,3 +1248,25 @@ left the `authority` node's answer on 2026-09-05 and is stated by
 the boldness changes, and the edit moves the authority-fact pin without a
 reading behind the move, which is the option `pin-names-the-text-the-reader-read`
 on `review-cost`.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- `## Facts` carries a `#### grant-from-a-ruling` subsection for the option named by `stands`, at disposition/disposition-graph/viable-options.md. The brief's encoding rule is that "The option named by `stands` omits its subsection, because its sentence is the first sentences of `## Answer`", and `commons.systems/disposition-graph/dialogue`'s recommended answer says the option that stands "needs none, since its text is the answer". The stored prose is a description of a change rather than an answer, so the projections render a delta where the standing sentence belongs. This is the cross-node finding recorded under the `contradiction` kind naming nine nodes; it is stated here because this node is one of the nine and one of the six whose brief row shows the stored prose in place of the answer.
+
+Strongest counter-argument (strong): The recommendation reverses the author's own scoping on the AI's reading of the purpose the author's words gave: the author scoped what persists to options "categorized as viable by the AI", and this node's own rationale had rejected keeping the rest. What it buys is a status on rows the author must now read, priced by the node itself at a hundred and forty-one rows across thirty-eight nodes; what it does not touch is the discretion the change was bought to remove, which is which candidates the AI names at all. Boldness `high` is recorded, and on this record high boldness is low confidence, so the record's own most-cited rule is being put to the author at its author's lowest confidence.
+
+The session's reply: Taken, and not answered here. The reversal is the node's own recorded `against`, and what would settle it is the author's sense of the word they used, which is why this survey raises a probe on this fact rather than moving anything. The session does not withdraw the recommendation while the probe is open: withdrawing it would settle by the AI's reading the same question the probe puts to the author, which is the failure the counter-argument names. The price is now measured rather than asserted, at a hundred and forty-one option rows across thirty-eight nodes, and it is on the row the author will read.
+
+### Frontier finding, 2026-09-05
+
+Kind: contradiction.
+
+Nine nodes carry, inside `## Facts`, a `#### <option>` subsection for the option their answer fact names in `stands`. The encoding rule is that the standing option omits its subsection because its sentence is the first sentences of `## Answer`, and `commons.systems/disposition-graph/dialogue`'s own recommended answer states it: the option that stands "needs none, since its text is the answer". The nine, each with the standing option whose subsection is stored: `authority` (`authority-derived`), `delegation` (`reconciliation-session-writes-options`), `dialogue` (`facts-carry-options`), `evaluation` (`overrule-by-class`), `readings` (`relation-per-option`), `recording` (`options-persist-at-the-recording`), `rejected` (`non-chosen-viable-options`), `unanswered` (`unanswered-is-no-ruling`), `viable-options` (`grant-from-a-ruling`). `dialogue` is one of the nine, so the node that states the rule breaks it. What is stored is not the answer's first sentences but a description of the change the option made — on `readings` at line 131 it opens "A reading stays a node under one node it bears on, with its own class, and its relation attaches to the options of the fact it bears on rather than to the answer", and elsewhere the prose opens with a raising note of the form "Raised on ... from the author's words of 2026-09-04". Six of the nine render that stored prose in the survey brief in place of the answer's opening (brief lines 559, 846, 1282, 2403, 2502, 3671), so any projection that reads a standing option's subsection shows the author a delta where the answer belongs. The other three (`dialogue`, `evaluation`, `unanswered`) are outside the judged set and their standing rows are not rendered in the brief, so their subsections are dead text nothing reads. The record has the question open and unruled in two places: `dialogue` carries the option `standing-option-carries-a-subsection` (source alignment-page, 2026-09-04) and `alignment-page` carries `standing-sentence-stored`, passed over on 2026-09-04. So nine nodes have implemented an option the author has not ruled, against the rule that stands.
+
+Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/delegation, commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/alignment-page.
+
+Proposed: Rule it once, on `commons.systems/disposition-graph/dialogue`, whose answer states the rule and whose fact already carries the option. If the standing option keeps no subsection, delete the nine subsections — the text is not lost, since `## Answer` carries the answer and the account carries the history of the change. If the standing option is to carry one, the rule in `dialogue`'s answer changes and the nine subsections are rewritten to carry the answer's first sentences rather than a description of a change. Either way the nine conform to one ruling and no node is left implementing the losing side. Until it is ruled, the six whose stored prose the projections render are the urgent half, because those are the ones showing the author the wrong text.

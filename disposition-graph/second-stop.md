@@ -43,6 +43,9 @@ review:
   date: 2026-09-03
   of: fd543d8b56a6a8724a9eaf03ac0f6ba8d7b3391f
   against: "The node's whole content is a decision about another node's prose, and the record now has three nodes deciding one page: second-stop on whether model is rewritten, model on the rewrite itself, and rejected on what a rationale carries of its alternatives. Keeping the option as a node buys the author a separate ruling; it costs a screen, an ordering the page does not show, and a text that must be reopened if the two rulings disagree. The redundancy finding's own second branch — fold each option into its parent's alternatives, which the new encoding makes structural — is the cheaper answer and is pending as `fold-into-model`."
+  survey:
+    date: 2026-09-05
+    of: 7dc2a99d03a687e47b5fa8617a855a5895f64da3
 facts:
   - name: answer
     options:
@@ -227,3 +230,23 @@ Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `
 ### The scope test, 2026-09-04
 
 The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, found the discharged entry `onboarding-walk-against-bite-order` to have been a node's question in its first limb: whether one scalar carries a teaching order and a work order is `commons.systems/disposition-graph/attention`'s answer in terms, a response of "they diverge" moves that node's recommendation, falsifies a sentence of work-loop's rationale, and sets the boosts on model's children. The answer the discharge cites, the author's high-level order on scope, is the record answering and not the author answering the probe, which the admission test's first limb calls a withdrawal. No node is minted, because attention already carries the question as two options on its answer fact; the entry's reason is annotated and attention enters `depends`, this node's ruling waiting on which order rank serves. The node itself passes the ruling test: rewriting model for the newcomer, or inserting a primer, is a design choice the author can delegate, and the primer question survives any move of model's recommendation.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- All three answer options — `rewrite-model`, `primer-node`, `boost-growth-first-among-models-children` — are edits to other nodes: two to `model` and one to a boost that `attention` says only the author may ratify. `commons.systems/disposition-graph/rejected`'s answer says "An option is not a page: an answer that was not taken has no standing and earns no node of its own", and the same logic reaches a node all of whose answers are options on someone else's fact. The `existence` fact recommends `keep`, so this is a live disagreement with the independence test rather than a defect already conceded, and it is reported here rather than as a prune.
+
+Strongest counter-argument (moderate): The question "What does a newcomer read after purpose?" has an answer already: `attention`'s rank order, and `scope`'s list, which together fix the reading order of the whole record. If those two are right, this node asks a question the record has answered twice; if they are wrong, this node is the wrong place to fix them, because its recommendation is to rewrite `model` rather than to move a boost or amend the scope list. Either way the recommendation is an edit to a sibling wearing a page, and the existence fact's `keep` is the part of the node with the weakest case.
+
+### Frontier finding, 2026-09-05
+
+Kind: decomposition.
+
+The independence test of `commons.systems/disposition-graph/probe-or-node`, run across the judged set and reported under this kind as `frontier-consistency`'s sixteenth validation prescribes, finds two nodes and no more; readings are exempt by construction. `commons.systems/disposition-graph/hexis` asks "In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?": its only possible answer is a reading of `purpose`'s, its answer options `hexis-first` and `knowledge-store-first` are the two orderings of one of purpose's sentences, `knowledge-store-first` already stands as an option on purpose's own answer fact sourced to this node, and it would be pruned the moment purpose's recommendation moved. `commons.systems/disposition-graph/audience` asks "Who is this repository for?": purpose's answer already carries "Its intended readers are humans who want that, and who may arrive here by way of an AI tasked with the same goal", this node's answer restates it, its answer fact carries the single option `standing`, and it too would fall with a move on purpose. Both nodes already recommend `prune` on their existence facts, so the test confirms a judgment the record has reached and supplies the reason it was missing. `commons.systems/disposition-graph/rejected`'s answer states the principle: "An option is not a page: an answer that was not taken has no standing and earns no node of its own." A third node was tested and survives: `commons.systems/disposition-graph/second-stop`'s three answer options are all edits to `model`, which has the same shape, but its question — what a newcomer reads after purpose — is not a reading of `model`'s question, and its existence fact recommends `keep`, so it is reported in its own node entry and not here. `commons.systems/disposition-graph/which-facts-are-listed` was tested and survives on its own account, which reaches `dialogue`'s reserved-four rule and not only the parent's rendering.
+
+Also named: commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/audience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/rejected.
+
+Proposed: Record the independence test as the reason on each existence fact's `prune` option, on `hexis` and on `audience`, and let the author rule the prune at each node's own row, which is what `probe-or-node`'s answer prescribes for a node already standing. Before `audience` is pruned, its surviving content is named: the sentence itself is already in `purpose`, and the enumeration of onboarding surfaces — README, browser opening pages, repository description, discovery tags — belongs to `projection` or `self-documentation` and moves there rather than being deleted with the node. `hexis` needs no survivor: `purpose` already carries its content as the option `knowledge-store-first`.

@@ -1,12 +1,15 @@
 ---
 question: In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: moderate
   date: 2026-09-03
   of: 99d93a890181feb0a8ae23d834505b07cb0bcc9a
   against: "Purpose is the onboarding entry point and the README's source, and leading with a Greek term the browser cannot link spends a newcomer's attention on vocabulary rather than on the claim. The apposition the recommendation keeps does teach the word where it stands, which mitigates it; the deeper cost is that the precision bought is the AI's reading of a text the author has not read, on a node whose own reading has a strong pending alternative saying the mapping fails. The order the page had — 'a knowledge store, a projection of its author's hexis' — asserts less and loses nothing the record can currently support."
+  survey:
+    date: 2026-09-05
+    of: 3bae29c927dfe9d35608fb632f9b8bbed9667a83
 facts:
   - name: answer
     options:
@@ -172,3 +175,25 @@ Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `
 ### The independence test, 2026-09-04
 
 The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, found this node to be a mis-encoded question on purpose: the independence test fires on all three of its conjuncts, each checkable against the record's own text, and the survival test does not save it, since nothing needs its answer on its own account. Under the rule's first clause the question is an option and not a probe, the AI holding both orderings viable and recommending one. Applied: the existence fact's recommendation moved to `prune` at low boldness, and `knowledge-store-first` was recorded on purpose's answer fact with this node as its source, so that purpose's row carries the alternative whichever way this one is ruled. Not applied: striking the node, which a ruling does and the recorder does not. `sub-ruling-of-purpose` is an ordering proposal and not an answer to this node's question; it is discharged by construction if the prune is ruled. The `## Recommendation` fence's claim that knowledge-store's `defines` carries the term stays false, and its remedy stays `define-hexis` on knowledge-store.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The independence test of `probe-or-node` reaches this node and its existence fact already recommends `prune`. Its question is the ordering of two clauses inside `commons.systems/disposition-graph/purpose`'s answer; its answer options `hexis-first` and `knowledge-store-first` are the two orderings of that sentence, and `knowledge-store-first` is already carried as an option on purpose's own answer fact sourced to this node; and it would be pruned the moment purpose's recommendation moved. The survivor is on purpose already, so the test's prescribed remedy — the existence fact moves to prune with the test as its reason, and the author rules the prune at this node's row — is available with nothing left behind. Recorded as the `decomposition` finding.
+
+Strongest counter-argument (strong): The node exists to propose an edit to another node's answer, and the record already holds that proposal in the right place: `purpose`'s answer fact carries `knowledge-store-first` sourced to this node. `rejected`'s answer says "An option is not a page: an answer that was not taken has no standing and earns no node of its own", and by that rule this node is an option wearing a page. Ruling `hexis-first` here would settle the ordering of a sentence in a node the author has not ruled, and the ordering would then have to be re-ruled when purpose's own answer is settled.
+
+The session's reply: Taken. The node is an option wearing a page by `rejected`'s own rule, the survivor is already on `purpose` as `knowledge-store-first` sourced to this node, and the independence test is now recorded as the reason on the existence fact's `prune`. The session does not prune: an existence fact is ruled at the node's own row, which is what `probe-or-node` prescribes for a node already standing.
+
+### Frontier finding, 2026-09-05
+
+Kind: decomposition.
+
+The independence test of `commons.systems/disposition-graph/probe-or-node`, run across the judged set and reported under this kind as `frontier-consistency`'s sixteenth validation prescribes, finds two nodes and no more; readings are exempt by construction. `commons.systems/disposition-graph/hexis` asks "In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?": its only possible answer is a reading of `purpose`'s, its answer options `hexis-first` and `knowledge-store-first` are the two orderings of one of purpose's sentences, `knowledge-store-first` already stands as an option on purpose's own answer fact sourced to this node, and it would be pruned the moment purpose's recommendation moved. `commons.systems/disposition-graph/audience` asks "Who is this repository for?": purpose's answer already carries "Its intended readers are humans who want that, and who may arrive here by way of an AI tasked with the same goal", this node's answer restates it, its answer fact carries the single option `standing`, and it too would fall with a move on purpose. Both nodes already recommend `prune` on their existence facts, so the test confirms a judgment the record has reached and supplies the reason it was missing. `commons.systems/disposition-graph/rejected`'s answer states the principle: "An option is not a page: an answer that was not taken has no standing and earns no node of its own." A third node was tested and survives: `commons.systems/disposition-graph/second-stop`'s three answer options are all edits to `model`, which has the same shape, but its question — what a newcomer reads after purpose — is not a reading of `model`'s question, and its existence fact recommends `keep`, so it is reported in its own node entry and not here. `commons.systems/disposition-graph/which-facts-are-listed` was tested and survives on its own account, which reaches `dialogue`'s reserved-four rule and not only the parent's rendering.
+
+Also named: commons.systems/disposition-graph/audience, commons.systems/disposition-graph/purpose, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/second-stop.
+
+Proposed: Record the independence test as the reason on each existence fact's `prune` option, on `hexis` and on `audience`, and let the author rule the prune at each node's own row, which is what `probe-or-node`'s answer prescribes for a node already standing. Before `audience` is pruned, its surviving content is named: the sentence itself is already in `purpose`, and the enumeration of onboarding surfaces — README, browser opening pages, repository description, discovery tags — belongs to `projection` or `self-documentation` and moves there rather than being deleted with the node. `hexis` needs no survivor: `purpose` already carries its content as the option `knowledge-store-first`.

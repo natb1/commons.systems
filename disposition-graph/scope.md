@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 33d06c42cce07aa1778d00c2c928ebb9fd4479e0
   against: "The node fixes the shape of the record before the record knows what it contains: its own answer says 'What it leaves out is open', coverage names four recorded functions outside the purpose as worded, and the order field is now enforced by the validator, so a seventh section would reset every boost the list names. The session's answer — that a seventh section is a new word from the author, recorded then — is honest, but the cost is asymmetric: the order is data the validator refuses to contradict, so the author's next new section is a landing that fails until scope is re-answered."
+  survey:
+    date: 2026-09-05
+    of: df46ba10cc4c4a5b59795bd633a6fffe2e2ff135
 facts:
   - name: answer
     options:
@@ -237,3 +240,12 @@ Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `
 ### A dependency recorded, 2026-09-04
 
 The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, read the open probe `what-equal-means-in-the-order` on `commons.systems/disposition-graph/self-documentation` and found that a response moves this node's `order-names-self-documentation`, minted from that node, through self-documentation's existence ruling. The probe stays a probe, doubt resolving downward; this node's ruling waits on that one's, which `depends` now says.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The answer's binding clause is "the rank of every node named here is held to this list", and the mechanism that holds it is boost, which `attention` says is "an allocation only the author may ratify" and of which it says "every boost in the record today is the AI's and unratified". Ratifying the table of contents therefore ratifies an order enforced by numbers the record says are not the author's, and the numbers are what a session actually reads. Either the list is the authority and rank is derived from it, or rank is the authority and the list is a projection; the answer asserts both.

@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 3c163ef7f2a5f1e78301e90f70c8ffbc30a1e1cd
   against: "The rule was struck under a bootstrap grant, without the periagogic movement the node's own account says is owed, on the strength of the author's words about what an unanswered disposition is — words that were about the unanswered status generally and not about this shape. The account itself concedes the AI 'treated a deferred answer as fixed, framed the author's challenge inside that frame, and parked a reading on the wrong parent'; the answer written from that concession removes a guard whose ground was a measured legacy failure, durable content stranded on a vanishing node. The author's model may well be right, but the record now has an answer and an instrument removed on an inference the periagogic movement was supposed to test."
+  survey:
+    date: 2026-09-05
+    of: ef3fa07a4050e0e5db919ebda7eadcc86414c48c
 facts:
   - name: answer
     options:
@@ -154,3 +157,12 @@ Un-aligned-children's account carries a '### Facts' section stating 'Authority n
 Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/dialogue.
 
 Proposed: Dialogue is the survivor of the requirement and growth of the presentation rule; neither text need change for this node. Un-aligned-children's stale '### Facts' section is superseded by its own later '### Answered on the author's ruling, 2026-09-03' section and should be struck or marked superseded rather than left standing beside a contradicting frontmatter — the alternative below is the vehicle, since the review proposes and never edits. Growth's already-pending `facts-from-recommendation-field` alternative is what closes the class at its source, by saying the three facts are presented from the recommendation field and the node's shims and never from a prose line; taking it would make this and the sixteen other instances unrepresentable rather than fixed one by one.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The answer's rule — work may not be grounded in an unanswered disposition — has an exception, an explicit grant from the author, and the exception is the record's entire operating mode: nothing in the record is ratified, every rule a session loads is projected from an unanswered node, and `what-acts-during-bootstrap` exists because of it. A rule whose exception has swallowed it is not yet load-bearing, and ratifying it now records as settled a distinction the record has never had occasion to apply in the direction that constrains anyone.

@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: b53f30941ddb339dc719cd8f186cb9eab6dd36fb
   against: "Republic VII's turning is away from appearance toward what is, and its authority is the reality the soul is turned toward. Here the author is turned back toward a record the AI drafted and the author has not ratified, and is asked to articulate it before the AI's account enters as counterpoint. That is induction into a text, with a predictable failure: the author's account converges on the record's wording, so the comprehension movement confirms the AI's framing rather than testing it. The node's defence — that the authority appealed to is the author's own past decision — is the claim that is false today, since nothing in the record is ratified, and the session's reply concedes exactly that."
+  survey:
+    date: 2026-09-05
+    of: b53f30941ddb339dc719cd8f186cb9eab6dd36fb
 facts:
   - name: answer
     options:
@@ -117,3 +120,14 @@ Alternatives pending, with their sources: `relation-diverged` (review, 2026-09-0
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 Moved to other nodes as alternatives: `cite-the-reading` on commons.systems/disposition-graph/growth.
 The census unit's note: The node has an answer and no draft, so it adopts standing, and its recommendation is already delegated as the readings rule requires. The one substantive thing still before the author is the relation: the divergence is named in the rationale and the relation still reads adopted, and the session's reply explicitly leaves the ruling to the author. The locus mismatch is the second, since the record still carries two citations for one conduct. I excluded the facts-line repairs, the one matching the frontmatter having been applied and the boldness split being an account of the facts rather than a different answer, and the readings coverage finding, which this node already satisfies. There is no Disposition section, so the merge analysis is empty. The locus proposal touches growth, which does not carry this review, so it goes elsewhere.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (strong): The turning presupposes something real to be turned toward: in Republic 518b-d the soul is turned toward what is, and the whole force of the image is that the object is not the teacher's invention. In this record the thing the author is turned toward is text the AI wrote and the AI's readings of traditions the author has not read — `madr-decision-records` says of itself that it is "drawn from the AI's memory of a template no one here has read". So the conduct that claims the record is authoritative makes the AI's own drafts authoritative over the author, which is the `capture` node's question, and this reading does not cite it or record it as a divergence.
+
+The session's reply: Taken. The turning in Republic 518b-d is toward what is, and its force is that the object is not the teacher's invention; here the object is text the AI wrote and readings of traditions the author has not read, which is the `capture` node's question and is not cited. The session records the divergence and the missing citation as owed. It does not follow that the reading should be withdrawn: the practice it grounds is the author being turned toward the record rather than toward the session, and the departure is in what the record is made of, not in the direction of the turn.

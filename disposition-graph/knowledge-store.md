@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: a732769a2b6a19dcb71bc0e2b117756564425968
   against: "The failure condition is not observable on any timescale a sitting can reach, so the criterion cannot fail and therefore cannot guard, which means the whole change from the standing answer buys nothing operational: an assumption whose failure sends the question back to the author is exactly what the node already is. Purpose-criteria, ruling on the parent, reached the opposite conclusion the same day and now recommends standing unguarded and saying so. The record would ratify an unguarded parent and a criterion-guarded child on the same reasoning, which is a difference the author is not shown."
+  survey:
+    date: 2026-09-05
+    of: a732769a2b6a19dcb71bc0e2b117756564425968
 facts:
   - name: answer
     options:
@@ -188,3 +191,12 @@ On the three facts: The frontmatter recommendation (adopts criterion-draft, rati
 Strongest counter-argument (moderate): The failure condition is not observable on any timescale a sitting can reach, so the criterion cannot fail and therefore cannot guard, which means the whole change from the standing answer buys nothing operational: an assumption whose failure sends the question back to the author is exactly what the node already is. Purpose-criteria, ruling on the parent, reached the opposite conclusion the same day and now recommends standing unguarded and saying so. The record would ratify an unguarded parent and a criterion-guarded child on the same reasoning, which is a difference the author is not shown.
 
 The session's reply: Forward accepted. The criteria block in the fence is sanctioned by dialogue's answer as a recommended text that presumes a ruling not yet given, and the dependence on instruments is now named by this reply; the hedge, the unguarded alternative, and cite-forms stay open for the author.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The answer records the knowledge-store claim as an assumption whose failure "returns [purpose] to the author for re-grasp rather than quietly standing on a false premise", and nothing in the record can make it fail: `instruments` stands at the maieutic stage, this node's recommendation is `criterion-draft` rather than a criterion, and no observation is specified that would count against "a record of standing answers is a knowledge store". An assumption with no falsifier is the paper doubt the `peirce-paper-doubt` reading names, recorded with the form of a safeguard and none of its function.

@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 1c5395eea68a14452e88040c5894830533188fdf
   against: "Taking the highest-ranked unanswered node is right if rank is the author's attention, and it is not: every boost in the record is the AI's and unratified, as attention's own answer now says, and the one order the author did state covers six nodes out of sixty-two. So 'rank answers it without the session's judgment entering' describes a queue the AI itself ordered and presents an AI choice to the author as the record's own. The session's reply — that the page shows the author the whole queue at every visit — is a real answer and is now true of the built page, which weakens but does not dissolve the objection."
+  survey:
+    date: 2026-09-05
+    of: b0dea316130efe6397be144452cb593680b1d073
 facts:
   - name: answer
     options:
@@ -143,3 +146,15 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
 Merge analysis of the author's words: 2026-09-03, own-question: Called with no disposition and no node id, `/align` chooses the highest-ranking unanswered disposition and progresses it through the movements its state still owes, up to confirmation.
 The census unit's note: Nothing is pending. The node stands at the ruling stage with a forward verdict, an answer and no draft, so the recommendation adopts the standing text. Both reviews' findings were accepted and applied in the answer — the id-prefix reading of the frontier, the striking of 'or an argument', the sentence on the stage set by the author's reclassification — and the remaining points are account corrections or observations. The two rejected alternatives, choosing by the oldest stage or the fewest movements owed and asking the author which node to take, are recorded in the rationale and excluded. I checked whether `alignment-order` duplicates this node's question and it does not: that node asks whether rank is the right order at all and its own account distinguishes the two, so no fold is proposed, though a ruling there could later amend this answer.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The answer says "A movement already behind the node is not repeated: the stage is the record of what the dialogue has done, and the session trusts it." At this commit thirty of the forty-four nodes at the ruling stage carry a review the projector marks "changed since its review", and the projector reports "Ready to rule: 0 of 44". A session that trusts the stage on those thirty would take up a ruling the record's own instrument says is not ready. Recorded as the `stale-recommendation` finding; the locus here is the trust clause, which is the sentence that turns the stale state into wrong action.
+
+Strongest counter-argument (strong): The answer instructs a session to trust the stage, and the stage is currently wrong on two thirds of the ruling-stage record by the projector's own reckoning. The rule that would keep it honest — that a recommendation moved at the ruling stage returns the node to review — lives on `evaluation` and is not applied, and this node's answer supplies the reason it is not: the stage is the record of what the dialogue has done and is trusted, so nothing in a sitting's ordinary path re-reads it. Trusting a derived-but-stored field, in a record whose model claims such things are never stored, is where that claim is actually paid for.
+
+The session's reply: Taken; this is the clause that turns a stale field into a wrong movement, and the survey is right to locate the defect here rather than only on `evaluation`. The session records the qualification as owed — a session checks the pin before trusting the stage — and does not write it, because the sentence is in the text the survey read. On the deeper point the counter-argument is correct and uncomfortable: `stage` is a derived-but-stored field in a record whose model says such things are never stored, and every stale-pin defect this survey found is that storage being paid for.

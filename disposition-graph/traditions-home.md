@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 73b6cca4bf27149632172b5149277d71128f98f3
   against: "Option 2, a graph per tradition, matches the author's stated model exactly — a mount that could be represented by its own graph with its own archē and its own references — and under it a tradition that later acquires its own repository needs no migration, because it already is one. The recommended option pays a directory move and a prefix rewrite instead, which is the liquidation the public graph carries and which the record has just adopted a principle to make owe redirects. The cost of the alternative is many near-empty manifests, which is real and cheap next to a migration the record has now priced twice."
+  survey:
+    date: 2026-09-05
+    of: a433c944f05360c1fe7fac6207e2032f6b09eb97
 facts:
   - name: answer
     options:
@@ -178,3 +181,12 @@ Also named: commons.systems/disposition-graph/readings, commons.systems/disposit
 Proposed: Traditions-home is the survivor of where a tradition node lives and is ruled before readings and namespaces, which the ruling order below does; the manifest entry it creates is shown on it, since that is what the ruling makes. Readings takes the alternative below, saying on the node that its tradition-as-mount sentence stands only if traditions-home's recommended option is taken — the gap the earlier finding left when it recorded its proposal on every named node but this one.
 
 Recorded as a pending alternative on commons.systems/disposition-graph/readings: `hold-for-traditions-home` (source review, 2026-09-03).
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The recommendation creates a graph before a single tradition node exists: fifty-nine readings stand in the record and `readings`' own answer says that until this is ruled "a reading names its tradition in its source alone", which is working. So the question being ruled is which container to build, when the prior question — whether the container is needed, given that `namespaces` already lets a graph declare a move and rewrite its ids — has not been put. Choosing the shape now fixes a home for contents nobody has written, and the cost of being wrong is the prefix rewrite the `web-routing` reading says addresses must never suffer.

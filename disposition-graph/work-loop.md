@@ -7,6 +7,9 @@ review:
   date: 2026-09-05
   of: 495e788047084ff6922db65745e215bb6c11f508
   against: "The amendment gives the loop a licence to write into the very record it reconciles to, and the controls the author conditioned that licence on do not exist in checkable form. 'Within the node's scope' is defined by no node; the review and the frontier read no reconciliation graph write; and on a delegated node the move acts and the author never sees it, so the only thing between a licensed option and a rewritten desired state is the judgment of the session making the move. The record's own two readings say as much and are the strongest witnesses against the draft: `level-triggered-reconciliation` concedes that 'the tradition's clean line is not kept', and `ocap-attenuation` says that here 'the attenuation is a written disposition that a session follows ... the same rule with a weaker guarantee', with 'the harness's permissions ... the only part of it that is actually a mechanism' — neither of which this node's answer records. Joined to an eleven-clause shim no projection reads and a second direction nothing derives, ratifying this ratifies the loop's self-licence together with the absence of its guard, on the one node whose failure mode is the record ceasing to be the author's. What answers it, and what the author should weigh against it, is that the licence is narrow by its terms (never a ruling, never a ruling's edit, never the author's words), that every move is visible in the graph's history the moment it lands, and that the author's own words of 2026-09-04 grant exactly this."
+  survey:
+    date: 2026-09-05
+    of: a8d6969e4da06ba3c03063a8af12b7ebc68acd9a
 facts:
   - name: answer
     options:
@@ -418,3 +421,15 @@ conditions and would move, so the author could not see which shape they would be
 ruling for. The first paragraph is narrowed to the last paragraph's terms. Nothing
 else moves: this is the option saying one thing where it said two, not a change to
 what it proposes.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The answer's second direction — "any materialized artifact with no supporting disposition ... is itself a frontier item" — is the mechanism `commons.systems/disposition-graph/materialization`'s answer relies on for its liquidation clause, and `commons.systems/disposition-graph/what-acts-during-bootstrap`'s answer says of it that "no instrument derives that frontier today" and that this node "begins [it] only at exit". So the half of the loop that checks the AI's own output is the half that does not run, and the two nodes that depend on it are both at the ruling stage. Recorded as the cross-node `contradiction` finding naming materialization, work-loop, what-acts-during-bootstrap and coverage.
+
+Strongest counter-argument (strong): On a delegated or deferred node a reconciliation session may move the recommendation and the moved recommendation acts, so the loop writes the desired state it then reconciles to — which the `level-triggered-reconciliation` reading concedes breaks the controller's clean line, and which on a delegated node the author never sees. The guard offered is that the move stays within the node's scope, and the party judging scope is the session making the move. Compounding this, the direction that would catch the resulting drift is the second one, which begins only at exit and which no instrument derives, so the loop's self-check is deferred exactly as long as the loop is unsupervised.
+
+The session's reply: Taken. The self-check the loop needs is the second direction, the second direction begins at exit, and no instrument derives it, so the period in which the loop is least supervised is exactly the period in which its own check is switched off. The session does not move the recommendation, because the alternative is to begin the second direction before the dispositions that state it are answered, which is the thing this record does not do. What is owed and now recorded is that `materialization` and `session-context` must not describe that frontier in the present tense while it does not exist.

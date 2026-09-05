@@ -1,12 +1,15 @@
 ---
 question: How are the author's words retained when a ruling is recorded?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: strong
   date: 2026-09-03
   of: 5597bbeedad00fbb6a4c6197563e1955dd7a3132
   against: "Option 1 has one virtue the record should weigh before discarding it. A verbatim ruling kept in the node accumulates: purpose already carries nine quotations, work-loop eight, dialogue thirteen, and the author reads past all of them on every page of the browser and the alignment page. Transience's own test is that only what re-derivation cannot reconstruct is stored, and the recommended option answers the accumulation with a roll-up nobody has specified — so the choice as put is between an unreadable record and an unverifiable one. Option 2 is right, and it owes the roll-up rule before it is ratified rather than after."
+  survey:
+    date: 2026-09-05
+    of: 2bc62fd8426b1e3b5af8410c96d37bb154cc3eb1
 facts:
   - name: answer
     options:
@@ -233,3 +236,25 @@ Counts and implementation claims recorded across the batch's review sections hav
 Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/dialogue.
 
 Proposed: No node's text is wrong and nothing moves. What is owed is that a count the author is asked to ratify be measured at the ruling rather than fixed in prose: quotes' facts state the bar as measured when the author rules, and the review skill's own briefs carry the counts, so the number the author sees is derived. Recording's counter-argument makes the general form of this point — most of what the review checks is mechanical — and frontier-consistency's validations 3, 5 and 11 are the natural home for the checks that would keep these numbers true.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The option `one-ruling-for-the-unquoted-stamp` at disposition/disposition-graph/quotes.md line 76 carries an enumeration that is false in three particulars at this commit. It says the question is pending "under three different names on six nodes — `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, `deferred-not-ratified` on review and persistence": `deferred-not-ratified` is on `review` only, and `persistence` carries the same question under a fourth name, `deferred-recommendation`. It says "twenty-three of sixty-eight nodes carry no '## Disposition' section": the graph now holds 142 nodes, 72 carry no `## Disposition`, and 12 of those recommend `ratified` on the authority fact. The node that decides how the author's words are retained is carrying a misdescription of the record. Recorded as the cross-node `cross-reference` finding.
+
+Strongest counter-argument (strong): The node's own recommendation is that a ruling stays in the node, and the strongest case against it is standing in the node's facts: its option `one-ruling-for-the-unquoted-stamp` is a hand-written census of the record that has already gone false in three particulars, which is what a quotation kept in a node becomes when the thing quoted moves. `ruling-in-commit-message` and `sittings-graph` both put the quotation somewhere the record cannot silently edit it. The reply — that the commit log is not read and a sittings graph is a second record — is real, but it is a reply about cost, and the failure this node is meant to prevent is a ruling whose words are not where they were said.
+
+The session's reply: Taken. The node that decides how the author's words are retained carries a census of the record that has gone false in three particulars, and that is the failure the node exists to prevent, occurring in the node itself. Both measurements come out of the option's prose for the rule they were counting, and the set of unquoted-ratified nodes is derivable — no `## Disposition`, authority recommending ratified — so an instrument computes it and the option names the rule. The four names the question pends under are struck for a citation here, and `persistence`'s fourth name goes with them; the session does not rule which way, since the question is this node's own.
+
+### Frontier finding, 2026-09-05
+
+Kind: cross-reference.
+
+One question — whether a node whose ruling was never quoted may be classed ratified, or must be deferred until the words are in the node — is pending on six nodes under four different names, and the node that gathers them describes the set wrongly. `commons.systems/disposition-graph/quotes`' option `one-ruling-for-the-unquoted-stamp` (disposition/disposition-graph/quotes.md line 76) says the question is pending "under three different names on six nodes — `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, `deferred-not-ratified` on review and persistence". Measured at this commit: `deferred-not-ratified` is on `review` only; `persistence` carries the same question under a fourth name, `deferred-recommendation` (disposition/disposition-graph/persistence.md line 55). The same option's second measurement is also stale: it says "twenty-three of sixty-eight nodes carry no '## Disposition' section", and the graph now holds 142 nodes, of which 72 carry no `## Disposition` and 12 of those recommend `ratified` on the authority fact — `class-recommendation`, `delegation-bounds-and-sizing`, `persistence`, `forms`, `bootstrap-exit-conditions`, `quotes`, `purpose-criteria`, `hexis`, `review`, `second-stop`, `traditions-home`, `validation-order`. And `persistence`'s own `deferred-recommendation` text repeats the stale figure, naming "this node among twenty-two carrying no Disposition section". Separately, `commons.systems/disposition-graph/evaluation`'s option `deferred-until-ruling-quoted` opens "Evaluation carries no Disposition section and quotes no ruling of any date", and evaluation now does carry a `## Disposition` — the author's words of 2026-09-03, "disposition: always make recommendations from this greenfield perspective - record this definition of greenfield you provided." — so half the option's stated ground is false.
+
+Also named: commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/review, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/recording.
+
+Proposed: Settle the question once on `commons.systems/disposition-graph/quotes`, which owns how the author's words are retained, and strike the six local options in favour of a citation to that ruling. In the same movement, remove both measurements from `quotes`' option prose: a count of the record inside the record is what `authority`'s `no-census-in-a-standing-answer` option is about, and both of these counts have already gone false. The set of unquoted-ratified nodes is derivable — nodes with no `## Disposition` whose authority fact recommends `ratified` — so the frontier or the alignment page should compute it and the node should name the rule. `evaluation`'s option is amended to drop the clause about carrying no Disposition section, which is no longer true of it.

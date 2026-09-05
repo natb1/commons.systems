@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: 5022100045d3fec87a66697115d238de6eead5cc
   against: "The node's rule is right and its second shim is the counter-example to it. Session-context says a session loads three projections 'and nothing else', and that anything in them no node projects is a prune-by-default proposal — yet the harness configuration that decides the permissions and the worktree base every session runs with is declared as a shim over a file that is not in the checkout, is not on the ref, and no projection reads. The one surface with the most operational force over a session is the one the record cannot see, and the node ratifies that state as a declared interim rather than naming it as the gap it is."
+  survey:
+    date: 2026-09-05
+    of: 8ade4e832717a6c3bf0fb4b7910f19bad0f1324f
 facts:
   - name: answer
     options:
@@ -299,3 +302,15 @@ reaches `.claude/rules/`. The alternative is recorded here as
 would carry the declaration. It is not recommended and nothing is settled by
 recording it; adding it moves no pin, this node recommending `standing`, which
 carries no subsection.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- The answer says a session loads "three projections and nothing else", that `CLAUDE.md` "states no rule of its own", and that "a rule no node projects is unsupported implementation". The committed `CLAUDE.md` at the repository root states one rule of its own, "How a recommendation is made", under a stopgap the author granted on 2026-09-04, and its own shim notice says so: "It states one rule of its own and no other". So the answer is presented for ratification in a state its own text classifies as unsupported implementation, and the node declares no shim covering it. The shim notice names its liquidation; the answer should carry that liquidation as a declared shim, or say why a stopgap on the orientation page needs none.
+
+Strongest counter-argument (strong): The answer's discipline — three projections, no rule outside a node, everything else on the frontier as a prune-by-default proposal — is stated in the present tense about a record that does not meet it: `CLAUDE.md` states a rule of its own by its own admission, and the frontier that would carry the residue as a proposal is the second direction of `work-loop`, which begins only at exit and which no instrument derives. Ratifying it makes a description of an intended state read as a description of the actual one, in the one file every session loads first.
+
+The session's reply: Taken, and the finding is the more precise of the two: the answer describes an intended state in the present tense, in the one file every session loads first, while `CLAUDE.md` states a rule of its own by its own admission and the frontier that would carry the residue does not exist. The session records that the answer must either declare the stopgap as a shim with the liquidation the page already names, or say why the orientation page needs none. The option `rules-projection-declared-a-shim` added on 2026-09-05 is a different question and does not cover this one.

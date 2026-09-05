@@ -7,6 +7,9 @@ review:
   date: 2026-09-03
   of: b2f24269ce14ca0e05593e53ba7d04ca2a21807f
   against: "The reading adopts 'addresses do not change' and the record then declares two exceptions to it: the public graph's prefix rewrite, now recorded, and the framed viewer's inability to show or receive an address, recorded as a clause in the answer. A principle with two live exceptions, one of which the record imposes on itself and one of which is a stand-in with no liquidation condition anything reads, is adopted more strongly than the record can honour. The honest form is a relation of diverged with both exceptions named, which is what the sibling readings' `relation-diverged` alternatives propose for the same shape."
+  survey:
+    date: 2026-09-05
+    of: b2f24269ce14ca0e05593e53ba7d04ca2a21807f
 facts:
   - name: answer
     options:
@@ -176,3 +179,12 @@ Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `
 ### Alternatives discharged, 2026-09-03
 
 At the clean-context review of 2026-09-03 the session struck the alternatives the record had already discharged: `delegated-not-ratified` dropped, the recommendation already reads delegated, as readings' rule requires.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The reading adopts four principles and then breaks the fourth twice in the same paragraph: once by the record's own prefix rewrite when the public graph moves, and once by the host, which cannot give a framed page an address. A principle adopted with both of its known applications recorded as divergences has not been adopted in any sense that binds a future decision. What the tradition would actually say here is that a record whose ids are import paths and whose public half is going to be re-prefixed has not yet chosen its addressing scheme, and that is `namespaces`' question, unruled.

@@ -51,6 +51,9 @@ review:
   date: 2026-09-05
   of: 0d91fe901802dc1eb43d9e12821b73dffcd42d03
   against: "The rule was already unrunnable on the day it was drafted, and the record shows it twice over: three readers died on the named model's session limit within one minute on 2026-09-05, the author had to direct a substitute, both skills were amended to name one at the launch, and this reading of the rule is itself running on the substitute. So the answer ratifies as doctrine, at the one class that takes an interview to change, a model the sitting could not obtain, while saying that the model \"is chosen by no session\"; what actually decides which model reads a draft is then the launching session, at the launch, unrecorded in the graph and invisible to every projection, which is the one place the answer says the choice can never be made. And the flat rule forecloses the evidence that would revise it: the instrument it declares observes readings on the named model alone, so the detection differential the Rationale calls unmeasured stays unmeasurable under the rule, and the return condition of the one option kept viable waits on a measurement the rule guarantees will not be made. A rule chosen on the merits would name the role, say what happens when the role's incumbent cannot be reached, and buy the measurement with a sample second reading on a weaker model, none of which the author's words, which name a model and not a method of choosing one, forbid."
+  survey:
+    date: 2026-09-05
+    of: a4d0e9bfc37dd059ae51672c6b770665c073f3dc
 form: rule
 under:
   - commons.systems/disposition-graph/clean-context-review
@@ -672,3 +675,14 @@ found on seven nodes at once. The test left the `authority` node's answer on
 node. Nothing about the class or the boldness changes. The edit moves this
 node's authority-fact pin without a reading behind the move, which is the live
 option `pin-names-the-text-the-reader-read` on `review-cost`.
+
+### Frontier survey, 2026-09-05
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+
+Strongest counter-argument (strong): The answer binds a role and lets the AI supply the name, so what a ratification pins is a sentence about roles while the model an executor actually launches moves without the author — which is the unit the author's words on `viable-options` handed the AI, and which this node otherwise takes back. On the merits of the flat rule: the per-draft reading re-checks, on the same class of mind, a text the most capable model has just written at full attention, so it pays the top rate where the marginal detection is lowest and buys correlated blind spots where the review wanted independence; and by pricing both readings the same it forecloses the measurement that would show whether that is true. `chosen-for-difference` is the option that answers the correlation objection and it is not the recommendation.
+
+The session's reply: Taken in full, and the correlation objection is the part the session cannot answer: a reader of the same class as the drafter, reading at the same effort, buys correlated blind spots exactly where independence was wanted, and pricing both readings the same forecloses the measurement that would show it. `chosen-for-difference` is on the table and is not the recommendation, and the reason recorded for that — that the record cannot yet measure detection by model — is a reason to defer the choice and not a reason to choose the flat rule. What the session adds is that this sitting ran its readings on the most capable model rather than the one the node names, because the smaller model's session limit was reached, so the record has one day of evidence against its own rule and no measurement of it.
