@@ -1,6 +1,6 @@
 ---
 question: What is the legacy record to this graph?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: moderate
@@ -38,6 +38,16 @@ under:
 defines:
   - legacy record
 ---
+## Disposition
+
+The author, 2026-09-04, during the `author-questions` sitting, stopping a sweep
+whose brief had sent it to the legacy tree for evidence:
+
+> stop the sweep. this is not valid
+
+> Ignore the legacy tree on main entirely. Never load the legacy tree unless explicitly instructed. Evaluate on content. If author quote exists that justifies disposition then that's an easy one. Otherwise apply your other content checks.
+
+
 ## Answer
 
 Evidence. The tree under `intentions/` on the main branch, its kinds and its vocabulary (virtue, strategy, tactic, phase, clarification, condition), the skills and rules that projected it, and the incumbent README are records of past decisions and instrument facts. A legacy node is read when a question in this graph needs its knowledge and is then cited as evidence; nothing carries over by default, and that kind vocabulary does not enter this graph. Doctrine the new record overrules is not amended in place: it appears as a rejected alternative in the new node's rationale.
@@ -157,3 +167,34 @@ Recorded as a pending alternative on commons.systems/disposition-graph/readings:
 Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### The author's words on loading the legacy tree, 2026-09-04
+
+The node stood at the ruling stage with a forward verdict. The author's words of
+this day contradict its answer on the one clause that says when the tree is
+opened: the answer has a legacy node read "when a question in this graph needs
+its knowledge", and the sweep that provoked these words was exactly such a
+question — a brief that made the tree the chief place to look for an author
+disposition behind a node. The author stopped it and struck the tree from the
+sweep's evidence, making the default never to load it and an explicit
+instruction the only way in.
+
+That is a narrower rule than the answer states, and the difference is not a
+wording matter: "read it when a question needs it" lets the AI decide the
+question needs it, and "never unless explicitly instructed" does not. Two
+reviews had already found that this node carries no `## Disposition` and that
+its ground was paraphrased rather than quoted, which the option
+`add-a-disposition-section` names; the section now exists, carrying words that
+postdate every option on the answer fact.
+
+No recommendation is moved here and no option is written: the words are
+recorded and the stage returns to the maieutic, where the answer is drafted
+against them. What the drafting must settle, at least: whether the standing
+answer's clause is amended or replaced; whether "explicitly instructed" is the
+author's instruction alone or also a grant recorded on a node; and what becomes
+of the drain, which the account below already flags as having no owner and no
+rank, if the tree may not be opened to drain it.
+
+The two sets of words were said while the `author-questions` sitting was in
+hand, and are recorded there too, where they governed the sweep's brief.
+
