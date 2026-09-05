@@ -103,7 +103,9 @@ reason for choosing it.
   `node packages/disposition/validate.mjs disposition`; browser,
   `node packages/disposition/project.mjs disposition --out dist/browser/index.html`;
   alignment page, `... --alignment dist/alignment/index.html`; rules,
-  `... --rules .claude/rules`; tests,
+  `... --rules .claude/rules`, and its read-only form, which writes nothing and
+  exits non-zero when a rule file has gone stale under an amended node,
+  `... --rules .claude/rules --check`; tests,
   `node --test packages/disposition/*.test.mjs`.
 - Worktrees: a session that isolates itself branches from this checkout's
   head when `.claude/settings.json` sets `worktree.baseRef` to `head`

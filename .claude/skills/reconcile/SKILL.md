@@ -85,7 +85,12 @@ judgment.
 3. `node packages/disposition/project.mjs disposition --rules .claude/rules`.
    If a rule file changed, commit it before anything else
    (`rules: regenerate from <node ids>`): rules bind every session and
-   must be current before a bite is taken.
+   must be current before a bite is taken. The read-only form of the same
+   question, which writes nothing and exits non-zero on drift, is
+   `... --rules .claude/rules --check`; it names each file that is missing,
+   stale, or projected from a node that is no longer `tier: global`. Use it
+   where the answer is wanted without the write, such as in a report or a
+   check on someone else's landing.
 4. Read this file against the nodes it projects. Where a node differs,
    follow the node and report the difference (§4). Apply every shim the
    nodes declare without being asked.

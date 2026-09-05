@@ -172,6 +172,19 @@ skill only when the session starts in the checkout that carries it.
    stages a response on the node as a whole (`alignment-page`)). Act
    on every response before anything else (§5), then resume each sitting
    at its stage.
+5. `node packages/disposition/project.mjs disposition --rules .claude/rules
+   --check` reports, and writes nothing, whether the rule projection under
+   `.claude/rules/` is current with the graph. A rule file is a projection of
+   a `tier: global` node's answer, so amending such a node stales it, and the
+   two land on different refs: nothing about landing the amendment makes the
+   projection happen. This skill does not write the implementation ref, so a
+   drift the check reports is reported to the author and left for the
+   reconciliation skill, unless a grant covers it, in which case the
+   regeneration lands on `greenfield` in its own commit. Run the check again
+   after any sitting that amends a `tier: global` node, so the drift the
+   sitting itself introduced is named in the sitting's report and not
+   discovered later. It was owed and missed twice on 2026-09-05, which is why
+   there is a command for it.
 
 ## 1. Frame
 

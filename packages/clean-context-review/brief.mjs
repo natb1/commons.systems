@@ -780,7 +780,7 @@ export function chooseMode(node, { rootDir, fresh }) {
   }
   return {
     mode: "delta",
-    reason: "the node is at stage review and node.reviewStale is true: its recommendation has moved since its last review's pin",
+    reason: "node.reviewStale is true: the recommendation has moved since the last review's pin, whether the node stands at the review stage or at ruling after a forward",
     fallback: false,
     commit,
     diff,
@@ -964,11 +964,20 @@ function roundLine(node) {
 
 /**
  * Resolve the node a review is invoked on, or throw the exit-2 error the CLI
- * reports on stderr: no such node in the record, or a node not at the review
- * stage (a review runs the moment the recommendation is recorded, which is
- * the node's transition to that stage). Shared by the draft brief and the
- * delta brief, since both are invoked the same way, by `--node <id>`, and
- * differ only in which template the mode choice below sends them to.
+ * reports on stderr: no such node in the record, or a node at neither of the
+ * two states a reading runs on. A reading runs the moment the recommendation
+ * is recorded, which is the node's transition to the review stage; and it
+ * runs again on a node a forward left at the ruling stage whose
+ * recommendation has since moved, which is the amendment a forward reading
+ * earns and the re-reading `review-cost` caps at one. Without that second
+ * state the two rules deadlock: the apply writes `ruling` on a forward, the
+ * session then amends in answer to the findings, and the re-reading that
+ * would re-pin the amended text cannot be generated at all, so the node goes
+ * to the author with a pin naming text nobody read. A ruling-stage node whose
+ * pin still matches is refused as before: it is ready to rule, and there is
+ * nothing for a reading to read. Shared by the draft brief and the delta
+ * brief, since both are invoked the same way, by `--node <id>`, and differ
+ * only in which template the mode choice below sends them to.
  */
 async function resolveReviewNode(rootDir, id) {
   const graph = await readGraph(rootDir);
@@ -978,8 +987,12 @@ async function resolveReviewNode(rootDir, id) {
     err.exitCode = 2;
     throw err;
   }
-  if (node.stage !== "review") {
-    const err = new Error(`${id} is at stage ${node.stage ?? "none"}, and the review of a draft runs on a node at stage review (its recommendation has just been recorded)`);
+  const amendedAfterForward = node.stage === "ruling" && node.reviewStale;
+  if (node.stage !== "review" && !amendedAfterForward) {
+    const at = node.stage === "ruling"
+      ? `${id} is at stage ruling and its recommendation has not moved since its review's pin: it is ready for the author, and a reading has nothing to read`
+      : `${id} is at stage ${node.stage ?? "none"}, and a reading runs on a node at stage review (its recommendation has just been recorded) or on one at stage ruling whose recommendation has moved since its review's pin (the amendment a forward earned)`;
+    const err = new Error(at);
     err.exitCode = 2;
     throw err;
   }

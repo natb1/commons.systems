@@ -194,8 +194,12 @@ describe("apply.mjs: draft, forward", () => {
     assert.ok(afterText.includes("question: Should boldness gate which drafts need a second reviewer?\n"));
     assert.ok(afterText.includes("The author asked whether a high-boldness draft needs a second pass before the\nruling."));
 
+    // The heading carries the short pin of the recommendation the reading
+    // read, so two readings of two answers on one day stay addressable.
+    const pinned = /^  of: ([0-9a-f]{40})$/m.exec(afterText);
+    assert.ok(pinned, "the review block pins the recommendation");
     const expectedSubsection = [
-      "### Clean-context review, 2026-09-03",
+      `### Clean-context review, 2026-09-03, of ${pinned[1].slice(0, 8)}`,
       "",
       `${DRAFT_OPENING} Verdict: forward to the author's ruling.`,
       "",
@@ -2152,5 +2156,43 @@ describe("apply.mjs: subtree_divergences", () => {
       result.report.some((l) => l === `subtree divergence on ${RULING_A}: whole-thing 1; already present, skipped: ${MAIEUTIC_NODE}`),
       `report does not carry the skip note: ${result.report.join(" | ")}`,
     );
+  });
+});
+
+describe("apply.mjs: a reading's heading is an address", () => {
+  test("the pin distinguishes two readings of two answers, and a roman suffix keeps a same-pin same-day pair addressable", async () => {
+    const rootDir = await freshFixture("heading-");
+    const file = reviewNodePath(rootDir);
+    const input = {
+      scope: "draft",
+      id: REVIEW_NODE,
+      verdict: "forward",
+      findings: ["Answer: read once."],
+      counter_argument: null,
+      strength: "none",
+    };
+
+    // The stage is held at 'review' across both applies: what is under test
+    // is the heading, and a forward would otherwise move the node to 'ruling'
+    // and the second apply would refuse it.
+    const overrides = { [REVIEW_NODE]: "review" };
+    const first = await applyReviews({ rootDir, input, replies: {}, overrides, date: DATE });
+    assert.equal(first.validation.ok, true, JSON.stringify(first.validation));
+    const afterFirst = await readFile(file, "utf8");
+    const pin = /^  of: ([0-9a-f]{40})$/m.exec(afterFirst);
+    assert.ok(pin, "the review block pins the recommendation");
+    const head = `### Clean-context review, ${DATE}, of ${pin[1].slice(0, 8)}`;
+    assert.ok(afterFirst.includes(`${head}\n`), `first heading missing: ${head}`);
+
+    // The same answer read again on the same day: the cap forbids it and the
+    // caller warns, but the heading must still name one section and not two.
+    const { result: second } = await captureStderr(() => applyReviews({
+      rootDir, input: { ...input, findings: ["Answer: read twice."] }, replies: {}, overrides, date: DATE,
+    }));
+    assert.equal(second.validation.ok, true, JSON.stringify(second.validation));
+    const afterSecond = await readFile(file, "utf8");
+    assert.ok(afterSecond.includes(`${head}\n`), "the first heading survives untouched");
+    assert.ok(afterSecond.includes(`${head} (ii)\n`), `the second heading is not disambiguated:\n${afterSecond.slice(-600)}`);
+    assert.equal(afterSecond.split(`${head}\n`).length - 1, 1, "exactly one section carries the bare heading");
   });
 });

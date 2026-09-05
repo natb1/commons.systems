@@ -137,7 +137,30 @@ describe("brief.mjs: the two readings", () => {
 
     const wrongStage = runCliExpectingFailure(["--node", MAIEUTIC_NODE, rootDir, "--dry"], cwd);
     assert.equal(wrongStage.status, 2);
-    assert.match(wrongStage.stderr, /is at stage maieutic, and the review of a draft runs on a node at stage review/);
+    assert.match(wrongStage.stderr, /is at stage maieutic, and a reading runs on a node at stage review/);
+    assert.match(wrongStage.stderr, /or on one at stage ruling whose recommendation has moved/);
+  });
+
+  test("CLI: a ruling-stage node is refused while its pin is current, and accepted once its recommendation has moved", async () => {
+    const rootDir = await freshFrontierFixture("ruling-stage-");
+    const cwd = path.dirname(rootDir);
+    const file = path.join(rootDir, "main", "ruling-a.md");
+
+    const ready = runCliExpectingFailure(["--node", RULING_A, rootDir, "--dry"], cwd);
+    assert.equal(ready.status, 2);
+    assert.match(ready.stderr, /is at stage ruling and its recommendation has not moved/);
+
+    // The amendment a forward reading earns: the answer text moves, the
+    // review's pin does not, and the re-reading that would re-pin it must be
+    // generable or the node reaches the author pinned to text nobody read.
+    const before = await readFile(file, "utf8");
+    const at = before.lastIndexOf("\n## Answer\n");
+    assert.ok(at > 0, "fixture precondition: the recommendation fence carries an '## Answer'");
+    const amended = `${before.slice(0, at)}\n## Answer\n\nAmended after the forward reading, which moves the recommendation pin.\n${before.slice(at + "\n## Answer\n".length)}`;
+    await writeFile(file, amended);
+
+    const accepted = runCli(["--node", RULING_A, rootDir, "--dry"], cwd);
+    assert.match(accepted, /mode: (delta|draft)/, `the reading was not generated:\n${accepted}`);
   });
 });
 

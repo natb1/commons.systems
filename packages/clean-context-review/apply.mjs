@@ -674,6 +674,32 @@ function readingSectionsSinceKickback(accountText, currentRecommends) {
 }
 
 /**
+ * What heads a reading's subsection, after the kind: the date, and the short
+ * pin of the recommendation the reading read. The date alone is not an
+ * address -- a redrawn answer read twice in one day gives two subsections
+ * with the same heading, and a citation by heading then resolves to neither
+ * (measured on `class-recommendation` and on `delegation-bounds-and-sizing`,
+ * 2026-09-05). The pin is the record's own handle for what was read, so the
+ * heading says which text the reading judged and no two readings of two
+ * answers can collide. A collision that survives the pin is the same answer
+ * read twice on one day, which the two-reading cap forbids and the caller
+ * warns about; the roman suffix keeps the heading addressable even then.
+ * A reading with no pin (nothing recommended yet) keeps the bare date.
+ */
+const ROMAN = ["", " (ii)", " (iii)", " (iv)", " (v)", " (vi)"];
+
+function readingStamp(date, of, kind, accountText) {
+  const base = of ? `${date}, of ${String(of).slice(0, 8)}` : `${date}`;
+  const prefix = kind === "survey" ? "### Frontier survey, " : kind === "delta" ? "### Clean-context re-reading, " : "### Clean-context review, ";
+  if (!accountText) return base;
+  for (let i = 0; i < ROMAN.length; i += 1) {
+    const candidate = `${base}${ROMAN[i]}`;
+    if (!accountText.includes(`${prefix}${candidate}\n`)) return candidate;
+  }
+  return `${base} (${Date.now()})`;
+}
+
+/**
  * The subsection one reading appends to the node it read: the draft's review,
  * with its verdict, or the survey's reading of that node, which has none --
  * the survey forwards nothing, and only its findings move a stage. The fields
@@ -688,21 +714,23 @@ function readingSectionsSinceKickback(accountText, currentRecommends) {
 function renderSubsection({
   kind = "draft", date, verdict, kickback_stage: kickbackStage, findings,
   counter_argument: counterArgument, strength, facts_check: factsCheck, viability, reply, recommends,
+  of = null, accountText = null,
 }) {
+  const stamp = readingStamp(date, of, kind, accountText);
   const parts = kind === "survey"
     ? [
-      `### Frontier survey, ${date}`,
+      `### Frontier survey, ${stamp}`,
       "",
       "Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.",
     ]
     : kind === "delta"
       ? [
-        `### Clean-context re-reading, ${date}`,
+        `### Clean-context re-reading, ${stamp}`,
         "",
         `Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. ${verdict === "forward" ? "Verdict: the amendment stands, forwarded to the author's ruling." : `Verdict: kicked back to the ${kickbackStage} stage.`}`,
       ]
       : [
-        `### Clean-context review, ${date}`,
+        `### Clean-context review, ${stamp}`,
         "",
         `Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. ${verdict === "forward" ? "Verdict: forward to the author's ruling." : `Verdict: kicked back to the ${kickbackStage} stage.`}`,
       ];
@@ -975,6 +1003,8 @@ async function planDraft(input, ctx) {
     viability: input.viability ?? null,
     reply,
     recommends,
+    of: parsedBefore.recommendationHash,
+    accountText: parsedBefore.account,
   });
 
   const survey = (parsedBefore.review && parsedBefore.review.survey) || null;
@@ -1421,6 +1451,8 @@ async function planTouchedNode(id, t, ctx) {
       facts_check: entry.facts_check ?? null,
       viability: entry.viability ?? null,
       reply,
+      of: ctx.pinOf(id),
+      accountText: parsedBefore.account,
     }));
     labels.push("Frontier survey");
     surveyPin = { date: ctx.date, of: ctx.pinOf(id) };

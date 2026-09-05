@@ -33,7 +33,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const MARKER = "<!--DG:GRAPH-->";
 
 function parseArgs(argv) {
-  const opts = { rootDir: null, input: null, out: null, rules: null, ancestry: null, local: null, frontier: null, alignment: null };
+  const opts = { rootDir: null, input: null, out: null, rules: null, ancestry: null, local: null, frontier: null, alignment: null, check: false };
   const valueFlags = { "--input": "input", "--out": "out", "--rules": "rules", "--ancestry": "ancestry", "--local": "local", "--frontier": "frontier", "--alignment": "alignment" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -41,6 +41,8 @@ function parseArgs(argv) {
       const v = argv[++i];
       if (v === undefined) throw new Error(`${a} needs a value`);
       opts[valueFlags[a]] = v;
+    } else if (a === "--check") {
+      opts.check = true;
     } else if (a.startsWith("--")) {
       throw new Error(`unknown flag ${a}`);
     } else if (opts.rootDir === null) {
@@ -52,6 +54,9 @@ function parseArgs(argv) {
   if (opts.rootDir === null) opts.rootDir = ".";
   if ((opts.ancestry === null) !== (opts.local === null)) {
     throw new Error("--ancestry and --local must be given together");
+  }
+  if (opts.check && opts.rules === null) {
+    throw new Error("--check reports the drift of the rule projection and needs --rules <dir> to know which directory to read");
   }
   return opts;
 }
@@ -167,25 +172,75 @@ export function classPhrase(node) {
  * @param {string} dir
  * @returns {Promise<{dir: string, written: string[], deleted: string[]}>}
  */
+export function ruleFiles(graph) {
+  const files = [];
+  for (const node of graph.nodes) {
+    if (node.tier !== "global") continue;
+    if (typeof node.answer !== "string" || node.answer.length === 0) {
+      throw new Error(`--rules: global-tier node ${node.id} has no '## Answer' section to project`);
+    }
+    const notice = `> Projected from ${node.id} (${classPhrase(node)}). ${RULES_NOTICE} If this file conflicts with the graph on the disposition ref, the graph wins.`;
+    files.push({ fileName: `${node.slug}.md`, id: node.id, content: `# ${node.question}\n${notice}\n\n${node.answer}\n` });
+  }
+  return files;
+}
+
+/**
+ * What `writeRules` would write, measured against what stands in `dir`, and
+ * writing nothing. A rule file is a projection, so it goes stale the moment
+ * the node it projects is amended, and the amendment lands on the graph's ref
+ * while the projection lands on the implementation's: nothing about landing
+ * one makes the other happen, and in this record's own bootstrap the
+ * regeneration was owed and missed twice on 2026-09-05. This is the check a
+ * session runs to find out, rather than remembering to.
+ *
+ * @param {{nodes: object[]}} graph
+ * @param {string} dir
+ * @returns {Promise<{dir: string, stale: string[], missing: string[], extra: string[], ok: boolean}>}
+ */
+export async function checkRules(graph, dir) {
+  const target = resolve(dir);
+  const expected = ruleFiles(graph);
+  const stale = [];
+  const missing = [];
+  for (const f of expected) {
+    let text = null;
+    try {
+      text = await readFile(join(target, f.fileName), "utf8");
+    } catch {
+      missing.push(`${f.fileName}: no such file; ${f.id} is tier: global and projects one`);
+      continue;
+    }
+    if (text !== f.content) stale.push(`${f.fileName}: stale; ${f.id} has been amended since it was projected`);
+  }
+  const keep = new Set(expected.map((f) => f.fileName));
+  const extra = [];
+  let entries = [];
+  try {
+    entries = await readdir(target, { withFileTypes: true });
+  } catch {
+    entries = [];
+  }
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".md") || keep.has(entry.name)) continue;
+    const text = await readFile(join(target, entry.name), "utf8");
+    if (text.includes(RULES_NOTICE)) extra.push(`${entry.name}: projected from a node that is no longer tier: global`);
+  }
+  return { dir: target, stale, missing, extra, ok: stale.length === 0 && missing.length === 0 && extra.length === 0 };
+}
+
 export async function writeRules(graph, dir) {
   const target = resolve(dir);
   await mkdir(target, { recursive: true });
 
   const written = [];
   const keep = new Set();
-  for (const node of graph.nodes) {
-    if (node.tier !== "global") continue;
-    if (typeof node.answer !== "string" || node.answer.length === 0) {
-      throw new Error(`--rules: global-tier node ${node.id} has no '## Answer' section to project`);
-    }
-    const fileName = `${node.slug}.md`;
-    const filePath = join(target, fileName);
-    const notice = `> Projected from ${node.id} (${classPhrase(node)}). ${RULES_NOTICE} If this file conflicts with the graph on the disposition ref, the graph wins.`;
-    const content = `# ${node.question}\n${notice}\n\n${node.answer}\n`;
+  for (const f of ruleFiles(graph)) {
+    const filePath = join(target, f.fileName);
     await mkdir(dirname(filePath), { recursive: true });
-    await writeFile(filePath, content);
+    await writeFile(filePath, f.content);
     written.push(filePath);
-    keep.add(fileName);
+    keep.add(f.fileName);
   }
 
   const deleted = [];
@@ -1953,7 +2008,16 @@ async function runCli(opts) {
     return;
   }
 
-  if (opts.rules) {
+  if (opts.rules && opts.check) {
+    const result = await checkRules(graph, opts.rules);
+    for (const line of [...result.missing, ...result.stale, ...result.extra]) process.stdout.write(`${line}\n`);
+    if (result.ok) {
+      process.stdout.write(`rules: current with the graph (${result.dir})\n`);
+    } else {
+      process.stdout.write(`rules: ${result.missing.length + result.stale.length + result.extra.length} file(s) out of date; run --rules ${opts.rules} to project them\n`);
+      process.exitCode = 1;
+    }
+  } else if (opts.rules) {
     const result = await writeRules(graph, opts.rules);
     for (const f of result.written) process.stdout.write(`wrote ${f}\n`);
     for (const f of result.deleted) process.stdout.write(`deleted ${f}\n`);
