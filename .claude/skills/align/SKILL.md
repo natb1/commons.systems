@@ -54,7 +54,7 @@ description: Record or revise one node of the disposition graph by interview wit
 > `review-model`, `decomposition`,
 > `checkpoint`,
 > `alignment-target`, `alignment-order`, `alignment-page`, `authority`,
-> `author-questions`,
+> `author-questions`, `probe-or-node`,
 > `viable-options`, `prose-and-structure`, `node`, `under`, `projection`,
 > `un-aligned-children`, `fidelity`,
 > `persistence`, `readings`, `review`, `evaluation`, `attention`,
@@ -364,7 +364,8 @@ skill only when the session starts in the checkout that carries it.
   `fidelity` question asks and the state does not yet do; and give the
   author, at the ruling, the context to see how this question stands to
   the rest of the frontier.
-- **Probes, and where they are asked** (`author-questions`). Probes are
+- **Probes, and where they are asked** (`author-questions`,
+  `probe-or-node`). Probes are
   collected at the periagoge, at the review of a draft, at the survey, when
   a confirmation kickback is processed, and at any point in the alignment
   dialogue, in reconciliation, or in the loop on itself where a recorded
@@ -372,9 +373,33 @@ skill only when the session starts in the checkout that carries it.
   where three things hold together: the record does not answer it and the
   AI has looked, `why` naming the locus read; an answer would move a
   recommendation on the node, `discharges` naming which; and the answer is
-  not itself a disposition, since a question whose answer would stand as an
-  answer to a question of the record is a node, minted under the node it
-  blocks and entered in that node's `depends`. Finding none is a complete
+  not itself a disposition. The third limb is decided by what the author's
+  response would do once it is given and never by how the question is
+  worded, since any question can be worded either way: an open question is
+  an option where the AI holds a candidate viable, a probe where the
+  response would be consumed whole by moving a recommendation on the node,
+  and a node where the response would have to stand, minted under the node
+  it blocks and entered in that node's `depends`. Four tests apply it
+  (`probe-or-node`), each put to the response and the first that settles
+  the matter settling it: the **ruling test**, whether the response would
+  be a ruling conferring a class or an answer saying what the author
+  intends; the **scope test**, whether it would move recommendations on
+  more than one node or bind nodes not yet written; the **survival test**,
+  whether anything would need the response after the recommendation it
+  moved has been ruled on; and the **independence test**, which runs the
+  other way, catching a node whose only possible answer is a reading of its
+  parent's answer, whose facts would repeat the parent's, and which would
+  be pruned the moment the parent's recommendation moved. Neither the
+  absence nor the presence of the author's words is evidence either way,
+  and a question the sitting cannot classify is recorded as a probe, the
+  reversible error, since a probe is promotable to a node and a node is
+  demotable only by a prune the author must rule on. A node found by the
+  independence test to be a probe on its parent is re-encoded as one, with
+  `source` naming the node it was, its account folded into the parent's,
+  any words of the author's on it moved to the parent's `## Disposition`,
+  and its options struck, since options that were never candidates are the
+  costumed options the author classified on 2026-09-04; a reading
+  (`form: reading`) is exempt by construction. Finding none is a complete
   answer and a movement that found no probe records none and says so. The
   cap is three open probes on one node, a probe compounding two counting as
   two, and a movement that would raise a fourth discharges or withdraws one
