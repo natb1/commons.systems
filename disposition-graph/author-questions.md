@@ -99,6 +99,11 @@ which stand as the options `cap-from-contract-class` and
 > Also, confirm: the review finding questions are examples of meiutic questions to be ruled on during meiutic dialogue, not the kind of thing to be confirmed as facts in the alignment artifact
 
 
+The author, 2026-09-04, on what the reconciliation of this node includes:
+
+> When you get to reconciliation, part of the reconciliation will be migrating existing nodes - looking for evidence of open meiutic questions recorded elsewhere which you cannot answer with current context, if found, recoding them with the new encoding for those questions, and resetting dialogue phase to meiutic if there are open meiutic questions.
+
+
 ## Answer
 
 In the dialogue state, as `probes`, one list on the node beside `stage`, `review` and `depends`. A probe is a question the AI needs the author to answer before it can recommend, and whose answer is not itself a disposition: it disambiguates what the author meant where the record leaves it open, and when it is answered it binds nothing and stands nowhere. The word is the record's already, used in fourteen nodes and defined in none, and the growth node's periagogic conduct, one probe per turn from the page and not from memory, is where it entered; this answer defines it, extends it to every movement rather than the periagogic one alone, and gives it a shape. One list and not one per fact: an entry names the `fact` it bears on where it bears on one, and names none where it bears on the node's ground. The author's words, a list of the questions needed to disambiguate intention and to make recommendations for each of the facts, admit both readings, and this one is taken because a node at the periagogic stage carries no facts at all, and the periagoge is the first moment the author's words name; a home that cannot hold the first probe it is asked to hold is not the home. What makes the list a list of decisions rather than of decisions repeated is the same rule the parent applies to everything else on a node: a probe is one thing the author must settle, a probe that compounds two is two probes, and a probe whose answer would itself stand as an answer to a question of the record is not a probe at all but a node.
