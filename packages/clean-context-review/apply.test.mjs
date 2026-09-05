@@ -137,7 +137,7 @@ describe("apply.mjs: draft, forward", () => {
       id: REVIEW_NODE,
       verdict: "forward",
       findings: ["Answer: needs a caveat about X."],
-      counter_argument: "A boldness gate could miss low-boldness drafts that are wrong for other reasons.",
+      counter_argument: "A boldness gate could miss low-boldness drafts that are wrong for other reasons: the \"gate\" is a proxy.",
       strength: "moderate",
       facts_check: "Delegated and high boldness both look right for this draft.",
       viability: "Both options are viable; none is missing.",
@@ -165,8 +165,8 @@ describe("apply.mjs: draft, forward", () => {
     assert.equal(fieldValue(block, "of"), wantHash, "'review.of' pins the node's recommendation hash");
     assert.equal(
       fieldValue(block, "against"),
-      "A boldness gate could miss low-boldness drafts that are wrong for other reasons.",
-      "'review.against' is written from the non-null counter_argument, beside strength",
+      JSON.stringify("A boldness gate could miss low-boldness drafts that are wrong for other reasons: the \"gate\" is a proxy."),
+      "'review.against' is written from the non-null counter_argument, beside strength, quoted so a colon or a quote in it stays YAML",
     );
     assert.ok(!block.includes("survey:"), "no survey pin is invented where the node carried none");
 
@@ -191,7 +191,7 @@ describe("apply.mjs: draft, forward", () => {
       "",
       "On the viability of the options: Both options are viable; none is missing.",
       "",
-      "Strongest counter-argument (moderate): A boldness gate could miss low-boldness drafts that are wrong for other reasons.",
+      'Strongest counter-argument (moderate): A boldness gate could miss low-boldness drafts that are wrong for other reasons: the "gate" is a proxy.',
       "",
       "The session's reply: Accepted: the gate stays proposal-only for now.",
       "",
@@ -300,7 +300,7 @@ describe("apply.mjs: draft, kickback", () => {
     assert.equal(fieldValue(block, "strength"), "weak");
     assert.equal(
       fieldValue(block, "against"),
-      "The ground may already be settled elsewhere and this redraws it needlessly.",
+      JSON.stringify("The ground may already be settled elsewhere and this redraws it needlessly."),
     );
   });
 
@@ -392,7 +392,7 @@ describe("apply.mjs: draft, override", () => {
     const block = reviewBlockOf(afterText);
     assert.equal(fieldValue(block, "verdict"), "forward");
     assert.equal(fieldValue(block, "strength"), "strong");
-    assert.equal(fieldValue(block, "against"), "The fixture's own record is thin, so 'sound' rests on little evidence.");
+    assert.equal(fieldValue(block, "against"), JSON.stringify("The fixture's own record is thin, so 'sound' rests on little evidence."));
     assert.deepEqual(topKeys(block), ["verdict", "strength", "date", "of", "against"], "review block is exactly these five keys, 'against' from the non-null counter_argument");
 
     // the recommendation hash is independent of stage, review and the

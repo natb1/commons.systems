@@ -341,7 +341,7 @@ function renderReviewBlock({ verdict = null, strength = null, date = null, of = 
   const lines = ["review:"];
   if (verdict !== null) {
     lines.push(`  verdict: ${verdict}`, `  strength: ${strength}`, `  date: ${date}`, `  of: ${hashScalar(of)}`);
-    if (against !== null) lines.push(`  against: ${against}`);
+    if (against !== null) lines.push(`  against: ${JSON.stringify(against)}`);
   }
   if (survey !== null) {
     lines.push("  survey:", `    date: ${survey.date}`, `    of: ${hashScalar(survey.of)}`);
