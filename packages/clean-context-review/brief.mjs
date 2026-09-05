@@ -55,6 +55,7 @@ import { renderFrontier } from "@commons.systems/disposition/project.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRAFT_TEMPLATE_PATH = path.join(HERE, "brief-draft.md");
+const DELTA_TEMPLATE_PATH = path.join(HERE, "brief-delta.md");
 const SURVEY_TEMPLATE_PATH = path.join(HERE, "brief-survey.md");
 
 // The two fragments the templates share, filled into both at `{{bounds}}` and
@@ -72,12 +73,15 @@ const RECORD_FRAGMENT_PATH = path.join(HERE, "brief-record.md");
 const SURVEY_OUT_FILE = "tmp/review/survey.json";
 const SURVEY_PINS_FILE = "tmp/review/survey.pins.json";
 const draftOutFile = (slug) => `tmp/review/draft-${slug}.json`;
+const deltaOutFile = (slug) => `tmp/review/delta-${slug}.json`;
 
 export const USAGE = [
-  "usage: node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry]",
+  "usage: node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry] [--fresh]",
   "       node brief.mjs --survey    [rootDir] [--date YYYY-MM-DD] [--dry]",
   "exactly one of --node <id> and --survey is given: the review of one draft,",
-  "or the survey of the frontier.",
+  "or the survey of the frontier. --fresh (--node only) forces the draft",
+  "brief even on a node whose recommendation has moved since its review --",
+  "what a kickback needs, since a kickback means the answer was redrawn.",
 ].join("\n");
 
 function todayIsoUtc() {
@@ -90,7 +94,7 @@ function todayIsoUtc() {
  * stderr and exits 2 on.
  */
 export function parseArgs(argv) {
-  const opts = { node: null, survey: false, rootDir: null, date: null, dry: false };
+  const opts = { node: null, survey: false, rootDir: null, date: null, dry: false, fresh: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--node") {
@@ -106,6 +110,8 @@ export function parseArgs(argv) {
       opts.date = v;
     } else if (a === "--dry") {
       opts.dry = true;
+    } else if (a === "--fresh") {
+      opts.fresh = true;
     } else if (a.startsWith("--")) {
       throw new Error(`unknown flag ${a}`);
     } else if (opts.rootDir === null) {
@@ -119,6 +125,9 @@ export function parseArgs(argv) {
   }
   if (opts.node === null && !opts.survey) {
     throw new Error("no reading named: give --node <id> for the review of a draft, or --survey for the survey of the frontier");
+  }
+  if (opts.fresh && opts.survey) {
+    throw new Error("--fresh forces the draft brief on a re-reading; the survey has no re-reading to force");
   }
   return opts;
 }
@@ -436,7 +445,87 @@ function renderWholeNode(node, { account = true } = {}) {
   return parts.join("\n");
 }
 
-/** One context node: class, stage, question, standing answer, other options. */
+/**
+ * One neighbour node, by what it answers and never by its whole file
+ * (`review-cost`, the `neighbours-answered-not-whole` clause the recommended
+ * answer folds in: "the neighbourhood is carried, but each neighbour by what
+ * it answers rather than by its whole file"): its id, its file, its
+ * question, its status line, the answer that stands on it, the answer it
+ * now recommends where that differs from what stands, and the names of the
+ * options on its answer fact -- each with its source and whether it is
+ * recommended or passed over -- one line apiece, no prose. Its rationale,
+ * its '## Facts' prose, its `#### <option>` subsections and the rest of its
+ * '## Recommendation' fence are that node's own dialogue and stay in the
+ * file one read away, exactly as its '## Account' already does and for the
+ * same reason.
+ *
+ * Used for every part of a draft's neighbourhood -- ancestry, the rules of
+ * the reading, children, siblings, cited, readings -- and never for the node
+ * under review itself, which keeps `renderWholeNode`, nor for the survey's
+ * own context nodes (`renderContextNode`), whose reader is meant to see the
+ * whole graph.
+ */
+function renderNeighbourNode(node) {
+  const parts = [
+    `### ${node.id}`,
+    "",
+    `- File: ${nodeFile(node)}`,
+    `- Question: ${node.question}`,
+    `- Stage: ${node.stage ?? "none"} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | status ${node.status} | class: ${classText(node)}`,
+    "",
+    "#### Answer (the text that stands)",
+    "",
+    node.answer || "(no '## Answer' section: nothing stands on this node yet)",
+  ];
+
+  const fact = node.answerFact;
+  if (fact && fact.recommends && fact.recommends !== fact.stands) {
+    const recommendedAnswer = node.fence && node.fence.sections ? node.fence.sections.Answer : null;
+    parts.push(
+      "",
+      `#### Now recommends \`${fact.recommends}\` (differs from what stands)`,
+      "",
+      recommendedAnswer || "(no '## Answer' in the '## Recommendation' fence)",
+    );
+  }
+
+  parts.push("", "#### The names of the options on its answer fact", "");
+  if (fact && (fact.options || []).length > 0) {
+    for (const option of fact.options) {
+      const bits = [option.source ? `source ${option.source}` : "no source recorded"];
+      if (fact.recommends === option.name) bits.push("recommended");
+      if (option.status === "passed") bits.push("passed over");
+      parts.push(`- \`${option.name}\` — ${bits.join(", ")}`);
+    }
+  } else {
+    parts.push("(no answer fact: no decision is recorded on this node yet)");
+  }
+
+  return parts.join("\n");
+}
+
+function renderNeighbourNodeList(nodes, empty) {
+  if (nodes.length === 0) return empty;
+  return nodes.map(renderNeighbourNode).join("\n");
+}
+
+/**
+ * One line for the index of every other question the record asks
+ * (`review-cost`): the id, the question, and the file -- so a reader whose
+ * question looks close to this one need not derive the path from the id --
+ * and nothing else, since the answer behind the question is the survey's
+ * object and not a draft reader's.
+ */
+function indexQuestionLine(node) {
+  return `- ${node.id} | ${node.question} | ${nodeFile(node)}`;
+}
+
+/**
+ * One context node: class, stage, question, standing answer, other options.
+ * Still used for the survey's context nodes (`writeSurveyBrief`), whose
+ * reader is given the whole graph and is meant to see each one in full; the
+ * draft's index uses `indexQuestionLine` instead (`review-cost`).
+ */
 function renderContextNode(node) {
   const head = [`### ${node.id}`, "", `- File: ${nodeFile(node)}`, `- Question: ${node.question}`];
   head.push(`- Status: ${node.status} | class: ${classText(node)} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | stage: ${node.stage || "none (no dialogue open)"}`);
@@ -533,20 +622,209 @@ function commitText({ commit, dirty }) {
   return dirty ? `${commit} (dirty)` : commit;
 }
 
+/**
+ * The unified diff of one node's file between the commit a reading pinned
+ * and the working tree, run in the graph's own checkout with `graphCommit`'s
+ * pattern. `git show` first, to check the file resolves at that commit at
+ * all -- a pin can name a commit the graph has since been rebased past, or a
+ * node since moved to a different graph -- then `git diff` for the text
+ * itself. Returns null, never throwing, on anything that keeps the diff from
+ * being read: no git checkout, an unresolvable commit, a file git does not
+ * find there. A re-reading falls back to the draft brief on null
+ * (`review-cost`'s own fallback).
+ */
+export function nodeDiffSinceCommit(rootDir, commit, relPath) {
+  const run = (args) => execFileSync("git", ["-C", rootDir, ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  try {
+    run(["show", `${commit}:${relPath}`]);
+  } catch {
+    return null;
+  }
+  try {
+    return run(["diff", commit, "--", relPath]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The last `### Clean-context review, <date>` subsection of a node's
+ * '## Account', verbatim, fence-aware in the same way `apply.mjs`'s
+ * `headingBoundaries` is (a heading-looking line inside a fenced code block
+ * is not a heading). Matches only a draft reading's own heading and never a
+ * re-reading's ("### Clean-context re-reading, ..."), since a re-reading is
+ * read against the reading before it and never against itself. Returns null
+ * where the account carries no such subsection, which sends the caller back
+ * to the draft brief: there is nothing here to re-read against.
+ */
+export function lastCleanContextReviewSection(accountText) {
+  if (!accountText) return null;
+  const lines = accountText.split("\n");
+  const headingRe = /^(#{1,6})[ \t]+(.*?)\s*$/;
+  const fenceRe = /^[ \t]*(`{3,}|~{3,})/;
+  const headings = [];
+  let fenceChar = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const fence = line.match(fenceRe);
+    if (fence) {
+      if (fenceChar === null) fenceChar = fence[1][0];
+      else if (fence[1][0] === fenceChar) fenceChar = null;
+      continue;
+    }
+    if (fenceChar !== null) continue;
+    const m = line.match(headingRe);
+    if (m && m[1].length === 3) headings.push({ name: m[2], index: i });
+  }
+  let lastMatch = null;
+  for (const h of headings) {
+    if (/^Clean-context review, /.test(h.name)) lastMatch = h;
+  }
+  if (!lastMatch) return null;
+  const at = headings.indexOf(lastMatch);
+  const end = at + 1 < headings.length ? headings[at + 1].index : lines.length;
+  return lines.slice(lastMatch.index, end).join("\n").trimEnd();
+}
+
+/**
+ * Which brief a `--node` review writes, decided from the record and never
+ * from a flag the session sets on its own account (`review-cost`: the
+ * re-reading's object is the amendment, owed only where the answer itself
+ * moved since its last reading, and `--fresh` is only for a kickback, whose
+ * new answer owes a fresh reading of its own). `node.reviewStale` is exactly
+ * "changed since its review" -- the same test the frontier renders that way
+ * -- and it is `true` only where `node.review` already exists, so every
+ * branch below it may read `node.review` without a further null check.
+ *
+ * Falls back to the draft brief, with `fallback: true` and a reason naming
+ * it, wherever the re-reading has nothing to read against: no review
+ * recorded at all, a review whose pin names no commit (one written before
+ * the `commit` key existed, or on a graph that was not a git checkout at the
+ * time), a commit `git show` cannot resolve the node's file at, or an
+ * account carrying no prior `### Clean-context review,` subsection.
+ *
+ * @returns {{mode: "draft"|"delta", reason: string, fallback: boolean,
+ *   commit?: string, diff?: string, previous?: string}}
+ */
+export function chooseMode(node, { rootDir, fresh }) {
+  if (fresh) {
+    return { mode: "draft", reason: "--fresh forces the draft brief: a kickback's new answer owes a fresh reading, not a re-reading of the old one", fallback: false };
+  }
+  if (!node.reviewStale) {
+    const hasDraftReview = !!(node.review && node.review.of !== null);
+    return {
+      mode: "draft",
+      reason: hasDraftReview
+        ? "the node's recommendation has not moved since its last review's pin: nothing for a re-reading to read"
+        : "the node carries no draft review yet: this is its first reading",
+      fallback: false,
+    };
+  }
+  const commit = node.review.commit;
+  if (!commit) {
+    return {
+      mode: "draft",
+      reason: "the node's recommendation has moved since its review, but the review names no commit to diff against",
+      fallback: true,
+    };
+  }
+  const relPath = `${node.graph}/${node.slug}.md`;
+  const diff = nodeDiffSinceCommit(rootDir, commit, relPath);
+  if (diff === null) {
+    return {
+      mode: "draft",
+      reason: `the review names commit ${commit}, but git could not resolve ${relPath} there`,
+      fallback: true,
+    };
+  }
+  const previous = lastCleanContextReviewSection(node.account);
+  if (!previous) {
+    return {
+      mode: "draft",
+      reason: "the node's recommendation has moved since its review, but its account carries no prior reading to re-read against",
+      fallback: true,
+    };
+  }
+  return {
+    mode: "delta",
+    reason: "the node is at stage review and node.reviewStale is true: its recommendation has moved since its last review's pin",
+    fallback: false,
+    commit,
+    diff,
+    previous,
+  };
+}
+
 // -------------------------------------------------- the review of one draft
 
 /**
+ * The twelve nodes that govern the reading itself and not the draft: what
+ * the review is and what it judges, the validations, the two readings and
+ * what each is given, the encoding's vocabulary (facts, options, rulings,
+ * the derived class), and what a node is (`review-cost`: "the rules of the
+ * reading itself in the same way rather than as a list of files for the
+ * reader to open"). The same twelve for every draft, so this is one place to
+ * edit them. Five are `tier: global` and so are already carried in
+ * `ancestry` for every node; `draftNeighbourhood` takes `rules` after
+ * `ancestry` so those five are not duplicated.
+ */
+export const READING_RULES = [
+  "commons.systems/disposition-graph/recording",
+  "commons.systems/disposition-graph/frontier-consistency",
+  "commons.systems/disposition-graph/clean-context-review",
+  "commons.systems/disposition-graph/viable-options",
+  "commons.systems/disposition-graph/authority",
+  "commons.systems/disposition-graph/unanswered",
+  "commons.systems/disposition-graph/dialogue",
+  "commons.systems/disposition-graph/node",
+  "commons.systems/disposition-graph/evaluation",
+  "commons.systems/disposition-graph/materialization",
+  "commons.systems/disposition-graph/session-context",
+  "commons.systems/disposition-graph/delegation",
+];
+
+/**
  * The neighbourhood a draft is judged against, from the record and never from
- * a set the session names (`clean-context-review`): the chain above it, its
- * siblings under the same parent, the nodes it names, and every other
- * question the record asks.
+ * a set the session names (`clean-context-review`, `review-cost`): the chain
+ * above it, the rules of the reading itself, the nodes under it, its siblings
+ * under the same parent, the nodes it names, the readings that bear on it,
+ * the round of other drafts that have moved since the survey last pinned
+ * them, and every other question the record asks -- bounded to its id and
+ * its question, per `review-cost`'s answer, since the answers behind those
+ * questions are the survey's object and not a draft reader's.
+ *
+ * A node claimed by an earlier part is never repeated in a later one, the
+ * parts taken in this order: the node itself, ancestry, rules, children,
+ * siblings, readings, cited, round; whatever is left is the index.
+ * `readings` is taken before `cited` -- and not the reverse, as an earlier
+ * cut had it -- because a node whose `bears` names this one is always
+ * already named in this node's own rendered text: every option's own
+ * rendering quotes the readings that bear on it ("Readings bearing on it:
+ * ..."), so `cited`'s plain substring search would claim a reading first on
+ * every real node and leave `readings` permanently empty.
  *
  * - ancestry: every node above it by `under`, nearest first, plus every
  *   `tier: global` node not already in the chain (the rules that bind
  *   everywhere).
+ * - rules: the `READING_RULES`, whole, so the reader is never told to go and
+ *   open a file the brief could have carried.
+ * - children: every node whose `under` names this node (`node.children`,
+ *   already derived and sorted by the reader).
  * - siblings: every other node sharing one of its `under` parents.
+ * - readings: every node whose `bears` names this node (the reader resolves
+ *   `bears[].node` to a canonical id at parse time, defaulting it to a
+ *   reading's sole parent, so a plain `n.bears[].node === node.id` check is
+ *   enough).
  * - cited: every node whose id appears in the node's own rendered text, or in
  *   its `depends`, and that no earlier part already carries.
+ * - round: every node `surveyJudges` owes a survey (on the review or ruling
+ *   stage, with no survey pin or a stale one) other than this one -- the
+ *   drafts written together with this one, so a contradiction between them
+ *   is caught before the survey and not left to it. Given as pointers, not
+ *   whole, since this part grows with the sitting and not with the draft.
  * - index: every remaining node.
  */
 export function draftNeighbourhood(graph, node) {
@@ -580,8 +858,17 @@ export function draftNeighbourhood(graph, node) {
   const globals = graph.nodes.filter((n) => n.tier === "global");
   const ancestry = take([...chain, ...globals]);
 
+  const rules = take(READING_RULES.map((id) => byId.get(id)));
+
+  const children = take((node.children || []).map((id) => byId.get(id)));
+
   const parents = new Set(node.under || []);
   const siblings = take(graph.nodes.filter((n) => (n.under || []).some((p) => parents.has(p))));
+
+  // Taken before 'cited': a node whose 'bears' names this one is otherwise
+  // always claimed first by 'cited', since every option's own rendering
+  // below quotes the readings that bear on it.
+  const readings = take(graph.nodes.filter((n) => (n.bears || []).some((b) => b.node === node.id)));
 
   // The node's own text, as this brief renders it, is what "the nodes it
   // names" is read from: every section, every fact, every option's prose and
@@ -591,26 +878,33 @@ export function draftNeighbourhood(graph, node) {
     ownText.includes(n.id) || (node.depends || []).some((d) => d.id === n.id)
   )));
 
-  const index = graph.nodes.filter((n) => !taken.has(n.id));
-  return { ancestry, siblings, cited, index };
-}
+  const round = take([...surveyJudges(graph)].sort(rulingOrderCompare));
 
-function renderNodeList(nodes, empty, options) {
-  if (nodes.length === 0) return empty;
-  return nodes.map((n) => renderWholeNode(n, options)).join("\n");
+  const index = graph.nodes.filter((n) => !taken.has(n.id));
+  return { ancestry, rules, children, siblings, readings, cited, round, index };
 }
 
 /**
- * Write the brief for the review of one draft. Refuses (letting the reader's
- * own message through) on a graph that does not validate, and refuses with an
- * exit-2 error on a node that does not exist or does not stand at the review
- * stage.
- *
- * @returns {Promise<{briefPath: string, outFile: string,
- *   ancestryCount: number, siblingCount: number, citedCount: number,
- *   indexCount: number, lines: number}>}
+ * One line for the round: a sibling draft that has moved since the survey
+ * last pinned it, given as a pointer and not whole (`review-cost`: "id,
+ * question, and the recommendation each now makes, one line each, since
+ * what the reader needs of a sibling draft is that it moved and what it
+ * moved to, and the text that moved is one file away").
  */
-export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry = false }) {
+function roundLine(node) {
+  const recommends = node.answerFact ? node.answerFact.recommends : null;
+  return `- ${node.id} | ${node.question} | now recommends: ${recommends ?? "(no answer fact recorded)"}`;
+}
+
+/**
+ * Resolve the node a review is invoked on, or throw the exit-2 error the CLI
+ * reports on stderr: no such node in the record, or a node not at the review
+ * stage (a review runs the moment the recommendation is recorded, which is
+ * the node's transition to that stage). Shared by the draft brief and the
+ * delta brief, since both are invoked the same way, by `--node <id>`, and
+ * differ only in which template the mode choice below sends them to.
+ */
+async function resolveReviewNode(rootDir, id) {
   const graph = await readGraph(rootDir);
   const node = graph.nodes.find((n) => n.id === id);
   if (!node) {
@@ -623,9 +917,25 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
     err.exitCode = 2;
     throw err;
   }
+  return { graph, node };
+}
+
+/**
+ * Write the brief for the review of one draft. Refuses (letting the reader's
+ * own message through) on a graph that does not validate, and refuses with an
+ * exit-2 error on a node that does not exist or does not stand at the review
+ * stage.
+ *
+ * @returns {Promise<{briefPath: string, outFile: string,
+ *   ancestryCount: number, rulesCount: number, childrenCount: number,
+ *   siblingCount: number, citedCount: number, readingsCount: number,
+ *   roundCount: number, indexCount: number, lines: number}>}
+ */
+export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry = false }) {
+  const { graph, node } = await resolveReviewNode(rootDir, id);
 
   const effectiveDate = date ?? todayIsoUtc();
-  const { ancestry, siblings, cited, index } = draftNeighbourhood(graph, node);
+  const { ancestry, rules, children, siblings, cited, readings, round, index } = draftNeighbourhood(graph, node);
   const outFile = draftOutFile(node.slug);
   const briefPath = path.join(reviewDir, `draft-${node.slug}.brief.md`);
 
@@ -635,11 +945,17 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
     repo: path.resolve(rootDir, ".."),
     id: node.id,
     node: renderWholeNode(node),
-    ancestry: renderNodeList(ancestry, "(no node above it and no rule that binds everywhere: this node is a root)", { account: false }),
-    siblings: renderNodeList(siblings, "(no sibling: no other node stands under the same parent)", { account: false }),
-    cited: renderNodeList(cited, "(this node names no other node the parts above do not already carry)", { account: false }),
+    ancestry: renderNeighbourNodeList(ancestry, "(no node above it and no rule that binds everywhere: this node is a root)"),
+    rules: renderNeighbourNodeList(rules, "(none of the twelve rule nodes are in this graph: this is a fixture or test graph, not the record)"),
+    children: renderNeighbourNodeList(children, "(no node under it: nothing stands on this node)"),
+    siblings: renderNeighbourNodeList(siblings, "(no sibling: no other node stands under the same parent)"),
+    cited: renderNeighbourNodeList(cited, "(this node names no other node the parts above do not already carry)"),
+    readings: renderNeighbourNodeList(readings, "(no reading bears on this node)"),
+    round: round.length > 0
+      ? round.map(roundLine).join("\n")
+      : "(no other draft has moved since the survey last pinned it)",
     index: index.length > 0
-      ? index.map(renderContextNode).join("\n")
+      ? index.map(indexQuestionLine).join("\n")
       : "(no other question: the parts above carry the whole record)",
     out: outFile,
   });
@@ -649,11 +965,66 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
     briefPath,
     outFile,
     ancestryCount: ancestry.length,
+    rulesCount: rules.length,
+    childrenCount: children.length,
     siblingCount: siblings.length,
     citedCount: cited.length,
+    readingsCount: readings.length,
+    roundCount: round.length,
     indexCount: index.length,
     lines,
   };
+  if (dry) return result;
+
+  await mkdir(reviewDir, { recursive: true });
+  await writeFile(briefPath, filled);
+  return result;
+}
+
+/**
+ * Write the re-reading brief for one draft's amendment. Its object is the
+ * amendment and not the node (`review-cost`): the node as it now stands, the
+ * diff of its file since the commit the last reading pinned, and that
+ * reading's own findings verbatim, and nothing of the neighbourhood a first
+ * reading is given, since that question is already settled. Self-contained,
+ * like `writeDraftBrief`: it resolves the node and re-derives the mode
+ * itself with `chooseMode` rather than trusting a caller's prior call, and
+ * refuses with the same exit-2 shape where the node cannot take a
+ * re-reading -- the ordinary path calls `chooseMode` first and dispatches
+ * here only on `mode: "delta"`, so this is a second guard against calling it
+ * out of turn and not the first.
+ *
+ * @returns {Promise<{briefPath: string, outFile: string, lines: number}>}
+ */
+export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry = false }) {
+  const { node } = await resolveReviewNode(rootDir, id);
+  const mode = chooseMode(node, { rootDir, fresh: false });
+  if (mode.mode !== "delta") {
+    const err = new Error(`${id} cannot take a re-reading brief: ${mode.reason} -- write the draft brief instead`);
+    err.exitCode = 2;
+    throw err;
+  }
+
+  const effectiveDate = date ?? todayIsoUtc();
+  const outFile = deltaOutFile(node.slug);
+  const briefPath = path.join(reviewDir, `delta-${node.slug}.brief.md`);
+
+  const template = await readTemplate(DELTA_TEMPLATE_PATH);
+  const withoutNav = fill(template, {
+    date: effectiveDate,
+    repo: path.resolve(rootDir, ".."),
+    id: node.id,
+    node: renderWholeNode(node),
+    commit: mode.commit,
+    diff: mode.diff.trim().length > 0
+      ? mode.diff
+      : "(no textual difference: the working tree matches the pinned commit at this file)",
+    previous_reading: mode.previous,
+    out: outFile,
+  });
+  const { text: filled, lines } = fillNav(withoutNav);
+
+  const result = { briefPath, outFile, lines };
   if (dry) return result;
 
   await mkdir(reviewDir, { recursive: true });
@@ -767,12 +1138,34 @@ if (isMain) {
     const reviewDir = path.resolve(process.cwd(), "tmp/review");
     try {
       if (opts.node !== null) {
-        const r = await writeDraftBrief({ rootDir, reviewDir, id: opts.node, date: opts.date, dry: opts.dry });
-        console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
-        console.log(`draft: ${opts.node}; ancestry ${r.ancestryCount}, siblings ${r.siblingCount}, cited ${r.citedCount}, index ${r.indexCount}; ${r.lines} lines`);
-        console.log(`the reviewer's output file: ${r.outFile}`);
-        if (r.lines > 4000) {
-          process.stderr.write(`note: this brief is ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
+        // The mode is derived from the record and never told by the flag:
+        // `--fresh` only forces it, for a kickback's fresh answer. Chosen
+        // once here, printed, and then handed to the write function that
+        // matches it -- which re-derives the same mode itself and refuses
+        // if the two disagree, so a mismatch is a bug and not a silent
+        // divergence.
+        const { node } = await resolveReviewNode(rootDir, opts.node);
+        const mode = chooseMode(node, { rootDir, fresh: opts.fresh });
+        console.log(`mode: ${mode.mode} (${mode.reason})`);
+        if (mode.fallback) {
+          process.stderr.write(`falling back to the draft brief: ${mode.reason}\n`);
+        }
+        if (mode.mode === "delta") {
+          const r = await writeDeltaBrief({ rootDir, reviewDir, id: opts.node, date: opts.date, dry: opts.dry });
+          console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
+          console.log(`delta: ${opts.node}; ${r.lines} lines`);
+          console.log(`the reviewer's output file: ${r.outFile}`);
+          if (r.lines > 4000) {
+            process.stderr.write(`note: this brief is ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
+          }
+        } else {
+          const r = await writeDraftBrief({ rootDir, reviewDir, id: opts.node, date: opts.date, dry: opts.dry });
+          console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
+          console.log(`draft: ${opts.node}; ancestry ${r.ancestryCount}, rules ${r.rulesCount}, children ${r.childrenCount}, siblings ${r.siblingCount}, cited ${r.citedCount}, readings ${r.readingsCount}, round ${r.roundCount}, index ${r.indexCount}; ${r.lines} lines`);
+          console.log(`the reviewer's output file: ${r.outFile}`);
+          if (r.lines > 4000) {
+            process.stderr.write(`note: this brief is ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
+          }
         }
       } else {
         const r = await writeSurveyBrief({ rootDir, reviewDir, date: opts.date, dry: opts.dry });

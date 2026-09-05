@@ -1599,8 +1599,9 @@ describe('readGraph: valid-dialogue fixture', () => {
     assert.equal(n.answerFact.boldness, 'moderate');
     assert.equal(n.answerFact.stands, 'standing');
     assert.equal(n.review.verdict, 'forward');
-    assert.deepEqual(Object.keys(n.review).sort(), ['against', 'date', 'of', 'strength', 'survey', 'verdict'], "the two readings and nothing else -- no 'siblings' key");
+    assert.deepEqual(Object.keys(n.review).sort(), ['against', 'commit', 'date', 'of', 'strength', 'survey', 'verdict'], "the two readings and nothing else -- no 'siblings' key");
     assert.equal(n.review.against, null, 'the review recorded no counter-argument');
+    assert.equal(n.review.commit, 'c1a5c1a5c1a5c1a5c1a5c1a5c1a5c1a5c1a5c1a5', 'a review block with commit parses');
     assert.equal(n.review.survey, null, 'the survey has not read this node yet');
     assert.equal(n.review.of, n.recommendationHash, "the fixture's review.of is kept in step");
     assert.equal(n.reviewStale, false);
@@ -1961,6 +1962,7 @@ describe('readGraph: valid-survey fixture', () => {
     assert.equal(n.review.verdict, 'forward');
     assert.deepEqual(n.review.survey, { date: '2026-09-04', of: n.recommendationHash });
     assert.equal(n.review.of, n.recommendationHash, 'the draft review pins the same recommendation');
+    assert.equal(n.review.commit, null, "a review block with no 'commit' still parses, as null: the fixture's review predates the field");
     assert.equal(n.reviewStale, false);
     assert.equal(n.surveyStale, false);
     assert.equal(n.surveyOwed, false);

@@ -121,7 +121,13 @@ export const REVIEW_STRENGTHS = ['strong', 'moderate', 'weak', 'none'];
 // `against` is the review's own counter-argument, optional and outside the
 // all-or-nothing rule the other four share: a review may be complete without
 // one, and a node with no draft review carries none.
-export const REVIEW_DRAFT_KEYS = ['verdict', 'strength', 'date', 'of', 'against'];
+// `commit` is the graph commit the draft reading read, optional beside `of`
+// the way `against` is: it names the tree `of`'s pin was taken from, so a
+// re-reading can diff the text the last reading pinned against the node as
+// it now stands (commons.systems/disposition-graph/review-cost). A node
+// with no draft review carries none, and one whose review predates this
+// field carries none either.
+export const REVIEW_DRAFT_KEYS = ['verdict', 'strength', 'date', 'of', 'against', 'commit'];
 export const REVIEW_DRAFT_REQUIRED_KEYS = ['verdict', 'strength', 'date', 'of'];
 export const REVIEW_SURVEY_KEYS = ['date', 'of'];
 // The two stages the survey judges: a node is ruled from the ruling stage,
@@ -1199,11 +1205,15 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
       // The counter-argument argues about a verdict, so it needs one to
       // argue about; it is otherwise optional on a review that has one.
       && (!has('against') || (drafted && isNonEmptyString(r.against)))
+      // `commit` names the tree `of`'s pin was taken from, so it needs a
+      // drafted `of` to name the tree of, the same way `against` needs a
+      // verdict to argue about; validated like `of` itself, a sha1 or absent.
+      && (!has('commit') || (drafted && typeof r.commit === 'string' && HASH_RE.test(r.commit)))
       && (!surveyed || surveyOk(r.survey));
     if (!ok) {
       problems.push(
         `'review' must be {verdict: ${REVIEW_VERDICTS.join('|')}, strength: ${REVIEW_STRENGTHS.join('|')}, date: YYYY-MM-DD, of: <sha1>}`
-        + ', with an optional against: <non-empty string> beside them'
+        + ', with an optional against: <non-empty string> and an optional commit: <sha1> beside them'
         + ', and an optional survey: {date: YYYY-MM-DD, of: <sha1>};'
         + ' the four draft-review keys are given together or not at all, and the survey may stand alone',
       );
@@ -1214,6 +1224,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
         date: drafted ? r.date : null,
         of: drafted ? r.of : null,
         against: drafted && has('against') ? r.against : null,
+        commit: drafted && has('commit') ? r.commit : null,
         survey: surveyed ? { date: r.survey.date, of: r.survey.of } : null,
       };
     }

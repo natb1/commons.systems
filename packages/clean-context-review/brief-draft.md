@@ -8,13 +8,13 @@
 
 Your object is **one node's recommendation**: `{{id}}`, which stands at `stage: review` because its recommendation has just been recorded or moved in substance. It alone receives a verdict, and your verdict alone forwards it to the author's ruling.
 
-You are given, from the record and never from a set a session named: the node whole, its account included; the chain of nodes above it and the rules that bind everywhere; its siblings under the same parent, which the checkpoint has landed; the nodes it names; and the index of every other question the record asks, with its class, its stage, its standing answer, and the options on its answer fact — so that a draft answering a question the record already asks is caught at the draft. Everything but the node itself is given without its `## Account`: the accounts are the dialogue's history and not its text.
+You are given, from the record and never from a set a session named: the node whole, its account included; the chain of nodes above it and the rules that bind everywhere; the rules of this reading itself, whole and not as files to go and open; the nodes under it; its siblings under the same parent, which the checkpoint has landed; the nodes it names; the readings that bear on it; the round of other drafts that have moved since the survey last pinned them, as pointers and not whole; and, of every other node in the record, its id, its question, and its file, and nothing else — so that the search validation 15 asks for is one you can perform, and the record is not made to write out, in every brief, the one standing answer that search exists to make unnecessary. Everything but the node itself is given without its `## Account`: the accounts are the dialogue's history and not its text.
 
 What you do **not** judge here is the frontier's consistency with itself. That is the survey's object, it reads the whole graph in one context, and it runs before the author rules. Do not hunt for drift between other nodes; report what bears on this draft.
 
 {{record}}
 
-Read first, in full: `disposition/disposition-graph/recording.md` (what this review is and what it judges), `frontier-consistency.md` (the validations you run), `clean-context-review.md` (the two readings and what each is given), `viable-options.md` (facts, options, rulings, and the derived class), `authority.md`, `unanswered.md`, `dialogue.md`, `node.md`, and the global-tier rules `evaluation.md`, `materialization.md`, `session-context.md`, `delegation.md`. Then this brief's node, whole, and its neighbourhood, before you write any finding.
+What this review is and what it judges, the validations you run, the two readings and what each is given, the encoding's own vocabulary (facts, options, rulings, and the derived class), what a node is, and the rules that bind every session are carried below in `## The rules of this reading` and `## Its ancestry, and the rules that bind everywhere`: read them there, and do not go and open their files again, since the brief already carries them whole. Then this brief's node, whole, and its neighbourhood, before you write any finding.
 
 ## What you judge
 
@@ -47,6 +47,8 @@ And validation 15, asked here of the draft against the index of every question t
 
 **A finding** cites the section and quotes the text it concerns, and gives a suggested edit where you have one. A finding about another node — a duplicate question, an option that belongs elsewhere, a merge or a split — is written here in prose, naming the node it concerns, the name the option would take, and the prose it would carry; the session records it, and the review proposes but never merges, splits, or edits a node. Nothing in this reading changes another node's stage: only the survey's findings do that.
 
+**Reading discipline.** This brief states its own length in the navigation line above. Read it in pieces of at most 300 lines at a time, with the Read tool's `offset` and `limit`, and never as one whole-file read; pipe every shell command's own output through `head -n 40`. A brief you cannot hold whole is a defect of the brief: report it as a finding, and do not work around it by skimming.
+
 ## The node under review
 
 {{node}}
@@ -54,6 +56,16 @@ And validation 15, asked here of the draft against the index of every question t
 ## Its ancestry, and the rules that bind everywhere
 
 {{ancestry}}
+
+## The rules of this reading
+
+The same twelve nodes for every draft: what this review is and what it judges, the validations, the two readings and what each is given, the encoding's vocabulary, and what a node is. Carried here, whole, so you are never told to go and open them.
+
+{{rules}}
+
+## The nodes under it
+
+{{children}}
 
 ## Its siblings, under the same parent
 
@@ -63,7 +75,25 @@ And validation 15, asked here of the draft against the index of every question t
 
 {{cited}}
 
-## The index of every other question the record asks
+## The readings that bear on it
+
+{{readings}}
+
+## The round: the other drafts that have moved
+
+Every node `surveyJudges` owes a survey — at the review or ruling stage, with no survey pin or a stale one — other than this one: the drafts written together with this one this sitting, so that a contradiction between them is caught here and not left for the survey alone. Given as pointers, since this part grows with the sitting and not with the draft: id, question, and the option each now recommends. Read the node itself, at the file its id names, before treating anything here as more than a signal to look.
+
+{{round}}
+
+## Every other question the record asks
+
+This is the questions the rest of the record asks, and not the answers to them: of every node outside the parts above, its id, its question, and its file, and nothing else. It is here for validation 15, the merge, which asks whether a disposition the author has given, a node, or an option pending on one is a new question or a new answer to a question the record already asks — a check you cannot make of a question you have never been shown, since you cannot search for a question you cannot phrase. What any of these nodes actually answers is read by opening its file, named on its line; anything else in the record — an answer, a rationale, an option, a reading — is reached by searching the graph, and the cost of reaching it is the cost of what is found and not the cost of what exists:
+
+```
+grep -rn "<phrase>" disposition/disposition-graph/ | head -n 40
+```
+
+then read a node file the search names with the Read tool, never a whole directory at once.
 
 {{index}}
 

@@ -7,15 +7,16 @@
 
 import assert from "node:assert/strict";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-  writeDraftBrief, writeSurveyBrief, frontierOrderIds,
-  reviewLine, graphCommit, parseArgs, draftNeighbourhood,
+  writeDraftBrief, writeDeltaBrief, writeSurveyBrief, frontierOrderIds,
+  reviewLine, graphCommit, parseArgs, draftNeighbourhood, READING_RULES,
+  chooseMode, nodeDiffSinceCommit, lastCleanContextReviewSection,
 } from "./brief.mjs";
 import { readGraph } from "@commons.systems/disposition/read.mjs";
 
@@ -36,6 +37,29 @@ async function freshFrontierFixture(prefix) {
   return dir;
 }
 
+/**
+ * A fixture copy that is also a git checkout with one commit, for the
+ * re-reading's own machinery (`chooseMode`, `nodeDiffSinceCommit`), which
+ * needs a real commit to diff a node's file against -- the plain fixture
+ * copies elsewhere in this file carry no git history at all.
+ */
+async function freshGitFrontierFixture(prefix) {
+  const dir = await freshFrontierFixture(prefix);
+  const git = (args) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  git(["init", "-q"]);
+  git(["config", "user.email", "test@example.com"]);
+  git(["config", "user.name", "test"]);
+  git(["add", "-A"]);
+  git(["commit", "-q", "-m", "baseline"]);
+  const commit = git(["rev-parse", "HEAD"]).trim();
+  return { rootDir: dir, commit };
+}
+
+// A 40-hex string that is never the real recommendation hash of any fixture
+// node -- only its shape (HASH_RE) is checked by the reader, so any such
+// string pins a review whose node has since moved, making 'reviewStale' true.
+const STALE_PIN = "1111111111111111111111111111111111111111";
+
 const MAIEUTIC_NODE = "clean-context-review.test/main/maieutic-node";
 const PERIAGOGIC_NODE = "clean-context-review.test/main/periagogic-node";
 const REVIEW_A = "clean-context-review.test/main/review-a";
@@ -47,6 +71,9 @@ const RULING_A = "clean-context-review.test/main/ruling-a";
 const ANSWERED = "clean-context-review.test/main/answered-ratified";
 const SIBLING = "clean-context-review.test/main/sibling-node";
 const SURVEY_PINNED = "clean-context-review.test/main/survey-pinned";
+const CHILD_OF_REVIEW_LOW = "clean-context-review.test/main/child-of-review-low";
+const READING_OF_REVIEW_LOW = "clean-context-review.test/main/reading-of-review-low";
+const CHILD_AND_READING_OF_REVIEW_LOW = "clean-context-review.test/main/child-and-reading-of-review-low";
 
 // The class the reader derives for a node no ruling reaches, as a brief
 // prints it: there is no stamp any more, so this is what stands in its place
@@ -74,13 +101,19 @@ function runCliExpectingFailure(args, cwd) {
 
 describe("brief.mjs: the two readings", () => {
   test("parseArgs takes exactly one reading, and refuses neither, both, and an unknown flag", () => {
-    assert.deepEqual(parseArgs(["--node", "x"]), { node: "x", survey: false, rootDir: null, date: null, dry: false });
+    assert.deepEqual(parseArgs(["--node", "x"]), { node: "x", survey: false, rootDir: null, date: null, dry: false, fresh: false });
     assert.deepEqual(parseArgs(["--survey", "root", "--date", "2026-09-04", "--dry"]),
-      { node: null, survey: true, rootDir: "root", date: "2026-09-04", dry: true });
+      { node: null, survey: true, rootDir: "root", date: "2026-09-04", dry: true, fresh: false });
     assert.throws(() => parseArgs([]), /no reading named/);
     assert.throws(() => parseArgs(["--node", "x", "--survey"]), /one invocation runs one of them/);
     assert.throws(() => parseArgs(["--survey", "--frontier"]), /unknown flag --frontier/);
     assert.throws(() => parseArgs(["--node"]), /--node needs a node id/);
+  });
+
+  test("--fresh forces the draft brief, and refuses beside --survey", () => {
+    assert.deepEqual(parseArgs(["--node", "x", "--fresh"]),
+      { node: "x", survey: false, rootDir: null, date: null, dry: false, fresh: true });
+    assert.throws(() => parseArgs(["--survey", "--fresh"]), /--fresh forces the draft brief on a re-reading/);
   });
 
   test("CLI: neither mode, both, and an unknown flag each print the usage on stderr and exit 2", async () => {
@@ -142,7 +175,7 @@ describe("writeDraftBrief", () => {
     assert.ok(lines[Number(named[1]) - 1].startsWith("## The node under review"), "the line the nav names is the node's heading");
   });
 
-  test("the four parts: ancestry with the global-tier rules, siblings, the nodes it names, and the index of the rest", async () => {
+  test("the parts: ancestry with the global-tier rules, children, siblings, the nodes it names, readings, the round, and the index of the rest", async () => {
     const rootDir = await freshFrontierFixture("draft-parts-");
     const reviewDir = path.join(rootDir, "_review");
     const graph = await readGraph(rootDir);
@@ -151,33 +184,135 @@ describe("writeDraftBrief", () => {
     const parts = draftNeighbourhood(graph, node);
     assert.deepEqual(parts.ancestry.map((n) => n.id), [ANSWERED, REVIEW_GLOBAL],
       "the under chain, then every global-tier node not already in it");
+    assert.deepEqual(parts.rules, [], "this fixture graph carries none of the twelve production rule ids");
+    assert.deepEqual(parts.children.map((n) => n.id), [CHILD_AND_READING_OF_REVIEW_LOW, CHILD_OF_REVIEW_LOW],
+      "every node whose 'under' names this node, sorted");
     assert.deepEqual(parts.siblings.map((n) => n.id), [SIBLING], "the node under the same parent");
-    assert.deepEqual(parts.cited.map((n) => n.id), [RULING_A], "the node its own text names");
-    assert.ok(!parts.index.some((n) => [REVIEW_LOW, ANSWERED, REVIEW_GLOBAL, SIBLING, RULING_A].includes(n.id)),
+    // 'readings' is taken before 'cited' (review-cost: a node whose 'bears'
+    // names this one is otherwise always claimed first by 'cited', since
+    // every option's own rendering quotes the readings that bear on it), so
+    // reading-of-review-low lands in 'readings' now.
+    // child-and-reading-of-review-low bears on the same option too, but it
+    // is already taken by 'children'.
+    assert.deepEqual(parts.readings.map((n) => n.id), [READING_OF_REVIEW_LOW],
+      "the reading bearing on this node, taken before 'cited' gets a chance to claim it");
+    assert.deepEqual(parts.cited.map((n) => n.id), [RULING_A],
+      "the node its own text names, minus the reading 'readings' already took");
+    assert.deepEqual(parts.round.map((n) => n.id), [REVIEW_SETTLES, REVIEW_A, REVIEW_B],
+      "surveyJudges, minus this node itself and whatever an earlier part already carried (review-global in ancestry, ruling-a in cited)");
+    const takenIds = [REVIEW_LOW, ANSWERED, REVIEW_GLOBAL, CHILD_AND_READING_OF_REVIEW_LOW, CHILD_OF_REVIEW_LOW,
+      SIBLING, READING_OF_REVIEW_LOW, RULING_A, REVIEW_SETTLES, REVIEW_A, REVIEW_B];
+    assert.ok(!parts.index.some((n) => takenIds.includes(n.id)),
       "the index is every node no earlier part carries");
-    assert.equal(parts.index.length + 5, graph.nodes.length);
+    assert.equal(parts.index.length + takenIds.length, graph.nodes.length);
 
     const result = await writeDraftBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-04" });
     assert.equal(result.ancestryCount, 2);
+    assert.equal(result.rulesCount, 0);
+    assert.equal(result.childrenCount, 2);
     assert.equal(result.siblingCount, 1);
     assert.equal(result.citedCount, 1);
-    assert.equal(result.indexCount, graph.nodes.length - 5);
+    assert.equal(result.readingsCount, 1);
+    assert.equal(result.roundCount, 3);
+    assert.equal(result.indexCount, graph.nodes.length - takenIds.length);
 
     const brief = await readFile(result.briefPath, "utf8");
     const section = (from, to) => brief.slice(brief.indexOf(`\n## ${from}`), brief.indexOf(`\n## ${to}`));
-    const ancestry = section("Its ancestry", "Its siblings");
+    const ancestry = section("Its ancestry", "The rules of this reading");
+    const rules = section("The rules of this reading", "The nodes under it");
+    const children = section("The nodes under it", "Its siblings");
     const siblings = section("Its siblings", "The nodes it names");
-    const cited = section("The nodes it names", "The index of every other question");
-    const index = section("The index of every other question", "Output");
+    const cited = section("The nodes it names", "The readings that bear on it");
+    const readings = section("The readings that bear on it", "The round: the other drafts that have moved");
+    const round = section("The round: the other drafts that have moved", "Every other question the record asks");
+    const index = section("Every other question the record asks", "Output");
 
     assert.ok(ancestry.includes(`### ${ANSWERED}`) && ancestry.includes(`### ${REVIEW_GLOBAL}`));
+    assert.ok(rules.includes("none of the twelve rule nodes are in this graph"), "the fallback text: no production rule ids here");
+    assert.ok(children.includes(`### ${CHILD_OF_REVIEW_LOW}`) && children.includes(`### ${CHILD_AND_READING_OF_REVIEW_LOW}`));
+    assert.ok(!index.includes(CHILD_OF_REVIEW_LOW), "a child is carried whole above, not repeated in the index");
     assert.ok(siblings.includes(`### ${SIBLING}`));
     assert.ok(cited.includes(`### ${RULING_A}`));
-    assert.ok(cited.includes("Answered whole: one node, one question, one answer."), "a cited node's fence is carried");
-    for (const id of [REVIEW_A, REVIEW_B, PERIAGOGIC_NODE, MAIEUTIC_NODE, SURVEY_PINNED, REVIEW_SETTLES]) {
-      assert.ok(index.includes(`### ${id}`), `${id} is in the index of every other question`);
+    assert.ok(cited.includes("Answered whole: one node, one question, one answer."), "a cited node's now-recommended answer is carried");
+    assert.ok(!cited.includes(`### ${READING_OF_REVIEW_LOW}`), "the reading is no longer in 'cited': 'readings' claims it first");
+    assert.ok(readings.includes(`### ${READING_OF_REVIEW_LOW}`), "the reading is carried in its own part now");
+    assert.ok(round.includes(REVIEW_SETTLES) && round.includes("now recommends:"), "the round names the drafts that moved and what they now recommend");
+    assert.ok(!round.includes(`### ${REVIEW_SETTLES}`), "the round is pointers, never a whole node");
+    for (const id of [PERIAGOGIC_NODE, MAIEUTIC_NODE, SURVEY_PINNED]) {
+      assert.ok(index.includes(`- ${id} | `), `${id} is in the index, as a one-line pointer`);
     }
-    assert.ok(index.includes("#### Other options on its answer"), "the index carries the other options on an answer fact");
+    assert.ok(!index.includes("#### Other options on its answer"), "the index is one line a node, not the standing answer and its options");
+  });
+
+  test("a node claimed by an earlier part is never duplicated in a later one: a node both under this node and a reading of it lands only in 'children'", async () => {
+    const rootDir = await freshFrontierFixture("draft-dedup-");
+    const reviewDir = path.join(rootDir, "_review");
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
+    const parts = draftNeighbourhood(graph, node);
+
+    assert.ok(parts.children.some((n) => n.id === CHILD_AND_READING_OF_REVIEW_LOW),
+      "it is under review-low, so 'children' claims it first");
+    assert.ok(!parts.cited.some((n) => n.id === CHILD_AND_READING_OF_REVIEW_LOW),
+      "not repeated in 'cited', though its 'Readings bearing on it' line names it too");
+    assert.ok(!parts.readings.some((n) => n.id === CHILD_AND_READING_OF_REVIEW_LOW),
+      "not repeated in 'readings' either, though it carries a 'bears' entry naming this node");
+    assert.ok(!parts.index.some((n) => n.id === CHILD_AND_READING_OF_REVIEW_LOW),
+      "and not repeated in the index");
+
+    const result = await writeDraftBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-04" });
+    const brief = await readFile(result.briefPath, "utf8");
+    // The dedup guarantee is which *part* carries a node whole, never a bound
+    // on how many times its id appears as text: review-low's own rendered
+    // facts inline "Readings bearing on it: <id>" for every reading on its
+    // answer option (renderFacts/readingsText, pre-existing), so the id
+    // legitimately appears there too, inside '## The node under review'.
+    // What must hold is that the node is carried *whole* -- a '### <id>'
+    // heading -- exactly once, and that is in 'children'.
+    const headingOccurrences = [...brief.matchAll(new RegExp(`^### ${CHILD_AND_READING_OF_REVIEW_LOW.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "gm"))].length;
+    assert.equal(headingOccurrences, 1, "the node is carried whole exactly once in the whole brief: once, in 'children'");
+    assert.ok(!brief.includes(`- ${CHILD_AND_READING_OF_REVIEW_LOW} | `), "and never as an index pointer line");
+  });
+
+  test("draftNeighbourhood: a node whose 'bears' names this node lands in 'readings' when no earlier part already claims it", () => {
+    // A hand-built graph, not a fixture on disk: draftNeighbourhood trusts
+    // its inputs and does not validate them, so this isolates the mechanism
+    // from the interaction the fixture-based test above documents, where a
+    // reading is already caught by 'cited' because the node under review's
+    // own rendered facts already quote every reading bearing on them
+    // ("Readings bearing on it: ..."). Here the node under review carries no
+    // facts at all, so nothing in its own rendered text names the reader.
+    const target = {
+      id: "synthetic/root", question: "What does the root ask?", rank: 0,
+      under: [], children: [], facts: [], bears: [], depends: [],
+    };
+    const reader = {
+      id: "synthetic/reader", question: "What does the reader ask?", rank: 0,
+      under: [], children: [], facts: [],
+      bears: [{ node: "synthetic/root", fact: "answer", option: "x", relation: "adopted" }],
+      depends: [],
+    };
+    const graph = { nodes: [target, reader] };
+
+    const parts = draftNeighbourhood(graph, target);
+    assert.deepEqual(parts.readings.map((n) => n.id), ["synthetic/reader"]);
+    assert.deepEqual(parts.cited, [], "nothing in the node's own text names the reader here");
+    assert.deepEqual(parts.index, [], "the reader is carried in 'readings', not left for the index");
+  });
+
+  test("draftNeighbourhood on the live graph: the twelve rules of the reading are carried whole, in 'ancestry' or in 'rules'", async () => {
+    const graph = await readGraph(path.join(REPO_ROOT, "disposition"));
+    const node = graph.nodes.find((n) => n.id === "commons.systems/disposition-graph/decomposition");
+    assert.ok(node, "the decomposition node is in the live graph");
+    const { ancestry, rules } = draftNeighbourhood(graph, node);
+    const covered = new Set([...ancestry, ...rules].map((n) => n.id));
+    for (const id of READING_RULES) {
+      assert.ok(covered.has(id), `${id} is carried whole, in ancestry (if global-tier) or in rules`);
+    }
+    // the five global-tier rules are already in every node's ancestry, so
+    // 'rules' carries only the other seven, never duplicating them
+    const ancestryIds = new Set(ancestry.map((n) => n.id));
+    for (const rule of rules) assert.ok(!ancestryIds.has(rule.id), `${rule.id} is not duplicated between ancestry and rules`);
   });
 
   test("a draft with no parent and no citation says so rather than showing a gap", async () => {
@@ -214,7 +349,7 @@ describe("writeDraftBrief", () => {
     const dry = runCli(["--node", REVIEW_LOW, rootDir, "--date", "2026-09-04", "--dry"], cwd);
     assert.doesNotMatch(dry, /model/i, "the script prints no model: it computes none");
     assert.match(dry, /\(dry run: nothing written\)/);
-    assert.match(dry, /draft: clean-context-review\.test\/main\/review-low; ancestry 2, siblings 1, cited 1, index \d+; \d+ lines/);
+    assert.match(dry, /draft: clean-context-review\.test\/main\/review-low; ancestry 2, rules 0, children 2, siblings 1, cited 1, readings 1, round 3, index \d+; \d+ lines/);
     assert.match(dry, /the reviewer's output file: tmp\/review\/draft-review-low\.json/);
     await assert.rejects(readFile(path.join(cwd, "tmp/review/draft-review-low.brief.md")), { code: "ENOENT" });
 
@@ -332,7 +467,7 @@ describe("writeSurveyBrief", () => {
     const cwd = path.dirname(rootDir);
     const dry = runCli(["--survey", rootDir, "--date", "2026-09-04", "--dry"], cwd);
     assert.doesNotMatch(dry, /model/i, "the script prints no model: it computes none");
-    assert.match(dry, /survey: 6 node\(s\) judged; context: 5 node\(s\); \d+ lines; graph commit \(unknown/);
+    assert.match(dry, /survey: 6 node\(s\) judged; context: 8 node\(s\); \d+ lines; graph commit \(unknown/);
     assert.match(dry, /the pins sidecar: .*survey\.pins\.json \(dry run: nothing written\)/);
     await assert.rejects(readFile(path.join(cwd, "tmp/review/survey.brief.md")), { code: "ENOENT" });
     await assert.rejects(readFile(path.join(cwd, "tmp/review/survey.pins.json")), { code: "ENOENT" });
@@ -473,9 +608,310 @@ describe("writeDraftBrief: a fact's own case against, a passed-over option, a ru
 
     const lowResult = await writeDraftBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-04" });
     const lowBrief = await readFile(lowResult.briefPath, "utf8");
+    // A ruling's reason lived in the fact-detail line ("- Facts: ...") that
+    // renderWholeNode prints for the node itself; a neighbour (review-cost's
+    // neighbours-answered-not-whole clause) no longer carries that line at
+    // all, only the status line, the answer that stands, and the names of
+    // its answer fact's options -- so the reason is not here to find, and
+    // the neighbour still says it was ruled.
     assert.ok(
-      lowBrief.includes("reason: Nothing has come up since to reopen it."),
-      "the author's own reason for the ruling, beside its response and date",
+      !lowBrief.includes("Nothing has come up since to reopen it."),
+      "a neighbour no longer carries a ruling's reason: that prose stays in the fact detail, dropped like its rationale",
     );
+    const answeredSection = lowBrief.slice(lowBrief.indexOf(`### ${ANSWERED}`));
+    assert.match(
+      answeredSection.slice(0, answeredSection.indexOf("###", 3)),
+      /class: ratified \(ruled here\)/,
+      "the ancestor's status line still says it was ruled, without the reason prose",
+    );
+  });
+});
+
+// ------------------------------------------------- the re-reading of an amendment
+
+const PREVIOUS_FINDING_TEXT = "the plain-answer sentence should name the node it cites by its full id, which it already does";
+
+/**
+ * Stage review-low as a node whose recommendation has moved since a review
+ * that stood at `commitValue`: the review block, an optional prior
+ * '### Clean-context review,' account subsection (the previous reading), and
+ * the amendment itself -- a changed '## Answer' -- written into the working
+ * tree. `commitValue: "auto"` resolves to the fixture's own baseline commit
+ * (requires `git: true`); a literal string is used as given, so a caller can
+ * hand it an unresolvable-looking sha1 on a plain, non-git copy; `null`
+ * leaves the 'commit' key out of the review block entirely.
+ */
+async function stageReReading(prefix, { git = true, commitValue = "auto", previousReading = true, of = STALE_PIN } = {}) {
+  let rootDir;
+  let resolvedCommit = commitValue;
+  if (git) {
+    const staged = await freshGitFrontierFixture(prefix);
+    rootDir = staged.rootDir;
+    if (commitValue === "auto") resolvedCommit = staged.commit;
+  } else {
+    rootDir = await freshFrontierFixture(prefix);
+    if (commitValue === "auto") throw new Error("commitValue 'auto' needs git: true to resolve a real commit");
+  }
+
+  const file = path.join(rootDir, "main", "review-low.md");
+  const before = await readFile(file, "utf8");
+  const reviewLines = ["review:", "  verdict: forward", "  strength: moderate", '  date: "2026-09-04"', `  of: "${of}"`];
+  if (resolvedCommit) reviewLines.push(`  commit: "${resolvedCommit}"`);
+  let after = before.replace("stage: review\n", `stage: review\n${reviewLines.join("\n")}\n`);
+  assert.notEqual(after, before, "fixture precondition: 'stage: review' matched");
+
+  if (previousReading) {
+    const accountBefore = after;
+    after = after.replace(
+      "smaller reviewer's model is read for.\n",
+      "smaller reviewer's model is read for.\n\n"
+      + "## Account\n\n### Clean-context review, 2026-09-04\n\n"
+      + "Read in clean context by a subagent given the batch at the review stage and the full graph as its context, and nothing of the sitting. Verdict: forward to the author's ruling.\n\n"
+      + `Findings:\n\n- Answer: ${PREVIOUS_FINDING_TEXT}.\n\nThe review found no strong counter-argument.\n`,
+    );
+    assert.notEqual(after, accountBefore, "fixture precondition: the rationale's last line matched");
+  }
+
+  const beforeAmend = after;
+  after = after.replace(
+    "A plain answer at low boldness: nothing here reaches beyond the node itself,\nand clean-context-review.test/main/ruling-a is the node it names.",
+    "A plain answer at low boldness, amended to also name clean-context-review.test/main/answered-ratified, in answer to the review's finding.",
+  );
+  assert.notEqual(after, beforeAmend, "fixture precondition: the Answer text matched");
+
+  await writeFile(file, after);
+  return { rootDir, reviewDir: path.join(rootDir, "_review"), commit: resolvedCommit };
+}
+
+describe("chooseMode: the re-reading's own mode, derived from the record and never told by a flag", () => {
+  test("no review at all: draft, and says so as the first reading", async () => {
+    const rootDir = await freshFrontierFixture("mode-first-");
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
+    const mode = chooseMode(node, { rootDir, fresh: false });
+    assert.equal(mode.mode, "draft");
+    assert.equal(mode.fallback, false);
+    assert.match(mode.reason, /first reading/);
+  });
+
+  test("--fresh forces the draft brief even where the recommendation has moved and a re-reading could otherwise run", async () => {
+    const { rootDir } = await stageReReading("mode-fresh-");
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
+    assert.equal(node.reviewStale, true, "fixture precondition: the recommendation has moved");
+    const mode = chooseMode(node, { rootDir, fresh: true });
+    assert.equal(mode.mode, "draft");
+    assert.equal(mode.fallback, false);
+    assert.match(mode.reason, /--fresh/);
+  });
+
+  test("the recommendation has not moved since the review's pin: draft, nothing to re-read", async () => {
+    const rootDir = await freshFrontierFixture("mode-unmoved-");
+    const before = await readGraph(rootDir);
+    const currentHash = before.nodes.find((n) => n.id === REVIEW_LOW).recommendationHash;
+    assert.ok(currentHash, "fixture precondition: the node has a recommendation hash");
+
+    const file = path.join(rootDir, "main", "review-low.md");
+    const text = await readFile(file, "utf8");
+    const staged = text.replace(
+      "stage: review\n",
+      `stage: review\nreview:\n  verdict: forward\n  strength: moderate\n  date: "2026-09-04"\n  of: "${currentHash}"\n`,
+    );
+    assert.notEqual(staged, text, "fixture precondition matched");
+    await writeFile(file, staged);
+
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
+    assert.equal(node.reviewStale, false, "fixture precondition: the pin still matches");
+    const mode = chooseMode(node, { rootDir, fresh: false });
+    assert.equal(mode.mode, "draft");
+    assert.equal(mode.fallback, false);
+    assert.match(mode.reason, /not moved/);
+  });
+
+  test("stale, but the review names no commit: draft, with fallback", async () => {
+    const { rootDir } = await stageReReading("mode-nocommit-", { commitValue: null });
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
+    assert.equal(node.reviewStale, true, "fixture precondition");
+    const mode = chooseMode(node, { rootDir, fresh: false });
+    assert.equal(mode.mode, "draft");
+    assert.equal(mode.fallback, true);
+    assert.match(mode.reason, /names no commit/);
+  });
+
+  test("stale, commit given but unresolvable (no git checkout at all): draft, with fallback", async () => {
+    const { rootDir } = await stageReReading("mode-unresolvable-", { git: false, commitValue: STALE_PIN });
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
+    assert.equal(node.reviewStale, true, "fixture precondition");
+    const mode = chooseMode(node, { rootDir, fresh: false });
+    assert.equal(mode.mode, "draft");
+    assert.equal(mode.fallback, true);
+    assert.match(mode.reason, /could not resolve/);
+  });
+
+  test("stale, commit resolvable, but no prior '### Clean-context review,' subsection: draft, with fallback", async () => {
+    const { rootDir } = await stageReReading("mode-noprevious-", { previousReading: false });
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
+    assert.equal(node.reviewStale, true, "fixture precondition");
+    const mode = chooseMode(node, { rootDir, fresh: false });
+    assert.equal(mode.mode, "draft");
+    assert.equal(mode.fallback, true);
+    assert.match(mode.reason, /no prior reading/);
+  });
+
+  test("stale, commit resolvable, a previous reading on record: delta, carrying the commit, the diff, and the previous reading", async () => {
+    const { rootDir, commit } = await stageReReading("mode-delta-");
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
+    assert.equal(node.reviewStale, true, "fixture precondition");
+    const mode = chooseMode(node, { rootDir, fresh: false });
+    assert.equal(mode.mode, "delta");
+    assert.equal(mode.fallback, false);
+    assert.equal(mode.commit, commit);
+    assert.ok(mode.diff.includes("amended to also name"), "the diff shows the amendment");
+    assert.ok(mode.previous.startsWith("### Clean-context review, 2026-09-04"));
+    assert.ok(mode.previous.includes(PREVIOUS_FINDING_TEXT));
+  });
+});
+
+describe("nodeDiffSinceCommit", () => {
+  test("returns the diff text when the commit and the file both resolve", async () => {
+    const { rootDir, commit } = await freshGitFrontierFixture("diff-ok-");
+    const file = path.join(rootDir, "main", "review-low.md");
+    await writeFile(file, `${await readFile(file, "utf8")}\nAmended.\n`);
+    const diff = nodeDiffSinceCommit(rootDir, commit, "main/review-low.md");
+    assert.ok(diff !== null);
+    assert.match(diff, /\+Amended\.$/m);
+  });
+
+  test("returns null on a graph with no git checkout at all", async () => {
+    const rootDir = await freshFrontierFixture("diff-nogit-");
+    assert.equal(nodeDiffSinceCommit(rootDir, STALE_PIN, "main/review-low.md"), null);
+  });
+
+  test("returns null on a commit git cannot resolve, even inside a real checkout", async () => {
+    const { rootDir } = await freshGitFrontierFixture("diff-badcommit-");
+    assert.equal(nodeDiffSinceCommit(rootDir, STALE_PIN, "main/review-low.md"), null);
+  });
+});
+
+describe("lastCleanContextReviewSection", () => {
+  test("returns null on empty or absent account text", () => {
+    assert.equal(lastCleanContextReviewSection(null), null);
+    assert.equal(lastCleanContextReviewSection(""), null);
+    assert.equal(lastCleanContextReviewSection("### Something else entirely\n\nNo review here.\n"), null);
+  });
+
+  test("extracts the last matching subsection verbatim, and never a re-reading's", () => {
+    const account = [
+      "### Clean-context review, 2026-08-01",
+      "",
+      "First reading, superseded.",
+      "",
+      "### Clean-context review, 2026-09-04",
+      "",
+      "Second reading, the one to re-read against.",
+      "",
+      "### Clean-context re-reading, 2026-09-05",
+      "",
+      "A re-reading's own subsection: never matched as 'the previous reading'.",
+      "",
+    ].join("\n");
+    const found = lastCleanContextReviewSection(account);
+    assert.ok(found.startsWith("### Clean-context review, 2026-09-04"));
+    assert.ok(found.includes("Second reading, the one to re-read against."));
+    assert.ok(!found.includes("First reading, superseded."));
+    assert.ok(!found.includes("re-reading"), "stops before the re-reading subsection that follows it");
+  });
+
+  test("fence-aware: a heading-looking line inside a fenced code block is not a heading", () => {
+    const account = [
+      "### Clean-context review, 2026-08-01",
+      "",
+      "```markdown",
+      "### Clean-context review, 2099-01-01",
+      "not a real heading -- inside a fence",
+      "```",
+      "",
+      "The real subsection continues here.",
+      "",
+    ].join("\n");
+    const found = lastCleanContextReviewSection(account);
+    assert.ok(found.startsWith("### Clean-context review, 2026-08-01"));
+    assert.ok(found.includes("The real subsection continues here."));
+    assert.ok(found.includes("```markdown"), "the fence itself is part of the one real subsection, carried whole");
+  });
+});
+
+describe("writeDeltaBrief", () => {
+  test("fills every placeholder; carries the node whole, the diff, the previous reading, and no neighbourhood", async () => {
+    const { rootDir, reviewDir, commit } = await stageReReading("delta-ok-");
+    const result = await writeDeltaBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-05" });
+    assert.equal(result.briefPath, path.join(reviewDir, "delta-review-low.brief.md"));
+    assert.equal(result.outFile, "tmp/review/delta-review-low.json");
+
+    const brief = await readFile(result.briefPath, "utf8");
+    assert.ok(!brief.includes("{{"), `unfilled placeholder left in brief:\n${brief.slice(0, 2000)}`);
+    assert.ok(brief.startsWith(`# Clean-context re-reading, 2026-09-05: \`${REVIEW_LOW}\``));
+    assert.ok(brief.includes(`### ${REVIEW_LOW}`), "the node whole");
+    assert.ok(brief.includes("#### Account (the AI's account"), "the node's account goes in whole, same as the draft brief");
+    assert.ok(brief.includes(commit), "the pinned commit is named");
+    assert.ok(brief.includes("amended to also name"), "the diff, showing the amendment");
+    assert.ok(brief.includes(PREVIOUS_FINDING_TEXT), "the previous reading, verbatim");
+    assert.ok(brief.includes('"scope": "delta"'), "the output schema pins scope to delta");
+    assert.ok(brief.includes("tmp/review/delta-review-low.json"));
+
+    // no neighbourhood: review-cost's answer gives a re-reading only the
+    // node, the diff, and the previous reading -- never the ancestry, the
+    // siblings, or the index a first reading is given.
+    for (const heading of ["## Its ancestry", "## Its siblings", "## The nodes it names", "## Every other question"]) {
+      assert.ok(!brief.includes(heading), `a re-reading carries no '${heading}': that question is already settled`);
+    }
+  });
+
+  test("refuses with an exit-2 error when the node cannot take a re-reading (chooseMode would not choose delta)", async () => {
+    const rootDir = await freshFrontierFixture("delta-refuse-");
+    const reviewDir = path.join(rootDir, "_review");
+    await assert.rejects(
+      () => writeDeltaBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-05" }),
+      (err) => {
+        assert.match(err.message, /cannot take a re-reading brief/);
+        assert.equal(err.exitCode, 2);
+        return true;
+      },
+    );
+  });
+});
+
+describe("CLI: --node derives its mode from the record, prints it, and --fresh forces the draft brief", () => {
+  test("a stale node with a resolvable commit and a previous reading takes the re-reading; --fresh on the same node forces the draft", async () => {
+    const { rootDir } = await stageReReading("cli-delta-");
+    const cwd = path.dirname(rootDir);
+
+    const delta = runCli(["--node", REVIEW_LOW, rootDir, "--date", "2026-09-05", "--dry"], cwd);
+    assert.match(delta, /^mode: delta \(/m);
+    assert.match(delta, /delta: clean-context-review\.test\/main\/review-low; \d+ lines/);
+    assert.match(delta, /the reviewer's output file: tmp\/review\/delta-review-low\.json/);
+
+    const fresh = runCli(["--node", REVIEW_LOW, rootDir, "--date", "2026-09-05", "--dry", "--fresh"], cwd);
+    assert.match(fresh, /^mode: draft \(--fresh/m);
+    assert.match(fresh, /draft: clean-context-review\.test\/main\/review-low;/);
+  });
+
+  test("a fallback prints the reason on stdout's mode line and warns on stderr, but still writes the draft brief", async () => {
+    const { rootDir } = await stageReReading("cli-fallback-", { commitValue: null });
+    const cwd = path.dirname(rootDir);
+    const { stdout, stderr, status } = spawnSync(
+      process.execPath,
+      [BRIEF_MJS, "--node", REVIEW_LOW, rootDir, "--date", "2026-09-05", "--dry"],
+      { cwd, encoding: "utf8" },
+    );
+    assert.equal(status, 0, `expected success; stderr:\n${stderr}`);
+    assert.match(stdout, /^mode: draft \(.*names no commit/m);
+    assert.match(stdout, /draft: clean-context-review\.test\/main\/review-low;/, "still writes the draft brief");
+    assert.match(stderr, /falling back to the draft brief: .*names no commit/);
   });
 });

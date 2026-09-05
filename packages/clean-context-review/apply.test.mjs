@@ -55,6 +55,22 @@ async function freshFixtureScratch(prefix) {
   return dir;
 }
 
+/**
+ * The same as `freshFixture`, but a real git checkout: `apply.mjs`'s draft
+ * path reads the graph commit off `rootDir` itself (`graphCommit`, shared
+ * with the survey's own sidecar), so exercising `review.commit` needs a
+ * real repository, not a bare directory copy.
+ */
+async function freshGitFixture(prefix) {
+  const dir = await freshFixture(prefix);
+  const git = (args) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  git(["init", "-q"]);
+  git(["-c", "user.email=test@example.com", "-c", "user.name=test", "add", "-A"]);
+  git(["-c", "user.email=test@example.com", "-c", "user.name=test", "commit", "-q", "-m", "fixture"]);
+  const sha = git(["rev-parse", "HEAD"]).trim();
+  return { rootDir: dir, sha };
+}
+
 /** A fresh copy of the frontier fixture graph. */
 async function freshFrontierFixture(prefix) {
   const dir = await scratch(prefix);
@@ -236,6 +252,64 @@ describe("apply.mjs: draft, forward", () => {
   });
 });
 
+describe("apply.mjs: draft, review.commit", () => {
+  test("a clean checkout's HEAD is written into the review block, beside 'of'", async () => {
+    const { rootDir, sha } = await freshGitFixture("commit-clean-");
+    const file = reviewNodePath(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "draft",
+        id: REVIEW_NODE,
+        verdict: "forward",
+        findings: ["Answer: sound as drafted."],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    });
+    assert.equal(result.validation.ok, true, result.validation && result.validation.message);
+
+    const afterText = await readFile(file, "utf8");
+    const block = reviewBlockOf(afterText);
+    assert.equal(fieldValue(block, "commit"), sha, "'review.commit' is the checkout's HEAD, the commit this reading read");
+
+    const parsed = parseNode(afterText, { id: REVIEW_NODE, graph: "main", slug: "review-node", path: file });
+    assert.equal(parsed.review.commit, sha);
+  });
+
+  test("a dirty checkout writes no commit: it must not silently pin a tree the checkout no longer matches", async () => {
+    const { rootDir } = await freshGitFixture("commit-dirty-");
+    const file = reviewNodePath(rootDir);
+    // Untracked change after the fixture's commit: the checkout is dirty.
+    await writeFile(path.join(rootDir, "untracked.txt"), "dirty\n");
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "draft",
+        id: REVIEW_NODE,
+        verdict: "forward",
+        findings: ["Answer: sound as drafted."],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    });
+    assert.equal(result.validation.ok, true, result.validation && result.validation.message);
+
+    const afterText = await readFile(file, "utf8");
+    const block = reviewBlockOf(afterText);
+    assert.equal(fieldValue(block, "commit"), null, "no 'commit' line: a dirty tree records none rather than a stale one");
+
+    const parsed = parseNode(afterText, { id: REVIEW_NODE, graph: "main", slug: "review-node", path: file });
+    assert.equal(parsed.review.commit, null);
+  });
+});
+
 describe("apply.mjs: draft, kickback", () => {
   test("sets the kickback stage, records a null counter-argument as 'no strong', omits absent fields", async () => {
     const rootDir = await freshFixture("kick-");
@@ -408,6 +482,213 @@ function topKeys(block) {
     .filter(Boolean)
     .map((m) => m[1]);
 }
+
+// ------------------------------------------ scope 'delta': the re-reading
+
+describe("apply.mjs: scope 'delta' (the re-reading of an amendment)", () => {
+  test("appends '### Clean-context re-reading' with the delta's own opening sentence and forward wording; stage and review block behave exactly as the draft path's", async () => {
+    const rootDir = await freshFixture("delta-fwd-");
+    const file = reviewNodePath(rootDir);
+    const before = await readFile(file, "utf8");
+    const parsedBefore = parseNode(before, { id: REVIEW_NODE, graph: "main", slug: "review-node", path: file });
+    const wantHash = parsedBefore.recommendationHash;
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "delta",
+        id: REVIEW_NODE,
+        verdict: "forward",
+        findings: ["The amendment answers the last reading's finding about X."],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    });
+
+    assert.deepEqual(result.report, ["example.test/main/review-node: Clean-context re-reading (forward), review → ruling"]);
+    assert.equal(result.validation.ok, true);
+
+    const afterText = await readFile(file, "utf8");
+    assert.equal(fieldValue(afterText, "stage"), "ruling");
+    const block = reviewBlockOf(afterText);
+    assert.equal(fieldValue(block, "verdict"), "forward");
+    assert.equal(fieldValue(block, "of"), wantHash, "'review.of' pins the node's recommendation hash exactly as the draft path does");
+
+    assert.ok(afterText.includes(`### Clean-context re-reading, ${DATE}`), "the delta heading, not the draft's");
+    assert.ok(!afterText.includes(`### Clean-context review, ${DATE}`), "never the draft's own heading for a delta reading");
+    assert.ok(
+      afterText.includes(
+        "Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.",
+      ),
+      "the delta's own opening sentence and forward wording, distinct from the draft's",
+    );
+  });
+
+  test("a kickback re-reading writes the delta heading with the wording shared with the draft path, and sets the kickback stage the same way", async () => {
+    const rootDir = await freshFixture("delta-kick-");
+    const file = reviewNodePath(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "delta",
+        id: REVIEW_NODE,
+        verdict: "kickback",
+        kickback_stage: "maieutic",
+        findings: ["The amendment does not answer the last reading's finding: still ambiguous."],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    });
+
+    assert.deepEqual(result.report, ["example.test/main/review-node: Clean-context re-reading (kickback), review → maieutic"]);
+    assert.equal(result.validation.ok, true);
+
+    const afterText = await readFile(file, "utf8");
+    assert.equal(fieldValue(afterText, "stage"), "maieutic");
+    assert.ok(afterText.includes(`### Clean-context re-reading, ${DATE}`));
+    assert.ok(afterText.includes("Verdict: kicked back to the maieutic stage."), "the kickback wording is shared with the draft path");
+  });
+
+  test("'nodes'/'frontier' on a delta-scoped input is refused with the same scope-aware message as the draft path", async () => {
+    const rootDir = await freshFixture("delta-with-nodes-");
+    await assert.rejects(
+      () => applyReviews({
+        rootDir,
+        input: { scope: "delta", id: REVIEW_NODE, verdict: "forward", findings: [], strength: "none", nodes: [] },
+        replies: {},
+        date: DATE,
+      }),
+      /'nodes' and 'frontier' belong to the survey, and this file names scope 'delta'/,
+    );
+  });
+});
+
+// ------------------------------------------------- the two-reading cap
+
+/** Splices reading subsections into a fixture's existing '## Account' prose,
+ * ahead of anything already there, exactly as a prior apply would have left
+ * them -- built directly rather than by chaining `applyReviews` calls, since
+ * a forward verdict advances the stage past 'review' and a further call
+ * would need an override to get back in, which is not what this is testing. */
+function withPriorReadings(text, sections) {
+  const rendered = sections.map(({ date, kind = "review", verdict = "forward", stage = null }) => [
+    `### Clean-context ${kind === "delta" ? "re-reading" : "review"}, ${date}`,
+    "",
+    kind === "delta"
+      ? `Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. ${verdict === "forward" ? "Verdict: the amendment stands, forwarded to the author's ruling." : `Verdict: kicked back to the ${stage} stage.`}`
+      : `Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. ${verdict === "forward" ? "Verdict: forward to the author's ruling." : `Verdict: kicked back to the ${stage} stage.`}`,
+    "",
+    "Findings:",
+    "",
+    "- Answer: as read.",
+    "",
+    "The review found no strong counter-argument.",
+    "",
+  ].join("\n")).join("\n");
+  const withSections = text.replace("## Account\n\n", `## Account\n\n${rendered}`);
+  assert.notEqual(withSections, text, "fixture precondition: '## Account' present to splice readings ahead of");
+  return withSections;
+}
+
+/** Runs `fn`, capturing everything written to `process.stderr` meanwhile. */
+async function captureStderr(fn) {
+  const original = process.stderr.write.bind(process.stderr);
+  const chunks = [];
+  process.stderr.write = (chunk) => { chunks.push(chunk.toString()); return true; };
+  try {
+    const result = await fn();
+    return { result, stderr: chunks.join("") };
+  } finally {
+    process.stderr.write = original;
+  }
+}
+
+describe("apply.mjs: the two-reading cap (review-cost)", () => {
+  test("a third reading with no intervening kickback prints a non-fatal stderr warning naming the node; the write still succeeds", async () => {
+    const rootDir = await freshFixture("cap-warn-");
+    const file = reviewNodePath(rootDir);
+    const seeded = withPriorReadings(await readFile(file, "utf8"), [
+      { date: "2026-08-01", kind: "review", verdict: "forward" },
+      { date: "2026-08-15", kind: "delta", verdict: "forward" },
+    ]);
+    await writeFile(file, seeded);
+
+    const { result, stderr } = await captureStderr(() => applyReviews({
+      rootDir,
+      input: {
+        scope: "delta",
+        id: REVIEW_NODE,
+        verdict: "forward",
+        findings: ["A third, later amendment."],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    }));
+
+    assert.equal(result.validation.ok, true, "the cap warns; it never refuses the write");
+    assert.ok(stderr.includes(REVIEW_NODE), `warning does not name the node: ${stderr}`);
+    assert.ok(stderr.includes("caps a single answer at two readings"), `warning missing the cap's own wording: ${stderr}`);
+
+    const afterText = await readFile(file, "utf8");
+    assert.ok(afterText.includes(`### Clean-context re-reading, ${DATE}`), "the third reading is still written despite the warning");
+  });
+
+  test("a kickback between two readings resets the cap: the next reading after it warns nothing", async () => {
+    const rootDir = await freshFixture("cap-reset-");
+    const file = reviewNodePath(rootDir);
+    const seeded = withPriorReadings(await readFile(file, "utf8"), [
+      { date: "2026-08-01", kind: "review", verdict: "kickback", stage: "maieutic" },
+      { date: "2026-08-20", kind: "review", verdict: "forward" },
+    ]);
+    await writeFile(file, seeded);
+
+    const { stderr } = await captureStderr(() => applyReviews({
+      rootDir,
+      input: {
+        scope: "draft",
+        id: REVIEW_NODE,
+        verdict: "forward",
+        findings: ["Only one reading has happened since the kickback; the cap does not reach back across it."],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    }));
+    assert.equal(stderr, "", "the kickback in between resets the cap: this reading is only the second one since it");
+  });
+
+  test("exactly two readings since the last kickback (or none) do not warn: the cap trips only on the third", async () => {
+    const rootDir = await freshFixture("cap-under-");
+    const file = reviewNodePath(rootDir);
+    const seeded = withPriorReadings(await readFile(file, "utf8"), [
+      { date: "2026-08-01", kind: "review", verdict: "forward" },
+    ]);
+    await writeFile(file, seeded);
+
+    const { stderr } = await captureStderr(() => applyReviews({
+      rootDir,
+      input: {
+        scope: "delta",
+        id: REVIEW_NODE,
+        verdict: "forward",
+        findings: ["The second reading of this answer."],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    }));
+    assert.equal(stderr, "", "only the first reading stands so far: the second is not yet the cap's third");
+  });
+});
 
 // ------------------------------------------------------ probes (both modes)
 //

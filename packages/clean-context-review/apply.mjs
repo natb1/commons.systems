@@ -65,6 +65,7 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
 import { readGraph, parseNode, FACT_NAMES } from "@commons.systems/disposition/read.mjs";
+import { graphCommit } from "./brief.mjs";
 
 const STAGE_ORDER = ["periagogic", "maieutic", "review", "ruling"];
 // the two stages a reading may send a node back to: the ground, or the draft
@@ -72,7 +73,7 @@ const STAGE_ORDER = ["periagogic", "maieutic", "review", "ruling"];
 // author's words are in question, the maieutic when the answer must be
 // redrafted").
 const KICKBACK_STAGES = ["periagogic", "maieutic"];
-const SCOPES = new Set(["draft", "survey"]);
+const SCOPES = new Set(["draft", "delta", "survey"]);
 const FRONTIER_KINDS = new Set([
   "contradiction", "supersession", "redundancy", "decomposition",
   "vocabulary", "cross-reference", "placement", "coverage",
@@ -330,17 +331,20 @@ function hashScalar(of) {
 
 /**
  * The `review:` block, in the two readings the review divides into: the four
- * draft keys plus the draft's own optional `against` (this reading's
- * strongest counter-argument, beside its `strength`), the survey's own
- * `date` and `of`, or either alone -- read.mjs accepts each half without the
- * other. Whichever half this run does not write is carried in from the node
- * as it stands, so a draft's forward never discards the survey's pin and the
- * survey never discards a verdict (or the counter-argument beside it).
+ * draft keys plus the draft's own optional `commit` (the graph commit this
+ * reading read, beside its `of`) and `against` (this reading's strongest
+ * counter-argument, beside its `strength`), the survey's own `date` and
+ * `of`, or either alone -- read.mjs accepts each half without the other.
+ * Whichever half this run does not write is carried in from the node as it
+ * stands, so a draft's forward never discards the survey's pin and the
+ * survey never discards a verdict (or the commit and counter-argument
+ * beside it).
  */
-function renderReviewBlock({ verdict = null, strength = null, date = null, of = null, against = null, survey = null }) {
+function renderReviewBlock({ verdict = null, strength = null, date = null, of = null, against = null, commit = null, survey = null }) {
   const lines = ["review:"];
   if (verdict !== null) {
     lines.push(`  verdict: ${verdict}`, `  strength: ${strength}`, `  date: ${date}`, `  of: ${hashScalar(of)}`);
+    if (commit !== null) lines.push(`  commit: ${hashScalar(commit)}`);
     if (against !== null) lines.push(`  against: ${JSON.stringify(against)}`);
   }
   if (survey !== null) {
@@ -629,6 +633,33 @@ function upsertDialogueFields(rawText, { stage, reviewLines, options = [], date 
 // ------------------------------------------------------------------ prose
 
 /**
+ * How many '### Clean-context review,' / '### Clean-context re-reading,'
+ * subsections stand at the end of '## Account' with no kickback among them
+ * (`review-cost`: "a draft gets two readings of one answer, a kickback being
+ * a new answer and not a third round"). A kickback's own subsection ends the
+ * count rather than joining it: it is the boundary that starts the next
+ * answer's readings, not an overrun of the answer it closes. Non-fatal by
+ * design -- this is read by the caller to warn on stderr and never to refuse
+ * a write, since the cap binds the movement and not this mechanical step.
+ */
+function readingSectionsSinceKickback(accountText) {
+  if (!accountText) return 0;
+  const lines = accountText.split("\n");
+  const all = headingBoundaries(lines).filter((h) => h.depth === 3);
+  const readings = all.filter((h) => /^Clean-context (review|re-reading), /.test(h.name));
+  let count = 0;
+  for (let i = readings.length - 1; i >= 0; i -= 1) {
+    const h = readings[i];
+    const at = all.indexOf(h);
+    const end = at + 1 < all.length ? all[at + 1].index : lines.length;
+    const body = lines.slice(h.index, end).join("\n");
+    if (/kicked back to the/.test(body)) break;
+    count += 1;
+  }
+  return count;
+}
+
+/**
  * The subsection one reading appends to the node it read: the draft's review,
  * with its verdict, or the survey's reading of that node, which has none --
  * the survey forwards nothing, and only its findings move a stage. The fields
@@ -645,11 +676,17 @@ function renderSubsection({
       "",
       "Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.",
     ]
-    : [
-      `### Clean-context review, ${date}`,
-      "",
-      `Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. ${verdict === "forward" ? "Verdict: forward to the author's ruling." : `Verdict: kicked back to the ${kickbackStage} stage.`}`,
-    ];
+    : kind === "delta"
+      ? [
+        `### Clean-context re-reading, ${date}`,
+        "",
+        `Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. ${verdict === "forward" ? "Verdict: the amendment stands, forwarded to the author's ruling." : `Verdict: kicked back to the ${kickbackStage} stage.`}`,
+      ]
+      : [
+        `### Clean-context review, ${date}`,
+        "",
+        `Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. ${verdict === "forward" ? "Verdict: forward to the author's ruling." : `Verdict: kicked back to the ${kickbackStage} stage.`}`,
+      ];
 
   parts.push("", "Findings:", "", ...(findings || []).map((f) => `- ${f}`));
   if (factsCheck) {
@@ -813,7 +850,7 @@ function validateDraft(input, { replies }) {
     problems.push(`${input.id}: strength 'strong' requires a reply in --replies`);
   }
   if (Array.isArray(input.nodes) || Array.isArray(input.frontier)) {
-    problems.push("a draft review reads one node: 'nodes' and 'frontier' belong to the survey, and this file names scope 'draft'");
+    problems.push(`a draft or a re-reading reads one node: 'nodes' and 'frontier' belong to the survey, and this file names scope '${input.scope}'`);
   }
   if (input.probes !== undefined && input.probes !== null) {
     if (!Array.isArray(input.probes)) {
@@ -891,8 +928,20 @@ async function planDraft(input, ctx) {
   const baseStage = hasOverride ? ctx.overrides[id] : input.verdict === "forward" ? "ruling" : input.kickback_stage;
   const newStage = openProbe ? stageForOpenProbe(currentStage, baseStage === "periagogic") : baseStage;
   const reply = Object.prototype.hasOwnProperty.call(ctx.replies, id) ? ctx.replies[id] : null;
+
+  // Non-fatal: the cap binds the movement (a session should not have asked
+  // for a third reading of the same answer), not this mechanical step, so
+  // this only warns and never refuses the write (review-cost).
+  if (readingSectionsSinceKickback(parsedBefore.account) >= 2) {
+    process.stderr.write(
+      `${id}: the record caps a single answer at two readings, and this write records a third (or later) with no kickback in between; `
+      + "a finding that survives from here belongs on the facts as an option, not as a further amendment.\n",
+    );
+  }
+
+  const kind = input.scope === "delta" ? "delta" : "draft";
   const subsection = renderSubsection({
-    kind: "draft",
+    kind,
     date: ctx.date,
     verdict: input.verdict,
     kickback_stage: input.kickback_stage ?? null,
@@ -906,9 +955,16 @@ async function planDraft(input, ctx) {
 
   const survey = (parsedBefore.review && parsedBefore.review.survey) || null;
   const against = input.counter_argument ?? null;
+  // The commit this reading read, the same way the survey's sidecar records
+  // one (`graphCommit`, `writeSurveyBrief`) -- except a node's `commit` is a
+  // bare sha1 with no `dirty` flag beside it (review-cost's schema carries
+  // only the one key), so a dirty tree records nothing rather than a commit
+  // that would silently claim to describe text it does not.
+  const { commit: graphCommitSha, dirty: graphDirty } = graphCommit(ctx.rootDir);
+  const commit = graphDirty ? null : graphCommitSha;
   const build = (of) => upsertDialogueFields(appendToAccount(rawTextBefore, subsection), {
     stage: newStage,
-    reviewLines: renderReviewBlock({ verdict: input.verdict, strength: input.strength, date: ctx.date, of, against, survey }),
+    reviewLines: renderReviewBlock({ verdict: input.verdict, strength: input.strength, date: ctx.date, of, against, commit, survey }),
     probesAdd: probesToAdd,
   });
 
@@ -922,7 +978,7 @@ async function planDraft(input, ctx) {
     return { id, problems: [`${id}: internal error -- the standing hash changed by the edit (${parsedBefore.standingHash} -> ${settled.parsed.standingHash}); this script writes dialogue state and the account only`] };
   }
 
-  const labels = [`Clean-context review (${input.verdict})`];
+  const labels = [kind === "delta" ? `Clean-context re-reading (${input.verdict})` : `Clean-context review (${input.verdict})`];
   if (survey) labels.push("survey pin kept");
   if (probesToAdd.length > 0) {
     labels.push(`probe${probesToAdd.length > 1 ? "s" : ""} ${probesToAdd.map((p) => `'${p.id}'`).join(", ")}`);
@@ -1374,6 +1430,7 @@ async function planTouchedNode(id, t, ctx) {
       date: parsedBefore.review.date,
       of: parsedBefore.review.of,
       against: parsedBefore.review.against,
+      commit: parsedBefore.review.commit,
     }
     : null;
   const reviewLines = surveyPin === null
@@ -1667,10 +1724,10 @@ export async function applyReviews({
     input = JSON.parse(await readFile(path.resolve(file), "utf8"));
   }
   if (!input || typeof input !== "object" || Array.isArray(input) || !SCOPES.has(input.scope)) {
-    throw new Error(`the input names no reading: 'scope' must be 'draft' (the review of one draft) or 'survey' (the survey of the frontier), found '${JSON.stringify(input && input.scope)}'`);
+    throw new Error(`the input names no reading: 'scope' must be 'draft' (the review of one draft), 'delta' (the re-reading of an amendment), or 'survey' (the survey of the frontier), found '${JSON.stringify(input && input.scope)}'`);
   }
 
-  if (input.scope === "draft") {
+  if (input.scope === "draft" || input.scope === "delta") {
     return applyDraft({ rootDir, manifest, input, replies, overrides, date, dry });
   }
 

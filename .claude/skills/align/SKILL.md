@@ -45,13 +45,29 @@ description: Record or revise one node of the disposition graph by interview wit
 > node carries as part of its dialogue state, the moments that collect
 > them, the kick-back a probe forces from the review or the ruling stage,
 > and the maieutic session as where the list is worked and the author is
-> asked. That recommendation is unanswered too.
+> asked. That recommendation is unanswered too. And reconciled on
+> 2026-09-05, under the author's grant of that day ("record and reconcile
+> that disposition first before proceeding with review (you have bootstrap
+> authority)"), to `neighbourhood-questions-and-delta` on `review-cost`:
+> what a draft's reader is given, its neighbourhood in full and every
+> other node as its question alone, each neighbour by what it answers and
+> not by its whole file, the node under review the one given whole; the
+> re-reading whose object is the
+> amendment and not the node; the two readings one answer gets before what
+> survives goes to the author as an option; the brief written to be held
+> whole; and the model named at the launch instead of written into the
+> skill. And, with it, to the option
+> `pointers-for-what-grows-with-the-record` on `clean-context-review`,
+> under which the round's other drafts reach a draft's reader as one line
+> each rather than whole. That recommendation is unanswered and its own
+> clean-context reading is owed; the option is recorded and unruled, and
+> `clean-context-review`'s recommendation has not moved for it.
 > Every recommendation these reconciliations wrote is unanswered, and no
 > ruling is recorded on any of it while either reading of the
 > clean-context review is owed.)** Hand-materialized from
 > the nodes `growth`, `recording`, `unanswered`, `dialogue`,
 > `clean-context-review`, `frontier-consistency`, `review-skills`,
-> `review-model`, `decomposition`,
+> `review-model`, `review-cost`, `decomposition`,
 > `checkpoint`,
 > `alignment-target`, `alignment-order`, `alignment-page`, `authority`,
 > `author-questions`, `probe-or-node`,
@@ -180,8 +196,9 @@ skill only when the session starts in the checkout that carries it.
      command does (sonnet); the design, the options on each fact, the
      recommendation with its boldness, and the draft text (opus, or fable
      where the draft touches a global-tier node or an ancestor); and the
-     review of the draft in clean context, which runs on fable at high
-     effort, as both readings of the review do (`review-model`, §5). The
+     review of the draft in clean context, which runs at the model and the
+     effort `review-model` fixes for both readings, named by the skill at
+     the launch and not written into it (§5). The
      surveys run together, the design waits
      on them, the review waits on the design, and the main thread's own
      adversarial reading of the integrated draft (`evaluation`) comes
@@ -194,17 +211,29 @@ skill only when the session starts in the checkout that carries it.
      expensive, irreversible, or capture-shaped, persistence follows the
      node's shape, and existence appears only where a prune is proposed; a
      design unit's contract names which facts are its.
-  4. Review (`recording`, `clean-context-review`, `frontier-consistency`).
+  4. Review (`recording`, `clean-context-review`, `frontier-consistency`,
+     `review-cost`).
      Two readings divided by their object, each in a fresh context (§5).
      The review of a draft runs the moment the node's recommendation is
      recorded: `/align-review <node id>` reads that draft against its
      neighbourhood and either forwards it, with its strongest
      counter-argument when it found one and the session's reply, or kicks
-     it back to stage 2 or 3 with findings. That counter-argument is the
+     it back to stage 2 or 3 with findings. Its brief carries that node
+     whole, since it is the only one being judged, its neighbourhood by
+     what each neighbour answers rather than by its whole file, and
+     everything that grows with the record — every
+     other question the record asks, and the round's other drafts — as one
+     line each, which is the bound on what a reading costs (§5). That
+     counter-argument is the
      line the page carries on the recommended option's row, with the
      strength the review gave it, in place of the case against the AI
      wrote when it recorded the recommendation; the reply sits one step
      down with the rest of the AI's explanation (`alignment-page`).
+     An amendment made for a reading's findings is read once more, that
+     re-reading's object being the amendment and not the node, and no
+     third reading of the same answer is run: a finding that survives the
+     second goes to the author as an option on the fact it bears on, or as
+     a probe. A kickback is a new answer and owes a reading of its own.
      The survey runs before the
      author rules, when the frontier shows one owed:
      `/align-survey` reads the whole graph and judges the nodes
@@ -680,16 +709,38 @@ rule projections are regenerated by the next reconciliation run, not here.
   ratify carries its boldness assessment and the other options held
   viable, and the three exits stay open.
 - **Review in clean context**, in two readings divided by their object
-  (`clean-context-review`, `frontier-consistency`, `decomposition`), before
+  (`clean-context-review`, `frontier-consistency`, `decomposition`,
+  `review-cost`), before
   the author sees a recommendation.
   *The review of a draft.* When a node's recommendation is recorded or
   moved in substance, set `stage: review` on it, land (`checkpoint`), and
   invoke `/align-review <node id>`: one fresh subagent, never a fork, whose
   brief carries nothing of the session and nothing but the record — the
-  node whole, the chain of nodes above it, its siblings under the same
-  parent, the nodes it names, the rules that bind everywhere, the author's
-  words on each, and the index of every question the record asks with its
-  class, stage, standing answer, and the options on its answer fact. It
+  node under review whole, the one node given whole because it is the only
+  one being judged; its neighbourhood entire, which is the chain of nodes
+  above
+  it, the rules that bind everywhere, the nodes its `depends` names and the
+  options named in them, the nodes under it, its siblings under the same
+  parent, the author's words on each, and the readings that bear on it,
+  each of them carried by what it answers and not by its whole file — its
+  question, the answer that stands on it, the answer it now recommends
+  where those differ, and the names of the options on its answer fact,
+  while its rationale, its facts prose, its passed-over options and its
+  fence stay in the file one read away, as its account does and by the same
+  test, since they are that node's own dialogue and a draft is judged
+  against what its neighbours answer;
+  together with the rules of the reading itself, carried in the brief and
+  not as files for the reader to open; and, as one line each, every other
+  question the record asks and the round's other drafts with the
+  recommendation each now makes. The rule that sorts them is
+  `review-cost`'s: what grows with the record rather than with the draft is
+  carried as pointers, and what is the draft's own is carried whole; a
+  neighbour's answer is the draft's own ground and is carried, and the
+  argument that neighbour made for it grows with the record's dialogue and
+  is not. Of the
+  rest of the record the reader is given the questions and not the answers,
+  since the standing answers of the whole graph are the survey's object,
+  and it reaches anything further by searching the graph. It
   judges whether the draft answers the question and the author's words,
   contradicts the record it joins or a tradition it cites without
   recording the divergence, states the facts to present, names shims that
@@ -699,10 +750,26 @@ rule projections are regenerated by the next reconciliation run, not here.
   the findings and the stage they name, plus the counter-argument when it
   found one worth the author's time and the probes it raised where it could
   not ground the draft, and it writes nothing. Both readings
-  run on fable at high effort, the model and the effort `review-model`
-  fixes for them, stated by the skill at the launch and never argued in a
-  brief. Reviews of drafts run
+  run at the model and the effort `review-model` fixes for them, named by
+  the skill at the launch and written into neither skill nor brief, so that
+  the day the harness's most capable model changes or is unavailable the
+  substitute is named at the launch and nowhere else. Reviews of drafts run
   concurrently and never wait on each other.
+  *How many readings.* An amendment made in answer to a reading's findings
+  is read once more (`review-cost`), and that re-reading's object is the
+  amendment: the node as it stands, its difference from the text the last
+  reading pinned, that reading's findings, and the session's reply to each.
+  Two readings of one answer is the cap: a finding that survives the second
+  is recorded as an option on the fact it bears on, or as a probe, and goes
+  to the author with the node, since a reader asked for findings returns
+  some and a loop that ends on a silent reading ends on the reader's mood.
+  The cap bounds amendment and not redrawing — either reading may kick the
+  draft back, and a kickback is a new answer, which owes a fresh reading.
+  *What the brief must fit.* A brief states its own length and is written
+  to be held whole by the reader it is given to; one that the reader cannot
+  hold is a defect of the brief, cured by narrowing its object and never by
+  asking the reader to skim, since a reading that dies of its own context
+  returns nothing and is paid for twice.
   *The survey.* Before the author rules, when the frontier shows a survey
   owed, invoke `/align-survey`: the whole graph, answered and
   unanswered at every stage, read in one context without its accounts,
@@ -718,7 +785,10 @@ rule projections are regenerated by the next reconciliation run, not here.
   the frontier and the alignment page show which of the two is owed, and
   no ruling is recorded while either is.
   The session validates every finding against the record on its own thread
-  and never delegates it. Apply each verdict on its own, the stage read
+  and never delegates it, at the locus the finding names and without
+  re-deriving the neighbourhood the reader was given (`review-cost`), which
+  is what bounds the main thread's own spend on a reading. Apply each
+  verdict on its own, the stage read
   from the probes before the verdict is read, since a reading that recorded
   what it could not ground has said the draft is not ready: a
   kickback sets `stage` and appends the findings to `## Account`; a
@@ -874,12 +944,17 @@ and their models: the decomposition of a bundled disposition into questions
 the main thread (§1); the record survey (opus); the tradition survey
 (opus); the implementation survey (sonnet); the design (opus, or fable
 where the draft touches a global-tier node or an ancestor); and the review
-of the draft, which runs on fable at high effort, as the survey does — the
-model and the effort `review-model` fixes for both readings, since the party
+of the draft, which runs at the model and the effort `review-model` fixes
+for both readings, since the party
 whose blind spots a reading hunts is the main thread and a reader below the
-main thread's model finds what the main thread already saw. The effort is
-stated in the brief. Every unit returns
+main thread's model finds what the main thread already saw. That model is
+named by the review skill at the launch and by no text that outlives the
+launch, so a substitute, where the model the node fixes is unavailable, is
+named there too; the effort is stated in the brief. Every unit returns
 its conclusion as data with the commands it ran and writes nothing to the
 record; the main thread integrates and writes. A disposition that asks one
-question runs one design unit and one review and no decomposition.
-Validating a review's findings is the main thread's and is never delegated.
+question runs one design unit and one review of the draft, with the
+re-reading of its amendment where a finding is accepted, and no
+decomposition.
+Validating a review's findings is the main thread's and is never delegated,
+and it is bounded to the loci the findings name (`review-cost`).
