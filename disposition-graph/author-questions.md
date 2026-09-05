@@ -840,3 +840,70 @@ node's own rule, which is the instrument acting on the record before the author
 has ruled on the instrument. That is the consequence of the author's own
 instruction to migrate as part of the reconciliation, and it is named here
 rather than discovered on the page.
+
+### The reverse sweep, 2026-09-04
+
+The migration of this day tested candidate questions found inside nodes and
+asked, of each, whether it was really a node. The author asked whether the
+reverse had been tested: whether any node standing on the alignment frontier is
+a mis-encoded probe. It had not been. Nothing in the migration's briefs asked
+it, and the nearest approach, on `self-documentation`, wrote a probe about
+whether that node should be pruned while still treating the node as a node.
+
+The first attempt at the reverse sweep was stopped by the author before it read
+anything, because its brief sent the units to the legacy tree on `main` for
+evidence that an author disposition stood behind a node. Their correction is
+recorded above and on `commons.systems/disposition-graph/legacy`, whose answer
+it contradicts and which returned to the maieutic for it. The rewritten brief
+struck the legacy tree from the sweep's evidence entirely and put the test on
+content.
+
+The test as it ran. An author quote anywhere in the record justifying a node's
+disposition settles it as a node and ends the analysis, which is the easy case.
+Absent one, nothing is inferred from the absence: most of this graph was minted
+without recorded quotes, and a missing disposition section, a missing
+quotation, and `source: ai` on every option were barred from a unit's reasoning
+as grounds to flag. What decides then is three content checks, which must all
+agree. Whether the question as written asks what should be the case or what the
+author meant by words already said, with the greenfield counter-test of whether
+it would still be live for someone writing the record from scratch. Whether the
+answer fact holds a candidate the AI genuinely finds viable, an unsettled node
+being a node still and a probe being the case where the AI has none and says
+so. And what work the node does in the record now: a term the record uses as
+vocabulary, other nodes naming it in `depends` or `under`, an answer that binds
+a rule or an instrument.
+
+The result. Three units read all 125 nodes in full, in three groups, and the
+main thread verified against the group lists that every node is named in a
+report rather than sampled. No node was flagged. Eighty-one were settled by the
+author's own words in the record. The rest were decided on the content checks,
+and on none of them did the first two checks both point at a probe: not one
+question in the graph asks what the author meant by words they had already
+said. The category the brief expected to be interesting, nodes the first two
+checks condemned and the third saved, is empty.
+
+That result is partly structural and the record should say so rather than claim
+a clean bill. Fifty-seven of the 125 are tradition readings, whose question is
+what the record takes from a source and whose answer is a standing relation the
+reader enforces through `bears`; a reading cannot take a probe's shape. Much of
+the remainder projects a rule or defines vocabulary. The shape that could fail
+this test is a node minted from a single author word with no account of it, and
+the graph holds few.
+
+The one thing the sweep changed is on `commons.systems/disposition-graph/rsi`,
+and it is the opposite miss: not a node that should have been a probe, but two
+options that should have been. That node is written up there.
+
+Two findings the sweep returned that are not about probes, recorded here so
+they derive onto the frontier rather than living in a session.
+`commons.systems/disposition-graph/validation-order` stands at the ruling stage
+recommending `ratified`, and the author ruling that recommendation rests on is
+nowhere in the record, which the main thread confirmed; by the authority node's
+rule a ratified stamp whose ruling is not in the record is invalid, and the
+question is `quotes`'. And `commons.systems/disposition-graph/stub-traditions`
+asks which traditions the record already reads without a node, a question that
+exists only because fourteen rationales carry prose lists and that would not be
+live in a record written from scratch; it is a node still, since
+`regenerate-enumeration` is a real design answer and three nodes rest on it, but
+its wording is a finding for its own maieutic.
+
