@@ -208,6 +208,9 @@ facts:
       - name: instrumentation-is-a-fact
         source: author
         ref: "2026-09-04"
+      - name: commit-in-the-review-block
+        source: commons.systems/disposition-graph/review-cost
+        ref: "2026-09-05"
     recommends: every-part-in-the-record
     boldness: moderate
     against: "It puts six decisions in one row, the standing encoding and the five clauses adopted into it, so a confirmation confers together what the author examined and what they did not, which is the bundling this node's own rule that a text answering two questions is two nodes exists to prevent."
@@ -846,6 +849,10 @@ The option named by `stands` carries a `####` subsection of its own, a stored se
 #### instrumentation-is-a-fact
 
 Everything the recommendation says, with a fifth reserved name beside the four: `instrumentation`, the decision of how a node's answer is checked, the instrument the instruments node describes, carried as a fact with options and a recommendation so that the author rules on it where they rule on the class. Raised by the author's words of 2026-09-04, quoted above, "I expect instrumentation (eg.) would be a fact"; against it, the instruments node holds the instrument as a field of the node and not a decision the author rules on separately, and this node's rule is that a decision not among the reserved names is a question under the node.
+
+#### commit-in-the-review-block
+
+The review block carries a fifth draft key beside `verdict`, `strength`, `date` and `of`: `commit`, the graph commit the reviewed text was read at, written when the applying step finds a clean tree and absent when it does not. Recorded from the sitting on `review-cost`, whose answer gives an amended draft a re-reading whose object is the difference between the node as it stands and the text the last reading pinned. The pin identifies that text but does not locate it, so the difference is computable only from a commit, and without one the re-reading falls back to a full reading of the amended node. This node's recommended text enumerates the draft keys as four written together or not at all, which a fifth optional key contradicts, so it is recorded here as an option and acts on nothing; what a ruling would have to settle is whether `commit` joins the four in that rule or stands beside them as `against` does, optional and written only when the tree is clean. It bears on this node's answer fact and the recommendation is unmoved.
 
 ### authority
 
@@ -2044,3 +2051,7 @@ for the first if the author wants it read.
 ### The scope test, 2026-09-04
 
 The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, found the discharged entry `proposal-at-two-loci` to have been a node's question: its own `discharges` names a second node's recommendation, `commons.systems/disposition-graph/authority`, a sibling rule and not a consequence of this node's answer, and the survival test says the same harder, the author's response now standing as authority's definition of `proposal`, carried in its `defines`, stated in its answer, and projected verbatim into `.claude/rules/authority.md`. No node is minted, because authority answers the question in terms and the author's words are quoted there; the entry's reason is annotated. The `depends` edge the scope test prescribes is not written: authority depends on viable-options, which depends on this node's `aspects-are-nodes`, and the validator holds a cycle in `depends` to be no order. The open entry `option-text-per-node-or-per-option` passes all three tests and stays a probe.
+
+### Option from the review-cost node, 2026-09-05
+
+`commit-in-the-review-block` was recorded on the answer fact from the sitting on `review-cost`, the node the author queued on 2026-09-05 when they asked what the review costs and granted its reconciliation. That node's answer gives an amended draft a re-reading whose object is the difference from the text the last reading pinned, and a difference needs a commit to be computed against; this node's recommended text says the four draft keys are written together or not at all, so a fifth is this node's decision and not that one's. The option is recorded here, acts on nothing, and leaves the recommendation and the pin where they were. The implementation already writes the key, under the author's bootstrap grant for that reconciliation, and it is unsupported by this node until the option is ruled; that is stated on `review-cost` as well as here.
