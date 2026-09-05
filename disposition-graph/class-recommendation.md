@@ -16,6 +16,9 @@ facts:
       - name: form-decides-the-default
         source: review
         ref: "2026-09-05"
+      - name: test-without-the-written-reading
+        source: review
+        ref: "2026-09-05"
     recommends: escalate-toward-ratified
     boldness: high
     stands: escalate-toward-ratified
@@ -28,12 +31,12 @@ facts:
     recommends: ratified
     boldness: low
 review:
-  verdict: kickback
-  strength: moderate
+  verdict: forward
+  strength: strong
   date: 2026-09-05
-  of: 04577246cb1f4a24c5cb2144a033c3590246c5b3
-  commit: fda0c6abc0068042b8650939bac0953c203d0ba1
-  against: "On the one charge the last reading called strong -- that the record measures this test and it does not do what the answer says it does -- the amendment moves the confidence mark, lists the two rivals the reading named, and then records that the counter-argument \"is answered by neither listed option; it is recorded and not answered\". The rule, its guard and its recommendation are unchanged, so what the author is asked to ratify is a rule the node says it cannot defend, at the boldness that says so; that is a legitimate state in this encoding and the honesty is real. But the boldness now rests entirely on a measurement, and an amendment whose principal answer to a measurement finding is a new measurement has to get the measurement right: twenty-one reproduces on no criterion, its supporting enumeration names a node that names no limb, and the count it retracts still stands in the fact's own `against`. Nine of the eleven findings are answered cleanly and verifiably; the one that mattered most to the author's ruling is answered with a second wrong number."
+  of: bba7da79145b968bac1322d680ac6d463ba79d05
+  commit: 2982cb6f6e07eb00680b2f14658e227e321a8d64
+  against: "The record measures this test and the test is not what sorts the record. Of the 129 authority facts, 113 carry a recommendation, and the node's `form` predicts 112 of them: every `form: reading` node recommends delegated or deferred, and every rule, assumption and target node recommends ratified, the single exception being `ruling-transport`. So on the substantive nodes the three limbs have produced ratified without exception, and a rule that ratifies everything of consequence hands the author every question while appearing to filter, which spends by default the attention the `attention` and `alignment-order` nodes exist to spend carefully; the risk is the opposite of the invisible tilt toward delegated that the fact's own `against` names. The guard the answer offers against that case -- that the reading which applied the test be written on the node -- is met by 20 of the 129 facts on the criterion the account states, so on the day the author is asked to ratify it the guard is a promise about future back-fill and not a property of the record. The rival the answer lists and does not weigh, `form-decides-the-default`, states what the record already does, is the only candidate an instrument could check without reading prose, and would make the three limbs an escalation from a checkable default rather than the whole rule; the node concedes all of this, records the charge as unanswered and marks the recommendation high boldness, which is honest but is not an answer."
 form: rule
 tier: global
 under:
@@ -50,16 +53,14 @@ defines:
 ---
 ## Answer
 
-The class the AI recommends on a node's authority fact escalates toward ratified
-where being wrong is expensive, irreversible, or capture-shaped, and is
-delegated or deferred otherwise; what it recommends is a recommendation and
-confers nothing.
+The class the AI recommends on a node's authority fact is ratified where being
+wrong is expensive, irreversible, or capture-shaped, and is delegated or
+deferred otherwise; what it recommends is a recommendation and confers nothing.
 
 Expensive means the cost of a wrong answer is paid in work the record cannot
 take back cheaply. Irreversible means it is not paid back at all: a deletion, a
 swap, a landing that other work is built on. Capture-shaped means the party that
-would set the answer is the party the answer is meant to check, which is the
-shape the `review-cost` and `clean-context-review` nodes' authority facts name.
+would set the answer is the party the answer is meant to check.
 Where none of the three holds, the recommendation is delegated where the author
 has said they do not want to be asked again about that class of decision, and
 deferred otherwise.
@@ -70,11 +71,9 @@ recommended with no such reading behind it is a recommendation the reviewer may
 find unsupported. The requirement binds from this node's ruling and not before:
 the authority facts already recorded without such a reading are a reconciliation
 item on this node, and not a defect the reviewer reports on each of them. The
-back-fill is most of the record and is owed rather than assumed; how much of it,
-on what criterion and at which commit, is measured in this node's account and not
-written into the text that stands, because a count in a standing answer is
-doctrine that goes stale where it is loaded, and this node's answer is projected
-into `.claude/rules/` and read by every session.
+back-fill is most of the record and is owed rather than assumed; the measure, the
+criterion it was taken on and the commit it was taken at are in this node's
+account.
 
 ## Rationale
 
@@ -94,6 +93,21 @@ rule. What it does not decide is the class itself: the author rules, and this
 test only says what the AI is to recommend and what it must show for the
 recommendation.
 
+Two things the answer used to carry stand here instead, because this node's
+answer is projected verbatim into `.claude/rules/` and read by every session, and
+neither of them should bind from there. The first is the reason the measure lives
+in the account: a count written into a standing answer is doctrine that goes
+stale the day the record next changes, with no instrument that would notice, and
+the general rule of which that is an instance is recorded as the option
+`no-census-in-a-standing-answer` on `authority`, sourced here, where the author
+can rule on it rather than meet it as the ground of a sentence in doctrine. The
+second is the two nodes whose authority facts name the capture limb,
+`review-cost` and `clean-context-review`: they are examples and not the
+definition, the clause above is complete without them, and `review-cost`'s own
+`### authority` prose now cites this node's test for the term, so a citation in
+the answer would put the two texts in a loop inside the rule every session
+loads.
+
 ## Facts
 
 ### answer
@@ -106,13 +120,12 @@ only evidence that the rule works is prose the AI wrote, and because the guard
 this answer offers against its own case against, that the reading be written on
 the node, is met by twenty of the record's 129 authority facts on the criterion
 the account states, fifty-six of which carry no `### authority` prose at all.
-An earlier draft said the record had nineteen applications with no reading
-recorded for most, and that was false twice over: every application that exists
-does record a reading, and the scarcity is that the applications are few. The
-case against is on the fact and the answer does not meet it. Three alternatives
-are live beside the recommendation: `no-recommendation-on-the-authority-fact`,
-`class-follows-the-authors-words`, and `form-decides-the-default`, the last of
-which is what the record measurably already does.
+The case against is on the fact and the answer does not meet it. Four options are
+live beside the recommendation: `no-recommendation-on-the-authority-fact`,
+`class-follows-the-authors-words`, `form-decides-the-default`, which is what the
+record measurably already does, and `test-without-the-written-reading`, which
+keeps the three limbs and drops the guard the paragraph above concedes the record
+does not yet meet.
 
 #### no-recommendation-on-the-authority-fact
 
@@ -152,6 +165,22 @@ the tilt the case against names moves from the reading to the form rather than
 going away, and a node whose form is wrong gets the wrong default silently.
 Raised by the clean-context reading of 2026-09-05, as the rule the record runs
 in place of the one this node states.
+
+#### test-without-the-written-reading
+
+The three limbs stand and the evidentiary clause goes: the AI recommends ratified
+where being wrong is expensive, irreversible or capture-shaped and delegated or
+deferred otherwise, with nothing required of the `### authority` prose beyond the
+reason every fact already carries. What it buys is that the author can rule for
+the test without also ruling for a back-fill of 109 of the record's 129 authority
+facts, which this node's own answer calls owed rather than assumed; as the fact
+stands those are one choice with two costs, and the author cannot take the first
+and decline the second. What it costs is the guard: a class recommended on no
+stated limb then reads the same as one recommended on a limb a reader could
+check, which is the invisible tilt the fact's case against names, and the
+reviewer loses the locus at which it would catch one. Raised by the clean-context
+reading of 2026-09-05, which held that the option cannot be ruled for as the fact
+is drawn.
 
 ### authority
 
@@ -441,3 +470,79 @@ which in this record is low confidence, with the three rival options live and
 unmarked and the first reading's counter-argument recorded and unanswered, which
 is what the boldness says. The kickback redraws the standing text, so a fresh
 reading of the answer is owed and the delta of this one closes.
+
+### Clean-context review, 2026-09-05
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Recommended at this reading: `escalate-toward-ratified`.
+
+Findings:
+
+- `## Answer`, third paragraph, closing clause (validation 2: a rule adopted in text where the record has parked it as an unruled option). The paragraph now ends "...is measured in this node's account and not written into the text that stands, because a count in a standing answer is doctrine that goes stale where it is loaded, and this node's answer is projected into `.claude/rules/` and read by every session." That clause states a general rule about where a measurement of the record lives, and the record has deliberately kept exactly that rule out of any answer: `authority` carries the option `no-census-in-a-standing-answer`, sourced to this node, whose own subsection (disposition/disposition-graph/authority.md:206-208) says "A measurement of the record does not go in the text that stands: a count belongs in the node's account, with the criterion it was taken on and the commit it was taken at" and closes "Recorded as an option and not written into the answer, because it would bind every node the record has and the author has not been asked." Because `tier: global` projects this answer verbatim (verified: the clause stands in `.claude/rules/class-recommendation.md`), the rule the option withholds is read by every session anyway, as the ground of a sentence in doctrine, while the option that states it acts on nothing. The clause also fixes an implementation fact -- that this node is global-tier and projected -- inside the very text that projection copies, so a change of tier falsifies the answer. Suggested edit: end the paragraph "...The back-fill is most of the record and is owed rather than assumed; the measure, the criterion it was taken on and the commit it was taken at are in this node's account." and move the "because a count in a standing answer..." clause to `## Rationale`, where the reason for the placement belongs and where it binds nothing.
+- `## Answer`, first sentence (validation 3, the executor test on a rule every session loads). "The class the AI recommends on a node's authority fact escalates toward ratified where being wrong is expensive, irreversible, or capture-shaped, and is delegated or deferred otherwise." The negative branch names its values exactly two paragraphs later -- "the recommendation is delegated where the author has said they do not want to be asked again about that class of decision, and deferred otherwise" -- while the positive branch names only a direction. With three classes on the fact, "escalates toward ratified" is readable as one step up rather than as the value `ratified`: an executor whose default is deferred could take it to mean delegated, and this text is `.claude/rules/class-recommendation.md`, loaded by every session that recommends a class. The record's own practice is the value and not the direction (measured today: of the 113 authority facts carrying a recommendation, 54 recommend `ratified`, 58 `delegated` and 1 `deferred`). Suggested edit: "The class the AI recommends on a node's authority fact is ratified where being wrong is expensive, irreversible, or capture-shaped, and delegated or deferred otherwise", keeping the word escalation for `## Rationale`.
+- `## Facts`, `### answer` (viability: an option the author cannot rule for). All four listed options keep or discard the test and its evidentiary clause together, so the author cannot ratify the three limbs while declining the requirement that every authority fact carry a written reading -- which is the requirement the same answer says the record fails on 109 of its 129 authority facts and whose back-fill it calls "most of the record and ... owed rather than assumed". Those are two decisions with different costs, and on this fact they are one choice. Missing option, `test-without-the-written-reading`, source review, ref 2026-09-05, with the prose given in the `viability` field. If the author would rather rule the two separately, with a class of their own on each, the evidentiary clause is a node of its own beneath this one ("What must a class recommendation show?"), carrying the clause as its first option; the review proposes and neither mints nor splits, so this is recorded here in prose for the session.
+- `## Answer`, second paragraph, last clause (validation 3, a citation that now points back at this node). "Capture-shaped means the party that would set the answer is the party the answer is meant to check, which is the shape the `review-cost` and `clean-context-review` nodes' authority facts name." The claim is true today -- verified at disposition/disposition-graph/review-cost.md:204 and disposition/disposition-graph/clean-context-review.md:232 -- but `review-cost`'s prose, corrected by this sitting, now reads "capture-shaped in the way the `class-recommendation` node's escalation test names", so the two texts cite each other for one term. That is the loop the first reading found between `review-cost` and `authority`, reproduced one node over, and it is in the text `.claude/rules/` carries, where a definition every session loads is made to depend on what two other unanswered drafts happen to say. The preceding clause is already a complete definition and `defines: capture-shaped` carries the same gloss, so nothing is lost. Suggested edit: strike "which is the shape the `review-cost` and `clean-context-review` nodes' authority facts name" from `## Answer` and keep the two examples in `## Rationale`.
+- `## Facts`, `### answer` (the reason carries the sitting's history). "An earlier draft said the record had nineteen applications with no reading recorded for most, and that was false twice over: every application that exists does record a reading, and the scarcity is that the applications are few." The retraction of a count in a draft the author never saw is the account's business, and `## Account` already carries it three times, in `### Clean-context review, 2026-09-05`, `### Amended after the reading, 2026-09-05` and `### The delta re-reading applied, 2026-09-05`; the fact's reason is what the alignment page shows the author as the ground of the recommendation, and it is pinned. In the same subsection, "Three alternatives are live beside the recommendation" uses the older word: the encoding's term, on `dialogue` and `viable-options`, is option. Suggested edit: strike the retraction sentence from the reason, leaving the corrected measure and the case against it supports, and read "Three options are live beside the recommendation".
+
+On the facts and what they recommend: The answer fact recommends `escalate-toward-ratified` at high boldness, which in this record is low confidence, naming a listed option that is also `stands`, so there is correctly no `## Recommendation` fence; the authority fact recommends `ratified` at low boldness on the capture limb its own `### authority` prose names, and no existence or persistence fact is carried, rightly, since no prune is proposed and the recommendation changes no shape. High is the honest mark: the three limbs are the AI's, promoted from a shim declared on `growth`, with no words of the author's behind them, and I re-took the census independently -- 142 node files, 129 carrying an authority fact, 73 with `### authority` prose and 56 without, 20 naming a limb in the literal terms (22 if a limb named in words counts, the two extra being this node and `delegation-bounds-and-sizing`) -- so the answer's "twenty of the record's 129 authority facts ... fifty-six of which carry no `### authority` prose" reproduces exactly on the criterion the account states, and understating the guard's reach by two is the conservative direction and is disclosed. `node packages/disposition/validate.mjs disposition` passes at 142 nodes; the `review` block carries the previous kickback pinned at 04577246, stale by the redraw, which is why this reading was owed and not a defect of the draft.
+
+On the viability of the options: All four options on the answer fact are live, unmarked and undominated: `escalate-toward-ratified` keeps a recommendation and a boldness on the page; `no-recommendation-on-the-authority-fact` removes the tilt the fact's own `against` names at the price of a judgment on every node; `class-follows-the-authors-words` removes it while keeping the recommendation, at the price of ratifying everything the author has not spoken to; and `form-decides-the-default` states what the record measurably does -- I reproduced its measure and it is sharper than the option claims: form predicts 112 of the 113 recommended classes, every `form: reading` node recommending delegated or deferred and every rule, assumption and target node recommending ratified, the one exception being `ruling-transport`. The authority fact's three options are the reserved vocabulary and are complete. One viable option is missing, `test-without-the-written-reading` (source review, 2026-09-05): the three limbs stand and the evidentiary clause goes, so the AI recommends ratified where being wrong is expensive, irreversible or capture-shaped and delegated or deferred otherwise, with nothing required of the `### authority` prose beyond the reason every fact already carries; it costs the guard, since a class recommended on no stated limb then reads the same as one recommended on a limb a reader could check, which is the tilt the fact's `against` names, and it buys the record out of a back-fill of 109 of its 129 authority facts that the answer itself calls owed and unassumed. Neither it nor the recommendation dominates the other, and as the fact stands the author cannot rule for the test while declining the burden.
+
+Strongest counter-argument (strong): The record measures this test and the test is not what sorts the record. Of the 129 authority facts, 113 carry a recommendation, and the node's `form` predicts 112 of them: every `form: reading` node recommends delegated or deferred, and every rule, assumption and target node recommends ratified, the single exception being `ruling-transport`. So on the substantive nodes the three limbs have produced ratified without exception, and a rule that ratifies everything of consequence hands the author every question while appearing to filter, which spends by default the attention the `attention` and `alignment-order` nodes exist to spend carefully; the risk is the opposite of the invisible tilt toward delegated that the fact's own `against` names. The guard the answer offers against that case -- that the reading which applied the test be written on the node -- is met by 20 of the 129 facts on the criterion the account states, so on the day the author is asked to ratify it the guard is a promise about future back-fill and not a property of the record. The rival the answer lists and does not weigh, `form-decides-the-default`, states what the record already does, is the only candidate an instrument could check without reading prose, and would make the three limbs an escalation from a checkable default rather than the whole rule; the node concedes all of this, records the charge as unanswered and marks the recommendation high boldness, which is honest but is not an answer.
+
+The session's reply: All five taken; the forward stands and the node is amended in place. (1) The clause adopting a general rule about where a measurement lives is struck from `## Answer` and its substance moved to `## Rationale`: the answer now says only that the measure, its criterion and its commit are in the account, which is a statement about this node and binds nothing. The reading is right that the record parks that rule as `no-census-in-a-standing-answer` on `authority`, sourced here and deliberately unwritten, and that a global-tier answer stating its ground puts the unruled rule into every session's context by the back door; it is right too that fixing the tier inside the text the tier projects makes a change of tier falsify the answer. (2) Taken: the positive branch now names its value, `is ratified where`, matching the negative branch two paragraphs down, and the word escalation is kept for `## Rationale` and for the option's name. The executor argument is the decisive one, since this text is loaded by every session that recommends a class. (3) The missing option is recorded on the answer fact as `test-without-the-written-reading`, source review, ref 2026-09-05, with its own `####`. The reading is right that the four options bundle two decisions with different costs, and that the author cannot today ratify the three limbs while declining a back-fill of 109 of 129 authority facts that the answer itself calls owed and unassumed. Recorded as an option and not recommended: the guard is what the fact's own case against asks for, and the AI does not move the recommendation onto the option that drops it. Not minted as a child node, because the review proposes and neither mints nor splits, and because an option is the instrument the record has for a choice the author may take. (4) Taken: the citation is struck from `## Answer`. Verified at `review-cost.md` `### authority`, whose prose this sitting corrected to read "capture-shaped in the way the `class-recommendation` node's escalation test names", so the two texts now cite each other for one term inside the rule every session loads; `clean-context-review.md` `### authority` names the shape without citing back. The preceding clause is a complete definition and `defines: capture-shaped` carries the same gloss, so nothing is lost; the two examples move to `## Rationale`. (5) Taken: the retraction of a count in a draft the author never saw is struck from the fact's reason, which is the ground the alignment page shows and is pinned; the account carries it three times already. `Three alternatives` reads `Three options`, and now `Four options`, the encoding's word. The counter-argument is recorded whole in the account and not answered here: the form measure reproduces on this thread at 129 authority facts, 113 with a recommendation, 54 ratified, 58 delegated, 1 deferred, and the charge that a test which ratifies everything of consequence spends by default the attention the record exists to spend carefully is exactly what `form-decides-the-default` is on the list to let the author rule for.
+
+### The fresh reading applied, 2026-09-05
+
+The redrawn answer's own reading, forward at strong counter-argument, five
+findings, all taken and amended in place. Two of the five were the same error in
+two places: the answer was carrying, as the ground of its own sentences, rules
+and citations that belong outside a text projected verbatim into `.claude/rules/`.
+The clause explaining why the census lives in the account stated a general rule
+about every node in the record, which is precisely the rule `authority` holds
+unruled as `no-census-in-a-standing-answer`, sourced here and deliberately not
+written into an answer; stating its reason in doctrine puts it in every session's
+context by the back door, and fixing this node's tier inside the text the tier
+projects would have made a change of tier falsify the answer. The citation of
+`review-cost` and `clean-context-review` for the shape of the capture limb became
+a loop the same day, when this sitting corrected `review-cost`'s `### authority`
+to cite this node's test for the term; both are now examples in the rationale,
+where the definition above them is complete and `defines: capture-shaped` carries
+the same gloss.
+
+The third finding is the one that changes what a session does. The answer's
+positive branch said the class "escalates toward ratified" while its negative
+branch two paragraphs down named its values outright, and with three classes on
+the fact a direction is not a value: an executor whose default is deferred could
+read one step up and land on delegated. The sentence now reads "is ratified
+where", and the word escalation is kept for the rationale and for the option's
+name.
+
+The fourth is a viability finding and is recorded as an option rather than
+answered. The four options all kept or dropped the three limbs and the
+evidentiary clause together, so the author could not ratify the test while
+declining a back-fill of 109 of 129 authority facts that the answer itself calls
+owed and unassumed; `test-without-the-written-reading` separates them. It is not
+recommended: the guard is what the fact's own case against asks for, and the AI
+does not move its recommendation onto the option that drops it. It was not minted
+as a child node, because the review proposes and neither mints nor splits.
+
+The fifth struck from the answer fact's reason the retraction of a count in a
+draft the author never saw. The reason is what the alignment page shows as the
+ground of the recommendation and it is pinned; the account carries the retraction
+three times already, which is where a sitting's history belongs.
+
+The counter-argument is recorded on the review block and is not answered. Its
+measure reproduces on the main thread: 129 authority facts, 113 carrying a
+recommendation, 54 ratified, 58 delegated, one deferred, and `form` predicting
+112 of the 113 with `ruling-transport` the sole exception. The charge is that a
+test which has produced ratified on every substantive node hands the author every
+question while appearing to filter, spending by default the attention the
+`attention` and `alignment-order` nodes exist to spend carefully. That is the
+case `form-decides-the-default` is on the list for, and it is the author's to
+rule, not the AI's to settle by amendment.
+
+The amendment moves the standing text, so the node returns to the review stage
+for the re-reading the cap budgets, which is the second and last reading this
+answer gets.
