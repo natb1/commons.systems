@@ -38,6 +38,9 @@ facts:
       - name: passed-over-stays-listed
         source: commons.systems/disposition-graph/prose-and-structure
         ref: "2026-09-04"
+      - name: membership-cited-not-restated
+        source: commons.systems/disposition-graph/viable-options
+        ref: "2026-09-05"
     recommends: passed-over-stays-listed
     boldness: moderate
     against: "The answer has no ground of its own if the author rules the other way one node earlier: it is `viable-options`' `passed-over-options-stay` restated for this question, so a confirmation here is a second vote on one decision, and `non-chosen-viable-options`, which stands, already answers the question the author asked while keeping their own scoping of what persists."
@@ -161,6 +164,17 @@ A rejected alternative is a viable option the author did not choose, kept on the
 #### passed-over-stays-listed
 
 A rejected alternative is any candidate the AI considered and can name, kept on the fact with its status and the reason it was not taken, whether or not the AI still holds it viable: `status: passed` with its `reason`, as `viable-options`' option `passed-over-options-stay` encodes it. Version control holds what the record no longer carries, the full text of an answer an option displaced, and the rejected passages of the rationales migrate as options passed over; the rationale argues and does not list. Raised on commons.systems/disposition-graph/prose-and-structure, whose clean-context review of 2026-09-04 found the membership rule to be this node's and `viable-options`'. Two decisions of this node's own go with it: that the record holds no rejected list, no rejected section, and no rejected node anywhere, so the browser's match on a heading beginning `Rejected` in a `## Rationale` is liquidated with the prose it read; and that `rejected alternative` is defined here, which the kickback of 2026-09-03 said was owed and which this node's `defines` now carries. Adopted by the recommendation and set out in the fence.
+
+#### membership-cited-not-restated
+
+The same answer with the membership rule cited and not restated. The
+recommended text says that none leaves the list, that an option is struck only
+by the author, and that the AI's judgment about an option is written on the
+option and never worked by removing it, and then cites the viable-options node
+as deciding exactly that; the citation is right and the three clauses before it
+are a second copy of a rule this node does not own. Under this option the
+sentence names the deciding node and stops, so an amendment there does not
+leave a stale copy standing here.
 
 ### authority
 

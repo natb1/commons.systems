@@ -35,6 +35,9 @@ facts:
         ref: "8938e2b7"
         status: passed
         reason: "its landings go straight to the ref and a worktree would only add a merge"
+      - name: reconciliation-passes-an-option-over
+        source: commons.systems/disposition-graph/viable-options
+        ref: "2026-09-05"
     recommends: reconciliation-writes-options
     boldness: moderate
     against: "On a delegated or deferred node the reconciliation session may move the recommendation and the moved recommendation acts, so the loop writes the desired state it then reconciles to, which the level-triggered reading concedes breaks the controller's clean line; the guard, within the node's scope, is judged by the session that makes the move, and on a delegated node the author never sees it."
@@ -138,6 +141,18 @@ operational state on the record.
 The reconciliation session works in a worktree of its own. It was passed over
 because its landings go straight to the ref, so a worktree would only add a
 merge.
+
+#### reconciliation-passes-an-option-over
+
+The licence this answer gives a reconciliation session's main thread named as
+three acts and not two: recording an option on a fact, passing an option over
+and lifting a status the AI wrote, and moving a fact's recommendation within
+the node's scope. The viable-options node's recommended answer of 2026-09-05
+gives the AI all three wherever it acts, in alignment, in reconciliation, and
+in the loop on itself, and this answer's enumeration is short by one the moment
+that is ruled. Recorded here rather than written in, because the bound on a
+reconciliation session is this node's to set and the other node's answer is not
+yet ruled.
 
 ### authority
 

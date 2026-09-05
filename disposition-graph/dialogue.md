@@ -211,6 +211,9 @@ facts:
       - name: commit-in-the-review-block
         source: commons.systems/disposition-graph/review-cost
         ref: "2026-09-05"
+      - name: source-names-who-raised-it
+        source: commons.systems/disposition-graph/viable-options
+        ref: "2026-09-05"
     recommends: every-part-in-the-record
     boldness: moderate
     against: "It puts six decisions in one row, the standing encoding and the five clauses adopted into it, so a confirmation confers together what the author examined and what they did not, which is the bundling this node's own rule that a text answering two questions is two nodes exists to prevent."
@@ -225,6 +228,7 @@ facts:
     against: "Every node in the record is already written to this encoding under a bootstrap grant, so a ratification here ratifies a migration the AI performed rather than a design the author chose against a standing rival; deferred would let the recommendation act, keep the node in front of the author, and cost nothing."
 depends:
   - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey
+  - commons.systems/disposition-graph/viable-options
 form: rule
 under:
   - commons.systems/disposition-graph/unanswered
@@ -853,6 +857,19 @@ Everything the recommendation says, with a fifth reserved name beside the four: 
 #### commit-in-the-review-block
 
 The review block carries a fifth draft key beside `verdict`, `strength`, `date` and `of`: `commit`, the graph commit the reviewed text was read at, written when the applying step finds a clean tree and absent when it does not. Recorded from the sitting on `review-cost`, whose answer gives an amended draft a re-reading whose object is the difference between the node as it stands and the text the last reading pinned. The pin identifies that text but does not locate it, so the difference is computable only from a commit, and without one the re-reading falls back to a full reading of the amended node. This node's recommended text enumerates the draft keys as four written together or not at all, which a fifth optional key contradicts, so it is recorded here as an option and acts on nothing; what a ruling would have to settle is whether `commit` joins the four in that rule or stands beside them as `against` does, optional and written only when the tree is clean. It bears on this node's answer fact and the recommendation is unmoved.
+
+#### source-names-who-raised-it
+
+An option's `source` names the party that put the candidate on the table and
+its `ref` points at that: the date of the author's words where the source is
+the author, the graph commit where the AI drafted it, the review that raised
+it, or the node or instrument that did, so that a source of `author` carrying a
+graph commit where the date of the words should be is a finding and not a fact.
+The author's later agreement with a reason the AI gave is a ruling where they
+gave one and an account where they did not, and never a source. This is what
+the viable-options node's recommended answer of 2026-09-05 says of source and
+reference; what an option carries is this node's question, and the rule belongs
+in this answer with the rest of it rather than beside it.
 
 ### authority
 

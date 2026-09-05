@@ -26,6 +26,9 @@ facts:
         ref: "6e9efb8c"
         status: passed
         reason: "the size of a debugging context is unknown until it has been read"
+      - name: reconciliation-passes-an-option-over
+        source: commons.systems/disposition-graph/viable-options
+        ref: "2026-09-05"
     recommends: reconciliation-session-writes-options
     boldness: moderate
     against: "The answer generalises past the author's words: they named verbose investigation and gave its cost, and the answer makes everything but the interview and the record a contracted unit. The contract, the report, and the main thread's read of the conclusion are a fixed cost per unit, the lookup exemption is the only floor, and anything larger is a unit catches every three-line investigation."
@@ -102,6 +105,15 @@ it.
 The main thread investigates itself when a question looks small. It was passed
 over because the size of a debugging context is unknown until it has been
 read.
+
+#### reconciliation-passes-an-option-over
+
+The amended sentence carrying three acts rather than two: the main thread may
+record an option on a fact, pass an option over and lift a status the AI wrote,
+and move a fact's recommendation within the node's scope. This answer takes its
+enumeration from work-loop's, which the viable-options node's recommended
+answer of 2026-09-05 would make short by one; the same option is recorded
+there, and this one moves only if that one does.
 
 ### authority
 

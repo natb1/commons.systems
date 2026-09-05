@@ -43,6 +43,9 @@ facts:
       - name: no-stated-cap
         source: ai
         ref: "2026-09-04"
+      - name: reconciliation-passes-an-option-over
+        source: commons.systems/disposition-graph/viable-options
+        ref: "2026-09-05"
     recommends: probes-on-the-node
     boldness: moderate
     stands: probes-on-the-node
@@ -79,6 +82,7 @@ depends:
   - commons.systems/disposition-graph/dialogue#every-part-in-the-record
   - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey
   - commons.systems/disposition-graph/probe-or-node
+  - commons.systems/disposition-graph/viable-options
 ---
 ## Disposition
 
@@ -205,6 +209,16 @@ Everything the recommendation says, with nothing at all reaching the alignment p
 #### no-stated-cap
 
 Everything the recommendation says, with the admission test and nothing else bounding the list: a probe is admitted on the three limbs, and if seven survive the test then seven is what the node honestly holds. What it would answer: the list is bounded by what earns a place and never by a number. It is on the table because a number is arbitrary where a test is principled, and because a cap that bites forces the AI to drop a probe that passed the test, which is a real loss the answer should not pretend away. Against it: the party applying the test is the party whose recommendation the probes would unsettle, so a test with no ceiling is a test the asker grades itself on; and the hazard the cap is against is not that the author refuses to answer eleven probes but that the answers degrade as the list runs on, worst at the end, and a satisficed answer is indistinguishable in this record from a considered one and authoritative afterwards.
+
+#### reconciliation-passes-an-option-over
+
+The clause 'Reconciliation and the loop on itself reach a node today only as
+the viable-options node allows, to record an option and to move a
+recommendation within scope' naming three acts rather than two, the third being
+passing an option over and lifting a status the AI wrote. The viable-options
+node's recommended answer of 2026-09-05 gives all three, and this clause cites
+that node while enumerating fewer acts than it grants; the citation is the
+right shape and only the list is short.
 
 ### authority
 
