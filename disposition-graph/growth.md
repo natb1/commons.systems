@@ -86,6 +86,10 @@ facts:
       - name: rejected-alternative-is-an-option
         source: commons.systems/disposition-graph/rejected
         ref: "2026-09-05"
+      - name: proposal-as-a-state-of-a-ratified-node
+        source: commons.systems/disposition-graph/authority
+        ref: "2026-09-05"
+
     recommends: boldness-reversed
     boldness: low
     stands: standing
@@ -267,6 +271,10 @@ rule a session works under is a node or a declared shim.
 #### rejected-alternative-is-an-option
 
 The standing answer's sentence "a steer enters the node's rationale as a rejected alternative or an amendment before the page is rendered again." places a rejected alternative in the rationale, and under the rejected node's recommended text that is the wrong place: a rejected alternative is an option on the fact it answers, with its status and the reason it was not taken, and the rationale argues and may name it but does not hold it. Raised by the rejected node from its reading of 2026-09-05; the amendment is the one clause, and it acts on nothing until the author rules.
+
+#### proposal-as-a-state-of-a-ratified-node
+
+The standing answer and the recommended `boldness-reversed` both list what a recorded thing may be, and among them "a proposal when it arose outside alignment". The origin no longer defines the word: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from. The list item becomes a proposal on a ratified node whose recommendation has moved, and the authority node is cited for the state. Raised on commons.systems/disposition-graph/authority, by its clean-context reading of 2026-09-05.
 
 ### persistence
 

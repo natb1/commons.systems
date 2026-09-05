@@ -43,6 +43,10 @@ facts:
         ref: "1920badc"
         status: passed
         reason: "no reason recorded in the rationale"
+      - name: proposal-as-a-state-of-a-ratified-node
+        source: commons.systems/disposition-graph/authority
+        ref: "2026-09-05"
+
     recommends: four-form-draft
     boldness: moderate
     stands: standing
@@ -131,6 +135,10 @@ node makes same scope decidable.
 
 A node carries its own history of what it replaced. The rationale records no
 reason for passing it over.
+
+#### proposal-as-a-state-of-a-ratified-node
+
+The recommended `four-form-draft` says a proposal "is the alternative that arose outside alignment, as the authority node defines it", and cites a definition that node no longer gives: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source. The sentence drops the origin and cites the authority node for the state. Raised on commons.systems/disposition-graph/authority, by its clean-context reading of 2026-09-05.
 
 ## Recommendation
 

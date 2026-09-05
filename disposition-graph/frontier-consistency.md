@@ -46,6 +46,10 @@ facts:
       - name: placement-feeds-the-order
         source: author
         ref: "2026-09-03"
+      - name: proposal-as-a-state-of-a-ratified-node
+        source: commons.systems/disposition-graph/authority
+        ref: "2026-09-05"
+
     recommends: split-survey-from-per-draft
     boldness: moderate
     against: "The split answers half of the counter-argument of 2026-09-03: the survey still reads the whole graph on every invocation and is incremental only in what it judges, so its cost and its noise grow with the frontier; the partition is stated in this fence and in the clean-context-review node's, and the merge validation runs at three moments on three objects."
@@ -173,6 +177,10 @@ Adopted into `split-survey-from-per-draft` on 2026-09-04: the fence cites the cl
 #### placement-feeds-the-order
 
 Adopted into `split-survey-from-per-draft` on 2026-09-04: the thirteenth validation records what the survey finds as the alignment-order node says and derives the order from it. Validation 13 had the review recommend the order in which the author rules, and nothing consumed the recommendation of 2026-09-03. The alignment-order node gives it a consumer: the survey's findings of contradiction, supersession, and redundancy between unanswered nodes are recorded as options on the earlier-recorded survivor, and its findings of divergence between subtrees as `depends` on the leaves, and the ruling order is derived from that data rather than recommended in prose. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+
+#### proposal-as-a-state-of-a-ratified-node
+
+Validation 2, in both the standing answer and the recommended `split-survey-from-per-draft`, reads "it is recorded as an option on the node it conflicts with, a proposal under the authority node when it arose outside alignment, and the review says which". Under the authority node's recommendation a proposal is no longer a thing recorded under that node but the state of a ratified node whose recommendation has moved, so the clause this node's own readings run under has become unreadable. The validation drops "a proposal under the authority node when it arose outside alignment, and the review says which" and says instead that where the node it conflicts with is ratified, the option puts that node into the proposal state the authority node defines. Raised on commons.systems/disposition-graph/authority, by its clean-context reading of 2026-09-05.
 
 ### authority
 

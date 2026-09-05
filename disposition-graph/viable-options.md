@@ -62,6 +62,10 @@ facts:
       - name: adopted-is-a-status
         source: commons.systems/disposition-graph/frontier-consistency
         ref: "2026-09-05"
+      - name: class-rules-cited-not-restated
+        source: commons.systems/disposition-graph/authority
+        ref: "2026-09-05"
+
     recommends: passed-over-options-stay
     boldness: high
     against: "The author scoped what persists to options 'categorized as viable by the AI', and this node's own rationale rejected keeping the rest, so the recommendation reverses the author's words on the AI's reading of the regression purpose those same words gave; what it buys is a status on rows the author must now read, a hundred and four of them today across twenty-nine nodes, on a page whose own reading of anchoring says the surface is already multiplied, while the discretion the change was bought to remove survives untouched in which candidates the AI names at all."
@@ -350,6 +354,10 @@ author strikes one.
 #### adopted-is-a-status
 
 Everything the recommendation says, with a status beside `passed` for an option the recommended text has absorbed, so that an adopted candidate stays on the list as the recommendation requires and the page and the frontier show it as adopted rather than as viable. Today the encoding's only status is passed, and an adopted option is listed with no status and its adoption noted in prose, which the dialogue, alignment-page, and frontier-consistency nodes do; a reader of the page sees it beside the live options. Raised by the reading of frontier-consistency on 2026-09-05, which found three adopted options struck from that node's list.
+
+#### class-rules-cited-not-restated
+
+The standing answer and the recommended `passed-over-options-stay` both restate the authority node's class rules at length — ratified, delegated, deferred, unanswered, the non-expiring grant, the narrowing of authority on the way down, and a class the AI wrote for itself being no grant — and both carry the definition of a proposal in full. Authority is the node whose `defines` holds `ratified`, `delegated`, `deferred` and `proposal`, so the same rule is answered twice and will drift the moment either is ruled, which is the update anomaly the `codd-update-anomaly` reading names. The second paragraph and the proposal sentence are replaced by a citation of the authority node, so that this answer says what viable options do for authority and does not restate what authority says. Raised on commons.systems/disposition-graph/authority, by its clean-context reading of 2026-09-05.
 
 ### authority
 
