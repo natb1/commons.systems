@@ -58,6 +58,15 @@ facts:
         ref: "32600efe"
         status: passed
         reason: "the queue is the unanswered nodes themselves"
+      - name: response-on-a-fact
+        source: commons.systems/disposition-graph/recording
+        ref: "2026-09-04"
+      - name: edit-ruled-then-reviewed
+        source: commons.systems/disposition-graph/recording
+        ref: "2026-09-04"
+      - name: stage-keeps-a-node-on-the-frontier
+        source: commons.systems/disposition-graph/recording
+        ref: "2026-09-04"
     recommends: unanswered-is-no-ruling
     boldness: moderate
     stands: unanswered-is-no-ruling
@@ -193,6 +202,18 @@ themselves.
 The order of the author's attention is carried by a curriculum, as the
 incumbent record had it. It was passed over because the queue is the
 unanswered nodes themselves.
+
+#### response-on-a-fact
+
+Every response is given on a fact, on the alignment page and in prose, and none on the node as a whole, since a fact is what a ruling is recorded on; a prose response reaches the facts it names, or every fact where it names none. This replaces the standing sentence that a response is given "on a node, or on one of the decisions that node's ruling asks". Recorded on 2026-09-04 with the recording node as its source, after that node's reading found the divergence owed here and unrecorded.
+
+#### edit-ruled-then-reviewed
+
+A confirmation with edits is recorded as a ruling on the edited option when it is given, and the node returns to the review stage where the edits change substance, the confirmed choice keeping its authority meanwhile. This replaces the standing sentence that the edited draft "goes through the review again before the ruling is recorded"; what a response does once given is the recording node's question, and this node would cite that node for it rather than carry a rival sentence. Recorded on 2026-09-04 with the recording node as its source; the other side, the edit held until the re-reading forwards it, is recorded on that node as `edit-held-until-re-read`.
+
+#### stage-keeps-a-node-on-the-frontier
+
+A node carrying a stage is on the alignment frontier whatever class the rulings on its other facts confer, until the recording removes the stage. The frontier as this node, dialogue, and viable-options define it is every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling; a node whose answer fact the author confirmed and whose persistence or existence fact they kicked back stands at the maieutic stage in none of those three sets, and the frontier and the alignment page would drop it while a movement is owed on it. Recorded on 2026-09-04 with the recording node as its source.
 
 ## Account
 

@@ -40,6 +40,9 @@ facts:
         ref: "6d21d356"
         status: passed
         reason: "it overloads a term the author reserves for the outside-alignment case"
+      - name: escalate-toward-ratified
+        source: commons.systems/disposition-graph/recording
+        ref: "2026-09-04"
     recommends: authority-derived
     boldness: moderate
     stands: authority-derived
@@ -143,6 +146,10 @@ Proposal names any candidate answer, amendment or finding with no authority,
 wherever it was recorded, which is what this node's draft defined. The author
 narrowed the word on 2026-09-03; it was passed over because it would have
 named the AI's own account and every alternative in a sitting with one word.
+
+#### escalate-toward-ratified
+
+The class the AI recommends for a decision escalates toward ratified where being wrong is expensive, irreversible, or capture-shaped, and is delegated or deferred otherwise. The rule is carried today by the alignment skill alone, a declared shim, and is applied by the authority fact of the recording node and of five others as "the record's own test"; the session-context node says a rule that lives only in a file is invisible to the projector and to review. Recorded on 2026-09-04 with the recording node as its source, after that node's reading found the citation empty.
 
 ## Account
 
