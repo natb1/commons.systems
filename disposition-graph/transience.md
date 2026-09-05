@@ -56,6 +56,9 @@ facts:
       - name: proposal-as-a-state-of-a-ratified-node
         source: commons.systems/disposition-graph/authority
         ref: "2026-09-05"
+      - name: rejected-alternative-is-an-option
+        source: commons.systems/disposition-graph/rejected
+        ref: "2026-09-05"
     recommends: standing
     boldness: high
     stands: standing
@@ -177,6 +180,10 @@ asked to sunset.
 #### proposal-as-a-state-of-a-ratified-node
 
 The standing answer defines a proposal as the alternative that arose outside alignment, "as the authority node defines it", and cites a definition that node no longer gives: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source. This option amends the sentence to say so and to cite the authority node for the state. Recorded from the clean-context reading of the authority node on 2026-09-05.
+
+#### rejected-alternative-is-an-option
+
+The standing answer's sentence "it has no authority and dies at the ruling, into the answer, into the rationale as a rejected alternative, or into nothing." places a rejected alternative in the rationale, and under the rejected node's recommended text that is the wrong place: a rejected alternative is an option on the fact it answers, with its status and the reason it was not taken, and the rationale argues and may name it but does not hold it. Raised by the rejected node from its reading of 2026-09-05; the amendment is the one clause, and it acts on nothing until the author rules.
 
 ## Account
 
@@ -375,3 +382,7 @@ Recorded as a pending alternative on commons.systems/disposition-graph/readings:
 Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### Option from the rejected node, 2026-09-05
+
+The option `rejected-alternative-is-an-option` is recorded on the answer fact, sourced to the rejected node, whose reading of 2026-09-05 found this node's standing answer placing a rejected alternative in the rationale. The recommendation here does not move.

@@ -22,6 +22,9 @@ facts:
       - name: drain-as-an-exit-criterion
         source: ai
         ref: "2026-09-03"
+      - name: rejected-alternative-is-an-option
+        source: commons.systems/disposition-graph/rejected
+        ref: "2026-09-05"
     recommends: standing
     boldness: moderate
     stands: standing
@@ -73,6 +76,10 @@ The placement finding's other branch, for each of the twenty-two nodes with no D
 #### drain-as-an-exit-criterion
 
 The reviewers' surviving counter-argument is that the drain of the legacy record has no owner and no rank, so it will be done at exit under time pressure or not at all: reading a legacy node when a question needs it is the only path in, and nothing derives which knowledge a question needs. The session replied that the author's words after compaction make the drain an exit criterion, on the exit list rather than on a rank, with the exit as its owner. That answer is in the reply and not in the node's answer, so it stands as a candidate edit.
+
+#### rejected-alternative-is-an-option
+
+The standing answer's sentence "Doctrine the new record overrules is not amended in place: it appears as a rejected alternative in the new node's rationale." places a rejected alternative in the rationale, and under the rejected node's recommended text that is the wrong place: a rejected alternative is an option on the fact it answers, with its status and the reason it was not taken, and the rationale argues and may name it but does not hold it. Raised by the rejected node from its reading of 2026-09-05; the amendment is the one clause, and it acts on nothing until the author rules.
 
 ## Account
 
@@ -198,3 +205,6 @@ rank, if the tree may not be opened to drain it.
 The two sets of words were said while the `author-questions` sitting was in
 hand, and are recorded there too, where they governed the sweep's brief.
 
+### Option from the rejected node, 2026-09-05
+
+The option `rejected-alternative-is-an-option` is recorded on the answer fact, sourced to the rejected node, whose reading of 2026-09-05 found this node's standing answer placing a rejected alternative in the rationale. The recommendation here does not move.

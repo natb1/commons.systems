@@ -83,6 +83,9 @@ facts:
         ref: "8938e2b7"
         status: passed
         reason: "no reason recorded in the rationale"
+      - name: rejected-alternative-is-an-option
+        source: commons.systems/disposition-graph/rejected
+        ref: "2026-09-05"
     recommends: boldness-reversed
     boldness: low
     stands: standing
@@ -260,6 +263,10 @@ kept and records no reason.
 The alignment skill's own text carries authority over the record. The passage
 lists it among the incumbent's mechanics not kept and records no reason; every
 rule a session works under is a node or a declared shim.
+
+#### rejected-alternative-is-an-option
+
+The standing answer's sentence "a steer enters the node's rationale as a rejected alternative or an amendment before the page is rendered again." places a rejected alternative in the rationale, and under the rejected node's recommended text that is the wrong place: a rejected alternative is an option on the fact it answers, with its status and the reason it was not taken, and the rationale argues and may name it but does not hold it. Raised by the rejected node from its reading of 2026-09-05; the amendment is the one clause, and it acts on nothing until the author rules.
 
 ### persistence
 
@@ -575,3 +582,7 @@ instead was considered and not recorded as an option: it would put the
 constitution of the instrument on a node whose question is how the graph grows,
 and `defines` is a field rather than a fact, so a placement disagreement is a
 finding for the survey and not a ruling for the author.
+
+### Option from the rejected node, 2026-09-05
+
+The option `rejected-alternative-is-an-option` is recorded on the answer fact, sourced to the rejected node, whose reading of 2026-09-05 found this node's standing answer placing a rejected alternative in the rationale. The recommendation here does not move.
