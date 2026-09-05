@@ -135,6 +135,9 @@ facts:
         ref: "2026-09-04"
         status: passed
         reason: "the encoding gives text only to the option a fact recommends, so a choice of a delta option has no text to render"
+      - name: progressive-disclosure-diverges-on-the-fold
+        source: commons.systems/disposition-graph/progressive-disclosure
+        ref: "2026-09-05"
     recommends: every-fact-every-option
     boldness: moderate
     against: "The delta encoding puts nine independent decisions in one radio group, so a combined ruling needs a confirmation with edits; the children the earlier review proposed would give each its own text, reading and pane."
@@ -340,6 +343,24 @@ A sixth metric, kick-backs per node and per sitting, for the recording node, who
 #### live-re-render-per-choice
 
 The right-hand column re-renders the node as each choice is made, which the recommended text promised until the reading of 2026-09-04. Passed because the encoding this node depends on gives text only to the option a fact recommends, so a choice of a delta option has no text to render, and because the artifact renders the column once from the fence and the standing text and never did otherwise.
+
+#### progressive-disclosure-diverges-on-the-fold
+
+The drill-down clause keeps its two levels and strikes the words "that tradition
+never asked for a decision to be removed from the ask", putting in their place
+that the tradition would defer the rarely used options by frequency and
+importance of use, that the author's words of 2026-09-04 put every fact and
+every option at the first level, and that the split within a row is this page's
+own criterion and not the tradition's. The divergence is the author's, which the
+evaluation node's rule says a tradition cannot overrule, and it is recorded on
+`commons.systems/disposition-graph/progressive-disclosure` as one `bears` entry
+carrying `diverged` on the option `every-fact-every-option`. Raised by the second
+clean-context reading of that node on 2026-09-05, which found that an account
+note on the reading binds nothing and shows nowhere beside the clause it
+contradicts. It supersedes the suggested edit this node's own reading of
+2026-09-05 gave for the same clause, to move the reading's recommendation to
+`discloses-detail-not-decisions`: that option was passed over the same day, for
+saying the record diverges from the tradition nowhere.
 
 ### authority
 

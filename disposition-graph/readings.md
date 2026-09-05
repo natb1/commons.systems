@@ -34,6 +34,9 @@ facts:
       - name: re-pointing-checked
         source: review
         ref: "2026-09-05"
+      - name: relation-per-holding
+        source: commons.systems/disposition-graph/progressive-disclosure
+        ref: "2026-09-05"
     recommends: relation-per-option
     boldness: moderate
     against: "The per-option relation binds a tradition's verdict to option names, which are the AI's handles and move under it as options are added, renamed, and composed, so the option the author confirms can show no tradition beside it while a rival shows one; and a reading per node multiplies files, whose queue effect is the cost the author will feel."
@@ -128,6 +131,24 @@ its viability field.
 #### relation-per-option
 
 A reading stays a node under one node it bears on, with its own class, and its relation attaches to the options of the fact it bears on rather than to the answer: adopted on the options the tradition supports, diverged on those it contradicts, so that "chosen over" becomes a tradition adopted on an option not chosen. The tradition's page still shows every reading that cites it, and the projections show on each option what tradition says. Raised on commons.systems/disposition-graph/viable-options, from the author's words of 2026-09-04 recorded there.
+
+#### relation-per-holding
+
+The relation attaches to the holding of the tradition and not to the option
+alone, so a reading may be adopted on one part of what a tradition says and
+diverged on another without either verdict swallowing the other. Under the rule
+as it stands the relation is one value per option, and a reading whose tradition
+is adopted in part must pick a net verdict and carry the nuance in prose, where
+no projection reaches it; the alternative the record has actually reached for is
+two entries on one option with opposite relations, which the second reading of
+`commons.systems/disposition-graph/progressive-disclosure` found on that node's
+draft, which `readBears` does not forbid, and which would put "supports" and
+"departs" on the same row from one reading. What a ruling for it would cost is a
+name for each holding, which is a second vocabulary the record does not have and
+would have to keep stable across a reading's redrawings. Raised by that reading
+on 2026-09-05, as the gap the double entry was reaching for; recorded as an
+option and not taken, the double entry being struck for a net `diverged` in the
+same landing.
 
 ### authority
 
