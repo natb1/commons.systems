@@ -226,8 +226,9 @@ skill only when the session starts in the checkout that carries it.
      so the record and not the session carries it. The facts divide with
      the work: the answer fact is the design's, the authority fact follows
      the record's rule of escalating toward ratified where being wrong is
-     expensive, irreversible, or capture-shaped, persistence follows the
-     node's shape, and existence appears only where a prune is proposed; a
+     expensive, irreversible, or capture-shaped (`class-recommendation`,
+     which owns that test and defines its three limbs), persistence
+     follows the node's shape, and existence appears only where a prune is proposed; a
      design unit's contract names which facts are its.
   4. Review (`recording`, `clean-context-review`, `frontier-consistency`,
      `review-cost`).
@@ -590,7 +591,8 @@ skill only when the session starts in the checkout that carries it.
   re-spelled under another class.
   What the author directs to be recorded is reported with the same
   facts. Escalate one class toward ratified when being wrong is expensive,
-  irreversible, or capture-shaped. Deliver a question's context where the
+  irreversible, or capture-shaped, the test `class-recommendation` owns and
+  whose three limbs it defines. Deliver a question's context where the
   author will read it, the alignment page or the prose turn, never the
   AI's own preamble.
 - A recommendation to keep the text already in the record is presented for

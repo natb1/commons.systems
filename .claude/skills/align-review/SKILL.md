@@ -67,8 +67,9 @@ its neighbourhood in full and the rest of the record as questions alone
 (`review-cost`, which defines the neighbourhood): the node under review whole,
 the one node given whole because it is the only one being judged; and, each by
 what it answers and not by its whole file, the chain of
-nodes above it; the rules that bind everywhere; the nodes its `depends` names
-and the options named in them; the nodes under it; its siblings under the same
+nodes above it; the rules that bind everywhere; the nodes it names and the
+nodes its `depends` names, with the options named in them; the nodes under it;
+its siblings under the same
 parent, which the checkpoint has landed; the author's words on each; and the
 readings that bear on it. A neighbour is its question, the answer that stands
 on it, the answer it now recommends where those differ, and the names of the
@@ -78,19 +79,30 @@ away, exactly as its account does and for the same reason — an account is the
 dialogue's history and not its text, and a neighbour's argument for its
 answer, its passed-over options and its fence are that same node's dialogue by
 the same test, while what a draft is judged against is what its neighbours
-answer. The brief carries the rules of the reading itself
+answer. One exception, and it is the draft's own text and not the neighbour's
+(`review-cost`): where an option on a neighbour's fact names the node under
+review as its source, that option's prose is carried whole, because it is what
+the draft wrote there and the validation that asks whether the draft
+contradicts the node above it turns on that prose; a reader given only the
+option's name has been told that the draft wrote something on its parent and
+not what it wrote. The generator does this as of the reconciliation of
+2026-09-05, which is later than the disclosure standing on `review-cost` that
+it does not. The brief carries the rules of the reading itself
 the same way, in the brief and not as a list of files for the reader to open —
 what the review is and what it judges, the validations, the two readings and
 what each is given, and the encoding's own vocabulary, facts, options,
-rulings, the derived class, and what a node is: the five global-tier rules,
-which are in every neighbourhood's ancestry already, and `recording`,
+rulings, the derived class, and what a node is: the global-tier rules,
+which are in every neighbourhood's ancestry already whatever their number, and
+`recording`,
 `frontier-consistency`, `clean-context-review`, `viable-options`,
 `unanswered`, `dialogue`, and `node`, which the brief used to tell its reader
 to go and open. A brief that sends its reader to a node it could have carried
 has that node read twice, once where the brief already quotes it and once from
 disk, and pays for both. Of
-every other node in the record it carries the id and the question, on one
-line, and nothing else: the questions because the merge validation asks
+every other node in the record it carries the id, the question, and the file
+the node is in, on one line, and nothing else: the file because it is what
+turns a pointer into a read the reader can make without first searching for
+where the node lives; the questions because the merge validation asks
 whether the record already asks this question and a reader cannot search for a
 question it cannot phrase, and no answers, because the standing answers of the
 whole graph are the survey's object and not a draft's reader's. The round's
@@ -110,7 +122,13 @@ the draft is carried as a list of pointers, and a part that is the draft's own
 is carried whole (`review-cost`); a neighbour is where the two meet, its
 answer being the ground the draft stands on and therefore carried, and the
 argument it made for that answer being its own dialogue, which grows with the
-record and is not. What the reader is given is
+record and is not. The rule has a third case, which the measurement of this
+node's own second brief forced (`review-cost`): a part constant across every
+brief grows with neither the record nor the draft, so the rule as stated does
+not reach it, and it is carried whole only where carrying it costs less than
+the reads it saves. The rules of the reading are that case, and the argument
+that carries them is the double read and not the pointer rule. What the reader
+is given is
 `clean-context-review`'s answer to state, and its recommendation has not moved
 for this: the pointer treatment of the round's drafts is recorded there as the
 option `pointers-for-what-grows-with-the-record`, which acts on nothing until
