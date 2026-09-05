@@ -25,6 +25,10 @@ bears:
   - fact: answer
     option: per-fact-after-two-readings
     relation: adopted
+  - node: commons.systems/disposition-graph/clean-context-review
+    fact: answer
+    option: per-draft-and-survey
+    relation: adopted
 ---
 ## Answer
 
@@ -60,3 +64,7 @@ take.
 ## Account
 
 Minted at reconciliation on 2026-09-04 under the author's bootstrap grant of that day, by a unit of the alignment sitting, from the pass with reference to tradition in `commons.systems/disposition-graph/recording`'s maieutic movement, which names this tradition among the readings owed under that node. Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
+
+### A second bearing, 2026-09-05
+
+The clean-context reading of `clean-context-review` found that this reading, sitting one level above that node under `recording`, argues directly about clauses of that node's own fence while bearing only on the parent's option, so the frontier showed the child's design as grounded in no tradition at all. A second `bears` entry is added, naming `commons.systems/disposition-graph/clean-context-review`, its answer fact, and the option `per-draft-and-survey`, with the relation adopted. The option named is the one whose design this reading informed, and it remains viable beside the recommendation that has since moved past it to `pointers-for-what-grows-with-the-record`; the tradition grounds the division and the office of the reading, and not the pointer form, which is measured rather than traditional.
