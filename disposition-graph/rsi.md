@@ -4,12 +4,6 @@ stage: maieutic
 facts:
   - name: answer
     options:
-      - name: rsi-as-section
-        source: ai
-        ref: "2026-09-03"
-      - name: rsi-as-loop-on-itself
-        source: ai
-        ref: "2026-09-03"
       - name: bound-by-ratification
         source: ai
         ref: "2026-09-03"
@@ -25,6 +19,28 @@ under:
   - commons.systems/disposition-graph/model
 depends:
   - commons.systems/disposition-graph/viable-options
+probes:
+  - id: what-rsi-names
+    asks: >-
+      What does the word `rsi`, at the end of the high-level order the author
+      recorded on 2026-09-03, name in this record?
+    fact: answer
+    why: >-
+      The author's only words on this node are that one word, in the order
+      carried here from `commons.systems/disposition-graph/scope`, which
+      grounds the node's placement and rank and nothing else. Read for an
+      answer: `scope`'s answer and its disposition, `work-loop`'s answer,
+      `viable-options`' answer on what the loop on itself may write, and
+      `authority`'s scope rule. None of them says what the term covers here.
+      The account records the AI's reading of the word as a reading, from the
+      term's use in the incumbent harness, which is evidence and not a reason.
+    discharges: >-
+      Whether recursive self-improvement is a section of the record with
+      dispositions of its own or the name of what the loop already does when
+      the frontier bites the loop's own nodes, and with it whether the answer
+      fact can carry a recommendation at all, which today it cannot.
+    source: ai
+    raised: "2026-09-03"
 ---
 ## Disposition
 
@@ -35,13 +51,7 @@ The author, 2026-09-03, naming the last section of the high-level order recorded
 
 ### answer
 
-#### rsi-as-section
 
-Recursive self-improvement is a section of the record with dispositions of its own, a peer of alignment and reconciliation under the model node where the author's order puts it, ranked last. This is one of the two readings the account puts to the author and neither is recommended.
-
-#### rsi-as-loop-on-itself
-
-Recursive self-improvement is not a section but the name of what the loop already does when the frontier bites the loop's own nodes: the work loop applied to the work loop, its instruments read against itself, its improvements landed through the same dialogue and reconciliation as any other change. This is the second reading the account puts to the author, and on it no new dispositions are needed beyond those the loop already has.
 
 #### bound-by-ratification
 
@@ -73,3 +83,36 @@ Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node
 Alternatives pending, with their sources: `rsi-as-section` (ai, 2026-09-03); `rsi-as-loop-on-itself` (ai, 2026-09-03); `bound-by-ratification` (ai, 2026-09-03).
 Merge analysis of the author's words: 2026-09-03, new-answer on commons.systems/disposition-graph/scope: The high-level order, purpose then scope and self-documentation equally, then alignment, harness context management, reconciliation, and rsi; the words are the scope node's order and are carried here as the ground of this node's placement and rank.
 The census unit's note: No recommendation field, no Answer and no Draft, so it adopts nothing; it is an un-aligned disposition in the author's one word, and its account holds two readings and one bound open, minted as the three alternatives with source ai since the reading of the word is the AI's. The single author quotation is the order recorded and answered on scope, carried here as the ground of this node's placement and rank, so I classified it new-answer but added no alternative there. The coverage finding about duplicated quotations is recorded on nine nodes and proposes nothing that changes rsi, so nothing moved elsewhere from it.
+
+### The two readings recorded as a probe, 2026-09-04
+
+The reverse sweep of this day read every node of the graph and asked of each
+whether it was a probe wearing a node's costume. None was, this one included:
+the question "How does this system improve its own loop?" asks what should be
+the case, the author placed it in their own recorded order, and nine files
+reference its id. What the sweep found here instead was the opposite miss, and
+it is the one the migration of this day should have caught.
+
+The options `rsi-as-section` and `rsi-as-loop-on-itself` were not candidate
+answers. Each ended by saying it was one of two readings the account put to the
+author, and neither was recommended, which is the tell the author named on
+2026-09-04 when they classified `cap-from-contract-class` and
+`graph-landing-instrument` on `commons.systems/disposition-graph/review` as
+maieutic questions rather than facts to be confirmed. The pattern is the same
+here: the two were not two answers the AI held viable but one question about
+what the author meant by a word they had already said, and the account said as
+much in prose while the answer fact carried no recommendation at all. Under the
+discriminator this record now states, a question the AI cannot answer and says
+it cannot answer has no home as an option; it is a probe. The two are struck
+and `what-rsi-names` records the question they were carrying.
+
+`bound-by-ratification` and `loop-writes-options` stay. Both state something
+the record could stand on rather than a reading to be chosen between, and
+`loop-writes-options` comes from the author's own words of 2026-09-04, where it
+reads the term the second way. That reading is evidence for an answer to the
+probe and does not discharge it: the author recorded what the loop may write,
+not what the word names.
+
+The stage does not move; the node was already at the maieutic, which is where
+the probe belongs.
+
