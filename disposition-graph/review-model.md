@@ -25,6 +25,9 @@ facts:
       - name: fable-until-the-yield-is-measured
         source: ai
         ref: "2026-09-04"
+      - name: fallback-when-the-model-is-unavailable
+        source: author
+        ref: "2026-09-05"
     recommends: fable-for-both-readings
     boldness: moderate
     against: "The draft's reading re-checks, on the same class of mind, a text the most capable model has just written at full attention, so the flat rule pays the top rate where the marginal detection is lowest, buys correlated blind spots where the review wanted independence, and, by pricing both readings the same, forecloses the measurement that would show it."
@@ -169,6 +172,10 @@ would declare a sample second reading on a weaker model as well, and the
 recommended text does not, since the author's words name a model and not a
 method of choosing one.
 
+#### fallback-when-the-model-is-unavailable
+
+The model this node names is the model the readings run on when it can be reached, and a named fallback runs them when it cannot: the author's words of 2026-09-05, said when three readers died on the session limit inside a minute, were "Continue with opus instead of fable", so a limit on the named model is not a reason for the review to stop. What it would answer beyond the recommended option is what happens when the answer's model is unavailable, which the recommended option does not say: whether the reading waits for the limit to reset, which stops the alignment frontier behind it, or runs on the next model down with the substitution recorded on the node it read. Raised by the author's words of 2026-09-05.
+
 ### authority
 
 Ratified, at low boldness: the author stated the rule in their own words, it
@@ -200,6 +207,11 @@ On fable, both of them. The review of a draft and the survey each run on fable, 
 This answer is materialized by the two review skills and the brief templates and fragments on the implementation ref, the three shims the review-skills node declares, and by the alignment skill that invokes them, the shim the growth node declares. Each review skill's launch step names the model and the effort for its reading, fable at high effort, and its section on model and delegation states this rule and cites this node, in place of the rule that sized a draft's reviewer to boldness, tier, and settling and put the survey on opus. `brief.mjs` computes no model and prints none: `reviewerModel`, the `model` field of both briefs' results, and the tests that pin them are deleted, since a script that prints a constant it does not compute is the projection of nothing. The bounds fragment both briefs open with states, among the reading's constraints, the model and the effort it runs on. The alignment skill's statements of the replaced rule, in its list of a sitting's units, its review step, and its section on model and delegation, say instead that both readings run on fable at high effort and cite this node. In the graph, the sentence of the clean-context-review node's recommended text that sizes the reviewer's model, with the rationale sentence and the rejected fixed model that argued it, and the clause of the decomposition node's recommended text that restates it, with the rationale clause and the rejected fixed model there, are replaced by citations of this node.
 
 What this costs, as a consequence and never a reason: every reading pays the top rate. Over the rule it replaces, the difference is the survey's reading and the review of a draft whose recommendation is at low boldness on a node that is not global-tier and settles nothing, each now on fable; every other draft's reading already ran there. What would lower the price of a reading is the brief it is handed, whose index carries every standing answer whole, and never the reader.
+
+
+The author, 2026-09-05, in the sitting's readings, when three readers died on the model's session limit within one minute of each other:
+
+> Continue with opus instead of fable
 
 ## Rationale
 
