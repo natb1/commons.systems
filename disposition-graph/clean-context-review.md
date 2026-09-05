@@ -86,6 +86,8 @@ facts:
       - name: shim superseded by review-skills
     recommends: shim superseded by review-skills
     boldness: low
+defines:
+  - clean-context review
 form: rule
 under:
   - commons.systems/disposition-graph/recording
@@ -241,6 +243,8 @@ recommended text names the two skills and cites that node.
 ```markdown
 ---
 question: How is the clean-context review run?
+defines:
+  - clean-context review
 form: rule
 under:
   - commons.systems/disposition-graph/recording

@@ -25,6 +25,10 @@ bears:
   - fact: answer
     option: every-part-in-the-record
     relation: diverged
+  - node: commons.systems/disposition-graph/recording
+    fact: answer
+    option: per-fact-after-two-readings
+    relation: diverged
 ---
 ## Answer
 
@@ -58,3 +62,7 @@ take.
 ## Account
 
 Minted at reconciliation on 2026-09-04 under the author's bootstrap grant of that day, by a unit of the alignment sitting, from the pass with reference to tradition in `commons.systems/disposition-graph/dialogue`'s maieutic movement, which names this tradition among the readings owed under that node and gives its relation as a divergence. Validated by the AI from its own knowledge of the sources; deferred until the author reads them, and delegated if the author declines to.
+
+### A second divergence, 2026-09-05
+
+The clean-context reading of `recording` found this reading arguing directly against the move that node's recommendation makes, and nothing recording the conflict: `per-fact-after-two-readings` composes the division of the review, the typing of the kick-back, the per-fact classification of a response and the persistence of the options into one option the author takes or leaves, which is the compounding this reading says is a decision not ruled on. The `evaluation` node makes an unrecorded conflict a frontier item deferred to neither side, so it is recorded rather than resolved: a second `bears` entry, relation diverged, and a sentence in that node's rationale answering the argument in its own terms. The author rules on the composition with the record's argument against it in front of them, which is all this entry claims to secure.
