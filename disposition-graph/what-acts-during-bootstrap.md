@@ -1,6 +1,6 @@
 ---
 question: What acts while nothing in the record is ratified, and when does that state end?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -39,11 +39,11 @@ facts:
     boldness: moderate
 review:
   verdict: forward
-  strength: strong
+  strength: moderate
   date: 2026-09-05
-  of: 9c96ce471cfe5f437c3586c400dd8d14c5d4b72b
-  commit: 1c8931f91054305fb2121f236a1f294fb88accad
-  against: "The answer names nothing that the doctrine the machine is actually running on is, and the author is asked to ratify it inside one of the files it fails to name. I verified eight rule files under `.claude/rules/` — authority, class-recommendation, delegation, delegation-bounds-and-sizing, evaluation, materialization, session-context and what-acts-during-bootstrap — each projected from one of the eight nodes carrying `tier: global`, none of which any ruling reaches, and session-context declares its two shims over `CLAUDE.md` and `.claude/settings.json` and over neither the rules projection nor this file. By the first paragraph's own 'Nothing else acts by right', those eight are neither of the two things that act: a projection of an unruled node stands in for no materialization the record has not made, the projection being made and what it lacks being authority, and it is no grant, a grant being given for one named reconciliation. The redraft's gain is real but negative — the second paragraph no longer condemns those files as unsupported, because it now cites materialization's and session-context's own tests instead of a test about authority — and what replaces the false condemnation is a hole: the answer says what does not make the rule files unsupported and never says what makes them binding. `projected-doctrine-acts` is listed and not recommended, honestly and by the AI's own rule against answering a case against itself, but the effect is that the recommendation put to the author is the one that leaves the hole, and ratifying it makes the hole doctrine."
+  of: 978ae6c02bed0e9281b0b0c76daa5e5c761ba09c
+  commit: 022448f548ba52bc6900dd2d7be9c8af11e44320
+  against: "The amendment answers two of its five findings by adding a citation of a divergence rather than by removing one, so the rule the author is asked to ratify now says twice, in the text `.claude/rules/` carries, that the node it cites holds the other position, and each contest is parked as an option on a node that is itself unruled: a session that reads the notice has nowhere to go for the resolution, and at the first ruling `.claude/rules/authority.md` will still carry 'During bootstrap no class acts' with no notice in that file. Beside that, the standing objection is untouched: the answer still says only what does not make the rule files unsupported and never what makes them binding, and the amendment's own new work — a second row for `projected-doctrine-acts` at `session-context` — moves the remedy one node further from the recommendation without moving the recommendation. None of this defeats the amendment: each of the five defects is cured at its own locus, verified at the loci below, and what is left is the record's condition and not a fault of this text."
 form: rule
 under:
   - commons.systems/disposition-graph/authority
@@ -54,7 +54,7 @@ defines:
   - term: bootstrap
     gloss: "The state of this record until bootstrap exit, in which nothing acts by right but a declared shim, the author's grant, and each class a ruling has already conferred."
   - term: bootstrap exit
-    gloss: "The moment every condition the record declares for it is met, the conditions being those the `bootstrap-exit-conditions` node gathers, at which `greenfield` is swapped with `main`."
+    gloss: "The moment every condition the record declares for it is met, which the node beneath this one gathers or derives as its own ruling decides, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
     gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
 ---
@@ -177,7 +177,9 @@ the doctrine the record projects from its own nodes into `.claude/rules/`,
 which binds every session as the record's interim doctrine until each node it
 projects is ruled. Whether that is written as a third limb here or declared as
 a shim on the `session-context` node over the rules projection is the same
-answer reached two ways, and the option covers both. It is not dominated by
+answer reached two ways; the shim shape is before the author at the node whose
+frontmatter would hold it, as `rules-projection-declared-a-shim` on
+`session-context`, and a ruling here is for the limb written here. It is not dominated by
 either live alternative: `deferred-as-the-resting-state` would give every
 recommendation of the AI's the force of an answer, which this does not, and
 `grant-expires-at-exit` grounds nothing that runs today. It is the only way on
@@ -650,3 +652,56 @@ reading earns leaves the node one stage past the re-reading that would re-pin
 it. That is the deadlock on `review-cost`'s option
 `pin-names-the-text-the-reader-read` in its mechanical form, and it is carried
 there.
+
+### Clean-context re-reading, 2026-09-05
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `shim-and-grant`.
+
+Findings:
+
+- ## Facts, `### answer`, `#### projected-doctrine-acts` (the option list the author rules from; the option still claims a reach the amendment itself gave away to another node). The option reads 'Whether that is written as a third limb here or declared as a shim on the `session-context` node over the rules projection is the same answer reached two ways, and the option covers both.' The last reading's fifth finding held that half of that is not this node's to carry — 'a ruling for `projected-doctrine-acts` here would declare that shim nowhere, and the author has no row at the node that would carry it' — and the amendment took the remedy exactly as proposed: `rules-projection-declared-a-shim` is now on `session-context`'s answer fact (session-context.md:28, prose at :102, source commons.systems/disposition-graph/what-acts-during-bootstrap, ref 2026-09-05), and the session's account says 'the author has a row at either end'. That cures the half the finding measured, the missing row, and leaves the claim standing: with both rows recorded, this option's own text still tells the author that ruling for it here settles the `session-context` declaration too, a decision that node's frontmatter carries and its own row now puts before the author separately. Neither option names the other — session-context.md:102 names this node's case against its own answer but not this option — so nothing on the record says the two must not both be taken, which is what this record did at the other merge of this round, where `exit-conditions-cited-not-carried` was kept on work-loop and the session recorded that which node holds the text is a live choice the author rules. Suggested edit: end the sentence at 'is the same answer reached two ways', and continue 'the shim shape is before the author at the node whose frontmatter would hold it, as `rules-projection-declared-a-shim` on `session-context`, and a ruling here is for the limb written here'; and, if the session agrees, name this option from that end too, so the record does not carry the same answer in two homes with neither pointing at the other. This does not touch the recommended option and is not a reason to hold the node back from the author's ruling.
+
+On the facts and what they recommend: The diff changed nothing on either fact: `answer` still recommends `shim-and-grant` at high boldness with `stands: shim-and-grant`, `authority` still recommends `ratified` at moderate, and the frontmatter `against` on the answer fact is untouched, so no `## Recommendation` fence is owed and none is present — I confirmed the node's sections are Disposition, Answer, Rationale, Facts and Account and no fence stands among them. The only frontmatter change is the review block: verdict kickback to forward, `of` now pinning 9c96ce47 at graph commit 1c8931f9, and the reader's own `against` replaced with the last reading's. That pin is the text the last reader read and not this amendment, which is why this re-reading runs and is the deadlock carried to `review-cost`'s `pin-names-the-text-the-reader-read`.
+
+On the viability of the options: The diff adds no option and removes none, so the six on the answer fact and the three reserved on `authority` stand exactly as the last reading judged them, and I found none the amendment makes newly dominated and none newly missing: the two clauses it adds cite options on `authority` and `work-loop`, not candidates for this node's own question. One qualification, which is my single finding: `projected-doctrine-acts` remains viable and undominated, but the amendment recorded the other half of it as `rules-projection-declared-a-shim` on `session-context` while its own text still says it 'covers both'.
+
+Strongest counter-argument (moderate): The amendment answers two of its five findings by adding a citation of a divergence rather than by removing one, so the rule the author is asked to ratify now says twice, in the text `.claude/rules/` carries, that the node it cites holds the other position, and each contest is parked as an option on a node that is itself unruled: a session that reads the notice has nowhere to go for the resolution, and at the first ruling `.claude/rules/authority.md` will still carry 'During bootstrap no class acts' with no notice in that file. Beside that, the standing objection is untouched: the answer still says only what does not make the rule files unsupported and never what makes them binding, and the amendment's own new work — a second row for `projected-doctrine-acts` at `session-context` — moves the remedy one node further from the recommendation without moving the recommendation. None of this defeats the amendment: each of the five defects is cured at its own locus, verified at the loci below, and what is left is the record's condition and not a fault of this text.
+
+The session's reply: The finding is taken. The option `projected-doctrine-acts` still told the author that ruling for it here settles the `session-context` declaration too, after the amendment had put that declaration before them as a row of its own on the node whose frontmatter would carry it. The sentence now ends where the option's own reach ends, and points at `rules-projection-declared-a-shim`; that option is amended in the same act to name this one, so the record does not carry the same answer in two homes with neither pointing at the other. The reader is right that this is the shape the round settled the other way at `work-loop`, where `exit-conditions-cited-not-carried` was kept and which node holds the text was recorded as a live choice for the author. On the counter-argument: it is true that two of the five findings were answered by citing a divergence rather than removing one, and that a session reading the notice has nowhere to go for the resolution while both cited nodes are themselves unruled. That is the record's condition and not a fault of this text, as the reading itself says; what this node can do about it is done, and `.claude/rules/authority.md` carrying "During bootstrap no class acts" with no notice in that file is a defect of `authority`'s answer, where the option that would cure it already stands. The standing objection, that the answer says only what does not make the rule files unsupported and never what makes them binding, is on the fact as `projected-doctrine-acts` and now at `session-context` as well, and is the author's to rule. This was the second reading `review-cost` allows this answer. The edits it earns fall outside the pinned text, so the node goes to the author with `review.of` naming the recommendation as it stands.
+
+### The re-reading applied, and one finding from the node beneath, 2026-09-05
+
+The re-reading's one finding is taken. `#### projected-doctrine-acts` still told
+the author that a ruling for it here settles the `session-context` declaration
+too, after the amendment had put that declaration before them as a row of its
+own on the node whose frontmatter would carry it. The sentence now ends where
+the option's reach ends and points at `rules-projection-declared-a-shim`, which
+is amended in the same act to name this option, so the record does not carry the
+same answer in two homes with neither pointing at the other. That is how the
+round settled the same shape at `work-loop`, where `exit-conditions-cited-not-carried`
+was kept and which node holds the text was recorded as the author's choice.
+
+The reading of `bootstrap-exit-conditions` the same day found a defect in this
+node's `defines` gloss for bootstrap exit: it said the conditions are those that
+node gathers, which is true only under that node's `gathered-and-cited` and
+false the moment either rival is ruled for. The gloss now says the conditions
+are what the record declares, which the node beneath gathers or derives as its
+own ruling decides. That edit could not be made while the re-reading was running
+without moving the pin the reader was reading against, which is why it is here
+and not in the amendment the reader judged.
+
+It moves the pin now, and the cap allows no third reading of this answer, so the
+node goes to the author with `review.of` naming the text the reader read. It is
+the same deadlock as everywhere else on this frontier, measured on
+`review-cost`'s option `pin-names-the-text-the-reader-read`, and here it is
+bought by a correction the record needed.
+
+The counter-argument stands unanswered on the review block: two of the five
+findings of the earlier reading were answered by citing a divergence rather than
+removing one, so the projected rule now says twice that the node it cites holds
+the other position, and each contest is parked on a node that is itself unruled.
+`.claude/rules/authority.md` will still carry "During bootstrap no class acts"
+with no notice in that file, which is a defect of `authority`'s answer, where
+the option that would cure it already stands.

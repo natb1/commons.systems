@@ -113,7 +113,10 @@ eight nodes no ruling reaches, and by that node's "Nothing else acts by right"
 they are neither of the two things that act. Against it, a shim over eight files
 projected from eight unruled nodes is one declaration standing in for the whole
 of the record's present operation, which is the thing a shim is least well
-shaped to be. Raised by the clean-context reading of
+shaped to be. The option on that node
+which offers the same answer written as a limb of its own text is
+`projected-doctrine-acts`, and each names the other, so a ruling for one is not
+read as a ruling for both. Raised by the clean-context reading of
 `commons.systems/disposition-graph/what-acts-during-bootstrap` on 2026-09-05,
 which found that half of that node's option `projected-doctrine-acts` was never
 that node's to carry, this node's frontmatter being what would hold the
