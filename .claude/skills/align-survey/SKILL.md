@@ -47,7 +47,8 @@ in one context without its `## Account` sections, which are the dialogue's
 history and not its text. The judged set is every node at the review or ruling
 stage whose recommendation hash differs from its survey pin or which carries
 none (`clean-context-review`); each of those is judged against every other
-node in the graph, on validations 7 to 15 of `frontier-consistency` —
+node in the graph, on validations 7 to 15 of `frontier-consistency`, and
+the sixteenth, the independence test of `probe-or-node` —
 contradiction, supersession, redundancy, decomposition, vocabulary,
 cross-reference, placement and order, coverage, and merge.
 

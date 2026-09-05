@@ -394,12 +394,17 @@ skill only when the session starts in the checkout that carries it.
   and a question the sitting cannot classify is recorded as a probe, the
   reversible error, since a probe is promotable to a node and a node is
   demotable only by a prune the author must rule on. A node found by the
-  independence test to be a probe on its parent is re-encoded as one, with
-  `source` naming the node it was, its account folded into the parent's,
-  any words of the author's on it moved to the parent's `## Disposition`,
-  and its options struck, since options that were never candidates are the
-  costumed options the author classified on 2026-09-04; a reading
-  (`form: reading`) is exempt by construction. Finding none is a complete
+  independence test to be a question on its parent is re-encoded there
+  when it is found at recording, as a probe, or as an option on the
+  parent's fact where the AI holds its answer viable, with `source` naming
+  the node it was, its account folded into the parent's, any words of the
+  author's on it moved to the parent's `## Disposition`, and its options
+  struck, since options that were never candidates are the costumed
+  options the author classified on 2026-09-04. A node already standing is
+  not struck by the sitting: the survivor is recorded on the parent the
+  same way, the node's existence fact moves to `prune` with the test as
+  its reason, and the author rules the prune at the node's own row. A
+  reading (`form: reading`) is exempt by construction. Finding none is a complete
   answer and a movement that found no probe records none and says so. The
   cap is three open probes on one node, a probe compounding two counting as
   two, and a movement that would raise a fourth discharges or withdraws one
