@@ -53,6 +53,9 @@ facts:
         ref: "8938e2b7"
         status: passed
         reason: "a list beside the record is the ledger the author asked to sunset"
+      - name: proposal-as-a-state-of-a-ratified-node
+        source: commons.systems/disposition-graph/authority
+        ref: "2026-09-05"
     recommends: standing
     boldness: high
     stands: standing
@@ -170,6 +173,10 @@ because the AI's side is re-derived from the record and the author's words.
 The queue of un-aligned dispositions is kept in a list outside the graph. It
 was passed over because a list beside the record is the ledger the author
 asked to sunset.
+
+#### proposal-as-a-state-of-a-ratified-node
+
+The standing answer defines a proposal as the alternative that arose outside alignment, "as the authority node defines it", and cites a definition that node no longer gives: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source. This option amends the sentence to say so and to cite the authority node for the state. Recorded from the clean-context reading of the authority node on 2026-09-05.
 
 ## Account
 

@@ -26,6 +26,10 @@ bears:
     fact: answer
     option: grant-from-a-ruling
     relation: adopted
+  - node: commons.systems/disposition-graph/authority
+    fact: answer
+    option: authority-derived
+    relation: adopted
 ---
 ## Answer
 
