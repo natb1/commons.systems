@@ -23,6 +23,9 @@ facts:
         ref: "1920badc"
         status: passed
         reason: "it differs from `under` by exactly one bit, motivation, and is kept as `cites`"
+      - name: cites-hash-tracks-or-freezes
+        source: review
+        ref: "2026-09-05"
     stands: standing
   - name: authority
     options:
@@ -80,6 +83,21 @@ which `under` already holds.
 A second reference kind names cousin nodes beside `under`. It was passed over
 because it differs from `under` by exactly one bit, motivation, and is kept as
 `cites`.
+
+#### cites-hash-tracks-or-freezes
+
+The recommended answer with one clause added, saying what the `hash` of a `cites`
+entry means: either it tracks, naming the cited node's text as it stands and
+refreshed whenever that text moves, or it freezes, naming the version the citing
+node was written against and re-read when the citation is checked. The reader
+requires only a 40-character blob sha and the record says neither. It matters
+because the record's only `cites` entry, on `growth` citing `author-questions`,
+went stale the day it was written, and what is done with it is the precedent: at
+the landing of 2026-09-05 it was refreshed, which is the tracking reading, taken
+because a citation that freezes must also say what it froze and be re-read when
+the text moves, and neither instrument exists. Raised by the second clean-context
+reading of `author-questions` on 2026-09-05, which found the stale pin and asked
+that the question be put where `cites` is defined.
 
 ## Account
 

@@ -116,7 +116,7 @@ under:
   - commons.systems/disposition-graph/model
 cites:
   - id: commons.systems/disposition-graph/author-questions
-    hash: 09ede4f7b4d568c5365071083c59d60cfe57e20e
+    hash: ecb27431eafeb2630f72ee384cae4d62118de303
 defines:
   - propose
   - project
@@ -315,7 +315,7 @@ under:
   - commons.systems/disposition-graph/model
 cites:
   - id: commons.systems/disposition-graph/author-questions
-    hash: 09ede4f7b4d568c5365071083c59d60cfe57e20e
+    hash: ecb27431eafeb2630f72ee384cae4d62118de303
 defines:
   - propose
   - project

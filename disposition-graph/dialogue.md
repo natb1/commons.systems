@@ -214,6 +214,9 @@ facts:
       - name: source-names-who-raised-it
         source: commons.systems/disposition-graph/viable-options
         ref: "2026-09-05"
+      - name: probes-in-the-enumeration
+        source: commons.systems/disposition-graph/author-questions
+        ref: "2026-09-05"
     recommends: every-part-in-the-record
     boldness: moderate
     against: "It puts six decisions in one row, the standing encoding and the five clauses adopted into it, so a confirmation confers together what the author examined and what they did not, which is the bundling this node's own rule that a text answering two questions is two nodes exists to prevent."
@@ -870,6 +873,20 @@ gave one and an account where they did not, and never a source. This is what
 the viable-options node's recommended answer of 2026-09-05 says of source and
 reference; what an option carries is this node's question, and the rule belongs
 in this answer with the rest of it rather than beside it.
+
+#### probes-in-the-enumeration
+
+The recommended answer with `probes` in it: the enumeration of the parts of the
+dialogue's state carries `probes` beside `stage`, `review` and `depends`, and the
+validator paragraph requires a stage of it as it does of the others. The
+`author-questions` node's recommended answer puts the field there — "In the
+dialogue state, as `probes`, one list on the node beside `stage`, `review` and
+`depends`" — and this node's enumeration does not carry it, so one node says the
+state has a part the node that enumerates the parts does not list. The record's
+only reconciliation of the gap today is a sentence of `recording`'s, where this
+node's ruler will not meet it. Raised by the second clean-context reading of
+`author-questions` on 2026-09-05, which found the amendment required and named
+nowhere.
 
 ### authority
 
