@@ -34,7 +34,14 @@ disable-model-invocation: true
 > This text has no authority of its own. Where it conflicts with the graph
 > at `origin/disposition`, the graph wins and the conflict is reported for
 > alignment (§4). Declared as a shim on `work-loop`, whose
-> liquidation condition is the exit list (§5).
+> liquidation condition is the exit list (§5). Reconciled on 2026-09-05,
+> under the author's grant of 2026-09-04 for the sitting's final task, to
+> `work-loop`'s recommended text on one clause its own reading found
+> missing here: §4's landing procedure now says that the compare-and-swap
+> it scripts is by hand and stands in for the landing instrument the
+> `persistence` node prescribes and nothing has built, which the shim
+> declaration on `work-loop` already said and this artifact did not. That
+> recommendation is unanswered.
 
 `/reconcile` runs one iteration of reconciliation on the implementation
 ref (`greenfield` during bootstrap): derive the frontier, take the
@@ -215,7 +222,15 @@ node file by pathspec with a message naming the node and what was
 recorded, and `git push origin disposition`. On rejection, re-fetch and
 reapply the write on the new head; never rebase the commit over another
 session's, and never carry an unrelated change with it. The session names
-in its report every node it wrote.
+in its report every node it wrote. This procedure is by hand, and it stands
+in for the landing instrument the `persistence` node prescribes and nothing
+has built: the compare-and-swap is a session following these steps, with no
+tool that enforces the one-node pathspec, the validation, or the reapply on
+rejection, so a session that skips a step breaks the protocol and nothing
+catches it. That is the gap this shim covers, named here so a reader of the
+artifact sees it (`work-loop`, whose shim declaration on this skill says the
+same); it closes when the instrument exists and this paragraph goes with the
+steps above it.
 
 Whether reconciliation keeps state of its own outside the graph, a bite in
 flight and the like, is a question the author

@@ -459,13 +459,28 @@ function renderWholeNode(node, { account = true } = {}) {
  * file one read away, exactly as its '## Account' already does and for the
  * same reason.
  *
+ * One exception, stated on `clean-context-review` and on `review-cost`: an
+ * option on the neighbour's answer fact whose `source` is the draft under
+ * review (`reviewedId`) is carried whole, its prose included, because it is
+ * the draft's own text and not the neighbour's, and the validation asking
+ * whether the draft contradicts a node above it turns on that prose. A
+ * reader given only the option's name has been told that the draft wrote
+ * something on its neighbour and not what it wrote. The prose is rendered
+ * the same way `renderFacts` carries an option's prose for the node under
+ * review itself -- indented under the option's own bullet, `option.prose`
+ * already parsed from the neighbour's own `#### <option>` subsection at read
+ * time -- so this invents no new markdown shape for it.
+ *
  * Used for every part of a draft's neighbourhood -- ancestry, the rules of
  * the reading, children, siblings, cited, readings -- and never for the node
  * under review itself, which keeps `renderWholeNode`, nor for the survey's
  * own context nodes (`renderContextNode`), whose reader is meant to see the
  * whole graph.
+ *
+ * @param {string} reviewedId - the id of the draft under review, whose own
+ *   text is the source that earns an option this treatment.
  */
-function renderNeighbourNode(node) {
+export function renderNeighbourNode(node, reviewedId) {
   const parts = [
     `### ${node.id}`,
     "",
@@ -496,6 +511,12 @@ function renderNeighbourNode(node) {
       if (fact.recommends === option.name) bits.push("recommended");
       if (option.status === "passed") bits.push("passed over");
       parts.push(`- \`${option.name}\` — ${bits.join(", ")}`);
+      // The one exception: this option is the draft under review's own
+      // text, so it is carried whole rather than by name alone.
+      if (option.source === reviewedId) {
+        const prose = option.prose && option.prose.length > 0 ? option.prose : missingProseText(fact, option);
+        for (const line of prose.split("\n")) parts.push(`  ${line}`);
+      }
     }
   } else {
     parts.push("(no answer fact: no decision is recorded on this node yet)");
@@ -504,9 +525,9 @@ function renderNeighbourNode(node) {
   return parts.join("\n");
 }
 
-function renderNeighbourNodeList(nodes, empty) {
+function renderNeighbourNodeList(nodes, empty, reviewedId) {
   if (nodes.length === 0) return empty;
-  return nodes.map(renderNeighbourNode).join("\n");
+  return nodes.map((n) => renderNeighbourNode(n, reviewedId)).join("\n");
 }
 
 /**
@@ -895,8 +916,15 @@ export function draftNeighbourhood(graph, node) {
 
   // Taken before 'cited': a node whose 'bears' names this one is otherwise
   // always claimed first by 'cited', since every option's own rendering
-  // below quotes the readings that bear on it.
-  const readings = take(graph.nodes.filter((n) => (n.bears || []).some((b) => b.node === node.id)));
+  // below quotes the readings that bear on it. A 'bears' entry may omit
+  // 'node' -- it then means the node the reading is mounted under -- and the
+  // reader canonicalizes that to the reading's sole 'under' parent when
+  // there is exactly one, but this function trusts its inputs and does not
+  // assume that resolution has already run, so the same fallback is applied
+  // here.
+  const readings = take(graph.nodes.filter((n) => (n.bears || []).some(
+    (b) => b.node === node.id || (!b.node && (n.under || []).includes(node.id)),
+  )));
 
   // The node's own text, as this brief renders it, is what "the nodes it
   // names" is read from: every section, every fact, every option's prose and
@@ -973,12 +1001,12 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
     repo: path.resolve(rootDir, ".."),
     id: node.id,
     node: renderWholeNode(node),
-    ancestry: renderNeighbourNodeList(ancestry, "(no node above it and no rule that binds everywhere: this node is a root)"),
-    rules: renderNeighbourNodeList(rules, "(none of the twelve rule nodes are in this graph: this is a fixture or test graph, not the record)"),
-    children: renderNeighbourNodeList(children, "(no node under it: nothing stands on this node)"),
-    siblings: renderNeighbourNodeList(siblings, "(no sibling: no other node stands under the same parent)"),
-    cited: renderNeighbourNodeList(cited, "(this node names no other node the parts above do not already carry)"),
-    readings: renderNeighbourNodeList(readings, "(no reading bears on this node)"),
+    ancestry: renderNeighbourNodeList(ancestry, "(no node above it and no rule that binds everywhere: this node is a root)", node.id),
+    rules: renderNeighbourNodeList(rules, "(none of the twelve rule nodes are in this graph: this is a fixture or test graph, not the record)", node.id),
+    children: renderNeighbourNodeList(children, "(no node under it: nothing stands on this node)", node.id),
+    siblings: renderNeighbourNodeList(siblings, "(no sibling: no other node stands under the same parent)", node.id),
+    cited: renderNeighbourNodeList(cited, "(this node names no other node the parts above do not already carry)", node.id),
+    readings: renderNeighbourNodeList(readings, "(no reading bears on this node)", node.id),
     round: round.length > 0
       ? round.map(roundLine).join("\n")
       : "(no other draft has moved since the survey last pinned it)",

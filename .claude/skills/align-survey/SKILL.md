@@ -16,7 +16,15 @@ description: The clean-context survey of the frontier. Invoked with no argument 
 > which this file was written before the author ruled. It has no authority of
 > its own: where it differs from the graph at `origin/disposition`, the graph
 > wins and the difference is recorded as an un-aligned disposition on the node
-> it differs from. Liquidation: the projector materializes this skill from
+> it differs from. Reconciled on 2026-09-05, under the author's grant of
+> 2026-09-04 for this sitting's final task, to `review-model`'s recommended
+> text on the one point where this file diverged from it: §3 and the section
+> on model and delegation named the harness's model and its effort in the
+> file, where that node holds the name to be the harness's and the day's and
+> requires the launch to name it and no text that outlives the launch to
+> carry it; `.claude/skills/align-review/SKILL.md` already did so, and this
+> file now does the same. That recommendation is unanswered.
+> Liquidation: the projector materializes this skill from
 > ratified nodes and this hand-written file is deleted.
 
 `/align-survey` takes no argument. Its object is the frontier's consistency
@@ -100,9 +108,11 @@ scratch.
 
 ## 3. The reader
 
-Launch one subagent with the Agent tool: type `general-purpose`, model
-`fable`, effort high — the model and the effort `review-model` fixes for this
-reading, stated here and never argued in a brief. Never a fork: a forked
+Launch one subagent with the Agent tool: type `general-purpose`, at the model
+and the effort `review-model` fixes for this reading, named in the prompt at
+the launch and written down nowhere in this file; where that model is
+unavailable to the launching session, the substitute is named in the prompt in
+the same place, and no brief argues either. Never a fork: a forked
 context carries the session's framing and is not clean. The prompt: "Read and
 follow `<the brief the previous step wrote>` exactly; you are a clean-context
 reviewer with no context but the record; never run state-changing git; write
@@ -215,9 +225,13 @@ with its own round instead, at its next stage transition (`checkpoint`).
 
 ## Model and delegation
 
-This reading runs on `fable` at high effort. The rule is `review-model`'s,
-stated there and cited here, and §3 is where the launch names it; nothing in
-this file computes a model and no brief argues one. The orchestration runs on
+The model and the effort this reading runs on are `review-model`'s rule,
+stated there and cited here, and §3 is where the launch names them; this file
+writes no model's name down, because the name is the harness's and the day's,
+and a reader cannot read it off a skill it never sees. Where the model that
+node fixes is unavailable to the launching session, the substitute is named at
+the launch and nowhere else, as it was for this sitting's readings on
+2026-09-05. Nothing in this file computes a model and no brief argues one. The orchestration runs on
 whatever model invoked this skill; the validation of the findings, the
 replies, the overrides, and what is put to the author from a merge or a split
 are the session's judgment and are never delegated (`delegation`).

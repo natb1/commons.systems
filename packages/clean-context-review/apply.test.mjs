@@ -199,6 +199,8 @@ describe("apply.mjs: draft, forward", () => {
       "",
       `${DRAFT_OPENING} Verdict: forward to the author's ruling.`,
       "",
+      "Recommended at this reading: `standing`.",
+      "",
       "Findings:",
       "",
       "- Answer: needs a caveat about X.",
@@ -570,18 +572,28 @@ describe("apply.mjs: scope 'delta' (the re-reading of an amendment)", () => {
 
 // ------------------------------------------------- the two-reading cap
 
+/** The fixture's own answer fact `recommends`, `standing` (review-node.md);
+ * the two-reading cap tests below pass this explicitly wherever a prior
+ * reading is meant to count as a reading of the node's current answer. */
+const REVIEW_NODE_RECOMMENDS = "standing";
+
 /** Splices reading subsections into a fixture's existing '## Account' prose,
  * ahead of anything already there, exactly as a prior apply would have left
  * them -- built directly rather than by chaining `applyReviews` calls, since
  * a forward verdict advances the stage past 'review' and a further call
- * would need an override to get back in, which is not what this is testing. */
+ * would need an override to get back in, which is not what this is testing.
+ * `recommends`, per section, renders the "Recommended at this reading" line
+ * apply.mjs's own `renderSubsection` writes; omitting it (the default)
+ * builds a section as any reading written before that recording existed
+ * left it -- with no such line at all. */
 function withPriorReadings(text, sections) {
-  const rendered = sections.map(({ date, kind = "review", verdict = "forward", stage = null }) => [
+  const rendered = sections.map(({ date, kind = "review", verdict = "forward", stage = null, recommends = null }) => [
     `### Clean-context ${kind === "delta" ? "re-reading" : "review"}, ${date}`,
     "",
     kind === "delta"
       ? `Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. ${verdict === "forward" ? "Verdict: the amendment stands, forwarded to the author's ruling." : `Verdict: kicked back to the ${stage} stage.`}`
       : `Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. ${verdict === "forward" ? "Verdict: forward to the author's ruling." : `Verdict: kicked back to the ${stage} stage.`}`,
+    ...(recommends ? ["", `Recommended at this reading: \`${recommends}\`.`] : []),
     "",
     "Findings:",
     "",
@@ -613,8 +625,8 @@ describe("apply.mjs: the two-reading cap (review-cost)", () => {
     const rootDir = await freshFixture("cap-warn-");
     const file = reviewNodePath(rootDir);
     const seeded = withPriorReadings(await readFile(file, "utf8"), [
-      { date: "2026-08-01", kind: "review", verdict: "forward" },
-      { date: "2026-08-15", kind: "delta", verdict: "forward" },
+      { date: "2026-08-01", kind: "review", verdict: "forward", recommends: REVIEW_NODE_RECOMMENDS },
+      { date: "2026-08-15", kind: "delta", verdict: "forward", recommends: REVIEW_NODE_RECOMMENDS },
     ]);
     await writeFile(file, seeded);
 
@@ -669,7 +681,7 @@ describe("apply.mjs: the two-reading cap (review-cost)", () => {
     const rootDir = await freshFixture("cap-under-");
     const file = reviewNodePath(rootDir);
     const seeded = withPriorReadings(await readFile(file, "utf8"), [
-      { date: "2026-08-01", kind: "review", verdict: "forward" },
+      { date: "2026-08-01", kind: "review", verdict: "forward", recommends: REVIEW_NODE_RECOMMENDS },
     ]);
     await writeFile(file, seeded);
 
@@ -687,6 +699,131 @@ describe("apply.mjs: the two-reading cap (review-cost)", () => {
       date: DATE,
     }));
     assert.equal(stderr, "", "only the first reading stands so far: the second is not yet the cap's third");
+  });
+
+  /** Turns the fixture's answer fact from recommending `standing` (its only
+   * option) into recommending a second option, `reconsidered`, `stands` left
+   * at `standing` -- exercising the boundary a moved recommendation draws on
+   * the cap, distinct from a kickback's, per review-cost's account "A defect
+   * in the cap's own instrument": a moved recommendation begins a new answer
+   * exactly as a kickback does. The added option's prose, and the recommended
+   * fence, are placeholders; this is not a real second draft. */
+  function withMovedRecommendation(text) {
+    const withOption = text.replace(
+      "      - name: standing\n        source: ai\n        ref: 2026-09-03\n    recommends: standing\n",
+      "      - name: standing\n        source: ai\n        ref: 2026-09-03\n      - name: reconsidered\n        source: ai\n        ref: 2026-09-04\n    recommends: reconsidered\n",
+    );
+    assert.notEqual(withOption, text, "fixture precondition: the answer fact's single option and its 'recommends' line");
+    const inserted = [
+      "## Facts",
+      "",
+      "### answer",
+      "",
+      "The reconsidered option is now recommended.",
+      "",
+      "#### reconsidered",
+      "",
+      "Reconsidered: a second look at the question found a better answer.",
+      "",
+      "## Recommendation",
+      "",
+      "```markdown",
+      "---",
+      "question: Should boldness gate which drafts need a second reviewer?",
+      "form: rule",
+      "---",
+      "",
+      "## Answer",
+      "",
+      "Reconsidered: yes, a second look at the question found a better answer.",
+      "```",
+      "",
+    ].join("\n");
+    // The original '## Account\n\n' marker is kept intact at the end of the
+    // replacement -- `withPriorReadings` below splices prior readings ahead
+    // of that same marker, and the account's own prose (kept, after it)
+    // stays exactly where it was.
+    const withFactsAndFence = withOption.replace("## Account\n\n", `${inserted}## Account\n\n`);
+    assert.notEqual(withFactsAndFence, withOption, "fixture precondition: '## Account' present to splice facts and the fence ahead of");
+    return withFactsAndFence;
+  }
+
+  test("two prior readings recording the option the node still recommends warn on the third (the minimum case the cap exists for)", async () => {
+    const rootDir = await freshFixture("cap-same-option-");
+    const file = reviewNodePath(rootDir);
+    const seeded = withPriorReadings(await readFile(file, "utf8"), [
+      { date: "2026-08-01", kind: "review", verdict: "forward", recommends: REVIEW_NODE_RECOMMENDS },
+      { date: "2026-08-15", kind: "delta", verdict: "forward", recommends: REVIEW_NODE_RECOMMENDS },
+    ]);
+    await writeFile(file, seeded);
+
+    const { stderr } = await captureStderr(() => applyReviews({
+      rootDir,
+      input: {
+        scope: "delta",
+        id: REVIEW_NODE,
+        verdict: "forward",
+        findings: ["A third reading of the same, still-standing answer."],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    }));
+    assert.ok(stderr.includes("caps a single answer at two readings"), `two readings of one answer already stand; the third must warn: ${stderr}`);
+  });
+
+  test("a recommendation moved to a different option between two prior readings and now does not warn: the move began a new answer, not a third round of the old one", async () => {
+    const rootDir = await freshFixture("cap-moved-");
+    const file = reviewNodePath(rootDir);
+    const withMove = withMovedRecommendation(await readFile(file, "utf8"));
+    const seeded = withPriorReadings(withMove, [
+      { date: "2026-08-01", kind: "review", verdict: "forward", recommends: REVIEW_NODE_RECOMMENDS },
+      { date: "2026-08-15", kind: "delta", verdict: "forward", recommends: REVIEW_NODE_RECOMMENDS },
+    ]);
+    await writeFile(file, seeded);
+
+    const { stderr } = await captureStderr(() => applyReviews({
+      rootDir,
+      input: {
+        scope: "delta",
+        id: REVIEW_NODE,
+        verdict: "forward",
+        findings: ["The first reading of the recommendation as moved to 'reconsidered'."],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    }));
+    assert.equal(stderr, "", `the two prior readings recorded 'standing', and the node now recommends 'reconsidered'; the move is a new answer and this is its first reading, so the cap must not warn: ${stderr}`);
+  });
+
+  test("a prior reading section with no recorded option stops the count rather than assuming it matches: the write after it does not warn", async () => {
+    const rootDir = await freshFixture("cap-unknown-");
+    const file = reviewNodePath(rootDir);
+    const seeded = withPriorReadings(await readFile(file, "utf8"), [
+      // Written as any reading before this recording existed would read: no
+      // "Recommended at this reading" line at all (`recommends` omitted).
+      { date: "2026-07-01", kind: "review", verdict: "forward" },
+      { date: "2026-08-01", kind: "review", verdict: "forward", recommends: REVIEW_NODE_RECOMMENDS },
+    ]);
+    await writeFile(file, seeded);
+
+    const { stderr } = await captureStderr(() => applyReviews({
+      rootDir,
+      input: {
+        scope: "delta",
+        id: REVIEW_NODE,
+        verdict: "forward",
+        findings: ["This would be the third reading by a naive count, but the oldest section records no option."],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    }));
+    assert.equal(stderr, "", `the oldest section's missing record must stop the count rather than assume it matches, so only one reading is counted: ${stderr}`);
   });
 });
 

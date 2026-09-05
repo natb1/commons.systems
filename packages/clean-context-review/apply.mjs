@@ -632,17 +632,29 @@ function upsertDialogueFields(rawText, { stage, reviewLines, options = [], date 
 
 // ------------------------------------------------------------------ prose
 
+/** The regex a recorded '### Clean-context ...' subsection's "Recommended at
+ * this reading: `<option>`." line matches, capturing the option's name. */
+const RECOMMENDED_AT_READING_RE = /^Recommended at this reading: `([^`]+)`\.$/m;
+
 /**
  * How many '### Clean-context review,' / '### Clean-context re-reading,'
- * subsections stand at the end of '## Account' with no kickback among them
- * (`review-cost`: "a draft gets two readings of one answer, a kickback being
- * a new answer and not a third round"). A kickback's own subsection ends the
- * count rather than joining it: it is the boundary that starts the next
- * answer's readings, not an overrun of the answer it closes. Non-fatal by
- * design -- this is read by the caller to warn on stderr and never to refuse
- * a write, since the cap binds the movement and not this mechanical step.
+ * subsections stand at the end of '## Account' as readings of the answer
+ * `currentRecommends` now names (`review-cost`: "a draft gets two readings of
+ * one answer, a kickback being a new answer and not a third round"). Two
+ * boundaries stop the backward walk, and a boundary section joins neither
+ * side's count: a section whose body says the draft was kicked back, the
+ * boundary that starts the next answer's readings and not an overrun of the
+ * answer it closes; and a section that names, on its own "Recommended at
+ * this reading" line, an option other than `currentRecommends` -- a moved
+ * recommendation is a new answer exactly as a kickback is, per review-cost,
+ * and the two are boundaries of the same kind. A section with no such line
+ * (every one written before this recording existed) is unknown rather than
+ * assumed to match, and stops the walk too, so the counter never over-counts
+ * a historical node it cannot actually read. Non-fatal by design -- this is
+ * read by the caller to warn on stderr and never to refuse a write, since
+ * the cap binds the movement and not this mechanical step.
  */
-function readingSectionsSinceKickback(accountText) {
+function readingSectionsSinceKickback(accountText, currentRecommends) {
   if (!accountText) return 0;
   const lines = accountText.split("\n");
   const all = headingBoundaries(lines).filter((h) => h.depth === 3);
@@ -654,6 +666,8 @@ function readingSectionsSinceKickback(accountText) {
     const end = at + 1 < all.length ? all[at + 1].index : lines.length;
     const body = lines.slice(h.index, end).join("\n");
     if (/kicked back to the/.test(body)) break;
+    const recorded = body.match(RECOMMENDED_AT_READING_RE);
+    if (recorded === null || recorded[1] !== currentRecommends) break;
     count += 1;
   }
   return count;
@@ -664,11 +678,16 @@ function readingSectionsSinceKickback(accountText) {
  * with its verdict, or the survey's reading of that node, which has none --
  * the survey forwards nothing, and only its findings move a stage. The fields
  * are the same in both, and each is omitted where the reading did not produce
- * it.
+ * it. A draft or delta reading also records, when the node carries an answer
+ * fact with a `recommends`, which option that was at the time -- the "two
+ * readings of one answer" cap (`review-cost`) reads this line back to tell a
+ * kickback-less move to a new answer from an overrun of the old one
+ * (`readingSectionsSinceKickback`); a node with no answer fact, or none
+ * `recommends`, records nothing here rather than a placeholder.
  */
 function renderSubsection({
   kind = "draft", date, verdict, kickback_stage: kickbackStage, findings,
-  counter_argument: counterArgument, strength, facts_check: factsCheck, viability, reply,
+  counter_argument: counterArgument, strength, facts_check: factsCheck, viability, reply, recommends,
 }) {
   const parts = kind === "survey"
     ? [
@@ -688,6 +707,9 @@ function renderSubsection({
         `Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. ${verdict === "forward" ? "Verdict: forward to the author's ruling." : `Verdict: kicked back to the ${kickbackStage} stage.`}`,
       ];
 
+  if (recommends) {
+    parts.push("", `Recommended at this reading: \`${recommends}\`.`);
+  }
   parts.push("", "Findings:", "", ...(findings || []).map((f) => `- ${f}`));
   if (factsCheck) {
     parts.push("", `On the facts and what they recommend: ${factsCheck}`);
@@ -928,11 +950,12 @@ async function planDraft(input, ctx) {
   const baseStage = hasOverride ? ctx.overrides[id] : input.verdict === "forward" ? "ruling" : input.kickback_stage;
   const newStage = openProbe ? stageForOpenProbe(currentStage, baseStage === "periagogic") : baseStage;
   const reply = Object.prototype.hasOwnProperty.call(ctx.replies, id) ? ctx.replies[id] : null;
+  const recommends = (parsedBefore.answerFact && parsedBefore.answerFact.recommends) || null;
 
   // Non-fatal: the cap binds the movement (a session should not have asked
   // for a third reading of the same answer), not this mechanical step, so
   // this only warns and never refuses the write (review-cost).
-  if (readingSectionsSinceKickback(parsedBefore.account) >= 2) {
+  if (readingSectionsSinceKickback(parsedBefore.account, recommends) >= 2) {
     process.stderr.write(
       `${id}: the record caps a single answer at two readings, and this write records a third (or later) with no kickback in between; `
       + "a finding that survives from here belongs on the facts as an option, not as a further amendment.\n",
@@ -951,6 +974,7 @@ async function planDraft(input, ctx) {
     facts_check: input.facts_check ?? null,
     viability: input.viability ?? null,
     reply,
+    recommends,
   });
 
   const survey = (parsedBefore.review && parsedBefore.review.survey) || null;

@@ -17,6 +17,7 @@ import {
   writeDraftBrief, writeDeltaBrief, writeSurveyBrief, frontierOrderIds,
   reviewLine, graphCommit, parseArgs, draftNeighbourhood, READING_RULES,
   chooseMode, nodeDiffSinceCommit, lastCleanContextReviewSection,
+  renderNeighbourNode,
 } from "./brief.mjs";
 import { readGraph } from "@commons.systems/disposition/read.mjs";
 
@@ -298,6 +299,82 @@ describe("writeDraftBrief", () => {
     assert.deepEqual(parts.readings.map((n) => n.id), ["synthetic/reader"]);
     assert.deepEqual(parts.cited, [], "nothing in the node's own text names the reader here");
     assert.deepEqual(parts.index, [], "the reader is carried in 'readings', not left for the index");
+  });
+
+  test("draftNeighbourhood: a 'bears' entry that omits 'node' means the parent the reading is mounted under", () => {
+    // A 'bears' entry may omit 'node' -- read.mjs canonicalizes that to the
+    // reading's sole 'under' parent before draftNeighbourhood ever sees a
+    // graph it read (readBears, read.mjs's parse-time canonicalization), but
+    // draftNeighbourhood trusts its inputs and does not assume that
+    // resolution has already run, so this exercises its own fallback
+    // directly, hand-built as the explicit-'node' test above. 'children' is
+    // left empty by hand, as that test's comment explains, so this isolates
+    // the 'readings' mechanism from the fact that a reading naming its own
+    // sole parent is always that parent's child too.
+    const target = {
+      id: "synthetic/root", question: "What does the root ask?", rank: 0,
+      under: [], children: [], facts: [], bears: [], depends: [],
+    };
+    const reader = {
+      id: "synthetic/reader", question: "What does the reader ask?", rank: 0,
+      under: ["synthetic/root"], children: [], facts: [],
+      bears: [{ fact: "answer", option: "x", relation: "adopted" }],
+      depends: [],
+    };
+    const graph = { nodes: [target, reader] };
+
+    const parts = draftNeighbourhood(graph, target);
+    assert.deepEqual(parts.readings.map((n) => n.id), ["synthetic/reader"],
+      "the omitted 'node' is read as bearing on 'synthetic/root', the reader's sole 'under' parent");
+  });
+
+  test("renderNeighbourNode: an option whose source is the draft under review is carried whole; the rest stay names only", () => {
+    // clean-context-review and review-cost both state the one exception to
+    // "a neighbour is carried by what it answers, not by its whole file": an
+    // option on the neighbour's answer fact whose 'source' is the node
+    // under review is carried whole, prose included, because it is the
+    // draft's own text. Three options here: one from an unrelated source
+    // (stays name-only), one whose source matches and carries prose (the
+    // exception), and one whose source matches but carries no prose (the
+    // same fallback text 'missingProseText' gives the node under review's
+    // own rendering).
+    const otherOption = { name: "other-option", source: "ai", ref: "2026-09-01" };
+    const matchingOption = {
+      name: "matching-option", source: "synthetic/draft", ref: "2026-09-05",
+      prose: "The option's own prose, put there by the draft under review.",
+    };
+    const matchingNoProse = { name: "matching-no-prose", source: "synthetic/draft", ref: "2026-09-05" };
+    const answerFact = {
+      name: "answer",
+      options: [otherOption, matchingOption, matchingNoProse],
+      recommends: "other-option",
+      stands: "other-option",
+    };
+    const neighbour = {
+      id: "synthetic/neighbour", graph: "synthetic-graph", slug: "neighbour",
+      question: "What does the neighbour ask?", rank: 0, stage: "ruling",
+      status: "standing", class: "delegated", classSource: { kind: "ancestor", id: "synthetic/root" },
+      settles: 0, answer: "Neighbour's own answer.", answerFact,
+    };
+
+    const rendered = renderNeighbourNode(neighbour, "synthetic/draft");
+    const lines = rendered.split("\n");
+
+    const otherIdx = lines.indexOf("- `other-option` — source ai, recommended");
+    assert.ok(otherIdx !== -1, `line not found in:\n${rendered}`);
+    assert.notEqual(lines[otherIdx + 1], "  The option's own prose, put there by the draft under review.",
+      "an option from an unrelated source is not followed by prose");
+
+    const matchingIdx = lines.indexOf("- `matching-option` — source synthetic/draft");
+    assert.ok(matchingIdx !== -1, `line not found in:\n${rendered}`);
+    assert.equal(lines[matchingIdx + 1], "  The option's own prose, put there by the draft under review.",
+      "the matching option is carried whole: its own prose follows immediately");
+
+    const noProseIdx = lines.indexOf("- `matching-no-prose` — source synthetic/draft");
+    assert.ok(noProseIdx !== -1, `line not found in:\n${rendered}`);
+    assert.equal(lines[noProseIdx + 1],
+      "  (no prose recorded, though every answer option but the one that stands owes one)",
+      "a matching option with no prose recorded gets the same fallback text the node under review's own rendering uses");
   });
 
   test("draftNeighbourhood: 'cited' is a bounded id match and a bounded '<slug> node' prose match, never a bare substring or a bare slug", () => {

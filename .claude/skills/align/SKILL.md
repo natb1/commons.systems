@@ -62,6 +62,21 @@ description: Record or revise one node of the disposition graph by interview wit
 > each rather than whole. That recommendation is unanswered and its own
 > clean-context reading is owed; the option is recorded and unruled, and
 > `clean-context-review`'s recommendation has not moved for it.
+> And reconciled once more on 2026-09-05, under the author's grant of
+> 2026-09-04 for this sitting's final task ("reconcile the aligment/review/
+> survey skills and alignment artifact against all reviewed (but not yet
+> confirmed) recommendations in the graph ... you have bootstrap authority
+> for this"), to the recommended text of `decomposition` and `review-model`
+> on one point they share: a unit's model is named by its relation, the most
+> capable, the larger, the smaller, the smallest, and never by the harness's
+> name for it, since that name is a fact of the day; the launching session
+> names it, and names the substitute in the same place where the model a
+> unit calls for is unavailable. With it, `decomposition`'s trigger for
+> escalating the design unit, a draft that amends an ancestor's recommended
+> text or a node whose answer binds every session, replaces the borrowed
+> `tier` vocabulary, and its clause that until `tier` is ruled the design
+> unit escalates on the first limb alone is carried. Both recommendations
+> are unanswered.
 > Every recommendation these reconciliations wrote is unanswered, and no
 > ruling is recorded on any of it while either reading of the
 > clean-context review is owed.)** Hand-materialized from
@@ -189,16 +204,19 @@ skill only when the session starts in the checkout that carries it.
      the record survey, what the graph says on the question, the chain of
      nodes above it, the rules that bind everywhere, the nodes that define
      or use its terms, and the contradictions and redundant seams among
-     them (opus); the tradition survey, the second evaluation, returning
-     readings with source, locus, and what each bears on, traditions
-     shelved by pre-agent constraints among them (opus); the
-     implementation survey, what exists and what a named artifact or
-     command does (sonnet); the design, the options on each fact, the
-     recommendation with its boldness, and the draft text (opus, or fable
-     where the draft touches a global-tier node or an ancestor); and the
-     review of the draft in clean context, which runs at the model and the
-     effort `review-model` fixes for both readings, named by the skill at
-     the launch and not written into it (§5). The
+     them (the larger model); the tradition survey, the second
+     evaluation, returning readings with source, locus, and what each
+     bears on, traditions shelved by pre-agent constraints among them (the
+     larger model); the implementation survey, what exists and what a
+     named artifact or command does (the smaller model); the design, the
+     options on each fact, the recommendation with its boldness, and the
+     draft text (the larger model, or the most capable one where the draft
+     amends an ancestor's recommended text or a node whose answer binds
+     every session, which nodes those are being `tier`'s question, and
+     until that node is ruled the design unit escalates on the first limb
+     alone); and the review of the draft in clean context, which runs at
+     the model and the effort `review-model` fixes for both readings, named
+     by the skill at the launch and not written into it (§5). The
      surveys run together, the design waits
      on them, the review waits on the design, and the main thread's own
      adversarial reading of the integrated draft (`evaluation`) comes
@@ -527,8 +545,8 @@ skill only when the session starts in the checkout that carries it.
   subagent proposes the questions the disposition asks, where each sits
   under the record, whether the record already asks it, which of the
   author's words bear on each, and which questions rest on which
-  (opus: the decomposition is judgment). The main thread validates the
-  proposal, records each question as a queued node carrying its words, with
+  (the larger model: the decomposition is judgment). The main thread
+  validates the proposal, records each question as a queued node carrying its words, with
   the rests-on relations among them as `depends`, and puts the
   decomposition to the author at the periagogic stage as a reading of their
   own words, refusable like any probe. The questions are then several
@@ -929,8 +947,16 @@ compaction, run §0.
 
 ## Model and delegation
 
-The interview is not delegable and runs on the main thread; the author's
-default model for the alignment skill is fable (`claude --model fable`).
+The interview is not delegable and runs on the main thread, at the most
+capable model and at full effort (`delegation`); the author's default for this
+skill is that model (`claude --model fable`, their word for it on 2026-09-04).
+Everywhere below, a unit's model is named as the record names it, by its
+relation and not by its name — the most capable, the larger, the smaller, the
+smallest — because which harness model each of those is is a fact of the
+harness and of the day, and a name written into a text that outlives the
+launch goes stale inside it. The launching session names the model, and where
+the one a unit calls for is unavailable it names the substitute in the same
+place and nowhere else, as `review-model`'s two readers already do.
 Everything mechanical (validation, projection, publication, surveys,
 tooling) and every investigation whose context is verbose (debugging,
 driving a browser, reading logs or transcripts, reading a page in full
@@ -940,10 +966,13 @@ thread reads the conclusion, never the context.
 A sitting's work divides along five seams (`decomposition`): the question,
 the movement, the kind of analysis, the fact, and the dependency. The units
 and their models: the decomposition of a bundled disposition into questions
-(opus, §1); the reading of the periagogic object, a survey unit and never
-the main thread (§1); the record survey (opus); the tradition survey
-(opus); the implementation survey (sonnet); the design (opus, or fable
-where the draft touches a global-tier node or an ancestor); and the review
+(the larger model, §1); the reading of the periagogic object, a survey unit
+and never the main thread (§1); the record survey (the larger model); the
+tradition survey (the larger model); the implementation survey (the smaller
+model); the design (the larger model, or the most capable one where the draft
+amends an ancestor's recommended text or a node whose answer binds every
+session, which nodes those are being `tier`'s question, and until that node is
+ruled the design unit escalates on the first limb alone); and the review
 of the draft, which runs at the model and the effort `review-model` fixes
 for both readings, since the party
 whose blind spots a reading hunts is the main thread and a reader below the
