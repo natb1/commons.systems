@@ -38,6 +38,13 @@ that is a mis-encoded probe:
 
 > Only re-apply the guidelines to the graph if they cover something not already reviewed in the previous sweeps.
 
+The author, 2026-09-04, asked whether this rule requires reconciliation with
+the alignment, review and survey skills, told that it does at four loci, the
+two reading briefs, the record brief, and the align skill's probes bullet, and
+that the sitting's grant was read as not covering them:
+
+> bootstrap authority granted
+
 ## Answer
 
 By what the author's response would do once it is given, and never by how the question is worded, since any question can be worded either way and the wording is the asker's to choose. An open question found in any movement has three homes in the record and this rule sends it to one of them. It is an option where the AI holds a candidate answer to this node's question viable, whether or not it recommends that candidate: the record's home for a candidate is the fact it answers, and a question the AI could answer is not a question for the author. It is a probe where the AI holds no candidate it can recommend among without knowing something about what the author intends, and where the author's response, once given, would be consumed whole by moving a recommendation on this node: the response is quoted under `## Disposition`, the recommendation moves, and nothing afterwards needs to read the response rather than the recommendation it moved. It is a node where the response would have to stand: be enforced by the record after it is given, be cited by another node, project a rule, ground work, be read by a session that never saw the question, or be delegated or deferred. A response that must stand is a disposition, and the record has exactly one shape for a disposition, a question with its standing answer, its facts, and the ruling that gives it a class; a probe carries none of that, so wherever the response would need any of it the question is a node, minted under the node it blocks and entered in that node's `depends`, as the parent's third limb already says.
@@ -116,3 +123,20 @@ application therefore runs the three new tests over every node and every
 probe in both directions, node to probe and probe to node, and the independence
 test over every node that stands under an unanswered parent, reporting only
 where a new test changes what the sweeps found.
+
+### The grant to reconcile the skills, 2026-09-04
+
+Asked whether the rule requires reconciliation with the skills, the sitting
+answered that it does, at four loci, each stating the parent's third limb by
+its conclusion alone: the draft brief and the survey brief of the
+clean-context review, which tell a reader that an answer standing as an
+answer to a question of the record is a node and give it no test to apply; the
+record brief, which still draws the line by what the author meant; and the
+align skill's probes bullet, which states the three limbs and cites only the
+parent. The applying script needs nothing, since promotion and demotion are
+the main thread's edits. The author granted bootstrap authority for that
+reconciliation, in the words above, and it lands on the implementation ref
+under this node, which stays unanswered: the four tests go into both reading
+briefs put to the response, the survey brief gains the independence test as a
+validation of its own for a node standing under an unanswered parent, the
+record brief takes the redrawn line, and the align skill cites this node.
