@@ -1,6 +1,6 @@
 ---
 question: What class does the AI recommend on a node's authority fact?
-stage: maieutic
+stage: review
 facts:
   - name: answer
     options:
