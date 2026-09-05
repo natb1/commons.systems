@@ -35,9 +35,15 @@ And validation 15, asked here of the draft against the index of every question t
 
 **The viability judgment** (`recording`, as the author amended it on 2026-09-04, from `viable-options`). For each fact of this node, say **whether every option listed is viable on its facts, and whether a viable option is missing.** Viable means not dominated on the record's criteria — the solution frontier of the `evaluation` node, applied to one decision. An option no longer viable is marked passed over with its reason and stays on the list, and the option that displaced it says why; a viable option missing is the one the author will never get to rule on, so name it and give its prose in the `viability` field. This is the judgment the recording node's first step asks of you before the author sees anything.
 
+**The probes** (`author-questions`). A probe is a question you need the author to answer before this draft's recommendation can be grounded, and whose answer is not itself a disposition. Raise one on this node only where all three limbs hold, and write none where any fails: the record does not answer it and you have looked, and your `why` names the locus you read and what that locus leaves open; the answer would move a recommendation on this node, and your `discharges` names which; and the answer is not itself a disposition — a question whose answer would stand as an answer to a question of the record is a node, and goes to validation 15's merge finding above and never here. **Finding no probe is a complete answer** and not a step left undone: an empty array is what a draft you can ground returns, and a probe raised to show diligence is the paper doubt this record refuses.
+
+**The cap is three open probes on one node**, a probe compounding two questions counting as the two it compounds. Check it on the node you read, counting the probes it already carries together with the ones you raise, and report an excess as a finding naming the node and the probes, so that the movement discharges or withdraws one before it raises another. The cap binds the movement and is checked by this reading; it is not enforced by the parser, so expect no parse failure from it.
+
 ## Verdict and findings
 
 **The verdict**: `forward` to the author's ruling, or `kickback` to the `periagogic` or `maieutic` stage. Kick back only when the draft cannot be put to the author as it stands: a ruling paraphrased against its sense, a contradiction with an ancestor, an answer that says nothing the author could rule on, or a pin that no longer matches what the node recommends. Findings a session can fix by amendment go with a forward.
+
+**A probe beats the verdict.** A probe recorded on a node at the review or the ruling stage returns that node to the `maieutic` stage whatever verdict was written, and on this reading it beats yours and not merely your choice of stage: a reader that has recorded what it could not ground has said the draft is not ready, and a forward beside it is a contradiction. So if you raise a probe, do not also forward — write `kickback` with `kickback_stage: "maieutic"`, or `"periagogic"` where the ground itself is at issue, and say in a finding which probe sent it back.
 
 **A finding** cites the section and quotes the text it concerns, and gives a suggested edit where you have one. A finding about another node — a duplicate question, an option that belongs elsewhere, a merge or a split — is written here in prose, naming the node it concerns, the name the option would take, and the prose it would carry; the session records it, and the review proposes but never merges, splits, or edits a node. Nothing in this reading changes another node's stage: only the survey's findings do that.
 
@@ -73,6 +79,14 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
   "verdict": "forward" | "kickback",
   "kickback_stage": "periagogic" | "maieutic" | null,
   "findings": ["<one finding per string, citing the section and quoting the text it concerns; a suggested edit where you have one>"],
+  "probes": [
+    {
+      "asks": "<the question in one line, put open and never as a choice between drafted answers>",
+      "why": "<why the record cannot answer it, naming the locus you read and what it leaves open>",
+      "discharges": "<what an answer would settle and which recommendation on this node it would move>",
+      "fact": "answer" | "authority" | "existence" | "persistence" | null
+    }
+  ],
   "facts_check": "<your assessment of what each fact recommends, its boldness, what stands, and the fence, in one to three sentences>" | null,
   "viability": "<whether every option on this node's facts is viable and whether a viable one is missing, in one to three sentences>" | null,
   "counter_argument": "<the strongest argument against the disposition, in two to five sentences>" | null,
@@ -80,8 +94,8 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
 }
 ```
 
-`scope` is exactly `"draft"` and `id` is exactly `{{id}}`: the apply step reads the reading from them and refuses a file that names neither. `kickback_stage` is null on a forward and required on a kickback. `strength` is your assessment of the counter-argument; `none` with `counter_argument` null when you found none worth the author's time. Check that the file parses (`node -e` with `JSON.parse` on it) before you finish.
+`scope` is exactly `"draft"` and `id` is exactly `{{id}}`: the apply step reads the reading from them and refuses a file that names neither. `kickback_stage` is null on a forward and required on a kickback. `probes` is the probes this reading raises on `{{id}}`, `[]` where you found none, which is the ordinary result; `fact` is null where the probe bears on the node's ground rather than on one decision, and the entries are ordered by what a `discharges` would move, the most first. `id`, `source` and `raised` are the applying step's and never yours. A non-empty `probes` and a `forward` verdict cannot both stand: write `kickback`. `strength` is your assessment of the counter-argument; `none` with `counter_argument` null when you found none worth the author's time. Check that the file parses (`node -e` with `JSON.parse` on it) before you finish.
 
 ## Report
 
-Under 20 lines: the verdict, the count of findings, the files you read, the commands you ran, and anything you could not read — an unread part is a gap in the reading, not a finding of nothing. Do not restate the findings; they are in the file.
+Under 20 lines: the verdict, the count of findings, the count of probes you raised, the files you read, the commands you ran, and anything you could not read — an unread part is a gap in the reading, not a finding of nothing. Do not restate the findings; they are in the file.

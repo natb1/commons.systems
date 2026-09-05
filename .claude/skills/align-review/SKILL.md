@@ -57,6 +57,21 @@ asks is caught at the draft (`clean-context-review`). It runs validations 1 to
 facts is viable and whether a viable one is missing (`recording`), and returns
 the strongest counter-argument with its strength.
 
+It returns the probes it raises on that node too (`author-questions`): the
+questions it needs the author to answer before the recommendation can be
+grounded, each with what it `asks`, `why` the record cannot answer it,
+`discharges`, what an answer would settle and which recommendation it would
+move, and the `fact` it bears on where it bears on one. Three limbs admit a
+probe and all must hold — the record does not answer it and the reader has
+looked, the answer would move a recommendation on this node, and the answer is
+not itself a disposition, a question of that last kind being a node and going
+to the merge finding instead. Finding none is a complete answer. The cap is
+three open probes on one node, a compound probe counting as the probes it
+compounds, and the reading checks it as a finding naming the node and the
+probes; the parser does not enforce it. A probe beats the verdict: a reader
+that returns one has said the draft is not ready, so a probe and a forward
+cannot both stand, and §4 applies the kick-back whichever the reader wrote.
+
 `node packages/disposition/project.mjs disposition --frontier -` lists every
 node with its stage, its class, what its facts recommend, and its review and
 survey state. A node is ready for the author's ruling when it carries a
@@ -71,7 +86,8 @@ that package, and names `tmp/review/draft-<slug>.json` as the reader's output
 file. It computes no model and prints none (`review-model`).
 
 The brief carries the validations this reading runs, the viability judgment,
-the judging criteria from `recording`, and nothing of the session: no draft of
+the admission test and the cap a probe is held to, the judging criteria from
+`recording`, and nothing of the session: no draft of
 the reply, no account of the sitting, no verdict hoped for. `tmp/` is
 gitignored scratch.
 
@@ -94,13 +110,20 @@ unread part as a gap in the reading rather than as a finding of nothing.
 ## 4. Validate, then apply
 
 1. Read `tmp/review/draft-<slug>.json`: the node's verdict, its findings, its
-   facts check, its viability judgment, and its counter-argument with the
-   strength. Validate every finding before any is applied, on this thread and
-   never delegated (the author, 2026-09-03, quoted on
+   facts check, its viability judgment, its probes, and its counter-argument
+   with the strength. Validate every finding before any is applied, on this
+   thread and never delegated (the author, 2026-09-03, quoted on
    `clean-context-review`): open the node, check that the text the finding
    quotes is there and says what the finding says, that the claim about the
    record or the implementation is true, and that the stage or edit it
-   recommends follows from the doctrine it cites. Record the validation as the
+   recommends follows from the doctrine it cites. A probe is validated the
+   same way and against the same three limbs: a `why` naming a locus that does
+   settle the matter, a `discharges` naming no recommendation, and a probe
+   whose answer would itself be a disposition are each the session's finding
+   against the reading, recorded in the reply; a probe the session holds
+   inadmissible on one of them is discharged with the reason that says what in
+   the record answers it, and it stays on the list discharged rather than
+   leaving it. Record the validation as the
    session's reply in `tmp/review/replies.json`, `{ "<id>": "<reply>" }`:
    which findings the session accepts and what it amends for them, which it
    rejects and why, and why the disposition stands against the
@@ -127,7 +150,13 @@ unread part as a gap in the reading rather than as a finding of nothing.
    The viability judgment marks and never removes: an option the reader no
    longer holds viable is marked passed over with its reason and stays on the
    list, and a viable option the reader named is added with the prose it gave
-   (`prose-and-structure`). An override wins on the stage. Nothing else in the
+   (`prose-and-structure`). Each probe the session let stand is spliced into
+   the node's `probes` with the `id` the apply derives, `source: review`, and
+   the date as `raised`, and the stage is derived from the probes before the
+   verdict is read: a node that will carry an open probe after the apply goes
+   to the `maieutic` stage, or to `periagogic` where that is the stage named,
+   and never to `ruling` (`author-questions`). An override wins on the stage,
+   with that one exception, which no override reaches. Nothing else in the
    node is touched — the `## Recommendation` fence, the rulings, and what each
    fact recommends least of all.
 3. The session's judgment after the apply. Amend the node where the reply says

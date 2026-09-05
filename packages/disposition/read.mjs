@@ -58,7 +58,7 @@ import {
 export const FRONTMATTER_KEYS = [
   'question', 'form', 'under', 'tier', 'boost', 'cites', 'instrument', 'after',
   'source', 'bears', 'defines', 'shims', 'stage', 'order', 'facts', 'review',
-  'depends',
+  'depends', 'probes',
 ];
 // Keys the encoding of 2026-09-04 removed. A node still carrying one is
 // rejected by name, since the fix is a migration and not a typo.
@@ -130,6 +130,14 @@ export const REVIEW_SURVEY_KEYS = ['date', 'of'];
 export const SURVEY_STAGES = ['review', 'ruling'];
 export const SECTION_ORDER = ['Disposition', 'Answer', 'Rationale', 'Facts', 'Recommendation', 'Account'];
 export const SHIM_KEYS = ['artifact', 'liquidation', 'declared', 'for'];
+// A `probes` entry: a question the AI needs the author to answer before it
+// can recommend, whose answer is not itself a disposition
+// (commons.systems/disposition-graph/dialogue). `fact` names the decision it
+// bears on where it bears on one, and is absent where it bears on the node's
+// ground; `status` and `reason` are absent while it stands open and both
+// present once it is discharged, in the shape an option's `passed`/`reason`
+// pair already has.
+export const PROBE_KEYS = ['id', 'asks', 'why', 'discharges', 'source', 'raised', 'fact', 'status', 'reason'];
 // A `defines` entry is a bare term or a term with the gloss a projection
 // shows wherever a vocabulary fact offers that term as an option: what
 // confirming that choice would mean, written once, on the node that defines
@@ -139,7 +147,7 @@ export const DEFINES_KEYS = ['term', 'gloss'];
 // The keys a '## Recommendation' fence may not carry: the fence holds the
 // node as it would stand, and a stamp, the facts, and the dialogue's own
 // state are not part of that.
-export const FENCE_FORBIDDEN_KEYS = ['authority', 'facts', 'stage', 'review', 'depends'];
+export const FENCE_FORBIDDEN_KEYS = ['authority', 'facts', 'stage', 'review', 'depends', 'probes'];
 // Whether the node keeps its answer once the question is settled, or is
 // derived from what stands elsewhere. Free text per node, unlike the two
 // vocabulary facts: what persistence would mean here is this node's own.
@@ -176,6 +184,11 @@ const ANSWER_OWED_NOTE = 'every answer option but the one that stands says in pr
 const PERSISTENCE_OWED_NOTE = 'every persistence option says in prose what keeping the node that shape would mean';
 const SURVEY_STAGE_SET = new Set(SURVEY_STAGES);
 const SHIM_KEY_SET = new Set(SHIM_KEYS);
+const PROBE_KEY_SET = new Set(PROBE_KEYS);
+// The one status a probe may carry: 'discharged' and nothing else, in the
+// shape OPTION_STATUSES already has for an option's 'passed'.
+const PROBE_STATUSES = ['discharged'];
+const PROBE_STATUS_SET = new Set(PROBE_STATUSES);
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HASH_RE = /^[0-9a-f]{40}$/;
@@ -1358,6 +1371,97 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     }
   }
 
+  // probes: a list of {id, asks, why, discharges, source, raised, and
+  // optional fact, status, reason}, modelled on shims above. The reader
+  // checks only the shape of a probe -- the cap of three open probes binds
+  // the movement and is checked by the readings as a finding, never here, so
+  // that an attention rule never turns into a parse error
+  // (commons.systems/disposition-graph/dialogue).
+  let probes = [];
+  if (!isAbsent(fm.probes)) {
+    if (!Array.isArray(fm.probes)) {
+      problems.push("'probes' must be a list of {id, asks, why, discharges, source, raised, and optional fact, status, reason}");
+    } else {
+      const seenProbeIds = new Set();
+      probes = fm.probes
+        .map((entry, i) => {
+          if (!isPlainObject(entry)) {
+            problems.push(`'probes[${i}]' must be a mapping with id, asks, why, discharges, source, raised`);
+            return null;
+          }
+          for (const k of Object.keys(entry)) {
+            if (!PROBE_KEY_SET.has(k)) problems.push(`unknown key 'probes[${i}].${k}'`);
+          }
+          let entryOk = true;
+          if (typeof entry.id !== 'string' || !OPTION_NAME_RE.test(entry.id)) {
+            problems.push(`'probes[${i}].id' must be a slug matching ${OPTION_NAME_RE}`);
+            entryOk = false;
+          } else if (seenProbeIds.has(entry.id)) {
+            problems.push(`'probes[${i}].id' duplicates another probe's id '${entry.id}' on this node`);
+            entryOk = false;
+          } else {
+            seenProbeIds.add(entry.id);
+          }
+          if (!isNonEmptyString(entry.asks)) {
+            problems.push(`'probes[${i}].asks' is required and must be a non-empty string`);
+            entryOk = false;
+          }
+          if (!isNonEmptyString(entry.why)) {
+            problems.push(`'probes[${i}].why' is required and must be a non-empty string`);
+            entryOk = false;
+          }
+          if (!isNonEmptyString(entry.discharges)) {
+            problems.push(`'probes[${i}].discharges' is required and must be a non-empty string`);
+            entryOk = false;
+          }
+          if (!isNonEmptyString(entry.source)) {
+            problems.push(`'probes[${i}].source' is required and must be a non-empty string`);
+            entryOk = false;
+          }
+          if (typeof entry.raised !== 'string' || !isValidDate(entry.raised)) {
+            problems.push(`'probes[${i}].raised' must be a YYYY-MM-DD date string`);
+            entryOk = false;
+          }
+          if (!isAbsent(entry.fact) && !FACT_NAME_SET.has(entry.fact)) {
+            problems.push(`'probes[${i}].fact' must be one of: ${FACT_NAMES.join(', ')}`);
+            entryOk = false;
+          }
+          const hasStatus = !isAbsent(entry.status);
+          const hasReason = !isAbsent(entry.reason);
+          if (hasStatus && !PROBE_STATUS_SET.has(entry.status)) {
+            problems.push(`'probes[${i}].status' must be 'discharged'`);
+            entryOk = false;
+          }
+          if (hasStatus && !hasReason) {
+            problems.push(`'probes[${i}].reason' is required when 'probes[${i}].status' is present`);
+            entryOk = false;
+          }
+          if (!hasStatus && hasReason) {
+            problems.push(`'probes[${i}].reason' is only allowed when 'probes[${i}].status' is present`);
+            entryOk = false;
+          }
+          if (hasReason && !isNonEmptyString(entry.reason)) {
+            problems.push(`'probes[${i}].reason' must be a non-empty string`);
+            entryOk = false;
+          }
+          return entryOk
+            ? {
+              id: entry.id,
+              asks: entry.asks,
+              why: entry.why,
+              discharges: entry.discharges,
+              source: entry.source,
+              raised: entry.raised,
+              fact: isAbsent(entry.fact) ? null : entry.fact,
+              status: isAbsent(entry.status) ? null : entry.status,
+              reason: isAbsent(entry.reason) ? null : entry.reason,
+            }
+            : null;
+        })
+        .filter((x) => x !== null);
+    }
+  }
+
   // order: a high-level order recorded once, as data (see scope.md's
   // Answer/Rationale). Its own shape is checked regardless of whether this
   // node has an '## Answer'; the requirement that it have one is checked
@@ -1419,10 +1523,10 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   // dependencies, and the account. The facts and the '## Recommendation'
   // fence are not dialogue state -- they persist after the ruling -- so
   // neither asks for a stage of its own.
-  const carriesDialogue = !isAbsent(fm.review) || !isAbsent(fm.depends) || sections.Account !== null;
+  const carriesDialogue = !isAbsent(fm.review) || !isAbsent(fm.depends) || !isAbsent(fm.probes) || sections.Account !== null;
   if (carriesDialogue && stage === null) {
     problems.push(
-      "'review', 'depends', and '## Account' are parts of the dialogue and require stage",
+      "'review', 'depends', 'probes', and '## Account' are parts of the dialogue and require stage",
     );
   }
 
@@ -1548,6 +1652,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     order,
     facts,
     answerFact,
+    probes,
     review,
     // A `review` carrying only the survey's pin has no draft verdict for a
     // move to overtake, so `reviewStale` is asked only where a draft review

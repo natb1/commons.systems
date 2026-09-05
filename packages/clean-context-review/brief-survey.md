@@ -42,6 +42,12 @@ Across the graph — each judged node against every other node, answered or unan
 
 **A lateral tangle** — two unruled nodes carrying the same idea, its opposite, or adjacent ideas that would merge — is recorded as an option on the **earlier-recorded** of the two, which stands by that rule alone and by no judgment of yours about which is better, the later one becoming the option with its source and date; report it as a `contradiction` or `redundancy` finding whose `options` puts the later node's answer on the earlier node, and say in the finding which is earlier and how you know. Earlier means the earlier date the node's own record carries, the earliest `ref` on its answer fact or the earliest date in its `## Disposition`, and, when those tie or are absent, the earlier addition to the graph's history (from inside `{{repo}}/disposition`, since the sandbox refuses `git -C`: `git log --diff-filter=A --format=%ad --date=short -- <file> | tail -1`).
 
+**A probe is a question for the author, raised on the node it bears on** (`author-questions`). A probe is a question the record must have the author answer before a recommendation can be grounded, and whose answer is not itself a disposition. Raise one only where all three limbs hold, and write none where any fails: the record does not answer it and you have looked, and your `why` names the locus you read and what that locus leaves open; the answer would move a recommendation on the node the probe names, and your `discharges` names which; and the answer is not itself a disposition — a question whose answer would stand as an answer to a question of the record is a node, and goes to validation 15's merge finding above and never here. **Finding no probe is a complete answer** and not a step left undone: an empty array is the ordinary result of a survey that can ground what it read, and a probe raised to show diligence is the paper doubt this record refuses.
+
+A probe names any node in the graph, judged or not, for the same reason a finding may: the frontier's findings already reach nodes outside the judged set, and a probe is the sharpest of them. What raising one does is one rule at every node it reaches: **a probe recorded on a node at the review or the ruling stage returns that node to the `maieutic` stage**, whether the survey is judging that node or not, and whatever else this reading says about it; a node already at the periagogic stage stays there, since a movement only ever moves a node back. Do not name a stage for it in `stages` on that account — the applying step derives the stage from the probes.
+
+**The cap is three open probes on one node**, a probe compounding two questions counting as the two it compounds. Check it on every node you judge, counting the probes it already carries together with the ones you raise, and report an excess as a finding naming the node and the probes, so that the movement discharges or withdraws one before it raises another. The cap binds the movement and is checked by this reading; it is not enforced by the parser, so expect no parse failure from it.
+
 **A subtree divergence** — a set of unruled nodes that stands under one option pending on an ancestor, and that a ruling for another option would discard — is recorded on the leaves and never on the ancestor: report it in `subtree_divergences`, naming the ancestor, the option each node stands under, and what diverges. Nothing you record computes an order; the projector does that, and the alignment page shows the author, at the ancestor, what each ruling keeps and what it discards.
 
 ## The judged set ({{batch_count}} node(s), in the ruling order)
@@ -89,6 +95,15 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
       ]
     }
   ],
+  "probes": [
+    {
+      "node": "<the node the probe is raised on; any node in the graph, judged or not>",
+      "asks": "<the question in one line, put open and never as a choice between drafted answers>",
+      "why": "<why the record cannot answer it, naming the locus you read and what it leaves open>",
+      "discharges": "<what an answer would settle and which recommendation on that node it would move>",
+      "fact": "answer" | "authority" | "existence" | "persistence" | null
+    }
+  ],
   "subtree_divergences": [
     {
       "ancestor": "<the unruled node whose pending answer options the subtrees diverge over>",
@@ -99,8 +114,8 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
 }
 ```
 
-`scope` is exactly `"survey"` and `commit` is the graph commit named above: the apply step reads the reading from the first and records the second. `nodes` carries **each judged node's `id`, written out**, one entry per node you judged and no entry for a node outside the judged set; a node whose recommendation has moved since this brief pinned it receives nothing and is judged again by the next survey, and so is every finding that names it. `options` is optional on a finding and **required on a `merge` finding**; each name must not already be listed on that node's answer fact (this brief shows every option of every node). `frontier` may be empty only if the survey found nothing, and then say so in your report. In `subtree_divergences` every option name must be one the ancestor's answer fact already carries or one this file's `options` adds to it, every node named must be unruled and must not be the ancestor, and no node may stand under two options of the same ancestor; the apply step refuses the whole run otherwise. Check that the file parses (`node -e` with `JSON.parse` on it) before you finish.
+`scope` is exactly `"survey"` and `commit` is the graph commit named above: the apply step reads the reading from the first and records the second. `nodes` carries **each judged node's `id`, written out**, one entry per node you judged and no entry for a node outside the judged set; a node whose recommendation has moved since this brief pinned it receives nothing and is judged again by the next survey, and so is every finding that names it. `options` is optional on a finding and **required on a `merge` finding**; each name must not already be listed on that node's answer fact (this brief shows every option of every node). `frontier` may be empty only if the survey found nothing, and then say so in your report. `probes` is every probe this reading raises, `[]` where you raised none; each `node` must be a node of the graph, judged or not, and `fact` is null where the probe bears on that node's ground rather than on one of its decisions; the entries on one node are ordered by what a `discharges` would move, the most first, and `id`, `source` and `raised` are the applying step's and never yours. In `subtree_divergences` every option name must be one the ancestor's answer fact already carries or one this file's `options` adds to it, every node named must be unruled and must not be the ancestor, and no node may stand under two options of the same ancestor; the apply step refuses the whole run otherwise. Check that the file parses (`node -e` with `JSON.parse` on it) before you finish.
 
 ## Report
 
-Under 30 lines: the graph commit you read, the count of judged nodes you wrote entries for, the count of frontier findings by kind, the count of options proposed, the files you read, the commands you ran, and anything you could not read — an unread part is a gap in the reading, not a finding of nothing. Do not restate the findings; they are in the file.
+Under 30 lines: the graph commit you read, the count of judged nodes you wrote entries for, the count of frontier findings by kind, the count of options proposed, the count of probes raised and the nodes they name, the files you read, the commands you ran, and anything you could not read — an unread part is a gap in the reading, not a finding of nothing. Do not restate the findings; they are in the file.

@@ -299,6 +299,40 @@ describe('derive.mjs', () => {
     assert.equal(bare, dressedUp, 'adding an option must not stale every pin');
   });
 
+  test('deriveStandingHash: probes (with everything nested under them) are invisible to it', () => {
+    const bare = deriveStandingHash({ fmText: 'question: Q?\nform: rule', answer: 'Ans.', rationale: null });
+    const withProbe = deriveStandingHash({
+      fmText: [
+        'question: Q?',
+        'stage: maieutic',
+        'probes:',
+        '  - id: whose-cap',
+        '    asks: Is three still the right cap?',
+        '    why: no measurement in the record backs the number',
+        '    discharges: the cap recommendation',
+        '    source: ai',
+        '    raised: 2026-09-04',
+        'form: rule',
+      ].join('\n'),
+      answer: 'Ans.', rationale: null,
+    });
+    assert.equal(bare, withProbe, 'recording a probe must not stale every pin');
+  });
+
+  test('deriveFactRecommendationHash: unmoved by a probe on a node with no fence, where the standing text also feeds the answer fact\'s hash', () => {
+    const f = fact('answer', [{ name: 'standing', prose: '' }], { recommends: 'standing', boldness: 'low', stands: 'standing' });
+    const noProbe = { fmText: 'question: Q?', answer: 'Ans.', rationale: null, fence: null, facts: [f] };
+    const withProbe = {
+      fmText: 'question: Q?\nprobes:\n  - id: x\n    asks: y\n    why: z\n    discharges: w\n    source: ai\n    raised: 2026-09-04',
+      answer: 'Ans.', rationale: null, fence: null, facts: [f],
+    };
+    assert.equal(
+      deriveFactRecommendationHash(noProbe, f),
+      deriveFactRecommendationHash(withProbe, f),
+      'an unstripped probe would mean recording one moves the answer fact\'s recommendation hash, and so review.of and a ruling\'s of',
+    );
+  });
+
   test('deriveFactRecommendationHash: name, recommends, boldness, the fact prose, the option prose, and -- for the answer fact -- the recommended text', () => {
     const f = fact('answer', [{ name: 'standing', prose: '' }, { name: 'other', prose: 'The other way.' }], {
       recommends: 'other', boldness: 'high', stands: 'standing', prose: 'Why the other way.',
@@ -621,9 +655,9 @@ describe('parseNode', () => {
     assert.equal(n.fence.sections.Answer, 'x');
   });
 
-  for (const key of ['authority', 'facts', 'stage', 'review', 'depends']) {
+  for (const key of ['authority', 'facts', 'stage', 'review', 'depends', 'probes']) {
     test(`a fence carrying '${key}' is rejected: it belongs to the node, not to the text it would stand on`, () => {
-      const value = key === 'facts' || key === 'depends' ? '\n  - name: answer' : key === 'stage' ? ' review' : '\n  x: 1';
+      const value = key === 'facts' || key === 'depends' || key === 'probes' ? '\n  - name: answer' : key === 'stage' ? ' review' : '\n  x: 1';
       const text = fenced(['---', 'question: What?', `${key}:${value}`, '---', '', '## Answer', '', 'x']);
       assert.throws(() => parseNode(text, loc), new RegExp(`'## Recommendation' carries '${key}'`));
     });
@@ -831,6 +865,174 @@ describe('parseNode', () => {
       '## Facts', '', '### persistence', '', '#### present', '', 'Kept here.', '',
     );
     assert.deepEqual(parseNode(lines.join('\n'), loc).facts.map((f) => f.name), order.map(([n]) => n));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseNode: probes
+// ---------------------------------------------------------------------------
+
+describe('parseNode: probes', () => {
+  const loc = { id: 'm/g/s', graph: 'g', slug: 's', path: 'g/s.md' };
+  const AUTHORITY_FACT = [
+    '  - name: authority',
+    '    options:',
+    '      - name: ratified',
+    '      - name: delegated',
+  ];
+  const ANSWER_FACT = [
+    'facts:',
+    '  - name: answer',
+    '    options:',
+    '      - name: standing',
+    '        source: ai',
+    '        ref: "2026-09-04"',
+    '    stands: standing',
+    ...AUTHORITY_FACT,
+  ];
+  // A node at the maieutic stage, with an answer fact, and whatever extra
+  // frontmatter lines a test needs spliced in above the facts -- the same
+  // shape 'parseNode's own 'answered' helper builds.
+  const answered = (extraFm) => [
+    '---', 'question: Q?', 'form: rule', 'stage: maieutic', ...(extraFm ?? []), ...ANSWER_FACT, '---', '',
+    '## Answer', '', 'x', '',
+  ].join('\n');
+
+  const PROBE_BASE = {
+    id: 'cap-still-right',
+    asks: 'Is three still the right cap?',
+    why: 'no measurement in the record backs the number',
+    discharges: 'the cap recommendation',
+    source: 'ai',
+    raised: '2026-09-04',
+  };
+  // One probe's fields as YAML lines under 'probes:', in insertion order --
+  // so a required key can be tested by omitting it from the object passed in.
+  function probeYaml(fields) {
+    const keys = Object.keys(fields);
+    const lines = ['probes:'];
+    keys.forEach((k, i) => {
+      lines.push(`${i === 0 ? '  - ' : '    '}${k}: ${fields[k]}`);
+    });
+    return lines;
+  }
+
+  test('a well-formed probe parses onto the node', () => {
+    const n = parseNode(answered(probeYaml(PROBE_BASE)), loc);
+    assert.deepEqual(n.probes, [{
+      ...PROBE_BASE,
+      fact: null,
+      status: null,
+      reason: null,
+    }]);
+  });
+
+  for (const key of ['id', 'asks', 'why', 'discharges', 'source', 'raised']) {
+    test(`a probe missing '${key}' is a problem`, () => {
+      const fields = { ...PROBE_BASE };
+      delete fields[key];
+      assert.throws(() => parseNode(answered(probeYaml(fields)), loc), new RegExp(`'probes\\[0\\]\\.${key}'`));
+    });
+  }
+
+  test("a probe with 'status' and no 'reason' is a problem", () => {
+    const text = answered(probeYaml({ ...PROBE_BASE, status: 'discharged' }));
+    assert.throws(
+      () => parseNode(text, loc),
+      /'probes\[0\]\.reason' is required when 'probes\[0\]\.status' is present/,
+    );
+  });
+
+  test("a probe with 'reason' and no 'status' is a problem", () => {
+    const text = answered(probeYaml({ ...PROBE_BASE, reason: 'the record already answers it' }));
+    assert.throws(
+      () => parseNode(text, loc),
+      /'probes\[0\]\.reason' is only allowed when 'probes\[0\]\.status' is present/,
+    );
+  });
+
+  test("a probe 'status' other than 'discharged' is a problem", () => {
+    const text = answered(probeYaml({ ...PROBE_BASE, status: 'closed', reason: 'the author answered it' }));
+    assert.throws(() => parseNode(text, loc), /'probes\[0\]\.status' must be 'discharged'/);
+  });
+
+  test('a probe discharged with status and reason together parses', () => {
+    const n = parseNode(answered(probeYaml({ ...PROBE_BASE, status: 'discharged', reason: 'the author answered it' })), loc);
+    assert.equal(n.probes[0].status, 'discharged');
+    assert.equal(n.probes[0].reason, 'the author answered it');
+  });
+
+  test('a duplicate probe id on one node is a problem', () => {
+    const text = answered([
+      'probes:',
+      '  - id: same-id',
+      '    asks: First question?',
+      '    why: First why.',
+      '    discharges: First discharge.',
+      '    source: ai',
+      '    raised: 2026-09-04',
+      '  - id: same-id',
+      '    asks: Second question?',
+      '    why: Second why.',
+      '    discharges: Second discharge.',
+      '    source: review',
+      '    raised: 2026-09-04',
+    ]);
+    assert.throws(() => parseNode(text, loc), /'probes\[1\]\.id' duplicates another probe's id 'same-id'/);
+  });
+
+  test("a probe with a bad 'raised' date is a problem", () => {
+    const text = answered(probeYaml({ ...PROBE_BASE, raised: '09-04-2026' }));
+    assert.throws(() => parseNode(text, loc), /'probes\[0\]\.raised' must be a YYYY-MM-DD date string/);
+  });
+
+  test("a probe 'fact' outside FACT_NAMES is a problem", () => {
+    const text = answered(probeYaml({ ...PROBE_BASE, fact: 'bogus' }));
+    assert.throws(() => parseNode(text, loc), /'probes\[0\]\.fact' must be one of: answer, authority, existence, persistence/);
+  });
+
+  test("a probe naming a valid fact parses", () => {
+    const n = parseNode(answered(probeYaml({ ...PROBE_BASE, fact: 'answer' })), loc);
+    assert.equal(n.probes[0].fact, 'answer');
+  });
+
+  test('an unknown key on a probe is a problem', () => {
+    const text = answered(probeYaml({ ...PROBE_BASE, bogus: 'nope' }));
+    assert.throws(() => parseNode(text, loc), /unknown key 'probes\[0\]\.bogus'/);
+  });
+
+  test('four open probes parse without complaint -- the cap of three binds the movement and is checked by the readings, not the reader', () => {
+    const lines = ['probes:'];
+    for (let i = 0; i < 4; i += 1) {
+      lines.push(
+        `  - id: probe-${i}`,
+        `    asks: Question ${i}?`,
+        `    why: Why ${i}.`,
+        `    discharges: Discharge ${i}.`,
+        '    source: ai',
+        '    raised: 2026-09-04',
+      );
+    }
+    const n = parseNode(answered(lines), loc);
+    assert.equal(n.probes.length, 4);
+    assert.ok(n.probes.every((p) => p.status === null), 'all four stand open');
+  });
+
+  test("a node with 'probes' and no 'stage' is a problem", () => {
+    const text = [
+      '---', 'question: What?',
+      ...probeYaml(PROBE_BASE),
+      '---', '',
+      'Just body text, no dialogue section at all.', '',
+    ].join('\n');
+    assert.throws(
+      () => parseNode(text, loc),
+      /'review', 'depends', 'probes', and '## Account' are parts of the dialogue and require stage/,
+    );
+  });
+
+  test("'probes' absent normalizes to an empty array", () => {
+    assert.deepEqual(parseNode(answered(), loc).probes, []);
   });
 });
 
@@ -1149,8 +1351,8 @@ describe('readGraph: invalid fixtures', () => {
     ['invalid-stage-value', /'stage' must be one of: periagogic, maieutic, ruling, review/],
     ['invalid-stage-without-dialogue', /stage requires a '## Disposition', '## Account', or '## Answer' section/],
     ['invalid-disposition-without-stage', /'## Disposition' requires 'stage'/],
-    ['invalid-dialogue-without-stage', /'review', 'depends', and '## Account' are parts of the dialogue and require stage/],
-    ['invalid-account-without-stage', /'review', 'depends', and '## Account' are parts of the dialogue and require stage/],
+    ['invalid-dialogue-without-stage', /'review', 'depends', 'probes', and '## Account' are parts of the dialogue and require stage/],
+    ['invalid-account-without-stage', /'review', 'depends', 'probes', and '## Account' are parts of the dialogue and require stage/],
     ['invalid-stage-needs-recommends', /stage review requires every fact to recommend one of its options; fact 'answer' recommends none/],
     ['invalid-stage-ruling-needs-forward-review', /stage ruling requires a 'review' with verdict forward/],
     ['invalid-unanswered-without-stage', /example\.test\/main\/bad is unanswered and must carry stage/],

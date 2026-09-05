@@ -87,6 +87,35 @@ test("build refuses a template with no marker", () => {
   assert.throws(() => build("<title>x</title>", FIXTURE), /DG:GRAPH/);
 });
 
+test("build strips 'probes' from every node before serializing -- the browser publishes the whole graph object, so an unstripped probe would reach anyone who opened the page", () => {
+  const withProbes = {
+    ...FIXTURE,
+    nodes: FIXTURE.nodes.map((n, i) => (i === 0 ? {
+      ...n,
+      probes: [{
+        id: "should-not-leak",
+        asks: "A question the author has not seen yet.",
+        why: "the record does not say",
+        discharges: "the answer recommendation",
+        source: "ai",
+        raised: "2026-09-04",
+        fact: null,
+        status: null,
+        reason: null,
+      }],
+    } : n)),
+  };
+  const html = build(TEMPLATE, withProbes);
+  assert.ok(!html.includes("should-not-leak"), "a probe's id must not reach the built page");
+  assert.ok(!html.includes("A question the author has not seen yet"), "nor its 'asks'");
+  assert.ok(!html.includes("the record does not say"), "nor its 'why'");
+  assert.ok(!html.includes('"probes"'), "the key itself is dropped, not just emptied");
+
+  const m = html.match(/<script type="application\/json" id="graph">([\s\S]*?)<\/script>/);
+  const parsed = JSON.parse(m[1]);
+  assert.ok(!Object.prototype.hasOwnProperty.call(parsed.nodes[0], "probes"), "the node object itself carries no 'probes' key");
+});
+
 /* -------------------------------------------------------------- project() */
 
 // covers finding project.mjs:62 -- a `graphs` entry with a null value (YAML
@@ -520,6 +549,41 @@ test("renderFrontier prints a 'depends:' line, bare or qualified by an option, r
 
   const open = blockFor("prerequisite");
   assert.ok(!open.includes("  depends:"), "the node depended on names no dependency of its own");
+});
+
+test("renderFrontier prints a 'probes:' line with the count of open probes, omitted when there are none", () => {
+  const probe = (id, status) => ({
+    id, asks: "?", why: "w", discharges: "d", source: "ai", raised: "2026-09-04", fact: null,
+    status: status ?? null, reason: status ? "the author answered it" : null,
+  });
+  const mk = (id, probes) => ({
+    id, stage: "maieutic", rank: 0.5, settles: 0,
+    settledBy: { under: 0, alternatives: 0, depends: 0 }, status: "unanswered", authority: null, probes,
+  });
+  const graph = {
+    module: "example.test",
+    nodes: [
+      mk("example.test/main/two-open", [probe("a"), probe("b", "discharged")]),
+      mk("example.test/main/none-open", []),
+      mk("example.test/main/no-field", undefined),
+    ],
+  };
+  const listing = renderFrontier(graph);
+  const everyNodeSection = listing.slice(listing.indexOf("## Every node, by rank"));
+  const blockFor = (id) => {
+    const start = everyNodeSection.indexOf(`- ${id}`);
+    const next = everyNodeSection.indexOf("\n- ", start + 1);
+    return everyNodeSection.slice(start, next === -1 ? everyNodeSection.length : next);
+  };
+
+  const twoOpen = blockFor("example.test/main/two-open");
+  assert.ok(twoOpen.includes("  probes: 1 open"), "counts only the entry with no status");
+  const depAt = twoOpen.indexOf("  settles:");
+  const probesAt = twoOpen.indexOf("  probes:");
+  assert.ok(depAt >= 0 && probesAt > depAt, "beside stage/settles/depends, after them");
+
+  assert.ok(!blockFor("example.test/main/none-open").includes("  probes:"), "no open probes, no line");
+  assert.ok(!blockFor("example.test/main/no-field").includes("  probes:"), "no 'probes' field at all, no line");
 });
 
 test("renderFrontier prints an 'order:' line, right after the head line, for a node carrying order", async () => {
@@ -2148,6 +2212,51 @@ test("the stage chip carries the node's readiness, and the review keeps no secti
   assert.ok(kicked.includes("moved since its survey"), "the stale pin still shows");
   assert.ok(!kicked.includes("is owed"));
   assert.ok(!kicked.includes(">ready to rule<"));
+});
+
+test("the stage chip's readiness carries the count of open probes and only the count -- never a probe's asks, why, discharges or id", async () => {
+  const graph = await readGraph(resolve(HERE, "fixtures/valid-survey"));
+  const node = nodeBySlug(graph, "ready-node");
+  node.probes = [
+    {
+      id: "boundary-open",
+      asks: "Is the boundary right where the answer stands?",
+      why: "the record does not say and the AI has looked",
+      discharges: "the answer recommendation",
+      source: "ai",
+      raised: "2026-09-04",
+      fact: null,
+      status: null,
+      reason: null,
+    },
+    {
+      id: "already-discharged",
+      asks: "A question the author already answered.",
+      why: "it was open once",
+      discharges: "the answer recommendation",
+      source: "ai",
+      raised: "2026-09-03",
+      fact: null,
+      status: "discharged",
+      reason: "the author answered it",
+    },
+  ];
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, graph);
+  const article = itemHtml(html, node.id);
+  const start = article.indexOf('<span class="readiness">');
+  assert.ok(start > 0, "no readiness rendered");
+  const readiness = article.slice(start, article.indexOf("</p>", start));
+  assert.ok(readiness.includes("1 probe open"), "counts only the open one, singular");
+  assert.ok(!readiness.includes("Is the boundary right"), "never a probe's 'asks'");
+  assert.ok(!readiness.includes("the record does not say"), "never a probe's 'why'");
+  assert.ok(!readiness.includes("the answer recommendation"), "never a probe's 'discharges'");
+  assert.ok(!readiness.includes("boundary-open") && !readiness.includes("already-discharged"), "never a probe's id");
+
+  const untouched = nodeBySlug(graph, "unsurveyed");
+  const untouchedArticle = itemHtml(html, untouched.id);
+  const untouchedStart = untouchedArticle.indexOf('<span class="readiness">');
+  const untouchedReadiness = untouchedArticle.slice(untouchedStart, untouchedArticle.indexOf("</p>", untouchedStart));
+  assert.ok(!untouchedReadiness.includes("probe"), "a node with no probes carries no probe pill at all");
 });
 
 test("what each stage asks: the author's words at the two early stages, a line at review, the facts alone at the ruling stage", () => {

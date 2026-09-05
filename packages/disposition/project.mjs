@@ -362,11 +362,26 @@ export function withOptionSentences(graph) {
   return { ...graph, nodes };
 }
 
+// `graph`, with `probes` dropped from every node before it is serialized.
+// The browser publishes the whole graph object into the page source, so an
+// unstripped `probes` would be readable by anyone who opened the page
+// whatever the client rendered -- a probe is not published, and the
+// maieutic session is the only place it is asked
+// (commons.systems/disposition-graph/dialogue).
+function withoutProbes(graph) {
+  const nodes = graph.nodes.map((n) => {
+    if (!('probes' in n)) return n;
+    const { probes, ...rest } = n;
+    return rest;
+  });
+  return { ...graph, nodes };
+}
+
 export function build(template, graph) {
   if (!template.includes(MARKER)) throw new Error(`template has no ${MARKER} marker`);
   // "<" only ever occurs inside a JSON string, so escaping it keeps the
   // payload valid JSON and keeps "</script" out of the document.
-  const json = JSON.stringify(withOptionSentences(graph)).replace(/</g, "\\u003c");
+  const json = JSON.stringify(withoutProbes(withOptionSentences(graph))).replace(/</g, "\\u003c");
   const block = `<script type="application/json" id="graph">${json}</script>`;
   return template.replace(MARKER, () => block);
 }
@@ -375,6 +390,15 @@ export function build(template, graph) {
 // the same syntax `readDependsList` (read.mjs) parses back apart.
 function formatDependsEntry(d) {
   return d.option ? `${d.id}#${d.option}` : d.id;
+}
+
+// The count of open probes on a node -- entries carrying no `status` -- read
+// on both the frontier's per-node block and the alignment page's stage chip.
+// Never the probe's `asks`, `why`, `discharges`, or `id`: the maieutic
+// session is where those are read, and this is only ever the count
+// (commons.systems/disposition-graph/dialogue).
+function countOpenProbes(node) {
+  return (node.probes || []).filter((p) => !p.status).length;
 }
 
 // The parenthetical breakdown shared by the ruling-order line and the
@@ -528,6 +552,8 @@ export function renderFrontier(graph) {
     if (node.depends && node.depends.length > 0) {
       lines.push(`  depends: ${node.depends.map(formatDependsEntry).join(", ")}`);
     }
+    const openProbes = countOpenProbes(node);
+    if (openProbes > 0) lines.push(`  probes: ${openProbes} open`);
     for (const fact of node.facts || []) lines.push(factLine(node, fact));
     if (node.review && node.review.verdict) {
       const stale = node.reviewStale ? ", changed since its review" : "";
@@ -781,6 +807,13 @@ function alignDocId(nodeId) {
 // what the author rules on. The fence may not carry any of the four at all
 // (the validator rejects them inside one), so comparing them would report
 // every fenced node as dropping its own facts.
+//
+// `probes` belongs on this list of exclusions and is deliberately absent
+// from `EDIT_FM_KEYS` below rather than added to it: a probe is never edited
+// from the alignment page, for the same reason the four dialogue keys above
+// are not -- it is not part of what the author rules on
+// (commons.systems/disposition-graph/dialogue). Do not add it here; the
+// invariant holds by omission.
 const EDIT_FM_KEYS = [
   "form", "under", "tier", "boost", "cites", "instrument",
   "after", "source", "bears", "defines", "shims", "order",
@@ -1040,6 +1073,13 @@ function renderReadiness(n) {
   } else {
     if (reviewOwed) pills += '<span class="pill rev-stale">the review of this draft is owed</span>';
     if (n.surveyOwed) pills += '<span class="pill rev-stale">the survey of the frontier is owed</span>';
+  }
+  // The count of open probes and nothing else: no probe's `asks`, `why` or
+  // `discharges`, and no `id`, reach this page -- the maieutic session is
+  // where they are asked (commons.systems/disposition-graph/dialogue).
+  const openProbes = countOpenProbes(n);
+  if (openProbes > 0) {
+    pills += `<span class="pill rev-stale">${openProbes} probe${openProbes === 1 ? "" : "s"} open</span>`;
   }
   return `<span class="readiness">${pills}</span>`;
 }

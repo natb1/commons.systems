@@ -56,6 +56,24 @@ that node as the kickback flow says (the author, 2026-09-03: "Adversarial
 review evaluates batch of nodes which are at the review dialogue phase against
 the full graph").
 
+This reading returns the probes it raises as well (`author-questions`): the
+questions it needs the author to answer before a recommendation can be
+grounded, each naming the node it is raised on and carrying what it `asks`,
+`why` the record cannot answer it, `discharges`, what an answer would settle
+and which recommendation it would move, and the `fact` it bears on where it
+bears on one. Three limbs admit a probe and all must hold — the record does
+not answer it and the reader has looked, the answer would move a
+recommendation on the node it names, and the answer is not itself a
+disposition, a question of that last kind being a node and going to the merge
+finding instead. Finding none is a complete answer. The cap is three open
+probes on one node, a compound probe counting as the probes it compounds, and
+the reading checks it on every node it judges, as a finding naming the node
+and the probes; the parser does not enforce it. A probe reaches any node in
+the graph for the same reason a finding does, and it does the same thing
+wherever it lands: a probe recorded on a node at the review or the ruling
+stage returns that node to the `maieutic` stage, judged or not, and the survey
+forwards nothing in any case.
+
 `node packages/disposition/project.mjs disposition --frontier -` lists every
 node with its stage, its class, what its facts recommend, and its review and
 survey state, and shows where a survey is owed; `brief.mjs` takes the judged
@@ -75,8 +93,9 @@ the reader copied — which is what serializes this reading, so nothing is
 locked. It computes no model and prints none (`review-model`).
 
 The brief carries the validations this reading runs, how a tangle and a
-subtree divergence are recorded (`alignment-order`), and nothing of the
-session. `tmp/` is gitignored scratch.
+subtree divergence are recorded (`alignment-order`), the admission test and
+the cap a probe is held to, and nothing of the session. `tmp/` is gitignored
+scratch.
 
 ## 3. The reader
 
@@ -103,12 +122,21 @@ reading rather than as a finding of nothing.
    `frontier`, the findings across the graph, each with the ids it names, the
    finding, the stage it recommends for each node whose text must change, the
    edit, merge, or split it proposes, and the `options` it proposes —
-   `{node, name, text}` each. Validate every finding before any is applied, on
+   `{node, name, text}` each; and `probes`, the questions it raises, each
+   naming the node it is raised on. Validate every finding before any is
+   applied, on
    this thread and never delegated (the author, 2026-09-03, quoted on
    `clean-context-review`): open each node, check that the text the finding
    quotes is there and says what the finding says, that the claim about the
    record or the implementation is true, and that the stage, edit, or option
-   it recommends follows from the doctrine it cites. Record the validation as
+   it recommends follows from the doctrine it cites. A probe is validated the
+   same way and against the same three limbs: a `why` naming a locus that does
+   settle the matter, a `discharges` naming no recommendation, and a probe
+   whose answer would itself be a disposition are each the session's finding
+   against the reading, recorded in the reply; a probe the session holds
+   inadmissible on one of them is discharged with the reason that says what in
+   the record answers it, and it stays on the list discharged rather than
+   leaving it. Record the validation as
    the session's reply in `tmp/review/replies.json`, `{ "<id>": "<reply>" }`,
    one per judged node and one per node a finding names. A rejected stage
    recommendation is held by `tmp/review/overrides.json`,
@@ -134,6 +162,13 @@ reading rather than as a finding of nothing.
      on a node that carried none, since a finding recorded on settled doctrine
      opens its dialogue — a stage-less node no entry names a stage for is
      refused, not guessed at;
+   - splices each probe the session let stand into its node's `probes`, with
+     the `id` the apply derives, `source: review`, and the reading's date as
+     `raised`, and derives that node's stage from the probes before any
+     finding's: a node that will carry an open probe after the run goes to the
+     `maieutic` stage, or to `periagogic` where that is the earliest stage the
+     run names for it, and never forward of where it stands
+     (`author-questions`);
    - records each proposed option on the named node's **answer fact** with
      `source: review` and the reading's date as its `ref`, with a
      `#### <name>` subsection appended under `### answer` in `## Facts`
@@ -155,9 +190,10 @@ reading rather than as a finding of nothing.
    Every node is parsed before and after its write: a node that would not
    validate after the write is reported and left unwritten, a node whose
    standing hash the edit moved is reported and left unwritten, and a run with
-   any problem writes nothing at all. An override wins on the stage. Nothing
-   else in a node is touched — the `## Recommendation` fence, the rulings, and
-   what each fact recommends least of all.
+   any problem writes nothing at all. An override wins on the stage, except
+   that no override puts a node carrying an open probe at the ruling stage.
+   Nothing else in a node is touched — the `## Recommendation` fence, the
+   rulings, and what each fact recommends least of all.
 3. The session's judgment after the apply. A merge, split, or fold is a
    proposal to the author, recorded as an option on the answer fact of the
    node it would change and put to the author on the alignment page; the

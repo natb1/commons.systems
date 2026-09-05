@@ -512,23 +512,29 @@ export function deriveCeiling(nodeId, nodesById) {
 
 /**
  * Strip the dialogue keys from a node file's raw frontmatter text, by line:
- * `stage`, `review`, `depends`, and `facts`, each together with every line
- * nested under it (indented relative to it), so that writing a hash into
- * `review.of` or a ruling's `of` -- or removing either afterward, or adding
- * an option to a fact -- never changes the standing hash. Operates on the
- * raw YAML source text, not the parsed object, because it is the *lines*
- * belonging to a key that must go, not just the key's value.
+ * `stage`, `review`, `depends`, `facts`, and `probes`, each together with
+ * every line nested under it (indented relative to it), so that writing a
+ * hash into `review.of` or a ruling's `of` -- or removing either afterward,
+ * or adding an option to a fact, or recording a probe -- never changes the
+ * standing hash. Operates on the raw YAML source text, not the parsed
+ * object, because it is the *lines* belonging to a key that must go, not
+ * just the key's value.
  *
  * `facts` is stripped although it is no longer dialogue state (the options
  * and their rulings persist after the ruling): what the standing hash is for
  * is the text that stands, and adding an option must not stale every pin.
+ * `probes` is dialogue state and load-bearing to strip for the same reason:
+ * on a node with no `## Recommendation` fence the standing text is also the
+ * answer fact's recommendation hash, so an unstripped `probes` would mean
+ * that recording a probe moves `review.of` and a ruling's `of`
+ * (commons.systems/disposition-graph/dialogue).
  *
  * @param {string} fmText - the raw text between the frontmatter's `---`
  *   delimiters (as `read.mjs`'s `parseNode` extracts it, before YAML.parse).
  * @returns {string}
  */
 function stripDialogueFrontmatterLines(fmText) {
-  const removedKeyRe = /^(stage|review|depends|facts):/;
+  const removedKeyRe = /^(stage|review|depends|facts|probes):/;
   let skipping = false;
   return String(fmText)
     .split('\n')

@@ -38,7 +38,14 @@ description: Record or revise one node of the disposition graph by interview wit
 > author's reason on a ruling, the option passed over rather than dropped
 > from the list, and the kick-back typed to the maieutic movement. Every
 > one of those recommendations is unanswered; the review of the first two
-> ran in that sitting and the review of the rest is owed.
+> ran in that sitting and the review of the rest is owed. And reconciled
+> once more on 2026-09-04, under the author's bootstrap grant of that day
+> on `author-questions` ("you have bootstap authority to reconcile it (for
+> pending reviews)"), to `probes-on-the-node` on that node: the probes a
+> node carries as part of its dialogue state, the moments that collect
+> them, the kick-back a probe forces from the review or the ruling stage,
+> and the maieutic session as where the list is worked and the author is
+> asked. That recommendation is unanswered too.
 > Every recommendation these reconciliations wrote is unanswered, and no
 > ruling is recorded on any of it while either reading of the
 > clean-context review is owed.)** Hand-materialized from
@@ -47,6 +54,7 @@ description: Record or revise one node of the disposition graph by interview wit
 > `review-model`, `decomposition`,
 > `checkpoint`,
 > `alignment-target`, `alignment-order`, `alignment-page`, `authority`,
+> `author-questions`,
 > `viable-options`, `prose-and-structure`, `node`, `under`, `projection`,
 > `un-aligned-children`, `fidelity`,
 > `persistence`, `readings`, `review`, `evaluation`, `attention`,
@@ -119,8 +127,9 @@ skill only when the session starts in the checkout that carries it.
    every node with its status, its class and where the class comes from,
    `stage`, each fact's recommendation, review
    state, the survey's state and which of the two readings is owed, whether
-   the node is ready to rule, and settling count, headed by the alignment frontier in the
-   ruling order, and the alignment page's responses are read with the Artifact
+   the node is ready to rule, how many probes stand open on it, and settling
+   count, headed by the alignment frontier in the ruling order, and the
+   alignment page's responses are read with the Artifact
    tool (`read_db`, collection `responses`; a document's id is the node id
    with each `/` replaced by `:`; a document carries `node`, `stage`,
    `updated`, `words`, the author's text from the stage's own free-text
@@ -331,9 +340,23 @@ skill only when the session starts in the checkout that carries it.
   here unblocks, its inverse being derived and never stored, each entry
   either a node id or a node id and an option on that node's answer fact,
   written `<id>#<option>`, the second form recording that this node stands
-  under that side of a divergence (`alignment-order`). And `## Account`, the account in prose, which is not a proposal
-  and does not carry that name. A ruling-stage node without a forward
-  verdict is invalid; a recommendation changed after its review is sent
+  under that side of a divergence (`alignment-order`). `probes` is the
+  questions the AI needs the author to answer before it can recommend, one
+  list on the node and not one per fact, each entry an `id` unique on the
+  node, what it `asks` in one line, put open and never as a choice between
+  drafted answers, the `fact` it bears on where it bears on one decision
+  rather than on the node's ground, `why` the record cannot answer it,
+  naming the locus the AI read and what that locus leaves open,
+  `discharges`, what an answer would settle and which recommendation it
+  would move, which is also the ordering, its `source` in the vocabulary
+  an option's source carries, and `raised`, the date; a probe discharged
+  stays on the list with `status: discharged` and the `reason`, in the
+  shape a passed option's status and reason have, the two reasons being
+  that the author answered it, the reason naming their words in
+  `## Disposition`, or that the AI withdrew it, the reason saying what in
+  the record answers it (`author-questions`). And `## Account`, the account
+  in prose, which is not a proposal and does not carry that name. A
+  ruling-stage node without a forward verdict is invalid; a recommendation changed after its review is sent
   through the review again when the change is substance. The state must do three things
   between them: survive the session that held it, so a session which loses
   its context resumes every node from its stage; hold the author's
@@ -341,6 +364,31 @@ skill only when the session starts in the checkout that carries it.
   `fidelity` question asks and the state does not yet do; and give the
   author, at the ruling, the context to see how this question stands to
   the rest of the frontier.
+- **Probes, and where they are asked** (`author-questions`). Probes are
+  collected at the periagoge, at the review of a draft, at the survey, when
+  a confirmation kickback is processed, and at any point in the alignment
+  dialogue, in reconciliation, or in the loop on itself where a recorded
+  recommendation is reconsidered. A question is written as a probe only
+  where three things hold together: the record does not answer it and the
+  AI has looked, `why` naming the locus read; an answer would move a
+  recommendation on the node, `discharges` naming which; and the answer is
+  not itself a disposition, since a question whose answer would stand as an
+  answer to a question of the record is a node, minted under the node it
+  blocks and entered in that node's `depends`. Finding none is a complete
+  answer and a movement that found no probe records none and says so. The
+  cap is three open probes on one node, a probe compounding two counting as
+  two, and a movement that would raise a fourth discharges or withdraws one
+  first; the readings check the cap as a finding and the reader of the graph
+  does not enforce it. Each movement that collects also asks whether the
+  list is still the right list. A probe recorded on a node at the review or
+  the ruling stage returns that node to the maieutic stage, whatever else
+  that movement wrote, and a node already at the periagogic stage stays
+  there. The maieutic session is where the list is worked and where the
+  author is asked; the alignment page carries how many probes are open on a
+  node, on the stage chip beside the readiness, and never a probe's text,
+  and `probes` is not among the fields its editing surface offers
+  (`alignment-page`). The projector drops the field from the graph the
+  browser serializes, so no probe is published either.
 - **The class is read off the rulings and never written** (`authority`,
   `authority-derived`; `unanswered`, `unanswered-is-no-ruling`). No stamp
   stands beside them. Ratified is a node whose answer fact carries a
@@ -619,7 +667,8 @@ rule projections are regenerated by the next reconciliation run, not here.
   its facts is viable and whether a viable one is missing, and what the
   strongest argument against it is; it reports forward or kick back with
   the findings and the stage they name, plus the counter-argument when it
-  found one worth the author's time, and it writes nothing. Both readings
+  found one worth the author's time and the probes it raised where it could
+  not ground the draft, and it writes nothing. Both readings
   run on fable at high effort, the model and the effort `review-model`
   fixes for them, stated by the skill at the launch and never argued in a
   brief. Reviews of drafts run
@@ -631,13 +680,17 @@ rule projections are regenerated by the next reconciliation run, not here.
   for contradiction, supersession, redundancy, decomposition, vocabulary,
   cross-reference, placement and order, and coverage of the author's
   words, each finding naming its nodes and recommending their stage with
-  the edit, merge, or split it proposes.
+  the edit, merge, or split it proposes, and each probe it raises naming
+  the node it is raised on, judged or not.
   *Ready to rule.* A node is ready when it carries a forward verdict
-  pinned to the recommendation as it stands and a survey pin on the same;
+  pinned to the recommendation as it stands and a survey pin on the same,
+  and no node with an open probe reaches the ruling stage at all;
   the frontier and the alignment page show which of the two is owed, and
   no ruling is recorded while either is.
   The session validates every finding against the record on its own thread
-  and never delegates it. Apply each verdict on its own: a
+  and never delegates it. Apply each verdict on its own, the stage read
+  from the probes before the verdict is read, since a reading that recorded
+  what it could not ground has said the draft is not ready: a
   kickback sets `stage` and appends the findings to `## Account`; a
   forward sets `stage: ruling`, writes `review` with the verdict, the
   strength, the date, and the pin of the recommendation it read, and puts the
@@ -735,7 +788,7 @@ rule projections are regenerated by the next reconciliation run, not here.
   (`prose-and-structure`), and where the author has ruled for a passed
   option the recording clears its status. What
   the recording removes is the dialogue and nothing else: `stage`,
-  `review`, `depends`, and `## Account`, `## Disposition` staying as the
+  `review`, `depends`, `probes`, and `## Account`, `## Disposition` staying as the
   `quotes` node decides. Validate and
   land. A ruling that the node not exist, on its `existence` fact, is
   recorded before the node is deleted, on the node that proposed the prune
