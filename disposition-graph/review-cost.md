@@ -186,6 +186,17 @@ review block in the record carries a graph commit except one, every re-reading
 fell back to the full draft brief, and every pin written names text its reader
 had not seen. Raised by the clean-context reading of `authority` on 2026-09-05.
 
+Measured again at graph commit 4262d092, with the record's own predicates and
+not by eye: of 142 nodes, 48 carry a stage of `review` or `ruling`; 34 of the 48
+are stale by `reviewStale`, their pinned recommendation differing from the one
+that stands; 13 review blocks now carry the graph commit the reader read, the
+sequencing rule this answer imposes having taken effect on 2026-09-05; and
+`readyToRule` is true of none of the 48. The survey pin is the other half of
+that zero and is a different debt, since no node yet carries one. What the
+first number says is that the deadlock is not a corner case of the two nodes
+that reached the cap: on a frontier the size of this one it is the ordinary
+state, and every amendment a reading earns puts one more node into it.
+
 #### brief-carries-the-recount-command
 
 Where a draft's rationale rests on a measurement, its brief carries the command
@@ -539,3 +550,16 @@ the most-read nodes are the ones whose successive readings each found something
 real, so a bound drawn today would have traded a known defect for tokens, and
 what would actually pay is a cheaper first draft rather than a cheaper loop.
 The pin does not move: an option is not in the recommendation's hash.
+
+### The deadlock measured on the whole frontier, 2026-09-05
+
+The option `pin-names-the-text-the-reader-read` was raised from one node's
+sequencing and is a property of the frontier. At graph commit 4262d092, 34 of
+the 48 nodes at the review or ruling stage carry a review pin that names text
+other than the recommendation that stands, and `readyToRule` is true of none of
+them. Two of the 34, `class-recommendation` and `delegation-bounds-and-sizing`,
+reached this answer's cap of two readings on 2026-09-05 and can be re-pinned by
+no reading at all; the rest are stale from amendments a reading earned, and
+sending each back through a reading is the cost this node exists to bound. The
+measurement is recorded and nothing is settled by it: which of the three ways
+out the record takes is the author's, on the option.
