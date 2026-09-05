@@ -18,6 +18,9 @@ facts:
         ref: "2026-09-03"
         status: passed
         reason: "the facts encoding carries each shim's liquidation in its own field, and the yaml shim is struck, so one shim remains with its condition on it"
+      - name: disclose-that-sessions-run-under-this-rule
+        source: review
+        ref: "2026-09-03"
       - name: traditions-to-readings
         source: review
         ref: "2026-09-03"
@@ -71,6 +74,10 @@ Standing, at low boldness: the answer is the author's words of 2026-09-03 restat
 #### facts-carry-each-shim-liquidation
 
 Both reviews found that the prose facts line says only 'persistence standing; two shims' and does not carry each shim's liquidation condition, which growth's presentation rule requires. It matters here because the greenfield shim's liquidation is a swap that prunes whatever no disposition supports, so without the condition the author cannot see that confirming this node arms a deletion. The alternative states both conditions in the facts.
+
+#### disclose-that-sessions-run-under-this-rule
+
+Adopted into `standing` on 2026-09-05, whose facts prose says that a kickback or an overrule here changes what sessions are running under today. The second review of 2026-09-03 asked the account to say so, since the rules directory holds this node's projection as one of the five global-tier rules, and the session's reply promised it at the sitting.
 
 #### traditions-to-readings
 
@@ -223,3 +230,7 @@ The session's reply: Eight findings, all validated on this thread and all accept
 ### Amended after the reading, 2026-09-05
 
 The clean-context review of 2026-09-05 forwarded the recommendation with a strong counter-argument and eight findings, all validated on this thread and all accepted. The answer fact and the authority fact open with their reasons and each carries its case against. `facts-carry-each-shim-liquidation` is passed over, the encoding carrying the one remaining shim's condition in its field. `disclose-that-sessions-run-under-this-rule` is absorbed into the answer fact's prose and removed as an option: the sentence it asked for is written, so it no longer differs from the recommendation. `traditions-to-readings` says it is settled by the stub-traditions node's ruling and names the three readings owed, and the rationale cites `npm-committed-lockfile` for the strand it read. The rationale no longer cites a ruling of 2026-09-02 the node does not hold. `package` and `greenfield ref` carry glosses in `defines`. The answer fact's prose says what the shim's liquidation rests on and that the rule is unguarded. The counter-argument, that ratifying the rule arms a deletion whose scope is unruled, is answered as the record answers it: the swap waits on the coverage node and the author holds that ruling, and the rule itself, that unsupported implementation is liquidated through reconciliation where pruning is proposed and the author rules, deletes nothing by itself; the reply is now on the fact as its case against, so the author reads it where they rule. The recommended text is unchanged and its pin moved with the prose, so the node returns to the review stage.
+
+### Adopted option restored, 2026-09-05
+
+`disclose-that-sessions-run-under-this-rule`, removed from the list on 2026-09-05 as absorbed, returns as adopted with its subsection: the record keeps an adopted option listed with its adoption noted, and no candidate leaves the list.

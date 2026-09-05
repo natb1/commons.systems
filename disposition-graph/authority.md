@@ -44,6 +44,9 @@ facts:
         ref: "6d21d356"
         status: passed
         reason: "it overloads a term the author reserves for the outside-alignment case"
+      - name: escalate-toward-ratified
+        source: commons.systems/disposition-graph/recording
+        ref: "2026-09-04"
       - name: ratify-command
         source: ai
         ref: "2026-09-02"
@@ -164,6 +167,10 @@ Proposal names any candidate answer, amendment or finding with no authority,
 wherever it was recorded, which is what this node's draft defined. The author
 narrowed the word on 2026-09-03; it was passed over because it would have
 named the AI's own account and every alternative in a sitting with one word.
+
+#### escalate-toward-ratified
+
+Adopted into `authority-derived` on 2026-09-05, whose answer carries the rule. The class the AI recommends for a decision escalates toward ratified where being wrong is expensive, irreversible, or capture-shaped, and is delegated or deferred otherwise. The rule was carried by the alignment skill alone, a declared shim, and applied by the authority fact of the recording node and of five others as "the record's own test"; the session-context node says a rule that lives only in a file is invisible to the projector and to review. Recorded on 2026-09-04 with the recording node as its source, after that node's reading found the citation empty.
 
 #### ratify-command
 
@@ -401,3 +408,7 @@ The session's reply: Ten findings, all validated on this thread; nine accepted. 
 ### Amended after the reading, 2026-09-05
 
 The clean-context review of 2026-09-05 forwarded the recommendation at moderate strength with ten findings, all validated on this thread. Accepted: the answer fact and the authority fact now open with the reason for their recommendation and its boldness; `bootstrap-authority-as-class` and `clause-level-ratification` are passed over with the reasons the rationale and the encoding already gave; `proposal-as-any-recorded-candidate` is sourced to the AI, whose draft defined it; the ratify command the rationale rejected in prose is the option `ratify-command`; the author's words of 2026-09-04 on the viable-options node, on which the amendment of that day rests, are copied into `## Disposition`, and the rationale says they supersede the origin in the words of 2026-09-03; the escalation test is absorbed into the answer and its option removed, as the rationale records; the node declares its instrument, the reader's derivation of the class and its rejection of a stamp key; and `depends` names the unanswered node, at the maieutic stage, whose definition the answer's first sentence rests on, so the page orders this ruling after it. The readings `ocap-attenuation` and `approval-directed-agents` now bear on `authority-derived`, adopted, since each reads the rule it supports here; ultra vires and cgroup v2 are named as owed. The transience node's sentence that cites this node for the origin definition of a proposal is recorded there as the option `proposal-as-a-state-of-a-ratified-node`. The counter-argument, that the answer names no state for what acts during bootstrap, is answered in the answer: what acts is a shim, applied by default as the evaluation node says, or a grant given in the author's words for one reconciliation, and neither is a class; the amendment of 2026-09-04 was made under such a grant, given on the viable-options node for that sitting, whose words address this node's question. Substance moved, so the node returns to the review stage.
+
+### Adopted option restored, 2026-09-05
+
+`escalate-toward-ratified`, removed from the list on 2026-09-05 as absorbed, returns as adopted with its subsection: the record keeps an adopted option listed with its adoption noted, and no candidate leaves the list.

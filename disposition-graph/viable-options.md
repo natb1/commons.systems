@@ -59,6 +59,9 @@ facts:
         ref: "2b184f05"
         status: passed
         reason: "it is the recommended option with the judgment hidden: the same list, and nothing on a row saying which candidates the AI holds dominated"
+      - name: adopted-is-a-status
+        source: commons.systems/disposition-graph/frontier-consistency
+        ref: "2026-09-05"
     recommends: passed-over-options-stay
     boldness: high
     against: "The author scoped what persists to options 'categorized as viable by the AI', and this node's own rationale rejected keeping the rest, so the recommendation reverses the author's words on the AI's reading of the regression purpose those same words gave; what it buys is a status on rows the author must now read, a hundred and four of them today across twenty-nine nodes, on a page whose own reading of anchoring says the surface is already multiplied, while the discretion the change was bought to remove survives untouched in which candidates the AI names at all."
@@ -343,6 +346,10 @@ which it recommends another. The AI wrote that status and the AI lifts and
 rewrites it, which is exactly what the recommended answer says the AI may do
 with its own judgment; the option itself stays on the list, since only the
 author strikes one.
+
+#### adopted-is-a-status
+
+Everything the recommendation says, with a status beside `passed` for an option the recommended text has absorbed, so that an adopted candidate stays on the list as the recommendation requires and the page and the frontier show it as adopted rather than as viable. Today the encoding's only status is passed, and an adopted option is listed with no status and its adoption noted in prose, which the dialogue, alignment-page, and frontier-consistency nodes do; a reader of the page sees it beside the live options. Raised by the reading of frontier-consistency on 2026-09-05, which found three adopted options struck from that node's list.
 
 ### authority
 
