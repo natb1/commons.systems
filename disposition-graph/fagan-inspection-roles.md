@@ -25,6 +25,10 @@ bears:
   - fact: answer
     option: two-skills-one-package
     relation: adopted
+  - node: commons.systems/disposition-graph/frontier-consistency
+    fact: answer
+    option: split-survey-from-per-draft
+    relation: adopted
 ---
 ## Answer
 
