@@ -28,6 +28,9 @@ facts:
       - name: section-of-its-own
         source: author
         ref: "2026-09-03"
+      - name: overview-as-blog-shaped-content
+        source: review
+        ref: "2026-09-05"
   - name: authority
     options:
       - name: ratified
@@ -54,6 +57,17 @@ The author, 2026-09-03, in the high-level order recorded on the scope node:
 #### section-of-its-own
 
 Self-documentation is a section of its own, this node under purpose, answering that the record is its own documentation, read through the graph browser in rank order, with a boost equal to scope's so that the equality the author stated is exact and scope's order field names this node in its first step. The browser's own disposition, owed by projection's shim, would then live under it. This is what the author's own words place in the high-level order, self documentation via the graph browser, equal with scope; the session also noted the author's remark that the browser may need a high-ranking disposition of its own.
+
+#### overview-as-blog-shaped-content
+
+The record's overview, the introduction-shaped orientation a newcomer reads
+before the graph, is not a node and not a section of the graph: it is provided
+later by blog-shaped content, as the author said on 2026-09-02, which is what
+the `srs-introduction` reading relies on when it records the standard's Overview
+section as a divergence. Until that content exists the record has no overview
+and says so. Raised by the clean-context review of `srs-introduction` on
+2026-09-05, under validation 15: where the overview lives is this node's
+question, and a reading may not settle it in passing.
 
 ### existence
 
