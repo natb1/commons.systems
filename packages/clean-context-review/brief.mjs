@@ -827,6 +827,34 @@ export const READING_RULES = [
  *   whole, since this part grows with the sitting and not with the draft.
  * - index: every remaining node.
  */
+/**
+ * Escape a string's regex metacharacters so it can be dropped into a
+ * `RegExp` as a literal.
+ */
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Whether `text` names node `n`: either its full id occurs and is not
+ * immediately followed by an id-continuation character (so
+ * `.../review` does not match inside `.../review-skills`), or its bare
+ * slug occurs, bounded on the left against an id-continuation character
+ * (so the slug is not matched inside a longer word or inside a full id
+ * rule 1 already governs), immediately followed by whitespace and the
+ * word "node" (the record's own way of naming a node by its slug, as in
+ * "the checkpoint node requires").  A bare slug alone is deliberately not
+ * a match: `under`, `node`, `growth` and `review` are all real slugs and
+ * would otherwise match ordinary prose.
+ */
+function namesNode(text, n) {
+  const idPattern = new RegExp(`${escapeRegExp(n.id)}(?![A-Za-z0-9-])`);
+  if (idPattern.test(text)) return true;
+  const slug = n.id.slice(n.id.lastIndexOf("/") + 1);
+  const slugAsNode = new RegExp(`(?<![A-Za-z0-9-])${escapeRegExp(slug)}\\s+node\\b`);
+  return slugAsNode.test(text);
+}
+
 export function draftNeighbourhood(graph, node) {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const taken = new Set([node.id]);
@@ -875,7 +903,7 @@ export function draftNeighbourhood(graph, node) {
   // the fence, so a citation anywhere in the node is caught.
   const ownText = renderWholeNode(node);
   const cited = take(graph.nodes.filter((n) => (
-    ownText.includes(n.id) || (node.depends || []).some((d) => d.id === n.id)
+    namesNode(ownText, n) || (node.depends || []).some((d) => d.id === n.id)
   )));
 
   const round = take([...surveyJudges(graph)].sort(rulingOrderCompare));

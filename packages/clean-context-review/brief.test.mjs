@@ -300,6 +300,63 @@ describe("writeDraftBrief", () => {
     assert.deepEqual(parts.index, [], "the reader is carried in 'readings', not left for the index");
   });
 
+  test("draftNeighbourhood: 'cited' is a bounded id match and a bounded '<slug> node' prose match, never a bare substring or a bare slug", () => {
+    // Hand-built, as the 'bears' test above: no facts on the target, so
+    // nothing but its own prose (the question) drives 'cited' here.
+    const review = {
+      id: "synthetic/review", question: "no mention here", rank: 0,
+      under: [], children: [], facts: [], bears: [], depends: [],
+    };
+    const reviewSkills = {
+      id: "synthetic/review-skills", question: "no mention here either", rank: 0,
+      under: [], children: [], facts: [], bears: [], depends: [],
+    };
+    const alignmentOrder = {
+      id: "synthetic/alignment-order", question: "no mention here either", rank: 0,
+      under: [], children: [], facts: [], bears: [], depends: [],
+    };
+    const target = {
+      id: "synthetic/target",
+      question: "As the alignment-order node says, this mentions synthetic/review-skills, and node alone.",
+      rank: 0, under: [], children: [], facts: [], bears: [], depends: [],
+    };
+    const graph = { nodes: [target, review, reviewSkills, alignmentOrder] };
+
+    const parts = draftNeighbourhood(graph, target);
+    const citedIds = parts.cited.map((n) => n.id).sort();
+
+    assert.ok(!citedIds.includes("synthetic/review"),
+      "the prefix false positive: 'synthetic/review' must not match inside 'synthetic/review-skills'");
+    assert.ok(citedIds.includes("synthetic/review-skills"), "its own full id occurs, unambiguously bounded");
+    assert.ok(citedIds.includes("synthetic/alignment-order"), "the '<slug> node' prose form: 'the alignment-order node says'");
+    assert.deepEqual(citedIds, ["synthetic/alignment-order", "synthetic/review-skills"]);
+  });
+
+  test("draftNeighbourhood: a bare slug with no trailing 'node' does not match, but a 'depends' entry pulls its node in regardless of text", () => {
+    const checkpoint = {
+      id: "synthetic/checkpoint", question: "no mention here", rank: 0,
+      under: [], children: [], facts: [], bears: [], depends: [],
+    };
+    const undependedOnByText = {
+      id: "synthetic/undepended-on-by-text", question: "no mention here either", rank: 0,
+      under: [], children: [], facts: [], bears: [], depends: [],
+    };
+    const target = {
+      id: "synthetic/target",
+      question: "The checkpoint requires nothing further -- 'checkpoint' alone, with no trailing 'node', is bare prose.",
+      rank: 0, under: [], children: [], facts: [], bears: [],
+      depends: [{ id: "synthetic/undepended-on-by-text" }],
+    };
+    const graph = { nodes: [target, checkpoint, undependedOnByText] };
+
+    const parts = draftNeighbourhood(graph, target);
+    const citedIds = parts.cited.map((n) => n.id);
+
+    assert.ok(!citedIds.includes("synthetic/checkpoint"), "a bare slug, with no trailing 'node', names nothing");
+    assert.ok(citedIds.includes("synthetic/undepended-on-by-text"),
+      "'depends' still pulls its node in even though the text never names it");
+  });
+
   test("draftNeighbourhood on the live graph: the twelve rules of the reading are carried whole, in 'ancestry' or in 'rules'", async () => {
     const graph = await readGraph(path.join(REPO_ROOT, "disposition"));
     const node = graph.nodes.find((n) => n.id === "commons.systems/disposition-graph/decomposition");
