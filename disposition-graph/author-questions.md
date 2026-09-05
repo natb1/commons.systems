@@ -771,3 +771,58 @@ is why it is said plainly: the author ordered the migration, the migration is
 the liquidation, and nothing stands in for the field any more. The
 recommendation on the persistence fact moves from `with the shim` to `without
 it`, and the case against the move is on the fact.
+
+### State at the fifth compaction, 2026-09-04
+
+Recorded so the record and not the session carries it. This node stands at the
+review stage with its answer, its rationale, its three facts and no shim; the
+author's four sets of words are under `## Disposition`, each written the turn
+it was said; the periagogic movement, the pass with reference to tradition, the
+maieutic movement, the main thread's adversarial reading and the migration are
+all above and landed. The graph is at this commit on `origin/disposition`, the
+implementation at `adb7c73d` on `origin/greenfield`, and both trees are clean
+but for one file named below.
+
+**What is done.** The reader parses `probes` and the pin strip removes it; the
+frontier and the alignment page render the count of open probes and never a
+probe's text; the browser drops the field from the graph object it serializes;
+the three skills and the three brief templates carry the five collecting
+moments, the admission test, the cap as a finding, and the kickback. Three
+hundred and sixty-four tests pass in `packages/disposition`, sixty in
+`packages/clean-context-review`, and the validator reads 125 nodes. The
+migration ran: twenty probes on twelve nodes, twelve open, four nodes returned
+to the maieutic, `viable-options`' eleven paragraphs replaced by one, `review`'s
+two costumed options struck, and the shim struck with the persistence fact
+moved to `without it`. The four amendments this answer requires elsewhere are
+recorded as options on `frontier-consistency`, `alignment-page` and `fidelity`
+and as a pinned citation on `growth`.
+
+**What is not done, in the order it comes.** One unit is still writing
+`packages/clean-context-review/apply.mjs`, which is the only file dirty in the
+implementation tree: it owes the branch that derives a reading's next stage from
+the probes before the verdict, so that no override and no forward puts a node
+carrying an open probe at the ruling stage; the `probesAdd` splice in
+`upsertDialogueFields`; the shape check in `validateDraft`; and their tests. Its
+brief is at `/home/n8/.claude/jobs/55639327/tmp/briefs3/unit-apply.md` and the
+survey's output shape it must meet is the top-level `probes` array with a `node`
+on each entry, which `brief-survey.md` already asks the reader for. When it
+lands, verify the tests independently and land it on `greenfield`.
+
+Then the readings, which the author stopped on this day and which restart only
+now: the briefs are regenerated from the reconciled templates, and a reading is
+owed on every node whose draft this sitting moved, which is this node and the
+twelve the migration wrote to, not the eleven the stopped batch was aimed at.
+`fable`'s session limit has cleared, and the batch goes in waves of two or three
+rather than all at once, because eleven at once exhausted it and lost every one.
+Then the survey, once, over the whole graph, which is what answers the
+forty-five nodes reading as awaiting it and the seven whose pins the earlier
+migration moved without their arguments changing. Then both pages are
+republished and the sitting reports.
+
+**What the author will want at the ruling, beyond the answer.** Nothing on the
+frontier is ready to rule: 0 of 28 at the ruling stage, every one awaiting the
+survey. Four of those nodes left the ruling and review stages because of this
+node's own rule, which is the instrument acting on the record before the author
+has ruled on the instrument. That is the consequence of the author's own
+instruction to migrate as part of the reconciliation, and it is named here
+rather than discovered on the page.
