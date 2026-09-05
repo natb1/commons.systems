@@ -32,8 +32,8 @@ facts:
     options:
       - name: keep
       - name: prune
-    recommends: keep
-    boldness: moderate
+    recommends: prune
+    boldness: low
 under:
   - commons.systems/disposition-graph/purpose
 ---
@@ -56,6 +56,8 @@ Hexis decides a clause purpose's recommended text already contains, that the rec
 ### existence
 
 Prune: The redundancy finding notes that this node decides a clause purpose's draft already contains, so a confirmation of purpose as shown decides it by that act and a contrary ruling here would reopen purpose's draft. Its alternative to keeping the option-node is to fold the option into purpose's Proposal as an explicit alternative, which is what the first option on rejected would make structural, that decision being itself unruled.
+
+Prune is recommended from 2026-09-04, on the independence test of `commons.systems/disposition-graph/probe-or-node`. The node's only possible answer is a reading of purpose's: its two orderings are one sentence of purpose's recommended text in two arrangements. Its answer fact is a sub-decision inside purpose's, which holds the whole text. And it would be pruned the moment purpose's recommendation moved, as the redundancy finding, both reviews, and the prune text above already say in as many words. Nothing in any node's `depends`, `cites`, or `under` reaches it. The survivor is the option `knowledge-store-first` on purpose's answer fact, sourced to this node, which is what `fold-option-nodes` on purpose proposes and what the rule's first clause sends a candidate the AI holds viable to; the ordering the answer fact here recommends is purpose's `draft` already. The node stands until the author rules the prune, since a standing node is struck only by a ruling, and this row is where that ruling is asked.
 
 ## Recommendation
 
@@ -166,3 +168,7 @@ Also named: commons.systems/disposition-graph/quotes, commons.systems/dispositio
 Proposed: Quotes is the survivor and is ruled first among the nodes of this batch, after the periagogic sitting on public/agency that every one of them descends from. Nothing in the eight fences need change before that ruling, because quotes' recommended answer sanctions them; what must not happen is that any of the eight is recorded with a ratified stamp before quotes is ruled, since under the losing option each such stamp is invalid on landing. Quotes' own facts should state the measured size of the bar at the moment of ruling rather than a count fixed in prose, since the count has already moved once.
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `fence-carries-the-ruling` (source review, 2026-09-03).
+
+### The independence test, 2026-09-04
+
+The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, found this node to be a mis-encoded question on purpose: the independence test fires on all three of its conjuncts, each checkable against the record's own text, and the survival test does not save it, since nothing needs its answer on its own account. Under the rule's first clause the question is an option and not a probe, the AI holding both orderings viable and recommending one. Applied: the existence fact's recommendation moved to `prune` at low boldness, and `knowledge-store-first` was recorded on purpose's answer fact with this node as its source, so that purpose's row carries the alternative whichever way this one is ruled. Not applied: striking the node, which a ruling does and the recorder does not. `sub-ruling-of-purpose` is an ordering proposal and not an answer to this node's question; it is discharged by construction if the prune is ruled. The `## Recommendation` fence's claim that knowledge-store's `defines` carries the term stays false, and its remedy stays `define-hexis` on knowledge-store.

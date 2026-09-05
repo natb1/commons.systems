@@ -31,6 +31,9 @@ facts:
       - name: keep-the-authors-words
         source: review
         ref: "2026-09-03"
+      - name: knowledge-store-first
+        source: commons.systems/disposition-graph/hexis
+        ref: "2026-09-03"
       - name: define-by-its-parts
         source: ai
         ref: "1920badc"
@@ -133,6 +136,10 @@ The same finding names purpose's draft, which uses criterion and the criteria fr
 #### keep-the-authors-words
 
 Purpose's recommended text keeps a '## Disposition' section rather than dropping all nine dated quotations, and its account names for each quotation either the sentence of the answer that absorbs it or the node it moves to. Verified that the fence carries no author quotation of any date and that two of the three quotations answered elsewhere — the form question and the tradition instruction — have no '## Disposition' section on their target nodes to move into. It is on the table because quotes' recommended answer permits only a roll-up of what the answer absorbed, quotes is unruled, and this would be the first and largest application of a rule whose shape no node describes; the author may equally rule that the record's highest-ranked page should carry the answer alone, with version control holding the words.
+
+#### knowledge-store-first
+
+The recommended text with its second hypothesis in the order the page had, "a knowledge store, a projection of its author's hexis", and otherwise as `draft` has it. It is the second ordering the option-node hexis held, recorded here on 2026-09-04 when the independence test of probe-or-node found that node to be a question on this one, which is the fold `fold-option-nodes` proposes, executed for hexis. Both reviews of 2026-09-03 backed this ordering with the same counter-argument: purpose is the onboarding entry point and the README's source, no node's `defines` carries hexis so the browser cannot link it, and the apposition teaches the term instead of assuming it, the philosophical precision belonging on knowledge-store where the hypothesis and its reading live. Low boldness either way, the ground being the AI's reading of a text the author has not read.
 
 #### define-by-its-parts
 
@@ -384,3 +391,7 @@ graph commit and no date. Three were these. The other five, two on
 `commons.systems/disposition-graph/dialogue` and
 `commons.systems/disposition-graph/unanswered` at 32600efe, are not checked
 here and are named for the survey.
+
+### The fold of hexis, 2026-09-04
+
+The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, found `commons.systems/disposition-graph/hexis` to be a question on this node and not a child of it: its two options are one sentence of this node's recommended text in two arrangements, its answer fact is a sub-decision inside this one's, and it would be pruned the moment this recommendation moved. The survivor is `knowledge-store-first` on the answer fact above, sourced to hexis; hexis's existence fact now recommends `prune`, and the author rules it there. This is `fold-option-nodes` carried out for one of its three nodes; purpose-criteria and second-stop were read by the same tests and settled as nodes, the first on the survival test, its answer being an instrumentation decision and not a reading of this text, the second on the ruling test.

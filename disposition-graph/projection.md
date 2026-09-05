@@ -96,6 +96,8 @@ shims:
     for: the human projection this node names
     liquidation: the browser is recorded as a node with its published address, and the page is published from the implementation ref
     declared: 2026-09-02
+depends:
+  - commons.systems/disposition-graph/self-documentation
 ---
 ## Disposition
 
@@ -378,3 +380,7 @@ Counts and implementation claims recorded across the batch's review sections hav
 Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/dialogue.
 
 Proposed: No node's text is wrong and nothing moves. What is owed is that a count the author is asked to ratify be measured at the ruling rather than fixed in prose: quotes' facts state the bar as measured when the author rules, and the review skill's own briefs carry the counts, so the number the author sees is derived. Recording's counter-argument makes the general form of this point — most of what the review checks is mechanical — and frontier-consistency's validations 3, 5 and 11 are the natural home for the checks that would keep these numbers true.
+
+### A dependency recorded, 2026-09-04
+
+The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, read the open probe `what-equal-means-in-the-order` on `commons.systems/disposition-graph/self-documentation` and found that a response moves this node's `absorb-self-documentation`, minted from that node, through self-documentation's existence ruling. The probe stays a probe, doubt resolving downward; this node's ruling waits on that one's, which `depends` now says. The open probe `scope-of-hiding-unanswered-nodes` here passes all three tests.

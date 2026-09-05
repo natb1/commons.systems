@@ -51,7 +51,14 @@ probes:
       meaning. A conflicting answer that arises outside of alignment is a
       proposal. eg. via some evidence/signal/instrument/criteria or because a
       conflict is identified outside of alignment. The term must not be
-      overloaded - it is technical vocabulary."
+      overloaded - it is technical vocabulary." Under the probe-or-node rule
+      of 2026-09-04 this entry was not a probe: its `discharges` names two
+      nodes' recommendations, and the response stood, as authority's
+      definition of `proposal`, in that node's `defines`, its `## Answer`, and
+      the rule projected from it; the question was authority's and the
+      author's words are quoted there. Authority is not entered in this node's
+      `depends` because authority waits on viable-options, which waits on this
+      node, and a cycle is no order.
 review:
   verdict: forward
   strength: strong
@@ -1974,3 +1981,7 @@ neither carries an author, a work or a date here, so a `source` line would have
 to be invented, and both existing readings already bear on
 `every-part-in-the-record`. MADR's pros-and-cons is the nearest citable home
 for the first if the author wants it read.
+
+### The scope test, 2026-09-04
+
+The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, found the discharged entry `proposal-at-two-loci` to have been a node's question: its own `discharges` names a second node's recommendation, `commons.systems/disposition-graph/authority`, a sibling rule and not a consequence of this node's answer, and the survival test says the same harder, the author's response now standing as authority's definition of `proposal`, carried in its `defines`, stated in its answer, and projected verbatim into `.claude/rules/authority.md`. No node is minted, because authority answers the question in terms and the author's words are quoted there; the entry's reason is annotated. The `depends` edge the scope test prescribes is not written: authority depends on viable-options, which depends on this node's `aspects-are-nodes`, and the validator holds a cycle in `depends` to be no order. The open entry `option-text-per-node-or-per-option` passes all three tests and stays a probe.

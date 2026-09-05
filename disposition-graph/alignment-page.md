@@ -22,7 +22,10 @@ probes:
       Disposition`, that the revised record carries a decision per aspect, each
       aspect with choices requiring confirmation and a recommendation with
       confidence; the node's `### The probe answered, 2026-09-03` records what
-      the ruling settles for the page.
+      the ruling settles for the page. Under the probe-or-node rule of
+      2026-09-04 this entry was not a probe: the response is carried on five
+      nodes, founded `aspects-are-nodes`, and stands as dialogue's and
+      recording's answers, both already in this node's `depends`.
   - id: permanence-or-persistence
     asks: >-
       Which fact did the author mean by "permanence"?
@@ -58,6 +61,11 @@ probes:
       The author answered on 2026-09-03, quoted under this node's `##
       Disposition`, "stick with boldness then, I want to know how much rests on
       the AI's own knowledge against the record"; the rename is retracted.
+      Under the probe-or-node rule of 2026-09-04 this entry was not a probe:
+      its `discharges` names two nodes' recommendations, and the response
+      stands as growth's gloss on `boldness`. Growth is not entered in this
+      node's `depends` because growth already waits on this node, and a cycle
+      is no order.
 facts:
   - name: answer
     options:
@@ -2005,3 +2013,7 @@ draft readings. Then `clean-context-review`'s own shim is struck, its
 persistence fact recommending it, and the final report names every node
 written. The readings unit's output is copied in with its relations whenever it
 returns.
+
+### The scope test, 2026-09-04
+
+The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, found two of this node's three discharged entries to have been node questions. `unit-of-a-ruling`: the author's response of 2026-09-03 is carried on five nodes, founded the vocabulary `aspects-are-nodes` named on nine, and stands as `commons.systems/disposition-graph/dialogue`'s and `commons.systems/disposition-graph/recording`'s answers, which every node written since obeys; the scope and survival tests both fire, and the record had already done what the scope test prescribes, both nodes being in `depends`. `boldness-renamed-to-confidence`: its `discharges` names two nodes' recommendations, and the second half of the response is now the record's definition of boldness on `commons.systems/disposition-graph/growth`. No node is minted for either, since the answering nodes exist; each entry's reason is annotated. The edge to growth is not written because growth's `depends` already names this node and the validator rejects a cycle; the two rule together. `permanence-or-persistence` passes all three tests.

@@ -30,7 +30,13 @@ probes:
       the browser before alignment, so projection stays first among model's
       children and the boost half of the recommendation is withdrawn." The
       option `boost-growth-first-among-models-children` carries `status: passed`
-      with that reason.
+      with that reason. Under the probe-or-node rule of 2026-09-04 this entry
+      was not a probe: its first limb, whether the onboarding walk and the bite
+      order diverge, is attention's question, which that node carries as the
+      options `author-states-the-order` and `rank-orders-reconciliation-only`,
+      and the discharge came from the record answering, which the admission
+      test calls a withdrawal; attention enters this node's `depends`, and the
+      second limb stays this node's own.
 review:
   verdict: forward
   strength: moderate
@@ -68,6 +74,8 @@ facts:
     boldness: moderate
 under:
   - commons.systems/disposition-graph/model
+depends:
+  - commons.systems/disposition-graph/attention
 ---
 ## Facts
 
@@ -215,3 +223,7 @@ Also named: commons.systems/disposition-graph/quotes, commons.systems/dispositio
 Proposed: Quotes is the survivor and is ruled first among the nodes of this batch, after the periagogic sitting on public/agency that every one of them descends from. Nothing in the eight fences need change before that ruling, because quotes' recommended answer sanctions them; what must not happen is that any of the eight is recorded with a ratified stamp before quotes is ruled, since under the losing option each such stamp is invalid on landing. Quotes' own facts should state the measured size of the bar at the moment of ruling rather than a count fixed in prose, since the count has already moved once.
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `fence-carries-the-ruling` (source review, 2026-09-03).
+
+### The scope test, 2026-09-04
+
+The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, found the discharged entry `onboarding-walk-against-bite-order` to have been a node's question in its first limb: whether one scalar carries a teaching order and a work order is `commons.systems/disposition-graph/attention`'s answer in terms, a response of "they diverge" moves that node's recommendation, falsifies a sentence of work-loop's rationale, and sets the boosts on model's children. The answer the discharge cites, the author's high-level order on scope, is the record answering and not the author answering the probe, which the admission test's first limb calls a withdrawal. No node is minted, because attention already carries the question as two options on its answer fact; the entry's reason is annotated and attention enters `depends`, this node's ruling waiting on which order rank serves. The node itself passes the ruling test: rewriting model for the newcomer, or inserting a primer, is a design choice the author can delegate, and the primer question survives any move of model's recommendation.

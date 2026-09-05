@@ -1,6 +1,35 @@
 ---
 question: When is an open question a probe, an option, or a node?
 stage: maieutic
+probes:
+  - id: a-delegable-review-finding-question
+    asks: >-
+      When a review-finding question's response would be a delegation, is it
+      a node, as the ruling test says, or a maieutic question, as the author's
+      words of 2026-09-04 on the review node say of review-finding questions?
+    fact: answer
+    why: >-
+      The author said on 2026-09-04, on
+      `commons.systems/disposition-graph/review`, that "the review finding
+      questions are examples of meiutic questions to be ruled on during
+      meiutic dialogue, not the kind of thing to be confirmed as facts in the
+      alignment artifact". The ruling test says a question the author could
+      answer "delegated, do not ask me again" is a node, because only a
+      disposition carries a class. Two open entries on review,
+      `cap-and-effort-from-the-contract` and `graph-landing-review-at-scale`,
+      are review-finding questions whose response could be exactly that, and
+      the application of 2026-09-04 found both to be nodes on the ruling and
+      survival tests. Whether the author's words were about costumed options,
+      which a node carrying a real delegation is not, or about the artifact
+      carrying any row for such a question, which a node would, is not
+      derivable from the record.
+    discharges: >-
+      Whether the ruling test carries an exception for review-finding
+      questions, which moves this node's answer fact; and with it whether the
+      two entries on review are promoted, which they are not until this is
+      answered, since doubt resolves downward.
+    source: ai
+    raised: 2026-09-04
 facts:
   - name: answer
     options:
@@ -57,7 +86,7 @@ The scope test. A probe bears on the recommendations of one node, and its `disch
 
 The survival test. Would anything need the response after the recommendation it moved has been ruled on? A probe dies with the dialogue, and what survives of it is the author's words and the rationale that quotes them; a response that a later sitting, a reading, a projection, or a reconciliation would need on its own account survives the dialogue, and what survives the dialogue is a node.
 
-The independence test, which runs the other way and catches the opposite miss. A node whose only possible answer is a reading of its parent's answer, whose facts would repeat the parent's, and which would be pruned the moment the parent's recommendation moved is a probe on the parent and not a child of it: its question can be put as "on the parent, which did you intend", and that is a probe's question. Such a node is re-encoded as a probe on the parent, with `source` naming the node it was; its account folds into the parent's, any words of the author's on it move to the parent's `## Disposition`, and its options are struck, since options that were never candidates are the costumed options the author classified on 2026-09-04 on the review node. The test does not reach a reading: a reading's answer is a standing relation between a tradition and the node above it, which stands by construction.
+The independence test, which runs the other way and catches the opposite miss. A node whose only possible answer is a reading of its parent's answer, whose facts would repeat the parent's, and which would be pruned the moment the parent's recommendation moved is a probe on the parent and not a child of it: its question can be put as "on the parent, which did you intend", and that is a probe's question. Such a node found at recording is re-encoded on the parent, as a probe, or as an option on the parent's fact where the AI holds its answer viable, with `source` naming the node it was; its account folds into the parent's, any words of the author's on it move to the parent's `## Disposition`, and its options are struck, since options that were never candidates are the costumed options the author classified on 2026-09-04 on the review node. A node already standing is not struck by the recorder: the survivor is recorded on the parent the same way, the node's existence fact moves to `prune` with the test as its reason, and the author rules the prune, since while it stands it puts a rulable row on the alignment page and that row is where the prune is asked. The test does not reach a reading: a reading's answer is a standing relation between a tradition and the node above it, which stands by construction.
 
 Two things the tests refuse to rest on. Whether the author has spoken: a probe asks what the author intends, and most of this record was minted without quoting them, so the absence of the author's words is not evidence that no disposition stands behind a node, and their presence is not evidence that a question is a probe; where the author has said nothing, the tests still run on what a response would do. And the question's wording: "what should this be" and "what did you mean by this" are each rewritable as the other, so wording is a tell and never the test, and the parent's line between a question of the record and a probe is read through this rule.
 
@@ -140,3 +169,7 @@ under this node, which stays unanswered: the four tests go into both reading
 briefs put to the response, the survey brief gains the independence test as a
 validation of its own for a node standing under an unanswered parent, the
 record brief takes the redrawn line, and the align skill cites this node.
+
+### Applied to the graph, 2026-09-04
+
+Three units on opus, one per third of the graph, ran only what the two earlier sweeps had not: the ruling, scope, and survival tests, and the independence test in its new tell, in both directions, over 125 nodes and 21 probes, reporting deltas only, with a coverage list naming which test settled each node and each probe. Nine deltas and two informational notes came back; the main thread's disposition of each is on the account of `commons.systems/disposition-graph/author-questions`. What the application taught the rule, written into the answer above: the independence test's remedy as first drafted said the node "is re-encoded as a probe", which is right for a question found at recording and wrong for a standing node, which the asymmetry paragraph of the same answer says only a prune can demote; the two sentences now agree, and the fold of `commons.systems/disposition-graph/hexis` was done the second way. And the ruling test met the author's words of 2026-09-04 on review head on, in two entries whose response could be a delegation; that collision is the probe above, and the entries stay probes until it is answered. The scope test's remedy, that every moved node enters the question in `depends`, met the validator's cycle check twice, on dialogue to authority and on alignment-page to growth, and was not written there; the rule does not say what to do where the edge would close a cycle, and the readings should say whether it needs to.

@@ -59,6 +59,8 @@ defines:
   - table of contents
   - section
   - order
+depends:
+  - commons.systems/disposition-graph/self-documentation
 ---
 ## Disposition
 
@@ -231,3 +233,7 @@ Recorded as a pending alternative on commons.systems/disposition-graph/readings:
 Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### A dependency recorded, 2026-09-04
+
+The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/author-questions` with the tests of `commons.systems/disposition-graph/probe-or-node`, read the open probe `what-equal-means-in-the-order` on `commons.systems/disposition-graph/self-documentation` and found that a response moves this node's `order-names-self-documentation`, minted from that node, through self-documentation's existence ruling. The probe stays a probe, doubt resolving downward; this node's ruling waits on that one's, which `depends` now says.
