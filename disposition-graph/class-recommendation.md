@@ -612,9 +612,13 @@ implementation ref, with the same defect the day's re-reading of
 `delegation-bounds-and-sizing` found.
 
 This was the second reading of this answer, the redraw having made a new one,
-and `review-cost`'s cap allows no third. The amendment moves the pin, so the
-node goes to the author with `review.of` naming the text the reader read: the
-deadlock recorded on `review-cost`'s live option
-`pin-names-the-text-the-reader-read`. The reader's own gap goes to `review-cost`
-with the others: its first read of the brief was truncated at line 433 against
+and `review-cost`'s cap allows no third. The reply written into the reading's
+own section said this amendment would move the pin and leave the node in the
+deadlock `review-cost`'s option `pin-names-the-text-the-reader-read` records;
+measured afterwards at 4262d092 with `deriveRecommendationHash`, it does not.
+Every edit the reading earned fell outside the pinned text: two in this account,
+one in a heading, and one on `authority`. So `review.of` names the
+recommendation as it stands, and what keeps the node from being ready to rule is
+the survey pin alone, which no node in the record yet carries. The reader's own
+gap goes to `review-cost` with the others: its first read of the brief was truncated at line 433 against
 the brief's discipline of at most 300 lines a read, and it recovered by paging.
