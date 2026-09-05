@@ -58,6 +58,7 @@ defines:
 depends:
   - commons.systems/disposition-graph/viable-options#passed-over-options-stay
   - commons.systems/disposition-graph/work-loop
+  - commons.systems/disposition-graph/delegation-bounds-and-sizing
 ---
 ## Disposition
 
@@ -309,3 +310,13 @@ pin silently would say a reader had read text no reader has seen. What that cost
 and the three ways out of it are recorded as the option
 `pin-names-the-text-the-reader-read` on the `review-cost` node, and none of them
 is taken here.
+
+### The dependency its own case against assumed, 2026-09-05
+
+The reading of `delegation-bounds-and-sizing` found this node's authority-fact
+`against` saying "a ruling here is on what remains after that one" while nothing
+in data held this ruling behind that one, and this node standing at the ruling
+stage with a forward pinned. That node is added to `depends`, so the alignment
+page will not put this question before the one it rests on. `depends` is a
+dialogue key and is stripped from the standing hash, so the recommendation and
+its pin are unmoved.

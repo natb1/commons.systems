@@ -56,6 +56,9 @@ facts:
       - name: no-census-in-a-standing-answer
         source: commons.systems/disposition-graph/class-recommendation
         ref: "2026-09-05"
+      - name: authority-per-clause-by-a-child-node
+        source: commons.systems/disposition-graph/delegation-bounds-and-sizing
+        ref: "2026-09-05"
     recommends: authority-derived
     boldness: moderate
     stands: authority-derived
@@ -203,6 +206,10 @@ A command run by the author as the act of ratification, which the record carried
 #### no-census-in-a-standing-answer
 
 A measurement of the record does not go in the text that stands: a count belongs in the node's account, with the criterion it was taken on and the commit it was taken at, and the standing answer says where the measure lives and not what it is. This node has struck the same shape twice already, on its own text ("thirteen nodes cite it as the record's own test") under the frontier finding of 2026-09-03 that a count the author is asked to ratify be measured at the ruling rather than fixed in prose. What the option adds to that finding is the general rule and the reason it now bites harder: a global-tier node's answer is projected verbatim into `.claude/rules/`, so a census written there is doctrine every session loads, stale from the day the record next changes and with no instrument that would notice. The case that raised it is `class-recommendation`, whose amendment of 2026-09-05 wrote a dated census of the record's authority facts into its answer on the same day the node became global-tier, and whose re-reading found the count wrong on every criterion it could run. Recorded as an option and not written into the answer, because it would bind every node the record has and the author has not been asked.
+
+#### authority-per-clause-by-a-child-node
+
+A ruling stays per fact, and a child node may name which clauses of its parent's answer that ruling reaches, so a rule whose clauses differ in kind can be ratified in part without a stamp on a clause. Raised by the sizing division the `delegation-bounds-and-sizing` node draws; it is the case the passed-over `clause-level-ratification` did not consider, since it is a node and not a stamp that does the naming. Against it stands the rule this node's own answer states, that authority only narrows on the way down, and `ocap-attenuation`, adopted on `authority-derived`, under which a holder passes on a strictly weaker reference and never a stronger one: a child naming how far its parent's ruling went is redistributing from below what the parent's ruling did. The node that raised it recommends moving the text instead, so that the division is made by a ruling per fact and this option is not needed; it is recorded because that node keeps `ratify-the-bounds-delegate-the-sizing` viable and the author may rule for it, and that option cannot be recorded without this encoding.
 
 ### authority
 
@@ -610,3 +617,16 @@ general rule is recorded here as the option `no-census-in-a-standing-answer`,
 since it would bind every node in the record and only the author can rule it. It
 acts on nothing. The option is not recommended, so this node's recommendation and
 its pin are unmoved and it stays at the ruling stage.
+
+### An option from delegation-bounds-and-sizing's reading, 2026-09-05
+
+That node's reading found it dividing one fact's answer text into two authority
+regimes, which is the question this node passed `clause-level-ratification` over
+on -- discharged by the facts encoding, a ruling being recorded per fact -- and
+which `growth` carries as `partial-ratification` with the note that it belongs
+here. The record would otherwise hold one question answered twice in opposite
+directions. The option `authority-per-clause-by-a-child-node` records the answer
+that node's passed-over recommendation needs. It is not recommended: that node's
+own recommendation moved to taking the clauses out of the parent's answer
+altogether, which needs no new encoding. The option acts on nothing, and this
+node's recommendation, pin and stage are unmoved.
