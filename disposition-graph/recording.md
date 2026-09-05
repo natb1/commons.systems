@@ -84,6 +84,9 @@ facts:
         ref: "2026-09-04"
         status: passed
         reason: "the judgment whether a move is substance is the reviewed party's, and the pin decides; substance stays the test for the author's own edit"
+      - name: one-response-rules-a-decompositions-existence-facts
+        source: commons.systems/disposition-graph/decomposition
+        ref: "2026-09-05"
     recommends: per-fact-after-two-readings
     boldness: moderate
     against: "Both readings must pin the recommendation as it stands before the author may answer a single row, so every ruling waits on two readings of the AI's own drafting, while the one judgment no instrument can check, whether a denial is about the options or about the ground, is made by the party the denial was aimed at."
@@ -280,6 +283,20 @@ A confirmation carries the author's reason and never an edit: every change the a
 #### re-read-on-substance-only
 
 The review of a draft is re-run after a move of the recommendation only where the session judges the move substance, which was the recommended text's own rule until the readings of 2026-09-04 on this node and on the clean-context-review node. Passed because the judgment whether a move is substance is the reviewed party's, and the pin the readings leave already decides: a reading attests to the text it read, and a text that moved has not been read. Substance stays the test for the author's own edit, whose words are theirs.
+
+#### one-response-rules-a-decompositions-existence-facts
+
+A refusal of a proposed decomposition is one response that records a ruling on
+the existence fact of each queued node the refusal names, so that the author
+rules once on a set of questions rather than once per node; the classification
+of the response is this node's as for any other. It is here because the
+`decomposition` node's recommended text reached for exactly this shortcut and
+the recommended answer above forbids it: a response given on a node below the
+ruling stage confers nothing, and a queued node is minted at the periagogic
+stage. That node now records the author's words and moves each existence fact's
+recommendation instead, and the shortcut is put on this fact, where the question
+of how far one response reaches is asked. Raised by the second clean-context
+reading of `decomposition` on 2026-09-05, which proposed it and did not make it.
 
 ### authority
 

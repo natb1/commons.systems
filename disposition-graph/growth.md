@@ -104,6 +104,7 @@ facts:
     options:
       - name: both shims kept
       - name: the page's shim moved out
+      - name: shim-reaches-what-the-skill-draws-on
     recommends: the page's shim moved out
     boldness: low
 depends:
@@ -287,6 +288,21 @@ This node keeps both shims, the alignment skill's and the alignment page's, and 
 #### the page's shim moved out
 
 This node keeps the skill's shim alone, and the page's declaration moves to `commons.systems/disposition-graph/alignment-page` with its date and its liquidation condition intact, so that the page is described where its question is asked and this node declares only what it projects.
+
+#### shim-reaches-what-the-skill-draws-on
+
+The skill's shim keeps its artifact and its liquidation and widens its `for`
+clause from "the projection of this node and its siblings as the alignment
+skill" to the projection of this node and the nodes the alignment skill draws
+on. It is raised because two nodes lean on this shim from outside its stated
+scope: `decomposition`, which is this node's grandchild and whose recommended
+text says it "is materialized by the alignment skill's list of a sitting's
+units, under the shim the growth node declares on that skill", and
+`review-model`, which sits under `clean-context-review` and whose answer the
+same skill carries. Either the shim reaches them or each declares its own, and
+the choice is this node's because the shim is this node's. Raised by the second
+clean-context reading of `decomposition` on 2026-09-05, which found the gap at
+its locus and proposed the widening.
 
 ## Recommendation
 

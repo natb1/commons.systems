@@ -103,3 +103,22 @@ Recorded as a pending alternative on commons.systems/disposition-graph/readings:
 Recorded as a pending alternative on this node: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
+### Registered from decomposition, 2026-09-05
+
+The second clean-context reading of `commons.systems/disposition-graph/decomposition`
+found that node's rationale asserting four adoptions with no reading behind any
+of them, no `bears` entry, and no entry here, which is the same finding the
+record made once already on `transience`. The list is struck from that rationale
+and registered here, where the record keeps the tradition lists whose readings
+are owed: incremental compilation and link-time analysis, claimed for the two
+objects of review; optimistic concurrency by version stamp, claimed for the pin
+at apply; mission command, already on this node's list from `transience` and
+claimed again for the brief that carries intent and not the scheme; and pair
+review at the point of writing, shelved while a second reader's time was scarce
+and claimed as affordable now that the reader is an agent. Every relation here is
+claimed and unread: no reading node exists for any of them, and none of them
+grounds anything on `decomposition` until one does. This section also stands as
+evidence for this node's own `regenerate-enumeration` option, since the
+enumeration above was written on 2026-09-03 and did not carry `decomposition`,
+which did not then exist.
