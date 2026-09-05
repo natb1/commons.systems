@@ -409,6 +409,258 @@ function topKeys(block) {
     .map((m) => m[1]);
 }
 
+// ------------------------------------------------------ probes (both modes)
+//
+// author-questions: a probe recorded on a node at the review or the ruling
+// stage returns it to the maieutic stage, whatever verdict or override says
+// -- never 'ruling' -- and a node already at the periagogic stage stays
+// there, since a movement only ever moves a node back. The applying step
+// derives the stage from the probes before it reads the verdict.
+
+const FRONTIER_PERIAGOGIC = "clean-context-review.test/main/periagogic-node";
+
+/** An existing open probe, in the shape a node file itself carries it, spliced
+ * in ahead of `facts:` -- for a test that needs a node already carrying one,
+ * without adding a fixture file the batch survey tests below would also see
+ * (they iterate every node under `fixtures/frontier/`). */
+const EXISTING_PROBE_BLOCK = [
+  "probes:",
+  "  - id: what-does-the-ground-mean-here",
+  "    asks: What does the ground mean here?",
+  "    why: The disposition never defines what counts as the ground versus the answer, and the account does not say either.",
+  "    discharges: Whether the periagogic movement here targets the disposition text or the answer fact.",
+  "    source: review",
+  '    raised: "2026-08-01"',
+].join("\n");
+function withExistingProbe(text) {
+  const withBlock = text.replace(/^facts:\n/m, `${EXISTING_PROBE_BLOCK}\nfacts:\n`);
+  assert.notEqual(withBlock, text, "fixture precondition: a top-level 'facts:' line to splice ahead of");
+  return withBlock;
+}
+
+function onePropoundedProbe(extra = {}) {
+  return [{
+    asks: "Does this recommendation cover the case the author raised, or a narrower one?",
+    why: "The disposition names the case but the answer does not say which reading it takes.",
+    discharges: "Whether the standing option or a narrower one is what the node recommends.",
+    fact: null,
+    ...extra,
+  }];
+}
+
+describe("apply.mjs: draft, probes", () => {
+  test("a draft returning one probe writes it into 'probes:' (created, since the node had none) and sets the stage to maieutic, after facts and review in the frontmatter's key order", async () => {
+    const rootDir = await freshFixture("probe-kickback-");
+    const file = reviewNodePath(rootDir);
+    const before = await readFile(file, "utf8");
+    assert.ok(!before.includes("probes:"), "fixture precondition: no probes yet");
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "draft",
+        id: REVIEW_NODE,
+        verdict: "kickback",
+        kickback_stage: "maieutic",
+        findings: ["Answer: ambiguous about which case is covered."],
+        probes: onePropoundedProbe(),
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.equal(fieldValue(await readFile(file, "utf8"), "stage"), "maieutic");
+
+    const after = await readFile(file, "utf8");
+    const parsed = parseNode(after, { id: REVIEW_NODE, graph: "main", slug: "review-node", path: file });
+    assert.equal(parsed.probes.length, 1);
+    const [p] = parsed.probes;
+    assert.match(p.id, /^[a-z0-9][a-z0-9-]*$/);
+    assert.equal(p.asks, "Does this recommendation cover the case the author raised, or a narrower one?");
+    assert.equal(p.why, "The disposition names the case but the answer does not say which reading it takes.");
+    assert.equal(p.discharges, "Whether the standing option or a narrower one is what the node recommends.");
+    assert.equal(p.source, "review");
+    assert.equal(p.raised, DATE);
+    assert.equal(p.fact, null);
+    assert.equal(p.status, null, "an open probe carries no status");
+    assert.ok(result.report[0].includes(`probe '${p.id}'`), `report names the probe's generated id: ${result.report[0]}`);
+
+    assert.ok(after.indexOf("\nreview:") < after.indexOf("\nprobes:"), "probes: comes after review:, the reader's own key order");
+  });
+
+  test("the same reading with a 'forward' verdict still sets maieutic, and the applying step records the contradiction without refusing the file", async () => {
+    const rootDir = await freshFixture("probe-forward-");
+    const file = reviewNodePath(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "draft",
+        id: REVIEW_NODE,
+        verdict: "forward",
+        findings: ["Answer: looks sound but see the probe."],
+        probes: onePropoundedProbe(),
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: DATE,
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const after = await readFile(file, "utf8");
+    assert.equal(fieldValue(after, "stage"), "maieutic", "never 'ruling' while an open probe stands, whatever the verdict says");
+    const block = reviewBlockOf(after);
+    assert.equal(fieldValue(block, "verdict"), "forward", "the reviewer's own verdict is still recorded as written");
+
+    assert.ok(
+      result.notes.some((n) => n.includes(REVIEW_NODE) && n.includes("contradiction")),
+      `expected a contradiction note, got: ${JSON.stringify(result.notes)}`,
+    );
+    assert.ok(result.report.some((l) => l.includes("contradiction")), "the note reaches the report too");
+  });
+
+  test("an override of 'ruling' is beaten by an open probe", async () => {
+    const rootDir = await freshFixture("probe-override-ruling-");
+    const file = rulingNodePath(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "draft",
+        id: RULING_NODE,
+        verdict: "forward",
+        findings: ["Rationale: needs the probe answered first."],
+        probes: onePropoundedProbe(),
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      overrides: { [RULING_NODE]: "ruling" },
+      date: DATE,
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.equal(fieldValue(await readFile(file, "utf8"), "stage"), "maieutic", "the override said 'ruling'; the open probe beats it outright");
+  });
+
+  test("an override of 'periagogic' is honoured", async () => {
+    const rootDir = await freshFixture("probe-override-periagogic-");
+    const file = answeredWithStagePath(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "draft",
+        id: ANSWERED_WITH_STAGE,
+        verdict: "kickback",
+        kickback_stage: "maieutic",
+        findings: ["Answer: the ground itself may need redrawing."],
+        probes: onePropoundedProbe(),
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      overrides: { [ANSWERED_WITH_STAGE]: "periagogic" },
+      date: DATE,
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.equal(fieldValue(await readFile(file, "utf8"), "stage"), "periagogic");
+  });
+
+  test("a node already at the periagogic stage stays there even under an override that names another stage; without a probe the override applies as it always did", async () => {
+    const withProbe = await freshFrontierFixture("probe-periagogic-stays-");
+    const withoutProbe = await freshFrontierFixture("probe-periagogic-control-");
+    const filePath = (dir) => path.join(dir, "main/periagogic-node.md");
+
+    const withProbeResult = await applyReviews({
+      rootDir: withProbe,
+      input: {
+        scope: "draft",
+        id: FRONTIER_PERIAGOGIC,
+        verdict: "kickback",
+        kickback_stage: "maieutic",
+        findings: ["Disposition: still needs the probe answered."],
+        probes: onePropoundedProbe(),
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      overrides: { [FRONTIER_PERIAGOGIC]: "maieutic" },
+      date: DATE,
+    });
+    assert.equal(withProbeResult.validation.ok, true, withProbeResult.validation.message);
+    assert.equal(
+      fieldValue(await readFile(filePath(withProbe), "utf8"), "stage"),
+      "periagogic",
+      "a movement only ever moves a node back: an open probe cannot advance it past periagogic",
+    );
+
+    const withoutProbeResult = await applyReviews({
+      rootDir: withoutProbe,
+      input: {
+        scope: "draft",
+        id: FRONTIER_PERIAGOGIC,
+        verdict: "kickback",
+        kickback_stage: "maieutic",
+        findings: ["Disposition: still needs redrafting, no probe this time."],
+        probes: [],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      overrides: { [FRONTIER_PERIAGOGIC]: "maieutic" },
+      date: DATE,
+    });
+    assert.equal(withoutProbeResult.validation.ok, true, withoutProbeResult.validation.message);
+    assert.equal(
+      fieldValue(await readFile(filePath(withoutProbe), "utf8"), "stage"),
+      "maieutic",
+      "with no probe the override applies exactly as it always did: this pair shows the probe rule changes nothing else",
+    );
+  });
+
+  test("a generated id colliding with one the node already carries is disambiguated, and the existing probe is kept byte for byte", async () => {
+    const rootDir = await freshFixture("probe-collide-");
+    const file = reviewNodePath(rootDir);
+    const before = withExistingProbe(await readFile(file, "utf8"));
+    await writeFile(file, before);
+
+    const result = await applyReviews({
+      rootDir,
+      input: {
+        scope: "draft",
+        id: REVIEW_NODE,
+        verdict: "kickback",
+        kickback_stage: "maieutic",
+        findings: ["Answer: a second ambiguity, distinct from the first."],
+        // slugifies to the same base as the probe the fixture already carries
+        probes: [{
+          asks: "What does the ground mean here?",
+          why: "A second look at the same passage finds a second gap the first probe did not cover.",
+          discharges: "Whether 'the ground' in this sentence means the disposition or the account.",
+          fact: null,
+        }],
+        counter_argument: null,
+        strength: "none",
+      },
+      replies: {},
+      date: "2026-09-05",
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const after = await readFile(file, "utf8");
+    const parsed = parseNode(after, { id: REVIEW_NODE, graph: "main", slug: "review-node", path: file });
+    assert.equal(parsed.probes.length, 2);
+    assert.equal(parsed.probes[0].id, "what-does-the-ground-mean-here", "the existing probe's id is untouched");
+    assert.equal(parsed.probes[0].raised, "2026-08-01", "and so is the rest of it: it is not rewritten by this apply");
+    assert.equal(parsed.probes[1].id, "what-does-the-ground-mean-here-2", "the collision is disambiguated rather than refused or overwriting the first");
+    assert.equal(parsed.probes[1].raised, "2026-09-05");
+    assert.ok(before.includes("id: what-does-the-ground-mean-here\n"), "fixture precondition unchanged");
+  });
+});
+
 describe("apply.mjs: draft refusals write nothing", () => {
   test("a strong finding with no reply is refused, naming the id", async () => {
     const rootDir = await freshFixture("strong-noreply-");
@@ -808,6 +1060,229 @@ describe("apply.mjs: survey", () => {
     const pins2 = await pinsFor(rootDir2);
     await applyReviews({ rootDir: rootDir2, pins: pins2, input: surveyInput({ date: "2020-01-01" }), replies: {}, date: "2021-06-06" });
     assert.ok((await readFile(nodePath(rootDir2, "review-a"), "utf8")).includes("### Frontier survey, 2021-06-06"));
+  });
+});
+
+describe("apply.mjs: survey, probes", () => {
+  test("a probe on a node the survey is judging sets that node to maieutic", async () => {
+    const rootDir = await freshFrontierFixture("survey-probe-judged-");
+    const pins = await pinsFor(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input: surveyInput({
+        probes: [{
+          node: REVIEW_A,
+          asks: "Does 'standing' cover the narrower case as well as the general one?",
+          why: "Neither the disposition nor the account says whether the narrower case was considered.",
+          discharges: "Whether 'standing' alone is enough or a second option belongs beside it.",
+          fact: "answer",
+        }],
+      }),
+      replies: {},
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const reviewA = await parseAt(rootDir, "review-a", REVIEW_A);
+    assert.equal(reviewA.stage, "maieutic", "a probe beats the survey's own 'nothing forwards' default");
+    assert.equal(reviewA.probes.length, 1);
+    assert.equal(reviewA.probes[0].source, "review");
+    assert.equal(reviewA.probes[0].raised, SURVEY_DATE);
+    assert.equal(reviewA.probes[0].fact, "answer");
+    assert.ok(result.report.some((l) => l.startsWith(`${REVIEW_A}: `) && l.includes("probe") && l.includes("review → maieutic")));
+  });
+
+  test("a probe on a node the survey is not judging reaches it and kicks it back the same way, from 'ruling' to 'maieutic'", async () => {
+    const rootDir = await freshFrontierFixture("survey-probe-unjudged-");
+    const pins = await pinsFor(rootDir);
+    const before = await parseAt(rootDir, "ruling-a", RULING_A);
+    assert.equal(before.stage, "ruling", "fixture precondition");
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input: surveyInput({
+        probes: [{
+          node: RULING_A,
+          asks: "Does the whole-thing option still answer the case the disposition raised?",
+          why: "The account's earlier round did not address the split the disposition describes.",
+          discharges: "Whether 'whole-thing' stands as the recommendation or needs a further split.",
+          fact: null,
+        }],
+      }),
+      replies: {},
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const rulingA = await parseAt(rootDir, "ruling-a", RULING_A);
+    assert.equal(rulingA.stage, "maieutic", "the same rule reaches a node the survey never judged this round");
+    assert.equal(rulingA.probes.length, 1);
+    assert.equal(rulingA.probes[0].fact, null);
+  });
+
+  test("an override of 'ruling' is beaten by an open probe", async () => {
+    const rootDir = await freshFrontierFixture("survey-probe-override-ruling-");
+    const pins = await pinsFor(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input: surveyInput({
+        probes: [{
+          node: REVIEW_A,
+          asks: "Same as above -- does 'standing' cover the narrower case?",
+          why: "As above.",
+          discharges: "As above.",
+        }],
+      }),
+      overrides: { [REVIEW_A]: "ruling" },
+      replies: {},
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    const reviewA = await parseAt(rootDir, "review-a", REVIEW_A);
+    assert.equal(reviewA.stage, "maieutic", "the override said 'ruling'; the open probe beats it outright");
+  });
+
+  test("an override of 'periagogic' is honoured", async () => {
+    const rootDir = await freshFrontierFixture("survey-probe-override-periagogic-");
+    const pins = await pinsFor(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input: surveyInput({
+        probes: [{
+          node: REVIEW_B,
+          asks: "Is the 'narrower' option meant to replace 'standing' or to sit beside it?",
+          why: "The account does not say whether the two options are mutually exclusive.",
+          discharges: "Whether 'narrower' stays an alternative or becomes the recommendation.",
+        }],
+      }),
+      overrides: { [REVIEW_B]: "periagogic" },
+      replies: {},
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    const reviewB = await parseAt(rootDir, "review-b", REVIEW_B);
+    assert.equal(reviewB.stage, "periagogic");
+  });
+
+  test("a node already at the periagogic stage stays there even under an override that names another stage; without a probe the override applies as it always did", async () => {
+    const withProbe = await freshFrontierFixture("survey-probe-periagogic-stays-");
+    const withoutProbe = await freshFrontierFixture("survey-probe-periagogic-control-");
+
+    const pinsWith = await pinsFor(withProbe);
+    const resultWith = await applyReviews({
+      rootDir: withProbe,
+      pins: pinsWith,
+      input: surveyInput({
+        nodes: [],
+        probes: [{
+          node: PERIAGOGIC_NODE,
+          asks: "Is the ground here the disposition's or the account's?",
+          why: "Neither section says which one the periagoge is meant to settle.",
+          discharges: "Which text the periagogic movement is meant to redraw.",
+        }],
+      }),
+      overrides: { [PERIAGOGIC_NODE]: "maieutic" },
+      replies: {},
+    });
+    assert.equal(resultWith.validation.ok, true, resultWith.validation.message);
+    const withProbeAfter = await parseAt(withProbe, "periagogic-node", PERIAGOGIC_NODE);
+    assert.equal(withProbeAfter.stage, "periagogic", "a movement only ever moves a node back: the probe cannot advance it past periagogic");
+
+    const pinsWithout = await pinsFor(withoutProbe);
+    const resultWithout = await applyReviews({
+      rootDir: withoutProbe,
+      pins: pinsWithout,
+      input: surveyInput({
+        nodes: [],
+        frontier: [{
+          kind: "placement", nodes: [PERIAGOGIC_NODE], finding: "x", proposal: "y", stages: { [PERIAGOGIC_NODE]: "maieutic" },
+        }],
+      }),
+      overrides: { [PERIAGOGIC_NODE]: "maieutic" },
+      replies: {},
+    });
+    assert.equal(resultWithout.validation.ok, true, resultWithout.validation.message);
+    const withoutProbeAfter = await parseAt(withoutProbe, "periagogic-node", PERIAGOGIC_NODE);
+    assert.equal(withoutProbeAfter.stage, "maieutic", "with no probe the override applies exactly as it always did");
+  });
+
+  test("appends to an existing 'probes:' block and disambiguates a colliding generated id", async () => {
+    const rootDir = await freshFrontierFixture("survey-probe-collide-");
+    const file = nodePath(rootDir, "review-b");
+    const before = withExistingProbe(await readFile(file, "utf8"));
+    await writeFile(file, before);
+    const pins = await pinsFor(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input: surveyInput({
+        nodes: [],
+        probes: [{
+          node: REVIEW_B,
+          asks: "What does the ground mean here?",
+          why: "A second look at the same passage finds a second gap the first probe did not cover.",
+          discharges: "Whether 'the ground' in this sentence means the disposition or the account.",
+        }],
+      }),
+      replies: {},
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const after = await parseAt(rootDir, "review-b", REVIEW_B);
+    assert.equal(after.probes.length, 2);
+    assert.equal(after.probes[0].id, "what-does-the-ground-mean-here");
+    assert.equal(after.probes[0].raised, "2026-08-01", "the existing probe is kept as it stood");
+    assert.equal(after.probes[1].id, "what-does-the-ground-mean-here-2");
+    assert.equal(after.probes[1].raised, SURVEY_DATE);
+    assert.ok(before.includes("id: what-does-the-ground-mean-here\n"), "fixture precondition unchanged");
+  });
+
+  test("a probe naming a node that moved since the survey read it is discarded and not written", async () => {
+    const rootDir = await freshFrontierFixture("survey-probe-moved-");
+    const pins = await pinsFor(rootDir, { patch: { [REVIEW_B]: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" } });
+    const before = await readFile(nodePath(rootDir, "review-b"), "utf8");
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input: surveyInput({
+        nodes: [judgedEntries()[0]],
+        probes: [{
+          node: REVIEW_B,
+          asks: "Does the narrower option still make sense after the edit?",
+          why: "The survey read this node before the edit that moved its recommendation.",
+          discharges: "Whether 'narrower' still belongs on the table.",
+        }],
+      }),
+      replies: {},
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.equal(await readFile(nodePath(rootDir, "review-b"), "utf8"), before, "the moved node is left exactly as it stands");
+    assert.ok(
+      result.discarded.some((l) => l.includes("probes[0]") && l.includes(REVIEW_B) && l.includes("moved since the survey read it")),
+      `expected a discarded-probe line, got: ${JSON.stringify(result.discarded)}`,
+    );
+  });
+
+  test("a probe naming a node that is not in the graph is refused, and nothing is written", async () => {
+    const rootDir = await freshFrontierFixture("survey-probe-badnode-");
+    const pins = await pinsFor(rootDir);
+    const before = await readFile(nodePath(rootDir, "review-a"), "utf8");
+
+    await assert.rejects(
+      () => applyReviews({
+        rootDir,
+        pins,
+        input: surveyInput({ probes: [{ node: "clean-context-review.test/main/nope", asks: "x", why: "y", discharges: "z" }] }),
+        replies: {},
+      }),
+      /probes\[0\]: 'node' must name a node/,
+    );
+    assert.equal(await readFile(nodePath(rootDir, "review-a"), "utf8"), before);
   });
 });
 

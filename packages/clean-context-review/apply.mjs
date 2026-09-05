@@ -19,16 +19,25 @@
 // The reading is read from the input's own `scope`, and nothing else:
 //
 //   {scope: "draft", id, date, verdict, kickback_stage, findings[],
-//    facts_check, viability, counter_argument, strength}
+//    probes: [{asks, why, discharges, fact}], facts_check, viability,
+//    counter_argument, strength}
 // the review of one draft. One node, at the review stage: '### Clean-context
 // review, <date>' on its account, `stage: ruling` on a forward or the named
 // stage on a kickback, and the four draft keys of `review` pinned to
 // `deriveRecommendationHash` of the node as edited. A survey pin the node
 // already carries is preserved: the `review:` block is merged, never replaced
-// wholesale.
+// wholesale. `probes` beats the verdict on the stage: a node that will carry
+// any open probe after this apply -- one this reading raises, or one the
+// node already carried -- never lands at 'ruling', not even under an
+// override that says so, and a node already at 'periagogic' stays there
+// (author-questions). Each probe is written into `probes:` with an `id` this
+// script derives and makes unique on the node, `source: review`, and
+// `raised` at this apply's date.
 //
 //   {scope: "survey", commit, date, nodes: [{id, findings, ...}],
-//    frontier: [finding], subtree_divergences: [divergence]}
+//    frontier: [finding],
+//    probes: [{node, asks, why, discharges, fact}],
+//    subtree_divergences: [divergence]}
 // the survey of the frontier. Serialized by its pin and by no lock: the
 // sidecar `survey.pins.json`, written beside the brief by brief.mjs, holds
 // the graph commit the survey read, the ids it judged, and the recommendation
@@ -36,7 +45,11 @@
 // matches its pin receives `review.survey` and its findings; one that has
 // moved receives nothing and is reported. A `frontier` finding naming any
 // node that has moved is discarded with a note and applied to none of its
-// nodes, for the same reason: a review attests to the text it read.
+// nodes, for the same reason: a review attests to the text it read -- and so
+// is a `probes` entry naming a node that has moved. `probes` is top-level and
+// not nested in `nodes`, since a probe reaches any node in the graph, judged
+// or not, the same as a `frontier` finding; the same stage rule as the draft
+// applies node by node.
 //   { kind, nodes: [id], finding, proposal, stages: {id: stage},
 //     options: [{node, name, text}] }
 // A `subtree_divergences` entry names an ancestor whose pending answer
@@ -51,7 +64,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
-import { readGraph, parseNode } from "@commons.systems/disposition/read.mjs";
+import { readGraph, parseNode, FACT_NAMES } from "@commons.systems/disposition/read.mjs";
 
 const STAGE_ORDER = ["periagogic", "maieutic", "review", "ruling"];
 // the two stages a reading may send a node back to: the ground, or the draft
@@ -429,6 +442,99 @@ function upsertAnswerOptions(fmLines, options, date) {
   return lines;
 }
 
+// ------------------------------------------------------------------ probes
+//
+// author-questions: a probe carries `id`, `asks`, `why`, `discharges`,
+// `source` and `raised` while it stands open. The reading supplies `asks`,
+// `why`, `discharges` and an optional `fact`; this script supplies the rest
+// -- `id`, a slug it derives and makes unique on the node, `source` (always
+// `review`, from either reading), and `raised` (the apply's date).
+
+/**
+ * A slug for a newly raised probe's `id`, derived from `asks` and shaped to
+ * the reader's OPTION_NAME_RE (`^[a-z0-9][a-z0-9-]*$`): lowercased, every run
+ * of non-alphanumeric characters collapsed to one hyphen, trimmed, and capped
+ * at 40 characters so a long question does not become an unreadable key.
+ */
+function slugifyProbeId(asks) {
+  let slug = asks.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (slug.length > 40) slug = slug.slice(0, 40).replace(/-+$/, "");
+  if (!/^[a-z0-9]/.test(slug)) slug = `probe-${slug}`;
+  return slug || "probe";
+}
+
+/**
+ * `slugifyProbeId`'s candidate, disambiguated against every id already in
+ * `used` (the node's existing probes, and every id this same apply has
+ * already assigned) by appending '-2', '-3', ...
+ */
+function uniqueProbeId(base, used) {
+  if (!used.has(base)) return base;
+  let n = 2;
+  while (used.has(`${base}-${n}`)) n += 1;
+  return `${base}-${n}`;
+}
+
+/**
+ * The reading's raw probes (`asks`, `why`, `discharges`, optional `fact`)
+ * turned into full entries ready to splice into `probes:`: `id` derived from
+ * `asks` and made unique among `existingProbes`' ids and each other, `source`
+ * and `raised` supplied by the caller.
+ */
+function assignProbeIds(existingProbes, rawEntries, { source, raised }) {
+  const used = new Set((existingProbes || []).map((p) => p.id));
+  return (rawEntries || []).map((p) => {
+    const id = uniqueProbeId(slugifyProbeId(p.asks), used);
+    used.add(id);
+    return { id, asks: p.asks, why: p.why, discharges: p.discharges, source, raised, fact: p.fact ?? null };
+  });
+}
+
+/**
+ * Whether a node will carry any open probe (one with no `status`) after this
+ * apply -- one already on it, or one this reading raises now.
+ */
+function willCarryOpenProbe(existingProbes, addedCount) {
+  return (existingProbes || []).some((p) => !p.status) || addedCount > 0;
+}
+
+/**
+ * The stage a node carrying an open probe is forced to (author-questions: "a
+ * probe recorded on a node at the review or the ruling stage returns that
+ * node to the maieutic stage" and "a node already at the periagogic stage
+ * stays there, because a movement only ever moves a node back"). Never
+ * 'ruling', which is why this beats a 'ruling' override or a forward verdict
+ * outright; `wantsPeriagogic` is whatever the verdict, kickback_stage, or
+ * override would otherwise have put at 'periagogic', which this still
+ * honours.
+ */
+function stageForOpenProbe(currentStage, wantsPeriagogic) {
+  if (currentStage === "periagogic") return "periagogic";
+  return wantsPeriagogic ? "periagogic" : "maieutic";
+}
+
+/**
+ * One probe entry appended to `probes:`, in the order the reader's parse
+ * block expects (`PROBE_KEYS`): `id`, `asks`, `why`, `discharges`, `source`,
+ * `raised`, and `fact` when it names one. `id` and `source` are short
+ * vocabulary words and need no quoting; the free-text fields are JSON-quoted,
+ * which is a valid single-line YAML double-quoted scalar and round-trips
+ * through any colon or quote mark the text carries; `raised` is a date,
+ * quoted as `renderOptionEntry`'s `ref` already is so it stays a string.
+ */
+function renderProbeEntry({ id, asks, why, discharges, source, raised, fact }, indent) {
+  const lines = [
+    `${indent}- id: ${id}`,
+    `${indent}  asks: ${JSON.stringify(asks)}`,
+    `${indent}  why: ${JSON.stringify(why)}`,
+    `${indent}  discharges: ${JSON.stringify(discharges)}`,
+    `${indent}  source: ${source}`,
+    `${indent}  raised: "${raised}"`,
+  ];
+  if (fact) lines.push(`${indent}  fact: ${fact}`);
+  return lines;
+}
+
 /**
  * Update `stage:` (inserting the line when the node carries none, which is
  * how a finding opens a dialogue on settled doctrine), unless `stage` is
@@ -445,9 +551,15 @@ function upsertAnswerOptions(fmLines, options, date) {
  *
  * Each field is placed where the reader's own declared frontmatter-key order
  * (`FRONTMATTER_KEYS` in read.mjs) puts it: `stage`, `order`, `facts`,
- * `review`, `depends`.
+ * `review`, `depends`, `probes`.
+ *
+ * `probesAdd` entries (each already carrying `id`, `asks`, `why`,
+ * `discharges`, `source`, `raised`, and optional `fact` -- `assignProbeIds`'s
+ * shape) are appended to `probes`, creating the list when absent, at the
+ * frontmatter's very end (the reader's key order puts `probes` after
+ * `depends`, last of all).
  */
-function upsertDialogueFields(rawText, { stage, reviewLines, options = [], date = null, dependsAdd = [] }) {
+function upsertDialogueFields(rawText, { stage, reviewLines, options = [], date = null, dependsAdd = [], probesAdd = [] }) {
   const { fmLines: originalFm, bodyLines } = splitRaw(rawText);
   let fmLines = [...originalFm];
 
@@ -492,6 +604,22 @@ function upsertDialogueFields(rawText, { stage, reviewLines, options = [], date 
       const facts = findFrontmatterBlock(fmLines, "facts");
       const insertAt = review ? review[1] : facts ? facts[1] : stageIdx + 1;
       fmLines.splice(insertAt, 0, "depends:", ...dependsAdd.map((d) => `  - ${d}`));
+    }
+  }
+
+  if (probesAdd.length > 0) {
+    const existing = findFrontmatterBlock(fmLines, "probes");
+    if (existing) {
+      const [start, end] = existing;
+      const firstItem = fmLines.slice(start + 1, end).find((l) => /^\s*- /.test(l));
+      const indent = firstItem ? indentOf(firstItem) : "  ";
+      fmLines.splice(end, 0, ...probesAdd.flatMap((p) => renderProbeEntry(p, indent)));
+    } else {
+      const depends = findFrontmatterBlock(fmLines, "depends");
+      const review = findFrontmatterBlock(fmLines, "review");
+      const facts = findFrontmatterBlock(fmLines, "facts");
+      const insertAt = depends ? depends[1] : review ? review[1] : facts ? facts[1] : stageIdx + 1;
+      fmLines.splice(insertAt, 0, "probes:", ...probesAdd.flatMap((p) => renderProbeEntry(p, "  ")));
     }
   }
 
@@ -646,6 +774,27 @@ function pinFailureMessage(err) {
 
 // -------------------------------------------------- the review of one draft
 
+/**
+ * Shape-check one raw probe entry from a reading (`asks`, `why`,
+ * `discharges`, optional `fact`) -- the shape both `brief-draft.md` and
+ * `brief-survey.md` ask the reading for, before `assignProbeIds` supplies
+ * `id`, `source` and `raised`. The cap of three open probes is not checked
+ * here: it binds the movement and is checked by the readings as a finding,
+ * never by the applying step (author-questions).
+ */
+function pushProbeProblems(problems, p, label) {
+  if (!p || typeof p !== "object" || Array.isArray(p)) {
+    problems.push(`${label} must be a mapping with asks, why, discharges, and optional fact`);
+    return;
+  }
+  if (!isNonEmptyString(p.asks)) problems.push(`${label}.asks is required and must be a non-empty string`);
+  if (!isNonEmptyString(p.why)) problems.push(`${label}.why is required and must be a non-empty string`);
+  if (!isNonEmptyString(p.discharges)) problems.push(`${label}.discharges is required and must be a non-empty string`);
+  if (p.fact !== undefined && p.fact !== null && !FACT_NAMES.includes(p.fact)) {
+    problems.push(`${label}.fact must be one of: ${FACT_NAMES.join(", ")}`);
+  }
+}
+
 function validateDraft(input, { replies }) {
   const problems = [];
   if (!isNonEmptyString(input.id)) {
@@ -666,7 +815,30 @@ function validateDraft(input, { replies }) {
   if (Array.isArray(input.nodes) || Array.isArray(input.frontier)) {
     problems.push("a draft review reads one node: 'nodes' and 'frontier' belong to the survey, and this file names scope 'draft'");
   }
+  if (input.probes !== undefined && input.probes !== null) {
+    if (!Array.isArray(input.probes)) {
+      problems.push(`${input.id}: 'probes' must be a list of {asks, why, discharges, and optional fact}`);
+    } else {
+      input.probes.forEach((p, i) => pushProbeProblems(problems, p, `${input.id}: probes[${i}]`));
+    }
+  }
   return problems;
+}
+
+/**
+ * The soft contradiction the answer names but does not let block the file:
+ * "a draft review that returns a probe and a forward verdict is a
+ * contradiction". Not a `validateDraft` problem -- that would refuse the
+ * file -- so it is surfaced through the same `notes` channel every other
+ * soft finding in this script uses (an already-listed option skipped, a
+ * commit mismatch noted); the applying step still keeps the node off
+ * 'ruling' regardless, since the open probe controls the stage either way.
+ */
+function draftForwardProbeContradiction(input) {
+  if (input.verdict === "forward" && Array.isArray(input.probes) && input.probes.length > 0) {
+    return [`${input.id}: contradiction -- this reading returns an open probe alongside a 'forward' verdict; the applying step does not forward this node to ruling while a probe is open`];
+  }
+  return [];
 }
 
 /**
@@ -706,7 +878,18 @@ async function planDraft(input, ctx) {
     return { id, problems: [`${id}: the review of a draft runs on a node at stage 'review' (or an override), found '${currentStage}'`] };
   }
 
-  const newStage = hasOverride ? ctx.overrides[id] : input.verdict === "forward" ? "ruling" : input.kickback_stage;
+  // A node that will carry any open probe after this apply -- one the
+  // reading raises now, or one it already carried -- never lands at
+  // 'ruling', and a node already at 'periagogic' stays there (a movement
+  // only ever moves a node back). This is derived before the verdict is read
+  // and beats it, and beats an override of 'ruling' too: any other override
+  // is respected (author-questions).
+  const existingProbes = parsedBefore.probes || [];
+  const probesToAdd = assignProbeIds(existingProbes, input.probes, { source: "review", raised: ctx.date });
+  const openProbe = willCarryOpenProbe(existingProbes, probesToAdd.length);
+
+  const baseStage = hasOverride ? ctx.overrides[id] : input.verdict === "forward" ? "ruling" : input.kickback_stage;
+  const newStage = openProbe ? stageForOpenProbe(currentStage, baseStage === "periagogic") : baseStage;
   const reply = Object.prototype.hasOwnProperty.call(ctx.replies, id) ? ctx.replies[id] : null;
   const subsection = renderSubsection({
     kind: "draft",
@@ -726,6 +909,7 @@ async function planDraft(input, ctx) {
   const build = (of) => upsertDialogueFields(appendToAccount(rawTextBefore, subsection), {
     stage: newStage,
     reviewLines: renderReviewBlock({ verdict: input.verdict, strength: input.strength, date: ctx.date, of, against, survey }),
+    probesAdd: probesToAdd,
   });
 
   let settled;
@@ -740,6 +924,9 @@ async function planDraft(input, ctx) {
 
   const labels = [`Clean-context review (${input.verdict})`];
   if (survey) labels.push("survey pin kept");
+  if (probesToAdd.length > 0) {
+    labels.push(`probe${probesToAdd.length > 1 ? "s" : ""} ${probesToAdd.map((p) => `'${p.id}'`).join(", ")}`);
+  }
   return { id, file, labels, notes: [], oldStage: currentStage, newStage, rawTextBefore, rawTextAfter: settled.text };
 }
 
@@ -747,14 +934,16 @@ async function applyDraft({ rootDir, manifest, input, replies, overrides, date, 
   const checkProblems = validateDraft(input, { replies });
   if (checkProblems.length > 0) throw new Error(checkProblems.join("\n"));
 
+  const notes = draftForwardProbeContradiction(input);
+
   const ctx = { rootDir, manifest, replies, overrides, date: date ?? input.date ?? todayIso() };
   const plan = await planDraft(input, ctx);
   if (plan.problems) throw new Error(plan.problems.join("\n"));
 
   const plans = [plan];
-  const report = [`${plan.id}: ${plan.labels.join(" + ")}, ${plan.oldStage ?? "no stage"} → ${plan.newStage ?? "no stage"}`];
+  const report = [`${plan.id}: ${plan.labels.join(" + ")}, ${plan.oldStage ?? "no stage"} → ${plan.newStage ?? "no stage"}`, ...notes];
 
-  if (dry) return { plans, report, validation: null, notes: [] };
+  if (dry) return { plans, report, validation: null, notes };
 
   await writeFile(plan.file, plan.rawTextAfter);
   let validation;
@@ -764,7 +953,7 @@ async function applyDraft({ rootDir, manifest, input, replies, overrides, date, 
   } catch (err) {
     validation = { ok: false, message: err.message };
   }
-  return { plans, report, validation, notes: [] };
+  return { plans, report, validation, notes };
 }
 
 // ------------------------------------------------------- the survey's pins
@@ -952,6 +1141,25 @@ function validateSurvey(input, graph, { replies, overrides, pins }) {
     }
   });
 
+  // probes: a top-level array (not nested in 'nodes'), since a probe must be
+  // able to reach a node the survey did not judge, the same way a 'frontier'
+  // finding already can (author-questions, brief-survey.md's output schema).
+  if (input.probes !== undefined && input.probes !== null && !Array.isArray(input.probes)) {
+    problems.push("'probes' must be a list of {node, asks, why, discharges, and optional fact}");
+  } else {
+    (Array.isArray(input.probes) ? input.probes : []).forEach((p, i) => {
+      const label = `probes[${i}]`;
+      if (!p || typeof p !== "object" || Array.isArray(p)) {
+        problems.push(`${label} must be a mapping with node, asks, why, discharges, and optional fact`);
+        return;
+      }
+      if (!isNonEmptyString(p.node) || !nodesById.has(p.node)) {
+        problems.push(`${label}: 'node' must name a node, found '${JSON.stringify(p.node)}'`);
+      }
+      pushProbeProblems(problems, p, label);
+    });
+  }
+
   return problems;
 }
 
@@ -963,15 +1171,16 @@ function stageRank(stage) {
 
 /**
  * Every node the survey touches -- named in `nodes` (a judged node's reading),
- * named by a `frontier` finding (findings only, at any stage), or both --
- * keyed by id, in the order first encountered. A finding's proposed options
- * are collected onto the node each goes on, which the checks above have
- * already required the finding to name.
+ * named by a `frontier` finding (findings only, at any stage), named by a
+ * `probes` entry (any node, judged or not, the same as a finding), or any
+ * combination of the three -- keyed by id, in the order first encountered. A
+ * finding's proposed options are collected onto the node each goes on, which
+ * the checks above have already required the finding to name.
  */
-function collectTouched({ nodes, frontier }) {
+function collectTouched({ nodes, frontier, probes }) {
   const touched = new Map();
   const ensure = (id) => {
-    if (!touched.has(id)) touched.set(id, { nodeEntry: null, findings: [], options: [] });
+    if (!touched.has(id)) touched.set(id, { nodeEntry: null, findings: [], options: [], probes: [] });
     return touched.get(id);
   };
   for (const entry of nodes || []) {
@@ -992,6 +1201,9 @@ function collectTouched({ nodes, frontier }) {
     for (const a of options) {
       ensure(a.node).options.push({ name: a.name, text: a.text });
     }
+  }
+  for (const p of probes || []) {
+    ensure(p.node).probes.push(p);
   }
   return touched;
 }
@@ -1068,15 +1280,28 @@ async function planTouchedNode(id, t, ctx) {
   }
 
   const hasOverride = Object.prototype.hasOwnProperty.call(ctx.overrides, id);
+
+  // A probe raised on a node the survey is judging, or on one it is not,
+  // sets that node to the maieutic the same way; a node already at
+  // 'periagogic' stays there. Derived before the candidate reduction below,
+  // and applied after it, so it beats whatever the candidates or an override
+  // of 'ruling' would otherwise have set (author-questions).
+  const existingProbes = parsedBefore.probes || [];
+  const probesToAdd = assignProbeIds(existingProbes, t.probes, { source: "review", raised: ctx.date });
+  const openProbe = willCarryOpenProbe(existingProbes, probesToAdd.length);
+
   // No candidate at all means nothing naming this node assigns it a stage
   // (only findings that omitted it from their `stages`): its stage is left
   // exactly as it stands, not forced to any value.
-  const stageTouched = hasOverride || candidates.length > 0;
-  const finalStage = hasOverride
+  const stageTouched = hasOverride || candidates.length > 0 || openProbe;
+  let finalStage = hasOverride
     ? ctx.overrides[id]
     : candidates.length > 0
       ? candidates.reduce((best, s) => (stageRank(s) < stageRank(best) ? s : best))
       : currentStage;
+  if (openProbe) {
+    finalStage = stageForOpenProbe(currentStage, finalStage === "periagogic");
+  }
 
   if (!stageTouched && currentStage === null) {
     return {
@@ -1136,6 +1361,9 @@ async function planTouchedNode(id, t, ctx) {
   if (newOptions.length > 0) {
     labels.push(`option${newOptions.length > 1 ? "s" : ""} ${newOptions.map((a) => `'${a.name}'`).join(", ")}`);
   }
+  if (probesToAdd.length > 0) {
+    labels.push(`probe${probesToAdd.length > 1 ? "s" : ""} ${probesToAdd.map((p) => `'${p.id}'`).join(", ")}`);
+  }
 
   // The draft review's own keys are carried in unchanged: the survey writes
   // its pin beside them and never over them.
@@ -1161,6 +1389,7 @@ async function planTouchedNode(id, t, ctx) {
       reviewLines,
       options: newOptions.map((a) => ({ name: a.name })),
       date: ctx.date,
+      probesAdd: probesToAdd,
     });
   };
 
@@ -1323,6 +1552,19 @@ async function applySurvey({ rootDir, manifest, input, pins, replies, overrides,
     keptFrontier.push(f);
   });
 
+  // A probe attests to the text it read, the same as a finding: one naming a
+  // node that has moved since the survey read it is discarded rather than
+  // written against text the reading never saw.
+  const keptProbes = [];
+  (Array.isArray(input.probes) ? input.probes : []).forEach((p, i) => {
+    const m = moved(p.node);
+    if (m.moved) {
+      discardedReport.push(`probes[${i}] (${p.node}): discarded — moved since the survey read it (pinned ${m.pin ?? "nothing"}, now ${m.now ?? "gone"}); not written`);
+      return;
+    }
+    keptProbes.push(p);
+  });
+
   const notes = [];
   if (isNonEmptyString(input.commit) && isNonEmptyString(pins.commit) && input.commit !== pins.commit) {
     notes.push(`note: the survey names graph commit ${input.commit}, the pins sidecar ${pins.commit}; the sidecar's hashes decide, as they are what this run compared against`);
@@ -1330,7 +1572,7 @@ async function applySurvey({ rootDir, manifest, input, pins, replies, overrides,
 
   const ctx = { rootDir, manifest, replies, overrides, date: effectiveDate, pinOf };
 
-  const touched = collectTouched({ nodes: keptNodes, frontier: keptFrontier });
+  const touched = collectTouched({ nodes: keptNodes, frontier: keptFrontier, probes: keptProbes });
   const plans = [];
   const planProblems = [];
   for (const [id, t] of touched) {
