@@ -34,10 +34,6 @@ bears:
     fact: answer
     option: two-skills-one-package
     relation: adopted
-  - node: commons.systems/disposition-graph/review-skills
-    fact: answer
-    option: two-skills-one-package
-    relation: adopted
   - node: commons.systems/disposition-graph/dialogue
     fact: answer
     option: every-part-in-the-record
