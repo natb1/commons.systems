@@ -30,6 +30,10 @@ bears:
     fact: answer
     option: authority-derived
     relation: adopted
+  - node: commons.systems/disposition-graph/work-loop
+    fact: answer
+    option: reconciliation-writes-options
+    relation: diverged
 ---
 ## Answer
 
