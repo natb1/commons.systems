@@ -980,7 +980,7 @@ One rule decides the rest, and it is what this answer adds to the model: every p
 
 The places this answer says what a pin does not cover follow from the same rule read the other way. A pin exists to tell the author that what they are about to confirm is what was read. A pin over everything on the node would say that of text nobody read differently, would send a reviewed node back because an option was added beside the recommendation, and would stale a review the moment its own counter-argument was written into the field beside its pin. So the pin covers the recommendation and its reason, and the statuses, the author's reasons, the options nothing recommends and both cases against sit outside it.
 
-The tradition closest to this encoding is read under this node as madr-decision-records, whose bears entries mark it adopted and whose one divergence is that the status is derived here where that tradition stores it. Readings owed under this node, each surfaced by the second evaluation of 2026-09-04 with the resolution it informed: the special verdict form, for the rule that a decider is asked each question the judgment needs and the form supplies none by default; legislative amendment shown against the text it changes, for naming the ground of an edit; the single-subject rule, which diverges from this answer and is the case against composing five clauses into one option; and the three the sitting of 2026-09-03 named in prose here and left owed, the status field of the RFC and PEP processes, the review approval pinned to a revision, and the review of a change as a diff against what stands. Two readings the record already holds gain an entry rather than a node of their own, chenery-reasoned-decision for the reason recorded with the ruling and codd-update-anomaly for the sentence stored once.
+The tradition closest to this encoding is read under this node as madr-decision-records, whose bears entries mark the form adopted and record two divergences: the class is derived here from the rulings on the facts where that tradition stores a status on the record, and a superseded answer is amended in place here where that tradition keeps the old record beside the new. Readings owed under this node, each surfaced by the second evaluation of 2026-09-04 with the resolution it informed: the special verdict form, for the rule that a decider is asked each question the judgment needs and the form supplies none by default; legislative amendment shown against the text it changes, for naming the ground of an edit; the single-subject rule, which diverges from this answer and is the case against composing five clauses into one option; and the three the sitting of 2026-09-03 named in prose here and left owed, the status field of the RFC and PEP processes, the review approval pinned to a revision, and the review of a change as a diff against what stands. Two readings the record already holds gain an entry rather than a node of their own, chenery-reasoned-decision for the reason recorded with the ruling and codd-update-anomaly for the sentence stored once.
 
 What this costs, as a consequence of the design and never as a reason for it, measured at graph commit 9144c708: every fact that recommends owes the reason in its `## Facts` subsection, which a hundred and five do not carry and seventy-six of those stand at the review or ruling stage; every fact that recommends owes its case against, which five carry; the survey owes its pin on every node it has judged, of which none carries one, so no node is ready to rule until the survey has run; and the validator gains three checks. The answer as it stood is kept as the option `facts-carry-options`, and the answers before it as the options this fact carries.
 ```
@@ -2089,3 +2089,19 @@ The delta sweep of 2026-09-04, run under `commons.systems/disposition-graph/auth
 ### Option from the review-cost node, 2026-09-05
 
 `commit-in-the-review-block` was recorded on the answer fact from the sitting on `review-cost`, the node the author queued on 2026-09-05 when they asked what the review costs and granted its reconciliation. That node's answer gives an amended draft a re-reading whose object is the difference from the text the last reading pinned, and a difference needs a commit to be computed against; this node's recommended text says the four draft keys are written together or not at all, so a fifth is this node's decision and not that one's. The option is recorded here, acts on nothing, and leaves the recommendation and the pin where they were. The implementation already writes the key, under the author's bootstrap grant for that reconciliation, and it is unsupported by this node until the option is ruled; that is stated on `review-cost` as well as here.
+
+### A citation of madr-decision-records corrected, 2026-09-05
+
+The second clean-context reading of `commons.systems/disposition-graph/madr-decision-records`
+found that this node's recommended text cited that reading for one divergence,
+the status derived where the tradition stores it, which the reading's own
+amendment of 2026-09-05 had falsified: it now records two divergences, and
+holds that nothing called a status is derived here, the class being what is
+derived. The drift was that draft's own making and the sentence is a plain
+citation of it, so the sentence is corrected here rather than recorded as an
+option; nothing the answer binds changes. The correction is inside the
+recommendation fence and so moves the answer fact's pin from the text the
+reading of this node read. It is not re-settled, for the reason the open option
+`pin-names-the-text-the-reader-read` on
+`commons.systems/disposition-graph/review-cost` states.
+
