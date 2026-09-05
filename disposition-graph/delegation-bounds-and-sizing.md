@@ -16,6 +16,9 @@ facts:
       - name: this-node-carries-the-sizing
         source: review
         ref: "2026-09-05"
+      - name: granularity-rule-for-every-compound-answer
+        source: review
+        ref: "2026-09-05"
     recommends: sizing-moves-to-its-own-node
     boldness: high
     stands: sizing-moves-to-its-own-node
@@ -225,6 +228,12 @@ node that holds the placement rule, and the boundary the ratified half depends o
 would sit inside the delegated one. Raised by the clean-context reading of
 2026-09-05, whose counter-argument is that the enumeration this node stands on is
 redundant the day the ruling is executed.
+
+#### granularity-rule-for-every-compound-answer
+
+Would answer the question the node's own reasoning raises and does not close: whether "a ruling is recorded per fact, so there is no act by which the author ratifies part of one answer" is a rule of the record or a fact about `delegation`. Under this option it is a rule: any answer fact whose text carries clauses the author might rule on separately is examined for a split before it is put to the author, and the examination is recorded on the node. It is on the table because the record holds at least five further answers of the same shape — `authority`, `recording`, `work-loop`, `viable-options`, `frontier-consistency` — all at or near the ruling stage, and the argument that moved the sizing out of `delegation` applies to every one of them without modification. Its cost is stated and real: it would put a split question in front of the author on each of those nodes before any of them could be ruled.
+
+Raised by the frontier survey of 2026-09-05 as a cross-node `decomposition` finding, and added by hand because the apply discarded that finding: this node had moved after the survey read it. The finding and its proposal are quoted in the account below.
 
 ### authority
 
@@ -632,3 +641,24 @@ The reader recorded a gap in its own instrument: its first read of the brief was
 truncated at line 444 against the brief's discipline of at most 300 lines a
 read, recovered by paging, and the brief states 988 lines where the file has
 989. Both belong to the review instrument and are carried to `review-cost`.
+
+### Two survey findings the apply discarded, 2026-09-05
+
+This node moved after the survey read it, the re-reading of 2026-09-05 having
+been applied in the interval, so the apply wrote nothing here and discarded both
+cross-node findings that name it. Both were validated at their loci on the main
+thread and neither is withdrawn. The option
+`granularity-rule-for-every-compound-answer` that the first of them proposes is
+added to the answer fact by hand, which is an act the AI has on any fact and
+which settles nothing. The stage the finding named was not set by hand, and this
+node's own survey reading is not written by hand either: a reading is what a
+reader in clean context produced, and that one was discarded whole. The next
+survey judges the node again.
+
+The `decomposition` finding, as the survey wrote it: The record has discovered a general rule about its own encoding and applied it once. `commons.systems/disposition-graph/delegation-bounds-and-sizing` argues, in the section beginning "Why a node and not a division of one text": "a ruling is recorded per fact, and `delegation` has one answer fact, so there is no act by which the author ratifies part of it. Nothing may say how far a parent's ruling reached but the parent's own facts, since authority narrows on the way down and never widens. Moving the clauses is what makes the division recordable by the machinery the record already has." That argument is not about `delegation`. It holds of every node whose single answer fact carries a compound text the author might want to ratify in part, and the record's largest texts are exactly those: `authority`'s answer settles at least a dozen separable questions in one unbroken paragraph, from what ratification is to what the AI may do within scope; `recording`'s answer carries a three-step procedure, a response classification, and a recording protocol; `work-loop`'s carries two directions of reconciliation, the division of sessions by ref, and the bound on what a reconciliation session may write; `viable-options`, `clean-context-review` and `frontier-consistency` are the same shape. Each of those is at the ruling stage or one step from it, and each will be ratified or not as one act. The record therefore either has a general granularity rule it has stated in one place and applied nowhere else, or it has a local reason why `delegation` was special, and the node does not say which.
+
+Its proposal: Decide the general question where the argument was made, on `commons.systems/disposition-graph/delegation-bounds-and-sizing`: either its reasoning is the record's rule for every compound answer, in which case the node says so and the five large nodes named above are each examined for the same split before they are ruled, or the node states what made `delegation` the exception — most plausibly that the author's own words raised the sizing question there and nowhere else, which is a fact about the dialogue and not about the encoding, and which should be said rather than left to be inferred. Nothing is proposed for the five nodes in this movement: the point of the finding is that the record should not rule six compound texts one at a time while a rule about compound texts sits unruled on one of them.
+
+The `placement` finding, as the survey wrote it: Parent and child stand at the ruling stage together, and the child's recommendation is to cut clauses out of the parent's answer. `commons.systems/disposition-graph/delegation-bounds-and-sizing`'s recommendation `sizing-moves-to-its-own-node` reads "The sizing leaves the rule. `delegation`'s answer keeps the bounds and is ratified whole; the clauses that size a unit move to a node of their own beneath it." `commons.systems/disposition-graph/delegation` stands at the ruling stage with its full text, sizing clauses included, and its authority fact recommends `ratified`. The ruling order lists `delegation` above `delegation-bounds-and-sizing`. Ruling the parent first ratifies text the child, one step later, proposes to remove, and `authority`'s rule that authority narrows on the way down means the child cannot then undo it: the author would have to be asked twice about the same clauses, once to ratify them and once to move them out. `delegation`'s own authority fact records the collision in its `against`, which names the child by name, but nothing in the ruling order acts on it.
+
+Its proposal: Rule `commons.systems/disposition-graph/delegation-bounds-and-sizing` before `commons.systems/disposition-graph/delegation`, by boost or by the author's choice of node, so that what the parent is ratified with is settled before it is ratified. Nothing in either text needs to change for this; it is an order, and `frontier-consistency`'s validation 13 is where it is owed. If the order cannot be inverted, `delegation` is not put to the author until the child is ruled, which is the same thing said as a hold.
