@@ -34,6 +34,9 @@ facts:
         ref: "cbabf108"
         status: passed
         reason: "it is too late, the implementation being built by then on inconsistent drafts"
+      - name: sixteenth-validation-independence
+        source: commons.systems/disposition-graph/probe-or-node
+        ref: "2026-09-04"
     recommends: split-survey-from-per-draft
     boldness: moderate
     stands: standing
@@ -139,6 +142,10 @@ Everything the recommendation says, with one clause added to the fifteenth valid
 The survey of the frontier runs at reconciliation rather than before the
 author rules. It was passed over because it is too late: the implementation is
 by then being built on inconsistent drafts.
+
+#### sixteenth-validation-independence
+
+The survey runs a sixteenth validation beside the fifteen this answer enumerates: the independence test of the probe-or-node node, under which a node standing under an unanswered parent, whose only possible answer is a reading of the parent's, whose facts would repeat the parent's, and which would be pruned the moment the parent's recommendation moved, is reported as a probe on the parent, as a finding carrying the probe it would become, readings exempt. The survey brief runs it since 2026-09-04 under the author's grant on probe-or-node and reports it under the decomposition kind, since a finding kind of its own would be refused by the applying script; this option enumerates it here so the brief runs nothing this node does not name, and leaves open whether independence becomes a kind of its own.
 
 ## Recommendation
 
@@ -246,3 +253,7 @@ The session's reply: Forward accepted. The circularity is real and disclosed her
 ### Recommendation moved, 2026-09-04
 
 Moved by the alignment session from the standing text to `split-survey-from-per-draft` on the author's words of 2026-09-04 quoted above, given on the decomposition node, whose account carries the reasoning and the grant. The review of 2026-09-03 pinned the standing text, so this node returns to the review stage and the frontier shows it as changed since its review; the first review of a draft the reconciled skill runs is owed here. The fifteen validations are kept whole; what changes is which reader runs which, the periagogic half of the merge analysis, the recording of what the survey finds, and the citation of the run mechanics to the clean-context-review node in place of the restatement that let both nodes go stale together on the lock.
+
+### The sixteenth validation, 2026-09-04
+
+Recorded by the reconciliation of the probe-or-node rule into the survey brief, under the author's grant of that day on that node: the brief now runs an independence validation the fifteen here do not name, and the reconciling unit reported the gap. The option `sixteenth-validation-independence` puts it on this node's answer fact for the author; the recommendation does not move.
