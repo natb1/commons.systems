@@ -55,6 +55,9 @@ facts:
       - name: unread-recommended-option
         source: review
         ref: "2026-09-05"
+      - name: a-validation-for-the-round
+        source: commons.systems/disposition-graph/review-cost
+        ref: "2026-09-05"
     recommends: split-survey-from-per-draft
     boldness: moderate
     against: "The split answers half of the counter-argument of 2026-09-03: the survey still reads the whole graph on every invocation and is incremental only in what it judges, so its cost and its noise grow with the frontier; the partition is stated in this fence and in the clean-context-review node's, and the merge validation runs at three moments on three objects."
@@ -217,6 +220,26 @@ whose false positives are every fact whose rivals were read for reasons that do
 not bear on the recommendation. Raised by the second clean-context reading of
 `readings` on 2026-09-05, which found the check assigned to this instrument and
 carried by nothing.
+
+#### a-validation-for-the-round
+
+A draft's reader is given the round, the other drafts of the sitting whose
+recommendations have moved, and is asked to run no validation that reaches
+them beyond the merge validation, which needs only their questions. The
+`review-cost` node's rule is that a part of a brief no validation reaches is
+struck rather than shortened, and by that rule the field the round adds beyond
+a question, the recommendation each draft now makes, is carried for nothing.
+Either it is struck, or this node's list gains a validation a draft's reader
+runs over the round: whether the draft contradicts a sibling draft written in
+the same sitting, which is today the seventh validation and the survey's alone,
+narrowed here to the round rather than to the whole frontier. The case for
+adding it is that the survey is the only reader that catches a
+sitting-created contradiction and the survey has never run; the case against is
+that it duplicates the seventh validation on a smaller set and gives a draft's
+reader a second object, which is what the division of the readings by their
+object exists to prevent. Raised by the clean-context reading of `review-cost`
+on 2026-09-05, which found the round priced to a validation this reader's list
+does not carry.
 
 ### authority
 
