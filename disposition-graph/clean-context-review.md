@@ -67,6 +67,9 @@ facts:
       - name: complex-drafts-only
         source: review
         ref: "2026-09-04"
+      - name: pointers-for-what-grows-with-the-record
+        source: commons.systems/disposition-graph/review-cost
+        ref: "2026-09-05"
     recommends: per-draft-and-survey
     boldness: moderate
     stands: standing
@@ -191,6 +194,12 @@ The reader of a draft is given its ancestry, its siblings under the same parent,
 #### complex-drafts-only
 
 The review of a draft runs only on the more complex recommendations, the author's words of 2026-09-04 on the decomposition node read literally: "pass the more complex recommendations to a fable subagent to review." Viable and not recommended: the review-model node reads those words as naming the model, which it settles for both readings, and a draft no one has read would reach the author unopposed, which the recording node forbids; what the words narrow, if anything, is the model and not whether a draft is read.
+
+#### pointers-for-what-grows-with-the-record
+
+The reader's neighbourhood is given whole and the two parts that grow with the record rather than with the draft are given as pointers: the index becomes each node's id and question on one line, without its class, its stage, its standing answer or its options, and the round's other drafts become one line each, the id, the question and the recommendation the node now makes, marked as the round. The neighbourhood grows to match, taking in the nodes under the draft, the readings that bear on it, and the nodes that state the rules of the reading itself, which the brief now names as files for the reader to open.
+
+Raised on `commons.systems/disposition-graph/review-cost` from the measurement of this sitting's nineteen briefs, where the index ran to a mean of 2,775 lines, a median of eight times the node under review, identical in every brief. It answers the reason this node gives for the index, that a draft answering a question the record already asks should be caught at the draft, since the questions are what that check reads; it does not answer the reason this node gives for the round's drafts, that texts written together are read together, except by holding that a reader told which neighbour moved and to what will open the one that matters. What it costs is stated on the review-cost node. The option is recorded here and acts on nothing, because the reader's neighbourhood is this node's answer to state.
 
 ### authority
 
@@ -443,3 +452,8 @@ The session's reply: Forwarded, and then amended, so the node stays at the revie
 ### Amended after the reading, 2026-09-04
 
 The reading's findings were accepted as the reply above says, and the recommended text changed in substance: the reader of a draft is given the round's other drafts, derived from the record as the nodes whose recommendation has moved since the survey last pinned them; the nodes it names are read by id or as the node of that slug; the reader returns its viability judgment and its probes, which the session writes on the node; the review's state carries the counter-argument and the ids the reader was given; and when the readings run, who invokes them, and what they gate are cited to the recording node instead of restated. The stage is set back to review for a re-reading. Three divergences of the instrument follow from the amendment and are reconciliation items under a grant, not this sitting's: the brief generator gives the reader the topological neighbourhood only, matches a named node by id substring, and records no ids in the review's state. One more, found by applying this reading: the apply script wrote the counter-argument into the review's state as a bare scalar, which a colon in this reading's text made invalid YAML; it now quotes it, and the change is landed on the implementation ref as the repair of a declared shim.
+
+### Option from the review-cost node, 2026-09-05
+
+`pointers-for-what-grows-with-the-record` was recorded on the answer fact from the sitting on `review-cost`, the node the author queued on 2026-09-05 when they asked what this review costs and granted its reconciliation. It bears on the reader's neighbourhood, which is this node's answer to state, so it is recorded here and acts on nothing; the recommendation is unmoved and the pin with it. The measurement behind it is on `review-cost` and is not repeated here.
+
