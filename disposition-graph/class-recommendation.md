@@ -1,6 +1,6 @@
 ---
 question: What class does the AI recommend on a node's authority fact?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -32,11 +32,11 @@ facts:
     boldness: low
 review:
   verdict: forward
-  strength: strong
+  strength: moderate
   date: 2026-09-05
-  of: bba7da79145b968bac1322d680ac6d463ba79d05
-  commit: 2982cb6f6e07eb00680b2f14658e227e321a8d64
-  against: "The record measures this test and the test is not what sorts the record. Of the 129 authority facts, 113 carry a recommendation, and the node's `form` predicts 112 of them: every `form: reading` node recommends delegated or deferred, and every rule, assumption and target node recommends ratified, the single exception being `ruling-transport`. So on the substantive nodes the three limbs have produced ratified without exception, and a rule that ratifies everything of consequence hands the author every question while appearing to filter, which spends by default the attention the `attention` and `alignment-order` nodes exist to spend carefully; the risk is the opposite of the invisible tilt toward delegated that the fact's own `against` names. The guard the answer offers against that case -- that the reading which applied the test be written on the node -- is met by 20 of the 129 facts on the criterion the account states, so on the day the author is asked to ratify it the guard is a promise about future back-fill and not a property of the record. The rival the answer lists and does not weigh, `form-decides-the-default`, states what the record already does, is the only candidate an instrument could check without reading prose, and would make the three limbs an escalation from a checkable default rather than the whole rule; the node concedes all of this, records the charge as unanswered and marks the recommendation high boldness, which is honest but is not an answer."
+  of: 5d924981999cd48668b2d71e8a6287b31a766fbd
+  commit: a85f29250ccfcc8a10192dc507a0f1a17de6c2c3
+  against: "Three of the previous reading's five findings were findings about `.claude/rules/class-recommendation.md`, the text every session loads, and the amendment answers all three in the node while leaving the projection exactly as that reading found it: the file still says \"escalates toward ratified\", still carries the citation loop, and still states as the ground of a sentence in doctrine the general census rule that `authority` deliberately holds unruled as `no-census-in-a-standing-answer`. So on the day the author is asked to rule, the defect the amendment's own account calls \"the one that changes what a session does\" is still in front of every session, and the amendment's claim that those clauses now sit outside \"a text projected verbatim into `.claude/rules/`\" is true of the node and false of the file. Against that: the fix is a regeneration and not a redrawing. The answer as amended is the right text on all five findings, the two things the amendment adds of its own -- the rationale paragraph and the fifth option -- check out against the record, and what is owed is publication, which is why this is a finding and not a kickback."
 form: rule
 tier: global
 under:
@@ -471,7 +471,7 @@ unmarked and the first reading's counter-argument recorded and unanswered, which
 is what the boldness says. The kickback redraws the standing text, so a fresh
 reading of the answer is owed and the delta of this one closes.
 
-### Clean-context review, 2026-09-05
+### Clean-context review of the redrawn answer, 2026-09-05
 
 Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: forward to the author's ruling.
 
@@ -525,8 +525,14 @@ evidentiary clause together, so the author could not ratify the test while
 declining a back-fill of 109 of 129 authority facts that the answer itself calls
 owed and unassumed; `test-without-the-written-reading` separates them. It is not
 recommended: the guard is what the fact's own case against asks for, and the AI
-does not move its recommendation onto the option that drops it. It was not minted
-as a child node, because the review proposes and neither mints nor splits.
+does not move its recommendation onto the option that drops it. It was recorded
+as an option and not minted as a child node because an option is the instrument
+the record has for a choice the author may take, and the choice here is whether
+the written reading travels with the test. The evidentiary clause is a clause of
+this rule and not a second question: a class recommended with nothing showing
+which limb was found has not applied the test, so the clause states what
+applying the rule produces, and the `node` node's rule bites where a text
+answers a question the node's own question does not ask.
 
 The fifth struck from the answer fact's reason the retraction of a count in a
 draft the author never saw. The reason is what the alignment page shows as the
@@ -546,3 +552,69 @@ rule, not the AI's to settle by amendment.
 The amendment moves the standing text, so the node returns to the review stage
 for the re-reading the cap budgets, which is the second and last reading this
 answer gets.
+
+### Clean-context re-reading, 2026-09-05
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `escalate-toward-ratified`.
+
+Findings:
+
+- `## Answer` as projected, and `.claude/rules/class-recommendation.md` (the amendment answers three findings in the node and leaves them standing in the text every session loads). Three of the previous reading's five findings -- the first sentence, the census-placement clause, and the `review-cost`/`clean-context-review` citation -- took their whole force from the fact that `tier: global` projects this answer verbatim into `.claude/rules/class-recommendation.md`, and that reading verified the defective clause there. The node is corrected; the projection is not. The file today still reads at line 4 "The class the AI recommends on a node's authority fact escalates toward ratified where being wrong is expensive, irreversible, or capture-shaped", still carries "which is the shape the `review-cost` and `clean-context-review` nodes' authority facts name", and still ends "because a count in a standing answer is doctrine that goes stale where it is loaded, and this node's answer is projected into `.claude/rules/` and read by every session". So the executor hazard the amendment's own account calls "the one that changes what a session does" is still in front of every session, and the general rule `authority` holds unruled as `no-census-in-a-standing-answer` is still doctrine by the back door. The file's notice line also reads "(unanswered; stage maieutic)" while the node carries `stage: review`, which dates the last regeneration to before the redraw. `writeRules` in `packages/disposition/project.mjs` confirms the file is a verbatim copy of `## Answer` and nothing else (line 177, `if (node.tier !== "global") continue`; line 184, content is the question, the notice and `node.answer`), so moving the two clauses into `## Rationale` is the right fix and needs only to be published. Suggested edit: regenerate before landing, `node packages/disposition/project.mjs disposition --rules .claude/rules`, and check that the notice reads "stage review" and the first sentence reads "is ratified where".
+- `## Account`, `### The fresh reading applied, 2026-09-05`, fourth paragraph (a decision the amendment introduces on a ground that does not hold of the party that made it). "It was not minted as a child node, because the review proposes and neither mints nor splits." That the review may not mint is a limit on the reader, not a reason for the session. The previous reading's third finding named the child node explicitly -- "the evidentiary clause is a node of its own beneath this one (\"What must a class recommendation show?\"), carrying the clause as its first option" -- and closed "the review proposes and neither mints nor splits, so this is recorded here in prose for the session", that is, it handed the mint-or-not decision to the session precisely because it could not make it itself. The session's reply in the appended reading section gives a second and real ground, "because an option is the instrument the record has for a choice the author may take", but the amendment's own account section drops it and keeps only the reviewer's disability, so the record's stated reason for declining a proposal put to the session is a reason that was never the session's. The live question behind it is the one the earlier reading of this node already noticed, that the evidentiary paragraph "borders on a second question -- what a class recommendation must show, as against what class is recommended", against the `node` node's rule that a text answering two questions is two nodes. Suggested edit: strike "because the review proposes and neither mints nor splits" and rest the decision on the ground that carries it, adding one clause saying why the evidentiary requirement is a clause of this rule and not a second question -- for instance that it fixes what the recommendation this node governs must show and so has no object of its own.
+- A finding about `commons.systems/disposition-graph/authority`, recorded in prose for the session and not applied here (a divergence the amendment creates between this answer and the option it stands on). The amendment changes the answer's operative verb from "escalates toward ratified" to "is ratified where", on the previous reading's executor argument. The parent's `#### escalate-toward-ratified` subsection -- the option this node's new `depends` entry names, and the option from which this rule was moved -- still states the same rule in the struck form, at disposition/disposition-graph/authority.md:203: "The class the AI recommends for a decision escalates toward ratified where being wrong is expensive, irreversible, or capture-shaped, and is delegated or deferred otherwise." Since `depends: commons.systems/disposition-graph/authority#escalate-toward-ratified` now ties the two rulings in data, the author would be ruling on one rule stated in two formulations that differ exactly where the previous reading found the ambiguity, and the parent's is the one still live on the fact the author reaches first. Suggested edit on `authority`: bring that sentence into line with the answer here, "is ratified where being wrong is expensive, irreversible, or capture-shaped, and is delegated or deferred otherwise", or replace it with a citation of `class-recommendation` for the rule's text.
+- `## Account` (a question the amendment raises that needs the neighbourhood, recorded for the survey and not as a defect of this draft). The node now carries two account subsections with the identical heading `### Clean-context review, 2026-09-05` (lines 220 and 474), written for two different readings of two different texts on the same day, and one is cited by heading inside the other: the previous reading's fifth finding says the retraction stands "in `### Clean-context review, 2026-09-05`, `### Amended after the reading, 2026-09-05` and `### The delta re-reading applied, 2026-09-05`", and that citation no longer resolves to one section. The shape is the encoding's and not this node's -- an account subsection of a reading is `### Clean-context review, <date>` -- so the collision will recur wherever an answer is read twice in one day, which the two-reading cap makes ordinary. Recorded here for the survey or for the node that owns the account's shape; on this node the cheap edit, if the session wants one, is to distinguish the second heading by the text it read.
+
+On the facts and what they recommend: The diff moves the answer fact only: a fifth option, `test-without-the-written-reading` (source review, ref 2026-09-05), is added with its own `####` subsection, while `recommends` and `stands` both remain `escalate-toward-ratified` and boldness remains high, so there is correctly no `## Recommendation` fence (verified: no `^## Recommendation` line in the file). The authority fact is untouched at ratified, low boldness, and the answer fact's `against` is unchanged and still consistent with the twenty-of-129 criterion the answer's account states. The `review` block is replaced by the previous reading's forward/strong verdict pinned at bba7da79 and commit 2982cb6f, stale by this amendment as expected and not a defect; `node packages/disposition/validate.mjs disposition` passes at 142 nodes.
+
+On the viability of the options: The diff removes no option, passes none over and marks none: all five options on the answer fact are live and undominated. The one it adds is the one the previous reading named, and it separates the two decisions the fact had bundled, so the author can now take the three limbs without also taking the back-fill of 109 of 129 authority facts the answer itself calls owed rather than assumed; its prose reproduces the reading's own and its arithmetic checks against the census (129 facts, twenty meeting the guard). The authority fact's three options are the reserved vocabulary and are complete.
+
+Strongest counter-argument (moderate): Three of the previous reading's five findings were findings about `.claude/rules/class-recommendation.md`, the text every session loads, and the amendment answers all three in the node while leaving the projection exactly as that reading found it: the file still says "escalates toward ratified", still carries the citation loop, and still states as the ground of a sentence in doctrine the general census rule that `authority` deliberately holds unruled as `no-census-in-a-standing-answer`. So on the day the author is asked to rule, the defect the amendment's own account calls "the one that changes what a session does" is still in front of every session, and the amendment's claim that those clauses now sit outside "a text projected verbatim into `.claude/rules/`" is true of the node and false of the file. Against that: the fix is a regeneration and not a redrawing. The answer as amended is the right text on all five findings, the two things the amendment adds of its own -- the rationale paragraph and the fifth option -- check out against the record, and what is owed is publication, which is why this is a finding and not a kickback.
+
+The session's reply: All four findings taken. On 1, which is on the implementation ref and not a graph edit: `.claude/rules/class-recommendation.md` still carries the pre-amendment answer, so the three findings of the previous reading that took their force from `tier: global` are live at the file where they were measured, and its notice line still reads "stage maieutic". It is discharged by regenerating the rules, `node packages/disposition/project.mjs disposition --rules .claude/rules`, together with the same defect the day's re-reading of `delegation-bounds-and-sizing` found. On 2: the account's stated reason for recording an option rather than minting a node was the reviewer's disability and not the session's. It is struck; the session's own ground stands in its place, that an option is the instrument the record has for a choice the author may take; and a clause is added saying why the evidentiary requirement is a clause of this rule and not a second question. On 3, on `authority`: `#### escalate-toward-ratified` no longer states the rule in the formulation this node struck, and cites this node for its text, so the `depends` entry does not put one rule in two wordings in front of the author. Editing that subsection moves no pin, since `authority` recommends `authority-derived`. On 4: the two account sections headed identically are disambiguated here, the later named for its object, so the citation by heading inside the earlier reading resolves again. The general defect is the instrument's, in the heading `apply.mjs` writes, and it recurs wherever a redrawn answer gets a fresh reading on the day of the first; it is carried to the reconciliation of the review package and not settled by a graph edit. This was the second reading of this answer, the redraw having made a new one, and `review-cost`'s cap allows no third. The amendment moves the pin, so the node goes to the author with `review.of` naming the text the reader read: the deadlock recorded on `review-cost`'s live option `pin-names-the-text-the-reader-read`. The reader's own gap is carried with the others to `review-cost`: its first read of the brief was truncated at line 433 against the brief's discipline of at most 300 lines a read, and it recovered by paging.
+
+### The re-reading applied, and the cap reached, 2026-09-05
+
+Four findings, all taken; two are graph edits here, one is on `authority`, and
+one is on the implementation ref.
+
+The account's reason for recording `test-without-the-written-reading` as an
+option rather than minting a node was the reviewer's disability, that the review
+proposes and neither mints nor splits. That is a limit on the reader and not a
+ground for the session, and the reading that raised the child node had handed
+the decision to the session precisely because it could not make it itself. The
+session's own ground stands in its place: an option is the instrument the record
+has for a choice the author may take, and the choice here is whether the written
+reading travels with the test. The paragraph now also says why the evidentiary
+requirement is a clause of this rule and not a second question — a class
+recommended with nothing showing which limb was found has not applied the test,
+so the clause states what applying the rule produces.
+
+On `authority`: `#### escalate-toward-ratified` still stated the rule in the
+wording this node struck, so the author, whose ruling there and here `depends`
+ties together, would have met one rule in two formulations. That subsection now
+cites this node for the text. The edit moves no pin, since `authority`
+recommends `authority-derived`.
+
+The two account sections headed `### Clean-context review, 2026-09-05` are
+disambiguated, the later named for its object, so the citation by heading inside
+the earlier reading resolves again. The general defect is the instrument's, in
+the heading `apply.mjs` writes, and it recurs wherever a redrawn answer takes a
+fresh reading on the day its predecessor was read; it is carried to the
+reconciliation of the review package and is not settled by a graph edit.
+
+`.claude/rules/class-recommendation.md` still carries the pre-amendment answer,
+so the three findings of the previous reading that took their force from
+`tier: global` are unfixed at the file where they were measured, and the notice
+line still reads "stage maieutic". The rules are regenerated on the
+implementation ref, with the same defect the day's re-reading of
+`delegation-bounds-and-sizing` found.
+
+This was the second reading of this answer, the redraw having made a new one,
+and `review-cost`'s cap allows no third. The amendment moves the pin, so the
+node goes to the author with `review.of` naming the text the reader read: the
+deadlock recorded on `review-cost`'s live option
+`pin-names-the-text-the-reader-read`. The reader's own gap goes to `review-cost`
+with the others: its first read of the brief was truncated at line 433 against
+the brief's discipline of at most 300 lines a read, and it recovered by paging.

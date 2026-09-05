@@ -200,7 +200,7 @@ named the AI's own account and every alternative in a sitting with one word.
 
 #### escalate-toward-ratified
 
-Adopted into `authority-derived` on 2026-09-05 and moved out of it the same day, to the node `class-recommendation` under this one, where the rule is the recommendation and the alternative to it is stated; the third reading of 2026-09-05 found that the survival and scope tests which minted `what-acts-during-bootstrap` reach this clause with more force, since it survives the recording, is cited by nineteen nodes, and is read by every session that recommends a class. The class the AI recommends for a decision escalates toward ratified where being wrong is expensive, irreversible, or capture-shaped, and is delegated or deferred otherwise. The rule was carried by the alignment skill alone, a declared shim, and applied as "the record's own test" by the authority fact of every node whose escalation rests on it; the session-context node says a rule that lives only in a file is invisible to the projector and to review. Recorded on 2026-09-04 with the recording node as its source, after that node's reading found the citation empty.
+Adopted into `authority-derived` on 2026-09-05 and moved out of it the same day, to the node `class-recommendation` under this one, where the rule is the recommendation and the alternative to it is stated; the third reading of 2026-09-05 found that the survival and scope tests which minted `what-acts-during-bootstrap` reach this clause with more force, since it survives the recording, is cited by nineteen nodes, and is read by every session that recommends a class. What the option holds is the rule the node `class-recommendation` states, and the text of the rule is that node's: it was amended there on 2026-09-05, to name the class rather than a direction toward it, and restating it here would put one rule in two formulations in front of an author whose ruling on this fact and on that node are tied by `depends`. The rule was carried by the alignment skill alone, a declared shim, and applied as "the record's own test" by the authority fact of every node whose escalation rests on it; the session-context node says a rule that lives only in a file is invisible to the projector and to review. Recorded on 2026-09-04 with the recording node as its source, after that node's reading found the citation empty.
 
 #### ratify-command
 
@@ -658,3 +658,12 @@ child's own gloss says a conferred class acts. Recorded as the option
 `a-conferred-class-acts-during-bootstrap` and not written into the answer: the
 sentence is this node's, and what a ruling elsewhere does to it is the author's
 to decide. The recommendation and the pin do not move.
+
+### The rule's text left this node, 2026-09-05
+
+The re-reading of `class-recommendation` on 2026-09-05 found that this node's
+`#### escalate-toward-ratified` still stated the escalation rule in the wording
+that node had struck, "escalates toward ratified", while the node the rule moved
+to now reads "is ratified where". The subsection cites `class-recommendation`
+for the text instead of restating it, so the rule has one home, and no pin moves:
+this node recommends `authority-derived`, not the option edited.
