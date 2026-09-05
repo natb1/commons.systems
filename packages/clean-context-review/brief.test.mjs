@@ -166,11 +166,15 @@ describe("writeDraftBrief", () => {
     const restOfBrief = brief.slice(brief.indexOf("\n## Its ancestry"));
     assert.ok(!restOfBrief.includes("#### Account"), "the neighbourhood carries no account");
 
-    // {{nav}}: filled last, from the filled text itself.
+    // {{nav}}: filled last, from the filled text itself. The file ends in a
+    // newline, so `split("\n")` yields one trailing empty element that is
+    // not a line; the nav line reports the true count, the one `wc -l`
+    // would give, and not `split`'s off-by-one.
     const lines = brief.split("\n");
+    const trueLineCount = brief.endsWith("\n") ? lines.length - 1 : lines.length;
     const navLine = lines.find((l) => l.startsWith("This brief is "));
     assert.ok(navLine, "the nav sentence is written");
-    assert.match(navLine, new RegExp(`^This brief is ${lines.length} lines\\.`));
+    assert.match(navLine, new RegExp(`^This brief is ${trueLineCount} lines\\.`));
     const named = navLine.match(/"## The node under review" at line (\d+)/);
     assert.ok(named, `nav sentence does not name the node's line: ${navLine}`);
     assert.ok(lines[Number(named[1]) - 1].startsWith("## The node under review"), "the line the nav names is the node's heading");

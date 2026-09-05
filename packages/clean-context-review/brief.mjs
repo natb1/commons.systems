@@ -447,17 +447,21 @@ function renderWholeNode(node, { account = true } = {}) {
 
 /**
  * One neighbour node, by what it answers and never by its whole file
- * (`review-cost`, the `neighbours-answered-not-whole` clause the recommended
- * answer folds in: "the neighbourhood is carried, but each neighbour by what
- * it answers rather than by its whole file"): its id, its file, its
- * question, its status line, the answer that stands on it, the answer it
- * now recommends where that differs from what stands, and the names of the
- * options on its answer fact -- each with its source and whether it is
- * recommended or passed over -- one line apiece, no prose. Its rationale,
- * its '## Facts' prose, its `#### <option>` subsections and the rest of its
+ * (`review-cost`'s recommended answer: "A neighbour is carried by what it
+ * answers and not by its whole file: its question, the answer that stands
+ * on it, the answer it now recommends where those differ, and the names of
+ * the options on its answer fact."): its id, its file, its question, its
+ * status line, the answer that stands on it, the answer it now recommends
+ * where that differs from what stands, and the names of the options on its
+ * answer fact -- each with its source and whether it is recommended or
+ * passed over -- one line apiece, no prose. Its rationale, its '## Facts'
+ * prose, its `#### <option>` subsections and the rest of its
  * '## Recommendation' fence are that node's own dialogue and stay in the
  * file one read away, exactly as its '## Account' already does and for the
- * same reason.
+ * same reason (the same answer: "Its rationale, its facts prose, its
+ * option subsections and the rest of its recommendation are its own
+ * dialogue, and they stay in the file one read away, exactly as its
+ * account does and for the same reason.").
  *
  * One exception, stated on `clean-context-review` and on `review-cost`: an
  * option on the neighbour's answer fact whose `source` is the draft under
@@ -576,7 +580,12 @@ function renderContextNode(node) {
  * is, so the line numbers it names stay true.
  */
 function fillNav(text) {
-  const lines = text.split("\n");
+  const rawLines = text.split("\n");
+  // `text` ends in a newline (a filled template does), so splitting on "\n"
+  // yields one trailing empty element that is not a line; drop it so the
+  // count matches `wc -l` and the line numbers a reader pages by, and not
+  // the one-too-many `split` gives a newline-terminated string.
+  const lines = text.endsWith("\n") ? rawLines.slice(0, -1) : rawLines;
   const headings = [];
   let fenced = false;
   lines.forEach((line, i) => {
@@ -585,7 +594,7 @@ function fillNav(text) {
   });
   const where = headings.map((h) => `"## ${h.name}" at line ${h.line}`).join(", ");
   const nav = `This brief is ${lines.length} lines. Read it whole before writing anything: ${where}.`;
-  return { text: lines.map((l) => (l === "{{nav}}" ? nav : l)).join("\n"), lines: lines.length };
+  return { text: rawLines.map((l) => (l === "{{nav}}" ? nav : l)).join("\n"), lines: lines.length };
 }
 
 function fill(template, values) {
@@ -813,9 +822,10 @@ export const READING_RULES = [
  * above it, the rules of the reading itself, the nodes under it, its siblings
  * under the same parent, the nodes it names, the readings that bear on it,
  * the round of other drafts that have moved since the survey last pinned
- * them, and every other question the record asks -- bounded to its id and
- * its question, per `review-cost`'s answer, since the answers behind those
- * questions are the survey's object and not a draft reader's.
+ * them, and every other question the record asks -- bounded to its id, its
+ * question, and the file it is in, per `review-cost`'s answer, since the
+ * answers behind those questions are the survey's object and not a draft
+ * reader's.
  *
  * A node claimed by an earlier part is never repeated in a later one, the
  * parts taken in this order: the node itself, ancestry, rules, children,

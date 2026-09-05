@@ -59,7 +59,7 @@ And validation 15, asked here of the draft against the index of every question t
 
 ## The rules of this reading
 
-The same twelve nodes for every draft: what this review is and what it judges, the validations, the two readings and what each is given, the encoding's vocabulary, and what a node is. Carried here, whole, so you are never told to go and open them.
+The same set of nodes governs every reading: what this review is and what it judges, the validations, the two readings and what each is given, the encoding's vocabulary, and what a node is. Those already carried whole in `## Its ancestry, and the rules that bind everywhere` are not repeated here; none of them, there or here, has to be opened from disk.
 
 {{rules}}
 
