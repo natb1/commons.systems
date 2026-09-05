@@ -166,14 +166,26 @@ yet ruled.
 #### exit-conditions-cited-not-carried
 
 The bootstrap exit clauses of the reconciliation shim's liquidation condition
-move to the `what-acts-during-bootstrap` node, which defines `bootstrap exit`,
-and the shim's condition cites that node instead of restating them; what stays
-on the shim is the validation the reconciliation loop itself skipped. Raised by
-the clean-context review of that node on 2026-09-05, under validation 15: the
-question of what the conditions of bootstrap exit are is today carried inside
-this node's shim declaration, and the node that defines the term restates them
-or contradicts them. The `split-the-shim` option is the other end of the same
-finding.
+move to the node that gathers the conditions of bootstrap exit, and the shim's
+condition cites that node instead of restating them; what stays on the shim is
+the validation the reconciliation loop itself skipped. Raised by the
+clean-context review of `what-acts-during-bootstrap` on 2026-09-05, under
+validation 15: the question of what the conditions of bootstrap exit are is
+today carried inside this node's shim declaration, and the node that defines the
+term restates them or contradicts them. Repointed on 2026-09-05, when the second
+reading of that node minted
+`commons.systems/disposition-graph/bootstrap-exit-conditions` for the same
+question: the destination is that node and no longer the node that defines the
+term, and the choice this option puts to the author is whether the clauses move
+there or stay here and are cited from there, which is the option
+`left-where-they-stand` seen from this side. The `split-the-shim` option is the
+other end of the same finding.
+
+One clause of this shim's liquidation cannot move under any reading, and the
+reading that minted the child found it: validation in use after the
+implementation ref is swapped with the main branch is discharged after the swap,
+and `materialization` puts the swap at bootstrap exit, so it is this shim's own
+liquidation condition and never a condition of exit.
 
 ### authority
 

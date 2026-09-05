@@ -25,7 +25,7 @@ facts:
         reason: "the author's words of 2026-09-04 make the grant a persistent rule of the authority node and no class, and the authority node passed the same option over on that ground"
     recommends: shim-and-grant
     boldness: high
-    against: "The five rule files under `.claude/rules/` that every session loads are projections of unanswered nodes and are declared as no shim, so this answer says the doctrine the record is running on today acts on nothing and is on the frontier for liquidation."
+    against: "The six rule files under `.claude/rules/` that every session loads, this node's own projection among them, are projections of unanswered nodes and are declared as no shim, so this answer says the doctrine the record is running on today acts on nothing and is on the frontier for liquidation, and says it in a file that binds every session while saying it."
     stands: shim-and-grant
   - name: authority
     options:
@@ -38,9 +38,9 @@ review:
   verdict: kickback
   strength: strong
   date: 2026-09-05
-  of: 42f6beeb104b6f994c8387a07e5a063e7e98002e
-  commit: e137c5b39b32108284065dc7910ab60856123ed0
-  against: "Five rule files under `.claude/rules/` are what every session is actually bound by today, and this answer grounds none of them: they are projections of unanswered nodes, no node declares them a shim, and no grant covers a session that merely loads them. By this answer's own second paragraph they are therefore among 'every artifact standing outside them', which is 'unsupported implementation, on the frontier and liquidated through reconciliation' — as are the operating skills' rules and the 'How a recommendation is made' section of CLAUDE.md that the author granted on 2026-09-04. Read strictly, the answer says the doctrine the machine is running on right now acts on nothing and is slated for liquidation, and it supplies no mechanism by which a projected rule acts. That is the live half of the counter-argument authority's own reading raised, that the classes and their two bootstrap substitutes describe none of the record's present operation; moving the clause into a node of its own restates it rather than answers it, and putting `deferred-as-the-resting-state` on the list asks the author to choose against a status quo their record cannot presently account for."
+  of: 741d2e9bbf27bdee63b22664b4a85864a87a8d8e
+  commit: 9bf7b2fe1f7f8e6f7f446e09756be5da10a6c55b
+  against: "The doctrine the machine is running on today is grounded by neither of the two things this answer says act: six rule files under `.claude/rules/`, projected from nodes no ruling reaches, over which no node declares a shim, plus the two operating skills and the 'How a recommendation is made' section of CLAUDE.md. By this answer's own second paragraph they are therefore 'every artifact standing outside them', which is 'unsupported implementation, on the frontier and liquidated through reconciliation'. So the rule the author is asked to ratify describes a machine that is not the one running, and it is itself being run as one of those six files while unruled. The two listed options that could account for the status quo are a resting state the `approval-directed-agents` reading expressly refuses and the author's own struck expiry, neither of which grounds a projected rule; the third way, declaring the rules projection a shim so that the doctrine acts as an interim materialization under this answer's own first limb, is not on the list, so the author cannot rule for it."
 form: rule
 under:
   - commons.systems/disposition-graph/authority
@@ -49,9 +49,9 @@ depends:
   - commons.systems/disposition-graph/authority
 defines:
   - term: bootstrap
-    gloss: "The state of this record until its global tier is ruled, in which a declared shim and the author's grant are the only things that act."
+    gloss: "The state of this record until bootstrap exit, in which a declared shim and the author's grant are the only things that act."
   - term: bootstrap exit
-    gloss: "The moment every condition the record declares for it is met, at which `greenfield` is swapped with `main` and the shims that carried the state are gone."
+    gloss: "The moment every condition the record declares for it is met, the conditions being the bootstrap-exit-conditions node's question, at which `greenfield` is swapped with `main`."
   - term: bootstrap authority
     gloss: "The author's grant, given in their words for one named reconciliation of one unanswered node; the term is the author's, and the grant is the thing this node calls a grant."
 ---
@@ -76,26 +76,23 @@ authority, and the two names are one thing. Nothing else acts by right: a
 recommendation on an unanswered node is a draft and grounds no work, and a
 class the AI writes for itself is not a grant.
 
-Bootstrap is the state of this record until its global tier is ruled, and it
-is not a licence: what a session may do in it is exactly what the two rules
-above allow, and every artifact standing outside them is unsupported
-implementation, on the frontier and liquidated through reconciliation. The
-state does not end in one act. It ends node by node, as rulings accumulate and
-each node's class begins to act in place of the shim or the grant that carried
-it. Bootstrap exit is the moment every condition the record declares for it is
-met, and this node mints none: the global tier is ruled; the coverage node has
-ruled what the record covers, as materialization declares; the second direction
-and the drain of the legacy record are complete and the reconciliation shim's
-remaining clauses are discharged, as work-loop declares; and every landing made
-under that shim has passed the code-review instrument, as review declares. The
-swap of `greenfield` with `main` is what happens at exit and is no condition of
-it. Whether those clauses should move here, to the node that defines the term,
-and be cited where they now stand, is recorded as an option on work-loop. The
-grant does not expire at exit: reconciling an unanswered node on the author's
-explicit word is the rule at any time, as the authority node holds, and that
-strikes the expiry the author's words of 2026-09-03 gave it, quoted above; the
-divergence is recorded here, and `grant-expires-at-exit` keeps the author's own
-side of it on the list.
+Bootstrap is the state of this record until bootstrap exit, and it is not a
+licence: what a session may do in it is exactly what the two rules above allow,
+and every artifact standing outside them is unsupported implementation, on the
+frontier and liquidated through reconciliation. The state does not end in one
+act, and it does not relax all at once. It relaxes node by node, as rulings
+accumulate and each node's class begins to act in place of the shim or the
+grant that carried it, so that what acts under this answer shrinks with every
+ruling until the last one leaves nothing for it to carry. Bootstrap exit is the
+moment every condition the record declares for it is met; which conditions
+those are is the question of the node beneath this one,
+`bootstrap-exit-conditions`, and this node mints none of them and lists none.
+The swap of `greenfield` with `main` is what happens at exit and is no
+condition of it. The grant does not expire at exit: reconciling an unanswered
+node on the author's explicit word is the rule at any time, as the authority
+node holds, and that strikes the expiry the author's words of 2026-09-03 gave
+it, quoted above; the divergence is recorded here, and `grant-expires-at-exit`
+keeps the author's own side of it on the list.
 
 ## Rationale
 
@@ -127,8 +124,9 @@ The recommendation is `shim-and-grant`, at high boldness, which in this
 record means low confidence. The two rules are the record's own words, from
 the evaluation node, the transience node and the authority node, and gathering
 them here invents nothing. What is the AI's, and what the boldness marks, is
-that bootstrap ends node by node rather than in one act, and that the record's
-declared liquidation conditions, and not this node, say when it is over. No
+that bootstrap relaxes node by node rather than ending in one act, and that the
+conditions the record declares elsewhere, gathered on the node beneath this one
+and not minted here, say when it is over. No
 ruling of the author's fixes either, and the record's stopgaps date themselves
 by this term, so a wrong answer here mis-dates every one of them. The one place
 the answer departs from the author's words is the expiry, which is why their
@@ -209,9 +207,14 @@ answer names no exit from a record of unanswered nodes, is answered by the
 second paragraph of this node's answer and put to the author as the option
 `deferred-as-the-resting-state`.
 
-This node is global tier, so a rule file is projected from it; the
-projection is owed on the implementation ref and is not this sitting's graph
-landing.
+This node is global tier, so a rule file is projected from it, and
+`.claude/rules/what-acts-during-bootstrap.md` already exists on the
+implementation ref and is loaded by every session, which the clean-context
+reading of 2026-09-05 caught and which the earlier text of this paragraph, that
+the projection was owed and not this sitting's landing, denied. It is the sixth
+of the six rule files, and the case against on the answer fact now counts it:
+the answer that says only a shim and a grant act is itself binding every
+session as an unshimmed projection of an unruled node.
 
 ### Clean-context review, 2026-09-05
 
@@ -237,3 +240,94 @@ On the viability of the options: On the answer fact the four listed options are 
 Strongest counter-argument (strong): Five rule files under `.claude/rules/` are what every session is actually bound by today, and this answer grounds none of them: they are projections of unanswered nodes, no node declares them a shim, and no grant covers a session that merely loads them. By this answer's own second paragraph they are therefore among 'every artifact standing outside them', which is 'unsupported implementation, on the frontier and liquidated through reconciliation' — as are the operating skills' rules and the 'How a recommendation is made' section of CLAUDE.md that the author granted on 2026-09-04. Read strictly, the answer says the doctrine the machine is running on right now acts on nothing and is slated for liquidation, and it supplies no mechanism by which a projected rule acts. That is the live half of the counter-argument authority's own reading raised, that the classes and their two bootstrap substitutes describe none of the record's present operation; moving the clause into a node of its own restates it rather than answers it, and putting `deferred-as-the-resting-state` on the list asks the author to choose against a status quo their record cannot presently account for.
 
 The session's reply: Ten findings, all validated on this thread and all accepted; the kickback to the maieutic stage is accepted and the answer is redrafted in this sitting. The definition of bootstrap exit minted here is struck. Three declarations in the record already carry conditions for it, work-loop's reconciliation shim, materialization's greenfield swap gated on the coverage ruling, and review's code-review instrument, and none of them is what this node said; as drafted it would have put the swap of `greenfield` with `main` in reach on six rulings while coverage stands at the periagogic stage, which is the irreversible act materialization's own review names. The circularity goes with it: the swap is what happens at exit and not a condition of it, and the shim limb, which made exit turn on the liquidation of a shim whose liquidation is exit, is dropped. The clause re-imposing the grant's expiry is struck outright. The parent's standing rule says the grant does not expire, authority's rationale records that as a divergence the AI took from the author's words of 2026-09-03 while saying the author may strike the line, and this node, which now owns how the state ends, is where that divergence and those words belong: they go into a `## Disposition` section verbatim and onto the answer fact as the option `grant-expires-at-exit`, source author, so the author rules on their own words rather than on a probe carried elsewhere. The shim gloss is corrected to the transience node's, a materialization not yet made, since four declared shims stand in for something that is not a projection; the wording taken for evaluation's was in fact its pending option's. The definition of bootstrap is restated as the state that holds until the global tier is ruled, so one ruling does not end it. `bootstrap`, `bootstrap exit` and `bootstrap authority` are glossed in `defines`, and the answer says that the grant is what the author's words call bootstrap authority. `deferred-as-the-resting-state` is restated as a divergence from the `approval-directed-agents` reading rather than as its support, the reading expressly refusing approval-direction as a resting state, and that reading now carries a `bears` entry on this node's option, diverged. The answer fact carries the reader's own line as its `against`: the five rule files every session loads are projections of unanswered nodes, declared as no shim, and this answer says the doctrine the record runs on today acts on nothing. That is the counter-argument at full strength, and it is the author's to weigh. The merge finding is recorded as the option `exit-conditions-cited-not-carried` on work-loop, where the clauses live. Of the two options the viability section names, `grant-expires-at-exit` is recorded; `exit-from-the-declared-conditions` is adopted into the answer rather than set beside it, since the redraft is that option. The node stands at the review stage and owes one reading, its first having been this one.
+
+### Clean-context review, 2026-09-05
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: kicked back to the maieutic stage.
+
+Findings:
+
+- ## Answer, second paragraph (validations 2 and 3; an executor could never declare exit). 'the second direction and the drain of the legacy record are complete and the reconciliation shim's remaining clauses are discharged, as work-loop declares'. work-loop.md:69 makes one of those remaining clauses 'every landing made under this shim has passed the validation it skipped, functional validation against its node's criteria, the review instrument's assessment, and validation in use after the implementation ref is swapped with the main branch', and materialization.md:60 puts that swap 'at bootstrap exit'. So this draft makes exit wait on a clause that can only be discharged after the swap, which the very next sentence says 'is what happens at exit and is no condition of it': the moment can never arrive. This is the circularity the previous reading found on the greenfield shim, which the session's reply said it had dropped ('the shim limb, which made exit turn on the liquidation of a shim whose liquidation is exit, is dropped'), reintroduced for the reconciliation shim. The frontmatter gloss repeats it: `bootstrap exit` is glossed as the moment 'at which `greenfield` is swapped with `main` and the shims that carried the state are gone', while review.md:86 liquidates its shim only when 'an instrument on the `greenfield` ref produces the assessment from this node', which exit does not bring about, and work-loop's shim cannot liquidate until after the swap. Suggested edit: keep only the clauses the record declares as exit conditions, the second direction and the legacy drain, and strike 'and the reconciliation shim's remaining clauses are discharged'; in the gloss, strike 'and the shims that carried the state are gone', each shim's liquidation being its own condition and not exit's.
+- ## Answer, second paragraph (validation 3; a claim about the record that is not true). 'Bootstrap exit is the moment every condition the record declares for it is met, and this node mints none: the global tier is ruled'. No other node declares the ruling of the global tier a condition of bootstrap exit: `grep -rln "bootstrap exit" disposition/disposition-graph/` returns fourteen files, and of those only this node ties the two, through its own gloss 'The state of this record until its global tier is ruled'; work-loop's nearest clauses are 'the orchestrator and the bite skills are materialized from ratified nodes' and 'every rule this project runs under is a node or a declared shim', neither of which is the global tier's ruling. The same is true of the second half of the third limb: work-loop declares its remaining clauses as its shim's liquidation condition, not as conditions of exit. So the disclaimer 'this node mints none' is false of the list it introduces, on a node whose whole point is that the record and not this node fixes the moment. Suggested edit: either say which limb is minted here — 'this node mints one, that the global tier is ruled; the rest are declared where they stand' — or drop the unattributed limbs.
+- ## Answer, second paragraph (validations 1 and 3; the enumeration omits two conditions the author gave). The list introduced by 'every condition the record declares for it is met' leaves out the author's own words on two nodes. vocabulary-view.md:25, the author of 2026-09-02: 'Before bootstrap exit technical repo vocabulary like "disposition", "ratified", "doctine" will need to be recorded on the onboarding path of the graph and clearly identified with appropriate layout in the documentation projection. References to tradition also need to be clearly called out with appropriate layout.' attention.md:56 and alignment-order.md:103, the author of 2026-09-03, on the reconciliation process: '(shimmed as a skill, but codified before bootstrap exit)'. This text is projected verbatim into `.claude/rules/what-acts-during-bootstrap.md`, which every session loads, so a session would hold exit reachable on four limbs while two conditions in the author's own words stand unmet, and vocabulary-view is at the periagogic stage with no answer at all. Suggested edit: add both limbs with their citations, or replace the list with the citation — 'the conditions are the ones the record declares, on work-loop, materialization, review, vocabulary-view and attention, and this node lists none' — which is the option this reading's viability judgment names as missing.
+- ## Answer, second paragraph, first sentence, and frontmatter `defines` (validation 1; the state ends before its own exit). 'Bootstrap is the state of this record until its global tier is ruled' and the gloss 'bootstrap — The state of this record until its global tier is ruled, in which a declared shim and the author's grant are the only things that act', against the same paragraph's 'Bootstrap exit is the moment every condition the record declares for it is met'. The two terms this node defines now name two different moments, and the later one is called the exit from the earlier: on six rulings the record is out of bootstrap while coverage stands unruled, the legacy record undrained, and the greenfield shim standing, and nothing says what governs the interval. The node's own `### answer` prose says why this matters — 'the record's stopgaps date themselves by this term, so a wrong answer here mis-dates every one of them' — and CLAUDE.md is one of them: 'The materialized implementation is this ref, `greenfield`, during bootstrap (the shim declared on `materialization`; swapped with `main` at exit)', a sentence that stops being true of an unswapped ref the moment the global tier is ruled. Suggested edit: 'Bootstrap is the state of this record until bootstrap exit', leaving the sentences that follow to say that what the state carries relaxes node by node as rulings accumulate.
+- Frontmatter `question`, against `## Answer`'s second paragraph (validation 1; the draft answers more than the node asks). The question is 'What acts while nothing in the record is ratified?', which the first paragraph answers whole; the second paragraph answers when the state ends and what the conditions of its exit are. The parent hands this node both — authority.md: 'what does act while nothing is ratified, and how that state ends, is the question of the node beneath this one, what-acts-during-bootstrap' — but the node's own question asks only the first, so the author is asked to rule on a text that exceeds the question printed above it, and the alignment page will head it with that question. Suggested edit: widen the question to 'What acts while nothing in the record is ratified, and when does that state end?', or move the second paragraph to a node of its own under this one, which is the merge finding below.
+- Validation 15, merge, concerning commons.systems/disposition-graph/work-loop and this node. The question 'what are the conditions of bootstrap exit?' is asked by no node and answered in four places: work-loop's reconciliation shim liquidation (work-loop.md:69), materialization's greenfield shim liquidation (materialization.md:60), review's shim artifact clause (review.md:84), and now one clause of this node's `## Answer`. Proposed as a node of its own under this one, slug `bootstrap-exit-conditions`, question 'What are the conditions of bootstrap exit?', its answer gathering what those three shims and the author's words on vocabulary-view and attention declare, so that this node answers what acts and the child answers when the state ends and this node cites it. The other end of the same finding is already recorded as the option `exit-conditions-cited-not-carried` on work-loop, whose prose moves the clauses here; the two shapes must not both be taken, and whichever is chosen the other should be passed over with the reason, so the record does not end with the conditions in two homes. The review proposes and neither merges, splits, nor edits.
+- ## Facts, `### answer`, and frontmatter `facts[0].against` (validation 3; a claim about the implementation that is one short). 'The five rule files under `.claude/rules/` that every session loads are projections of unanswered nodes and are declared as no shim'. `ls .claude/rules/` returns six: authority.md, delegation.md, evaluation.md, materialization.md, session-context.md, and what-acts-during-bootstrap.md, the last projected from this node and carrying the notice 'Projected from commons.systems/disposition-graph/what-acts-during-bootstrap (unanswered; stage review)'. The count is one low and the missing file is this node's own rule, which makes the case against stronger rather than weaker: the answer that says only a shim and a grant act is itself already binding every session as an unshimmed projection of an unruled node. The `## Account` line 'the projection is owed on the implementation ref and is not this sitting's graph landing' is overtaken by the same fact. Suggested edit: 'The six rule files under `.claude/rules/` that every session loads, this node's own projection among them, are projections of unanswered nodes and are declared as no shim ...', and correct the account.
+- ## Answer, second paragraph, final limb of the list (validation 5; presumed materialized). 'every landing made under that shim has passed the code-review instrument, as review declares'. review.md:79-82 declares that instrument `note: not yet materialized; the shim below stands in for it`, and what the record has is the shim at review.md:84, 'the detached code-review instrument on `main`, `.claude/skills/dispatch-propagate/scripts/dispatch-code-review` ... at bootstrap exit for every landing made under the reconciliation shim', whose own liquidation is 'an instrument on the `greenfield` ref produces the assessment from this node'. Two things follow: the instrument this limb rests on is unmaterialized and the draft does not say so, and review's words name when the assessment is run — at exit — rather than a condition met before it. Suggested edit: 'and the batched assessment review declares at exit has been made on every landing under that shim, by the instrument review declares as a shim until one on `greenfield` produces it'.
+
+On the facts and what they recommend: The answer fact recommends `shim-and-grant`, which `stands` also names, so the absence of a `## Recommendation` fence is right, and high boldness is right: the first paragraph is the record's own words gathered, but the whole second paragraph is the AI's and findings 1 to 4 show it still wrong against the record. The fact now carries an `against`, which the last reading asked for, though its count is one low (finding 7); the authority fact recommends `ratified` at moderate, which I agree with, since what an agent may act on while nothing is ruled is capture-shaped on its face, the class-recommendation node's third limb, and moderate is right because only the second paragraph is new. No `existence` or `persistence` fact is owed, the node declaring no shim and changing no shape; the `review` block pins 42f6beeb, which the recommendation has moved past, and this reading replaces it.
+
+On the viability of the options: On the answer fact the five listed options are each viable or correctly passed: `deferred-as-the-resting-state` is genuinely not dominated, `grant-expires-at-exit` rightly puts the author's own struck words on the list, and the two passed-over reasons check out against authority's `bootstrap-authority-as-class` and the first-sitting argument; the authority fact's three options are the reserved vocabulary and are complete. Two viable options are missing. `projected-rules-act-as-a-shim`: three things act, a shim, a grant, and the doctrine the record projects into `.claude/rules/` while the nodes it projects stand unruled, that projection being declared a shim on session-context beside CLAUDE.md, liquidated when the nodes it projects are ruled — so that the six rule files every session loads act as an interim materialization instead of standing outside the answer as unsupported implementation, which is the counter-argument this node records against itself and answers nowhere. `conditions-cited-not-listed`: the two rules act as drafted and this node names no exit condition at all, bootstrap exit being the moment every condition the record declares is met and the conditions read from the declarations where they stand, so that no list here can go stale against them; the session's reply says `exit-from-the-declared-conditions` was 'adopted into the answer rather than set beside it', but what the redraft adopted was an enumeration, and the choice between citing and enumerating is the author's, being exactly the tradeoff materialization's own answer weighs.
+
+Strongest counter-argument (strong): The doctrine the machine is running on today is grounded by neither of the two things this answer says act: six rule files under `.claude/rules/`, projected from nodes no ruling reaches, over which no node declares a shim, plus the two operating skills and the 'How a recommendation is made' section of CLAUDE.md. By this answer's own second paragraph they are therefore 'every artifact standing outside them', which is 'unsupported implementation, on the frontier and liquidated through reconciliation'. So the rule the author is asked to ratify describes a machine that is not the one running, and it is itself being run as one of those six files while unruled. The two listed options that could account for the status quo are a resting state the `approval-directed-agents` reading expressly refuses and the author's own struck expiry, neither of which grounds a projected rule; the third way, declaring the rules projection a shim so that the doctrine acts as an interim materialization under this answer's own first limb, is not on the list, so the author cannot rule for it.
+
+The session's reply: Kickback taken and the maieutic work done on this thread; eight findings, all validated at their loci on the alignment thread, and all eight accepted.
+
+The circularity is real and is struck. `work-loop`'s liquidation makes one of its clauses "validation in use after the implementation ref is swapped with the main branch", and `materialization` puts that swap at bootstrap exit, so a draft that made exit wait on the reconciliation shim's remaining clauses made exit wait on something only the exit can bring about. It is the same circularity the previous reading found on the greenfield shim, reintroduced for a different shim, and the gloss carried it too. The clause is gone from the answer and "and the shims that carried the state are gone" is gone from the gloss: a shim's liquidation is its own condition, not exit's, and `review`'s shim liquidates when an instrument on `greenfield` produces the assessment, which exit does not bring about.
+
+The disclaimer was false of the list it introduced, and the enumeration was two short. No other node makes the ruling of the global tier a condition of exit; work-loop declares its clauses as its shim's liquidation and not as exit conditions; and the author's own words set two more, on `vocabulary-view`, that the vocabulary and the tradition references are on the onboarding path before exit, and on `attention` and `alignment-order`, that the reconciliation process is codified before it. A list introduced by "every condition the record declares" that misses two of the author's own, and is projected verbatim into a rule file every session loads, is worse than no list.
+
+The remedy is the merge finding's, and the two findings that ask for it converge. The question "What are the conditions of bootstrap exit?" is asked by no node and answered in four places, which is the record's own test for a node; and the second paragraph answered more than the question printed above it. `commons.systems/disposition-graph/bootstrap-exit-conditions` is minted under this node, gathering what work-loop, materialization, review, vocabulary-view, attention and alignment-order declare, each cited to where it is declared and none minted there; this node keeps what acts, says that the state ends node by node as rulings accumulate, and cites the child for when it is over. The question is kept as it stands, a reworded question being a new question on the node node's rule, and the parent's handoff of both halves is answered by the citation. The option `exit-conditions-cited-not-carried` on work-loop is the other end of the same finding and is kept and repointed at the new node rather than passed over: it is the same gathering with the same effect on the shim's condition, and which node holds the list is now a live choice between the child and work-loop's own text, which the author rules.
+
+The two terms named two moments and now name one. Bootstrap is the state of this record until bootstrap exit; what the state carries relaxes node by node as rulings accumulate. As it stood, the record left bootstrap on six rulings while coverage stood unruled, the legacy record undrained and the greenfield shim standing, with nothing saying what governed the interval — and `CLAUDE.md`'s own sentence about the greenfield ref would have stopped being true of an unswapped ref at that moment.
+
+The count in the case against was one low, and the missing file is this node's own. Six rule files bind every session, `what-acts-during-bootstrap.md` among them, projected from this unanswered node and declared as no shim; the correction makes the case against stronger, since the answer that says only a shim and a grant act is itself already binding every session as an unshimmed projection. The account line that called the projection owed and not this sitting's landing is overtaken by the same fact and is corrected.
+
+The code-review limb went to the child with what it rests on said plainly: `review`'s instrument is `not yet materialized`, the shim stands in for it, and review's words put the assessment at exit rather than before it, so it is a thing done at the exit and not a condition met before one.
+
+The counter-argument stands strong and is not answered here. Six rule files are what every session is bound by today and this answer grounds none of them; on its own second paragraph they are unsupported implementation on the frontier. That is the live half of the counter-argument authority's reading raised, and minting a child for the exit conditions does not touch it. It is the ground of `deferred-as-the-resting-state`, which stays on the fact for the author, and the recommendation does not move: the answer refuses a resting state the AI writes for itself and pays for the refusal in the author's attention, one grant at a time, which is the author's choice to make and not the AI's.
+
+### Redrawn after the kickback, 2026-09-05
+
+The clean-context reading kicked the draft back to the maieutic stage with
+eight findings, all validated at their loci on this thread; the maieutic work
+was done here and the node returns to the review stage. The review block records
+the reading against graph commit 9bf7b2fe.
+
+The circularity is struck. `work-loop`'s liquidation includes validation in use
+after the implementation ref is swapped with the main branch, and
+`materialization` puts that swap at bootstrap exit, so making exit wait on the
+reconciliation shim's remaining clauses made it wait on what only the exit can
+bring about; the previous reading had found the same circularity on the
+greenfield shim and the reply had claimed to drop it. The gloss carried it too,
+in "the shims that carried the state are gone", and a shim's liquidation is its
+own condition and never exit's: `review`'s shim liquidates when an instrument on
+`greenfield` produces the assessment, which exit does not cause.
+
+The list was false where it stood and short by two. No other node makes the
+ruling of the global tier a condition of exit, so "this node mints none" was
+untrue of the list it introduced; and the author's own words set conditions the
+list omitted, on `vocabulary-view`, that the vocabulary and the tradition
+references reach the onboarding path before exit, and on `attention` and
+`alignment-order`, that the reconciliation process is codified before it. The
+list was projected verbatim into a rule file every session loads.
+
+The remedy is the merge finding's, and the finding about the question converges
+on it. The question of what the conditions are is asked by no node and answered
+in four places, which is this record's own test for a node;
+`commons.systems/disposition-graph/bootstrap-exit-conditions` is minted under
+this one and gathers them, each cited where it is declared. This node keeps what
+acts, says that the state relaxes node by node, and cites the child for when it
+is over. The question here is kept as it stands, a reworded question being a new
+question on the node node's rule; the parent hands this node both halves and the
+second is answered by the citation.
+
+The two terms named two moments and now name one: bootstrap runs until bootstrap
+exit. As it stood the record would have left bootstrap on six rulings with
+coverage unruled, the legacy record undrained and the greenfield shim standing,
+and nothing said what governed the interval.
+
+`exit-conditions-cited-not-carried` on `work-loop` is the other end of the merge
+finding. It is kept and repointed at the new node rather than passed over: it is
+the same gathering, and which node holds the list is now a live choice the author
+rules.
+
+The counter-argument is not answered and is not weakened by any of this. Six
+rule files bind every session and this answer grounds none of them; on its own
+second paragraph they are unsupported implementation on the frontier. It is the
+ground of `deferred-as-the-resting-state`, which stays on the fact, and the
+recommendation does not move: refusing a resting state the AI writes for itself
+and paying for the refusal in the author's attention is the author's choice to
+make.
+
