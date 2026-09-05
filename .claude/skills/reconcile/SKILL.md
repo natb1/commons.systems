@@ -1,6 +1,6 @@
 ---
 name: reconcile
-description: Reconcile materialized implementation to the disposition graph, one bite per invocation from the answered frontier in rank order, from disposition to implementation, writing the graph only as viable options recorded and recommendations moved. Bootstrap shim declared on work-loop; the graph wins on conflict. The session runs on opus, its units on sonnet.
+description: Reconcile materialized implementation to the disposition graph, one bite per invocation from the answered frontier in rank order, from disposition to implementation, writing the graph only as viable options recorded and recommendations moved. Bootstrap shim declared on work-loop; the graph wins on conflict. The session runs on the larger model, its units on the smaller.
 model: opus
 effort: high
 disable-model-invocation: true
@@ -63,13 +63,22 @@ carried over from one grant to the next (`authority`, `viable-options`).
 
 ## Model
 
-Run the session on `opus`: `claude --model opus`, then `/reconcile`. The
-`model` field above sets the model for the turn that invokes the skill and
-the bite runs inside that turn, but the flag is the sure way. Units run on
-`sonnet` unless the brief names design or judgment, then `opus`; lookups
-on `haiku` (`delegation`, whose draft answers on the AI's judgment what
+Run the session on the larger model, and name it at the launch:
+`claude --model <it>`, then `/reconcile`. The `model` field in the
+frontmatter above is the harness's own interface and a launch fact, not the
+rule; it sets the model for the turn that invokes the skill, and the bite runs
+inside that turn, but the flag is the sure way. Everywhere in this file a
+model is named as the record names it, by its relation and not by the
+harness's word for it — the larger, the smaller, the smallest — because which
+harness model each of those is is a fact of the harness and of the day, and a
+name written into a text that outlives the launch goes stale inside it
+(`review-model`; and `decomposition`, which names every unit's model by
+relation and none by name). Units run on the smaller model unless the brief
+names design or judgment, then the larger; lookups on the smallest
+(`delegation`, whose draft answers on the AI's judgment what
 makes a subagent, a model, and an effort appropriate; the author's words
-of 2026-09-03 on `work-loop` leave that question open). Sonnet can run this skill itself once every
+of 2026-09-03 on `work-loop` leave that question open). The smaller model can
+run this skill itself once every
 frontier node carries an executable check and each kind of bite has a
 skill of its own, which is the last bite in the author's order; until
 then choosing a bite and writing its contract from prose criteria is
@@ -176,10 +185,16 @@ read and stop.
 ## 4. The graph
 
 This session's main thread writes the `disposition` ref, and only as
-decision state: a viable option recorded on a fact, and a fact's
-recommendation moved onto one, within the node's scope (the author,
+decision state: a viable option recorded on a fact, a fact's
+recommendation moved onto one, and an option marked passed over with the
+reason, each within the node's scope (the author,
 2026-09-04, quoted on `viable-options`; `work-loop`,
-`reconciliation-writes-options`). It never rules, never edits a ruling or
+`reconciliation-writes-options`). The third of those is unsupported by
+`work-loop`, whose answer enumerates two: the passing over is recorded there
+as the option `reconciliation-passes-an-option-over`, and it is what
+`viable-options`' recommended answer and the projected `authority` rule grant
+the AI generally, so it is done meanwhile and named here rather than left to
+read as one of the two. It never rules, never edits a ruling or
 the author's words, and never recommends beyond the scope a delegation
 confers; a subagent never edits a node (`delegation`,
 `reconciliation-session-writes-options`). An option this loop finds

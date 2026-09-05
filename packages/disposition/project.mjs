@@ -1301,8 +1301,13 @@ function renderMetrics(items, ctx) {
       const because = ctx.browser === null
         ? `Instruments ${m.of}; no shim names the browser's address, so there is nothing to link to.`
         : `Instruments ${m.of}, which the browser does not render: it has no answer yet.`;
-      return `<div class="metric" title="${alignEsc(`${m.why} ${because}`)}">${inner}`
-        + `<span class="metric-of mono">${alignEsc(m.of)}</span></div>`;
+      // The fence requires the metric to say why it does not link. A hover
+      // title is not the metric saying so and does not exist on touch, so
+      // `because` is visible text beside the id (`alignment-page`, and the
+      // reconciliation item `alignment-page-observations` records).
+      return `<div class="metric" title="${alignEsc(m.why)}">${inner}`
+        + `<span class="metric-of mono">${alignEsc(m.of)}</span>`
+        + `<span class="metric-why">${alignEsc(because)}</span></div>`;
     }
     return `<a class="metric" href="${alignEsc(ctx.browser)}#${alignEsc(m.of)}" target="_blank" rel="noopener"`
       + ` title="${alignEsc(`${m.why} Instruments ${m.of}.`)}">${inner}</a>`;
@@ -1476,9 +1481,14 @@ function renderOption(ctx, n, fact, o, doc, locked) {
   const recommended = fact.recommends === o.name;
   const stands = fact.name === "answer" && fact.stands === o.name;
   const said = optionText(ctx.nodes, n, fact, o);
+  // The row carries the option's name nowhere: the name is how a ruling is
+  // stored and the sentence is the decision, and the author's words of
+  // 2026-09-04 strike the id-shaped string from the row (`alignment-page`).
+  // The bare name survives only where the record holds no sentence yet, which
+  // is the case that same clause provides for. The name still reaches the DOM
+  // in `data-option` on the radio, which is where a ruling is filed from.
   const lead = said
     ? `<span class="choicesays">${alignInline(firstSentences(said.text))}</span>`
-      + `<span class="choicename mono handle">${alignEsc(o.name)}</span>`
     : `<span class="choicename">${alignEsc(o.name)}</span>`;
 
   const source = sourcePhrase(o);

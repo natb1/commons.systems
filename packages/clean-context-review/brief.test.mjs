@@ -197,7 +197,10 @@ describe("writeDraftBrief", () => {
     const trueLineCount = brief.endsWith("\n") ? lines.length - 1 : lines.length;
     const navLine = lines.find((l) => l.startsWith("This brief is "));
     assert.ok(navLine, "the nav sentence is written");
-    assert.match(navLine, new RegExp(`^This brief is ${trueLineCount} lines\\.`));
+    // `review-cost` fixes the measure in bytes; the line count stays beside
+    // it because the nav names line numbers the reader pages by.
+    const trueBytes = Buffer.byteLength(brief, "utf8");
+    assert.match(navLine, new RegExp(`^This brief is ${trueBytes.toLocaleString("en-US")} bytes over ${trueLineCount.toLocaleString("en-US")} lines\\.`));
     const named = navLine.match(/"## The node under review" at line (\d+)/);
     assert.ok(named, `nav sentence does not name the node's line: ${navLine}`);
     assert.ok(lines[Number(named[1]) - 1].startsWith("## The node under review"), "the line the nav names is the node's heading");
@@ -510,7 +513,7 @@ describe("writeDraftBrief", () => {
     const dry = runCli(["--node", REVIEW_LOW, rootDir, "--date", "2026-09-04", "--dry"], cwd);
     assert.doesNotMatch(dry, /model/i, "the script prints no model: it computes none");
     assert.match(dry, /\(dry run: nothing written\)/);
-    assert.match(dry, /draft: clean-context-review\.test\/main\/review-low; ancestry 2, rules 0, children 2, siblings 1, cited 1, readings 1, round 3, index \d+; \d+ lines/);
+    assert.match(dry, /draft: clean-context-review\.test\/main\/review-low; ancestry 2, rules 0, children 2, siblings 1, cited 1, readings 1, round 3, index \d+; \d+ bytes over \d+ lines/);
     assert.match(dry, /the reviewer's output file: tmp\/review\/draft-review-low\.json/);
     await assert.rejects(readFile(path.join(cwd, "tmp/review/draft-review-low.brief.md")), { code: "ENOENT" });
 
@@ -628,7 +631,7 @@ describe("writeSurveyBrief", () => {
     const cwd = path.dirname(rootDir);
     const dry = runCli(["--survey", rootDir, "--date", "2026-09-04", "--dry"], cwd);
     assert.doesNotMatch(dry, /model/i, "the script prints no model: it computes none");
-    assert.match(dry, /survey: 6 node\(s\) judged; context: 8 node\(s\); \d+ lines; graph commit \(unknown/);
+    assert.match(dry, /survey: 6 node\(s\) judged; context: 8 node\(s\); \d+ bytes over \d+ lines; graph commit \(unknown/);
     assert.match(dry, /the pins sidecar: .*survey\.pins\.json \(dry run: nothing written\)/);
     await assert.rejects(readFile(path.join(cwd, "tmp/review/survey.brief.md")), { code: "ENOENT" });
     await assert.rejects(readFile(path.join(cwd, "tmp/review/survey.pins.json")), { code: "ENOENT" });
@@ -866,6 +869,34 @@ describe("chooseMode: the re-reading's own mode, derived from the record and nev
     assert.match(mode.reason, /--fresh/);
   });
 
+  test("a kickback owes a fresh reading and the record says so, with no flag from the session", async () => {
+    // `review-cost`: a kickback is a new answer, which owes a reading of its
+    // own and not a re-reading of the answer it replaced. `apply.mjs` writes
+    // the reader's verdict into the node's `review` block on a kickback just
+    // as it does on a forward, so the choice is derivable and the session
+    // names nothing -- which is what the review skill claims of it.
+    const { rootDir } = await stageReReading("mode-kickback-");
+    const file = path.join(rootDir, "main", "review-low.md");
+    const staged = (await readFile(file, "utf8")).replace("  verdict: forward\n", "  verdict: kickback\n");
+    await writeFile(file, staged);
+
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
+    assert.equal(node.reviewStale, true, "fixture precondition: the answer moved after the reading");
+    assert.equal(node.review.verdict, "kickback", "fixture precondition: the reading kicked it back");
+
+    const mode = chooseMode(node, { rootDir, fresh: false });
+    assert.equal(mode.mode, "draft", "the redrawn answer gets a fresh reading");
+    assert.equal(mode.fallback, false, "and it is the owed reading, not a fallback");
+    assert.match(mode.reason, /kicked this answer back/);
+
+    // The same node with a forward verdict is the re-reading's case, so the
+    // branch turns on the verdict and not on some other property of the
+    // fixture.
+    const forwarded = { ...node, review: { ...node.review, verdict: "forward" } };
+    assert.equal(chooseMode(forwarded, { rootDir, fresh: false }).mode, "delta");
+  });
+
   test("the recommendation has not moved since the review's pin: draft, nothing to re-read", async () => {
     const rootDir = await freshFrontierFixture("mode-unmoved-");
     const before = await readGraph(rootDir);
@@ -1054,7 +1085,7 @@ describe("CLI: --node derives its mode from the record, prints it, and --fresh f
 
     const delta = runCli(["--node", REVIEW_LOW, rootDir, "--date", "2026-09-05", "--dry"], cwd);
     assert.match(delta, /^mode: delta \(/m);
-    assert.match(delta, /delta: clean-context-review\.test\/main\/review-low; \d+ lines/);
+    assert.match(delta, /delta: clean-context-review\.test\/main\/review-low; \d+ bytes over \d+ lines/);
     assert.match(delta, /the reviewer's output file: tmp\/review\/delta-review-low\.json/);
 
     const fresh = runCli(["--node", REVIEW_LOW, rootDir, "--date", "2026-09-05", "--dry", "--fresh"], cwd);

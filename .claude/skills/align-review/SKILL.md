@@ -25,10 +25,10 @@ description: The clean-context review of one draft. Invoked by node id the momen
 > one answer gets, the brief written to be held whole, and the model no
 > longer written down here; and to the option
 > `pointers-for-what-grows-with-the-record` on `clean-context-review`, under
-> which the round's other drafts reach the reader as pointers too. That
-> recommendation is unanswered and its own clean-context reading is owed, and
-> the option is recorded and unruled, `clean-context-review`'s own
-> recommendation not having moved for it. It has no authority of
+> which the round's other drafts reach the reader as pointers too.
+> `clean-context-review`'s answer fact now recommends that option, the node
+> standing at the review stage with a forward verdict of 2026-09-05 its
+> recommendation has since moved past, and nothing on it ruled. It has no authority of
 > its own: where it differs from the graph at `origin/disposition`, the graph
 > wins and the difference is recorded as an un-aligned disposition on the node
 > it differs from. Liquidation: the projector materializes this skill from
@@ -129,10 +129,10 @@ not reach it, and it is carried whole only where carrying it costs less than
 the reads it saves. The rules of the reading are that case, and the argument
 that carries them is the double read and not the pointer rule. What the reader
 is given is
-`clean-context-review`'s answer to state, and its recommendation has not moved
-for this: the pointer treatment of the round's drafts is recorded there as the
-option `pointers-for-what-grows-with-the-record`, which acts on nothing until
-the author rules, and this file describes what the brief tool now does under
+`clean-context-review`'s answer to state, and its recommendation has moved to
+it: the pointer treatment of the round's drafts is that node's recommended
+option, `pointers-for-what-grows-with-the-record`, unruled like everything
+else on this record, and this file describes what the brief tool does under
 the grant of 2026-09-05.
 
 The reading runs validations 1 to
@@ -200,7 +200,10 @@ node's review pin no longer matches what its facts recommend, the reading owed
 is the re-reading, and the brief's object is the amendment — the node as it
 stands, its difference from the pinned text, the last reading's findings, and
 the session's replies to them — while after a kickback the brief is a fresh
-reading's, because the answer was redrawn. The brief states its own length and
+reading's, because the answer was redrawn. The kickback is read off the node's
+own `review` block, which the apply step writes on a kickback exactly as on a
+forward, so no flag is passed for it; `--fresh` remains only for the case the
+record cannot show, a redraw whose kickback was never applied. The brief states its own length and
 the discipline for reading it, and it is written to be held whole by the
 reader it is given to.
 
@@ -210,7 +213,10 @@ Launch one subagent with the Agent tool: type `general-purpose`, at the model
 and the effort `review-model` fixes for this reading, named in the prompt at
 the launch and written down nowhere in this file; where that model is
 unavailable to the launching session, the substitute is named in the prompt in
-the same place. Never a fork: a forked context carries the session's framing
+the same place — a clause `review-model`'s recommended answer names unsupported
+implementation until the author rules on
+`fallback-when-the-model-is-unavailable`, applied meanwhile and named here so a
+reader of the skill sees it. Never a fork: a forked context carries the session's framing
 and is not clean. The prompt: "Read and follow `<the brief the previous step
 wrote>` exactly; you are a clean-context reviewer with no context but the
 record; read the brief in pieces of at most 300 lines with the Read tool's
@@ -233,7 +239,9 @@ dies of its own context returns nothing and is paid for twice.
 
 ## 4. Validate, then apply
 
-1. Read `tmp/review/draft-<slug>.json`: the node's verdict, its findings, its
+1. Read `tmp/review/<draft|delta>-<slug>.json` — the prefix is the mode the
+   brief step reported, `draft-` for a reading and `delta-` for a
+   re-reading: the node's verdict, its findings, its
    facts check, its viability judgment, its probes, and its counter-argument
    with the strength. Validate every finding before any is applied, on this
    thread and never delegated (the author, 2026-09-03, quoted on
@@ -259,17 +267,28 @@ dies of its own context returns nothing and is paid for twice.
    is still recorded on the node with the reply, as the dialogue's history,
    and the author sees both on the alignment page. Nothing is applied
    unvalidated.
-2. `node packages/clean-context-review/apply.mjs tmp/review/draft-<slug>.json
+2. `node packages/clean-context-review/apply.mjs
+   tmp/review/<draft|delta>-<slug>.json
    --replies tmp/review/replies.json [--overrides tmp/review/overrides.json]
    [--date YYYY-MM-DD]`. It reads the reading from the file's own `scope`,
    verifies that the node is at the review stage, and appends
-   `### Clean-context review, <date>` to `## Account` (creating the section
-   when absent) with the verdict, the findings, the facts check, the viability
-   judgment, the counter-argument with its strength, and the reply. On
+   `### Clean-context review, <date>, of <pin>` to `## Account` (creating the
+   section when absent) with the verdict, the findings, the facts check, the
+   viability judgment, the counter-argument with its strength, and the reply.
+   The heading carries the short pin of the recommendation the reading read,
+   which is what makes it an address: a node read twice in one day would
+   otherwise carry two sections a citation cannot tell apart, and a collision
+   surviving the pin takes a roman suffix. On
    `forward` it sets `stage: ruling` and writes `review` with `verdict`,
    `strength`, `date`, `against`, and `of`, the pin of the recommendation
    read, which goes stale when any fact's recommendation moves; on `kickback`
-   it sets the stage the reader named and writes the same. What the
+   it sets the stage the reader named and writes the same. It writes a fifth
+   key beside those, `commit`, the graph commit the reviewed text was read at,
+   which the re-reading diffs against; `dialogue`'s recommended text
+   enumerates the review's draft keys as four written together or not at all,
+   so the key is unsupported by that node and recorded there as the option
+   `commit-in-the-review-block`, written meanwhile under the author's grant
+   for that reconciliation. What the
    counter-argument is for: the alignment page carries it, with the strength
    this reading gave it, on the recommended option's row, in place of the case
    against the session wrote when it recorded the recommendation, and the
@@ -318,7 +337,12 @@ stated there and cited here, and §3 is where the launch names them; this file
 writes no model's name down, because the name is the harness's and the day's,
 and a reader cannot read it off a skill it never sees. Where the model that
 node fixes is unavailable to the launching session, the substitute is named at
-the launch and nowhere else — as it was on 2026-09-05, when three readers died
+the launch and nowhere else. That clause is unsupported implementation by the
+`materialization` node's test: `review-model`'s recommended answer leaves
+unavailability unanswered, open on the option
+`fallback-when-the-model-is-unavailable`, and names this skill's clause among
+the three it holds unsupported until the author rules. It was applied on
+2026-09-05, when three readers died
 on the model's session limit within a minute of each other and the author
 directed the sitting's readings to continue on another model, which their
 words on `review-model` name; that node's recommendation has not moved for

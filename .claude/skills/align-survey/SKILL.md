@@ -112,7 +112,10 @@ Launch one subagent with the Agent tool: type `general-purpose`, at the model
 and the effort `review-model` fixes for this reading, named in the prompt at
 the launch and written down nowhere in this file; where that model is
 unavailable to the launching session, the substitute is named in the prompt in
-the same place, and no brief argues either. Never a fork: a forked
+the same place, and no brief argues either — a clause `review-model`'s
+recommended answer names unsupported implementation until the author rules on
+`fallback-when-the-model-is-unavailable`, applied meanwhile and named here so a
+reader of the skill sees it. Never a fork: a forked
 context carries the session's framing and is not clean. The prompt: "Read and
 follow `<the brief the previous step wrote>` exactly; you are a clean-context
 reviewer with no context but the record; never run state-changing git; write
@@ -231,7 +234,11 @@ writes no model's name down, because the name is the harness's and the day's,
 and a reader cannot read it off a skill it never sees. Where the model that
 node fixes is unavailable to the launching session, the substitute is named at
 the launch and nowhere else, as it was for this sitting's readings on
-2026-09-05. Nothing in this file computes a model and no brief argues one. The orchestration runs on
+2026-09-05. That clause is unsupported implementation by the `materialization`
+node's test: `review-model`'s recommended answer leaves unavailability
+unanswered, open on the option `fallback-when-the-model-is-unavailable`, and
+names this skill's clause among the three it holds unsupported until the author
+rules. Nothing in this file computes a model and no brief argues one. The orchestration runs on
 whatever model invoked this skill; the validation of the findings, the
 replies, the overrides, and what is put to the author from a merge or a split
 are the session's judgment and are never delegated (`delegation`).

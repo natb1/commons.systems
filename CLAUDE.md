@@ -3,13 +3,17 @@
 > **Shim notice (2026-09-03).** This page is hand-written orientation. In
 > the target state the projector writes it from the `purpose` and
 > `projection` nodes (`session-context`), and it is declared as a shim on
-> `session-context` until then. It states one rule of its own and no other:
-> "How a recommendation is made" below, under a stopgap grant the author gave
-> on 2026-09-04 as a stand-in for rule reconciliation, and that section names
-> its own liquidation. Every other rule a session works under is a file under
-> `.claude/rules/`, projected from the graph, and the operations live in the
-> two skills below. Where this page conflicts with the graph on the
-> `disposition` ref, the graph wins.
+> `session-context` until then. It states no rule of its own: every rule a
+> session works under is a file under `.claude/rules/`, projected from the
+> graph, and the operations live in the two skills below. The one rule this
+> page did state, "How a recommendation is made", was a stopgap of 2026-09-04
+> standing in for rule reconciliation, and it named its own liquidation:
+> `.claude/rules/evaluation.md` is now projected from
+> `commons.systems/disposition-graph/evaluation`, carries the same text, and
+> `--rules --check` holds it current, so the section was deleted on 2026-09-05
+> rather than left as a second, hand-maintained copy the projector cannot see.
+> Where this page conflicts with the graph on the `disposition` ref, the graph
+> wins.
 
 ## What this repository is for
 
@@ -22,39 +26,6 @@ factories, where the specification is the person's standing answers and
 the factory is whatever agents act on them. Its intended readers are humans
 who want that, and who may arrive here by way of an AI tasked with the same
 goal."
-
-## How a recommendation is made
-
-> **Stopgap (2026-09-04).** The author granted bootstrap authority to
-> reconcile this disposition here, as a stand-in for rule reconciliation, and
-> stated it needs neither a disposition nor a shim. It is the one rule this
-> page states. Liquidation: rules are reconciled, the projector writes this
-> from `evaluation` like every other rule, and this section is deleted. Until
-> then it is unsupported implementation by `session-context`'s own standard,
-> which is why it says so here. The graph's text at
-> `commons.systems/disposition-graph/evaluation` governs; this is its shim.
-
-Against the full solution frontier. Nothing is sacred: no doctrine is implied
-by what exists, least of all by the incumbent implementation, which is evidence
-of past decisions and never authority over future ones. That is what greenfield
-means here, and it is the lens every recommendation is made through, not an
-occasional one; it is operational rather than a sentiment.
-
-A class of argument is struck from the choosing: what a change would cost to
-migrate, how many files or nodes it touches, what reviews or assessments it
-would spend, what tooling it would rework, and that the incumbent already does
-it the other way. None of those bear on whether a design is right, and a
-recommendation resting on one of them has not been made.
-
-The positive test replaces them: judge the design as if the record were being
-written from scratch, with nothing in it to preserve. The error to hunt is an
-incumbent fact doing the work of a design constraint, which is the failure this
-lens exists to catch; a recommendation found resting on one is named as such
-and redrawn.
-
-Cost is not thereby unsayable. A recommendation still states what its design
-will cost: that is a consequence of a design chosen on its merits, and never a
-reason for choosing it.
 
 ## Where the record lives
 

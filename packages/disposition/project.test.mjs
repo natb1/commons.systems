@@ -1939,9 +1939,15 @@ test("every option's row leads with its sentence, read from the record and never
   const answer = factHtml(pageItem("ruling-node"), "answer");
   const drafted = optionHtml(answer, "the-drafted-answer");
   const saysAt = drafted.indexOf('<span class="choicesays">');
-  const nameAt = drafted.indexOf('<span class="choicename mono handle">the-drafted-answer</span>');
-  assert.ok(saysAt >= 0 && nameAt > saysAt, "the sentence leads; the name follows as the handle a ruling is filed under");
-  assert.ok(drafted.slice(saysAt, nameAt).includes("The drafted answer's own sentence"), "from the option's own subsection");
+  assert.ok(saysAt >= 0, "the sentence leads");
+  assert.ok(drafted.includes("The drafted answer's own sentence"), "from the option's own subsection");
+  // The name is nowhere on a row that has a sentence: the name is how a
+  // ruling is stored and the sentence is the decision, and the author's words
+  // of 2026-09-04 strike the id-shaped string from the row (`alignment-page`).
+  assert.ok(!drafted.includes("choicename"), "no name span on a row the record holds a sentence for");
+  assert.ok(!drafted.includes(">the-drafted-answer<"), "the id-shaped string is off the row");
+  // It still reaches the DOM where a ruling is filed from.
+  assert.ok(drafted.includes('data-option="the-drafted-answer"'), "the name is on the radio, which is what files a ruling");
 
   // The option that stands has no subsection of its own: its sentence is the
   // node's `## Answer`, read through optionText like every other row's.
@@ -2506,10 +2512,38 @@ test("the alignment header carries the title and the module, and the rail's metr
     partial.includes(`<span class="metric-of mono">${firstNamed}</span>`),
     "the metric carries the node's id instead",
   );
+  // The fence asks the metric to say so, and a hover title is not the metric
+  // saying so -- it does not exist on touch. The reason is visible text.
   assert.ok(
-    partial.includes(`Instruments ${firstNamed}, which the browser does not render: it has no answer yet.`),
-    "and says so in its title",
+    partial.includes(`<span class="metric-why">Instruments ${firstNamed}, which the browser does not render: it has no answer yet.</span>`),
+    "and says so in visible text and not only on hover",
   );
+  assert.ok(
+    !partial.includes(`title="${"Instruments "}${firstNamed}, which the browser does not render`),
+    "the reason has left the title, which now carries only the metric's why",
+  );
+
+  // The same holds for the other unlinked case, where no shim names the
+  // browser at all: there is nowhere to link and the metric says why.
+  assert.ok(
+    html.includes('<span class="metric-why">Instruments '),
+    "the no-browser case says why in visible text too",
+  );
+  assert.ok(
+    html.includes("no shim names the browser's address, so there is nothing to link to."),
+    "and names the reason it cannot link",
+  );
+});
+
+test("the footer's launch stub carries the same visible mark the per-node chip's does", () => {
+  // `ruling-transport`: the launch half is a stub and a mark on the control
+  // says so, because a stub that looks finished is worse than no stub. The
+  // chip's mark is a rendered glyph; reduced opacity on the footer's control
+  // reads as disabled or secondary and is not a mark.
+  const html = buildAlignment(ALIGNMENT_TEMPLATE, ALIGNMENT_GRAPH);
+  assert.ok(html.includes('<a class="sbtn stub" id="btn-launch"'), "the footer's launch control is a stub");
+  assert.match(html, /\.chipbtn\.stub::after \{ content: "\\2217"/, "the chip's mark, for reference");
+  assert.match(html, /\.sbtn\.stub::after \{ content: "\\2217"/, "and the footer's, the same one");
 });
 
 test("only the selected node is shown, and the [hidden] rule beats the item's own display", () => {

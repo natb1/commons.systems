@@ -308,6 +308,7 @@
   a.metric dt { text-decoration: underline dotted var(--line); text-underline-offset: 3px; }
   /* A metric whose node the browser does not render carries the id instead of
      a link, so the author can still address the disposition it instruments. */
+  .metric-why { display: block; font-size: 9px; line-height: 1.3; color: var(--ink-3); margin-top: 2px; }
   .metric-of { display: block; font-size: 9px; line-height: 1.2; color: var(--ink-3); overflow-wrap: anywhere; margin-top: 2px; }
 
   /* ---------- the rail ---------- */
@@ -358,6 +359,7 @@
   .chipbtn.stub::after { content: "\2217"; font-size: 9px; vertical-align: super; margin-left: 1px; }
   .foot-acts { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
   .sbtn.stub { text-decoration: none; display: inline-flex; align-items: center; gap: 4px; opacity: .72; }
+  .sbtn.stub::after { content: "\2217"; font-size: 9px; vertical-align: super; margin-left: 1px; }
   .nowords { font-size: 13px; color: var(--ink-2); font-style: italic; margin: 12px 0 0; }
   .nopane { margin: 12px 0 0; font-size: 13px; }
   /* The node's readiness, beside the two controls that move it: the chip is
@@ -386,7 +388,6 @@
   /* What the choice would answer leads the row; its name follows as the
      handle the record files a ruling under, never in place of it. */
   .choicesays { font-size: 13.5px; color: var(--ink); }
-  .choicename.handle { font-size: 11px; color: var(--ink-3); letter-spacing: .04em; white-space: nowrap; }
   .optpills { margin: 4px 0 0 22px; }
   /* The case against the recommended option, on its row and at the first
      level: a case against that is folded is a case the author never reads

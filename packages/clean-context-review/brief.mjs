@@ -79,9 +79,9 @@ export const USAGE = [
   "usage: node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry] [--fresh]",
   "       node brief.mjs --survey    [rootDir] [--date YYYY-MM-DD] [--dry]",
   "exactly one of --node <id> and --survey is given: the review of one draft,",
-  "or the survey of the frontier. --fresh (--node only) forces the draft",
-  "brief even on a node whose recommendation has moved since its review --",
-  "what a kickback needs, since a kickback means the answer was redrawn.",
+  "or the survey of the frontier. A kickback is read off the node's own",
+  "review block, so the draft brief a redrawn answer owes needs no flag;",
+  "--fresh (--node only) forces it where the record cannot show one.",
 ].join("\n");
 
 function todayIsoUtc() {
@@ -593,8 +593,28 @@ function fillNav(text) {
     else if (!fenced && /^## /.test(line)) headings.push({ name: line.slice(3).trim(), line: i + 1 });
   });
   const where = headings.map((h) => `"## ${h.name}" at line ${h.line}`).join(", ");
-  const nav = `This brief is ${lines.length} lines. Read it whole before writing anything: ${where}.`;
-  return { text: rawLines.map((l) => (l === "{{nav}}" ? nav : l)).join("\n"), lines: lines.length };
+  // `review-cost` fixes the measure: bytes and not lines, since this record
+  // writes a paragraph as one unwrapped line and a line count flatters
+  // whichever text has the shorter paragraphs. The line count stays beside it
+  // because the reader pages by lines and the headings below name line
+  // numbers.
+  // The figure must be the size of the brief as written, and the sentence
+  // stating it is part of that size, so the count is taken to a fixed point:
+  // substituting a longer number lengthens the file by the digits it added,
+  // and one or two rounds settle it. Line count is stable under the
+  // substitution -- one line replaces one line -- and only bytes iterate.
+  const fmt = (n) => n.toLocaleString("en-US");
+  const navFor = (bytes) => `This brief is ${fmt(bytes)} bytes over ${fmt(lines.length)} lines. `
+    + `Read it whole before writing anything: ${where}.`;
+  let bytes = Buffer.byteLength(text, "utf8");
+  let out = text;
+  for (let round = 0; round < 8; round += 1) {
+    out = rawLines.map((l) => (l === "{{nav}}" ? navFor(bytes) : l)).join("\n");
+    const actual = Buffer.byteLength(out, "utf8");
+    if (actual === bytes) break;
+    bytes = actual;
+  }
+  return { text: out, lines: lines.length, bytes };
 }
 
 function fill(template, values) {
@@ -723,8 +743,14 @@ export function lastCleanContextReviewSection(accountText) {
  * Which brief a `--node` review writes, decided from the record and never
  * from a flag the session sets on its own account (`review-cost`: the
  * re-reading's object is the amendment, owed only where the answer itself
- * moved since its last reading, and `--fresh` is only for a kickback, whose
- * new answer owes a fresh reading of its own). `node.reviewStale` is exactly
+ * moved since its last reading, while a kickback is a new answer, which owes
+ * a fresh reading of its own). The kickback is read off the record and not
+ * off a flag: `apply.mjs` writes the reader's verdict into the node's
+ * `review` block on a kickback exactly as it does on a forward, so a node
+ * whose last reading kicked it back says so in the record the brief is
+ * derived from, and the session names nothing. `--fresh` remains as an
+ * override for the case the record cannot show -- a redraw whose kickback
+ * was never applied. `node.reviewStale` is exactly
  * "changed since its review" -- the same test the frontier renders that way
  * -- and it is `true` only where `node.review` already exists, so every
  * branch below it may read `node.review` without a further null check.
@@ -742,6 +768,13 @@ export function lastCleanContextReviewSection(accountText) {
 export function chooseMode(node, { rootDir, fresh }) {
   if (fresh) {
     return { mode: "draft", reason: "--fresh forces the draft brief: a kickback's new answer owes a fresh reading, not a re-reading of the old one", fallback: false };
+  }
+  if (node.review && node.review.verdict === "kickback") {
+    return {
+      mode: "draft",
+      reason: "the last reading kicked this answer back, and a kickback is a new answer, which owes a fresh reading of its own and not a re-reading of the answer it replaced",
+      fallback: false,
+    };
   }
   if (!node.reviewStale) {
     const hasDraftReview = !!(node.review && node.review.of !== null);
@@ -1008,7 +1041,7 @@ async function resolveReviewNode(rootDir, id) {
  * @returns {Promise<{briefPath: string, outFile: string,
  *   ancestryCount: number, rulesCount: number, childrenCount: number,
  *   siblingCount: number, citedCount: number, readingsCount: number,
- *   roundCount: number, indexCount: number, lines: number}>}
+ *   roundCount: number, indexCount: number, lines: number, bytes: number}>}
  */
 export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry = false }) {
   const { graph, node } = await resolveReviewNode(rootDir, id);
@@ -1038,7 +1071,7 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
       : "(no other question: the parts above carry the whole record)",
     out: outFile,
   });
-  const { text: filled, lines } = fillNav(withoutNav);
+  const { text: filled, lines, bytes } = fillNav(withoutNav);
 
   const result = {
     briefPath,
@@ -1052,6 +1085,7 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
     roundCount: round.length,
     indexCount: index.length,
     lines,
+    bytes,
   };
   if (dry) return result;
 
@@ -1073,7 +1107,8 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
  * here only on `mode: "delta"`, so this is a second guard against calling it
  * out of turn and not the first.
  *
- * @returns {Promise<{briefPath: string, outFile: string, lines: number}>}
+ * @returns {Promise<{briefPath: string, outFile: string, lines: number,
+ *   bytes: number}>}
  */
 export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry = false }) {
   const { node } = await resolveReviewNode(rootDir, id);
@@ -1101,9 +1136,9 @@ export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry
     previous_reading: mode.previous,
     out: outFile,
   });
-  const { text: filled, lines } = fillNav(withoutNav);
+  const { text: filled, lines, bytes } = fillNav(withoutNav);
 
-  const result = { briefPath, outFile, lines };
+  const result = { briefPath, outFile, lines, bytes };
   if (dry) return result;
 
   await mkdir(reviewDir, { recursive: true });
@@ -1139,7 +1174,7 @@ export function surveyPins({ graph, judged, date, commit, dirty }) {
  * node, in the frontier's order. No account goes into either.
  *
  * @returns {Promise<{briefPath: string, pinsPath: string, outFile: string,
- *   batchCount: number, contextCount: number, lines: number,
+ *   batchCount: number, contextCount: number, lines: number, bytes: number,
  *   commit: string|null, dirty: boolean}>}
  */
 export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = false }) {
@@ -1179,7 +1214,7 @@ export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = 
     out: SURVEY_OUT_FILE,
     pins: SURVEY_PINS_FILE,
   });
-  const { text: filled, lines } = fillNav(withoutNav);
+  const { text: filled, lines, bytes } = fillNav(withoutNav);
 
   const result = {
     briefPath,
@@ -1188,6 +1223,7 @@ export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = 
     batchCount: judged.length,
     contextCount: contextNodes.length,
     lines,
+    bytes,
     commit,
     dirty,
   };
@@ -1232,28 +1268,28 @@ if (isMain) {
         if (mode.mode === "delta") {
           const r = await writeDeltaBrief({ rootDir, reviewDir, id: opts.node, date: opts.date, dry: opts.dry });
           console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
-          console.log(`delta: ${opts.node}; ${r.lines} lines`);
+          console.log(`delta: ${opts.node}; ${r.bytes} bytes over ${r.lines} lines`);
           console.log(`the reviewer's output file: ${r.outFile}`);
           if (r.lines > 4000) {
-            process.stderr.write(`note: this brief is ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
+            process.stderr.write(`note: this brief is ${r.bytes} bytes over ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
           }
         } else {
           const r = await writeDraftBrief({ rootDir, reviewDir, id: opts.node, date: opts.date, dry: opts.dry });
           console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
-          console.log(`draft: ${opts.node}; ancestry ${r.ancestryCount}, rules ${r.rulesCount}, children ${r.childrenCount}, siblings ${r.siblingCount}, cited ${r.citedCount}, readings ${r.readingsCount}, round ${r.roundCount}, index ${r.indexCount}; ${r.lines} lines`);
+          console.log(`draft: ${opts.node}; ancestry ${r.ancestryCount}, rules ${r.rulesCount}, children ${r.childrenCount}, siblings ${r.siblingCount}, cited ${r.citedCount}, readings ${r.readingsCount}, round ${r.roundCount}, index ${r.indexCount}; ${r.bytes} bytes over ${r.lines} lines`);
           console.log(`the reviewer's output file: ${r.outFile}`);
           if (r.lines > 4000) {
-            process.stderr.write(`note: this brief is ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
+            process.stderr.write(`note: this brief is ${r.bytes} bytes over ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
           }
         }
       } else {
         const r = await writeSurveyBrief({ rootDir, reviewDir, date: opts.date, dry: opts.dry });
         console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
-        console.log(`survey: ${r.batchCount} node(s) judged; context: ${r.contextCount} node(s); ${r.lines} lines; graph commit ${commitText({ commit: r.commit, dirty: r.dirty })}`);
+        console.log(`survey: ${r.batchCount} node(s) judged; context: ${r.contextCount} node(s); ${r.bytes} bytes over ${r.lines} lines; graph commit ${commitText({ commit: r.commit, dirty: r.dirty })}`);
         console.log(opts.dry ? `the pins sidecar: ${r.pinsPath} (dry run: nothing written)` : `the pins sidecar: ${r.pinsPath}`);
         console.log(`the reviewer's output file: ${r.outFile}`);
         if (r.lines > 4000) {
-          process.stderr.write(`note: this brief is ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
+          process.stderr.write(`note: this brief is ${r.bytes} bytes over ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
         }
       }
     } catch (err) {
