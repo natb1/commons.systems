@@ -38,6 +38,9 @@ facts:
       - name: reconciliation-passes-an-option-over
         source: commons.systems/disposition-graph/viable-options
         ref: "2026-09-05"
+      - name: exit-conditions-cited-not-carried
+        source: review
+        ref: "2026-09-05"
     recommends: reconciliation-writes-options
     boldness: moderate
     against: "On a delegated or deferred node the reconciliation session may move the recommendation and the moved recommendation acts, so the loop writes the desired state it then reconciles to, which the level-triggered reading concedes breaks the controller's clean line; the guard, within the node's scope, is judged by the session that makes the move, and on a delegated node the author never sees it."
@@ -159,6 +162,18 @@ in the loop on itself, and this answer's enumeration is short by one the moment
 that is ruled. Recorded here rather than written in, because the bound on a
 reconciliation session is this node's to set and the other node's answer is not
 yet ruled.
+
+#### exit-conditions-cited-not-carried
+
+The bootstrap exit clauses of the reconciliation shim's liquidation condition
+move to the `what-acts-during-bootstrap` node, which defines `bootstrap exit`,
+and the shim's condition cites that node instead of restating them; what stays
+on the shim is the validation the reconciliation loop itself skipped. Raised by
+the clean-context review of that node on 2026-09-05, under validation 15: the
+question of what the conditions of bootstrap exit are is today carried inside
+this node's shim declaration, and the node that defines the term restates them
+or contradicts them. The `split-the-shim` option is the other end of the same
+finding.
 
 ### authority
 

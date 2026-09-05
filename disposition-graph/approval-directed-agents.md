@@ -30,6 +30,10 @@ bears:
     fact: answer
     option: authority-derived
     relation: adopted
+  - node: commons.systems/disposition-graph/what-acts-during-bootstrap
+    fact: answer
+    option: deferred-as-the-resting-state
+    relation: diverged
 ---
 ## Answer
 
