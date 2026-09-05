@@ -29,6 +29,10 @@ bears:
     fact: answer
     option: prose-argues-structure-records
     relation: adopted
+  - node: commons.systems/disposition-graph/delegation
+    fact: answer
+    option: reconciliation-session-writes-options
+    relation: adopted
 ---
 ## Answer
 

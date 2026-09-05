@@ -31,6 +31,9 @@ facts:
       - name: wait-for-the-named-model
         source: review
         ref: "2026-09-05"
+      - name: alignment-main-thread-named
+        source: review
+        ref: "2026-09-05"
     recommends: fable-for-both-readings
     boldness: moderate
     against: "The draft's reading re-checks, on the same class of mind, a text the most capable model has just written at full attention, so the flat rule pays the top rate where the marginal detection is lowest, buys correlated blind spots where the review wanted independence, and, by pricing both readings the same, forecloses the measurement that would show it."
@@ -208,6 +211,26 @@ alignment frontier, and the record then has no reading at all rather than a
 reading it can see the model of. It is on the fact because the author's words
 of 2026-09-05 directed a substitution for that day and did not choose between
 the two rules.
+
+#### alignment-main-thread-named
+
+The recommended rule with its ground restated: both readings run on the model
+the `delegation` node gives the *alignment* session's main thread, and a reading
+invoked by any other session runs on that same model rather than on the model of
+the session that invoked it. It is raised because the ground this node's answer
+rests on moved beneath it. That answer names fable as the model "the delegation
+node gives the main thread"; the amendment of 2026-09-05 to `delegation` gives
+the most capable model at full effort to the alignment session's main thread
+alone, and gives a reconciliation session's main thread the model the
+reconciliation skill recommends. So a reading invoked from a reconciliation
+session now has no main thread at the rank this node's argument assumes, and the
+rule as written no longer says which model that reading runs on. What it buys is
+that the reading's reader is pinned to one rank whoever invokes it, which is what
+the answer already means; what it costs is a second place where a change to
+`delegation` changes what this rule names, unless the model is named here
+outright. Raised by the second clean-context reading of `delegation` on
+2026-09-05, which found the cross-node consequence at its locus; that review
+proposes the option and does not write this node's answer.
 
 ### authority
 
