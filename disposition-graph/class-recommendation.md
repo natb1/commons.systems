@@ -10,8 +10,14 @@ facts:
       - name: no-recommendation-on-the-authority-fact
         source: review
         ref: "2026-09-05"
+      - name: class-follows-the-authors-words
+        source: review
+        ref: "2026-09-05"
+      - name: form-decides-the-default
+        source: review
+        ref: "2026-09-05"
     recommends: escalate-toward-ratified
-    boldness: moderate
+    boldness: high
     stands: escalate-toward-ratified
     against: "The test decides which questions reach the author at all, and the party applying it is the party whose work a ratification would slow. Expensive, irreversible and capture-shaped are the AI's own reading of each node, applied nineteen times with no instrument behind it and no record of the reading anywhere but the node's authority-fact prose, so a systematic tilt toward delegated would be invisible in exactly the way the test exists to prevent."
   - name: authority
@@ -21,22 +27,27 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: low
+review:
+  verdict: forward
+  strength: strong
+  date: 2026-09-05
+  of: 8853d8dc5bf0c1d467d84d0d1e200306019f29b9
+  commit: 1d32a5aa4680268c1a1a5ebcf6bebd3c139c8543
+  against: "The record measures this test and it does not do what the answer says it does. Of 129 authority facts only 20 name a limb of the three at all, and 56 carry no `### authority` reading whatever, so the guard this answer offers against its own case against -- that the reading be written on the node -- is absent from more than four fifths of the record on the day the author is asked to ratify it. Where the test is invoked, it is invoked almost only to justify escalation: 58 of the 59 non-ratified recommendations in the record sit on `form: reading` nodes and the 59th on `ruling-transport`, so on every substantive node but one the test has produced ratified. What actually sorts the record is the node's form, which the answer does not state, and the three limbs are the prose written after the sort. The risk is therefore the opposite of the one the fact's own `against` names: not an invisible tilt toward delegated, but a rule that ratifies nearly everything and so hands the author every question while appearing to filter, which spends by default the attention the `attention` and `alignment-order` nodes exist to spend carefully. The alternative the draft has not weighed is to state the rule the record runs -- form decides the default and the limbs escalate from it -- or to drop the AI's discretion and follow the author's words alone."
 form: rule
+tier: global
 under:
   - commons.systems/disposition-graph/authority
+depends:
+  - commons.systems/disposition-graph/authority#escalate-toward-ratified
+defines:
+  - term: expensive
+    gloss: "Of a wrong answer: that its cost is paid in work the record cannot take back cheaply."
+  - term: irreversible
+    gloss: "Of a wrong answer: that its cost is not paid back at all, as with a deletion, a swap, or a landing that other work is built on."
+  - term: capture-shaped
+    gloss: "Of a decision: that the party which would set the answer is the party the answer is meant to check."
 ---
-## Disposition
-
-Minted on 2026-09-05 by the third clean-context reading of the `authority`
-node, which found the test stated in that node's answer and measured its reach:
-nineteen node files carry the phrase, it came from the alignment skill, a
-declared shim, and no words of the author's speak to it. The reading's words:
-"Every limb of that test holds of this clause with more force -- it survives the
-ruling, it is cited by eighteen nodes, and it is read by every session that
-recommends a class -- and the two clauses were treated oppositely one paragraph
-apart." The same reading recorded that this is not a probe, since the AI can
-answer it.
-
 ## Answer
 
 The class the AI recommends on a node's authority fact escalates toward ratified
@@ -56,7 +67,12 @@ deferred otherwise.
 The reading that applies the test is written on the node, in the `### authority`
 subsection, which says which of the three limbs it found and why; a class
 recommended with no such reading behind it is a recommendation the reviewer may
-find unsupported.
+find unsupported. The requirement binds from this node's ruling and not before:
+the authority facts already recorded without such a reading are a reconciliation
+item on this node, and not a defect the reviewer reports on each of them. At
+graph commit 1d32a5aa the record holds 129 authority facts, of which twenty-one
+name a limb and fifty-six carry no `### authority` prose at all, so the back-fill
+is most of the record and is owed rather than assumed.
 
 ## Rationale
 
@@ -66,9 +82,9 @@ it cited it as the record's own; the `recording` node's reading found the
 citation empty, and it was recorded as an option on `authority` and absorbed into
 that node's answer on 2026-09-05. It left the same day, because a rule that
 survives the recording, is cited across the record, and is read by sessions that
-never saw it asked is a question and not a clause, which is the test the
-`node` node states and which minted `what-acts-during-bootstrap` from the same
-answer one paragraph away.
+never saw it asked is a question and not a clause, which is the survival and
+scope test the `probe-or-node` node states, and which minted
+`what-acts-during-bootstrap` from the same answer one paragraph away.
 
 It is a rule and not a heuristic because it decides what reaches the author, and
 the `session-context` node holds that what binds every session is projected as a
@@ -80,16 +96,21 @@ recommendation.
 
 ### answer
 
-`escalate-toward-ratified` is recommended at moderate boldness. The three limbs
-are the AI's, promoted from a shim and supported by no words of the author's;
-what is the author's is that they rule the class, which this answer does not
-touch. Moderate rather than low because the limbs are the AI's own wording and
-the record has nineteen applications of them with no reading recorded for most,
-and moderate rather than high because the rule is already the record's practice
-and the alternative is a bare refusal to recommend. The case against is on the
-fact, and the requirement that the `### authority` subsection show the reading is
-this answer's only answer to it. `no-recommendation-on-the-authority-fact` is
-live.
+`escalate-toward-ratified` is recommended at high boldness, which in this record
+means low confidence. The three limbs are the AI's, promoted from a shim and
+supported by no words of the author's; what is the author's is that they rule the
+class, which this answer does not touch. High rather than moderate because the
+only evidence that the rule works is prose the AI wrote, and because the guard
+this answer offers against its own case against, that the reading be written on
+the node, is met by twenty-one of the record's 129 authority facts, fifty-six of
+which carry no `### authority` prose at all, measured at graph commit 1d32a5aa.
+An earlier draft said the record had nineteen applications with no reading
+recorded for most, and that was false twice over: every application that exists
+does record a reading, and the scarcity is that the applications are few. The
+case against is on the fact and the answer does not meet it. Three alternatives
+are live beside the recommendation: `no-recommendation-on-the-authority-fact`,
+`class-follows-the-authors-words`, and `form-decides-the-default`, the last of
+which is what the record measurably already does.
 
 #### no-recommendation-on-the-authority-fact
 
@@ -103,23 +124,195 @@ present in the form it presents every other, a recommendation and its boldness.
 Raised by the clean-context reading of `authority` on 2026-09-05, as the remedy
 its counter-argument points at.
 
+#### class-follows-the-authors-words
+
+The AI recommends ratified wherever no words of the author's grant a class, and
+delegated or deferred only where the author's own recorded words, on the node or
+on an ancestor, say so; the three limbs go. It answers the case against as
+squarely as the bare refusal does, since no test of the AI's remains that could
+tilt, and it keeps the recommendation and the boldness the alignment page
+presents on every other fact, which is the one cost the refusal carries. What it
+costs is that the default is the most expensive class in the record: every node
+the author has not spoken to reaches them, which is the attention the `attention`
+and `alignment-order` nodes exist to spend carefully. Raised by the clean-context
+reading of 2026-09-05.
+
+#### form-decides-the-default
+
+The recommendation follows the node's form, a reading delegated and a rule or a
+disposition ratified, and the three limbs act only to escalate a delegated
+default. It is what the record measurably already does: of the 59 non-ratified
+recommendations on authority facts, 58 sit on `form: reading` nodes and the 59th
+on `ruling-transport`. It is the only candidate on this list an instrument could
+check without reading prose, which is what the answer's own evidentiary clause
+asks for and cannot get. What it costs is that form is a field the AI writes, so
+the tilt the case against names moves from the reading to the form rather than
+going away, and a node whose form is wrong gets the wrong default silently.
+Raised by the clean-context reading of 2026-09-05, as the rule the record runs
+in place of the one this node states.
+
 ### authority
 
 Ratified, at low boldness. What this decides is which questions reach the author
 at all, and the party that would otherwise set it is the party the review exists
 to check, which is the capture limb of the test itself; being wrong is not
 visible in the record, since a class recommended too low simply means a question
-the author never saw. Low boldness because the escalation this node recommends
-for itself is the record's own rule read on its own terms.
+the author never saw. Low boldness rests on that capture argument alone: the
+test is not yet the record's rule, since whether it is the rule is the question
+this node asks, and an earlier draft rested the boldness on the very citation the
+`recording` node's reading of 2026-09-05 found empty.
 
 ## Account
 
 ### Minted, 2026-09-05
 
-By the third clean-context reading of `authority`, whose finding is quoted under
-`## Disposition`. The rule and its option are moved from that node, which now
-cites this one; the option `escalate-toward-ratified` stays on `authority`'s
-answer fact, marked as moved, since no candidate leaves a list. The alternative
+By the third clean-context reading of the `authority` node, which found the test
+stated in that node's answer and measured its reach: nineteen node files carried
+the phrase, it came from the alignment skill, a declared shim, and no words of
+the author's speak to it. The reading's words: "Every limb of that test holds of
+this clause with more force -- it survives the ruling, it is cited by eighteen
+nodes, and it is read by every session that recommends a class -- and the two
+clauses were treated oppositely one paragraph apart." The same reading recorded
+that this is not a probe, since the AI can answer it. No `## Disposition` section
+carries any of that, and one did until the reading of 2026-09-05: the alignment
+page renders that section under "The author's words on this node", and the author
+has never spoken to this node, so the panel would have attributed the AI's
+reading to them. The rule and its option are moved from `authority`, which now
+cites this one; the option `escalate-toward-ratified` stays on that node's answer
+fact unmarked, its own `#### escalate-toward-ratified` subsection there recording
+the move, and it will be shown as moved rather than passed over once
+`viable-options#adopted-is-a-status` is ruled. The alternative
 the reading's counter-argument points at is recorded here as
 `no-recommendation-on-the-authority-fact`. No ruling and no class is written:
 this node stands unanswered at the review stage with its own reading owed.
+
+### Clean-context review, 2026-09-05
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Recommended at this reading: `escalate-toward-ratified`.
+
+Findings:
+
+- Frontmatter, `tier` absent (validation 5, and the executor test). The node carries `form: rule` and its own `## Rationale` argues "It is a rule and not a heuristic because it decides what reaches the author, and the `session-context` node holds that what binds every session is projected as a rule" -- but the frontmatter carries no `tier`, and `packages/disposition/project.mjs` line 177 writes a rule file only for a global-tier node (`if (node.tier !== "global") continue`). `.claude/rules/` holds exactly the six `tier: global` nodes (authority, delegation, evaluation, materialization, session-context, what-acts-during-bootstrap). Because the test left `authority`'s answer on 2026-09-05, `grep -n "capture-shaped\|expensive" .claude/rules/*.md` now returns nothing, and this node as drafted will not restore it. The sibling minted from the same answer one paragraph away, `what-acts-during-bootstrap`, carries `tier: global` and is projected. So on the day this answer is ruled the rule is read by no session -- which is precisely the limb the `## Disposition` gives as the ground for minting the node, "it is read by every session that recommends a class". Suggested edit: add `tier: global` to the frontmatter and regenerate `.claude/rules/`.
+- `## Disposition` (validation 1, and the executor test). The section holds no words of the author's: it holds the third clean-context reading of `authority` and that reading's quotation. `packages/disposition/project.mjs` renders this section on the alignment page under the summaries "The author's words on this node" (line 1642) and "The author's words" (line 1680), so the author will be shown a panel headed with their own name carrying the AI's reading. The node is honest about the ground elsewhere -- `### answer` says the limbs are "supported by no words of the author's" -- but the panel the page leads with contradicts it. The sibling `delegation-bounds-and-sizing` minted the same day does the same thing, so this is the sitting's pattern and not a slip. Suggested edit: move the reading's account and quotation into `## Account` under `### Minted, 2026-09-05`, where it already partly stands, and leave `## Disposition` absent as on `bootstrap-exit-conditions`, so the page shows no author's-words panel on a node the author has never spoken to.
+- `## Facts`, `### answer` (validation 3, a claim about the record that the record contradicts). "the record has nineteen applications of them with no reading recorded for most". Every application does record a reading. Of the eighteen nodes whose `### authority` subsection contains "capture-shaped" -- alignment-page, author-questions, authority, bootstrap-exit-conditions, clean-context-review, delegation, dialogue, frontier-consistency, probe-or-node, prose-and-structure, readings, recording, rejected, review-cost, review-skills, viable-options, what-acts-during-bootstrap, work-loop -- all eighteen name a limb and give a reason. The measure that is true is the other one: the record holds 129 authority facts, only 20 name a limb of the test, and 56 carry no `### authority` prose at all. This sentence is the stated reason for moderate rather than low boldness, so the boldness rests on a premise the record does not support. Suggested edit: "...and the record applies them on twenty of its 129 authority facts, fifty-six of which carry no reading at all."
+- `## Answer`, third paragraph (validation 5, second limb: presumed materialized). "The reading that applies the test is written on the node, in the `### authority` subsection, which says which of the three limbs it found and why; a class recommended with no such reading behind it is a recommendation the reviewer may find unsupported." Measured today: 20 of 129 authority facts name a limb and 56 carry no `### authority` prose whatever. As written, ruling this answer makes 109 of the record's own class recommendations unsupported the moment it lands, and the node nowhere says the back-fill is owed. (The paragraph also borders on a second question -- what a class recommendation must show, as against what class is recommended -- though it is defensible as the evidentiary clause of the same rule.) Suggested edit: add "The requirement binds from this ruling; the authority facts already recorded without such a reading are a reconciliation item on this node and not a defect the reviewer reports on each."
+- `## Rationale`, first paragraph (validation 3, a citation that does not hold). "...is a question and not a clause, which is the test the `node` node states". The `node` node states no such test: `grep -n "survives\|cited across\|read by sessions" disposition/disposition-graph/node.md` returns nothing, and what that node states is "If a text answers two questions, it is two nodes." The three-limb test is the survival test of `probe-or-node` together with its scope test, and `authority`'s own `#### escalate-toward-ratified` subsection attributes it exactly that way: "the survival and scope tests which minted `what-acts-during-bootstrap`". Suggested edit: "...which is the survival and scope test the `probe-or-node` node states, and which minted `what-acts-during-bootstrap` from the same answer one paragraph away."
+- `## Account` (validation 3, a claim about the record that is not true today). "the option `escalate-toward-ratified` stays on `authority`'s answer fact, marked as moved". It carries no mark: the option in `disposition/disposition-graph/authority.md` has only `name`, `source` and `ref`, the encoding admits `status: passed` and nothing else, and `authority`'s own `### answer` reason says the option will be "shown as moved rather than passed over once the `adopted-is-a-status` option on the viable-options node is ruled". Suggested edit: "...stays on `authority`'s answer fact unmarked, its `#### escalate-toward-ratified` subsection there recording the move, and shown as moved once `viable-options#adopted-is-a-status` is ruled."
+- Frontmatter, `depends` absent (validation 3, a dependency the record holds only in prose). `escalate-toward-ratified` is still a live, unpassed option on `authority`'s answer fact carrying this node's rule, so the author could rule for it there and for `no-recommendation-on-the-authority-fact` here and the record would stand holding both. Nothing in data ties the two rulings: this node's `depends` is empty and `authority` carries no `depends` key at all, although its `### answer` reason says "which `depends` names". Suggested edit here: `depends: [commons.systems/disposition-graph/authority#escalate-toward-ratified]`, the id-and-option form `review-skills` already uses (`frontier-consistency#split-survey-from-per-draft`). The matching gap on `authority` is that node's and is named here in prose only; the review proposes and never edits another node.
+- Frontmatter, `defines` absent (validation 3, vocabulary the record already reads from here). The answer defines three terms -- expensive, irreversible, capture-shaped -- and another node already cites this one as their definer: `delegation-bounds-and-sizing` says its bounds "are capture-shaped in the sense `class-recommendation` gives the word". Forty-seven node files carry `defines`, and the encoding holds that a gloss is written once on the defining node and read from there, so with no `defines` entry no projection can link the term to the sentence that fixes it. Suggested edit: add three `{term, gloss}` entries carrying the answer's own definitions verbatim.
+- `## Facts`, `### authority` (validation 3, a reason that is circular). "Low boldness because the escalation this node recommends for itself is the record's own rule read on its own terms." It is not the record's rule until this node is ruled -- that is the question the node asks -- and "the record's own test" is the very citation the `recording` node's reading found empty on 2026-09-05: "neither evaluation.md nor authority.md carries 'capture-shaped' or 'irreversible'... the class recommended is defensible on the grounds the prose gives; the citation is not." The capture reason given earlier in the same paragraph carries the recommendation on its own. Suggested edit: strike "is the record's own rule read on its own terms" and rest the low boldness on the capture argument the paragraph already makes, whatever the record's present practice.
+- `## Facts`, `### answer` and the frontmatter's `boldness: moderate` (validation 3, the boldness). Moderate is understated on the draft's own account. The three limbs are the AI's wording, promoted from a shim, supported by no words of the author's; the guard the answer offers against its own case against is met by 20 of 129 authority facts; and one of the two reasons given for moderate rather than low is the measurement finding 3 corrects. Since high boldness is low confidence in this record, `high` is the honest mark for a rule of the AI's whose only evidence of working is prose the AI wrote. Suggested edit: `boldness: high` on the answer fact, with the reason restated on the corrected measure.
+- Cross-references the move leaves pointing at the wrong locus, recorded in prose for the session and not applied here. The `## Account` says the rule "is moved from that node, which now cites this one", but seven other nodes still attribute the test elsewhere: `disposition/disposition-graph/review-cost.md:177`, "capture-shaped in the way the authority node's escalation test names" -- and since `authority` no longer states the test while this node's own `## Answer` cites `review-cost` as naming the shape, the citation is now a loop between the two; `disposition/disposition-graph/viable-options.md:444`, "the capture-shaped case the alignment skill escalates toward ratified", pointing at the shim the rationale says the test has left; and `decomposition.md:189`, `materialization.md:121`, `work-loop.md:192`, `frontier-consistency.md:223` and `review-model.md`, each calling it "the record's own test" or "the record's test" and naming no node -- `decomposition`'s own reading has already logged this as its finding 4, "calls the escalation 'the record's own test' without naming `class-recommendation`". Each would take the same edit: name `class-recommendation` as the node that states the test.
+
+On the facts and what they recommend: The answer fact recommends `escalate-toward-ratified`, a listed option, with `stands` naming that same option and no `## Recommendation` fence, which is correct; the node has no review block, so no pin is stale, and `validate.mjs disposition` passes at 142 nodes. Boldness `moderate` is understated (findings 3 and 10): its stated ground is a measurement the record contradicts, and the limbs are the AI's own, promoted from a shim, with no words of the author's behind them. The authority fact recommends `ratified` at low boldness on the capture limb, which is right on its substance though its reason is circular (finding 9); no existence and no persistence fact, correctly, since no prune is proposed and the recommendation changes no shape -- but the frontmatter is missing `tier`, `defines` and `depends`, which findings 1, 8 and 7 name.
+
+On the viability of the options: Both options on the answer fact are viable and neither dominates the other: `escalate-toward-ratified` keeps a recommendation and a boldness on the alignment page, and `no-recommendation-on-the-authority-fact` removes the tilt the case against names. Two viable options are missing. `class-follows-the-authors-words`: the AI recommends ratified wherever no words of the author's grant a class, and delegated or deferred only where the author's own recorded words on the node or on an ancestor say so; the three limbs go. It answers the case against as squarely as the bare refusal does, since no AI-applied test remains that could tilt, while keeping the recommendation and boldness the page presents on every other fact -- the one cost the refusal carries. `form-decides-the-default`: the recommendation follows the node's form, a reading delegated and a rule or a disposition ratified, and the three limbs act only to escalate a delegated default; this is what the record measurably already does, 58 of the 59 non-ratified authority recommendations sitting on `form: reading` nodes and the 59th on `ruling-transport`, and it is the only candidate an instrument could check without reading prose. Neither is dominated by the two listed. The authority fact's three options are the reserved vocabulary and are complete.
+
+Strongest counter-argument (strong): The record measures this test and it does not do what the answer says it does. Of 129 authority facts only 20 name a limb of the three at all, and 56 carry no `### authority` reading whatever, so the guard this answer offers against its own case against -- that the reading be written on the node -- is absent from more than four fifths of the record on the day the author is asked to ratify it. Where the test is invoked, it is invoked almost only to justify escalation: 58 of the 59 non-ratified recommendations in the record sit on `form: reading` nodes and the 59th on `ruling-transport`, so on every substantive node but one the test has produced ratified. What actually sorts the record is the node's form, which the answer does not state, and the three limbs are the prose written after the sort. The risk is therefore the opposite of the one the fact's own `against` names: not an invisible tilt toward delegated, but a rule that ratifies nearly everything and so hands the author every question while appearing to filter, which spends by default the attention the `attention` and `alignment-order` nodes exist to spend carefully. The alternative the draft has not weighed is to state the rule the record runs -- form decides the default and the limbs escalate from it -- or to drop the AI's discretion and follow the author's words alone.
+
+The session's reply: Forwarded at strong strength with eleven findings, every one validated at its locus on this thread. Nine accepted as written, two accepted with a correction to the reading's own supporting measurement.
+
+tier: global is added and .claude/rules/ regenerated. Verified: packages/disposition/project.mjs writes a rule file only where node.tier === 'global', and the six files there are exactly the six global-tier nodes. Because the test left authority's answer on 2026-09-05, no rule file carried it at all, on the very day the node's own ground for existing is that it is read by every session that recommends a class.
+
+The ## Disposition section held no words of the author's; it held the third clean-context reading of authority. Verified that the alignment page renders that section under 'The author's words on this node' and 'The author's words', so the panel the page leads with would have attributed the AI's reading to the author. The section is gone and its content stands in ## Account under the minting section, as on bootstrap-exit-conditions. The sibling delegation-bounds-and-sizing has the same defect and it is named there rather than fixed from here.
+
+The measurement is corrected, and re-taken independently rather than copied. Of 129 authority facts in the record, twenty-one name a limb of the test in their ### authority prose and fifty-six carry no ### authority prose at all; eighteen carry the word capture-shaped, and the three that name a limb without it are decomposition, materialization and review-model. The reading counted twenty and the difference is those three; the figure written into the node is twenty-one, which I measured. The claim it replaces, 'nineteen applications with no reading recorded for most', was false twice over: every application that exists does record a reading, and the true scarcity is the other way round.
+
+The evidentiary clause now says the requirement binds from the ruling, and that the authority facts already recorded without a reading are a reconciliation item on this node rather than a defect the reviewer reports on each. Without it, ruling this answer would have made a hundred and eight of the record's own class recommendations unsupported the moment it landed.
+
+The citation is corrected: the survival and scope tests are probe-or-node's, not the node node's, and authority's own subsection already attributed them that way. Verified that node.md states only 'If a text answers two questions, it is two nodes.'
+
+The account's claim that the option on authority is 'marked as moved' is corrected: it carries no mark, the encoding admits only status: passed, and authority's own reason says it will be shown as moved once viable-options#adopted-is-a-status is ruled.
+
+depends now names commons.systems/disposition-graph/authority#escalate-toward-ratified in the id-and-option form. One correction to the reading: authority does carry a depends key, naming viable-options#adopted-is-a-status and unanswered; what it lacks is an entry naming this node. The finding's substance stands, that nothing in data tied the two rulings and the author could have ruled both ways at once.
+
+defines is added with the three terms and their glosses taken verbatim from the answer, since delegation-bounds-and-sizing already reads 'capture-shaped' from here.
+
+The circular reason is struck from ### authority: the test is not the record's rule until this node is ruled, which is the question the node asks. The capture argument carries the recommendation on its own.
+
+Boldness moves to high, which in this record is low confidence. The three limbs are the AI's wording promoted from a shim with no words of the author's behind them, the guard the answer offers against its own case against is met by twenty-one of 129 authority facts, and one of the two reasons given for moderate was the measurement finding 3 corrects.
+
+Two viable options the reading names are added, since a candidate never listed is one the author cannot rule for: class-follows-the-authors-words and form-decides-the-default, both source review, ref 2026-09-05, with the reading's own prose. The second is the record's measured behaviour and the only candidate an instrument could check, and the counter-argument, that the rule as drafted ratifies nearly everything while appearing to filter, is answered by neither listed option; it is recorded and not answered here.
+
+The seven stale cross-references of finding 11 are plain corrections of citation on other nodes and are made directly, each disclosed in that node's account: review-cost, viable-options, decomposition, materialization, work-loop, frontier-consistency and review-model each named the test without naming the node that states it, and review-cost's citation of authority had become a loop.
+
+The recommendation moved, so the node returns to the review stage.
+
+### Amended after the reading, 2026-09-05
+
+Eleven findings, all validated at their loci on the alignment thread. Nine taken
+as written, two taken with a correction to the reading's own supporting claim.
+
+`tier: global` is added and `.claude/rules/` regenerated. `writeRules` in
+`packages/disposition/project.mjs` writes a rule file only where a node's `tier`
+is global, and the six files there are exactly the six global-tier nodes; so on
+the day the test left the `authority` node's answer, no rule file carried it at
+all, on a node whose stated ground for existing is that it is read by every
+session that recommends a class.
+
+The `## Disposition` section is gone. It held no words of the author's; it held
+the reading that minted the node. The alignment page renders that section under
+"The author's words on this node", so the panel the page leads with would have
+attributed the AI's reading to the author, on a node the author has never spoken
+to. Its content stands in the minting section above. The sibling
+`delegation-bounds-and-sizing`, minted the same day, has the same defect; it is
+named here and left for that node's own reading.
+
+The measurement is corrected and re-taken on this thread rather than copied from
+the reading. At graph commit 1d32a5aa the record holds 129 authority facts, of
+which twenty-one name a limb of the test in their `### authority` prose and
+fifty-six carry no such prose at all; eighteen carry the word capture-shaped, and
+the three that name a limb without it are `decomposition`, `materialization` and
+`review-model`. The reading counted twenty and the difference is those three; the
+figure written into the node is the one measured here. The claim it replaces was
+false twice over.
+
+The evidentiary clause now says the requirement binds from this node's ruling and
+that the back-fill is a reconciliation item here. Without it, ruling this answer
+would have made a hundred and eight of the record's own class recommendations
+unsupported the moment it landed.
+
+The survival and scope tests are `probe-or-node`'s and not the `node` node's,
+which states only that a text answering two questions is two nodes; the citation
+is corrected, and the `authority` node's own subsection already attributed them
+that way.
+
+`depends` names `authority#escalate-toward-ratified`, so the record no longer
+holds two rulings that could contradict each other with nothing in data tying
+them. One correction to the reading: `authority` does carry a `depends` key,
+naming `viable-options#adopted-is-a-status` and `unanswered`; what it lacks is an
+entry naming this node, which is that node's to add.
+
+`defines` carries the three terms with the answer's own glosses, since
+`delegation-bounds-and-sizing` already reads capture-shaped from here.
+
+The circular reason is struck from `### authority`: the test is not the record's
+rule until this node is ruled, which is the question the node asks, and the
+citation it rested on is the one the `recording` node's reading found empty. The
+capture argument carries the low boldness on its own.
+
+Boldness on the answer fact moves to high, which in this record is low
+confidence. A rule of the AI's whose only evidence of working is prose the AI
+wrote, whose guard is met by twenty-one of 129 facts, and one of whose two
+reasons for moderate was the corrected measurement, is not a moderate-confidence
+recommendation.
+
+Two options the reading named are added, `class-follows-the-authors-words` and
+`form-decides-the-default`, in its own prose. The counter-argument, that the rule
+as drafted ratifies nearly everything while appearing to filter and so spends by
+default the attention the record exists to spend carefully, is answered by
+neither listed option; it is recorded and not answered, and the second option is
+what the record measurably already does.
+
+The seven stale cross-references are corrected directly, each disclosed in its
+own node's account: `decomposition`, `materialization`, `work-loop`,
+`frontier-consistency`, `review-cost`, `viable-options` and `review-model` each
+named the escalation test without naming the node that states it, and
+`review-cost`'s citation of `authority` had become a loop. Those are corrections
+of citation and not of substance, but each moves that node's authority-fact pin,
+which is the live option `pin-names-the-text-the-reader-read`.
+
+The recommendation moved, so the node returns to the review stage.
+

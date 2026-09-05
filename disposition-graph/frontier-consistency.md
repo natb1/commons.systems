@@ -243,7 +243,7 @@ does not carry.
 
 ### authority
 
-Ratified is recommended because the validations are the contract every reading runs under, and a change to the list changes what the author is shown before they rule; a defect in it is undetected in every ruling after it, which is capture-shaped on the record's own test. Boldness moderate: the requirement and the survey are the author's, the list and its division are the AI's. The case against is deferred, under which the validations would act while the node stays in view; it is live because this node is unanswered under an unanswered ancestor whose own division of the readings is still at review, and the fence rests on options of three other nodes, named in `depends`, none of them ruled.
+Ratified is recommended because the validations are the contract every reading runs under, and a change to the list changes what the author is shown before they rule; a defect in it is undetected in every ruling after it, which is capture-shaped on the escalation test the `class-recommendation` node states. Boldness moderate: the requirement and the survey are the author's, the list and its division are the AI's. The case against is deferred, under which the validations would act while the node stays in view; it is live because this node is unanswered under an unanswered ancestor whose own division of the readings is still at review, and the fence rests on options of three other nodes, named in `depends`, none of them ruled.
 
 ## Recommendation
 
@@ -436,3 +436,13 @@ re-settled by hand. What the record should do in this exact case is recorded as
 `pin-names-the-text-the-reader-read` on the `review-cost` node, with the three
 ways out and none of them taken; until the author rules there, this node carries
 the honest pin and the note.
+
+### The escalation test's citation corrected, 2026-09-05
+
+This node's `### authority` prose named the escalation test as the record's own
+and named no node, which the clean-context reading of `class-recommendation`
+found on seven nodes at once. The test left the `authority` node's answer on
+2026-09-05 and is now stated by `class-recommendation`; the citation names that
+node. Nothing about the class or the boldness changes. The edit moves this
+node's authority-fact pin without a reading behind the move, which is the live
+option `pin-names-the-text-the-reader-read` on `review-cost`.

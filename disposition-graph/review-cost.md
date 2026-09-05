@@ -201,7 +201,7 @@ which is why the option is on the list rather than in the prose.
 
 ### authority
 
-Ratified. What this decides is how much of the record the adversarial reader is shown, and the party it is shown against is the party that would otherwise set it: a rule that lets the drafter narrow the review's object is capture-shaped in the way the authority node's escalation test names, and being wrong here is not visible in the record, since a review that reads too little returns fewer findings and looks cheaper and no worse. Moderate boldness: the escalation is the record's own rule, and what rests on the AI is the judgment that the author's delegation of right-sizing does not reach the reviewer's object, which the case against disputes.
+Ratified. What this decides is how much of the record the adversarial reader is shown, and the party it is shown against is the party that would otherwise set it: a rule that lets the drafter narrow the review's object is capture-shaped in the way the `class-recommendation` node's escalation test names, and being wrong here is not visible in the record, since a review that reads too little returns fewer findings and looks cheaper and no worse. Moderate boldness: the escalation is the test the `class-recommendation` node states, and what rests on the AI is the judgment that the author's delegation of right-sizing does not reach the reviewer's object, which the case against disputes.
 
 ## Recommendation
 
@@ -472,3 +472,13 @@ second reading of this answer, and the cap the node itself sets means the
 findings that survive from here are recorded as options and not answered in the
 text.
 
+### The escalation test's citation corrected, 2026-09-05
+
+The `### authority` prose cited the `authority` node for the escalation test in
+two places. The test left that node's answer on 2026-09-05 for
+`class-recommendation`, and while this node's own `## Answer` cites this node's
+question back, the pair had become a loop; the reading of `class-recommendation`
+found it. Both citations now name `class-recommendation`, and nothing about the
+class or the boldness changes. The edit moves the authority-fact pin without a
+reading behind the move, which is this node's own option
+`pin-names-the-text-the-reader-read`.

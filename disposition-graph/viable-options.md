@@ -441,7 +441,7 @@ showing what was considered once the question is settled.
 
 Ratified. The answer redefines what authority is in this record and opens a
 write path from reconciliation into the graph, which is the capture-shaped
-case the alignment skill escalates toward ratified; a delegation of this
+case the `class-recommendation` node's test escalates toward ratified; a delegation of this
 decision would be a delegation of the definition of delegation. The
 recommendation adds a second capture-shaped decision to the same node: what
 the AI may keep off the author's page, and who may remove a candidate from the
@@ -1227,3 +1227,13 @@ whether a correction of this kind ought to re-settle the pin is the open option
 `pin-names-the-text-the-reader-read` on
 `commons.systems/disposition-graph/review-cost`. Nothing the answer binds is
 changed by any of it; what changed is the price the author is shown.
+
+### The escalation test's citation corrected, 2026-09-05
+
+The `### authority` prose attributed the escalation test to the alignment skill,
+a declared shim, which was true when it was written and is not now: the test
+left the `authority` node's answer on 2026-09-05 and is stated by
+`class-recommendation`. The citation names that node. Nothing about the class or
+the boldness changes, and the edit moves the authority-fact pin without a
+reading behind the move, which is the option `pin-names-the-text-the-reader-read`
+on `review-cost`.

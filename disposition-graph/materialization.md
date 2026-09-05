@@ -137,7 +137,7 @@ node is unsupported implementation, which today is nearly all of them.
 
 ### authority
 
-Ratified, at low boldness: a global-tier rule every session writing to the implementation ref runs under, whose shim's liquidation deletes whatever no disposition supports, is expensive and irreversible if wrong, the record's test for escalating toward ratified; low because the rule is the author's words. The case against is on the fact.
+Ratified, at low boldness: a global-tier rule every session writing to the implementation ref runs under, whose shim's liquidation deletes whatever no disposition supports, is expensive and irreversible if wrong, which is the escalation test the `class-recommendation` node states; low because the rule is the author's words. The case against is on the fact.
 
 ## Account
 
@@ -334,3 +334,13 @@ F11, the child stale by one day: confirmed. `npm-committed-lockfile` described a
 F10, the brief's readings section: confirmed at the locus and not a matter for the author. `brief.mjs` line 899 selects readings by `b.node === node.id` alone, so a reading that omits `node` because it sits under the node it bears on, which the `readings` node's answer expressly allows, is never counted; here `npm-committed-lockfile` was taken as a child and the section said no reading bears on this node, which would make validation 4 look vacuous. The remedy the reading gives is right. It is materialized implementation on this node's frontier, it belongs to the reconciliation ref and not to a graph edit, and it is recorded as owed work in this sitting's reconciliation task, which is the sitting's last.
 
 The counter-argument is accepted as strong and is not answered. Its new limb, that the rule is already contradicted where it is automated, is now on the answer fact's `against` beside the older case, so the author rules on this node seeing that a rule no instrument guards is being asked for at the record's highest class while its own projector prunes without one. F2's boundary narrows what that limb amounts to; it does not dissolve it, since the boundary is written in prose and nothing checks it either.
+
+### The escalation test's citation corrected, 2026-09-05
+
+This node's `### authority` prose named the escalation test as the record's own
+and named no node, which the clean-context reading of `class-recommendation`
+found on seven nodes at once. The test left the `authority` node's answer on
+2026-09-05 and is now stated by `class-recommendation`; the citation names that
+node. Nothing about the class or the boldness changes. The edit moves this
+node's authority-fact pin without a reading behind the move, which is the live
+option `pin-names-the-text-the-reader-read` on `review-cost`.

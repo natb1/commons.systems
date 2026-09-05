@@ -186,7 +186,7 @@ the list.
 
 ### authority
 
-Ratified, at low boldness: the rule binds how every sitting spends the author's tokens and attention and how the adversarial review is run, and a wrong answer here is expensive and compounds across sittings, which is the record's own test for escalating toward ratified.
+Ratified, at low boldness: the rule binds how every sitting spends the author's tokens and attention and how the adversarial review is run, and a wrong answer here is expensive and compounds across sittings, which is the escalation test the `class-recommendation` node states.
 
 ## Recommendation
 
@@ -379,3 +379,13 @@ the draft the reader read and not the amended text, and it is not re-settled:
 this is the second reading of this answer and the cap is reached. What that
 costs, and the three ways out of it, are on the `review-cost` node as the option
 `pin-names-the-text-the-reader-read`.
+
+### The escalation test's citation corrected, 2026-09-05
+
+This node's `### authority` prose named the escalation test as the record's own
+and named no node, which the clean-context reading of `class-recommendation`
+found on seven nodes at once. The test left the `authority` node's answer on
+2026-09-05 and is now stated by `class-recommendation`; the citation names that
+node. Nothing about the class or the boldness changes. The edit moves this
+node's authority-fact pin without a reading behind the move, which is the live
+option `pin-names-the-text-the-reader-read` on `review-cost`.
