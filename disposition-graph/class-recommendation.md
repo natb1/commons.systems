@@ -1,6 +1,6 @@
 ---
 question: What class does the AI recommend on a node's authority fact?
-stage: review
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -19,7 +19,7 @@ facts:
     recommends: escalate-toward-ratified
     boldness: high
     stands: escalate-toward-ratified
-    against: "The test decides which questions reach the author at all, and the party applying it is the party whose work a ratification would slow. Expensive, irreversible and capture-shaped are the AI's own reading of each node, applied nineteen times with no instrument behind it and no record of the reading anywhere but the node's authority-fact prose, so a systematic tilt toward delegated would be invisible in exactly the way the test exists to prevent."
+    against: "The test decides which questions reach the author at all, and the party applying it is the party whose work a ratification would slow. Expensive, irreversible and capture-shaped are the AI's own reading of each node, applied on twenty of the record's 129 authority facts, counted by the three terms in a node's `### authority` prose, with no instrument behind it and no record of the reading anywhere but the node's authority-fact prose, so a systematic tilt toward delegated would be invisible in exactly the way the test exists to prevent."
   - name: authority
     options:
       - name: ratified
@@ -28,12 +28,12 @@ facts:
     recommends: ratified
     boldness: low
 review:
-  verdict: forward
-  strength: strong
+  verdict: kickback
+  strength: moderate
   date: 2026-09-05
-  of: 8853d8dc5bf0c1d467d84d0d1e200306019f29b9
-  commit: 1d32a5aa4680268c1a1a5ebcf6bebd3c139c8543
-  against: "The record measures this test and it does not do what the answer says it does. Of 129 authority facts only 20 name a limb of the three at all, and 56 carry no `### authority` reading whatever, so the guard this answer offers against its own case against -- that the reading be written on the node -- is absent from more than four fifths of the record on the day the author is asked to ratify it. Where the test is invoked, it is invoked almost only to justify escalation: 58 of the 59 non-ratified recommendations in the record sit on `form: reading` nodes and the 59th on `ruling-transport`, so on every substantive node but one the test has produced ratified. What actually sorts the record is the node's form, which the answer does not state, and the three limbs are the prose written after the sort. The risk is therefore the opposite of the one the fact's own `against` names: not an invisible tilt toward delegated, but a rule that ratifies nearly everything and so hands the author every question while appearing to filter, which spends by default the attention the `attention` and `alignment-order` nodes exist to spend carefully. The alternative the draft has not weighed is to state the rule the record runs -- form decides the default and the limbs escalate from it -- or to drop the AI's discretion and follow the author's words alone."
+  of: 04577246cb1f4a24c5cb2144a033c3590246c5b3
+  commit: fda0c6abc0068042b8650939bac0953c203d0ba1
+  against: "On the one charge the last reading called strong -- that the record measures this test and it does not do what the answer says it does -- the amendment moves the confidence mark, lists the two rivals the reading named, and then records that the counter-argument \"is answered by neither listed option; it is recorded and not answered\". The rule, its guard and its recommendation are unchanged, so what the author is asked to ratify is a rule the node says it cannot defend, at the boldness that says so; that is a legitimate state in this encoding and the honesty is real. But the boldness now rests entirely on a measurement, and an amendment whose principal answer to a measurement finding is a new measurement has to get the measurement right: twenty-one reproduces on no criterion, its supporting enumeration names a node that names no limb, and the count it retracts still stands in the fact's own `against`. Nine of the eleven findings are answered cleanly and verifiably; the one that mattered most to the author's ruling is answered with a second wrong number."
 form: rule
 tier: global
 under:
@@ -69,10 +69,12 @@ subsection, which says which of the three limbs it found and why; a class
 recommended with no such reading behind it is a recommendation the reviewer may
 find unsupported. The requirement binds from this node's ruling and not before:
 the authority facts already recorded without such a reading are a reconciliation
-item on this node, and not a defect the reviewer reports on each of them. At
-graph commit 1d32a5aa the record holds 129 authority facts, of which twenty-one
-name a limb and fifty-six carry no `### authority` prose at all, so the back-fill
-is most of the record and is owed rather than assumed.
+item on this node, and not a defect the reviewer reports on each of them. The
+back-fill is most of the record and is owed rather than assumed; how much of it,
+on what criterion and at which commit, is measured in this node's account and not
+written into the text that stands, because a count in a standing answer is
+doctrine that goes stale where it is loaded, and this node's answer is projected
+into `.claude/rules/` and read by every session.
 
 ## Rationale
 
@@ -102,8 +104,8 @@ supported by no words of the author's; what is the author's is that they rule th
 class, which this answer does not touch. High rather than moderate because the
 only evidence that the rule works is prose the AI wrote, and because the guard
 this answer offers against its own case against, that the reading be written on
-the node, is met by twenty-one of the record's 129 authority facts, fifty-six of
-which carry no `### authority` prose at all, measured at graph commit 1d32a5aa.
+the node, is met by twenty of the record's 129 authority facts on the criterion
+the account states, fifty-six of which carry no `### authority` prose at all.
 An earlier draft said the record had nineteen applications with no reading
 recorded for most, and that was false twice over: every application that exists
 does record a reading, and the scarcity is that the applications are few. The
@@ -218,7 +220,7 @@ tier: global is added and .claude/rules/ regenerated. Verified: packages/disposi
 
 The ## Disposition section held no words of the author's; it held the third clean-context reading of authority. Verified that the alignment page renders that section under 'The author's words on this node' and 'The author's words', so the panel the page leads with would have attributed the AI's reading to the author. The section is gone and its content stands in ## Account under the minting section, as on bootstrap-exit-conditions. The sibling delegation-bounds-and-sizing has the same defect and it is named there rather than fixed from here.
 
-The measurement is corrected, and re-taken independently rather than copied. Of 129 authority facts in the record, twenty-one name a limb of the test in their ### authority prose and fifty-six carry no ### authority prose at all; eighteen carry the word capture-shaped, and the three that name a limb without it are decomposition, materialization and review-model. The reading counted twenty and the difference is those three; the figure written into the node is twenty-one, which I measured. The claim it replaces, 'nineteen applications with no reading recorded for most', was false twice over: every application that exists does record a reading, and the true scarcity is the other way round.
+The measurement is corrected, and re-taken independently rather than copied. Of 129 authority facts in the record, twenty-one name a limb of the test in their ### authority prose and fifty-six carry no ### authority prose at all; eighteen carry the word capture-shaped, and the three that name a limb without it are decomposition, materialization and review-model. The reading counted twenty and the difference is those three; the figure written into the node is twenty-one, which I measured. The claim it replaces, 'nineteen applications with no reading recorded for most', was false twice over: every application that exists does record a reading, and the true scarcity is the other way round. (Twenty-one and its enumeration are wrong, and the re-reading of the same day caught them; the census as it stands is the one in the section below.)
 
 The evidentiary clause now says the requirement binds from the ruling, and that the authority facts already recorded without a reading are a reconciliation item on this node rather than a defect the reviewer reports on each. Without it, ruling this answer would have made a hundred and eight of the record's own class recommendations unsupported the moment it landed.
 
@@ -232,7 +234,7 @@ defines is added with the three terms and their glosses taken verbatim from the 
 
 The circular reason is struck from ### authority: the test is not the record's rule until this node is ruled, which is the question the node asks. The capture argument carries the recommendation on its own.
 
-Boldness moves to high, which in this record is low confidence. The three limbs are the AI's wording promoted from a shim with no words of the author's behind them, the guard the answer offers against its own case against is met by twenty-one of 129 authority facts, and one of the two reasons given for moderate was the measurement finding 3 corrects.
+Boldness moves to high, which in this record is low confidence. The three limbs are the AI's wording promoted from a shim with no words of the author's behind them, the guard the answer offers against its own case against is met by a fifth of the record's 129 authority facts, and one of the two reasons given for moderate was the measurement finding 3 corrects.
 
 Two viable options the reading names are added, since a candidate never listed is one the author cannot rule for: class-follows-the-authors-words and form-decides-the-default, both source review, ref 2026-09-05, with the reading's own prose. The second is the record's measured behaviour and the only candidate an instrument could check, and the counter-argument, that the rule as drafted ratifies nearly everything while appearing to filter, is answered by neither listed option; it is recorded and not answered here.
 
@@ -316,3 +318,126 @@ which is the live option `pin-names-the-text-the-reader-read`.
 
 The recommendation moved, so the node returns to the review stage.
 
+### Clean-context re-reading, 2026-09-05
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `escalate-toward-ratified`.
+
+Findings:
+
+- Frontmatter, the answer fact's `against` (a contradiction the amendment itself creates: the diff leaves this field untouched while adding a sentence that retracts it). `### answer` now says "An earlier draft said the record had nineteen applications with no reading recorded for most, and that was false twice over", while the fact's own `against`, two lines above in the same frontmatter, still reads "Expensive, irreversible and capture-shaped are the AI's own reading of each node, applied nineteen times with no instrument behind it and no record of the reading anywhere but the node's authority-fact prose". The node now carries three counts of one thing in one frontmatter: nineteen in `facts[answer].against`, twenty in `review.against` ("Of 129 authority facts only 20 name a limb of the three at all"), and twenty-one in `## Answer` and in the `### answer` reason. The last reading had no occasion to see this, because the retraction is the amendment's own. The field is the record's store of the AI's case against its own recommendation and is printed in full to every clean-context reader; on the alignment page it is displaced only because `caseAgainst` in `packages/disposition/project.mjs` (line 1323) prefers `review.against` on the answer fact wherever a review block exists, so the retracted figure is hidden there by a review whose pin is already stale. Suggested edit: restate the `against` on whatever count the answer settles on, keeping the argument, which does not turn on the number: "...are the AI's own reading of each node, applied on twenty of the record's 129 authority facts with no instrument behind it and no record of the reading anywhere but the node's authority-fact prose...".
+- `## Answer`, third paragraph, and `### answer` (validation 3, a claim about the record the amendment introduces). "At graph commit 1d32a5aa the record holds 129 authority facts, of which twenty-one name a limb and fifty-six carry no `### authority` prose at all". Two of the three figures reproduce exactly: over the 142 node files under `disposition/`, 129 carry an authority fact, 73 carry `### authority` prose and 56 carry none. Twenty-one does not reproduce on either reading of "name a limb". Counting the three terms literally in `### authority` prose gives twenty: the eighteen carrying "capture-shaped", plus `decomposition` ("a wrong answer here is expensive and compounds across sittings") and `materialization` ("is expensive and irreversible if wrong") -- which is the previous reading's figure. Counting a limb named in words gives twenty-two: those twenty, plus this node itself ("which is the capture limb of the test itself") and `delegation-bounds-and-sizing` ("which is the capture limb of `class-recommendation`'s test read on this node itself"). The account's stated ground for departing from twenty -- "eighteen carry the word capture-shaped, and the three that name a limb without it are `decomposition`, `materialization` and `review-model`" -- fails on `review-model`, whose `### authority` prose names no limb of the three at all: "a wrong answer compounds across sittings, which is the escalation test the `class-recommendation` node states", and compounding is not one of the three (it named none before the citation edit either: "which is the record's own test for escalating toward ratified"). Twenty-one is reachable only by counting this node and not `delegation-bounds-and-sizing`, which names the capture limb in almost the same words. Suggested edit: give the criterion with the count -- "twenty of the 129 name one of the three terms in their `### authority` prose" -- or drop the count as the next finding proposes.
+- `## Answer`, third paragraph, the census inside the text that stands (placement, introduced by the amendment together with `tier: global`). The amendment writes a dated measurement of the record into the answer -- "At graph commit 1d32a5aa the record holds 129 authority facts, of which twenty-one name a limb and fifty-six carry no `### authority` prose at all, so the back-fill is most of the record and is owed rather than assumed" -- and the same amendment's `tier: global` projects that text verbatim into `.claude/rules/class-recommendation.md` (regenerated; the sentence is lines 23-26 of that file). So the count is now doctrine every session loads, it is wrong today (previous finding), and it goes wrong again the moment the back-fill the same sentence declares owed begins, with nothing in the record that would update it. The node this rule came from has already been told this once: the second clean-context reading recorded on `authority` struck the same shape -- "'thirteen nodes cite it as the record's own test'... Suggested edit: drop both numbers" -- citing that node's own frontier finding of 2026-09-03, "a count the author is asked to ratify be measured at the ruling rather than fixed in prose". Suggested edit: keep in `## Answer` only the binding clause the last reading asked for ("The requirement binds from this node's ruling and not before: the authority facts already recorded without such a reading are a reconciliation item on this node, and not a defect the reviewer reports on each of them"), and move the measure, with the criterion it was taken on and the commit it was taken at, into `## Account`, where the `### Amended after the reading, 2026-09-05` section already states it.
+
+On the facts and what they recommend: The diff moves the answer fact only: two options added (`class-follows-the-authors-words` and `form-decides-the-default`, both source review, ref 2026-09-05, each with its `####` subsection) and boldness moderate to high, with `recommends` and `stands` both still `escalate-toward-ratified` and therefore no `## Recommendation` fence, correctly. The authority fact is untouched (ratified, low boldness) and only its circular reason is struck; a `review` block is added carrying the last reading's verdict and pin, stale by the move as expected, and the frontmatter gains `tier: global`, `depends: commons.systems/disposition-graph/authority#escalate-toward-ratified` and three `defines` entries, with `validate.mjs disposition` passing at 142 nodes and `.claude/rules/` now holding seven files for seven global-tier nodes. What the diff does not move is the answer fact's `against`, which still asserts the count the amendment retracts.
+
+On the viability of the options: The diff removes no option and passes none over, and the two it adds are viable and dominated by nothing: `class-follows-the-authors-words` answers the fact's case against without the bare refusal's cost, and `form-decides-the-default`'s stated measure checks out exactly -- of the 59 non-ratified authority recommendations in the record, 58 sit on `form: reading` nodes and the 59th is `ruling-transport` -- which makes it a description of what the record already does and the only candidate an instrument could check. All four options on the answer fact are unmarked and live, and the authority fact's three are the reserved vocabulary and complete.
+
+Strongest counter-argument (moderate): On the one charge the last reading called strong -- that the record measures this test and it does not do what the answer says it does -- the amendment moves the confidence mark, lists the two rivals the reading named, and then records that the counter-argument "is answered by neither listed option; it is recorded and not answered". The rule, its guard and its recommendation are unchanged, so what the author is asked to ratify is a rule the node says it cannot defend, at the boldness that says so; that is a legitimate state in this encoding and the honesty is real. But the boldness now rests entirely on a measurement, and an amendment whose principal answer to a measurement finding is a new measurement has to get the measurement right: twenty-one reproduces on no criterion, its supporting enumeration names a node that names no limb, and the count it retracts still stands in the fact's own `against`. Nine of the eleven findings are answered cleanly and verifiably; the one that mattered most to the author's ruling is answered with a second wrong number.
+
+The session's reply: Kicked back to the maieutic stage at moderate strength with three findings, all
+three validated at their loci on this thread and all three accepted. Nine of the
+first reading's eleven findings the re-reading verifies as answered; what it
+found is that the answer to the tenth, the measurement, was itself wrong.
+
+The census is re-measured here and the reading's figures reproduce exactly. Over
+the 142 node files, 129 carry an authority fact and 56 carry no `### authority`
+prose at all. Of the 73 that carry prose, 18 use the word capture-shaped; two
+more name a limb in the literal terms, `decomposition` ("expensive and compounds
+across sittings") and `materialization` ("expensive and irreversible if wrong"),
+which gives 20; and two more name a limb in words without the terms, this node
+("the capture limb of the test itself") and `delegation-bounds-and-sizing` ("the
+capture limb of `class-recommendation`'s test read on this node itself"), which
+gives 22. Twenty-one is reachable on no criterion, and the enumeration that was
+offered for it named `review-model`, whose `### authority` prose names no limb of
+the three: it says a wrong answer "compounds across sittings", and compounding is
+not one of the three. The reading is right on every part of this, including that
+the correction it corrects was mine and not its own.
+
+Finding 1, the retracted count still standing in the answer fact's `against`, is
+accepted. The field is restated on twenty with the criterion beside it, and the
+argument it makes is untouched, since that argument never turned on the number.
+The reading is also right that `caseAgainst` in `packages/disposition/project.mjs`
+prefers `review.against` on the answer fact wherever a review block exists, so the
+alignment page was showing the reader's figure and hiding the stale one; that is
+a display accident and not a fix, and it is why the field had to be corrected in
+the record rather than left to the page.
+
+Finding 2 is accepted. The count leaves the answer with finding 3, and where the
+measure is now stated it carries its criterion, its two figures, and the commit it
+was taken at.
+
+Finding 3 is accepted and is the one that matters beyond this node. The amendment
+put a dated census of the record into `## Answer` on the same day it made the node
+global-tier, so the projector wrote that census verbatim into
+`.claude/rules/class-recommendation.md`, where every session loads it as doctrine.
+A count in a standing answer is wrong on the day it is taken or wrong soon after,
+and this one is both: wrong today, and guaranteed to go wrong again by the very
+back-fill the sentence declares owed. The record has already ruled this shape once,
+on `authority`, under its own frontier finding of 2026-09-03 that a count the
+author is asked to ratify be measured at the ruling rather than fixed in prose.
+`## Answer` keeps the binding clause, which is what the first reading asked for,
+and the measure moves to `## Account` with the criterion it was taken on and the
+commit it was taken at. This is a rule for the record and not for this node alone,
+and it is recorded as the option `no-census-in-a-standing-answer` on `authority`,
+which owns the finding it descends from; it acts on nothing until the author rules.
+
+The answer does not otherwise move. The recommendation is `escalate-toward-ratified`
+at high boldness, which in this record is low confidence, the three rival options
+stay live and unmarked, and the counter-argument the first reading called strong
+stays recorded and unanswered, which is what the boldness says. This kickback is a
+redrawing of the standing text, so a fresh reading of the answer is owed and the
+delta of this one closes.
+
+### The delta re-reading applied, 2026-09-05
+
+The re-reading of the amendment verified nine of the first reading's eleven
+findings as answered at their loci and kicked the node back to the maieutic
+stage on the tenth: the amendment's answer to a measurement finding was a second
+wrong measurement.
+
+The census, re-taken here on the amended record at graph commit fda0c6ab and
+stated with the criterion it is taken on, because a census without one is not a
+measurement. Of the 142 node files, 129 carry an authority fact and 56 carry no
+`### authority` prose at all. Of the 73 that carry prose, 18 use the word
+capture-shaped; two more name a limb in the literal terms, `decomposition`
+("expensive and compounds across sittings") and `materialization` ("expensive
+and irreversible if wrong"), which makes twenty on the literal criterion; and two
+more name a limb in words without using the terms, this node ("the capture limb
+of the test itself") and `delegation-bounds-and-sizing` ("the capture limb of
+`class-recommendation`'s test read on this node itself"), which makes twenty-two
+counting those. Twenty-one is reachable on neither, and the enumeration offered
+for it named `review-model`, whose `### authority` prose names no limb of the
+three at all: it says a wrong answer "compounds across sittings", and compounding
+is not one of them. Twenty is the figure the answer's guard is measured against,
+because the guard asks that the reading name which limb it found, and the literal
+terms are what a reader or an instrument can check.
+
+The retracted count is struck from the answer fact's `against`, which had gone on
+asserting nineteen while the `### answer` prose two screens away called nineteen
+false. The field's argument is untouched, since it never turned on the number.
+The reading is right that this was hidden on the alignment page rather than
+absent: `caseAgainst` in `packages/disposition/project.mjs` prefers
+`review.against` on the answer fact wherever a review block exists, so the page
+showed the reader's figure and not the record's, which is a display accident and
+no substitute for correcting the record.
+
+The census leaves `## Answer` altogether, and that is the finding worth more than
+this node. The same amendment that wrote a dated measurement into the standing
+text made the node global-tier, so the projector copied the census verbatim into
+`.claude/rules/class-recommendation.md`, where every session loads it as doctrine
+-- a count that was wrong the day it was written and that the back-fill the same
+sentence declares owed would falsify again, with nothing in the record to update
+it. The record has already ruled this shape once, on `authority`, under its own
+frontier finding of 2026-09-03 that a count the author is asked to ratify be
+measured at the ruling rather than fixed in prose. `## Answer` keeps the binding
+clause and says where the measure lives; the measure lives here. The general rule
+is recorded as the option `no-census-in-a-standing-answer` on `authority`, which
+owns the finding it descends from, and it acts on nothing until the author rules.
+
+The answer itself does not move: `escalate-toward-ratified` at high boldness,
+which in this record is low confidence, with the three rival options live and
+unmarked and the first reading's counter-argument recorded and unanswered, which
+is what the boldness says. The kickback redraws the standing text, so a fresh
+reading of the answer is owed and the delta of this one closes.

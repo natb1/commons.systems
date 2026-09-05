@@ -53,6 +53,9 @@ facts:
         ref: "2026-09-02"
         status: passed
         reason: "the author: ratification is not a rubber stamp; the command stamped under the identity every session commits with and made the act a keystroke"
+      - name: no-census-in-a-standing-answer
+        source: commons.systems/disposition-graph/class-recommendation
+        ref: "2026-09-05"
     recommends: authority-derived
     boldness: moderate
     stands: authority-derived
@@ -196,6 +199,10 @@ Adopted into `authority-derived` on 2026-09-05 and moved out of it the same day,
 #### ratify-command
 
 A command run by the author as the act of ratification, which the record carried on 2026-09-02. Passed over on the author's words of that day: "Ratification is not a rubber stamp. I don't see the function of a ratification script and it can probably be liquidated with updated disposition/doctrine." The command guaranteed nothing, since it stamped under the same version-control identity every session commits with, and it made the act a keystroke instead of a decision; the answer says no command confers a ruling.
+
+#### no-census-in-a-standing-answer
+
+A measurement of the record does not go in the text that stands: a count belongs in the node's account, with the criterion it was taken on and the commit it was taken at, and the standing answer says where the measure lives and not what it is. This node has struck the same shape twice already, on its own text ("thirteen nodes cite it as the record's own test") under the frontier finding of 2026-09-03 that a count the author is asked to ratify be measured at the ruling rather than fixed in prose. What the option adds to that finding is the general rule and the reason it now bites harder: a global-tier node's answer is projected verbatim into `.claude/rules/`, so a census written there is doctrine every session loads, stale from the day the record next changes and with no instrument that would notice. The case that raised it is `class-recommendation`, whose amendment of 2026-09-05 wrote a dated census of the record's authority facts into its answer on the same day the node became global-tier, and whose re-reading found the count wrong on every criterion it could run. Recorded as an option and not written into the answer, because it would bind every node the record has and the author has not been asked.
 
 ### authority
 
@@ -586,3 +593,20 @@ F10, the escalation test: confirmed, and the reading is right that the two claus
 F11, `authority` defined nowhere: confirmed, and it is the defect that struck `author` from a `defines` list the same day. Glossed here.
 
 F12, a claim about text that does not stand: confirmed. The subsection describes what the option changed relative to `stamped-classes` and read as a claim about the answer; it now names the option it is contrasting with.
+
+### An option from class-recommendation's re-reading, 2026-09-05
+
+The re-reading of `class-recommendation`'s amendment found a dated census of the
+record written into that node's `## Answer` on the same day the node became
+global-tier, and therefore copied verbatim by the projector into
+`.claude/rules/class-recommendation.md`, where every session loads it. The census
+was wrong when written and would have been falsified again by the back-fill the
+same sentence declared owed. The reading cited this node for the shape: the
+second clean-context reading recorded here struck the same thing on this node's
+own text, under the frontier finding of 2026-09-03 that a count the author is
+asked to ratify be measured at the ruling rather than fixed in prose. The census
+was moved into that node's account with its criterion and its commit, and the
+general rule is recorded here as the option `no-census-in-a-standing-answer`,
+since it would bind every node in the record and only the author can rule it. It
+acts on nothing. The option is not recommended, so this node's recommendation and
+its pin are unmoved and it stays at the ruling stage.
