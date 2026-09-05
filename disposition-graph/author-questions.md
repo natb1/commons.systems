@@ -1,6 +1,6 @@
 ---
 question: What probes for the author does a node carry, and where are they asked?
-stage: maieutic
+stage: review
 facts:
   - name: answer
     options:
@@ -954,3 +954,7 @@ Applied. `commons.systems/disposition-graph/hexis`, node to question on purpose,
 Not applied, and why. `review / cap-and-effort-from-the-contract` and `review / graph-landing-review-at-scale`, both found nodes on the ruling and survival tests with confidence: the author's words of 2026-09-04 on review call review-finding questions maieutic questions and not things to be confirmed on the artifact, and a minted node is a row on the artifact; the collision is recorded as a probe on probe-or-node, and the entries stay probes, doubt resolving downward. Two `depends` edges the scope test prescribes, dialogue to authority and alignment-page to growth, because each would close a cycle the validator rejects.
 
 Near-misses the units set out and the main thread accepts as no delta: `assumption-form`, where the independence test points at a probe on forms and the scope test fires first, the tests being ordered; `coverage / host-and-shared-infrastructure`, whose wording reaches purpose and whose response does not; `purpose-criteria`, the most independence-shaped node in its group, failing all three conjuncts. For the survey, two encoding observations outside the tests: `commons.systems/disposition-graph/domain-assumptions-reading` and `commons.systems/disposition-graph/reconciliation-reading` are readings in substance and declare no `form`. And one stale sentence in the `why` of `frontier-metrics`' probe, noted on that node.
+
+### Checkpoint to review, 2026-09-04
+
+The maieutic movement closes with the delta sweep above: the rule the author asked for stands on `commons.systems/disposition-graph/probe-or-node`, the skills carry it under the author's grant, and the graph has been read under it. The answer fact recommends what stands, `probes-on-the-node`, with the third limb now reading through the child. The clean-context reading of this draft is owed and runs next; the ruling waits on probe-or-node, in `depends`, which carries one open probe for the author.
