@@ -222,3 +222,29 @@ Three units on opus, one per third of the graph, ran only what the two earlier s
 ### The grant renewed, 2026-09-04
 
 The application amended the independence test's remedy above, distinguishing a question found at recording from a node already standing, and the author renewed the grant to carry the rule into the skills in the words quoted under `## Disposition`. Reconciled under it, on the implementation ref: the alignment skill's probes rule, whose re-encoding sentence now carries the standing-node form; the survey brief's sixteenth validation, whose proposal now names the survivor on the parent and the prune on the child's existence fact, the child being a node already standing whenever a survey reads it; and the survey skill's statement of what it runs, which now counts the sixteenth. The draft brief and the record brief state the rule for a question found at recording and needed no change.
+
+### Where a pruned node's words go, 2026-09-06
+
+This answer's remedy says that when a node is re-encoded on its parent, "any
+words of the author's on it move to the parent's `## Disposition`". The prune of
+`alignment-page-observations` on 2026-09-05 met that in substance and not in
+form, and the discrepancy is worth the record because it will recur wherever the
+independence test reaches a node minted by a decomposition.
+
+That node held nine of the author's observations. One of them, with the heading
+line and the words that queued the sitting, stands on the parent's
+`## Disposition`. The other eight stand verbatim on the eight children that own
+them, one apiece, and on the parent nowhere. Nothing was lost, so the prune's
+condition held; but the words are distributed and not gathered, and a reader of
+the parent's `## Disposition` does not meet eight of the nine.
+
+The question this leaves is which the remedy wants, and it is not decided here.
+Gathering them on the parent puts every word the author said on the question they
+said it about, which is the parent's question, and makes the parent's
+`## Disposition` the complete record of the dialogue that produced its children.
+Leaving them with the children puts each word beside the decision it bears on,
+which is where a reader ruling that decision needs it, and avoids nine bullets
+appearing twice in a record whose whole discipline is that the prose argues and
+the structure records. A third reading is that the remedy already means the
+second, since a decomposition's children are where the words moved *to*, and the
+clause was written for a node whose words had nowhere else to go.

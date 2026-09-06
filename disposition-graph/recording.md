@@ -90,6 +90,9 @@ facts:
       - name: one-response-rules-a-decompositions-existence-facts
         source: commons.systems/disposition-graph/decomposition
         ref: "2026-09-05"
+      - name: earlier-stage-words-come-from-the-interview
+        source: author
+        ref: "2026-09-06"
     recommends: per-fact-after-two-readings
     boldness: moderate
     against: "Both readings must pin the recommendation as it stands before the author may answer a single row, so every ruling waits on two readings of the AI's own drafting, while the one judgment no instrument can check, whether a denial is about the options or about the ground, is made by the party the denial was aimed at."
@@ -301,6 +304,31 @@ recommendation instead, and the shortcut is put on this fact, where the question
 of how far one response reaches is asked. Raised by the second clean-context
 reading of `decomposition` on 2026-09-05, which proposed it and did not make it.
 
+
+#### earlier-stage-words-come-from-the-interview
+
+This answer says: "The words the author writes at the periagogic or the maieutic
+stage, in the control that stage asks with rather than on a fact, are no response
+at all: they are their account of the ground or their intention, recorded the
+same way and advancing the stage as the movement completes." The sentence is
+right about what those words are and wrong, from 2026-09-06, about where they
+come from. The author's rule of that day, recorded on
+`commons.systems/disposition-graph/alignment-page`, is that the page's scope is
+the final confirmation and, of every other movement, a preview and a read-only
+indicator, and that all other information from the author is given in the
+`/align` interview. There is no longer a control that stage asks with, so the
+clause names a thing the page does not have.
+
+Under this option the clause keeps its classification and changes its locus: the
+author's account of the ground and their intention are given in the interview,
+recorded verbatim and dated the turn they are said, and advance the stage as the
+movement completes; they are no response, and no projection collects them. What
+does not change is anything about a response, which is the ruling stage's and the
+rest of this answer's subject.
+
+Recorded and not applied: the conflict is with the author's words and the
+recommendation on this fact has not moved, so the node stays at the maieutic
+stage and the clause stands until this node's own sitting takes it.
 ### authority
 
 Ratified, at low boldness. This is the node that says what a ruling is and where it is written, so an error here is an error in every ruling the record will ever hold: a response mis-classified confers a class the author did not confer, a ruling recorded on the wrong option records a choice they did not make, and a recording that drops the wrong field loses the reason a question was closed. That is expensive, irreversible in the way a mis-recorded ruling is irreversible, and capture-shaped, which is the test the authority node's answer now states for escalating toward ratified, absorbed there on 2026-09-05 from the option this node sourced on 2026-09-04, and which the frontier applies across the nodes below it. Delegated would let the recommendation act on how the author's own words are read, which is the one thing a delegation cannot cover; deferred is on the fact because the record's classes are three and the author's third exit stays open, and it is what the author takes if they want the recommendation to act while the question stays before them. Boldness low because the class follows that test, stated in the skill and applied across the frontier, rather than the AI's judgment of this node alone.
