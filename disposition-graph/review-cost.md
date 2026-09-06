@@ -601,3 +601,39 @@ states bytes over lines — both, because the reader pages by the line numbers t
 same sentence names — taken to a fixed point, since the sentence stating the size
 is part of the size it states. The stdout reports and the too-large warning
 carry the same pair.
+
+### The delta brief was unreachable, and why, 2026-09-06
+
+Measured in the sitting on `what-an-option-row-carries`, 2026-09-06. The
+re-reading of an amendment fell back to a full draft brief, and the reason is a
+seam between two instruments rather than a defect in either.
+
+`brief.mjs` chooses the delta brief when the node's recommendation has moved
+since its review's pin and the review names a graph commit to diff against. The
+commit comes from the reader's own output, which `apply.mjs` copies into
+`review.commit`. Nothing asks the reader for it: the reading of 2026-09-06
+returned `scope`, `id`, `date`, `verdict`, `kickback_stage`, `findings`,
+`probes`, `facts_check`, `viability`, `counter_argument` and `strength`, and no
+`commit`, so `apply.mjs` wrote none and `brief.mjs` reported "the node's
+recommendation has moved since its review, but the review names no commit to
+diff against" and fell back.
+
+What the fallback costs is the whole of the economy this node's answer is about.
+The draft brief for that node was 308,317 bytes over 2,164 lines; the delta brief,
+once the commit was recorded, was 132,655 bytes over 1,272 lines. The re-reading
+is therefore paid at more than twice its price, and it is paid on every
+amendment, since nothing in the loop supplies the commit. It is also paid
+silently: the fallback is reported on stderr at the moment the brief is written
+and nowhere in the record, so a session that does not read that line buys the
+larger brief without knowing there was a smaller one.
+
+The commit was recorded by hand for that node, `c162955a`, which is the graph
+commit the worktree stood at when the brief was generated and is verifiable from
+the log rather than invented. That is a repair of one instance and not of the
+seam. Two remedies are worth the reconciliation frontier's attention and neither
+is taken here: the brief could carry the graph commit it was generated at and
+require the reader to return it, which puts the fact where the reader can see it;
+or `apply.mjs` could fill `review.commit` from the graph's own head when the
+reading omits it, which needs no reader change and is right whenever the reading
+was run against the landed tree. The first is the honest one, since the second
+records what the applying session read rather than what the reading read.

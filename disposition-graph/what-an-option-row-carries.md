@@ -53,6 +53,7 @@ review:
   strength: moderate
   date: 2026-09-06
   of: cf9ee19cc984ed32f1ec2fa96108519ddf280c4a
+  commit: c162955a3edbfe5c29e0124d4b21a78dd91973d0
   against: "The one clause this answer takes from the author is defended by an argument the record itself has already answered differently. The Answer keeps the AI's own case against at the first level because \"the first level would be advocacy without opposition\" otherwise, but `scholastic-articulus` records that an objection written by the recommending party has lost the tradition's guarantee and that \"what stands in its place is the clean-context review, whose counter-argument replaces the AI's own on the row\" — so the opposition the first level needs is the reader's, not the AI's, and the author's placement could be honoured whole without leaving the row unopposed. That matters more than one clause, because this node's own authority reading says the answer is capture-shaped: the party setting it is the AI, and two of the things it sets exist to check the AI. On the one of those two where the author has spoken twice, the AI decides against them and offers the author a binary between its own objection at the first level and no objection at all. A reader who wanted the amendment tested rather than merely named would find that the option that would test it is the one not on the list."
 under:
   - commons.systems/disposition-graph/alignment-page
