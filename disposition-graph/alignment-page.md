@@ -308,6 +308,10 @@ The author, 2026-09-06, answering the probe `stands-as-a-draft-no-one-has-confir
 
 > What "stands" could represent is the prior confirmed disposition (if any). There are no confirmed dispositions currently, so we would expect to see no indication of that.
 
+The author, 2026-09-06, on where the warning goes that a node's text is an unconfirmed draft, once the `stands` chip stops carrying it:
+
+> A single indication per node to indicate that node is not yet confirmed is fine.
+
 ## Facts
 
 ### answer
