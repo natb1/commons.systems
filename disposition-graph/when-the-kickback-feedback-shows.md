@@ -18,3 +18,29 @@ What the sitting would amend: `commons.systems/disposition-graph/alignment-page`
 Cascades: `commons.systems/disposition-graph/recording`, whose option `denial-typed-to-maieutic` types the kick-back to the movement it returns the node to and whose classification reads the author's words, so a control that is easy to miss is a movement that is easy to miss; `commons.systems/disposition-graph/unanswered`, whose third response is the denial with feedback and whose feedback "is recorded as the author's words, never as a ruling"; `commons.systems/disposition-graph/ruling-transport`, on what the staged response carries back to a session; and `commons.systems/disposition-graph/progressive-disclosure`, whose two levels are what a conditionally shown control is a third case of.
 
 The periagogic object: the published alignment page at https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 at a node at the ruling stage, with the kick-back row chosen and unchosen, read against the recommended text of `alignment-page` and its option `kick-back-feedback-one-step-down`, the answers of `recording` and `unanswered`, and `renderKickback` with the template's staging script, before anything is changed.
+
+### What the page does with abandoned kick-back text, 2026-09-05
+
+The account above says of the staging script that it "reads
+`[data-kickback-text]` only when the kick-back radio is the chosen one, so text
+typed and abandoned never reaches a response". The periagogic survey of
+2026-09-05 found that true in one case and false in the other, and the sentence
+is corrected by this one.
+
+Where another option on the same fact is chosen, the script reads that option's
+own control and the kick-back text is dropped, which is the behaviour the
+sentence describes. Where no option is chosen at all, `alReadFacts` in
+`packages/disposition/alignment-template.html` takes a different branch: it
+collects every non-empty textarea in the fieldset and stages the first of them,
+on the reasoning its own comment gives, that a half-finished response should
+survive the next keystroke. Kick-back words typed with no radio chosen are
+therefore staged as an option of `null` with `kickback` false, and carried into
+the launch instruction as "no option chosen" followed by the words, not as a
+kick-back at all. So the words are neither discarded nor recorded as what they
+are.
+
+Whether that is a defect of the instrument or a case the answer must provide for
+is this node's question and is not settled here: the author's words say the text
+is discarded, the script's comment says a draft should survive, and the two meet
+only in the case neither of them names. Recorded before the periagoge, so that
+the author reads the page knowing what it does with what they type.

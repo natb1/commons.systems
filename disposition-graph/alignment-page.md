@@ -2268,3 +2268,37 @@ linked, the metric saying so", and a hover title is not the metric saying so and
 does not exist on touch. The reason is now visible text beneath the id, in both
 unlinked cases, the `why` staying in the title. This is the reconciliation item
 `alignment-page-observations` recorded on the author's first observation.
+
+### The row's pills: the account of 2026-09-05 misread the fence, 2026-09-05
+
+The section above, `The renderer reconciled to the fence`, says of the four
+pills that "this answer keeps them at the first level and sends the rest to the
+details". That is not what the fence says, and the sentence is withdrawn. The
+fence's options paragraph names exactly two things the row carries at the first
+level, "the two the author's words of 2026-09-04 keep: that the recommendation
+adopts it, with its boldness; and, for each reading that bears on it, whether
+the tradition supports it or it departs from the tradition", and it sends three
+of the four pills down: "The rest of the option's status as the record holds it
+goes to the option's details, where the same words send the AI's reasoning:
+where it came from, by its source and reference; that the AI holds it dominated,
+marked passed over with the clause saying why ...; and that the author has ruled
+on it, with the response and the date". `alt-src`, `alt-passed` and `alt-ruled`
+are those three. `alt-adopted` and the reading chips are the two the fence
+keeps, and only `alt-stands` is left open, as the probe the author raised.
+
+So the reconciliation of 2026-09-05 reconciled one clause of the fence and left
+a second unreconciled while recording that it had nothing to reconcile. The page
+as published on 2026-09-05 renders `alt-src`, `alt-passed` and `alt-ruled` at
+the first level, in `renderOption` in `packages/disposition/project.mjs`,
+against the answer's own words. Measured by the periagogic survey of the sitting
+on `alignment-page-observations`, 2026-09-05, at that function and at the
+published page.
+
+The divergence is recorded here and not repaired here. The clause is provisional
+by its own terms, "what this answer says of the row stands only until that node
+rules", and the node that rules it, `what-an-option-row-carries`, is in the
+sitting now open; the grant that carried the reconciliation of 2026-09-05 was
+given for that reconciliation and does not carry over, so repairing the page
+would spend a fresh grant on a clause a ruling is about to settle. What the
+record owes meanwhile is that the author sees the row as the answer describes it
+or knows that they do not. This section is that notice.
