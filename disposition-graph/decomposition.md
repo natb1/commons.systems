@@ -56,6 +56,9 @@ facts:
         ref: "2cbf3618"
         status: passed
         reason: the model is the review-model node's question since 2026-09-04, where the author's words decide it for both readings
+      - name: no-carrier-and-the-questions-are-progressed
+        source: author
+        ref: "2026-09-05"
       - name: unit-models-left-to-delegation
         source: review
         ref: "2026-09-05"
@@ -131,6 +134,12 @@ The author, 2026-09-04, on the recommendation above, the probe, and the grant as
 
 > go, and bootrap authority granted
 
+The author, 2026-09-05, in the periagogic movement of the sitting on `alignment-page-observations`, on what a decomposition mints and what becomes of the nodes it makes:
+
+> carrier is not inferred by disposition input. Nodes may not even be siblings. Prune it if it carries nothing.
+
+> But the nodes that are created are expected to be progressed through dialogue.
+
 ## Facts
 
 ### answer
@@ -174,6 +183,26 @@ model, and the reader's model became the review-model node's question, where
 its recommended option fable-for-both-readings is this option decided there;
 it stays passed over on this fact only because the model is not this node's
 question.
+
+#### no-carrier-and-the-questions-are-progressed
+
+It would add to the first seam two sentences the answer does not carry, in the
+author's words of 2026-09-05. That a decomposition mints no carrier: the node
+standing for the bundled input as a whole is not implied by the input being
+bundled, so a sitting that decomposes records the questions and leaves the
+words on the node the disposition refines, where this answer already puts the
+ones a question refuses. And that the questions the decomposition mints are
+progressed through dialogue rather than merely recorded, so that decomposing is
+not a way of closing a sitting. It would also make explicit what the answer
+already implies in the clause "where each sits under the record", which the
+author's second sentence affirms: the questions a decomposition yields need not
+be siblings and need not share a parent.
+
+The record minted such a carrier on 2026-09-05,
+`commons.systems/disposition-graph/alignment-page-observations`, which is the
+evidence that the rule is not in the answer today; its existence fact already
+recommended `prune` before these words, on the independence test, and the
+author's words are what the rule would be, not what that prune rests on.
 
 #### unit-models-left-to-delegation
 

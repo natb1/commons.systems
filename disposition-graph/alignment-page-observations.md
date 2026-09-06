@@ -1,18 +1,32 @@
 ---
 question: What does the alignment page show on a node, and what does it collect from the author?
-stage: periagogic
+stage: review
 facts:
   - name: existence
     options:
       - name: keep
+        source: ai
+        ref: "2026-09-05"
       - name: prune
+        source: author
+        ref: "2026-09-05"
     recommends: prune
     boldness: low
+    against: The node is the only place the nine observations stand together in the order and the voice the author gave them, and the assembled form is the one thing a reader of nine separate nodes cannot reconstruct; the answer to that is that the author, asked, said the assembly does no work, and the record's test is what a node carries and not what a reader might like.
   - name: authority
     options:
       - name: ratified
+        source: ai
+        ref: "2026-09-05"
       - name: delegated
+        source: ai
+        ref: "2026-09-05"
       - name: deferred
+        source: ai
+        ref: "2026-09-05"
+    recommends: ratified
+    boldness: low
+    against: The node is a carrier the AI itself minted three days ago and the author has already said to prune it, so asking for a ruling is ceremony over a file nobody wants; the answer is that a deletion is the one act the record cannot take back, and the ceremony is cheap where the act is not.
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -34,11 +48,68 @@ The author, 2026-09-04:
 > - I do not undertand what "The AI's account" is meant to be recording. If it is justified to support alignment dialogue and review then keep it, but it does not need to be presented in the UI.
 > - To avoid confusion, the kickback feedback text input only needs to be displayed when the kickbox option is selected. Otherwise kickback text input is discarded.
 
+The author, 2026-09-05, in the periagogic movement of this sitting, answering the probe on whether the assembled form of the nine observations does work the nine nodes do not:
+> carrier is not inferred by disposition input. Nodes may not even be siblings. Prune it if it carries nothing.
+
+The author, 2026-09-05, immediately after, in the same movement:
+> But the nodes that are created are expected to be progressed through dialogue.
+
 ## Facts
 
 ### existence
 
-Prune is recommended because the disposition asked nine questions and each is now a node of its own under commons.systems/disposition-graph/alignment-page, carrying the author's words that bear on it, and the words no child carries, the heading line, the first observation, and the queuing words, are carried on that node's Disposition; this node's question restates its parent's, its facts would be the parent's, and it would be pruned the moment the parent's recommendation moved to take the nine answers, which is the independence test of the probe-or-node node, whose remedy for a node already standing is that its existence fact moves to prune and the author rules it. Boldness low: the words are all retained and dated elsewhere, and nothing is lost by the prune. The case against is that this node is the one place the nine observations stand together as the author gave them.
+Prune is recommended, and the author's words of 2026-09-05 are what it now rests
+on: "carrier is not inferred by disposition input. Nodes may not even be
+siblings. Prune it if it carries nothing." The direction is conditional, so the
+sitting owes the determination, and this is it.
+
+The node carries three things and no fourth. Its `## Disposition`, the author's
+words of 2026-09-04: every one of them, the heading line, the nine bullets, and
+the words that queued the sitting, stands also on
+`commons.systems/disposition-graph/alignment-page`'s own `## Disposition`,
+measured on 2026-09-05 by matching each of the three passages no child carries
+against that file. Its `## Account`, two sections recording what the sitting
+queued and what the decomposition of 2026-09-05 classified: that is the one
+thing held here and nowhere else, and it is the parent's account, being an
+account of how the parent's question came to have nine children; it moves to
+`alignment-page` at the recording, which is where `probe-or-node` puts the
+account of a node found to be a question on its parent. And the author's words
+of 2026-09-05, quoted above, which are a disposition on what a decomposition
+mints and not on this node's own question; they are recorded on
+`commons.systems/disposition-graph/decomposition`, in its `## Disposition` and
+as the option `no-carrier-and-the-questions-are-progressed` on its answer fact,
+and so they too are held elsewhere.
+
+With the account moved, the node carries nothing. The earlier ground stands
+beside the author's and is not replaced by it: the node's question restates its
+parent's, its facts would be the parent's, and it would be pruned the moment the
+parent's recommendation moved, which is the independence test of `probe-or-node`
+and the reason the recommendation was already `prune` before the author spoke.
+Boldness low: the words are all retained and dated elsewhere, the account has a
+named destination, and nothing is lost by the prune.
+
+Keep is the option the record must still be able to name, and it is not passed
+over: the author's condition is what decides between them, and an option struck
+before the author rules is an option they cannot choose.
+
+### authority
+
+Ratified. The only decision this node carries is whether it exists, and the
+ruling that settles it deletes a file. That is the second limb of
+`class-recommendation`'s test, irreversible: not expensive but unpayable, "a
+deletion, a swap, a landing that other work is built on", in that node's own
+words. Neither of the other limbs is reached, and neither needs to be: the first
+is not met, since nothing is built on this node and the work of deleting it is
+one commit, and the third is not met, since the party the ruling would check and
+the party that would give it are not the same. One limb is enough, and the
+reading is recorded here because `class-recommendation` requires the limb it
+found to be named and a class recommended without one to be treated as
+unsupported.
+
+Delegated and deferred are named and not recommended for the same reason and are
+not passed over: under either, the recommendation acts, and here the
+recommendation is a deletion, so either would let the AI delete a node of the
+record on its own judgment. That is the shape the limb names.
 
 ## Account
 
@@ -49,3 +120,37 @@ Queued during the sitting on `commons.systems/disposition-graph/author-questions
 ### Decomposed, 2026-09-05
 
 The decomposition unit of the sitting classified the nine observations: nine questions, each now a node under alignment-page (input-for-an-unfinished-movement, authors-words-on-the-page, which-facts-are-listed, what-an-option-row-carries, vocabulary-option-summary, how-a-fact-is-headed, where-a-change-request-goes, the-account-on-the-page, when-the-kickback-feedback-shows); three probes, two on dialogue and one on alignment-page; one observation answered by the record, the first; and one option, instrumentation as a fact, recorded on dialogue's answer fact from the author's words. Three observations are answered in part already: the third's "none folded" is the page's rule, the fourth's reason is one step down, and the ninth's discard is the page's behaviour, each named on its node.
+
+### The periagoge, and the two movements of 2026-09-05
+
+The periagogic object was read by a survey unit and not by the main thread: one
+unit, over the ten loci the author's observations of 2026-09-04 name, reading
+the published page of 2026-09-05, `renderMetrics`, `renderStageAsk`,
+`renderAsk`, `authorWordsFor`, `renderFacts`, `factLabel`, `renderOption`,
+`optionText`, `renderKickback` and `renderAccount` in
+`packages/disposition/project.mjs`, and the staging script in
+`packages/disposition/alignment-template.html`, each against the recommended
+text of `alignment-page`. Its conclusion is on the nine children, one section
+each; two findings that bear on the record rather than on a child were recorded
+the same day, on `alignment-page` and on `when-the-kickback-feedback-shows`, and
+were validated at their loci on the main thread before they were written.
+
+The periagogic movement then ran as one probe, on the ground the existence fact
+rests on: whether the assembled form of the nine observations does work the nine
+nodes do not. The author answered that it does not, and gave with it the rule
+the record was missing, that a carrier is not inferred by a bundled disposition
+and that the questions a decomposition mints need not be siblings. That rule is
+recorded on `decomposition`, whose answer it amends and whose question it is.
+
+The maieutic movement is the determination under `### existence` above and the
+class under `### authority`, and it is short because the author's words left one
+thing to settle and the settling is a measurement. Both movements completed in
+the same turn, with no author turn between them, and the node is written once,
+at the review stage, rather than landed twice for a transition nothing happened
+across.
+
+What the author's second sentence binds is not this node: "But the nodes that
+are created are expected to be progressed through dialogue." Pruning the carrier
+is not the sitting's end and does not discharge the nine; each of them stands at
+the periagogic stage with its object now read, and the sitting continues on
+them.
