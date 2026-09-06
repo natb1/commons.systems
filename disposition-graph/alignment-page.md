@@ -122,6 +122,9 @@ facts:
       - name: open-probe-count-on-the-chip
         source: commons.systems/disposition-graph/author-questions
         ref: "2026-09-04"
+      - name: page-collects-only-the-confirmation
+        source: author
+        ref: "2026-09-06"
       - name: standing-sentence-stored
         source: ai
         ref: "2026-09-04"
@@ -282,6 +285,10 @@ The author, 2026-09-04, opening that sitting, whose nine observations the nodes 
 > /align observations of the alignment artifact which potentially have cascading effects to other dispositions
 > - next settles metric in the left nav prints a node id, but I suspect it's supposed to work like the other metrics as a link to that node in the browser. probably not a disposition, just a reconciliation error
 
+The author, 2026-09-06, in the periagogic movement of the sitting on `input-for-an-unfinished-movement`, answering the probe on whether the maieutic control goes with the periagogic one:
+
+> The scope of alignment artifact is limited to final confirmation and previews/read only indicators of other phases of the dialogue. All other information from the author is done via the `/align` session interview.
+
 ## Facts
 
 ### answer
@@ -331,6 +338,31 @@ The recommended answer with one clause changed: the line beneath the question ca
 #### open-probe-count-on-the-chip
 
 Everything the recommendation says, with the stage chip carrying the number of probes open on the node beside the readiness it already renders, and the page carrying nothing of a probe's text, its `why` or its `discharges`. Raised by the `author-questions` sitting of 2026-09-04, whose answer requires it: the author's words exclude the list from this page, and the two readings under this node hold that the recommender does not decide what the decider sees, which is the reasoning this record used to kill the boldness fold here. The count reconciles them so far as they can be reconciled, and the divergence that remains, the probe's text, is recorded on that node rather than argued away. Adopted into the recommended text on 2026-09-04 after the reading of that day, with the citation of author-questions. Its work is at the maieutic stage, where this page asks the author for their intention and an author writing into that control with probes open and no sign of them is answering questions they cannot see; by the ruling stage no node with an open probe arrives at all.
+
+#### page-collects-only-the-confirmation
+
+The author's rule of 2026-09-06, which is a scope on this whole answer and not a
+clause of it: the page collects the final confirmation and nothing else, shows
+every other movement as a preview or a read-only indicator, and sends every other
+thing the author has to say to the `/align` interview.
+
+It strikes the free-text control at the periagogic and the maieutic stages, and
+the caption written for the case where the node carries no words. It leaves
+standing everything the page renders read-only at those stages, which is the
+whole of the middle column with its inputs disabled, since a preview is what the
+author asked those stages to be. It leaves standing the ruling stage's own
+controls, the option rows, the option's text control and the kick-back's, because
+those are the confirmation, which is the one thing this rule says the page is
+for. What it does not itself settle is which of the ruling stage's controls count
+as part of the confirmation and which are a change request the interview should
+take, which is `where-a-change-request-goes`' question, nor whether the author's
+recorded words may be shown back as a read-only preview, which is
+`authors-words-on-the-page`', nor whether the AI's account may be, which is
+`the-account-on-the-page`'.
+
+Recommending it is not this subsection's act: the rule is the author's and is
+recorded here the turn it was said, and what it does to the answer's own text is
+this node's maieutic movement, still owed.
 
 #### standing-sentence-stored
 

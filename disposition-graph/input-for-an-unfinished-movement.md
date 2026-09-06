@@ -9,6 +9,10 @@ under:
 The author, 2026-09-04, on the alignment page, queued from the sitting on author-questions:
 > - Do not take text input for the unfinished periagoge - that is for the periagoge session to collect. Whatever response is provided in periagoge it does not need to be played back in the alignment artifact expect as quotes supporting or refuting fact options.
 
+The author, 2026-09-06, in the periagogic movement of the sitting on `input-for-an-unfinished-movement`, answering the probe on whether the maieutic control goes with the periagogic one:
+
+> The scope of alignment artifact is limited to final confirmation and previews/read only indicators of other phases of the dialogue. All other information from the author is done via the `/align` session interview.
+
 ## Account
 
 What the sitting would amend: `commons.systems/disposition-graph/alignment-page`, its answer fact, and in the recommended text the paragraph that opens "The stage is the first thing the column says of the ruling", whose clause "at the periagogic stage the ask is the author's own account of the ground and the free-text control for it leads; at the maieutic stage it is the author's intention" is what puts the control on the page, and with it the clause "Where the stage asks for the author's words and the node carries none, the column says that in as many words rather than rendering an empty space", which exists only to caption that control. The author's words strike the periagogic case by name and leave open whether the maieutic control goes with it, since the same sentence places both and the author named one; that is the first thing the periagoge on this node has to settle. In the implementation the change falls on the alignment page's projector in `packages/disposition/project.mjs`, `renderStageAsk` and the `STAGE_ASK` table it reads, which write the `words-note` textarea and open the author's words beside it, and on `packages/disposition/alignment-template.html`, whose staging script reads `[data-words]` into the response it records to the page's database.
