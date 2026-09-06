@@ -84,6 +84,14 @@ probes:
       what-an-option-row-carries, which decides the row.
     source: author
     raised: 2026-09-04
+    status: discharged
+    reason: >-
+      the author answered it on 2026-09-06, in the words quoted in
+      `## Disposition` on `what-an-option-row-carries` and in this node's own
+      `## Disposition`: what `stands` could represent is the prior confirmed
+      disposition, if any, and since there are no confirmed dispositions
+      currently no indication of it is expected. What that answer does to the
+      naming rule below is `what-an-option-row-carries`' maieutic movement.
 facts:
   - name: answer
     options:
@@ -295,6 +303,10 @@ The author, 2026-09-04, on the alignment page, transferred here on 2026-09-06 fr
 
 The author, 2026-09-04, on the alignment page, transferred here on 2026-09-06 from `the-account-on-the-page` before its prune:
 > - I do not undertand what "The AI's account" is meant to be recording. If it is justified to support alignment dialogue and review then keep it, but it does not need to be presented in the UI.
+
+The author, 2026-09-06, answering the probe `stands-as-a-draft-no-one-has-confirmed`, raised on this node 2026-09-04:
+
+> What "stands" could represent is the prior confirmed disposition (if any). There are no confirmed dispositions currently, so we would expect to see no indication of that.
 
 ## Facts
 
