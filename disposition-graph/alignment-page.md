@@ -169,13 +169,13 @@ depends:
   - commons.systems/disposition-graph/unanswered#confirmation-before-the-ruling-stage-is-invalid
   - commons.systems/disposition-graph/author-questions
   - commons.systems/disposition-graph/viable-options
-  - commons.systems/disposition-graph/alignment-page-observations
   - commons.systems/disposition-graph/authors-words-on-the-page
   - commons.systems/disposition-graph/how-a-fact-is-headed
   - commons.systems/disposition-graph/input-for-an-unfinished-movement
   - commons.systems/disposition-graph/the-account-on-the-page
   - commons.systems/disposition-graph/vocabulary-option-summary
   - commons.systems/disposition-graph/what-an-option-row-carries
+  - commons.systems/disposition-graph/which-facts-are-listed
   - commons.systems/disposition-graph/when-the-kickback-feedback-shows
   - commons.systems/disposition-graph/where-a-change-request-goes
 under:
@@ -2302,3 +2302,49 @@ given for that reconciliation and does not carry over, so repairing the page
 would spend a fresh grant on a clause a ruling is about to settle. What the
 record owes meanwhile is that the author sees the row as the answer describes it
 or knows that they do not. This section is that notice.
+
+### The carrier pruned, and its account carried here, 2026-09-05
+
+`commons.systems/disposition-graph/alignment-page-observations` is deleted. It
+was the node the decomposition of 2026-09-05 minted for the author's nine
+observations of the day before, standing under this one and restating this one's
+question. Its existence fact had recommended `prune` since it was written, on the
+independence test of `probe-or-node`. The author ruled it in the dialogue of
+2026-09-05, in these words:
+
+> carrier is not inferred by disposition input. Nodes may not even be siblings. Prune it if it carries nothing.
+
+> Pruning doesn't require confirmation of explicitly granted in dialogue. just prune it
+
+> (Pruning of unratified nodes that is)
+
+The node was unratified, no ruling reaching it, so the second and third sentences
+reach it and the prune was taken without a row. The rule they state is recorded
+on `probe-or-node`, whose answer sends every prune to a row, as the option
+`prune-granted-in-dialogue-needs-no-row`; the rule they state about what a
+decomposition mints is recorded on `decomposition`, as
+`no-carrier-and-the-questions-are-progressed`. Neither recommendation has moved.
+
+The condition was met before the file went. Every word of the author's that node
+held stands here: the heading line, the nine bullets, and the words that queued
+the sitting are in this node's `## Disposition`, measured on 2026-09-05 by
+matching each of the three passages no child carries against this file. Its
+account, the one thing it held that nothing else did, is carried below unaltered.
+The words of 2026-09-05 are on `probe-or-node` and on `decomposition`, where the
+dispositions they state belong. Its nine children were never its children: they
+stand under this node, and the author's second sentence binds them — they are
+progressed through dialogue and the prune of the carrier discharges none of them.
+
+One repair goes with the deletion, since the `depends` list was being edited
+anyway: `which-facts-are-listed` is added to it. The frontier finding recorded on
+that node on 2026-09-05 had it as the only one of the ten absent from this list,
+so this node could have been ruled on the very sentence that child exists to
+amend with nothing naming the dependency.
+
+#### Queued, 2026-09-04
+
+Queued during the sitting on `commons.systems/disposition-graph/author-questions`, at the author's word, for after the clean-context readings that sitting owes; recorded the turn it was said and drafted from not at all. What the sitting would amend: `commons.systems/disposition-graph/alignment-page`, whose answer is the page's shape, on what a node's screen lists, how an option's row is presented and what goes to its details, what the page collects and when, and what it does not collect; and, by the cascade the author names, the nodes the observations reach: `commons.systems/disposition-graph/dialogue`, on whether a node's facts are the four reserved names and what "the AI's account" records and for whom; `commons.systems/disposition-graph/recording`, on the kickback as the one channel for a change request; `commons.systems/disposition-graph/authority`, on how a class is presented; and the periagogic movement, on the page taking no input for an unfinished periagoge and playing its responses back only as quotations for or against an option. One observation, the next-settles metric printing an id where the other metrics link, the author held to be a reconciliation error; the decomposition of 2026-09-05 found the page does what the alignment-page node's recommended text says, a metric whose target the browser does not render is named by its id and not linked, and that the one gap is that the text requires the metric to say so and the page says it only in a hover title, which goes to the reconciliation frontier. The periagogic object: the alignment page's projector in `packages/disposition/project.mjs` and the published page, read against the alignment-page node's answer and the rulings it carries. The disposition asks more than one question, so the sitting's first unit is the decomposition that yields one node per question under this node, each carrying the words that bear on it and, in `depends`, the questions it rests on.
+
+#### Decomposed, 2026-09-05
+
+The decomposition unit of the sitting classified the nine observations: nine questions, each now a node under alignment-page (input-for-an-unfinished-movement, authors-words-on-the-page, which-facts-are-listed, what-an-option-row-carries, vocabulary-option-summary, how-a-fact-is-headed, where-a-change-request-goes, the-account-on-the-page, when-the-kickback-feedback-shows); three probes, two on dialogue and one on alignment-page; one observation answered by the record, the first; and one option, instrumentation as a fact, recorded on dialogue's answer fact from the author's words. Three observations are answered in part already: the third's "none folded" is the page's rule, the fourth's reason is one step down, and the ninth's discard is the page's behaviour, each named on its node.

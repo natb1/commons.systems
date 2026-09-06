@@ -39,6 +39,9 @@ facts:
       - name: by-what-is-asked
         source: commons.systems/disposition-graph/author-questions
         ref: "2026-09-04"
+      - name: prune-granted-in-dialogue-needs-no-row
+        source: author
+        ref: "2026-09-05"
       - name: node-by-default
         source: ai
         ref: "2026-09-04"
@@ -77,6 +80,14 @@ that the sitting's grant was read as not covering them:
 The author, 2026-09-04, after the delta sweep, renewing the grant for the amended remedy:
 > ensure new probe/node guidelines are reconciled into the align/review/survey skills (you have bootstrap authority)
 
+The author, 2026-09-05, in the sitting on `alignment-page-observations`, on the clause of this answer that sends every prune to a row on the alignment page:
+
+> Pruning doesn't require confirmation of explicitly granted in dialogue. just prune it
+
+The author, 2026-09-05, immediately after, scoping it:
+
+> (Pruning of unratified nodes that is)
+
 ## Answer
 
 By what the author's response would do once it is given, and never by how the question is worded, since any question can be worded either way and the wording is the asker's to choose. An open question found in any movement has three homes in the record and this rule sends it to one of them. It is an option where the AI holds a candidate answer to this node's question viable, whether or not it recommends that candidate: the record's home for a candidate is the fact it answers, and a question the AI could answer is not a question for the author. It is a probe where the AI holds no candidate it can recommend among without knowing something about what the author intends, and where the author's response, once given, would be consumed whole by moving a recommendation on this node: the response is quoted under `## Disposition`, the recommendation moves, and nothing afterwards needs to read the response rather than the recommendation it moved. It is a node where the response would have to stand: be enforced by the record after it is given, be cited by another node, project a rule, ground work, be read by a session that never saw the question, or be delegated or deferred. A response that must stand is a disposition, and the record has exactly one shape for a disposition, a question with its standing answer, its facts, and the ruling that gives it a class; a probe carries none of that, so wherever the response would need any of it the question is a node, minted under the node it blocks and entered in that node's `depends`, as the parent's third limb already says.
@@ -112,6 +123,37 @@ Readings owed under this node, each surfaced by the second evaluation and named 
 #### by-what-is-asked
 
 The parent's third limb as it stood before this sitting: a question of the record asks what something should be, a probe asks what the author meant by words they have already said, and the recorder classifies by which is asked. Viable if the author holds the sweeps' result to be complete and the line to want no more than wording; under this option the parent's limb is restored to its former sentence and this node is pruned.
+
+#### prune-granted-in-dialogue-needs-no-row
+
+The four tests stand and the remedy changes, for unratified nodes and no others.
+This answer's clause on a node already standing says "the author rules the prune,
+since while it stands it puts a rulable row on the alignment page and that row is
+where the prune is asked", which makes the page the only place a prune can be
+granted. The author's words of 2026-09-05 say otherwise: a prune of an unratified
+node, explicitly granted in the dialogue, needs no confirmation and is taken.
+Under this option the clause reads that such a prune is taken on the author's
+explicit word wherever it is given, in the dialogue or at the node's row, and the
+row remains the way it is asked when no word has been given.
+
+The scope is the author's own and is the whole of the option's safety. A node no
+ruling reaches carries a draft, and deleting a draft the author has just told you
+to delete destroys nothing they have ever confirmed. A ratified node is the other
+case: its answer is a thing the author committed to, its prune is the withdrawal
+of that commitment, and this option does not reach it — the prune of a ratified
+node is a ruling and is asked at the row, as this answer's clause already
+provides. What the two have in common is that the record keeps the reason either
+way. What does not change is what the prune must leave behind, since that is
+the reason the clause exists: the survivor recorded on the parent, the account
+folded into the parent's, the author's words moved to the parent's
+`## Disposition`, and the reason the question was closed written on the parent
+before the file goes, so that a deletion is never the only record of itself.
+
+The evidence is this sitting: the AI took `alignment-page-observations` from the
+periagogic stage to the review stage so that a prune the author had already
+directed could be asked at a row, and the author struck that as ceremony. The
+cost the clause was paying is one clean-context reading and one ruling per node
+pruned, on a frontier where the independence test is expected to reach several.
 
 #### node-by-default
 
