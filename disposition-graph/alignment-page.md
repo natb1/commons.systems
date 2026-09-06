@@ -141,6 +141,9 @@ facts:
       - name: progressive-disclosure-diverges-on-the-fold
         source: commons.systems/disposition-graph/progressive-disclosure
         ref: "2026-09-05"
+      - name: account-not-on-the-page
+        source: commons.systems/disposition-graph/the-account-on-the-page
+        ref: "2026-09-06"
     recommends: every-fact-every-option
     boldness: moderate
     against: "The delta encoding puts nine independent decisions in one radio group, so a combined ruling needs a confirmation with edits; the children the earlier review proposed would give each its own text, reading and pane."
@@ -174,8 +177,6 @@ depends:
   - commons.systems/disposition-graph/viable-options
   - commons.systems/disposition-graph/authors-words-on-the-page
   - commons.systems/disposition-graph/how-a-fact-is-headed
-  - commons.systems/disposition-graph/input-for-an-unfinished-movement
-  - commons.systems/disposition-graph/the-account-on-the-page
   - commons.systems/disposition-graph/vocabulary-option-summary
   - commons.systems/disposition-graph/what-an-option-row-carries
   - commons.systems/disposition-graph/which-facts-are-listed
@@ -289,6 +290,12 @@ The author, 2026-09-06, in the periagogic movement of the sitting on `input-for-
 
 > The scope of alignment artifact is limited to final confirmation and previews/read only indicators of other phases of the dialogue. All other information from the author is done via the `/align` session interview.
 
+The author, 2026-09-04, on the alignment page, transferred here on 2026-09-06 from `input-for-an-unfinished-movement` before its prune:
+> - Do not take text input for the unfinished periagoge - that is for the periagoge session to collect. Whatever response is provided in periagoge it does not need to be played back in the alignment artifact expect as quotes supporting or refuting fact options.
+
+The author, 2026-09-04, on the alignment page, transferred here on 2026-09-06 from `the-account-on-the-page` before its prune:
+> - I do not undertand what "The AI's account" is meant to be recording. If it is justified to support alignment dialogue and review then keep it, but it does not need to be presented in the UI.
+
 ## Facts
 
 ### answer
@@ -394,6 +401,37 @@ contradicts. It supersedes the suggested edit this node's own reading of
 `discloses-detail-not-decisions`: that option was passed over the same day, for
 saying the record diverges from the tradition nowhere.
 
+
+#### account-not-on-the-page
+
+The AI's account is not shown on this page. The clause "Last, as drill-downs, the
+author's words and the AI's account" keeps the first and drops the second, so the
+column carries the facts, their options, the recommendation with the case against
+it, and the author's own words, and the account is read in the browser by anyone
+who wants it.
+
+The option is the survivor of `the-account-on-the-page`, the child minted for the
+author's observation of 2026-09-04, "I do not undertand what 'The AI's account'
+is meant to be recording. If it is justified to support alignment dialogue and
+review then keep it, but it does not need to be presented in the UI." That node
+was pruned on 2026-09-06 under the author's delegation, on the independence test:
+its only possible answer was a reading of this clause, its facts would have been
+this fact, and it would have been pruned the moment this recommendation moved.
+The substantive half of the author's observation, what `## Account` is for and
+whether it is justified at all, is not this option's and is not lost with the
+node: it stands as the probe `what-the-account-records` on
+`commons.systems/disposition-graph/dialogue`, sourced to the author and raised
+2026-09-04, whose own text already says that "the-account-on-the-page decides
+only the presentation".
+
+The contrary reading is on the list and is why this option is not the
+recommendation by default: the author's rule of 2026-09-06 permits a preview and
+a read-only indicator of every movement the page is not running, and the account
+folded into a drill-down is exactly that. What the author asked was what the
+account records, and their condition was that it be kept if it is justified; a
+reader who cannot see it cannot judge the case against on the row against the
+reasoning behind it. The recommendation on this fact has not moved and this
+option acts on nothing.
 ### authority
 
 Ratified, because this page is the surface every ruling passes through: a row that mis-states what a confirmation does, as the caption naming a draft "the node as it stands" did on `commons.systems/public/agency`, records a ruling the author did not give, and that is capture-shaped whatever the fold does; the fold's removal took the page's one mechanism for deciding what the author sees and left this one, which is about what the author is told they are deciding. Deferred is on the fact because the record's classes are three and the reader admits it; delegated would let the recommendation act on the layout, which is reversible, but also on what a confirmation is said to mean, which is not. Moderate boldness: the ground is the record's own on `agency` and this page's own history, and what rests on the AI is the reading that a caption is a ruling.
@@ -2446,3 +2484,56 @@ conflict is recorded there as the option
 classification of those words and changes where they come from. Nothing was
 applied to that node: the recommendation on its answer fact has not moved and it
 stays at the maieutic stage.
+
+### Two children pruned under the delegation, 2026-09-06
+
+The author, 2026-09-06, making the prune grant standing:
+
+> the prune grant is standard disposition.
+> - may not prune something that is ratified
+> - anything from the author (such as quotes) must be transferred to another node before prune
+>
+> Otherwise, pruning authority is granted to AI under general delegation of graph topology.
+
+`commons.systems/disposition-graph/input-for-an-unfinished-movement` and
+`commons.systems/disposition-graph/the-account-on-the-page` are deleted under it.
+Both bounds were checked before either file went. Neither node carried a ruling
+of any kind, so neither was ratified. The author's words on each are transferred:
+the periagoge bullet now stands in this node's `## Disposition` and already stood
+on `authors-words-on-the-page`, and the account bullet, which stood on its own
+node and nowhere else in the record, now stands here and on
+`commons.systems/disposition-graph/dialogue`, beside the probe it raises there.
+
+The independence test is why they went and not the delegation, which only says
+who takes the prune. `input-for-an-unfinished-movement` asked whether the page
+takes the author's words for a movement it is not running; the author's rule of
+2026-09-06 answers it outright and this node's answer now states the answer, so
+the child was a discharged probe on this node with nothing of its own left.
+`the-account-on-the-page` asked only whether the account is presented, its
+substantive half being a probe on `dialogue` by its own account; its only
+possible answer was a reading of one clause of this answer, and the survivor is
+the option `account-not-on-the-page` on the answer fact above, sourced to it.
+Both are struck from `depends`, and the closing paragraph of the recommended text
+counts eight children where it counted nine.
+
+Seven children stand: `authors-words-on-the-page`, `which-facts-are-listed`,
+`what-an-option-row-carries`, `vocabulary-option-summary`, `how-a-fact-is-headed`,
+`where-a-change-request-goes` and `when-the-kickback-feedback-shows`. The author's
+words of 2026-09-05 bind them and not the prunes: they are progressed through
+dialogue, and nothing here discharges one.
+
+#### Carried from `input-for-an-unfinished-movement`, 2026-09-06
+
+What the sitting would amend: `commons.systems/disposition-graph/alignment-page`, its answer fact, and in the recommended text the paragraph that opens "The stage is the first thing the column says of the ruling", whose clause "at the periagogic stage the ask is the author's own account of the ground and the free-text control for it leads; at the maieutic stage it is the author's intention" is what puts the control on the page, and with it the clause "Where the stage asks for the author's words and the node carries none, the column says that in as many words rather than rendering an empty space", which exists only to caption that control. The author's words strike the periagogic case by name and leave open whether the maieutic control goes with it, since the same sentence places both and the author named one; that is the first thing the periagoge on this node has to settle. In the implementation the change falls on the alignment page's projector in `packages/disposition/project.mjs`, `renderStageAsk` and the `STAGE_ASK` table it reads, which write the `words-note` textarea and open the author's words beside it, and on `packages/disposition/alignment-template.html`, whose staging script reads `[data-words]` into the response it records to the page's database.
+
+Cascades: `commons.systems/disposition-graph/recording`, which says which movement collects the author's words and how a response given in prose is classified; `commons.systems/disposition-graph/unanswered`, whose three responses are all the ruling stage's, so a control at an earlier stage collects something that is not a response at all; `commons.systems/disposition-graph/transience` and `commons.systems/disposition-graph/ruling-transport`, on whether a page's database may hold the author's words even as a buffer, which is what the control fills; `commons.systems/disposition-graph/author-questions`, whose answer already puts the asking of the maieutic movement in the alignment session and not on the page, "Where they are asked is the maieutic session and not the alignment page", and which the author's words here extend from probes to the movement's own collection; `commons.systems/disposition-graph/growth`, where the periagogic conduct of one probe per turn is written; and this node's own parent again, for the stage chip's two controls, `/align <the node's id>`, which are the route the author's words say the periagoge is collected by.
+
+The periagogic object: the published alignment page at https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 at a node standing at the periagogic and at the maieutic stage, read against the recommended text of `alignment-page`, the answers of `recording`, `unanswered` and `author-questions`, and `renderStageAsk` in the projector, before anything is changed.
+
+#### Carried from `the-account-on-the-page`, 2026-09-06
+
+What the sitting would amend: `commons.systems/disposition-graph/alignment-page`, its answer fact, and in the recommended text the clause "Last, as drill-downs, the author's words and the AI's account", which is the only sentence putting the account on the page. What the author's words do not touch is the account's place in the record: their condition, that it be kept if it is justified to support the alignment dialogue and the review, is a question put to the AI about what `## Account` is for, and it is carried as a probe on `commons.systems/disposition-graph/dialogue`, which defines the term, rather than answered here. This node decides only the presentation, and it can be answered either way whatever that probe returns: an account the readings need is not thereby an account the ruling screen shows. The sitting should say, too, what a reader loses if the drill-down goes, since the account is where the findings, the review's counter-argument and what is open for the author are written, and some of that is already on the page by other routes, the counter-argument on the recommended option's row and the readiness on the stage chip. In the implementation the change falls on the alignment page's projector in `packages/disposition/project.mjs`, `renderAsk`, which appends the `The AI's account` drill-down, and `renderAccount`, which renders its sections, and on `packages/disposition/alignment-template.html`, which styles them.
+
+Cascades: `commons.systems/disposition-graph/dialogue`, whose answer says what `## Account` holds, "the evidence, the findings, the reasoning behind the recommendation of each fact, the review's findings and its counter-argument with the session's reply, and what is open for the author", and which carries the author's question as a probe; `commons.systems/disposition-graph/recording`, on what a sitting writes into it; `commons.systems/disposition-graph/clean-context-review`, whose two readings consume it and are the "alignment dialogue and review" the author's condition names; `commons.systems/disposition-graph/projection`, on whether the browser renders the account, which is the same question asked of the other projection; and `commons.systems/disposition-graph/attention`, on what the author's reading time is spent on.
+
+The periagogic object: the published alignment page at https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 at a node with a long account, `commons.systems/disposition-graph/alignment-page` itself among them, read against the recommended text of `alignment-page`, the answer of `dialogue` on `## Account`, and `renderAsk` with `renderAccount` in the projector, before anything is changed.

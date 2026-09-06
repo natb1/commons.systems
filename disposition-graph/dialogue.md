@@ -370,6 +370,17 @@ Traditions, recorded as readings under this node or owed under the stub-traditio
 
 Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Each fact on a node, regardless of authority, has viable options list (possibly length 1) with a) AI recommendation/why b) support or divergence from tradition for each option and c) (if answered) the confirmed choice and why"; "For each fact, the confirmed choice, the AI recommendation and support divergence from tradition as well as any non-chosen option which is categorized as 'viable' by the AI - these are all is persisted after confirmation to mitigate regression." Alternatives and facts become one structure, since a candidate answer is a choice on the answer and the record had two shapes for one thing; the node-level recommendation goes into each fact, which is where its boldness already sat; the stamp goes, the class being read off the rulings; the sentence that confirmed dialogue state folds and unconfirmed state survives only in version control is amended, since what folds is the dialogue and what persists is the facts, which the minimal-state principle keeps by its own test: what persists is judgment that re-derivation cannot reconstruct, and what dies is the account, which re-running the review reconstructs. `aspects-are-nodes` stands within this answer, its second paragraph. The encoding's field names are the delegated detail the author left to the AI on 2026-09-03 and are decided on the viable-options node. The answer as it stood is kept as the option `alternatives-beside-facts`, and the review of this text is owed.
 
+The author, 2026-09-06, making the prune grant standing rather than a grant given case by case:
+
+> the prune grant is standard disposition.
+> - may not prune something that is ratified
+> - anything from the author (such as quotes) must be transferred to another node before prune
+>
+> Otherwise, pruning authority is granted to AI under general delegation of graph topology.
+
+The author, 2026-09-04, on the alignment page, transferred here on 2026-09-06 from `the-account-on-the-page` before its prune, being the words the probe `what-the-account-records` rests on:
+> - I do not undertand what "The AI's account" is meant to be recording. If it is justified to support alignment dialogue and review then keep it, but it does not need to be presented in the UI.
+
 ## Facts
 
 ### answer
@@ -2126,3 +2137,20 @@ key is what the re-reading diffs against and it was written under the author's
 grant for that reconciliation, so what removes the divergence is a ruling and not
 an edit. Landed on `greenfield` at `87e4b24e` under the author's grant of
 2026-09-04.
+
+### Who prunes, 2026-09-06
+
+This node defines `prune` as an option of the existence fact, and the author's
+standing disposition of 2026-09-06, quoted above, says who takes it: the AI, for
+any node no ruling reaches, under the general delegation of graph topology, with
+two bounds — a ratified node is not the AI's to prune, and anything from the
+author on the node is transferred to another node first. The rule itself is
+recorded on `commons.systems/disposition-graph/probe-or-node`, whose remedy sent
+every prune to a row on the alignment page, as the option
+`prune-delegated-with-two-bounds`; it is quoted here because this node holds the
+term and a reader of the existence fact should meet it.
+
+What the existence fact is for is unchanged by this. A prune the author wants to
+rule is still asked at the node's row, and the fact is still how they are asked;
+what the delegation removes is the requirement that they be asked at all where
+the node carries no ruling.

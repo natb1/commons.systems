@@ -42,6 +42,11 @@ facts:
       - name: prune-granted-in-dialogue-needs-no-row
         source: author
         ref: "2026-09-05"
+        status: passed
+        reason: superseded by the author's own standing disposition of 2026-09-06, which delegates the pruning of unratified nodes rather than granting it case by case
+      - name: prune-delegated-with-two-bounds
+        source: author
+        ref: "2026-09-06"
       - name: node-by-default
         source: ai
         ref: "2026-09-04"
@@ -87,6 +92,14 @@ The author, 2026-09-05, in the sitting on `alignment-page-observations`, on the 
 The author, 2026-09-05, immediately after, scoping it:
 
 > (Pruning of unratified nodes that is)
+
+The author, 2026-09-06, making the prune grant standing rather than a grant given case by case:
+
+> the prune grant is standard disposition.
+> - may not prune something that is ratified
+> - anything from the author (such as quotes) must be transferred to another node before prune
+>
+> Otherwise, pruning authority is granted to AI under general delegation of graph topology.
 
 ## Answer
 
@@ -154,6 +167,41 @@ periagogic stage to the review stage so that a prune the author had already
 directed could be asked at a row, and the author struck that as ceremony. The
 cost the clause was paying is one clean-context reading and one ruling per node
 pruned, on a frontier where the independence test is expected to reach several.
+
+#### prune-delegated-with-two-bounds
+
+The four tests stand, and the remedy's last clause is replaced by a delegation.
+This answer says of a node already standing that "the author rules the prune,
+since while it stands it puts a rulable row on the alignment page and that row is
+where the prune is asked". Under this option the author does not rule it, because
+the author has delegated it: pruning is the AI's under the general delegation of
+graph topology, and the row is not where an unratified prune is asked.
+
+Two bounds hold, and they are the whole of the delegation's safety, in the
+author's own words of 2026-09-06. A ratified node may not be pruned: its answer
+is a thing the author committed to, and withdrawing that commitment is theirs.
+And anything from the author on the node — their words above all, but anything
+the record holds as theirs — must be transferred to another node before the prune,
+so that a deletion never destroys something only the author could have given. To
+those the record adds what it already required of the remedy above and which the
+delegation does not touch: the survivor recorded on the parent, the account
+folded into it, and the reason the question was closed written down before the
+file goes.
+
+The option it supersedes, `prune-granted-in-dialogue-needs-no-row`, read the
+author's words of 2026-09-05 as a grant to be given case by case, which is what a
+grant is under `authority`. The author's next words made it a disposition, so the
+narrower reading is passed over rather than struck: it stays on the list because
+the author may yet prefer that a prune be asked for each time, and because the
+difference between the two is exactly the difference between a grant and a
+delegation, which is the thing the author is deciding.
+
+What this option does not settle is which node holds the general delegation of
+graph topology the author names. No node of the record asks what that delegation
+covers, so the delegation is recorded here, on the node whose remedy it changes,
+and named as reaching further than this node's own question. That gap is on the
+frontier and is not filled by minting a node for it, since a carrier is not
+inferred from an input.
 
 #### node-by-default
 
