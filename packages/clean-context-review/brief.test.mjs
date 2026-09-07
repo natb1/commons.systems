@@ -21,8 +21,10 @@ import {
   frontierFindingSectionsSince,
   sectionHashes, movedSections, SECTION_HASH_KEYS, judgedSet, candidatePairs,
   cutPairs, probeSeed, drawProbe, wholeDemand,
+  renderJudgedNode, groupedPairLines, shortId, shortKey, probePairLine,
 } from "./brief.mjs";
 import { readGraph, surveyJudges } from "@commons.systems/disposition/read.mjs";
+import { diffText } from "@commons.systems/disposition/patch.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "../..");
@@ -1666,7 +1668,7 @@ describe("writeSurveyBrief: the selection, the sidecars and --out", () => {
     assert.match(brief, /### The judged set, in the ruling order/);
     assert.match(brief, /judged because /);
     assert.match(brief, /### The candidate pairs \(\d+ live/);
-    assert.match(brief, /key\(s\): /);
+    assert.match(brief, /^### main\/\S+ \(\d+ pair\(s\)\)$/m, "the pairs are grouped by the judged node each is compared against");
     assert.equal(result.pairCount, result.livePairCount + result.frozenPairCount);
   });
 
@@ -1759,5 +1761,388 @@ describe("writeSurveyBrief: the selection, the sidecars and --out", () => {
     await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07", dry: true });
     await assert.rejects(readFile(path.join(reviewDir, "survey.brief.md"), "utf8"));
     await assert.rejects(readFile(path.join(reviewDir, "survey.history.json"), "utf8"));
+  });
+});
+
+// ------------------------------------- the judged node, and the pair list
+//
+// `survey-selection`: the judged node is "carried once ... its content never
+// rendered twice", and a key "narrows attention and never the corpus", the
+// pair list ordering the reading rather than partitioning it.
+
+const CONTENT_NODE = "clean-context-review.test/main/content-node";
+
+/** Content, as `parseOptionContent` normalizes it: no trailing blank line,
+ * one closing newline -- so a diff computed here applies to what the reader
+ * resolves there. */
+const content = (...lines) => `${lines.join("\n").replace(/\n+$/, "")}\n`;
+
+/** Four hundred lines of body, so that a near copy rewriting fifty
+ * consecutive ones has a difference well past the eighty-line cap and well
+ * short of the copy itself. */
+const LONG_BODY = Array.from({ length: 400 }, (_, i) => `Line ${i}, which the long near copy either keeps or rewrites.`);
+
+const RECOMMENDED_CONTENT = content(
+  "---",
+  "question: What does a content-encoded node carry?",
+  "form: rule",
+  "---",
+  "",
+  "## Answer",
+  "",
+  "The recommended answer, which is the one that binds.",
+  "",
+  "A second paragraph, which the near copy rewrites and nothing else touches.",
+  "",
+  ...LONG_BODY,
+);
+
+const LONG_NEAR_COPY_CONTENT = content(
+  ...RECOMMENDED_CONTENT.replace(/\n$/, "").split("\n").map((line) => {
+    const m = /^Line (\d+), /.exec(line);
+    return m && Number(m[1]) >= 100 && Number(m[1]) < 150 ? `Line ${m[1]}, rewritten by the long near copy.` : line;
+  }),
+);
+
+const NEAR_COPY_CONTENT = RECOMMENDED_CONTENT.replace(
+  "A second paragraph, which the near copy rewrites and nothing else touches.",
+  "A second paragraph, rewritten by the near copy and otherwise the same node.",
+);
+
+const NAMED_CHANGE_TARGET = RECOMMENDED_CONTENT.replace(
+  "The recommended answer, which is the one that binds.",
+  "The named change's answer, which is the recommendation with its first line replaced.",
+);
+
+const NAMED_CHANGE_DIFF = diffText(RECOMMENDED_CONTENT, NAMED_CHANGE_TARGET);
+
+const DIFFERENT_DRAFT_CONTENT = content(
+  "---",
+  "question: What does a content-encoded node carry?",
+  "form: rule",
+  "---",
+  "",
+  "## Answer",
+  "",
+  "Nothing of the sort.",
+);
+
+/** A whole option whose frontmatter differs from the recommendation's own
+ * (`form: target` rather than `form: rule`) and whose `## Answer` is
+ * byte-identical to it -- rule 3's case: the frontmatter is never rendered
+ * whole, only diffed, and the unchanged answer is named rather than shown. */
+const FRONTMATTER_CHANGE_CONTENT = content(
+  "---",
+  "question: What does a content-encoded node carry?",
+  "form: target",
+  "---",
+  "",
+  "## Answer",
+  "",
+  "The recommended answer, which is the one that binds.",
+  "",
+  "A second paragraph, which the near copy rewrites and nothing else touches.",
+  "",
+  ...LONG_BODY,
+);
+
+/** What the migration of 2026-09-07 left on most options: the whole node,
+ * frontmatter and all, with the option's own sentence standing in the `##
+ * Answer`'s place and nothing else of the node touched -- the case
+ * `optionContentAgainstAnswer`'s rule 1 collapses to one line. */
+const MIGRATED_SENTENCE = "The migration carried this option's sentence into the answer's place and wrote no text of its own.";
+
+const MIGRATED_WHOLE_CONTENT = content(
+  "---",
+  "question: What does a content-encoded node carry?",
+  "form: rule",
+  "---",
+  "",
+  "## Answer",
+  "",
+  MIGRATED_SENTENCE,
+);
+
+/**
+ * One node in the content encoding, judged: five options on its answer fact,
+ * of which one is the recommendation the answer resolves to, one a near copy
+ * of it, one byte-identical to it, one a named change against it, and one a
+ * different draft altogether and shorter than the difference from the answer
+ * would be. `depends` names another judged node, so the pair list has a
+ * judged-judged pair to place.
+ */
+function contentEncodedNode() {
+  const whole = (name, sentence, text) => [
+    `#### ${name}`,
+    "",
+    sentence,
+    "",
+    "**AI support.** Support the survey never reads.",
+    "",
+    "**AI divergence.** Divergence the survey never reads either.",
+    "",
+    "**Content.**",
+    "",
+    "```markdown",
+    text.replace(/\n$/, ""),
+    "```",
+    "",
+  ].join("\n");
+
+  return [
+    "---",
+    "question: What does a content-encoded node carry?",
+    "form: rule",
+    "stage: ruling",
+    "facts:",
+    "  - name: answer",
+    "    options:",
+    "      - name: recommended-whole",
+    "        source: ai",
+    '        ref: "2026-09-07"',
+    "      - name: near-copy-whole",
+    "        source: ai",
+    '        ref: "2026-09-07"',
+    "      - name: same-as-recommended",
+    "        source: ai",
+    '        ref: "2026-09-07"',
+    "      - name: a-named-change",
+    "        source: ai",
+    '        ref: "2026-09-07"',
+    "      - name: a-long-near-copy",
+    "        source: ai",
+    '        ref: "2026-09-07"',
+    "      - name: a-frontmatter-change",
+    "        source: ai",
+    '        ref: "2026-09-07"',
+    "      - name: migrated-whole",
+    "        source: ai",
+    '        ref: "2026-09-07"',
+    "      - name: a-different-draft",
+    "        source: ai",
+    '        ref: "2026-09-07"',
+    "    recommends: recommended-whole",
+    "    boldness: low",
+    "  - name: authority",
+    "    options:",
+    "      - name: ratified",
+    "      - name: delegated",
+    "      - name: deferred",
+    "    recommends: deferred",
+    "    boldness: low",
+    "review:",
+    "  verdict: forward",
+    "  strength: weak",
+    '  date: "2026-09-07"',
+    "  of: bbcda4b8c34fbcad8efcb72f071571ea038b415c",
+    "depends:",
+    "  - clean-context-review.test/main/ruling-a",
+    "---",
+    "",
+    "## Facts",
+    "",
+    "### answer",
+    "",
+    "The five options differ only in what each would make of the node.",
+    "",
+    whole("recommended-whole", "What the node says under the recommendation.", RECOMMENDED_CONTENT),
+    whole("near-copy-whole", "The recommendation with its second paragraph rewritten.", NEAR_COPY_CONTENT),
+    whole("same-as-recommended", "The recommendation again, word for word.", RECOMMENDED_CONTENT),
+    [
+      "#### a-named-change",
+      "",
+      "The recommendation with its first line replaced, written as a change.",
+      "",
+      "**Content.**",
+      "",
+      "From: recommended-whole",
+      "",
+      "```diff",
+      NAMED_CHANGE_DIFF.replace(/\n$/, ""),
+      "```",
+      "",
+    ].join("\n"),
+    whole("a-long-near-copy", "The recommendation with fifty of its lines rewritten.", LONG_NEAR_COPY_CONTENT),
+    whole("a-frontmatter-change", "The recommendation with a different form declared.", FRONTMATTER_CHANGE_CONTENT),
+    whole("migrated-whole", MIGRATED_SENTENCE, MIGRATED_WHOLE_CONTENT),
+    whole("a-different-draft", "A different draft, shorter than the difference from the answer.", DIFFERENT_DRAFT_CONTENT),
+    [
+      "## Account",
+      "",
+      "### Clean-context review, 2026-09-07",
+      "",
+      "Read in clean context. Verdict: forward to the author's ruling.",
+      "",
+    ].join("\n"),
+  ].join("\n");
+}
+
+async function fixtureWithContentNode(prefix) {
+  const rootDir = await freshFrontierFixture(prefix);
+  await writeFile(path.join(rootDir, "main", "content-node.md"), contentEncodedNode());
+  return rootDir;
+}
+
+describe("renderJudgedNode: the content of every option, and the answer never twice", () => {
+  test("the answer is carried once; a near copy and a named change are differences, an equal option one line, a different draft whole", async () => {
+    const rootDir = await fixtureWithContentNode("judged-content-");
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === CONTENT_NODE);
+    assert.ok(node, "the content-encoded node reads");
+    assert.equal(node.encoding, "content");
+
+    const block = renderJudgedNode(node, graph.words, new Map(graph.nodes.map((n) => [n.id, n])));
+
+    // carried once: the answer's own sentence is in the block exactly once,
+    // and no option repeats it in a fenced block of its own.
+    const answerSentence = "The recommended answer, which is the one that binds.";
+    const asItsOwnLine = block.split("\n").filter((line) => line === answerSentence);
+    assert.equal(asItsOwnLine.length, 1,
+      "the text that binds stands once in the whole block, under the answer and nowhere else");
+    // the one other occurrence is inside the named change's hunks, where the
+    // record itself writes the line it removes, prefixed: a change is quoted
+    // as the record writes it and is not the node carried again.
+    assert.equal(block.split(answerSentence).length - 1, 2);
+    assert.match(block, new RegExp(`^-${answerSentence.replace(/[.]/g, "\\.")}$`, "m"));
+    assert.match(block, /#### The one answer that binds \(the resolved content of `recommended-whole`\)/);
+    assert.match(block, /##### `recommended-whole`\n\nContent: the node as rendered above/);
+
+    // the near copy: a difference, not the node again -- rendered section by
+    // section now, so the unchanged frontmatter is named and only the
+    // `## Answer` section carries a diff.
+    const nearCopy = block.slice(block.indexOf("##### `near-copy-whole`"), block.indexOf("##### `same-as-recommended`"));
+    assert.match(nearCopy, /unchanged: frontmatter/);
+    assert.match(nearCopy, /Answer:/);
+    assert.match(nearCopy, /```diff/);
+    assert.match(nearCopy, /^\+A second paragraph, rewritten by the near copy and otherwise the same node\.$/m);
+    assert.ok(!nearCopy.includes("```markdown"), "a near copy is never carried as a second copy of the node");
+
+    // the option whose content resolves to the answer's own text
+    const same = block.slice(block.indexOf("##### `same-as-recommended`"), block.indexOf("##### `a-named-change`"));
+    assert.match(same, /Content: identical to the answer above\./);
+    assert.ok(!same.includes("```"), "an identical option carries no block at all");
+
+    // the named change, as the record writes it
+    const named = block.slice(block.indexOf("##### `a-named-change`"), block.indexOf("##### `a-long-near-copy`"));
+    assert.match(named, /Content: a named change against `recommended-whole`, as the record writes it\./);
+    assert.ok(named.includes(NAMED_CHANGE_DIFF.replace(/\n$/, "")), "the record's own hunks, verbatim");
+
+    // the long near copy: its `## Answer` section still carries a difference
+    // past the cap, cut there with what was cut and where to read the rest
+    const longCopy = block.slice(block.indexOf("##### `a-long-near-copy`"), block.indexOf("##### `a-frontmatter-change`"));
+    assert.match(longCopy, /Answer:/);
+    assert.match(longCopy, /^… \d+ more line\(s\) of this diff; open \S+content-node\.md for the option whole\.$/m);
+    assert.ok(longCopy.split("\n").filter((l) => /^[-+@]/.test(l)).length < 120, "the cut diff is a fraction of the four hundred lines");
+
+    // a frontmatter change: never rendered whole, only diffed, with the
+    // byte-identical `## Answer` named as unchanged rather than repeated
+    const frontmatterChange = block.slice(block.indexOf("##### `a-frontmatter-change`"), block.indexOf("##### `migrated-whole`"));
+    assert.match(frontmatterChange, /Frontmatter differs:/);
+    assert.match(frontmatterChange, /```diff/);
+    assert.ok(!frontmatterChange.includes("```markdown"), "an option's frontmatter is never rendered whole");
+    assert.match(frontmatterChange, /unchanged: answer/);
+
+    // the migration's own copy: the answer holds only this option's
+    // sentence, and every other section matches -- one line, no fence, and
+    // the option's frontmatter appears nowhere in its own block
+    const migrated = block.slice(block.indexOf("##### `migrated-whole`"), block.indexOf("##### `a-different-draft`"));
+    assert.match(
+      migrated,
+      /Content: the node as it stands with this option's sentence in the answer's place \(the migration wrote no text of its own for it\)\.$/m,
+    );
+    assert.ok(!migrated.includes("```"), "the migration's own copy renders no fence at all");
+    assert.ok(!migrated.includes("question: What does a content-encoded node carry?"), "its frontmatter appears nowhere in its block");
+
+    // the different draft: its content is shorter than the difference would
+    // be, so the content is what the reader is shown -- the measured rule,
+    // since on this record a rival is usually a draft and not a copy. Its
+    // frontmatter matches the judged node's and is named unchanged rather
+    // than repeated; only the `## Answer` section is shown, in a fence.
+    const different = block.slice(block.indexOf("##### `a-different-draft`"));
+    assert.match(different, /unchanged: frontmatter/);
+    assert.match(different, /Answer:/);
+    assert.match(different, /```markdown/);
+    assert.ok(different.includes("Nothing of the sort."), "the different draft is carried whole");
+    assert.ok(!different.includes("question: What does a content-encoded node carry?"), "its frontmatter is not repeated");
+
+    // struck, as the answer says: no rationale, no facts prose, no
+    // accumulated support or divergence
+    assert.ok(!block.includes("**AI support.**"), "the AI's accumulated support is not carried");
+    assert.ok(!block.includes("**AI divergence.**"), "nor its divergence");
+    assert.ok(!block.includes("The five options differ only in"), "nor the fact's own prose");
+
+    // and the fact line the reader rules on: what is recommended, with what
+    // boldness, out of which options, on both facts
+    assert.match(block, /^- Facts: answer: recommends recommended-whole \(low\) of /m);
+    assert.match(block, /authority: recommends deferred \(low\)/);
+  });
+});
+
+describe("the candidate pairs, grouped by the judged node each is compared against", () => {
+  test("shortId drops the module, and the graph where it is the disposition graph", () => {
+    assert.equal(shortId("commons.systems/disposition-graph/authority"), "authority");
+    assert.equal(shortId("commons.systems/public/why-this-exists"), "public/why-this-exists");
+    assert.equal(shortId("clean-context-review.test/main/review-a"), "main/review-a");
+    assert.equal(shortId("not-an-id"), "not-an-id");
+  });
+
+  test("shortKey names the term and not its definer, and keeps the resemblance's score", () => {
+    assert.equal(shortKey("term:judged set (defines: commons.systems/disposition-graph/survey-selection)"), "term: judged set");
+    assert.equal(shortKey("words:words/2026-09-07/9"), "words words/2026-09-07/9");
+    assert.equal(shortKey("parent:commons.systems/disposition-graph/review-cost"), "parent");
+    assert.equal(shortKey("jaccard:0.61"), "resemblance 0.61");
+    assert.equal(shortKey("cites"), "cites");
+    assert.equal(shortKey("depends"), "depends");
+  });
+
+  test("groupedPairLines gives each pair one host, names a judged-judged pair once, and counts the rest", () => {
+    const judged = [{ id: "m/g/a" }, { id: "m/g/b" }];
+    const live = [
+      { a: "m/g/a", b: "m/g/b", keys: ["depends", "parent:m/g/p"] },
+      { a: "m/g/a", b: "m/g/z", keys: ["term:probe (defines: m/g/z)"] },
+      { a: "m/g/y", b: "m/g/z", keys: ["cites"] },
+    ];
+    const { text, listed, unjudged } = groupedPairLines(live, judged, new Set(["m/g/a\tm/g/z"]));
+    assert.equal(listed, 2);
+    assert.equal(unjudged, 1, "a pair neither of whose members is judged is counted, not listed");
+    assert.ok(!text.includes("m/g/y"), "and never listed line by line");
+    assert.match(text, /^### g\/a \(2 pair\(s\)\)$/m);
+    assert.match(text, /^- g\/b — depends; parent$/m);
+    assert.match(text, /^- g\/z — term: probe \(drift probe\)$/m);
+    assert.match(text, /^### g\/b \(0 pair\(s\)\)$/m);
+    assert.match(text, /^- and the pairs listed above under g\/a$/m);
+    assert.equal(text.split("- g/b — depends; parent").length - 1, 1, "the judged-judged pair is listed once");
+  });
+
+  test("probePairLine names both sides, since a frozen pair has no judged member to sit under", () => {
+    assert.equal(
+      probePairLine({ a: "commons.systems/disposition-graph/x", b: "commons.systems/public/y", keys: ["cites", "cites"] }),
+      "- x + public/y — cites",
+    );
+  });
+
+  test("the brief groups the live pairs under the judged nodes, in the ruling order, with no module prefix", async () => {
+    const rootDir = await fixtureWithContentNode("pairs-grouped-");
+    const reviewDir = path.join(rootDir, "out");
+    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
+    const brief = await readFile(result.briefPath, "utf8");
+    const pairs = brief.slice(brief.indexOf("\n## Where to look first"), brief.indexOf("\n## How you record what you find"));
+
+    const headings = [...pairs.matchAll(/^### (main\/\S+) \(\d+ pair\(s\)\)$/gm)].map((m) => m[1]);
+    const judgedIndex = [...brief.matchAll(/^- (\S+) \| stage \S+ \| rank /gm)].map((m) => m[1]);
+    assert.deepEqual(headings, judgedIndex.map(shortId), "one group per judged node, in the ruling order");
+
+    assert.ok(!pairs.includes("clean-context-review.test/"), "no line repeats the module on both sides");
+    assert.match(pairs, /^- main\/\S+ — .*depends/m, "a pair carries the key that nominated it");
+
+    // content-node depends on ruling-a: both are judged, so the pair is
+    // listed under whichever comes first in the ruling order and named in
+    // the other's group.
+    const listed = (pairs.match(/^- main\/(content-node|ruling-a) — depends$/gm) ?? []);
+    assert.equal(listed.length, 1, "a judged-judged pair is listed once");
+    assert.match(pairs, /^- and the pairs listed above under main\/(content-node|ruling-a)$/m);
+
+    // the paragraph that says what the list is for stays
+    assert.match(pairs, /A key narrows attention and never the corpus/);
   });
 });

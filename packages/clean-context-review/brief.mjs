@@ -69,6 +69,7 @@ import { fileURLToPath } from "node:url";
 import {
   readGraph, surveyJudges, answerText, confirmedOption, resolveOptionContent,
 } from "@commons.systems/disposition/read.mjs";
+import { diffText } from "@commons.systems/disposition/patch.mjs";
 import { renderFrontier } from "@commons.systems/disposition/project.mjs";
 import { concordance, nodeText } from "@commons.systems/disposition/concordance.mjs";
 import { checkTier, tierNotes, loadFoldable, TIER_CHECKS } from "@commons.systems/disposition/tier.mjs";
@@ -785,14 +786,13 @@ export function nodeDiffSinceCommit(rootDir, commit, relPath) {
 }
 
 /**
- * Every fence-aware level-3 (`### `) heading in `text`, each `{name, index}`
- * (`index` the zero-based line the heading starts on) -- the scan
- * `lastCleanContextReviewSection` and `lastAccountSectionOnly` both build on,
- * factored once so a heading-looking line inside a fenced code block
- * (`apply.mjs`'s `headingBoundaries` guards the same case) is never mistaken
- * for a real one in either.
+ * Every fence-aware heading of `text` at exactly `level` `#`s, each `{name,
+ * index}` (`index` the zero-based line the heading starts on) -- a
+ * heading-looking line inside a fenced code block (`apply.mjs`'s
+ * `headingBoundaries` guards the same case) is never mistaken for a real
+ * one.
  */
-function level3Headings(text) {
+function fenceAwareHeadings(text, level) {
   const lines = text.split("\n");
   const headingRe = /^(#{1,6})[ \t]+(.*?)\s*$/;
   const fenceRe = /^[ \t]*(`{3,}|~{3,})/;
@@ -808,9 +808,27 @@ function level3Headings(text) {
     }
     if (fenceChar !== null) continue;
     const m = line.match(headingRe);
-    if (m && m[1].length === 3) headings.push({ name: m[2], index: i });
+    if (m && m[1].length === level) headings.push({ name: m[2], index: i });
   }
   return { lines, headings };
+}
+
+/**
+ * Every fence-aware level-3 (`### `) heading in `text`, each `{name, index}`
+ * -- the scan `lastCleanContextReviewSection` and `lastAccountSectionOnly`
+ * both build on, factored once so the guard above is never written twice.
+ */
+function level3Headings(text) {
+  return fenceAwareHeadings(text, 3);
+}
+
+/**
+ * Every fence-aware level-2 (`## `) heading in `text` -- what
+ * `splitWholeNodeText` needs to cut a whole node's rendered text into its
+ * `## ` sections, the same guard applied one level up.
+ */
+function level2Headings(text) {
+  return fenceAwareHeadings(text, 2);
 }
 
 /**
@@ -1902,7 +1920,11 @@ export async function appendSurveyHistory(historyPath, history, entry) {
  * carried once"): its question, the author's words its options carry, the
  * one answer that binds it, and, of its answer fact, each option's name,
  * source, ref and status with the sentence saying what it would answer,
- * then the resolved content of every other option on that fact.
+ * then what every other option on that fact would make of it -- as the
+ * difference from the answer above and not as a second copy of the node,
+ * which is the same rule ("its content never rendered twice") applied to the
+ * rivals: on `survey-selection` itself ten options each carry the whole
+ * answer, so the second render is nine tenths of the block.
  *
  * What is not here is the point of it. The prose of its facts and the AI's
  * accumulated support and divergence on its options are struck, because no
@@ -1923,6 +1945,7 @@ export function renderJudgedNode(node, words = null, byId = null) {
     `- File: ${nodeFile(node)}`,
     `- Question: ${node.question}`,
     `- Stage: ${node.stage} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | status ${node.status} | class: ${classText(node)}`,
+    `- Facts: ${factsSummary(node)}`,
     `- Depends: ${dependsText(node)} | under: ${(node.under || []).join(", ") || "none"}`,
   ];
   const defines = definesText(node);
@@ -1978,30 +2001,371 @@ export function renderJudgedNode(node, words = null, byId = null) {
     }
   }
 
-  parts.push("", "#### The content of every other option on the answer fact", "");
-  const rivals = options.filter((o) => o.name !== carried);
-  if (rivals.length === 0) {
-    parts.push("(no rival: the answer fact carries one option, or none)");
+  parts.push(
+    "",
+    "#### The content of every option on the answer fact",
+    "",
+    `Each option's content is the node as it would stand under it. The answer above is one of them and is never repeated; a named change and a near-copy of the answer are given as the difference, which is the answer above with it applied, and everything else whole. The file is one read away at ${nodeFile(node)}.`,
+    "",
+  );
+  if (options.length === 0) {
+    parts.push("(no answer fact: there is no option whose content to carry)");
   } else {
-    for (const option of rivals) {
-      const content = optionContentText(node, ANSWER_FACT, option);
+    for (const option of options) {
       parts.push(`##### \`${option.name}\``, "");
-      if (content === null) {
-        parts.push("(this node is in the legacy encoding: the option carries no content of its own, and what it would answer is its sentence above)", "");
-      } else {
-        parts.push("```markdown", content, "```", "");
-      }
+      parts.push(...optionContentAgainstAnswer(node, option, carried));
     }
   }
 
   return `${parts.join("\n").replace(/\n+$/, "")}\n`;
 }
 
-/** One candidate pair, as the reader is handed it: the two nodes and the
- * keys that nominated it, "so the reader is told where to look and what to
- * look for". */
-export function pairLine(pair) {
-  return `- ${pair.a} + ${pair.b} — key(s): ${pair.keys.join("; ")}`;
+/** The cap on a rendered difference, in lines: past it the reader is told how
+ * much was cut and where the option stands whole. It fires rarely, since a
+ * difference is only ever rendered where it is shorter than the content it
+ * stands for, but a difference is not the record and is capped where the
+ * content is not. */
+const DIFF_LINE_CAP = 80;
+/** The context a rendered difference carries: one line, not the usual three.
+ * A node's lines are whole paragraphs, so every context line is a paragraph,
+ * and three of them cost more than most of the contents this stands in for. */
+const DIFF_CONTEXT = 1;
+
+/**
+ * A whole node's rendered text -- what `answerText` returns and what a
+ * whole option's resolved content is -- cut into its frontmatter block and
+ * its `## ` sections, fence-aware, in the order they appear. Returns `null`
+ * where the text does not open on a `---` frontmatter delimiter or never
+ * closes one: `optionContentAgainstAnswer` reads that as text this rule
+ * cannot compare section by section, and falls back to comparing it whole,
+ * as it did before this function existed.
+ *
+ * @param {string} text
+ * @returns {{frontmatter: string, sections: Map<string, string>, order: string[]}|null}
+ */
+function splitWholeNodeText(text) {
+  const raw = String(text ?? "");
+  const lines = raw.split("\n");
+  if ((lines[0] ?? "").trim() !== "---") return null;
+  let end = -1;
+  for (let i = 1; i < lines.length; i += 1) {
+    if (lines[i].trim() === "---") {
+      end = i;
+      break;
+    }
+  }
+  if (end === -1) return null;
+  const frontmatter = lines.slice(1, end).join("\n").trim();
+  const bodyText = lines.slice(end + 1).join("\n");
+  const { lines: bodyLines, headings } = level2Headings(bodyText);
+  const sections = new Map();
+  const order = [];
+  for (let i = 0; i < headings.length; i += 1) {
+    const h = headings[i];
+    const stop = i + 1 < headings.length ? headings[i + 1].index : bodyLines.length;
+    sections.set(h.name, bodyLines.slice(h.index + 1, stop).join("\n").trim());
+    order.push(h.name);
+  }
+  return { frontmatter, sections, order };
+}
+
+/** Whether every `## ` section of `a` and `b` but `except` is byte-equal,
+ * presence included -- a section only one of the two carries counts as a
+ * difference and not as a match. This is rule 1's "every other section
+ * equals the judged node's". */
+function sectionsEqualExcept(a, b, except) {
+  const names = new Set([...a.order, ...b.order]);
+  for (const name of names) {
+    if (name === except) continue;
+    if ((a.sections.get(name) ?? null) !== (b.sections.get(name) ?? null)) return false;
+  }
+  return true;
+}
+
+/** One `## ` section's rendering where it differs from the judged node's own:
+ * the shorter of its diff against the judged node's section or its body
+ * whole, the same measured rule `optionContentAgainstAnswer` states, applied
+ * to one section instead of to the whole document. */
+function renderSectionDifference(node, name, baseBody, targetBody) {
+  const label = `${name}:`;
+  const diff = diffText(baseBody, targetBody, DIFF_CONTEXT);
+  if (Buffer.byteLength(diff) >= Buffer.byteLength(targetBody)) {
+    return [label, "", "```markdown", targetBody, "```", ""];
+  }
+  const lines = diff.replace(/\n+$/, "").split("\n");
+  const shown = lines.slice(0, DIFF_LINE_CAP);
+  const out = [label, "", "```diff", ...shown, "```"];
+  if (lines.length > shown.length) {
+    out.push(`… ${lines.length - shown.length} more line(s) of this diff; open ${nodeFile(node)} for the option whole.`);
+  }
+  out.push("");
+  return out;
+}
+
+/** The frontmatter's own difference: always a diff, never the shorter-wins
+ * whole -- the judged node's own frontmatter is already rendered once, above
+ * every option, and an option's is never rendered whole beside it. */
+function renderFrontmatterDifference(node, baseFrontmatter, targetFrontmatter) {
+  const diff = diffText(baseFrontmatter, targetFrontmatter, DIFF_CONTEXT);
+  const lines = diff.replace(/\n+$/, "").split("\n");
+  const shown = lines.slice(0, DIFF_LINE_CAP);
+  const out = ["Frontmatter differs:", "", "```diff", ...shown, "```"];
+  if (lines.length > shown.length) {
+    out.push(`… ${lines.length - shown.length} more line(s) of this diff; open ${nodeFile(node)} for the option whole.`);
+  }
+  out.push("");
+  return out;
+}
+
+/**
+ * Rule 2: every `## ` section (and the frontmatter) of a whole option's
+ * content that differs from the judged node's own resolved answer, each
+ * under its own label, with the sections that match named on one line so
+ * the reader knows they were checked and not merely omitted.
+ */
+function renderSectionwiseDifference(node, base, target) {
+  const unchanged = [];
+  const blocks = [];
+
+  if (base.frontmatter === target.frontmatter) {
+    unchanged.push("frontmatter");
+  } else {
+    blocks.push(renderFrontmatterDifference(node, base.frontmatter, target.frontmatter));
+  }
+
+  const names = [...new Set([...base.order, ...target.order])];
+  for (const name of names) {
+    const same = base.sections.has(name) === target.sections.has(name)
+      && (base.sections.get(name) ?? "") === (target.sections.get(name) ?? "");
+    if (same) {
+      unchanged.push(name.toLowerCase());
+    } else {
+      blocks.push(renderSectionDifference(node, name, base.sections.get(name) ?? "", target.sections.get(name) ?? ""));
+    }
+  }
+
+  const out = [];
+  if (unchanged.length > 0) out.push(`unchanged: ${unchanged.join(", ")}`, "");
+  for (const block of blocks) out.push(...block);
+  return out;
+}
+
+/**
+ * What one option's content says, given that the answer above is already the
+ * content of `carried`: nothing for the carried option itself, the named
+ * change verbatim where the record writes one (it is a difference already,
+ * and a short one), one line where the two resolve to byte-identical text,
+ * and otherwise the difference from the judged node's own resolved answer,
+ * section by section -- frontmatter, `## Answer`, `## Rationale`, and any
+ * other `## ` section either carries.
+ *
+ * Most options on this record were migrated on 2026-09-07 by
+ * `migrate.mjs`, which "wrote no text of its own" for most of them: the
+ * option's content is the whole node with its own sentence standing in the
+ * `## Answer`'s place, and every other section carried over unchanged. That
+ * fence told the reader nothing twice over -- the sentence already stands
+ * in "#### The options on its answer fact" and the rest of the node in the
+ * judged node's own rendering above -- so it collapses to one line rather
+ * than a second copy of the node.
+ *
+ * Where an option differs from the migration's copy, only the sections that
+ * differ are shown, each labelled, and the sections that match are named on
+ * one line rather than silently dropped -- the reader is told what was
+ * checked and not only what changed. The frontmatter is never shown whole:
+ * the judged node's own frontmatter is already rendered once, above every
+ * option, and repeating an option's beside it would be the same double
+ * carriage this whole rule exists to strike.
+ *
+ * Within a differing section, the choice is still by size, and still
+ * measured rather than assumed (`survey-selection`'s "its content never
+ * rendered twice"): whichever is shorter, the section's body whole or its
+ * difference from the judged node's own.
+ */
+function optionContentAgainstAnswer(node, option, carried) {
+  if (option.name === carried) {
+    return ["Content: the node as rendered above, under '#### The one answer that binds'.", ""];
+  }
+  const content = option.content ?? null;
+  if (content === null) {
+    return ["(this node is in the legacy encoding: the option carries no content of its own, and what it would answer is its sentence above)", ""];
+  }
+  if (content.form === "change") {
+    return [
+      `Content: a named change against \`${content.from}\`, as the record writes it.`,
+      "",
+      "```diff",
+      String(content.diff).replace(/\n+$/, ""),
+      "```",
+      "",
+    ];
+  }
+
+  const base = answerText(node);
+  const target = optionContentText(node, ANSWER_FACT, option);
+  if (target === null || /^\(unresolvable: /.test(target)) {
+    return [target ?? "(no content resolved for this option)", ""];
+  }
+  if (base === null) return ["```markdown", target, "```", ""];
+  if (base === target) return ["Content: identical to the answer above.", ""];
+
+  const baseParts = splitWholeNodeText(base);
+  const targetParts = splitWholeNodeText(target);
+  if (baseParts === null || targetParts === null) {
+    // Not amenable to section comparison (malformed, or not a `---`-framed
+    // node at all): fall back to the old whole-document diff-or-whole rule.
+    const diff = diffText(base, target, DIFF_CONTEXT);
+    if (Buffer.byteLength(diff) >= Buffer.byteLength(target)) {
+      return ["```markdown", target, "```", ""];
+    }
+    const lines = diff.replace(/\n+$/, "").split("\n");
+    const shown = lines.slice(0, DIFF_LINE_CAP);
+    const out = ["Content: the answer above, with this difference.", "", "```diff", ...shown, "```"];
+    if (lines.length > shown.length) {
+      out.push(`… ${lines.length - shown.length} more line(s) of this diff; open ${nodeFile(node)} for the option whole.`);
+    }
+    out.push("");
+    return out;
+  }
+
+  // Rule 1: the migration's copy -- the answer holds only this option's own
+  // sentence, and nothing else about the node differs.
+  const sentence = optionSentence(option);
+  if (sentence !== null) {
+    const targetAnswer = targetParts.sections.get("Answer") ?? null;
+    if (
+      targetAnswer !== null
+      && targetAnswer.trim() === sentence.trim()
+      && baseParts.frontmatter === targetParts.frontmatter
+      && sectionsEqualExcept(baseParts, targetParts, "Answer")
+    ) {
+      return [
+        "Content: the node as it stands with this option's sentence in the answer's place (the migration wrote no text of its own for it).",
+        "",
+      ];
+    }
+  }
+
+  // Rule 2: only the sections that differ, each on its own, with the rest
+  // named as unchanged.
+  return renderSectionwiseDifference(node, baseParts, targetParts);
+}
+
+/**
+ * One node id as the pair list names it: the module dropped, and the graph
+ * too where it is the disposition graph, so that `public/` stays visible and
+ * the common prefix is not repeated on both sides of every line. The judged
+ * set's own headings keep the full id -- a reading's heading is an address --
+ * and this shortening is the pair list's alone.
+ */
+export function shortId(id) {
+  const parts = String(id).split("/");
+  if (parts.length < 3) return String(id);
+  const [, graph, ...rest] = parts;
+  const slug = rest.join("/");
+  return graph === "disposition-graph" ? slug : `${graph}/${slug}`;
+}
+
+/**
+ * One nominating key as the pair list names it. A term key names the term
+ * and not the node that defines it: the definer is in the concordance the
+ * reader can open, and the judged node's own `Defines:` line is printed with
+ * it, so repeating a full node id on every line of a list thousands of lines
+ * long buys the reader nothing. A shared parent is `parent` for the same
+ * reason -- the parent is on both nodes' own lines -- and a resemblance
+ * keeps its score, which is the only part of it a reader can act on.
+ */
+export function shortKey(key) {
+  const s = String(key);
+  const term = s.match(/^term:(.*?)(?: \(defines: .*\))?$/);
+  if (term) return `term: ${term[1]}`;
+  const words = s.match(/^words:(.*)$/);
+  if (words) return `words ${words[1]}`;
+  if (s.startsWith("parent:")) return "parent";
+  const resemblance = s.match(/^jaccard:(.*)$/);
+  if (resemblance) return `resemblance ${resemblance[1]}`;
+  return s;
+}
+
+/** One partner of one judged node: the partner's slug and the short keys,
+ * deduplicated (two shared parents are one `parent`), and the mark where the
+ * pair was drawn as the drift probe. */
+function partnerLine(pair, selfId, probe) {
+  const other = pair.a === selfId ? pair.b : pair.a;
+  const keys = [...new Set((pair.keys ?? []).map(shortKey))].join("; ");
+  return `- ${shortId(other)}${keys ? ` — ${keys}` : ""}${probe ? " (drift probe)" : ""}`;
+}
+
+/** One pair named on its own, outside any judged node's group -- the drift
+ * probe's own list, whose pairs have no judged member by construction. */
+export function probePairLine(pair) {
+  const keys = [...new Set((pair.keys ?? []).map(shortKey))].join("; ");
+  return `- ${shortId(pair.a)} + ${shortId(pair.b)}${keys ? ` — ${keys}` : ""}`;
+}
+
+/**
+ * The candidate pairs as the reader is handed them: grouped by the judged
+ * node each is compared against, in the ruling order, one line per partner,
+ * "so the reader is told where to look and what to look for".
+ *
+ * The grouping is the answer's own statement of what a survey compares -- "a
+ * judged node is compared against the nodes that reach it ... and against the
+ * other judged nodes" (`survey-selection`) -- so every pair has exactly one
+ * host, the judged node it is compared against, and a pair between two judged
+ * nodes is listed once, under the earlier of the two in the ruling order,
+ * with a line in the later one's group naming where to find it. A pair
+ * neither of whose members is judged is compared against nothing this round:
+ * it is counted here and named in the selection sidecar, which is where the
+ * run records what it did not read, and it is not listed line by line.
+ *
+ * The list orders the reading and does not partition the brief: every node
+ * the brief carries stays readable whether a key reached it or not.
+ *
+ * @param {Array<{a: string, b: string, keys: string[]}>} live
+ * @param {object[]} judged - the judged set, already in the ruling order
+ * @param {Set<string>} [probeIds] - `${a}\t${b}` of every pair drawn as the probe
+ * @returns {{text: string, listed: number, unjudged: number}}
+ */
+export function groupedPairLines(live, judged, probeIds = new Set()) {
+  const order = new Map(judged.map((n, i) => [n.id, i]));
+  const groups = new Map(judged.map((n) => [n.id, []]));
+  const alsoAbove = new Map(judged.map((n) => [n.id, []]));
+  let unjudged = 0;
+  let listed = 0;
+
+  for (const pair of live) {
+    const ia = order.has(pair.a) ? order.get(pair.a) : -1;
+    const ib = order.has(pair.b) ? order.get(pair.b) : -1;
+    if (ia < 0 && ib < 0) { unjudged += 1; continue; }
+    let host;
+    if (ia >= 0 && ib >= 0) {
+      host = ia <= ib ? pair.a : pair.b;
+      const later = host === pair.a ? pair.b : pair.a;
+      alsoAbove.get(later).push(shortId(host));
+    } else {
+      host = ia >= 0 ? pair.a : pair.b;
+    }
+    groups.get(host).push({ pair, probe: probeIds.has(`${pair.a}\t${pair.b}`) });
+    listed += 1;
+  }
+
+  const out = [];
+  for (const node of judged) {
+    const mine = groups.get(node.id) ?? [];
+    const above = [...new Set(alsoAbove.get(node.id) ?? [])].sort();
+    const lines = mine
+      .map(({ pair, probe }) => partnerLine(pair, node.id, probe))
+      .sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+    out.push(`### ${shortId(node.id)} (${mine.length} pair(s))`, "");
+    if (lines.length === 0 && above.length === 0) {
+      out.push("(no key nominated a pair for this node)", "");
+      continue;
+    }
+    if (lines.length > 0) out.push(...lines);
+    if (above.length > 0) out.push(`- and the pairs listed above under ${above.join(", ")}`);
+    out.push("");
+  }
+
+  return { text: out.join("\n").replace(/\n+$/, ""), listed, unjudged };
 }
 
 // ------------------------------------------------------ the frontier survey
@@ -2181,19 +2545,30 @@ export async function writeSurveyBrief({
       : "(nothing is judged: every node at the review or ruling stage carries a survey pin on the recommendation it now stands on)",
   ].join("\n");
 
+  const grouped = groupedPairLines(live, judged, probeIds);
   const livePairs = [
-    `### The candidate pairs (${live.length} live${isWhole ? "" : `, ${probe.length} of them the drift probe`}), each with the key that nominated it`,
+    `### The candidate pairs (${live.length} live${isWhole ? "" : `, ${probe.length} of them the drift probe`}), grouped by the judged node each is compared against`,
     "",
     "A key narrows attention and never the corpus: every node this brief carries stays readable, and this list orders your reading rather than partitioning it. Record the key with any finding it produced, so a key's yield is measurable across surveys.",
     "",
-    live.length > 0 ? live.map(pairLine).join("\n") : "(no key nominated a live pair this round)",
+    "One heading per judged node, in the ruling order, and one line per partner: the partner's slug, with the module dropped and the graph too where it is the disposition graph, then the keys that nominated the pair. A term key names the term and not the node that defines it — that node is in the concordance, and the judged node's own `Defines:` line is printed with it. A pair between two judged nodes is listed once, under the earlier of the two, and named in the later one's group.",
+    "",
+    grouped.listed > 0
+      ? grouped.text
+      : "(no key nominated a live pair against any judged node this round)",
+    "",
+    grouped.unjudged > 0
+      ? `A further ${grouped.unjudged} live pair(s) join two nodes neither of which is judged this round. A judged node is compared against the nodes that reach it and against the other judged nodes, so those pairs are compared against nothing here; every one of them is named in \`${SURVEY_SELECTION_FILE}\`, and a finding on one of them is a finding like any other.`
+      : "Every live pair this round has a judged member and is listed above.",
   ].join("\n");
 
   const driftProbe = probe.length > 0
     ? [
-      `#### The drift probe (${probe.length} frozen pair(s), drawn on seed \`${seed}\`; read them like any other pair)`,
+      `### The drift probe (${probe.length} frozen pair(s), drawn on seed \`${seed}\`; read them like any other pair)`,
       "",
-      probe.map(pairLine).join("\n"),
+      "Neither member of a frozen pair is judged — that is what froze it — so the probe is listed here rather than under a judged node's heading.",
+      "",
+      probe.map(probePairLine).join("\n"),
     ].join("\n")
     : "(no drift probe this round: this survey is whole, or the frozen set holds nothing to draw from)";
 
