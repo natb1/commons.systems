@@ -126,6 +126,14 @@ The author, 2026-09-07, later in the same turn:
 
 > begin applying the optimizations as you progress
 
+The author, 2026-09-07, while the survey of that day was running:
+
+> The fronteir-survey appears to be very expensive. Is it part of the recommended alignment design from this sitting? What function does it serve that's not served by the frontier consistency check?
+
+The author, 2026-09-07, in reply to the session's answer on what the survey serves and what it costs:
+
+> do not stop the current survey, we do not want to lose the work it has already done. For future surveys, make your own recommendation about how to optimize. It could involve changes to how data on unconfirmed nodes is accumulated, or how the survey is orchestrated, improvements to the algorithms/heuristics for full graph analysis, or any other optimization that you recommend. Fold this optimization in to the sittings alignment and bootstrap reconciliation.
+
 ## Facts
 
 ### answer

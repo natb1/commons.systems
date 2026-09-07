@@ -143,6 +143,14 @@ The author, 2026-09-07, later in the same turn:
 
 > begin applying the optimizations as you progress
 
+The author, 2026-09-07, while the survey of that day was running:
+
+> The fronteir-survey appears to be very expensive. Is it part of the recommended alignment design from this sitting? What function does it serve that's not served by the frontier consistency check?
+
+The author, 2026-09-07, in reply to the session's answer on what the survey serves and what it costs:
+
+> do not stop the current survey, we do not want to lose the work it has already done. For future surveys, make your own recommendation about how to optimize. It could involve changes to how data on unconfirmed nodes is accumulated, or how the survey is orchestrated, improvements to the algorithms/heuristics for full graph analysis, or any other optimization that you recommend. Fold this optimization in to the sittings alignment and bootstrap reconciliation.
+
 ## Answer
 
 By the adversarial review, which at every invocation takes the batch of nodes at the review stage and evaluates it against the full graph, answered and unanswered at every stage, in one context, and runs the validations below. Inconsistency between a draft and the answered graph is surfaced to the author by the periagogic stage, where the dialogue turns the author toward the doctrine the draft would join; inconsistency within the frontier has no author to meet it, and the review is where it is surfaced. The validations, each producing findings that name the nodes and the sentences:
