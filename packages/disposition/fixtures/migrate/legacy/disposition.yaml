@@ -1,0 +1,5 @@
+module: example.test
+ref: disposition
+graphs:
+  main:
+    about: a small graph in the legacy encoding, for the migration's tests
