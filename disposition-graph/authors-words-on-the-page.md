@@ -1,7 +1,7 @@
 ---
 question: Where does the alignment page show the author's recorded words?
 form: rule
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -71,11 +71,10 @@ facts:
     against: "Whichever way this goes the author's words stay in the node unaltered and are read in full in the `/align` interview their own rule of 2026-09-06 sends everything else to, so nothing is lost that a session cannot show them on request; ratifying it spends the author's scarcest act on which dated entries a projector quotes beside an option, and the capture the reading names is already answered by the parent's own authority fact, under which the whole shape of this page is the author's to confirm."
 review:
   verdict: forward
-  strength: strong
+  strength: none
   date: 2026-09-07
-  of: c48996dc6997e0445b1ff385d558a8c8d0eed9be
-  commit: 51769bb92848017d1aa8779cb526e40b114f8ea6
-  against: "The answer's one guard against the AI deciding which of the author's own words the author sees is the mechanical finding for a `ref` that names no entry — and that guard catches only the eleven references that resolve to nothing, never the 142 of 255 entries that no option names at all. Verified at `ca46f7ff`: `deriveMechanicalFindings` raises a finding for an author-sourced option whose `ref` names no entry (`packages/disposition/read.mjs:1828-1833`) and raises nothing for an entry no option names, so under this answer the AI's broken selections are published and its silent omissions are not, which is precisely the shape `bentham-publicity` — adopted on this option — is against, a recommender that 'publishes some of its decisions and withholds others by its own measure'. The answer's remedy for the residue, that 'an entry that bears on a fact the record asks and that no option names is recorded as an option on that fact', is a judgment the AI makes with no instrument behind it and no finding when it is not made, which is the capture shape this node's own authority fact gives as its ground for recommending ratified. So the answer buys exclusivity today and defers its only check to a back-fill nothing measures, on 39 of the 71 nodes that carry the author's words — while `projection`'s standing answer holds that the record is read 'through projections, never by opening node files', so the majority of what the author has said reaches the ruler nowhere. The reply the answer gives, that this is a defect of the references and curable exactly there, is right and is not yet true: the record can see the eleven and cannot see the hundred and forty-two."
+  of: b41bd908254e08cdd52e3dd02a06a241d83a429c
+  commit: 98c4c8df3fa173654332bb33435ce145b57c2e1a
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -748,3 +747,18 @@ The session's reply: Accepted on all six, each verified at its locus on the main
 ### Amended after the second fresh reading, 2026-09-07
 
 The fresh reading of the repaired answer forwarded at strong strength with six findings and no probes, every one validated at its locus on the main thread and every one accepted. The recommendation does not move. The boldness moves to moderate, since the answer's exclusivity is the AI's reading of a release, and the mark now agrees with the case against beside it; the cost paragraph carries the figures re-taken at `62121b69` in place of the superseded ones; the three figures about the parent are dated to `ca46f7ff` and re-taken; an entry is defined as `authorEntries` defines it, everything beneath a dated paragraph up to the next; the departure from `hansard-verbatim-record`'s substitute guard on the eleven options is disclosed in the readings paragraph; and `residue-raised-as-a-finding` is recorded on the answer fact, source `review`, viable and not adopted. The counter-argument stands on the row at strong strength. The amended answer owes its re-reading.
+
+### Clean-context re-reading, 2026-09-07, of b41bd908
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `per-option-only`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff touches only the answer fact: boldness moves from `low` to `moderate` in both the frontmatter and the boldness paragraph (now agreeing with the fact's own `against` instead of contradicting it), and one new viable option, `residue-raised-as-a-finding` (source review, ref 2026-09-07), is appended to the option list with its own `#### ` prose subsection. `recommends` (`per-option-only`) and `stands` (`per-option-only`) are unchanged, so no `## Recommendation` fence is added. The authority fact and its options are untouched by the diff.
+
+On the viability of the options: No existing option's viability changes: every option already viable or passed-over keeps its status and reason. The one addition, `residue-raised-as-a-finding`, is recorded viable-and-not-adopted with its own case for and against, consistent with the previous reading's viability note that it is dominated by no other option on the fact.
+
+The review found no strong counter-argument.
