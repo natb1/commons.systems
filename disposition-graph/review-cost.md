@@ -138,6 +138,10 @@ The author, 2026-09-07, while the design of the survey's optimization was in han
 
 > The optimizations must involve some accumulation strategy, with the full history preserved only in git but enough context in the unconfirmed node to support alignment across an unconfirmed frontier. Something between keeping the full pre-confirmation record in the graph and the accumulation that is performed after confirmation. One the recommendation is established, you have bootstrap authority to reconcile that accumulation.
 
+The author, 2026-09-07, in the next turn:
+
+> (The accumulation strategy may be used in conjunction with other recommended optimizations)
+
 ## Facts
 
 ### answer
