@@ -1,6 +1,6 @@
 ---
 question: What may the recorder do to the graph's topology without asking?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -35,11 +35,10 @@ facts:
     against: "`commons.systems/disposition-graph/class-recommendation`'s test returns ratified on two of its three limbs. A prune is a deletion, which that node names irreversible; and the party that would set the answer is the party the answer is meant to check, which is its capture limb. A ruling of delegated is recommended against both, on the author's words alone, and if those words are read as a direction to draft rather than a delegation given, the recommendation is wrong."
 review:
   verdict: forward
-  strength: strong
+  strength: none
   date: 2026-09-07
-  of: ad0be2cfd3e41c6cf0eb34c2a34d51a63f7e7350
-  commit: f146f8f44b295c64e47a13bff338748035183d87
-  against: "One ruling on this node's authority fact confers the record's only irreversible power, deletion, on the party that also decides which node is redundant, which is both the irreversible and the capture limb of `class-recommendation`; and the two bounds meant to carry that weight bind nothing today, since no option in the record carries a ruling, so the ratified bound names an empty set, and the transfer bound is checked by the same session that wants the file gone. The scope the ruling would confer is wider than the words it rests on: the author granted pruning \"under general delegation of graph topology\", and three of the four acts this answer reads into that phrase, minting a node, redrawing `under` edges, and folding one question into another, have never been put to them in any form. The first thing the delegation reaches is a decision already queued at the author's own row: `hexis`, whose existence fact has recommended `prune` since 2026-09-04, is deleted the day this fact is ruled, and the author loses a ruling they were about to make and never learns which one. The answer's reply is that this is the author's own disposition and the record has nowhere else to put it, and that the narrower readings sit on the fact for the author to choose; but the fact's own `against` concedes that this answer does not meet the case, so what the author is asked to confirm is a power whose guards the recommendation itself calls empty."
+  of: 90a2d6e729a986e93df3e0a8d8e241fa7bf6e5b0
+  commit: ca46f7ff9a913d8d696fdfa5fb535e0e35bd1ec2
 depends:
   - commons.systems/disposition-graph/recording#prune-of-an-unruled-node-needs-no-ruling
 form: rule
@@ -460,3 +459,20 @@ The session's reply: Accepted on all seven, each verified at its locus on the ma
 ### Amended after the fresh reading, 2026-09-07
 
 The fresh reading of the repaired answer forwarded at strong strength with seven findings and no probes, every one validated at its locus on the main thread and every one accepted. The recommendation does not move. The bound's gloss is narrowed to a ratified node, the author's word; the authority reason names its divergence from `class-recommendation`'s test rather than reading a scope limit into that node, and cites `class-follows-the-authors-words` as where the position stands; the sixteenth validation is attributed to what `frontier-consistency` recommends and the interim to what `probe-or-node` recommends, bounded as that node bounds it; `which-facts-are-listed` and `dialogue`'s account are named among what the ruling changes, and the option `existence-radio-waits-on-the-delegations-ruling` is recorded on the former with this node as its source; what `recording` requires of any prune is separated from what `probe-or-node`'s remedy requires; and the author's words are quoted as they stand. `prunes-reported-to-the-author` is recorded on the answer fact, source `review`, viable and not adopted. The counter-argument stands on the row at strong strength. The amended answer owes its re-reading.
+
+### Clean-context re-reading, 2026-09-07, of 90a2d6e7
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `delegation-with-two-bounds`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff adds `prunes-reported-to-the-author` as a sixth option on the answer fact (source review, ref 2026-09-07), with its own prose subsection recorded as viable and explicitly not adopted; `recommends` stays `delegation-with-two-bounds` at moderate boldness, unchanged, and the `## Recommendation` fence still carries the whole proposed node since nothing stands, which is still correct. The `review` frontmatter block itself is rewritten from the earlier kickback (of c1095227055e1edde4e6efdfc79c3d2be1b064c3, commit e6f0b87118fe9410668bf7f8eebef2e69c1ea305) to the forward verdict pinned at `of ad0be2cfd3e41c6cf0eb34c2a34d51a63f7e7350, commit f146f8f44b295c64e47a13bff338748035183d87` with the longer `against`, which now matches the previous reading given verbatim in this brief word for word.
+
+On the viability of the options: All six options on the answer fact remain viable and none is newly dominated; the added `prunes-reported-to-the-author` closes the gap the previous reading's viability paragraph named, and its own prose gives a reason it is not adopted (a report is a surface question for `turn-form` and `alignment-page`, not this node's to settle) rather than silently dropping it. The authority fact's two reserved options (`ratified`, `delegated`) are untouched.
+
+The review found no strong counter-argument.
+
+The session's reply: Forwarded with no finding; the option on which-facts-are-listed verified on the main thread. The counter-argument stands on the row at strong strength. Nothing on the node changes.
