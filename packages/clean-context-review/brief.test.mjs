@@ -2078,6 +2078,197 @@ describe("renderJudgedNode: the content of every option, and the answer never tw
   });
 });
 
+/**
+ * A judged node built by hand rather than read from a fixture file
+ * (`draftNeighbourhood`'s own hand-built-graph test, above, is the
+ * precedent): `renderJudgedNode` reads a node object and a words `Map`
+ * directly and does not care where either came from. Three options on one
+ * answer fact -- `recommended-option` (the carried one, source/ref/reading
+ * all present, so the test can show each is dropped), `rival-shared`
+ * (`status: passed`, referencing the same ledger entry as the carried
+ * option), and `rival-only` (referencing a second entry the carried option
+ * never touches) -- and a two-entry ledger `Map` in the shape `nodeWords`
+ * and `sectionHashes` both read (`{address, date, context, text}`).
+ */
+function handBuiltJudgedNode() {
+  const recommendedOption = {
+    name: "recommended-option",
+    source: "ai",
+    ref: "2026-09-07",
+    prose: "What the recommended option would answer.",
+    supports: ["words/2026-09-07/1"],
+    diverges: [],
+    readings: [{ id: "clean-context-review.test/main/a-reading", relation: "adopted" }],
+  };
+  const rivalShared = {
+    name: "rival-shared",
+    source: "ai",
+    ref: "2026-09-06",
+    status: "passed",
+    reason: "a rival, passed over",
+    prose: "What the shared rival would answer.",
+    supports: ["words/2026-09-07/1"],
+    diverges: [],
+  };
+  const rivalOnly = {
+    name: "rival-only",
+    source: "ai",
+    ref: "2026-09-05",
+    prose: "What the rival-only option would answer.",
+    supports: ["words/2026-09-07/2"],
+    diverges: [],
+  };
+  const answerFact = {
+    name: "answer",
+    options: [recommendedOption, rivalShared, rivalOnly],
+    recommends: "recommended-option",
+    boldness: "moderate",
+    against: null,
+    stands: "recommended-option",
+  };
+  const authorityFact = {
+    name: "authority",
+    options: [{ name: "ratified" }, { name: "delegated" }, { name: "deferred" }],
+    recommends: "deferred",
+    boldness: "low",
+    against: null,
+    stands: null,
+  };
+  return {
+    id: "clean-context-review.test/main/words-node",
+    graph: "main",
+    slug: "words-node",
+    question: "What node exercises word addressing and the trimmed option list?",
+    rank: 0,
+    stage: "review",
+    status: "review",
+    class: "unanswered",
+    classSource: null,
+    settles: 0,
+    under: [],
+    depends: [],
+    defines: [],
+    bears: [],
+    review: null,
+    reviewStale: false,
+    surveyStale: false,
+    facts: [answerFact, authorityFact],
+    answerFact,
+    answer: "The recommended answer, which is the one that binds.",
+    fmText: "",
+    rationale: null,
+    fence: null,
+  };
+}
+
+function handBuiltWords() {
+  return new Map([
+    ["words/2026-09-07/1", {
+      address: "words/2026-09-07/1", date: "2026-09-07",
+      context: "First context.", text: "The first quoted sentence.",
+    }],
+    ["words/2026-09-07/2", {
+      address: "words/2026-09-07/2", date: "2026-09-07",
+      context: "Second context.", text: "The second quoted sentence.",
+    }],
+  ]);
+}
+
+describe("renderJudgedNode: options-by-sentence-and-status-and-words-by-address", () => {
+  test("an option line carries name, status and sentence, and no source, ref or 'Readings bearing on it'", () => {
+    const node = handBuiltJudgedNode();
+    const byId = new Map([[node.id, node], ["clean-context-review.test/main/a-reading", { source: "a tradition" }]]);
+    const block = renderJudgedNode(node, handBuiltWords(), byId);
+
+    const options = block.slice(block.indexOf("#### The options on its answer fact"), block.indexOf("#### The content of every option"));
+
+    // name, sentence, and the status-shaped markers are carried
+    assert.match(options, /^- `recommended-option` — recommended, boldness moderate, this is the answer above$/m);
+    assert.match(options, /^ {2}What the recommended option would answer\.$/m);
+    assert.match(options, /^- `rival-shared` — status passed$/m);
+    assert.match(options, /^ {2}What the shared rival would answer\.$/m);
+    assert.match(options, /^- `rival-only`$/m);
+    assert.match(options, /^ {2}What the rival-only option would answer\.$/m);
+
+    // source, ref and readings are gone, even though this option carries
+    // a reading (`readings: [...]` above) and every option carries a
+    // source and a ref
+    assert.ok(!options.includes("source ai"), "the source is not carried");
+    assert.ok(!options.includes("ref 2026-09-07"), "the ref is not carried");
+    assert.ok(!options.includes("ref 2026-09-06"), "nor a rival's ref");
+    assert.ok(!options.includes("ref 2026-09-05"), "nor the other rival's ref");
+    assert.ok(!options.includes("Readings bearing on it"), "the readings recorded under an option are not carried");
+    assert.ok(!options.includes("a-reading"), "not even by the reading's own id");
+    assert.ok(!options.includes("passed over"), "the reason a passed-over option carries is not carried either");
+  });
+
+  test("an entry referenced only by a rival is an address line with no quotation", () => {
+    const node = handBuiltJudgedNode();
+    const block = renderJudgedNode(node, handBuiltWords(), null);
+    const words = block.slice(block.indexOf("#### The author's words its options carry"), block.indexOf("#### The one answer that binds"));
+
+    // rival-only references words/2026-09-07/2, which the carried option
+    // never references: its line carries the address and nothing more.
+    const rivalLine = words.split("\n").find((l) => l.includes("`rival-only`"));
+    assert.match(rivalLine, /^- `rival-only` \(answer\) supports words\/2026-09-07\/2, 2026-09-07/);
+    assert.ok(!words.includes("The second quoted sentence."), "an entry no carried option references is never quoted");
+  });
+
+  test("an entry the carried option references is quoted once, under its own line, even when a rival also references it", () => {
+    const node = handBuiltJudgedNode();
+    const block = renderJudgedNode(node, handBuiltWords(), null);
+    const words = block.slice(block.indexOf("#### The author's words its options carry"), block.indexOf("#### The one answer that binds"));
+    const lines = words.split("\n");
+
+    const carriedIdx = lines.findIndex((l) => l.includes("`recommended-option`") && l.includes("words/2026-09-07/1"));
+    const rivalIdx = lines.findIndex((l) => l.includes("`rival-shared`") && l.includes("words/2026-09-07/1"));
+    assert.ok(carriedIdx >= 0 && rivalIdx >= 0, "both options' lines for the shared entry are present");
+
+    assert.equal(lines[carriedIdx + 1], "  > The first quoted sentence.", "quoted once, directly under the carried option's line");
+    // the quotation appears exactly once in the whole section, not twice
+    assert.equal(words.split("The first quoted sentence.").length - 1, 1);
+    // the rival's own line for the same entry carries no quotation of it
+    assert.ok(!lines[rivalIdx + 1].startsWith("  >"), "the rival's line for the shared entry carries the address alone");
+
+    // the section head tells the reader where to find a quotation by address
+    assert.match(words, /disposition\/words\/<date>\.md/);
+    assert.match(words, /## <n>/);
+  });
+});
+
+describe("sectionHashes still hashes source, ref and the words' text whole, though the render carries less", () => {
+  test("changing an option's source changes the 'options' hash, though the render never shows it", () => {
+    const node = handBuiltJudgedNode();
+    const words = handBuiltWords();
+    const before = sectionHashes(node, words);
+
+    const block = renderJudgedNode(node, words, null);
+    assert.ok(!block.includes("source ai"), "the render itself carries no source");
+
+    const changed = handBuiltJudgedNode();
+    changed.answerFact.options[0].source = "author";
+    const after = sectionHashes(changed, words);
+    assert.notEqual(before.options, after.options, "the options hash still moves on a source change");
+    assert.equal(before.question, after.question);
+    assert.equal(before.answer, after.answer);
+    assert.equal(before.rivals, after.rivals);
+    assert.equal(before.words, after.words);
+  });
+
+  test("changing a referenced entry's text changes the 'words' hash, though the render quotes it at most once", () => {
+    const node = handBuiltJudgedNode();
+    const words = handBuiltWords();
+    const before = sectionHashes(node, words);
+
+    const changedWords = new Map(words);
+    changedWords.set("words/2026-09-07/1", { ...words.get("words/2026-09-07/1"), text: "A different quoted sentence." });
+    const after = sectionHashes(node, changedWords);
+    assert.notEqual(before.words, after.words, "the words hash still moves on a change to a quoted entry's text");
+    assert.equal(before.options, after.options);
+    assert.equal(before.rivals, after.rivals);
+  });
+});
+
 describe("the candidate pairs, grouped by the judged node each is compared against", () => {
   test("shortId drops the module, and the graph where it is the disposition graph", () => {
     assert.equal(shortId("commons.systems/disposition-graph/authority"), "authority");

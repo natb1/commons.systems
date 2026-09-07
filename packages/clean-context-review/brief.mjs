@@ -1918,22 +1918,39 @@ export async function appendSurveyHistory(historyPath, history, entry) {
 /**
  * One judged node, carried once (`survey-selection`: "The judged node is
  * carried once"): its question, the author's words its options carry, the
- * one answer that binds it, and, of its answer fact, each option's name,
- * source, ref and status with the sentence saying what it would answer,
- * then what every other option on that fact would make of it -- as the
- * difference from the answer above and not as a second copy of the node,
- * which is the same rule ("its content never rendered twice") applied to the
- * rivals: on `survey-selection` itself ten options each carry the whole
- * answer, so the second render is nine tenths of the block.
+ * one answer that binds it, and, of its answer fact, each option's name and
+ * status with the sentence saying what it would answer, then what every
+ * other option on that fact would make of it -- as the difference from the
+ * answer above and not as a second copy of the node, which is the same rule
+ * ("its content never rendered twice") applied to the rivals: on
+ * `survey-selection` itself ten options each carry the whole answer, so the
+ * second render is nine tenths of the block.
  *
- * What is not here is the point of it. The prose of its facts and the AI's
- * accumulated support and divergence on its options are struck, because no
- * validation from the seventh to the sixteenth reads them and
- * `review-cost`'s rule is that a part no validation reaches is struck
- * rather than shortened. The account is struck for the reason
- * `clean-context-review` gives. And the answer appears once: the structured
- * render of the standing node that `renderWholeNode` puts beside it is the
- * same text twice, which is exactly the double carriage the answer forbids.
+ * What is not here is the point of it. An option's source, its ref, the
+ * reason it was passed over and the readings recorded under it are not
+ * carried (`options-by-sentence-and-status-and-words-by-address`: "no
+ * validation reads them, and a reader that wants one has the node's id").
+ * The prose of its facts and the AI's accumulated support and divergence on
+ * its options are struck too, because no validation from the seventh to the
+ * sixteenth reads them and `review-cost`'s rule is that a part no validation
+ * reaches is struck rather than shortened. The account is struck for the
+ * reason `clean-context-review` gives. And the answer appears once: the
+ * structured render of the standing node that `renderWholeNode` puts beside
+ * it is the same text twice, which is exactly the double carriage the
+ * answer forbids.
+ *
+ * The author's words are carried by address and not repeated: "the
+ * quotation itself is carried only where the recommended option references
+ * it, since the sixteenth validation reads the words against the answer
+ * that binds the node, and a rival option's words are evidence for that
+ * rival's content and not for the answer." Where an entry is referenced by
+ * more than one option, the quotation stands once, under the carried
+ * option's own line; every other option's line for that entry carries the
+ * address alone. This does not touch `sectionHashes`: the `options` hash
+ * still hashes each option's source and ref, and the `words` hash still
+ * hashes every referenced entry's text whole, so a changed entry or a moved
+ * source still moves the node for the next delta even though this render
+ * shows less of it.
  *
  * The heading, the file and the stage line stay: a reading's heading is an
  * address, and a finding names the node it is written on.
@@ -1963,10 +1980,21 @@ export function renderJudgedNode(node, words = null, byId = null) {
   if (said.length === 0) {
     parts.push("(no option on this node references an entry of the ledger of the author's words)");
   } else {
+    parts.push(
+      "An address `words/<date>/<n>` is entry `## <n>` of `disposition/words/<date>.md` (`words/2026-09-07/21` is entry `## 21` of `disposition/words/2026-09-07.md`). The quotation stands once, under the line of the option carried above; every other option's line for the same entry carries the address alone.",
+      "",
+    );
+    // The `words` section hash keeps every referenced entry's text whole
+    // (`sectionHashes`), so a changed entry still moves the node for the
+    // next delta even though this render quotes it, at most, once.
+    const quoted = new Set();
     for (const w of said) {
       parts.push(`- \`${w.option}\` (${w.fact}) ${w.relation} ${w.address}${w.date ? `, ${w.date}` : ""}${w.context ? ` — ${w.context}` : ""}`);
-      const text = w.text ?? "(unresolved: the ledger has no such entry)";
-      for (const line of text.split("\n")) parts.push(`  > ${line}`);
+      if (w.option === carried && !quoted.has(w.address)) {
+        quoted.add(w.address);
+        const text = w.text ?? "(unresolved: the ledger has no such entry)";
+        for (const line of text.split("\n")) parts.push(`  > ${line}`);
+      }
     }
   }
 
@@ -1983,17 +2011,18 @@ export function renderJudgedNode(node, words = null, byId = null) {
     parts.push("(no answer fact: no decision is recorded on this node yet)");
   } else {
     for (const option of options) {
-      const bits = [
-        option.source ? `source ${option.source}` : "no source recorded",
-        option.ref ? `ref ${option.ref}` : "no ref",
-        option.status ? `status ${option.status}` : "no status",
-      ];
+      // Name, status, and sentence only: source, ref and the readings
+      // recorded under an option are not carried here (nothing from the
+      // seventh to the sixteenth validation reads them, and a reader that
+      // wants one has the node's id). What is kept -- recommended, "this is
+      // the answer above", ruled -- is the reader's status of the option,
+      // together with `option.status` itself.
+      const bits = [];
+      if (option.status) bits.push(`status ${option.status}`);
       if (fact.recommends === option.name) bits.push(`recommended, boldness ${fact.boldness}`);
       if (option.name === carried) bits.push("this is the answer above");
       if (option.ruling) bits.push(`ruled ${option.ruling.response} on ${option.ruling.date}, pinning ${option.ruling.of}`);
-      parts.push(`- \`${option.name}\` — ${bits.join(", ")}`);
-      const readings = readingsText(option, byId);
-      if (readings) parts.push(`  - Readings bearing on it: ${readings}`);
+      parts.push(`- \`${option.name}\`${bits.length > 0 ? ` — ${bits.join(", ")}` : ""}`);
       const sentence = optionSentence(option);
       for (const line of (sentence ?? "(no sentence: this option says nothing about what it would answer)").split("\n")) {
         parts.push(`  ${line}`);
