@@ -712,11 +712,76 @@ function withoutProbes(graph) {
   return { ...graph, nodes };
 }
 
+/* ------------------------------------------------------------------ *
+ * what the payload carries
+ *
+ * The page's payload is what the page renders, and the content encoding is
+ * why that has to be said. An option in that encoding carries the whole
+ * node it would make, so the same text reaches the payload four times over:
+ * once as the option's `prose` (the `#### <name>` subsection, fence and
+ * all), once as `content.text` (the fence), once as `resolved` (the fence
+ * with any named change applied), and once inside the `sentence` that
+ * `withOptionSentences` composes out of the other three. The renderer in
+ * browser-template.html reads the sentence and none of the rest, so three of
+ * the four are bytes no reader can reach; `answerFact`, which is the same
+ * object as the `answer` entry of `facts` and so a second copy of every
+ * option on the node, is a fourth. Together they were 12.4 MB of a 19.3 MB
+ * page, over the 16 MB the artifact host accepts.
+ *
+ * So the derivations run first and their inputs are dropped after: nothing
+ * the page shows changes, and the option's content still reaches the reader
+ * exactly once, in the sentence composed from it. A field added to this list
+ * is a field the renderer must not read; a field the renderer starts reading
+ * comes off it.
+ * ------------------------------------------------------------------ */
+const UNRENDERED_OPTION_KEYS = ["prose", "content", "resolved", "aiSupport", "aiDivergence"];
+const UNRENDERED_NODE_KEYS = ["fmText"];
+
+/* `answerFact` slimmed to what the page reads of it. `withDerivedAnswers`
+ * sets it to the very fact object the node's `facts` already holds, which
+ * JSON cannot express as one thing twice; the renderer reads only how many
+ * options it has and whether one stands, to decide whether to print the note
+ * that the standing answer keeps its authority. So the payload carries that
+ * and no second copy of the options themselves. */
+function slimAnswerFact(fact) {
+  if (!fact) return fact;
+  return {
+    name: fact.name ?? null,
+    stands: fact.stands ?? null,
+    options: (fact.options || []).map((o) => ({ name: o.name })),
+  };
+}
+
+/* `graph`, with every field of a node or an option that no route of the
+ * browser renders dropped from it. Runs last, after every sentence and
+ * every derived answer is composed, since those are what read the dropped
+ * fields. Never mutates its argument: --rules, --frontier and --alignment
+ * may still read the same graph object in the same run. */
+export function withoutUnrendered(graph) {
+  const nodes = (graph.nodes || []).map((n) => {
+    const next = { ...n };
+    for (const k of UNRENDERED_NODE_KEYS) delete next[k];
+    if ("answerFact" in next) next.answerFact = slimAnswerFact(next.answerFact);
+    if (Array.isArray(next.facts)) {
+      next.facts = next.facts.map((f) => ({
+        ...f,
+        options: (f.options || []).map((o) => {
+          const opt = { ...o };
+          for (const k of UNRENDERED_OPTION_KEYS) delete opt[k];
+          return opt;
+        }),
+      }));
+    }
+    return next;
+  });
+  return { ...graph, nodes };
+}
+
 export function build(template, graph) {
   if (!template.includes(MARKER)) throw new Error(`template has no ${MARKER} marker`);
   // "<" only ever occurs inside a JSON string, so escaping it keeps the
   // payload valid JSON and keeps "</script" out of the document.
-  const json = JSON.stringify(withoutProbes(withOptionSentences(withSerializableWords(graph)))).replace(/</g, "\\u003c");
+  const json = JSON.stringify(withoutUnrendered(withoutProbes(withOptionSentences(withSerializableWords(graph))))).replace(/</g, "\\u003c");
   const block = `<script type="application/json" id="graph">${json}</script>${ledgerSection(graph)}`;
   return template.replace(MARKER, () => block);
 }

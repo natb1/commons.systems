@@ -12,7 +12,7 @@ import os from "node:os";
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { check, build, project, writeRules, checkRules, writeAncestry, excludeUnaligned, renderFrontier, withOptionSentences, withDerivedAnswers, buildAlignment, orderAlignmentItems, frontmatterEdits, wordDiff, parseArgs } from "./project.mjs";
+import { check, build, project, writeRules, checkRules, writeAncestry, excludeUnaligned, renderFrontier, withOptionSentences, withoutUnrendered, withDerivedAnswers, buildAlignment, orderAlignmentItems, frontmatterEdits, wordDiff, parseArgs } from "./project.mjs";
 import { readGraph } from "./read.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -65,7 +65,7 @@ test("build inlines a graph that parses back out of the page, each option's own 
   const html = build(TEMPLATE, FIXTURE);
   const m = html.match(/<script type="application\/json" id="graph">([\s\S]*?)<\/script>/);
   assert.ok(m, "page carries a JSON graph element");
-  assert.deepEqual(JSON.parse(m[1]), withOptionSentences(FIXTURE));
+  assert.deepEqual(JSON.parse(m[1]), withoutUnrendered(withOptionSentences(FIXTURE)));
   assert.ok(!html.includes("<!--DG:GRAPH-->"), "marker is consumed");
 });
 
@@ -3208,6 +3208,101 @@ test("the browser reads a content node's answer, its options' content, and the l
   assert.ok(html.includes('id="words-2026-09-07-1"') && html.includes('id="words-2026-09-07-2"'));
   assert.ok(html.includes("Author quotes are kept in a ledger outside the graph"));
   assert.ok(html.includes("Asked what the right-hand column of the alignment page holds."), "with the line saying what was asked");
+});
+
+/* ------------------------------------------------ the payload's own weight
+ *
+ * The content encoding puts the whole node an option would make into the
+ * option, and the reader that composes an option's sentence out of it leaves
+ * four copies of that text in the graph object: `prose` (the subsection, with
+ * the fence in it), `content.text` (the fence), `resolved` (the fence with any
+ * named change applied), and the `sentence` composed from them. Only the
+ * sentence is rendered. The tests below hold the payload to the one copy the
+ * page shows: on this record they took the browser from 19.3 MB, over the
+ * 16 MB the artifact host accepts, to 5.6 MB.
+ */
+
+test("the browser payload carries an option's content once, in the sentence, and never a second unrendered copy", () => {
+  const html = build(TEMPLATE, excludeUnaligned(withDerivedAnswers(CONTENT_PAGE)));
+  const json = JSON.parse(html.match(/<script type="application\/json" id="graph">([\s\S]*?)<\/script>/)[1].replace(/\\u003c/g, "<"));
+  const node = json.nodes.find((n) => n.slug === "ruling-content");
+  const fact = node.facts.find((f) => f.name === "answer");
+
+  for (const o of fact.options) {
+    for (const key of ["prose", "content", "resolved", "aiSupport", "aiDivergence"]) {
+      assert.ok(!(key in o), `${o.name} reaches the page with no '${key}': the page renders the sentence and never it`);
+    }
+  }
+  assert.ok(!("fmText" in node), "nor the node's own raw frontmatter, which no route renders");
+
+  // One copy, counted: a line of the whole-content option's own text occurs
+  // once in the option the page carries, where the graph object holds it four
+  // times over.
+  const whole = fact.options.find((o) => o.name === "the-previewing-column");
+  const line = "re-rendered as the selection moves";
+  const count = (s) => s.split(line).length - 1;
+  assert.equal(count(JSON.stringify(whole)), 1, "the payload carries the line once");
+  const untrimmed = withOptionSentences(excludeUnaligned(withDerivedAnswers(CONTENT_PAGE)))
+    .nodes.find((n) => n.slug === "ruling-content")
+    .facts.find((f) => f.name === "answer")
+    .options.find((o) => o.name === "the-previewing-column");
+  assert.ok(count(JSON.stringify(untrimmed)) >= 3, "fixture precondition: the graph object holds it three times or more");
+
+  // And the sentence is the content the reader is shown, not the document it
+  // is written as: the frontmatter of that document is no part of it.
+  assert.ok(whole.sentence.text.includes(line));
+  assert.ok(!JSON.stringify(whole).includes("form: rule"), "no frontmatter reaches the option row");
+});
+
+test("an option carrying whole content weighs less in the payload than its content does twice over", () => {
+  const untrimmed = withOptionSentences(excludeUnaligned(withDerivedAnswers(CONTENT_PAGE)));
+  const trimmed = withoutUnrendered(untrimmed);
+  const optionsOf = (graph) => graph.nodes.find((n) => n.slug === "ruling-content").facts.find((f) => f.name === "answer").options;
+  const before = optionsOf(untrimmed);
+  const after = optionsOf(trimmed);
+
+  for (let i = 0; i < before.length; i++) {
+    const content = before[i].resolved;
+    assert.ok(typeof content === "string" && content.length > 0, `fixture precondition: ${before[i].name} carries content`);
+    assert.ok(
+      JSON.stringify(after[i]).length < JSON.stringify(before[i]).length - 2 * content.length,
+      `${before[i].name} sheds at least two copies of its content`,
+    );
+  }
+  assert.ok(JSON.stringify(trimmed).length * 2 < JSON.stringify(untrimmed).length, "the payload as a whole is more than halved");
+});
+
+test("'answerFact' reaches the page as the count and the standing name, not as a second copy of every option", () => {
+  const html = build(TEMPLATE, excludeUnaligned(withDerivedAnswers(CONTENT_PAGE)));
+  const json = JSON.parse(html.match(/<script type="application\/json" id="graph">([\s\S]*?)<\/script>/)[1].replace(/\\u003c/g, "<"));
+  const node = json.nodes.find((n) => n.slug === "ruling-content");
+  const fact = node.facts.find((f) => f.name === "answer");
+
+  assert.deepEqual(Object.keys(node.answerFact).sort(), ["name", "options", "stands"]);
+  assert.equal(node.answerFact.options.length, fact.options.length, "the count the note is decided on survives");
+  assert.equal(node.answerFact.stands, fact.stands);
+  for (const o of node.answerFact.options) {
+    assert.deepEqual(Object.keys(o), ["name"], "and nothing of the option but the name it is counted by");
+  }
+});
+
+test("dropping the unrendered fields changes no page the reader sees", () => {
+  const untrimmed = withOptionSentences(excludeUnaligned(withDerivedAnswers(CONTENT_PAGE)));
+  const trimmed = withoutUnrendered(untrimmed);
+  // Two renderers, so that neither one's index is built over the other's data.
+  const before = loadRenderer();
+  const after = loadRenderer();
+  before.DG.data = JSON.parse(JSON.stringify(untrimmed));
+  after.DG.data = JSON.parse(JSON.stringify(trimmed));
+  before.index();
+  after.index();
+
+  assert.ok(before.DG.data.nodes.length > 0, "fixture precondition: the page has nodes");
+  for (let i = 0; i < before.DG.data.nodes.length; i++) {
+    const n = before.DG.data.nodes[i];
+    assert.equal(after.renderNode(after.DG.data.nodes[i]), before.renderNode(n), `${n.id}'s page is unchanged`);
+    assert.equal(after.rowHtml(after.DG.data.nodes[i]), before.rowHtml(n), `${n.id}'s index row is unchanged`);
+  }
 });
 
 test("a graph with no ledger and no content node reaches the browser exactly as it did", () => {
