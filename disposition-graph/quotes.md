@@ -87,6 +87,16 @@ form: rule
 under:
   - commons.systems/disposition-graph/authority
 ---
+## Disposition
+
+The author, 2026-09-07, answering the three calls the session put before them on the revised accumulation strategy, carried here because this node's question is one the answer reaches:
+
+> 1. named-change form legibility tradeoff is acceptable as long as the exact node preview can be mechanically derived (eg. via patch syntax)
+> 2. previously confirmed and standing are just one and the same thing (we can probably just remove reference to "standing" and replace it with "confirmed"
+> 3. All of AI and author rationale and references to tradition are recorded as support and/or divergence for each option. AI response is accumulated, reference to tradition is accumulated, author response is concatenated quotation. AI support and divergence can be recorded for any option. The AI recommendation is the judgement that weighs AI support/divergence for each option.
+>
+> This implies guidance for which quotes from the author need to be retained and which options need to be recorded. We don't need to retain author quotes that neither support or diverge from an option. If a quote from an author expresses support or divergence from an option then that option must be recorded. Any option with support or divergence in tradition must be recorded. If an option is weighed by the AI for any reason including its own internal assessment of viability then that option must be recorded.
+
 ## Answer
 
 The verbatim ruling stays in the node. When a sitting records a ruling, the author's words are quoted in the node's Disposition section with their date, and the message of the commit that lands the node carries them in addition. The rationale restates the ruling in the record's own register; the quotation is what the restatement is of, and is never replaced by it. The section accumulates, and each sitting on the node rolls up the quotations its answer has absorbed, version control holding what the roll-up drops. A ratified stamp whose ruling is not in the node is invalid, and the ruling a stamp requires is the one the author gives at that sitting, quoted then; words the author said earlier are the ground a draft rests on and bar no stamp.
