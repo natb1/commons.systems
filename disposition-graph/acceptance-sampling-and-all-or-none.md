@@ -1,7 +1,7 @@
 ---
 question: Does acceptance sampling ground the drift probe, and what answers Deming's objection to it?
 form: reading
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -25,11 +25,11 @@ facts:
     against: "Deming's position is recorded at high confidence and the escalation rule is elementary, so a deferral keeps a node on the frontier for a sizing the parent's own option already queues."
 review:
   verdict: forward
-  strength: strong
+  strength: weak
   date: 2026-09-07
-  of: ca5e3e7d8d6d23bcca699886a49f61ebf7b2e797
-  commit: ed7d78d30fc534929dce9c889c9ad08bc1ef1219
-  against: "The answer invokes Deming's scope to be chosen over `a-whole-graph-reading-every-time`, and that same argument, taken seriously, removes the ground for the design the answer does take. The all-or-none rule is a comparison of the cost of inspecting an item against the cost of an escape, and the answer's premise is that an escape here is cheap: \"nothing acts on a node until the author rules, so a contradiction the survey misses is met by a later reading rather than by a defect already shipped.\" Below the break-even that premise asserts, the rule's prescription is not the sample and not the periodic whole; it is none — inspect nothing, and let the later reading catch it. So the tradition does not merely fail to license the drift probe, it selects the limb the record does not take, and the mixed design the answer defends, a delta plus a one-in-twenty probe plus a whole survey on a cadence, is the intermediate plan Deming's rule exists to exclude. What can be said back is that the premise is false in the place it matters: an escape that reaches a node the author is about to rule on is not cheap, because a ruling taken on a contradicted node is the one thing the record exists to prevent, and the cost of inspection is the author's own attention rather than a machine's. But that reply abandons the answer's stated ground and puts a different one in its place, and it also concedes that the record is not in the stable-defect-rate world the rule presumes at all. The disposition can survive as \"the tradition supplies the escalation rule and the objection, and the record's own account of what an escape costs decides the rest\"; what does not survive is the sentence that the record is chosen over the everything limb on the ground the tradition's own scope names."
+  of: e55d2c6a05f8d1e94890624e7770eb15a2812977
+  commit: 2b934c69754bc5938e8374a0aab095b4526e6565
+  against: "The reply concedes, as the prior counter-argument itself said it must, that the record is not in the stable-defect-rate world Deming's rule presumes, yet the answer still leans on \"the tradition's escalation rule\" as the design's authority. Having granted that the rule's central premise fails here, the amendment does not explain why the escalation-rule mechanism survives that concession rather than the whole comparison being set aside as inapplicable; the answer separates the borrowed mechanism from the premise-dependent verdict (\"the tradition supplies the escalation rule and the objection, and the record's account of the two costs decides the rest\") but does not defend that separation as more than assertion."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: Dodge and Romig's sampling inspection at Bell Labs, from 1929; Deming, Out of the Crisis, MIT Center for Advanced Engineering Study, 1982, cited elsewhere in this record as 1986, the year of the later printing, for the all-or-none rule.
@@ -99,3 +99,21 @@ The session's reply: Taken into the answer: the ground for being chosen over the
 ### Repaired after the reading of abb15a3e, 2026-09-07
 
 All six findings applied, and the counter is taken into the answer. The rationale's class now matches the authority fact, whose reason is now the transfer and not the date. `source` gives Out of the Crisis as 1982 with the later printing's year the record's other citations use, two printings of one book and not a conflict. The answer names what it takes of Dodge and Romig, the escalation rule with its acceptance number set to zero and the sample-as-audit, and the tables as the part not taken, with the sizing sent to the parent's option; Deming's rule is stated with its two costs and its stability premise, and the ground for being chosen over the everything limb is the record's own account of what an escape costs, the premise failing here and the comparison coming out differently near a ruling and far from one. The `bears` entry on `survey-selection` moves from `the-delta-survey-with-a-periodic-whole`, a rung the standing option contains, to `candidate-pairs-with-their-nominating-key`, the option that stands, so the relation projects as adopted and not as chosen over; the entry on `a-whole-graph-reading-every-time` stays, and projects as chosen over, which it is. The answer fact's boldness stays high on what is the AI's, its case against is the reading's counter, and the option `supports-the-probe-diverges-on-its-sizing` is recorded from the reading's viability, source review. The reply to the counter is on the reading's entry above. The amendment is the object of the reading this entry owes.
+
+### Clean-context re-reading, 2026-09-07, of e55d2c6a
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `as-read`.
+
+Findings:
+
+- The amendment retargets the `bears` entry on `survey-selection` from `the-delta-survey-with-a-periodic-whole` to `candidate-pairs-with-their-nominating-key`, resting on a containment claim about `survey-selection`'s own options that this delta brief's scope excludes the neighbourhood needed to check: "The entry on `survey-selection` is recorded on `candidate-pairs-with-their-nominating-key`, the option that stands, because the drift probe this reading grounds is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen." Neither the previous reading nor a survey finding asked for this retargeting; it should be checked against `survey-selection` itself at the next full reading or by the survey before the author rules.
+
+On the facts and what they recommend: The diff changes only the `against` text on both facts (each now grounded in the reading's own strong counter-argument rather than the retired citation-date doubt), corrects the `## Rationale`'s class to `Deferred` so it matches the authority fact's `recommends: deferred`, and adds the option `supports-the-probe-diverges-on-its-sizing` (source review, ref 2026-09-07) to the answer fact. `recommends`, `boldness`, `stands: as-read`, and the absence of a `## Recommendation` fence are all unchanged.
+
+On the viability of the options: The diff leaves `as-read` viable and adds `supports-the-probe-diverges-on-its-sizing` as a second option on the answer fact, recorded with no `status`, consistent with the node's existing convention (the prior single-option state also carried no `status` on its option); the authority fact's three reserved options are untouched.
+
+Strongest counter-argument (weak): The reply concedes, as the prior counter-argument itself said it must, that the record is not in the stable-defect-rate world Deming's rule presumes, yet the answer still leans on "the tradition's escalation rule" as the design's authority. Having granted that the rule's central premise fails here, the amendment does not explain why the escalation-rule mechanism survives that concession rather than the whole comparison being set aside as inapplicable; the answer separates the borrowed mechanism from the premise-dependent verdict ("the tradition supplies the escalation rule and the objection, and the record's account of the two costs decides the rest") but does not defend that separation as more than assertion.
+
+The session's reply: [object Object]

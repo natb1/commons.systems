@@ -1,7 +1,7 @@
 ---
 question: Does Fagan's entry criterion ground the mechanical tier that gates a survey's launch?
 form: reading
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -27,9 +27,9 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: a4ac90dd071557b6b470ad463b092b253f4dc992
-  commit: 843c99c0003959178d387261b13d73cb0779fd26
-  against: "The amended opening now reads \"Supports, whole, within the locus this reading takes\" rather than either of the previous reading's two clean resolutions (keep \"Supports, whole.\" unqualified once the refinement moves away, or rename the divergence outright). A strict reader could see the inserted qualifier as a residual hedge against the frontmatter's unqualified `relation: adopted`, of the same shape the previous reading objected to in its second finding, until reaching the third paragraph two sentences later that names which locus is meant and cedes it to the sibling reading."
+  of: 92991608a4007a03ddcf4e7937680e80e27a4e51
+  commit: 2b934c69754bc5938e8374a0aab095b4526e6565
+  against: "The previous reading's two findings (about the `progressive-disclosure` and `readings` cross-references) were already closed by the session's reply recorded inline in that same reading's own account, before this diff; the amendment this reading actually judges is only the bears retargeting. If `the-mechanical-tier-gates-the-launch` turns out not to be contained in `candidate-pairs-with-their-nominating-key` on `survey-selection`'s own terms, the retargeting would silently misrecord which option this reading adopts, and nothing in this delta's given scope can rule that out."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: Fagan, Design and code inspections to reduce errors in program development, IBM Systems Journal 15(3), 1976, and Advances in software inspections, 1986, for the entry criterion as a named gate; Gilb and Graham, Software Inspection (1993), on entry criteria. Locus to be checked, the entry criterion as a stated and checked gate, which is explicit in the 1986 paper and in Gilb and Graham and implicit in the 1976 paper's moderator readiness check; the tradition survey of 2026-09-07 cited only the 1976 paper and the 1993 book, so the 1986 citation is the AI's own and is given by title and year without its venue.
@@ -121,3 +121,21 @@ The session's reply: Both citations were verified on the main thread before this
 ### Re-pointed after the readings of abb15a3e, 2026-09-07
 
 The `bears` entry on `survey-selection` moves from `the-mechanical-tier-gates-the-launch`, a rung the standing option contains, to `candidate-pairs-with-their-nominating-key`, the option that stands, and the answer's last sentence says why: `survey-selection`'s options are a ladder, each rung carrying everything above it, and `readings` derives chosen over for a tradition adopted on an option not chosen, so a relation stored on a contained rung projected as the opposite of what this reading says. The clean-context reading of `tolerated-inconsistency` at abb15a3e found it, and the same move is made on every reading under `survey-selection` that bore on a contained rung. Nothing else moves. The amendment is the object of the reading this entry owes.
+
+### Clean-context re-reading, 2026-09-07, of 92991608
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `as-read`.
+
+Findings:
+
+- The `### Re-pointed after the readings of abb15a3e, 2026-09-07` account entry and the matching sentence appended to `## Answer` — "The entry on `survey-selection` is recorded on `candidate-pairs-with-their-nominating-key`, the option that stands, because the gate this reading grounds is a lower rung of the same ladder, `the-mechanical-tier-gates-the-launch`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen." — retarget the `bears` entry from `the-mechanical-tier-gates-the-launch` to `candidate-pairs-with-their-nominating-key` on a containment claim about `survey-selection`'s own option ladder that this delta's given scope excludes the means to verify. The account entry says the same move was applied to every reading under `survey-selection` bearing on a contained rung, which is consistent with the identical retargeting seen on the sibling `acceptance-sampling-and-all-or-none` in this same wave, but the containment claim itself should still be checked against `survey-selection` at the next full reading or by the survey before the author rules.
+
+On the facts and what they recommend: The diff makes no change to either fact's `recommends`, `boldness`, or `stands`: `answer` still recommends `as-read` (high, stands, no `## Recommendation` fence) and `authority` still recommends `deferred` (moderate). The substantive changes are the `bears` entry's retargeted `option`, the sentence added to `## Answer` explaining it, and the new `### Re-pointed after the readings of abb15a3e` account entry documenting the move; the `review:` frontmatter block's changed pin, strength, and `against` text is the prior reading's own apply-step record, not part of this amendment.
+
+On the viability of the options: Unaffected: `as-read` and `supports-the-gate-diverges-on-its-scope` on `answer`, and the three reserved options on `authority`, carry the same status before and after the diff. The bears retargeting touches only which `survey-selection` option this reading is recorded as bearing on, not any option's viability on this node.
+
+Strongest counter-argument (weak): The previous reading's two findings (about the `progressive-disclosure` and `readings` cross-references) were already closed by the session's reply recorded inline in that same reading's own account, before this diff; the amendment this reading actually judges is only the bears retargeting. If `the-mechanical-tier-gates-the-launch` turns out not to be contained in `candidate-pairs-with-their-nominating-key` on `survey-selection`'s own terms, the retargeting would silently misrecord which option this reading adopts, and nothing in this delta's given scope can rule that out.
+
+The session's reply: [object Object]

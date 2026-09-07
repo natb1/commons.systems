@@ -1,7 +1,7 @@
 ---
 question: Do verifying traces and early cutoff ground the delta survey's selection on section hashes?
 form: reading
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -27,9 +27,9 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: c90fdf22b0a5fa11a9570bf0a9c8c424cd00e38f
-  commit: 843c99c0003959178d387261b13d73cb0779fd26
-  against: "The previous review's own recorded counter-argument -- that the survey's five sections are an input set the record declares rather than derives, so the trace's guarantee is stipulated rather than sound, and a third node's redefinition can break the judgment with no hash moving -- is not something the amendment was asked to fix (it was not one of the five numbered findings), and it is not fixed: narrowing \"whole\" to the trace and the cutoff only restates which mechanism is being adopted, it does not touch whether that mechanism's guarantee is as sound within its own narrowed scope as the tradition's is, so the same weakness the review already accepted at moderate strength persists unchanged into the amended text."
+  of: c7b836e102c0851a79c0245633b93dc633ba2c8f
+  commit: 2b934c69754bc5938e8374a0aab095b4526e6565
+  against: "The previous reading's two findings (the `progressive-disclosure` citation and the `acceptance-sampling-and-all-or-none` citation) and its own carried-forward counter-argument (the five sections being stipulated rather than derived) were already addressed inline by the session's reply recorded in that same reading's own account, before this diff; the amendment this reading actually judges is only the bears retargeting. If `the-delta-survey-with-a-periodic-whole` is not in fact contained in `candidate-pairs-with-their-nominating-key` on `survey-selection`'s own terms, the retargeting would silently misrecord which option this reading adopts, and nothing in this delta's given scope can rule that out."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: Mokhov, Mitchell and Peyton Jones, Build systems à la carte, ICFP 2018, on verifying traces and early cutoff; Shake's and Bazel's rebuild rules as the practice.
@@ -124,3 +124,21 @@ The session's reply: Both citations were verified on the main thread before this
 ### Re-pointed after the readings of abb15a3e, 2026-09-07
 
 The `bears` entry on `survey-selection` moves from `the-delta-survey-with-a-periodic-whole`, a rung the standing option contains, to `candidate-pairs-with-their-nominating-key`, the option that stands, and the answer's last sentence says why: `survey-selection`'s options are a ladder, each rung carrying everything above it, and `readings` derives chosen over for a tradition adopted on an option not chosen, so a relation stored on a contained rung projected as the opposite of what this reading says. The clean-context reading of `tolerated-inconsistency` at abb15a3e found it, and the same move is made on every reading under `survey-selection` that bore on a contained rung. Nothing else moves. The amendment is the object of the reading this entry owes.
+
+### Clean-context re-reading, 2026-09-07, of c7b836e1
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `as-read`.
+
+Findings:
+
+- The `### Re-pointed after the readings of abb15a3e, 2026-09-07` account entry and the matching sentence appended to `## Answer` — "The entry on `survey-selection` is recorded on `candidate-pairs-with-their-nominating-key`, the option that stands, because the trace and the cutoff this reading grounds is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen." — retarget the `bears` entry on `survey-selection` from `the-delta-survey-with-a-periodic-whole` to `candidate-pairs-with-their-nominating-key` on a containment claim about `survey-selection`'s own option ladder that this delta's given scope excludes the means to verify. The same retargeting appears verbatim on the sibling readings `acceptance-sampling-and-all-or-none` and `fagan-entry-criteria` in this wave, which supports it being a systematic fix rather than an isolated one, but the containment claim should still be checked against `survey-selection` at the next full reading or by the survey before the author rules.
+
+On the facts and what they recommend: The diff makes no change to either fact's `recommends`, `boldness`, or `stands`: `answer` still recommends `as-read` (moderate, stands, no `## Recommendation` fence) and `authority` still recommends `deferred` (moderate). The substantive changes are the `bears` entry on `survey-selection` retargeted to `candidate-pairs-with-their-nominating-key` (the `dialogue` bears entry is untouched), the sentence added to `## Answer` explaining the retarget, and the new `### Re-pointed after the readings of abb15a3e` account entry; the `review:` frontmatter block's changed pin, strength, and `against` text is the prior reading's own apply-step record, not part of this amendment.
+
+On the viability of the options: Unaffected: `as-read` and `supports-the-trace-diverges-on-where-it-lives` on `answer`, and the three reserved options on `authority`, carry the same status before and after the diff. The retargeting touches only which `survey-selection` option this reading is recorded as bearing on, not any option's viability on this node.
+
+Strongest counter-argument (weak): The previous reading's two findings (the `progressive-disclosure` citation and the `acceptance-sampling-and-all-or-none` citation) and its own carried-forward counter-argument (the five sections being stipulated rather than derived) were already addressed inline by the session's reply recorded in that same reading's own account, before this diff; the amendment this reading actually judges is only the bears retargeting. If `the-delta-survey-with-a-periodic-whole` is not in fact contained in `candidate-pairs-with-their-nominating-key` on `survey-selection`'s own terms, the retargeting would silently misrecord which option this reading adopts, and nothing in this delta's given scope can rule that out.
+
+The session's reply: [object Object]
