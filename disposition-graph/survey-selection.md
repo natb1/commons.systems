@@ -1,7 +1,7 @@
 ---
 question: How does a survey narrow its object without narrowing what it can find?
 form: rule
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -28,6 +28,9 @@ facts:
         ref: "2026-09-07"
         status: passed
         reason: "it prices every survey at the frontier's whole size rather than at what moved, so the reader spends its attention re-deriving on every run the consistency an earlier reader already established and pinned"
+      - name: size-the-cadence-and-the-sample-on-inclusiveness-and-precision
+        source: review
+        ref: "2026-09-07"
     recommends: candidate-pairs-with-their-nominating-key
     boldness: high
     against: "Every clause narrows what the record's only whole-graph reader is shown, and it narrows on a dependency relation this record does not have: semantic contradiction respects neither `under` nor citation nor shared vocabulary, so the pair the survey exists to find, two nodes that disagree in disjoint words and never name each other, is exactly the pair the delta freezes, no nominating key nominates, and only a drift probe whose size this same design chose could ever catch."
@@ -163,6 +166,14 @@ Every survey reads the graph entire, every judged node whole, every pair live, n
 
 **AI divergence.** It prices every survey at the frontier's whole size rather than at what moved, so the cheapest survey the record can run is the one after a survey that changed nothing.
 
+#### size-the-cadence-and-the-sample-on-inclusiveness-and-precision
+
+The whole survey's cadence, the drift probe's sample and the resemblance threshold are sized in the regression-testing tradition's own vocabulary, inclusiveness and precision as degrees rather than a binary and the cost model that trades them, so that the numbers the answer leaves unstated are set by a stated measure and revised from what the probe finds, rather than by a session's sense of enough.
+
+**AI support.** The recorded case against this node's answer is that its numbers are unstated, and this is the apparatus in which they could be stated: `regression-test-selection`'s repaired reading names inclusiveness, precision and the cost model as what the framework offers a selection that cannot be safe, and sends the sizing here as this node's question. The drift probe already measures inclusiveness after the fact, a finding on a frozen pair being a test the selection dropped, so the measure exists in the design and the option only names it and lets it set the cadence.
+
+**AI divergence.** The framework's measures presuppose a deterministic test and a fault model, and the survey's test is a reader's judgment, so a number derived from the apparatus is a number with a citation and not a measurement until surveys have run and the probe has found something to count; the sizing waits on that data, and the option is recorded for the sitting that has it rather than taken by this one.
+
 ### authority
 
 Ratified, on the capture-shaped limb of `class-recommendation`'s test and on that limb alone. This node decides how much of the record the survey is shown, and the survey is the only reader whose object is the AI's whole frontier judged against itself; the party that would set the answer is the party the answer checks. Two features make it the sharp case. A narrowing is invisible in the record's own terms — a survey that reads less returns fewer findings, and fewer findings on a frontier are indistinguishable from a cleaner frontier — so being wrong here leaves no trace the author could read. And a clean mechanical tier is an affirmative signal that something was checked, so a tier the AI sizes can make the record look audited exactly where it stopped auditing. The parent's authority fact recommends ratified on the identical limb and the identical ground, that a rule letting the drafter narrow the review's object is capture-shaped and that a review reading too little looks cheaper and no worse, and no ruling has reached either node; this node is that rule one step narrower, so a delegation here would reach past the ratification recommended there. Not irreversible: nothing here deletes, swaps or lands; the gate opens, the selection widens, and a design changed back at the next sitting leaves the graph as it was — which is where this node and the accumulation node part, since a fold does not. Not expensive, or weakly so: a wrong selection is paid in a survey that missed something, recovered by the whole survey this answer schedules. Boldness low: the test is stated and the limb is the parent's own.
@@ -238,3 +249,7 @@ On the facts and what they recommend: The diff removes a stray blank line inside
 On the viability of the options: Every option on the answer and authority facts remains viable after the diff; the mint only adds `bears` annotations to options that already existed and changes no option's viability, recommendation, or ranking. This is corroborated by the node's own current rendering: `lint-and-the-false-positive-threshold` now shows adopted on `the-mechanical-tier-gates-the-launch`, `tolerated-inconsistency` and `acceptance-sampling-and-all-or-none` on `the-delta-survey-with-a-periodic-whole`, and `mapreduce-and-cross-shard-blindness` adopted on `candidate-pairs-with-their-nominating-key` and diverged on `several-readers-over-a-partition` -- exactly the bearings the Rationale and the account's mint description claim.
 
 Strongest counter-argument (weak): The amendment's claim of having minted four reading nodes is attested only by this file's own prose and by the brief's synthesized 'Readings bearing on it' lines; a delta reading of survey-selection.md alone is never given the four new reading-node files themselves, so a defect internal to one of them -- a bears entry pointed at the wrong option, or a gloss too thin to count as 'recording a tradition' under evaluation's rule -- would not surface in this diff or this reading. The arithmetic is internally consistent (4 already read + 1 read elsewhere + 4 newly minted + 15 owed = 24 surfaced, matching the survey's count) and the bearings line up with the Rationale's own description, which is the strongest verification available at this reading's scope, but it stops short of reading the minted nodes' own content.
+
+### Option recorded, 2026-09-07
+
+`size-the-cadence-and-the-sample-on-inclusiveness-and-precision` recorded on the answer fact, source `review`, from the counter-argument the clean-context reading of `regression-test-selection` at d35b0014 raised, that a tradition read for its unavailable guarantee alone constrains nothing; the repaired reading names the tradition's measurement apparatus and sends the sizing here. The recommendation does not move. The same repair moved that reading's relation on `the-delta-survey-with-a-periodic-whole` from diverged to adopted, with a second entry adopting on `a-whole-graph-reading-every-time`, so the traditions this node's options carry have changed since the last survey pinned it.

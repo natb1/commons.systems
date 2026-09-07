@@ -9,15 +9,17 @@ facts:
         source: ai
         ref: "2026-09-07"
     recommends: as-read
-    boldness: moderate
+    boldness: high
+    against: "The unresolved year is recorded rather than hidden and touches nothing the relation rests on, so moderate would report the relation's strength honestly and high reports a bibliographic doubt in the place the page uses for a doubt about the reading."
     stands: as-read
   - name: authority
     options:
       - name: ratified
       - name: delegated
       - name: deferred
-    recommends: delegated
+    recommends: deferred
     boldness: moderate
+    against: "Deming's position is recorded at high confidence and the escalation rule is elementary, so a deferral keeps a node on the frontier for a date discrepancy the source field already names."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: Dodge and Romig's sampling inspection at Bell Labs, from 1929; Deming, Out of the Crisis, for the all-or-none rule, whose year the tradition survey of 2026-09-07 gave as 1982 and the record's other citations of the same book give as 1986.
@@ -36,6 +38,16 @@ Supports the probe, and carries the objection to it as its other half. The tradi
 ## Rationale
 
 Recorded under `survey-selection` on 2026-09-07, on the clean-context reading's finding that this tradition carries the case against the drift probe in the draft's own words while holding no reading, which `evaluation`'s rule does not allow to stand unrecorded. The confidences are the tradition survey's of that date, which is not part of the record: moderate-high on Dodge and Romig, high on Deming's position, and the sources are cited as it gave them. The AI validated the relation from its own knowledge of them. Delegated, because the relation is the AI's reading of sources the author may check, and the author's ruling on the options it bears on is where the reading has effect.
+
+## Facts
+
+### answer
+
+`as-read` is the only reading of the sampling line on the record and it is recommended because it carries the tradition's objection to itself rather than answering it away: the drift probe is Dodge and Romig's instrument with its escalation rule intact, and Deming's all-or-none is recorded as adopted on `a-whole-graph-reading-every-time`, the option the answer passed over, which is what `readings` means by chosen over and is the shape the record already uses. The ground the answer gives for being chosen over is the tradition's own scope, that all-or-none turns on what an escape costs, and here nothing acts on a node until the author rules. Boldness high, on the citations. The tradition survey of 2026-09-07 recorded Dodge and Romig at moderate-high and Deming's position at high, and this node's `source` already carries a year for Out of the Crisis it cannot resolve, 1982 from that survey against 1986 from the record's other citations of the same book; a reading whose own source field records an unresolved date is a reading asking to be checked in its own text. The case against is on the fact.
+
+### authority
+
+Deferred, and this node states its own reason for it in its `source` field: it carries two years for one book and cannot choose between them. A class that says the author need not be asked again sits badly beside a citation the node itself flags as unsettled, and what the deferral queues is exactly that, one shelf-check that would close it. Delegated would leave the discrepancy standing under a class that says nobody will look. Boldness moderate: `class-recommendation`'s expensive and irreversible limbs are answered by `readings`' re-grasp trigger, and the judgement that the capture limb does not bite is the AI's own. The case against is on the fact.
 
 ## Account
 

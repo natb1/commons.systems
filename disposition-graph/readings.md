@@ -1,6 +1,6 @@
 ---
 question: How are references to tradition recorded?
-stage: ruling
+stage: review
 review:
   verdict: forward
   strength: weak
@@ -42,6 +42,9 @@ facts:
         ref: "2026-09-05"
       - name: the-relation-is-projected-onto-the-option-as-one-of-three
         source: commons.systems/disposition-graph/dialogue
+        ref: "2026-09-07"
+      - name: a-readings-class-is-deferred-until-the-author-reads
+        source: review
         ref: "2026-09-07"
     recommends: the-relation-is-projected-onto-the-option-as-one-of-three
     boldness: moderate
@@ -173,6 +176,14 @@ What the readings bear on an option is projected onto it as the traditions' accu
 **AI support.** This node's answer already puts the relation on the reading and derives the option's readings as the inverse; the author's words of 2026-09-07 ask that references to tradition be recorded as support and divergence per option, and the projection of that inverse, headed support or divergence, is that record without a second copy. One reading of a shared source stays stored once and refined under each node it grounds.
 
 **AI divergence.** A projection is only as complete as the `bears` entries are, and a tradition read under one node and bearing on an option of another is recorded only where the reading's author remembered to add the cross-node entry, which the validator cannot check; the derived inverse is exact and the coverage is not.
+
+#### a-readings-class-is-deferred-until-the-author-reads
+
+The class the AI recommends on every reading's authority fact is deferred until words of the author delegate the reading of traditions, the derivation being this node's and recorded once rather than on each reading: on `class-recommendation`'s three limbs a tradition reading is neither expensive nor irreversible, since a reading whose verdict changes on re-reading is a re-grasp trigger for the node it grounds and nothing acts under an unanswered parent, and is not capture-shaped, since its claim is about a text outside the record, fixed, public, and openable by the author, which is what the `source` field exists to name; the residual therefore governs, delegated needs words of the author saying they do not want to be asked again about the AI's account of a source, and no such words are on the record.
+
+**AI support.** The sentence every reading of 2026-09-07 offered for delegating, that the relation is the AI's reading of a source the author may check, is a reason for deferring and not for delegating, as the clean-context reading of `regression-test-selection` found in terms; this node's own answer describes deferred as the class of a reading the author accepts for now while queueing the primary reading, which is what each of those readings is. The nine readings under `survey-selection` now recommend deferred with a node-specific reason each, and the derivation lives here because the class of a tradition reading is one question and not nine, and because nine copies of one passage would fail the mechanical tier's byte-identity check. The census in `progressive-disclosure`'s authority reason, fifty-seven of fifty-nine readings recommending delegated, `srs-introduction` deferred and `npm-committed-lockfile` carrying no recommendation, is on this derivation a reconciliation item of this node's, to be moved as one act and not swept node by node.
+
+**AI divergence.** The capture limb may bite: a check the checked party writes and may move without being asked is captured whether or not the source is public, and the record has watched it happen, `progressive-disclosure` having been redrawn three times in two days, each time fitted to whatever the page's text said, which its own review calls the pattern a delegated class makes cheap and a deferred class exists to stop; on that reading the class is ratified and not deferred. And the option is a rule about the readings' class beside options that decide how a relation is encoded, so it competes with none of them, and under the content encoding it is a named change to the recommended text rather than a replacement for it.
 
 ### authority
 
@@ -585,3 +596,7 @@ On the facts and what they recommend: The diff only touches prose: it replaces t
 On the viability of the options: No option is added, removed, or newly contradicted; the two edits are corrections to prose fields (the answer fact's `against` and the authority fact's reason paragraph) that bring them into agreement with what each fact already recommended, and the new option's own AI-support/AI-divergence subsection is untouched and internally consistent.
 
 Strongest counter-argument (weak): The account entry "Repaired after the re-reading, 2026-09-07" (the first repair's own self-report) still states unqualified that the authority fact's case against "no longer claims that every reading on the record recommends delegated for itself," and that exact sentence is left untouched by this diff -- it was not corrected, only overtaken. A reader who trusted that entry in isolation, without reading the second re-reading's findings that followed it, would still be misled about what the first repair actually fixed (the frontmatter copy only, not the body prose). The sentence reads as true of the node now only because this amendment's authority-prose fix makes it true two steps later, which is incidental to the self-report's own honesty at the time it was written and was never itself corrected or flagged as imprecise.
+
+### Option recorded, 2026-09-07
+
+`a-readings-class-is-deferred-until-the-author-reads` recorded on the answer fact, source `review`, from the clean-context readings of the three readings under `survey-selection` read at d35b0014, each of which found the authority fact recommending delegated on a sentence that argues for deferred. The recommendation does not move: the option is the derivation behind the nine readings' authority recommendations, held once here, and the census of the record's other readings it names is a reconciliation item of this node's and not a change made in this landing.

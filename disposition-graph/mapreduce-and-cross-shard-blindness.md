@@ -10,14 +10,16 @@ facts:
         ref: "2026-09-07"
     recommends: as-read
     boldness: moderate
+    against: "The emit-keys discipline the answer keeps is not in the paper: a reader emitting terms, quotations, citations and propositions each with a verbatim locus is the AI's transposition of a machine's key-value contract onto a reader, and the descendant strand the source names carries no primary citation at all, so the half doing the most work here has the least behind it."
     stands: as-read
   - name: authority
     options:
       - name: ratified
       - name: delegated
       - name: deferred
-    recommends: delegated
+    recommends: deferred
     boldness: moderate
+    against: "The paper is the most widely read of the nine sources and its cross-shard limit is not contested, so a deferral queues a check that will confirm the reading and leaves the transposition, which is the contestable part, unchecked either way."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: MapReduce, Dean and Ghemawat, OSDI 2004; the hierarchical and refine reading chains of current practice as its informal descendant, which carry no primary citation.
@@ -36,6 +38,16 @@ Supports the option the answer does not take, and is read for its limit. The tra
 ## Rationale
 
 Recorded under `survey-selection` on 2026-09-07, because the draft's rationale leant on this tradition's cross-shard blindness as its reason for not partitioning the survey while carrying no reading of it, which the clean-context reading of that day named as an unrecorded divergence from `evaluation`. The tradition survey of that date, which is not part of the record, cited it at high confidence and the citation is given as it gave it; the AI validated the relation from its own knowledge of the source. Delegated, because the relation is the AI's reading of a source the author may check, and the author's ruling on the options it bears on is where the reading has effect.
+
+## Facts
+
+### answer
+
+`as-read` is the only reading of MapReduce on the record and it is recommended because the tradition is read here for its limit and not for its shape, which is the only way a reading can ground an option the answer did not take: both `bears` entries read adopted, one on `several-readers-over-a-partition`, the tradition's own form, which the answer is chosen over, and one on `candidate-pairs-with-their-nominating-key`, which keeps the emit-keys discipline inside the design the answer does take. Boldness moderate: the tradition survey of 2026-09-07 recorded Dean and Ghemawat at high confidence, cross-shard blindness is the paper's own accounting of what a shuffle exists to fix rather than a gloss on it, and the reason the option is not taken is an argument about this record — that the whole-node validations do not shard, that coverage's input is an absence and an absence has no shard, and that a split buys context capacity and not tokens — which any reader can check against `survey-selection`. The case against is on the fact.
+
+### authority
+
+Deferred, and the thing it queues is not the paper but the transposition. That a relation between two shards is invisible to both readers is the paper's own and is not in dispute; that the discipline following from it, for a reader rather than a machine, is to emit keys with verbatim loci and never prose summaries, is the AI's extension, and this node's `source` says the descendant strand it belongs to carries no primary citation. Delegating would put that extension beyond asking. Boldness moderate: the failing limbs of `class-recommendation`'s test are read off the record, and the judgement that the capture limb does not bite, a paper being openable by the author, is the AI's own. The case against is on the fact.
 
 ## Account
 
