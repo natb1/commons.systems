@@ -1,7 +1,7 @@
 ---
 question: Does regression test selection ground the delta survey, and where does the answer depart from its guarantee?
 form: reading
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -24,12 +24,12 @@ facts:
     boldness: moderate
     against: "The capture limb does bite: this reading's own repair moved a relation from diverged to adopted on the AI's re-reading of a source nobody else has opened, which is exactly the freedom a delegated class would make permanent and a deferred class only postpones."
 review:
-  verdict: kickback
-  strength: strong
+  verdict: forward
+  strength: weak
   date: 2026-09-07
   of: e9714fc7b20b79583a4d5f084416bdbb0c0eb80f
-  commit: 2b934c69754bc5938e8374a0aab095b4526e6565
-  against: "The amendment answers the previous reading's second finding (the `progressive-disclosure` and `readings` citations, verified per the session's reply) but its answer to the first finding is internally inconsistent: it declines to correct the `### Minted` clause on the stated ground that account entries are historical and unrewritten, while rewriting a different account entry (the d35b0014 repair) in the same diff to add that very justification. A reader who takes the stated principle at face value has direct evidence in the same file that the record does not actually hold to it, which is a new defect on the exact question -- whether the AI's account can be trusted as a record of what happened -- that this node's dialogue is about."
+  commit: edbe507a81c4bfe51308f5fb96845b8bbdaff4c8
+  against: "The repair's own account of itself claims account entries are 'not rewritten, since an account entry is the record of its day,' yet its remedy for the previous finding is to rewrite the `### Repaired after the reading of d35b0014` entry a second time (restoring it to its pre-ed7d78d3 text). One could argue this is still an edit to a dated historical entry and so brushes the same principle the previous finding turned on. This does not hold up on inspection, though: the previous reading's own suggested edit was exactly 'revert the d35b0014 entry to its prior text and instead add the acknowledgment ... as a new dated entry,' which is precisely what the repair does — reverting an erroneous later insertion restores the entry's true historical state rather than adding new interpretive content to it, and the justification sentence itself is relocated to a fresh, separately dated entry rather than left duplicated in place."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: Rothermel and Harrold, Analyzing regression test selection techniques, IEEE TSE 22(8), 1996, and A safe, efficient regression test selection technique, TOSEM 6(2), 1997; industrial test-impact analysis as the practice.
@@ -154,3 +154,20 @@ The session's reply: [object Object]
 ### Repaired after the re-reading of 2b934c69, 2026-09-07
 
 The first finding is taken whole. The entry `### Repaired after the reading of d35b0014` had been rewritten at ed7d78d3, in answer to the re-reading of abb15a3e, to insert a sentence that named two loci for that reading's first finding, the answer and the clause of the `### Minted` entry, and that said the clause stands in its entry as the account of the misreading it was, superseded by the answer and not rewritten, since an account entry is the record of its day; the rewrite did to one entry what the sentence said is not done to any, and the re-reading of 2b934c69 found it. That entry is restored, byte for byte, to its text as first written at d35b0014's repair, and the sentence it had gained is carried here instead, which is where an amendment to an account goes: a new entry of its own day. Nothing in the answer or the facts moves. The second finding, on the re-pointing to `candidate-pairs-with-their-nominating-key`, is verified on the main thread against `survey-selection`'s own facts, whose options are a ladder each opening "Everything above, with", and is left to the survey to judge again before the author rules, as it asks. The amendment is the object of the reading this entry owes.
+
+### Clean-context re-reading, 2026-09-07, of e9714fc7 (ii)
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `as-read`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff touches only the `## Account` section (the apply step's own record of the previous e9714fc7 reading, which the brief says is not part of the amendment, plus the actual repair entry `### Repaired after the re-reading of 2b934c69, 2026-09-07`) and the `review:` frontmatter's pin/commit/against fields, which the brief likewise excludes as the prior reading's own apply-step record. Neither fact's `recommends`, `boldness`, `against`, or `stands` changes: `answer` still recommends `as-read` (high, stands, no `## Recommendation` fence) and `authority` still recommends `deferred` (moderate).
+
+On the viability of the options: Unaffected. The diff never touches `## Facts`, so `as-read` and `adopts-the-industrial-practice-and-diverges-on-the-safety-result` on `answer`, and the three reserved options on `authority`, carry the same status, sources and reasons before and after the amendment.
+
+Strongest counter-argument (weak): The repair's own account of itself claims account entries are 'not rewritten, since an account entry is the record of its day,' yet its remedy for the previous finding is to rewrite the `### Repaired after the reading of d35b0014` entry a second time (restoring it to its pre-ed7d78d3 text). One could argue this is still an edit to a dated historical entry and so brushes the same principle the previous finding turned on. This does not hold up on inspection, though: the previous reading's own suggested edit was exactly 'revert the d35b0014 entry to its prior text and instead add the acknowledgment ... as a new dated entry,' which is precisely what the repair does — reverting an erroneous later insertion restores the entry's true historical state rather than adding new interpretive content to it, and the justification sentence itself is relocated to a fresh, separately dated entry rather than left duplicated in place.
+
+The session's reply: [object Object]
