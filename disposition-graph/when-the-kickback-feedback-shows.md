@@ -5,11 +5,51 @@ under:
   - commons.systems/disposition-graph/alignment-page
 depends:
   - commons.systems/disposition-graph/where-a-change-request-goes
+facts:
+  - name: answer
+    options:
+      - name: the-control-asks-for-the-change-by-name
+        source: commons.systems/disposition-graph/where-a-change-request-goes
+        ref: "2026-09-06"
+  - name: authority
+    options:
+      - name: ratified
+        source: ai
+        ref: "2026-09-06"
+      - name: delegated
+        source: ai
+        ref: "2026-09-06"
+      - name: deferred
+        source: ai
+        ref: "2026-09-06"
 ---
 ## Disposition
 
 The author, 2026-09-04, on the alignment page, queued from the sitting on author-questions:
 > - To avoid confusion, the kickback feedback text input only needs to be displayed when the kickbox option is selected. Otherwise kickback text input is discarded.
+
+## Facts
+
+### answer
+
+No option is recommended yet: this node stands at the periagogic stage and its
+own sitting has not been held. One option is recorded, from a sibling's sitting.
+
+#### the-control-asks-for-the-change-by-name
+
+The kick-back's feedback control asks for the change the author wants and not
+only for what the options miss. Recorded from
+`commons.systems/disposition-graph/where-a-change-request-goes`, whose answer of
+2026-09-06 routes every change request to this control and therefore needs it to
+say so; that answer names the requirement and does not amend the clause, because
+the kick-back's marking and the wording of its control are this node's question.
+A ruling here is what would make it. Against it: the control's ask is what tells
+the author what the movement is for, and asking for two things in one label is
+how a control stops saying either.
+
+### authority
+
+No recommendation yet, for the same reason.
 
 ## Account
 
@@ -44,3 +84,13 @@ is this node's question and is not settled here: the author's words say the text
 is discarded, the script's comment says a draft should survive, and the two meet
 only in the case neither of them names. Recorded before the periagoge, so that
 the author reads the page knowing what it does with what they type.
+
+### An option recorded from a sibling's sitting, 2026-09-06
+
+`where-a-change-request-goes` recommends that every request to change what is
+recommended go to this control, on the fact it bears on. Its reading of
+2026-09-06 found that its draft had also widened this control's ask inside a
+proposed amendment to `alignment-page`, which reaches a clause this node owns and
+which that node had itself declined to amend elsewhere in the same draft. The
+requirement is recorded here as an option instead, so that a ruling on the
+routing does not carry a ruling on this control's wording with it.

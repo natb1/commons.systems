@@ -56,9 +56,9 @@ review:
   verdict: kickback
   strength: moderate
   date: 2026-09-06
-  of: 34d2c5f3dd9e5c6b1b22416818222a209a848297
-  commit: f16442305e5bf2f15c484bd6b55074390fc10095
-  against: "The draft's one ground that does not rest on the author's authority is the pin dilemma, and the node it cites for it has already resolved it. `recording`'s recommended text pins `of` \"to the recommendation as those edits leave it, since the text the ruling stands on is the author's own and a pin that named the text they superseded would flag every clerical edit for good\", and where the edit changes substance it sets the node back to review before the re-confirmation, so neither of the two fictions the draft names is what the record would actually store. The draft's claim that \"the pin can name the text the author read or the text after their edit and one of the two is always a fiction\" is asserted against that stated resolution without quoting or answering it, and `edit-pins-what-the-author-read` is a delta option the AI raised, not a standing objection of the record's. Strip the pin argument and the answer rests on a single parenthesis about a page's text input, read as closing one of the three responses the record opens everywhere, at the price the fact's own `against` names: the cheapest correction on the page becomes the most expensive act on it."
+  of: a8bdef71a269201e01c3db903ce893274cd8455d
+  commit: 55c98d1035af1782563a6b14b356d78f49734218
+  against: "The answer routes the cheapest class of author feedback through the most expensive path the record has, and it understates that price in the sentence where the author would look for it. A kick-back on one fact moves the whole node, so an author who wants one word changed loses the ruling they were ready to give, returns the node to the maieutic movement, buys a re-drafted recommendation, buys a clean-context re-reading of it — which `recording`'s `per-fact-after-two-readings` requires before any ruling is recorded — and then gives the confirmation they were already giving; under the incumbent the same correction costs a keystroke, and where it is not substance, nothing more. The answer's defence is that the pin cannot honour an edit, and that defence fails at the record: `recording`'s recommended text already pins `of` to the recommendation as the edits leave it, on the ground that the text the ruling stands on is the author's own, and sends the node back to review only where the edit changes substance. Strip the pin argument, as the account says has already happened and the text does not, and the whole reach past the page rests on one parenthesis in a note about a text input, read as closing one of the three responses the record opens everywhere."
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:
@@ -71,234 +71,142 @@ The author, 2026-09-04, on the alignment page, queued from the sitting on author
 
 ## Answer
 
-In the kick-back's feedback control, and nowhere else on this page.
+The option's own text control holds the author's reason for their choice and
+nothing else, and its label says so: it asks for the reason, says it is optional,
+and names no edit. Every request to change what is recommended goes to the
+kick-back's feedback control, on the fact it bears on, and that control asks for
+the change and not only for the ground of the refusal.
 
-The option's own text control stays where the author put it, in the option's
-details, and it holds one thing: their reason for choosing that option, the
-`reason` a ruling carries in the dialogue node's recommended text, why they chose
-as they did, in their own words and optional. The reason sits on the option
-because the choice does. Its label asks for that reason, says that it is
-optional, and names no edit, because a label that names an edit solicits one, and
-what is written in that control arrives attached to a confirmation. The control is
-not a second channel into the record and it is not a place to say what should have
-been recommended: it is the ruling's own field, filled at the moment of ruling,
-and it says why the author confirmed and never what they would have confirmed
-instead.
+So the page offers two of the three responses the record opens. An author who
+wants an option changed denies it with feedback and the node returns to the
+maieutic movement, where the options are drawn again from what they wrote. There
+is no control on this page that stages a confirmation with edits.
 
-A change the author wants made is recorded in the kick-back's feedback control, on
-the fact the change bears on, and that control asks for the change by name and not
-only for the ground of the refusal, because the one control on the page that
-collects a change request has to say that it takes them or the author will look
-for another. A change to the recommended text is a change to what the answer fact
-recommends and is recorded on that fact; a change to the class a ruling would
-confer, on the authority fact; and so for each, since every response on this page
-is given on a fact and a change is a response.
+That is what this answer decides and the limit of it. What a session does with
+words that amend an option, wherever they are written, is
+`commons.systems/disposition-graph/recording`'s: that node recommends
+`per-fact-after-two-readings`, under which such words are edits and are applied
+with the ruling, and it carries the contrary option
+`edits-only-through-the-kick-back`, whose own prose says it waits on this
+sitting. Where the author rules that option the words are classified as the
+denial they make; until they do, this answer says only that the page offers no
+route for them. And whether the third response survives at all is
+`unanswered`'s, whose roster it is, and which carries
+`two-responses-where-the-page-offers-them` for that ruling.
 
-The two cannot share a control, and the reason is the pin rather than the label. A
-ruling is written on the option the author chose and pins the recommendation they
-answered, so a ruling recorded on a text amended in the same breath pins one of two
-things and neither is true: the text the author read, which the record then shows
-as moved for a change the author themselves asked for, or the text after the edit,
-which attests a reading the author never made. There is no third pin. The record
-already holds that dilemma, on the recording node, where `edit-pins-what-the-author-read`
-stands against that node's recommended text and neither side of it is satisfying
-while an edit rides on a confirmation. This answer dissolves it rather than
-choosing a side: a change is not a confirmation of anything. It is the author
-saying that what is in front of them is not what they would confirm, which is a
-denial with feedback, and the change is the feedback.
+The ground is the author's words of 2026-09-04 and the page's own shape, and it
+is no wider than that. The draft this answer replaces claimed a second ground,
+that a ruling pins the recommendation it answered so an edit inside a
+confirmation would pin either a reading the author never made or a text they
+replaced. `recording` has already resolved that: it "pins `of` to the
+recommendation as those edits leave it, since the text the ruling stands on is
+the author's own and a pin that named the text they superseded would flag every
+clerical edit for good." There is no dilemma and no third pin, and the claim is
+withdrawn rather than restated.
 
-So of the three responses the unanswered node opens, this page offers two and adds
-none: the confirmation, and the denial with feedback. The third, the confirmation
-with edits, has no control here. This answer holds further that it has no home
-anywhere, on the page or in prose, because a change requires a kick-back wherever
-it is given and nothing about that turns on which surface it was given from; but
-the roster of responses is the unanswered node's answer and the classification of
-a response is the recording node's, and authority does not widen on the way down,
-so the striking is theirs to rule and not this node's. The consequence is recorded
-as an option on each, `edits-only-through-the-kick-back` already standing on the
-recording node's answer fact from these same words. Until they rule, what this
-node fixes is the page, and on the page the third response has no control.
-
-A label is not a guarantee, and the answer says what happens when it is ignored.
-Text written in an option's control that amends the option rather than explaining
-the choice is no confirmation and the page does not stage it as one, since no
-control here offers an edit. What the session then does with such words is
-`commons.systems/disposition-graph/recording`'s and not this answer's: that node
-recommends `per-fact-after-two-readings`, under which they are edits and are
-applied with the ruling, and carries the contrary option
-`edits-only-through-the-kick-back`, which says in as many words that it waits on
-this sitting. Where the author rules that option, the words are classified as the
-denial they make and carried as its feedback; until they do, this answer says
-only that the page offers no route for them and leaves the classification where
-it lives. The label is
-what keeps the case rare; the classification is what keeps it safe; and the page
-converts nothing silently, since a control that turned a confirmation into a
-denial on its own would be deciding the response instead of collecting it.
-
-What this costs the author is the ruling they were ready to give on that fact, and,
-because a kick-back on one fact moves the whole node, the node's stage with it;
-what it does not cost is a redrawing. The kick-back row is typed to the maieutic
-movement, and where the author's feedback supplies the refinement itself the
-session moves the recommendation and the node reaches the review stage from there,
-as the recording node's classification has it, so the price of a wording change is
-one further confirmation and not a second interview. Nothing new is transported
-back either: the instruction the page emits already hangs the author's words on
-the response they were written under, the option's name or the kick-back, so a
-reason and a change request are told apart by the control they were written in,
-and the ruling-transport node's rule that every route emits one and the same text
-is untouched.
-
+What the answer costs is that the cheapest correction becomes the most expensive
+act. An author who would have written "confirm, with this word changed" must now
+deny the option, and the node goes back to the maieutic movement, is redrawn, and
+buys a clean-context reading of the moved recommendation before it returns for
+confirmation. That is a reading and a further confirmation, not a second
+interview, and it is the price of a record in which a confirmation confirms a
+text the author has read as it stands.
 
 ## Rationale
 
-Recorded on the author's disposition of 2026-09-04, queued from the sitting on
-`commons.systems/disposition-graph/author-questions` and carried under
-`## Disposition`:
+The author, 2026-09-04, on the alignment page: "text input in option details is
+only for author reasoning, not for 'changes you want made'. All change requests
+are recorded in the kickback input only (any changes will necessarily require a
+kickback)."
 
-> text input in option details is only for author reasoning, not for "changes you
-> want made". All change requests are recorded in the kickback input only (any
-> changes will necessarily require a kickback).
+The parenthesis is what the answer rests on, and the sentence before it is what
+the answer implements. The record's own reasoning ran the other way until this
+sitting: `alignment-page` had put the author's edits on the option they edit,
+"which is where an edit belongs", and had removed the older ruling-on-the-whole
+on the strength of it. The author's words say that an edit is not a confirmation
+at all, and once that is granted, an edit riding on a confirmed option is a
+confirmation the record cannot honour and the page must not offer it.
 
-The sentence has three parts and the answer takes all three. "In option details"
-keeps the control where it is. "Only for author reasoning" narrows it to the
-`reason` a ruling already carries. "In the kickback input only" names the one home
-of a change request. The parenthesis is what carries the answer past the page:
-if any change requires a kick-back, then a change is a denial, and a confirmation
-with edits is a response the record cannot honour rather than a shape of the page
-that could be drawn differently. The record's own ground for the same conclusion is
-in the recording node's `edit-pins-what-the-author-read`, where a ruling's pin can
-name the text the author read or the text after their edit and neither is a true
-account of what they confirmed.
-
-The reach is bounded by where authority lies. What the page offers is the
-`alignment-page` node's, devolved here; the roster of responses is
-`commons.systems/disposition-graph/unanswered`'s answer, and how a response given
-in prose is classified is `commons.systems/disposition-graph/recording`'s. This
-answer states the consequence for both and rules neither: the recording node
-already carries `edits-only-through-the-kick-back` from these same words, and the
-unanswered node takes the matching option, each for the author's own ruling.
-
+What the answer beat is on the fact: `edits-ride-on-the-option`, the incumbent,
+which the author's words strike; `label-only-change`, which closes the channel
+behind a new label and leaves the session doing the same thing with the words;
+and `a-dedicated-change-request-control`, which is a third control where the
+kick-back already is one.
 
 ## Facts
 
 ### answer
 
-Recommended: `change-requests-go-to-the-kick-back`, at moderate boldness. Both
-halves of the author's words of 2026-09-04 are load-bearing and they point the
-same way. The affirmative half places the reason in the option's details and keeps
-it there, which is where the dialogue node's recommended text already puts it, on
-the option, because that is where the choice is; so the control is not removed,
-it is narrowed to the field it was always filling. The parenthesis, that any
-change will necessarily require a kick-back, is what reaches past the label, and
-the record has an argument of its own for it that does not rest on the author's
-authority: a ruling pins the recommendation it answered, and an edit applied
-inside a confirmation leaves the pin naming either a text the author never read in
-final form or a text they read and then replaced. The recording node holds both
-sides of that dilemma already, as `edit-pins-what-the-author-read` against its own
-recommended text, and neither side is satisfying, which is the signature of a
-question posed wrongly. Treating a change as a denial dissolves it: nothing is
-pinned because nothing is ruled, and the author's words become the feedback the
-next draft is drawn from. The boldness is moderate rather than low because the
-reach is the AI's: the author wrote about a text input, and this answer reads them
-as closing a response, which is a larger claim than the sentence makes on its
-face; it is not high, because the locus, the label and the routing are the author's
-words nearly verbatim and only the consequence is inferred. What the answer
-declines to do is strike the third response itself. The roster is the unanswered
-node's and the classification is the recording node's, authority narrows on the
-way down and never widens, so the consequence is recorded as an option on each and
-the author rules it there.
+Recommended because the author's words say it and the page can do it without
+deciding anything else. The option's control keeps the ruling's reason, which
+`dialogue` already provides for on the ruling itself; the kick-back's control
+gains the change request, which is what the author's parenthesis makes it; and
+the confirmation with edits loses its home on the page without losing its place
+in the record, which stays `unanswered`'s to rule and `recording`'s to classify.
+
+Boldness moderate, and the reason is the reach rather than the routing. The
+routing is the author's own sentence. What is not theirs is the reading that a
+response class the record opens may have no control on the one surface where the
+author rules, and that reading is what the fact's `against` argues with.
 
 #### edits-ride-on-the-option
 
-The incumbent, and the only whole alternative on this fact: the option's control
-takes the author's reason and any edits they want made, a confirmation with text
-that amends the option is applied and recorded as the ruling, and the node returns
-to the review stage where the edits change substance. It is the clause the parent's
-recommended text carries in three places today and it is on this list because a
-ruling that keeps it is a ruling the author is entitled to give. Passed over: the
-author's words of 2026-09-04 close exactly this channel, and independently of them
-it makes a ruling attest a text nobody confirmed, since the pin can name the text
-the author read or the text after their edit and one of the two is always a
-fiction. Its own strongest defence is cheapness for a small correction, and the
-recommended option answers it: the refinement moves the recommendation and reaches
-the review stage, so the correction costs a clean-context re-reading of the moved
-recommendation and one further confirmation, and not a
-redrawing.
+Everything the recommended option says, reversed: the option's control keeps its
+label naming edits, an edit written there is a confirmation with edits, and the
+session applies it and records the ruling. This is `alignment-page`'s incumbent
+and the record's position before 2026-09-04. Passed over: the author's words
+strike it by name, and it makes a confirmation carry a text the author confirmed
+in the same breath as changing it.
 
 #### label-only-change
 
-Everything the recommended option says, with the change stopping at the label: the
-option's control is relabelled for the reason alone, and the responses, the
-classification and the parent's other two clauses are left as they stand. Passed
-over: the words in the box are not what carries an edit into the record, the
-classification is, and under this option a change written in the reason box is
-still a confirmation with edits, applied and ruled. It renames the channel the
-author asked to close and leaves it open, which is the worse of the two states,
-because the page would then say one thing and the record do another.
+Everything the recommended option says, with the label alone rewritten and the
+routing unchanged: the control stops naming edits and the session goes on
+classifying whatever is written there as `recording` says. Passed over: it
+closes the channel in the wording and leaves it open in the record, which is the
+appearance of the author's instruction rather than the instruction.
 
 #### a-dedicated-change-request-control
 
-Everything the recommended option says, with a third control beside the fact's
-options, neither a confirmation nor a kick-back, taking a change the author wants
-made without denying anything. Passed over: it is the confirmation with edits under
-another name, so every argument above tells against it; and where it is not, it is
-a second box for words that are not a ruling, duplicating the kick-back's, which
-the author's words already name as the one home. The record has no response it
-would express, and the unanswered node's answer says no fourth response is needed.
+Everything the recommended option says, with a third control for a change
+request, distinct from the reason box and from the kick-back's feedback. Passed
+over: the kick-back's control already is that control under this answer, and a
+third one would ask the author to distinguish a change from a denial when the
+author's own words say a change is a denial.
 
 #### reason-goes-to-the-interview-too
 
-Everything the recommended option says, with the option's text control removed
-altogether and the author's reason given in the `/align` interview like every
-other word of theirs, on the author's rule of 2026-09-06 that the page's scope is
-the final confirmation and all other information comes from the interview. Passed
-over: the reason is not other information, it is part of the confirmation, the
-field the ruling carries beside the response and the date, so removing it takes
-something out of the page's own scope; and the author's words of 2026-09-04 say in
-as many words that the option's text input is for their reasoning, which is the
-affirmative half of the disposition this node rests on.
+Everything the recommended option says, with the option's reason box removed as
+well, so the page takes the ruling and nothing else and every word of the
+author's is given in the interview. Passed over: the reason is part of the
+ruling, `dialogue` carries it on the ruling itself, and a reason given anywhere
+but beside the choice it explains has to be re-attached by hand.
 
 #### one-reason-box-per-fact
 
-Everything the recommended option says, with one reason control beneath the fact's
-options rather than one inside each option's details. For it: with a box per
-option, a reason typed under option A and then a choice of option B leaves the
-words unread, since the staging reads the chosen option's box, and a single box
-per fact has no such trap. Against it, and decisive: the author's words place the
-input in the option details, "text input in option details is only for author
-reasoning", and the reason belongs to the option because the choice does. Viable
-and not recommended; if the author wants the trap closed without moving the
-control, that is the discard question the `when-the-kickback-feedback-shows` node
-is already looking at from the other side.
+Everything the recommended option says, with one reason control on the fact
+rather than one on each option. Viable and not adopted: it is fewer controls and
+the reason attaches to the ruling either way; against it, the author writes the
+reason while reading the option they are choosing, and a box that is not beside
+that option asks them to name it again.
 
 #### change-request-typed-to-review
 
-Everything the recommended option says, with a kick-back whose feedback is a
-change request typed to the review movement rather than to the maieutic, on the
-ground that a refinement does not ask for the options to be drawn again. Viable
-and not recommended: the recording node's `denial-typed-to-maieutic` types the row
-and not its contents, and re-typing the row by what the author wrote puts the page
-in the business of classifying, which is the session's; and the outcome is already
-reached, since a refinement moves the recommendation and the node arrives at the
-review stage from the maieutic as any moved recommendation does. The two differ in
-the stage's name and in nothing an executor would do, which is the same finding
-the recording node made against `refinement-re-enters-at-review`.
+Everything the recommended option says, with a change request returning the node
+to the review stage rather than the maieutic. Viable and not adopted: where the
+author's words amend the text rather than reject its ground, the maieutic
+movement redraws what did not need redrawing. Against it, `recording`'s
+`denial-typed-to-maieutic` types the kick-back to the maieutic and this answer
+does not reach that clause.
 
 #### edit-applied-and-held-until-the-re-reading
 
-Everything the recommended option says, with the confirmation with edits surviving
-as a response and the ruling held: the session applies the edit, the re-reading
-runs on the edited text, and the ruling is recorded only when that reading forwards
-it, so no pin ever names a text the author did not see in its final form. This is
-the shape the unanswered node's answer already carries and the recording node
-records as `edit-held-until-re-read`. Viable and not recommended: it cures the pin
-and keeps the channel the author asked to close, which is the half of the
-disposition that decides this node; and it makes the author's ratification wait on
-a step in producing a draft they have replaced, which is the reasoning the
-unanswered node used against holding a child's ruling. It is on the list because
-it is the strongest version of the incumbent and the author should meet it before
-closing the response.
-
+Everything the recommended option says, with the edit applied to the option and
+the ruling held until the re-reading returns, rather than the node kicked back.
+Viable and not adopted: it is the cheapest path for a small change and keeps the
+author's words as an edit rather than a denial. Against it, it is the
+confirmation with edits under another name, and it holds a ruling the author has
+given, which `recording` says is never done.
 
 #### kick-back-ask-unchanged
 
@@ -306,35 +214,27 @@ Everything the recommended option says, with the kick-back's own control left
 exactly as it is: the routing changes, the option's label stops naming an edit,
 and the feedback control goes on asking for what the options miss rather than
 also asking for the change by name. It is the counterpart on the kick-back of
-`label-only-change` on the option, and it exists so that the author can rule the
-routing without ruling anything about a control whose wording is
-`when-the-kickback-feedback-shows`' question. Against it: a channel that is the
-only home for a change request and does not say so is a channel the author has to
-be told about somewhere else, and the page is where they are.
+`label-only-change` on the option, and it lets the author rule the routing
+without ruling on a control whose wording is `when-the-kickback-feedback-shows`'
+question. Against it: a channel that is the only home for a change request and
+does not say so is a channel the author must be told about somewhere else.
 
 ### authority
 
-Ratified, at low boldness. `class-recommendation`'s test asks whether being wrong
-would be expensive, irreversible, or capture-shaped, and the limb this node meets
-is capture-shaped. The answer fixes the channel through which the author tells the
-AI that its draft is not what they would confirm, and under any class but ratified
-the party setting that channel is the AI, which is precisely the party the channel
-exists to check. The answer also narrows the author's responses from three to two
-on the page and asks the record to strike the third everywhere; a narrowing of the
-ways the author may dissent, proposed by the party dissented from, is the shape the
-limb names whatever its merits, and the merits are what the author should get to
-weigh. The other two limbs are not met and the reading says so: a label and a
-routing between two controls are cheap to change, nothing is built on them that
-cannot be taken back, so neither expensive nor irreversible carries this
-recommendation and neither is claimed. Delegated would leave the wording and the
-routing of the author's own dissent channel in the AI's hands, which is the one
-class of decision a delegation here cannot cover. Deferred is on the fact because
-the record's classes are three and the author's third exit stays open; it is what
-they take if they want this answer to act while the question stays in front of
-them, and it is the reasonable choice if they read the reach past the page as the
-only contested part. Boldness low because the class follows the stated test rather
-than the AI's judgment of this node alone.
+Ratified, on the capture-shaped limb of `class-recommendation`'s test. The other
+two are not met: the object is which control holds which words, which costs a
+projector change to get wrong and can be changed back.
 
+The limb is met because the answer fixes the channel by which the author tells
+the AI that its draft is wrong, and the AI is the party being told. Narrowing the
+author's routes from three to two is a decision about how easily the author can
+contradict the recommending party, taken by the recommending party. Low boldness:
+the routing is the author's own sentence and the class follows the stated test.
+
+Against it: the reach past the page is what a ruling here would ratify, and the
+author's words are about a text input; `deferred` would let the page change while
+the roster question stays open on `unanswered`, which is where the contested part
+actually lives.
 
 ## Account
 
@@ -364,99 +264,35 @@ to the responses sentence instead.
 
 The clean-context reading is owed before the author rules.
 
-### What a ruling here would do to the parent's recommended text
+### What a ruling here would reach in the parent, 2026-09-06
 
+The proposed amendment this account carried is withdrawn, as it is on the two
+sibling nodes and for the same reason: it restated this answer in the parent's
+words, and two of the three blocking findings of the reading of 2026-09-06 were
+in it rather than in the answer, one of them an After text that decided
+`recording`'s question inside the parent's fence against this answer's own
+reservation. Its line anchors were stale twice over. A child's account is not
+where a parent's text is drafted.
 
-All line numbers are `disposition/disposition-graph/alignment-page.md` on the
-`disposition` ref as re-measured on 2026-09-06 after the day's landings; the
-fence runs 498-568 and each quoted
-clause is verbatim from it. Four amendments to the answer, one bookkeeping
-sentence in the fence's rationale, two clauses declined.
+The clauses a ruling here reaches, quoted from `alignment-page`'s recommended
+text and located by their words:
 
-#### Amendment 1 — line 497, the last item of the drill-down list
+- The drill-down's control, "a text control for the author's reason for choosing
+  it and for any edits they want made to it", where the edits go.
+- The responses sentence, "choosing an option and writing in its text is a
+  confirmation with text, which the session classifies as the recording node
+  classifies every response given in prose", whose second half is `recording`'s
+  and stays theirs.
+- "The ruling on the whole, which used to stage the confirmation with edits by
+  itself, goes with nothing lost: the author's edits ride on the option they
+  edit, which is where an edit belongs", which this answer reverses.
+- The roster sentence, as to what the page offers and not as to what the record
+  opens, which is `unanswered`'s.
 
-**Before**
-
-> and a text control for the author's reason for choosing it and for any edits they want made to it.
-
-**After**
-
-> and a text control for the author's reason for choosing it and for nothing else, holding the `reason` a ruling carries, its label asking for that reason, saying it is optional, and naming no edit, since a label that names an edit solicits one and what is written there arrives attached to a confirmation.
-
-#### Amendment 2 — line 511, first sentence
-
-**Before**
-
-> A response is one of the three the unanswered node opens and this page adds none, and every response is given on a fact, since nothing on the page stages a ruling on the node as a whole.
-
-**After**
-
-> A response is one of those the unanswered node opens and this page adds none; of the three that node opens the page offers two, the confirmation and the denial with feedback, and the confirmation with edits has no control here, for the reason below, whether it survives on that node's roster at all being that node's ruling and not this one's. Every response is given on a fact, since nothing on the page stages a ruling on the node as a whole.
-
-#### Amendment 3 — line 511, the responses sentence
-
-**Before**
-
-> Choosing an option on a fact and leaving its text empty is a confirmation of that option; choosing an option and writing in its text is a confirmation with text, which the session classifies as the recording node classifies every response given in prose, a reason recorded with the ruling where it is a reason, and a confirmation with edits where it amends the option, applied and recorded as the ruling, the node returning to the review stage where they change substance, as the recording node's `per-fact-after-two-readings` says of a confirmation with edits; the kick-back on a fact is a denial with feedback on that decision.
-
-**After**
-
-> Choosing an option on a fact is a confirmation of that option, and what the author writes in that option's text control is the reason the ruling carries and never a change they want made; the kick-back on a fact is a denial with feedback on that decision, and its feedback is where every change request on this page is recorded, the control asking for the change by name and not for the ground of the refusal alone. Text written in an option's control that amends the option rather than explaining the choice is no confirmation and is not recorded as one: the session classifies it as the recording node classifies every response given in prose, and classifies it as the denial it is, carrying the author's words as the feedback and saying which reading it took in the turn it takes it, since the label is what keeps the case rare and the classification is what keeps it safe.
-
-#### Amendment 4 — line 511, the "ruling on the whole" sentence
-
-**Before**
-
-> The ruling on the whole, which used to stage the confirmation with edits by itself, goes with nothing lost: the author's edits ride on the option they edit, which is where an edit belongs.
-
-**After**
-
-> The ruling on the whole goes and what it used to stage goes with it: no control on this page stages an edit, because a ruling recorded on a text amended in the same breath pins either a reading the author did not make or a text they did not confirm, and a page offering one would be offering an act the record cannot honour.
-
-#### Amendment 5 — line 536, appended to the fence's `## Rationale`
-
-Bookkeeping, in the form the two amendments already recorded there take.
-
-**Appended after** "…and what an earlier stage offers is the chip's two controls and the preview."
-
-> Amended again 2026-09-06 on the author's words of 2026-09-04 that the option's text input is for their reasoning and not for changes they want made, and that any change will necessarily require a kick-back, as the `where-a-change-request-goes` node reads them: the option's control is the ruling's reason and its label says so, every change request is recorded in the kick-back's feedback, and the page stages no confirmation with edits.
-
-#### Declined — line 499, the kick-back's marking and its feedback control
-
-> It stays in the radio group … and it is marked as what it is: set apart from the options, captioned with what it does to the node rather than with the summary of an option it is not, and its feedback control opens with it at the first level rather than in a drill-down, since the words are what a kick-back consists of and what the dialogue resumes from…
-
-This answer adds a requirement on that control, that it ask for the change by
-name. The clause is not amended here. The decision it takes is the row's marking
-and the control's placement, which the parent has devolved to
-`commons.systems/disposition-graph/when-the-kickback-feedback-shows`, not to this
-node; the parent's own account of what the kick-back's words are is where the new
-requirement would land, and adding it at 499 would have this node writing into a
-sibling's clause. The requirement is carried in Amendment 3 instead, in the
-responses paragraph, which is a clause the parent's account devolves here and
-which is where the page's routing of responses is stated. If the main thread
-judges that 499 must say it too, the sentence belongs to
-`when-the-kickback-feedback-shows` and should be recorded as an option there.
-
-#### Declined — line 505, "the applied text read afterwards as an author's edit is"
-
-> …the session applying the sentence's change to the recommended text, the applied text read afterwards as an author's edit is and the choice keeping its authority meanwhile.
-
-The simile survives this answer and needs no amendment: an author's edit still
-exists, still arrives, and is still read again where it changes substance; what
-changes is only the response it arrives under, from a confirmation to a kick-back.
-The clause's own subject, what happens when the session applies an option's
-sentence to the recommended text, is untouched.
-
-#### What falls to the implementation, if the answer is ruled
-
-Named so the reconciliation is not discovered later, and deciding nothing:
-`OPTION_NOTE_PLACEHOLDER` at `packages/disposition/project.mjs:676`, today "Your
-reason, or the edits you want made", is the label Amendment 1 rewrites;
-`KICKBACK_PLACEHOLDER` at `:681`, today "What these options miss, and what the
-next ones are drawn from", is the ask Amendment 3 widens. Neither the staging
-script nor `alInstructionAll` needs a change: the instruction already hangs the
-words on the option's name or on "kick back", which is the distinction this answer
-draws.
+One clause this answer's requirement touches and a ruling here must not move: the
+kick-back's marking and its feedback control, which is
+`when-the-kickback-feedback-shows`' question. That the control must ask for the
+change by name is recorded there as an option and not amended here.
 
 ### Clean-context review, 2026-09-06, of 34d2c5f3
 
@@ -522,3 +358,54 @@ the clean-context re-reading a moved recommendation buys, which is the cost the
 fact's own `against` turns on; and `kick-back-ask-unchanged` goes on the fact, so
 the author can rule the routing without ruling on a control whose wording belongs
 to `when-the-kickback-feedback-shows`.
+
+### Clean-context review, 2026-09-06, of a8bdef71
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `change-requests-go-to-the-kick-back`.
+
+Findings:
+
+- Facts (validation 3), blocking; a claim about the record that the record contradicts, on the sentence that carries the answer's reason. `## Answer` says "The two cannot share a control, and the reason is the pin rather than the label", then "a ruling recorded on a text amended in the same breath pins one of two things and neither is true: the text the author read ... or the text after the edit, which attests a reading the author never made. There is no third pin." There is a third pin and the record names it: `commons.systems/disposition-graph/recording`'s recommended text, in its `**The edit.**` paragraph, "pins `of` to the recommendation as those edits leave it, since the text the ruling stands on is the author's own and a pin that named the text they superseded would flag every clerical edit for good", and where the edit changes substance it "sets the node to the review stage, because the text that now stands has had no reading". The draft's second horn is answered there in terms — the author is not attesting a reading of a text they wrote — and the draft neither quotes that clause nor answers it. `edit-pins-what-the-author-read` is not a standing objection of the record's either: it is a delta option, source `ai`, whose own subsection on `recording` closes "The recommended text takes the other side and lets substance, not the pin, decide what is read again." So the `### answer` reason's claim that "the record has an argument of its own for it that does not rest on the author's authority" and the `## Rationale`'s "The record's own ground for the same conclusion is in the recording node's `edit-pins-what-the-author-read`" are both unsupported. Edit: strike the independent ground and rest the routing where the account already says it rests, on the author's words of 2026-09-04 and the page's own shape; or quote `recording`'s clause and say why the third pin does not satisfy, and record the divergence on `recording` as an option. Because this changes the `### answer` reason, it moves the fact's pin, which is why it cannot ride on a forward.
+- Account, blocking; the section that answers the last reading states four repairs that are not true of the text in front of the author. "### The kickback answered, 2026-09-06" says "The counter-argument lands and the answer is narrower for it ... So the dilemma is not open and the answer rests on what it always rested on, the author's words and the page's own shape." The pin ground survives unaltered in four places: `## Answer` ("There is no third pin", and "neither side of it is satisfying"), `## Rationale` ("The record's own ground for the same conclusion is ..."), the `### answer` fact reason ("the record has an argument of its own for it that does not rest on the author's authority ... which is the signature of a question posed wrongly"), and Amendment 4's After text ("because a ruling recorded on a text amended in the same breath pins either a reading the author did not make or a text they did not confirm"). The same section's "the account's line anchors ... are re-measured" and "the price sentence now names the clean-context re-reading a moved recommendation buys" are likewise untrue (findings 4 and 5 below), and it opens "Six findings, no probes, all validated at their loci and all answered." Edit: apply the repairs, or withdraw the claims; an account that reports work not done is worse than one that reports the work as owed, because the author cannot check it from the page.
+- Doctrine and executor (validation 2), blocking; Amendment 3 contradicts the `## Answer` it implements. `## Answer` now conditions the classification correctly: "What the session then does with such words is `commons.systems/disposition-graph/recording`'s and not this answer's ... Where the author rules that option, the words are classified as the denial they make and carried as its feedback; until they do, this answer says only that the page offers no route for them and leaves the classification where it lives." But Amendment 3's After text, which is what a ruling here writes into `alignment-page`'s recommended text, is unconditioned: "Text written in an option's control that amends the option rather than explaining the choice is no confirmation and is not recorded as one: the session classifies it as the recording node classifies every response given in prose, and classifies it as the denial it is, carrying the author's words as the feedback ..." That decides `recording`'s question against `recording`'s own recommendation (`per-fact-after-two-readings`: "where they amend the option they are edits, and are applied to it", and "A confirmation with edits is a ruling like any other and is never held"), in the ancestor's own answer text, which is exactly what this node's reservation and its new `depends` entry exist to prevent. The last reading said so in terms — "Amendment 3 in the Account carries the same sentence into the parent's fence and moves with it" — and the amendment did not move with it. Edit: condition Amendment 3 in the same words the Answer uses ("where the author rules `edits-only-through-the-kick-back` on the recording node, the session classifies it as the denial it is; until they do, the page offers no route for such words and the classification stays where it lives"), or cut the second sentence and let Amendment 3 say only what the page does.
+- Facts (validation 3), line numbers; the fence range was corrected and the five anchors it contains were not. The Account says "All line numbers are `disposition/disposition-graph/alignment-page.md` on the `disposition` ref as re-measured on 2026-09-06 after the day's landings; the fence runs 498-568", and then anchors Amendment 1 at "line 497", Amendments 2, 3 and 4 at "line 511", Amendment 5 at "line 536", and the two Declined sections at "line 499" and "line 505". This is self-inconsistent on its face — 497 is outside a fence beginning at 498 — and every anchor is the pre-landing number the last reading already reported as +29 stale. Measured today at graph commit ec6e230094ea4d6c08916bb83a62b09e4d3ada6b: 497 and 511 and 536 are blank lines, 499 is the fence's own opening frontmatter delimiter `---`, and 505 is the frontmatter line `  - artifact: the alignment page, written by ...`. The correct anchors are 526 (the drill-down list item ending "and a text control for the author's reason for choosing it and for any edits they want made to it."), 528 ("The last row on every fact is the kick-back ..."), 534 ("The right-hand column is the disposition and nothing else ...", which carries the declined simile), 540 ("A response is one of the three the unanswered node opens ...", which carries Amendments 2, 3 and 4), and 565 (the fence's `## Rationale` paragraph ending "... and what an earlier stage offers is the chip's two controls and the preview."). Every quoted Before clause is verbatim and still present, so only the anchors are wrong. Edit: re-anchor to 526, 528, 534, 540 and 565, and pin the graph commit beside the date, since line numbers into a node that is itself on the frontier go stale between the sitting and the reading — which has now happened twice on this node.
+- Facts (validation 3), cost understated in the text that stands. `## Answer` still reads "the session moves the recommendation and the node reaches the review stage from there, as the recording node's classification has it, so the price of a wording change is one further confirmation and not a second interview." The re-reading is not named, though the fact's own passed-over reason on `edits-ride-on-the-option` now names it ("the correction costs a clean-context re-reading of the moved recommendation and one further confirmation, and not a redrawing"), and `recording`'s `per-fact-after-two-readings` is explicit that "no ruling is recorded on a recommendation of the AI's while either is owed". The sentence is the one the answer fact's own `against` turns on, so the understatement falls exactly where the author is being asked to weigh the cost. Edit: "so the price of a wording change is a clean-context re-reading of the amended draft and one further confirmation, and not a second interview".
+- Viability, on the one whole alternative. `edits-ride-on-the-option`'s passed-over reason, in the frontmatter and in its subsection, rests on the ground finding 1 removes: "it makes a confirmation carry a text the author did not confirm, and the pin can name only one of the two", and in prose "since the pin can name the text the author read or the text after their edit and one of the two is always a fiction". The incumbent may still be dominated — the author's words of 2026-09-04 close the channel in as many words, and that half of the reason stands alone — but as written the record's single whole alternative is passed over on an argument the record contradicts, which is the one place a wrong reason costs the author a ruling they might have given. Edit: rewrite both the frontmatter `reason` and the subsection to rest the domination on the author's words, and say what `recording`'s third pin gives the incumbent that this answer does not.
+- Cross-reference. This node's `depends` now names `commons.systems/disposition-graph/recording#edits-only-through-the-kick-back`, and that option's own subsection on `recording` says "It is not recommended here, and the reason is that the sitting the author queued for those words, `commons.systems/disposition-graph/where-a-change-request-goes`, has not yet been held". The sitting has now been held, so that sentence is stale, and with the classification sentence conditioned the dependency no longer protects anything: each text now points at the other as the one that must move first, which is the loop `dialogue`'s `every-part-in-the-record` says is "a finding and one side of it is dropped". Edit: drop this node's `depends` entry, since the conditional sentence acts whichever way `recording` rules; and, as a finding for that node rather than an edit made here, `recording`'s option prose is owed the amendment that the sitting was held on 2026-09-06 and what it concluded.
+- Placement, a finding about another node and not an edit here. Amendment 3 adds a requirement to the kick-back's own control — "its feedback is where every change request on this page is recorded, the control asking for the change by name and not for the ground of the refusal alone" — and the Account's "Declined — line 499" section already admits that the control is the parent's devolution to `commons.systems/disposition-graph/when-the-kickback-feedback-shows`, saying the sentence "belongs to `when-the-kickback-feedback-shows` and should be recorded as an option there" only if the main thread judges 499 must say it too. The requirement reaches that control through Amendment 3 whether or not 499 says it, and that node stands at the periagogic stage carrying no facts, so nothing there will meet it. `kick-back-ask-unchanged` lets the author rule the reach away from this side, which is right, but the positive side is unrecorded on the node that owns the control. Propose on `commons.systems/disposition-graph/when-the-kickback-feedback-shows` an option named `the-ask-names-a-change-request`, source `commons.systems/disposition-graph/where-a-change-request-goes`, carrying: "The kick-back's feedback control asks for the change the author wants made by name, and not only for what the options miss, because it is the one control on the page that collects a change request and a channel that does not say it takes them is a channel the author looks past. `KICKBACK_PLACEHOLDER` at `packages/disposition/project.mjs:681`, today 'What these options miss, and what the next ones are drawn from', is what the requirement rewrites."
+
+On the facts and what they recommend: The answer fact recommends `change-requests-go-to-the-kick-back`, which is also `stands`, so there is correctly no `## Recommendation` fence and the draft is the node as it stands; nine options are listed, five passed over with reasons, and moderate boldness is right, since the locus, the label and the routing are the author's words nearly verbatim while the reach past the page to what a response is belongs to the AI. The authority fact recommends `ratified` at low boldness with the written `### authority` reading `class-recommendation` requires, and capture-shaped is the correct limb — the answer narrows the channel by which the author tells the AI its draft is not what they would confirm, and the party proposing the narrowing is the party dissented from; the reading correctly disclaims expensive and irreversible rather than claiming all three. No `existence` or `persistence` fact is owed, since no prune is proposed and the node's shape does not change. The standing review pin (kickback, of 34d2c5f3) is stale by design, being the pin of the reading this draft answers; but findings 1, 5 and 6 change the `## Answer` and the `### answer` reason, both of which the fact's pin covers, so no forward pin may be written before they are applied.
+
+On the viability of the options: Every option on the answer fact is viable on its facts and the set now covers the space: the incumbent `edits-ride-on-the-option` and its strongest form `edit-applied-and-held-until-the-re-reading`, the two half-measures `label-only-change` and `a-dedicated-change-request-control`, the two placements `one-reason-box-per-fact` and `reason-goes-to-the-interview-too`, the typing variant `change-request-typed-to-review`, and `kick-back-ask-unchanged`, which the last reading asked for and which is correctly on the fact so the author can rule the routing without ruling on a control that belongs to `when-the-kickback-feedback-shows`. The three vocabulary options on the authority fact are complete. No viable option is missing; what is wrong is a reason and not a list, as finding 6 says — the domination of the one whole alternative is argued on the pin ground the record contradicts, and it needs to be re-argued from the author's words before the author is shown it as passed over.
+
+Strongest counter-argument (moderate): The answer routes the cheapest class of author feedback through the most expensive path the record has, and it understates that price in the sentence where the author would look for it. A kick-back on one fact moves the whole node, so an author who wants one word changed loses the ruling they were ready to give, returns the node to the maieutic movement, buys a re-drafted recommendation, buys a clean-context re-reading of it — which `recording`'s `per-fact-after-two-readings` requires before any ruling is recorded — and then gives the confirmation they were already giving; under the incumbent the same correction costs a keystroke, and where it is not substance, nothing more. The answer's defence is that the pin cannot honour an edit, and that defence fails at the record: `recording`'s recommended text already pins `of` to the recommendation as the edits leave it, on the ground that the text the ruling stands on is the author's own, and sends the node back to review only where the edit changes substance. Strip the pin argument, as the account says has already happened and the text does not, and the whole reach past the page rests on one parenthesis in a note about a text input, read as closing one of the three responses the record opens everywhere.
+
+The session's reply: Accepted, and the second finding is the one that matters: the account said the counter-argument had landed and the ground had narrowed, and the pin ground survived verbatim in four places. That is the third node in this sitting whose account asserted a repair its text did not carry, and the remedy is the one taken on the other two rather than a fourth patch. The live sections are rewritten whole in one pass and the proposed amendment is withdrawn, since it restated the answer in the parent's words and was where two of the three blocking findings lived. On the substance the reading is right and the answer is smaller for it: `recording`'s recommended text pins `of` to the recommendation as the edits leave it, so there is no third pin and no dilemma, and the draft's claim to an argument that does not rest on the author's authority is struck rather than restated. What is left is the author's words and the page's shape, which is enough for what the page does and is not enough to close a response the record opens elsewhere; that consequence stays recorded on `unanswered` and on `recording` for their own rulings. The line anchors go with the amendment. The price sentence is corrected in the answer and not only in the account. And the reach into `when-the-kickback-feedback-shows` is recorded as an option there rather than carried silently in an amendment to a clause that node owns.
+
+### The second kickback, and the method changed, 2026-09-06
+
+Eight findings, three of them blocking, all validated at their loci. The second
+is the one that decided the remedy: the account of the first kickback said the
+counter-argument had landed and the ground had narrowed, and the pin ground
+survived verbatim in four places. That is the third node of this sitting whose
+account asserted a repair its text did not carry, so the live sections are
+rewritten whole in one pass and the proposed amendment is withdrawn, as on the
+two siblings.
+
+On the substance the reading is right and the answer is smaller. `recording`'s
+recommended text already pins `of` "to the recommendation as those edits leave
+it", so the dilemma the draft claimed as an independent ground does not exist,
+and the claim is struck rather than restated. What is left is the author's words
+and the page's shape, which is enough for what the page does and is not enough to
+close a response the record opens elsewhere; that consequence is on `unanswered`
+and on `recording`, for their own rulings, and this node's `depends` names the
+second.
+
+The rest: the price sentence now names the clean-context re-reading in the answer
+and not only in the account; the stale line anchors go with the amendment that
+carried them; the passed reason on `edits-ride-on-the-option` no longer rests on
+the contradicted pin ground; and the reach into
+`when-the-kickback-feedback-shows` is recorded as an option there rather than
+carried in an amendment to a clause that node owns.
