@@ -976,10 +976,13 @@ The survey's state on a node, `survey` with its `date` and its `of`, carries a
 third key, `commit`, the graph commit the survey read the graph at, written at
 apply as the draft reading's own `commit` is under `commit-in-the-review-block`.
 Recorded from the sitting on `frontier-consistency` of 2026-09-07, whose
-recommended text carries a node an earlier survey read on one line and a node
-minted since by what it answers, a condition the generator can take only from
-the commit the last survey read at against the commit that first carried the
-node. The survey of 2026-09-05 read the graph at `73e2a04f`, and the record
+recommended text carries a node on one line where its text, what the survey
+reads of it, stands as an earlier survey read it, and a node minted or amended
+since by what it answers, a condition the generator can take only by comparing
+that text as it stands against the same text at the commit the last survey read
+at; its first form on that node, drawn on the commit that first carried the
+node, was passed over the same day, and the key both forms ask for is this one.
+The survey of 2026-09-05 read the graph at `73e2a04f`, and the record
 holds that commit in the message of the commit that applied it and in no node,
 so the condition rests on a key the review block does not carry. It acts on
 nothing until ruled, and what a ruling would settle is the question
