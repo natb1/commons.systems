@@ -1,6 +1,6 @@
 ---
 question: What may the recorder do to the graph's topology without asking?
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -13,8 +13,14 @@ facts:
       - name: a-third-bound-for-open-business
         source: ai
         ref: "2026-09-07"
+      - name: deprecation-rather-than-deletion
+        source: review
+        ref: "2026-09-07"
+      - name: pruning-and-what-a-prune-needs
+        source: review
+        ref: "2026-09-07"
     recommends: delegation-with-two-bounds
-    boldness: low
+    boldness: moderate
     against: "The delegation's only stated limit excludes nothing in the record as it stands: no option on any node carries a ruling, so `may not prune something that is ratified` names an empty set, and the second bound, that anything of the author's be transferred first, is checked by the same session that wants the file gone. What a ruling would confer is deletion, which `commons.systems/disposition-graph/class-recommendation` names irreversible, on the party that also decides which node is redundant, which is the shape `segregation-of-duties` names. And the scope is the AI's: the author's words name a general delegation of graph topology and grant pruning under it, so which acts besides the prune that phrase covers is read off this answer and not off anything they said."
   - name: authority
     options:
@@ -31,6 +37,8 @@ review:
   of: 0ec4fd5aece448acbb12dc347279597100af8d55
   commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
   against: "One ruling on this fact confers, permanently and on the AI, the only power this record calls irreversible, and every guard offered against it is empty on the day it is given. The bound \"may not prune something that is ratified\" names an empty set -- no option on any node in the record carries a ruling -- and the bound requiring the author's words to be transferred first is checked by the same session that wants the file gone, as the fact's own `against` concedes; the scope the delegation runs over is drawn by the delegate, from a phrase the author used for something they believed already existed. What the delegation would reach first is not hypothetical: `commons.systems/disposition-graph/hexis` carries an existence fact recommending `prune` and sits at a row the author has not yet reached, so the first exercise of the power would delete a decision they were queued to make, and they would learn of it by the row's absence. And the discriminator that finds a node redundant is `probe-or-node`'s independence test, which that node's own `against` calls the AI's, \"drawn in one sitting from the failure the author named and ... not yet worn by use\" -- so this ruling would hand an untested test an unrecoverable remedy. The answer that meets all of this is deprecation rather than deletion, which the rationale names, declines to argue against, and does not put on the fact."
+depends:
+  - commons.systems/disposition-graph/recording#prune-of-an-unruled-node-needs-no-ruling
 form: rule
 under:
   - commons.systems/disposition-graph/authority
@@ -53,25 +61,48 @@ The author, 2026-09-07, asked the open probe on `commons.systems/disposition-gra
 
 ### answer
 
-`delegation-with-two-bounds` is recommended, at low boldness, because it is the
-author's own words with nothing added but the scope those words presuppose. What
-is theirs is the delegation, the two bounds, and the direction that a persistent
-disposition takes a node; what is the AI's is the reach of the phrase "graph
-topology", which the author used as a thing already granted and which no node of
-the record has ever stated, and the rule that the delegation acts from the ruling
-on this node's authority fact and not from the words alone. That second is not a
-qualification of the author's grant but the record's own machinery: `authority`
-holds that a node's class is read off the rulings on its facts and that a class
-the AI writes for itself is not a grant, so the author's words are what this node
-recommends and their ruling is what confers it. The case against is on the fact,
-and this answer does not meet it: the bound naming a ratified node excludes
-nothing in the record today, and the transfer bound is self-checked.
+`delegation-with-two-bounds` is recommended, at moderate boldness. What is the
+author's is the delegation itself, the two bounds, and the direction that a
+persistent disposition takes a node of its own. What is the AI's is the reach of
+the phrase "graph topology", which the author used as a thing already granted and
+which no node of the record has ever stated; the rule that the delegation acts
+from the ruling on this node's authority fact and not from the words alone; and
+the departure from `commons.systems/disposition-graph/recording`, that a prune
+taken under the delegation records no ruling before the deletion. The word
+"presuppose", which this reason carried until 2026-09-07, is struck: it made the
+AI's construction read as something the author's words supplied, and it
+contradicted this fact's own `against` three lines above. Boldness is a property
+of the whole recommended text and not of the clause whose provenance is best, and
+three of that text's four paragraphs are the AI's, which is what moderate
+records; the sitting reasoned the same way on
+`commons.systems/disposition-graph/probe-or-node` the same morning. The rule
+about the ruling is not a qualification of the author's grant but the record's
+own machinery: `authority` holds that a node's class is read off the rulings on
+its facts and that a class the AI writes for itself is not a grant, so the
+author's words are what this node recommends and their ruling is what confers it.
+The case against is on the fact, and this answer does not meet it: the bound
+naming a ratified node excludes nothing in the record today, and the transfer
+bound is self-checked.
+
+This node and `commons.systems/disposition-graph/probe-or-node`'s option
+`prune-delegated-with-two-bounds` are two homes for one delegation, and a ruling
+here is the choice of this home. That node's `depends` names this one, so the
+author meets this question first; a ruling for the option there would leave this
+node's question answered by nothing, and its existence fact would move to
+`prune`. What the author chooses between is two homes and not two delegations.
 
 `every-prune-asked-at-the-row` and `a-third-bound-for-open-business` are the AI's
-and are live. The first is the record as it stands and the narrower reading of
+and are live. The first is the record as it stands and the narrowest reading of
 what the author delegated; the second keeps the delegation and adds the bound the
 author's two do not supply, which is the one the record's only queued prune would
-need.
+need. `deprecation-rather-than-deletion` and `pruning-and-what-a-prune-needs` are
+the clean-context reading's of 2026-09-07 and are live too: the first changes
+what the delegated act is, so that it is reversible and
+`commons.systems/disposition-graph/class-recommendation`'s irreversible limb no
+longer fires; the second changes how far the scope reaches, delegating the prune
+the author named and what a prune's remedy needs and no more. The rationale
+argues against each, which is what the reading asked and what this answer
+previously owed.
 
 #### delegation-with-two-bounds
 
@@ -119,6 +150,41 @@ case against is that it hands back by a side door what the author gave — a
 recorder who wants a prune can leave a row standing and then read the row as the
 bound — and that the author said "otherwise" without qualification.
 
+#### deprecation-rather-than-deletion
+
+Within the topology scope the recorder deprecates rather than deletes. The node
+is marked as superseded with the survivor named, dropped from the browser, the
+alignment page and the frontier, and left in the tree; nothing the record holds
+is destroyed, and the delegated act is reversible, since a deprecation read back
+is undone by unmarking the node. What that buys is the strongest objection this
+fact records. `commons.systems/disposition-graph/class-recommendation` returns
+irreversible on a deletion — "Irreversible means it is not paid back at all: a
+deletion, a swap, a landing that other work is built on" — and an act that is
+paid back does not fire that limb, so the author's two bounds become belt and
+braces rather than the whole of the delegation's safety, and the objection that
+one ruling confers the only power the record calls irreversible falls away.
+Viable, and not recommended, for the reason the rationale now makes rather than
+owes: the deletion is already paid back where it must be, and a third state left
+in the tree is a cost every instrument and every rule about nodes pays forever.
+Raised by the clean-context reading of 2026-09-07, which named it the answer that
+meets its counter-argument.
+
+#### pruning-and-what-a-prune-needs
+
+The delegation is of the prune the author named, together with the minting and
+the edge-drawing a prune's remedy needs — the node the surviving question moves
+to, and the `under` edge that places it — and the rest of what "graph topology"
+might reach is left to be asked when something needs it. Three of the four acts
+the recommended answer lists have never been put to the author, and their words
+grant pruning "under general delegation of graph topology" without saying what
+else that phrase covers. Viable because it adds nothing of the AI's to what the
+author granted, and because a delegation is the one thing the record says only
+ever narrows on the way down, so the narrow reading is the one that cannot be too
+wide. Not recommended for the reason the rationale gives: the author's words name
+the general delegation as a thing they already hold, and a scope drawn narrower
+than their words reach is the AI narrowing a grant, which is a different act from
+reading one. Raised by the clean-context reading of 2026-09-07.
+
 ### authority
 
 `delegated`, at low boldness. What a ruling of `delegated` records is that the
@@ -157,7 +223,7 @@ The recorder shapes the graph and never decides its questions. The graph's topol
 
 Two bounds hold, and they are the author's own. A node the author has ruled is not the recorder's to prune: its answer is a thing the author committed to, and withdrawing a commitment is theirs. And anything the record holds as the author's on the node, their words above all, is transferred to another node before the file goes, so that a deletion never destroys something only the author could have given. To those the record adds what it already required of any prune and what this delegation does not touch: the survivor recorded on the node that keeps the question, the account folded into it, and the reason the question was closed written down before the file goes, so that a deletion is never the only record of itself.
 
-The delegation acts from the ruling on this node's authority fact and not before, and that is not a formality. A class is read off a ruling recorded on a fact; a delegation written into the prose of an answer is a class the AI wrote for itself, which the `authority` node says is not a grant. So until this fact is ruled `delegated`, a prune is asked where the record asks it today: the node's existence fact moves to `prune` with the reason it was found, and the author rules it at that node's own row, which is what `commons.systems/disposition-graph/frontier-consistency`'s sixteenth validation and the alignment skill's independence clause instruct, and those instructions stand unchanged until the ruling. What the ruling changes is one clause in each of them, and in the independence test's remedy on `commons.systems/disposition-graph/probe-or-node`, which cites this node rather than carrying the rule.
+The delegation acts from the ruling on this node's authority fact and not before, and that is not a formality. A class is read off a ruling recorded on a fact; a delegation written into the prose of an answer is a class the AI wrote for itself, which the `authority` node says is not a grant. So until this fact is ruled `delegated`, a prune is asked where the record asks it today, and taken where the author has already directed it: a prune the author has directed in their own words is taken on that word, since a grant given in the author's words acts by right while nothing in the record is ratified, which is the interim `commons.systems/disposition-graph/probe-or-node` states; and where no such word has been given the node's existence fact moves to `prune` with the reason it was found, and the author rules it at that node's own row, which is what `commons.systems/disposition-graph/frontier-consistency`'s sixteenth validation and the alignment skill's independence clause instruct, and those instructions stand unchanged until the ruling. What the ruling changes is one clause in each of them, and in the independence test's remedy on `commons.systems/disposition-graph/probe-or-node`, which cites this node rather than carrying the rule.
 
 Where a prune is taken under this delegation no ruling precedes the deletion, and that departs from `commons.systems/disposition-graph/recording`, whose answer requires that a ruling the node not exist be recorded before the node is deleted. The departure is recorded as an option on that node and is not adopted here in silence. What survives it is the reason that rule was given: the record keeps the reason a question was closed instead of losing it with the file, which the paragraph above requires whether a ruling was given or not.
 
@@ -169,9 +235,13 @@ Why a node and not a clause of the rule that needed it. `commons.systems/disposi
 
 Why the scope is drawn at shape and stops there. The delegation the author names is of topology, and what the record can hand over without handing over the dialogue is which questions the graph asks and how they nest; what it cannot hand over is any answer, since a class only ever narrows on the way down and a delegation over shape that reached substance would be widening it. The line is checkable: an act is a topology act if the record after it asks a different set of questions, and it is not one if the record after it gives a different answer to the same question.
 
+Why the whole of that scope and not the prune alone, which is the narrower answer on the fact as `pruning-and-what-a-prune-needs`. The author's words name a general delegation of graph topology as a thing they hold and grant the prune under it, so the phrase is theirs and its reach is what this node exists to state; a scope drawn narrower than their words reach would be the AI narrowing a grant it was given, which is a different act from reading one and is not the delegate's to take. The paragraph above argues where the outer edge falls, at the line between shape and substance, and this one says why the inner scope is not cut back further: because cutting it back is a decision about the author's grant, and the place for that decision is the author's ruling on the option, not the drafting of the answer.
+
 The first prune this delegation reaches is the one the independence test proposed on `commons.systems/disposition-graph/hexis`, whose existence fact has recommended `prune` since 2026-09-04 and which waits at its row. That is why the third option on this node's answer fact exists and why the author is shown it: the two bounds look at a node's history and neither reaches a node whose question is currently in front of the author.
 
-Readings owed under this node: `segregation-of-duties`, already held in this record, for the shape the fact's case against names, the party that finds the node redundant being the party that takes the file; `deprecation-not-deletion`, for the alternative to deleting at all, which this answer does not take and should say why; `ocap-attenuation`, adopted on `authority`, for the rule that a delegation passes on a strictly weaker reference, which is what confines this one to shape; and the distinction in administrative law between a power to organize and a power to decide, for the line this answer draws.
+Why deletion and not deprecation, which is on the fact as `deprecation-rather-than-deletion` and is the answer that would dissolve the case against this one. A deletion here is already paid back where it must be: the file stays in the ref's history, and before it goes the surviving node carries the question, the account folded into it, and the reason the question was closed, which the paragraph on the bounds requires of every prune; what a reader loses is a path, never the content, and the record's own test for irreversibility is whether the thing is paid back and not whether the file is still where it was. A deprecated node left in the tree is a third state, neither a node nor gone, and the parser, the browser, the alignment page, the frontier and the validator must each learn to skip it, so every rule the record states about nodes acquires an exception and every instrument acquires a branch. That is a standing cost paid on every node forever, to make reversible an act the author's own word, "prune", does not ask to be reversible. The option stays on the fact because the judgment that the history is enough is the author's to disagree with.
+
+Readings owed under this node: `segregation-of-duties`, already held in this record, for the shape the fact's case against names, the party that finds the node redundant being the party that takes the file; `deprecation-not-deletion`, for the alternative to deleting at all, which the paragraph above declines and says why and which stands on the fact as `deprecation-rather-than-deletion`; `ocap-attenuation`, adopted on `authority`, for the rule that a delegation passes on a strictly weaker reference, which is what confines this one to shape; and the distinction in administrative law between a power to organize and a power to decide, for the line this answer draws.
 ```
 
 ## Account
@@ -251,3 +321,71 @@ On the viability of the options: The three options listed are viable and none is
 Strongest counter-argument (strong): One ruling on this fact confers, permanently and on the AI, the only power this record calls irreversible, and every guard offered against it is empty on the day it is given. The bound "may not prune something that is ratified" names an empty set -- no option on any node in the record carries a ruling -- and the bound requiring the author's words to be transferred first is checked by the same session that wants the file gone, as the fact's own `against` concedes; the scope the delegation runs over is drawn by the delegate, from a phrase the author used for something they believed already existed. What the delegation would reach first is not hypothetical: `commons.systems/disposition-graph/hexis` carries an existence fact recommending `prune` and sits at a row the author has not yet reached, so the first exercise of the power would delete a decision they were queued to make, and they would learn of it by the row's absence. And the discriminator that finds a node redundant is `probe-or-node`'s independence test, which that node's own `against` calls the AI's, "drawn in one sitting from the failure the author named and ... not yet worn by use" -- so this ruling would hand an untested test an unrecoverable remedy. The answer that meets all of this is deprecation rather than deletion, which the rationale names, declines to argue against, and does not put on the fact.
 
 The session's reply: Accepted on all five, each verified at its locus on the main thread: the fact's reason says the scope is presupposed by the author's words while its against says the scope is the AI's, and the sitting reasoned the other way on probe-or-node the same morning, so boldness is moderate and the reason says what is the author's and what is the AI's; deprecation-not-deletion is named as owed an argument the rationale never makes and is on no fact; the departure from recording is recorded there as an option and nothing orders the two, so depends gains recording#prune-of-an-unruled-node-needs-no-ruling; nothing here says what a ruling does to the competing home on probe-or-node; and the scope is drawn wider than the author's words reach without the rationale saying why. The amendments owed: boldness moderate with the reason rewritten; the option deprecation-rather-than-deletion recorded, source review, with the rationale's argument for deletion over it made rather than owed, that the file stays in the ref's history and the survivor's account names it and the reason before it goes, while a deprecated node left in the tree is a third state the parser, the projections and the validator must all learn, which is the cost the author's own word prune does not ask for; the option pruning-and-what-a-prune-needs recorded, source review, viable, with the reason the whole scope is drawn, that the author's words name a general delegation of graph topology as a thing they hold and a scope drawn narrower than their words would be the AI's narrowing of a grant; the depends entry; and the two-homes sentence in the fact's reason. On the counter-argument, which is strong: the recommendation stands, on the author's words that pruning of unratified nodes is delegated, with the counter-argument on the row at the strength the reading gave it and the hexis case, a node at a row the author has not reached, carried by the option a-third-bound-for-open-business, which stays viable. The amended answer owes its re-reading.
+
+### Amended after the reading, 2026-09-07
+
+The clean-context reading of 2026-09-07 forwarded this node to the author's
+ruling at strong strength and returned five findings. All five were accepted and
+each was verified at its locus on the main thread; the recommendation did not
+move.
+
+The boldness and the reason. The answer fact's reason said the recommendation was
+the author's words "with nothing added but the scope those words presuppose",
+while the same fact's `against` three lines above said the scope is the AI's.
+Both could not hold, and "presuppose" was the word that made the AI's
+construction read as the author's; it is struck. The boldness is now moderate,
+which is what a property of the whole recommended text records: the author
+supplied the delegation, the two bounds and the direction that a persistent
+disposition takes a node; the reach of "graph topology", the rule that the
+delegation acts only from the ruling, and the departure from
+`commons.systems/disposition-graph/recording` are the AI's. The sitting reasoned
+the same way on `commons.systems/disposition-graph/probe-or-node` three hours
+earlier, and this node had reasoned the other way on the same question.
+
+Two options recorded, both source `review`, ref 2026-09-07, viable and not
+adopted. `deprecation-rather-than-deletion`: within the topology scope the
+recorder deprecates rather than deletes, the node marked as superseded with the
+survivor named, dropped from the browser, the alignment page and the frontier,
+and left in the tree, so that the delegated act is reversible and
+`commons.systems/disposition-graph/class-recommendation`'s irreversible limb no
+longer fires. It is the option that meets the reading's counter-argument, and the
+rationale now argues against it rather than recording that it owes the argument:
+the file stays in the ref's history and the survivor's node carries the question,
+the account and the reason before the file goes, so the deletion is paid back
+where it must be, while a deprecated node is a third state the parser, the
+projections and the validator must each learn to skip, which is a cost paid on
+every node forever for a reversibility the author's own word does not ask for.
+`pruning-and-what-a-prune-needs`: the delegation is of the prune the author named
+together with the minting and edge-drawing a prune's remedy needs, and the rest
+of what "graph topology" reaches is left to be asked when something needs it. The
+rationale gains the argument for the wider scope it never made: the author's
+words name a general delegation of graph topology as a thing they hold, and a
+scope drawn narrower than their words reach would be the AI's narrowing of a
+grant, which is a different act from reading one.
+
+`depends` gains `commons.systems/disposition-graph/recording#prune-of-an-unruled-node-needs-no-ruling`.
+The fourth paragraph of the recommended answer departs from `recording`, the
+option that records the departure stands on that node at line 99, and nothing
+ordered the two: a ruling of `delegated` here before that option is ruled would
+have the recorder pruning without a ruling while `recording`'s standing answer
+and the text it recommends both still required one. The entry is the node-and-option
+form `commons.systems/disposition-graph/dialogue` provides, so the page refuses to
+put this question before the one it rests on.
+
+The two homes. Nothing on this node said what a ruling here does to
+`commons.systems/disposition-graph/probe-or-node`'s option
+`prune-delegated-with-two-bounds`, which is passed over but live and carries the
+same delegation with the same two bounds. The answer fact's reason now says that
+the two are two homes for one delegation, that a ruling here is the choice of
+this home, and that a ruling for the option there would leave this node's
+question answered by nothing and move its existence fact to `prune`. The same
+sentence is written on that option, on that node.
+
+On the counter-argument, which the reading gave at strong strength: the
+recommendation stands, on the author's words that pruning of unratified nodes is
+delegated. The counter-argument goes on the row at the strength the reading gave
+it; the `hexis` case, a node at a row the author has not reached, is carried by
+`a-third-bound-for-open-business`, which stays viable; and the alternative it
+names is now on the fact and argued against in the rationale.
+
+The amended answer owes its re-reading.

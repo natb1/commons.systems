@@ -55,6 +55,9 @@ facts:
       - name: cites-turn-form-for-the-three-surfaces
         source: review
         ref: "2026-09-07"
+      - name: promoted-question-placed-by-its-own-question
+        source: review
+        ref: "2026-09-07"
     recommends: probes-on-the-node
     boldness: moderate
     stands: probes-on-the-node
@@ -308,6 +311,35 @@ found that node's claim to state the rule once contradicted by this one; it is
 recorded here so the amendment is ruled and not discovered, and it is not adopted
 because this node is at the ruling stage and its recommendation does not move
 before the author has ruled on it.
+
+#### promoted-question-placed-by-its-own-question
+
+The recommended answer with the third limb's placement clause corrected. That
+limb says today that a question whose answer would stand as an answer to a
+question of the record "is a node, minted under the node it blocks and entered in
+that node's `depends`, where the fifteenth frontier validation already puts it".
+Under this option a promoted question is minted where its own question belongs,
+which is what it refines, and is entered in the blocked node's `depends`: the
+blocking relation is what `depends` records, and `under` records what a node
+refines, so the two edges answer different questions and the clause conflates
+them. Placing a promoted question beneath whatever node happened to be blocked is
+placement by accident of discovery.
+
+The case is the record's own act. `commons.systems/disposition-graph/graph-topology`
+was minted on 2026-09-07 as the promotion of a question blocking
+`commons.systems/disposition-graph/probe-or-node`, and it stands under
+`commons.systems/disposition-graph/authority`, not under the node it blocks,
+because "What may the recorder do to the graph's topology without asking?"
+refines the authority question and not "When is an open question a probe, an
+option, or a node?"; it is entered in that node's `depends`. The sitting that
+wrote the clause did the opposite of it in the same movement, which is the
+sharpest evidence a rule can have against itself.
+
+Viable and not adopted. This node is at the ruling stage and its recommendation
+does not move, so the option is recorded for the author to meet at the row; the
+same correction is made in the text `commons.systems/disposition-graph/probe-or-node`
+recommends, whose own clause repeated it. Raised by the clean-context reading of
+2026-09-07 on that node.
 
 ### authority
 
