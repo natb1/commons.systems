@@ -1,6 +1,6 @@
 ---
 question: Which model runs the clean-context review's readings?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -53,11 +53,11 @@ facts:
     against: "The answer holds that the rule binds the role and that the model's name is a fact about the harness, so under it the AI decides when the harness's most capable model has changed and rewrites a ratified text with no interview and no ruling; that is the kind of unit the author's words on the viable-options node handed the AI, and this node otherwise takes it back. Ratified therefore buys the author less than it looks: the name that an executor actually launches moves without them, and what a ruling pins is a sentence about roles."
 review:
   verdict: forward
-  strength: moderate
+  strength: none
   date: 2026-09-07
-  of: bc4d3457aa41f1e9a8470b1dfa533aed985c9c5a
-  commit: 660d178d4d869254ec3a7f862dc9e122e5e3a69c
-  against: "The clause spends the record's scarcest guarantee to buy its smallest saving. The re-reading is the last reader between an amendment and the author's ruling, and it is also the cheapest of the three readings by this node's own measurement, so the rule downgrades the reader exactly where a miss is least recoverable and saves least. The argument that its contract determines the answer holds for the first of its two questions and not the second, whether the amendment introduces anything the last reading had no chance to see, which is a fresh judgment of a text -- the fact's own `against` concedes this, and the clause is recommended anyway. And the reply that what the weaker eye misses falls to the survey rests on a reading that, by the parent node's own rationale, no sitting has yet generated, so the fallback the clause leans on has never once run."
+  of: e27a2e7326a338bd4f519b1e55dfccc2394da68c
+  commit: f146f8f44b295c64e47a13bff338748035183d87
+  against: "None found. Verified at the loci the diff touches: `.claude/skills/align-review/SKILL.md` lines 221-223 name the draft reading on the larger/most-capable model and the re-reading on the smaller model, matching the fence's corrected rank and `delegation.md`'s fixed vocabulary (line 85, 'the smaller model for mechanical tooling... the larger model for design and judgment'). `tmp/review/delta-*.brief.md` today holds 18 files, not the five the account measured -- but the node itself discloses that `tmp/review/` is gitignored and that 'the figures stand with the commit that produced them or not at all', so this is the disclosed staleness of an ephemeral measurement rather than a new defect the amendment introduced. All seven of the last reading's findings are answered in substance: the fence's rank, the missing `bears` entries, the pinned measurement, the `delegation` citation's phrasing, the fallback's second instance, and the costs paragraph's answer to the author's question of 2026-09-07."
   survey:
     date: 2026-09-05
     of: a4d0e9bfc37dd059ae51672c6b770665c073f3dc
@@ -779,3 +779,20 @@ The fallback records its second instance: the draft reading of this node on 2026
 The counter-argument goes on the answer fact at the strength the reading gave it, replacing a case against that had been drawn against the flat rule this fact no longer recommends.
 
 The amended answer owes its re-reading.
+
+### Clean-context re-reading, 2026-09-07, of e27a2e73
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-smaller-model-on-a-re-reading`.
+
+Findings:
+
+
+On the facts and what they recommend: The answer fact keeps recommending `the-smaller-model-on-a-re-reading` at moderate boldness, with a new viable-and-not-adopted option `effort-graded-by-the-readings-object` added and the fact's `against` reworded to say 'the fact's own `against` concedes this'; the `## Recommendation` fence is unchanged in shape (still present, since `standing` never applied here -- no `## Answer` stood before this draft). The fence's rank for the re-reading is corrected from 'the larger model' to 'the smaller model', matching both `delegation`'s fixed vocabulary and what `.claude/skills/align-review/SKILL.md` actually runs. Authority and existence facts are untouched by the diff.
+
+On the viability of the options: Every option on the answer fact remains viable; the diff adds `effort-graded-by-the-readings-object` (viable, not adopted) without displacing any existing option, and `bears` entries are added on `scholarly-peer-review` (diverged), `brooks-surgical-team` and `n-version-programming` (both adopted, in part) on the recommended option, closing the gap the last reading found.
+
+Strongest counter-argument (none): None found. Verified at the loci the diff touches: `.claude/skills/align-review/SKILL.md` lines 221-223 name the draft reading on the larger/most-capable model and the re-reading on the smaller model, matching the fence's corrected rank and `delegation.md`'s fixed vocabulary (line 85, 'the smaller model for mechanical tooling... the larger model for design and judgment'). `tmp/review/delta-*.brief.md` today holds 18 files, not the five the account measured -- but the node itself discloses that `tmp/review/` is gitignored and that 'the figures stand with the commit that produced them or not at all', so this is the disclosed staleness of an ephemeral measurement rather than a new defect the amendment introduced. All seven of the last reading's findings are answered in substance: the fence's rank, the missing `bears` entries, the pinned measurement, the `delegation` citation's phrasing, the fallback's second instance, and the costs paragraph's answer to the author's question of 2026-09-07.
+
+The session's reply: Forwarded with no finding; the rank, the bears entries and the pinned measurements verified on the main thread. Nothing on the node changes.

@@ -1,13 +1,13 @@
 ---
 question: How is the clean-context review run?
-stage: review
+stage: ruling
 review:
   verdict: forward
-  strength: strong
+  strength: none
   date: 2026-09-07
-  of: 9d937730a6c1f5b9c56b1cbe447dc323dff6ac04
-  commit: 660d178d4d869254ec3a7f862dc9e122e5e3a69c
-  against: "The wave buys bytes and spends attention, and attention is the quantity this subtree has already said is the scarce one. `review-cost` now recommends that \"Token efficiency and context management are bounds on what a reading is given; attention is what the reading does with it, and it is not the same quantity\", and a wave halves the bytes while quartering what any one object gets of the reader: the brief is fifty-six percent smaller, but each of the four drafts is now judged by a reader holding three other drafts, three other neighbourhoods of options, and three other verdicts it must also write. On the record's own accounting that is a rise in cost per unit of attention, not a fall, and it is invisible to the measurement the case is built on, which counts only bytes. The deeper objection is that the saving and the loss fall on different parties: the bytes are the record's, the independence is the author's, and the author is the one the review exists to protect. And the loss is not hedged, because the one thing that would catch a wave-reader's blind spot is the survey, which by this node's own rationale \"no sitting has yet generated\"."
+  of: 9972f0cfa1d3635eba4440a793ce96b6d88271e0
+  commit: 1f2caa98a5f69bcca4db3d38a6a3dee46a3d13dc
+  against: "None found. Checked against the record rather than argued: `packages/clean-context-review/` and `.claude/skills/align-review/` still contain no mention of a wave (`grep -rin wave` empty), confirming the fence's disclosure is accurate; `disposition/disposition-graph/review-cost.md` now carries the `a-waves-brief-is-one-brief` option (source `clean-context-review`, ref 2026-09-07) with the byte figures moved there as the account claims; and the amended survey paragraph's division of labor with `frontier-consistency` (this node cites that node's validations rather than restating them) matches `frontier-consistency`'s own concurrent amendment, which independently records fixing the same contradiction against this node's prior text. All seven of the last reading's findings are answered in substance and nothing in the diff introduces a new false claim, contradiction, or stale pin."
   survey:
     date: 2026-09-05
     of: 2be1aaec7b5494e97b4c74de6d66ade15373da92
@@ -768,3 +768,20 @@ The evidence, at graph commit `2abca334` and implementation commit `cb0e02c6`: t
 On the counter-argument: the attention objection is the fact's own case against and stands on the row at the strength the reading gave it. What the amendment answers of it is who chooses the wave and how large its brief may be; what it does not answer is that four objects share one reader, and the survey the reply leans on runs for the first time in this sitting.
 
 The amended answer owes its re-reading.
+
+### Clean-context re-reading, 2026-09-07, of 9972f0cf
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `wave-membership-derived-from-the-record`.
+
+Findings:
+
+
+On the facts and what they recommend: The answer fact's recommendation moves from `one-reading-for-a-wave-written-together` to `wave-membership-derived-from-the-record`, with `identical-prefix-across-a-waves-briefs` added as a new viable-and-not-adopted option; boldness stays high and `standing` still stands, so the `## Recommendation` fence is still present as required. The fence now derives the wave's membership from the record rather than the session (answers finding 1), states what is unmaterialized -- a wave mode on brief.mjs, a template, and a second `/align-review` contract -- and that the saving is a projection (finding 2), cites `review-cost`'s bound and states the split rule (finding 3), records today's actual four-brief trial as evidence and labels the 598,240-byte figure a projection (finding 4), fixes the self-contradicting 'parts that do not differ ... run between' language into 'parts common to all four ... differing only by which each excludes' (finding 5), and moves the detailed byte accounting out of the fence's closing paragraph into a citation of `review-cost` (findings 6-7). Authority and persistence facts are unchanged by the diff.
+
+On the viability of the options: The diff adds the two options the last reading found missing (`wave-membership-derived-from-the-record`, `identical-prefix-across-a-waves-briefs`) rather than leaving them unrecorded, and every existing option's passed-over reason still holds against the amended text. No option is left non-viable by the amendment.
+
+Strongest counter-argument (none): None found. Checked against the record rather than argued: `packages/clean-context-review/` and `.claude/skills/align-review/` still contain no mention of a wave (`grep -rin wave` empty), confirming the fence's disclosure is accurate; `disposition/disposition-graph/review-cost.md` now carries the `a-waves-brief-is-one-brief` option (source `clean-context-review`, ref 2026-09-07) with the byte figures moved there as the account claims; and the amended survey paragraph's division of labor with `frontier-consistency` (this node cites that node's validations rather than restating them) matches `frontier-consistency`'s own concurrent amendment, which independently records fixing the same contradiction against this node's prior text. All seven of the last reading's findings are answered in substance and nothing in the diff introduces a new false claim, contradiction, or stale pin.
+
+The session's reply: Forwarded with no finding; verified on the main thread that no wave code exists in the units package or the review skill, as the fence discloses. The counter-argument stands on the row at the strength the last reading gave it. Nothing on the node changes.
