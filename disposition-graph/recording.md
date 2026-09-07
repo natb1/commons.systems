@@ -967,3 +967,45 @@ One question — whether a node whose ruling was never quoted may be classed rat
 Also named: commons.systems/disposition-graph/quotes, commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/review, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/legacy.
 
 Proposed: Settle the question once on `commons.systems/disposition-graph/quotes`, which owns how the author's words are retained, and strike the six local options in favour of a citation to that ruling. In the same movement, remove both measurements from `quotes`' option prose: a count of the record inside the record is what `authority`'s `no-census-in-a-standing-answer` option is about, and both of these counts have already gone false. The set of unquoted-ratified nodes is derivable — nodes with no `## Disposition` whose authority fact recommends `ratified` — so the frontier or the alignment page should compute it and the node should name the rule. `evaluation`'s option is amended to drop the clause about carrying no Disposition section, which is no longer true of it.
+
+### A failure mode in applying a reading's findings, measured 2026-09-06
+
+Three drafts in one sitting were kicked back for the same defect, and it is not a
+defect of drafting but of how the main thread applies what a reading returns. It
+is recorded here because the application of a finding is this node's act.
+
+The shape is constant. A reading returns findings; the session amends the
+paragraphs the findings name; the session writes an account saying which findings
+were answered and how; and the amendment reaches the named paragraphs and not the
+rest of the node, which goes on arguing the position the amendment abandoned. The
+next reading then finds two things wrong rather than one: the stale text, and an
+account that asserts a correction the text does not carry. The second is the worse
+of the two, because an account that says a thing was fixed is what stops the next
+reader looking at it.
+
+Three instances, all on 2026-09-06. On `what-an-option-row-carries`, the first
+amendment changed the answer's two load-bearing paragraphs and left the authority
+reading, the answer fact's own opening reason and four sections of the proposed
+parent amendment arguing the abandoned position. On the same node, a correction
+asked for by a reading was applied to the reading's own verbatim quotation of the
+draft, which is one long line, instead of to the paragraph the finding named,
+which wraps; a reading's words were altered and the locus left standing, and the
+account said the finding was taken as given. On
+`where-the-unconfirmed-indication-goes`, an amendment struck a word from a fact's
+prose, claimed it gone, and reinstated it in the heading the same amendment wrote.
+
+Two things about the cause are worth the record rather than the session. The
+first is that a finding names a locus and the session treats the locus as the
+scope, where the scope is every sentence of the node that rests on what the locus
+said. The second is mechanical and reaches the instruments: a node's prose is
+hard-wrapped and its account quotes its own prose verbatim, so a whole-string
+edit matches the unwrapped copy in the account and misses the wrapped original,
+and the check that would catch it — that an edit hit the paragraph the finding
+named — is not one any instrument makes.
+
+What follows from it is not decided here. The remedy might be a rule of this
+node's, that an amendment made for a finding is swept against the whole node
+before its account is written and the account names what it swept; or an
+instrument's, that the loci a reading names are checked against the diff the
+session lands; or the reading's, that a re-reading is given the diff rather than
+the node. `review-cost` holds the third, since it prices the re-reading.
