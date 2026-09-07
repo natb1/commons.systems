@@ -1,7 +1,7 @@
 ---
 question: Does Fagan's entry criterion ground the mechanical tier that gates a survey's launch?
 form: reading
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -25,11 +25,11 @@ facts:
     against: "The capture limb does bite: a check the checked party writes and may move without being asked is captured whether or not the source is public, and a deferral schedules the author's reading without preventing a redrawing before it."
 review:
   verdict: forward
-  strength: moderate
+  strength: weak
   date: 2026-09-07
-  of: 238c0ec86a56987c3eecb76370ff2be261ee9557
-  commit: d35b0014367874f0376fea8e271f1737b798857c
-  against: "The economics the reading transfers are not the economics it names. Fagan's entry criterion is cheap because an inspection is a meeting: several people, scheduled, in a room, and the cost avoided by refusing to convene is the coordination cost of assembling them, which is why the gate sits before the convening and not inside the reading. The survey's reader is an agent launched by a name at no coordination cost at all, and the scarcity the record actually cites is a single reader's attention inside one context, which is `review-cost`'s argument and not Fagan's. So the sentence \"The tradition's own reason is the answer's\" is the load-bearing claim and the weakest one: strike it and the reading grounds the tier no further than the slogan that a cheap check should precede an expensive reader, which `review-cost` already says on its own authority and which needs no tradition behind it. Against that: the deeper claim, that an inspector asked to report what a checklist could have caught yields less on the defects only an inspector can find, is a defect-removal-efficiency argument that is genuinely Fagan's and survives the change of venue, which is why the counter is moderate and not fatal."
+  of: a4ac90dd071557b6b470ad463b092b253f4dc992
+  commit: 843c99c0003959178d387261b13d73cb0779fd26
+  against: "The amended opening now reads \"Supports, whole, within the locus this reading takes\" rather than either of the previous reading's two clean resolutions (keep \"Supports, whole.\" unqualified once the refinement moves away, or rename the divergence outright). A strict reader could see the inserted qualifier as a residual hedge against the frontmatter's unqualified `relation: adopted`, of the same shape the previous reading objected to in its second finding, until reaching the third paragraph two sentences later that names which locus is meant and cedes it to the sibling reading."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: Fagan, Design and code inspections to reduce errors in program development, IBM Systems Journal 15(3), 1976, and Advances in software inspections, 1986, for the entry criterion as a named gate; Gilb and Graham, Software Inspection (1993), on entry criteria. Locus to be checked, the entry criterion as a stated and checked gate, which is explicit in the 1986 paper and in Gilb and Graham and implicit in the 1976 paper's moderator readiness check; the tradition survey of 2026-09-07 cited only the 1976 paper and the 1993 book, so the 1986 citation is the AI's own and is given by title and year without its venue.
@@ -98,3 +98,22 @@ Strongest counter-argument (moderate): The economics the reading transfers are n
 ### Repaired after the reading of d35b0014, 2026-09-07
 
 All six findings applied. The superlative went: "the cheapest lever in an inspection" is replaced by the practice without the ranking, since the inspection literature's own first-ranked variable is the checking rate, which this node's minting note had already declined to read. The tier's bound went to `lint-and-the-false-positive-threshold`, whose account records the division and whose answer now states it from its side, so the two readings on `the-mechanical-tier-gates-the-launch` no longer claim one clause for two traditions; with the refinement gone, "Supports, whole" and `relation: adopted` stand as the second finding said they would, qualified only by naming the locus the whole is taken of. The per-run divergence is recorded in the answer's second paragraph, against `survey-selection`'s own sentence that no reader is launched while one check reports a finding, and the option `supports-the-gate-diverges-on-its-scope` is recorded live beside it for the author who would rather see that departure in the relation than in the prose; it is not taken, because the principle is adopted without qualification and only its breadth departs. The `source` field gains Fagan 1986 for the entry criterion as a named gate, by title and year alone and marked as the AI's own citation, the tradition survey having named neither it nor its venue. And the file gains the `## Facts` section it never had, whose `### answer` reason raises the boldness to high on the reading's own evidence and whose `### authority` reason moves the class from delegated to deferred, no words of the author delegating the reading of traditions; the derivation behind that move is recorded once, as an option on `readings`, and not nine times.
+
+### Clean-context re-reading, 2026-09-07, of a4ac90dd
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `as-read`.
+
+Findings:
+
+- New option `supports-the-gate-diverges-on-its-scope`, in its "AI divergence" paragraph: "`progressive-disclosure`'s own review names the failure this would be, a reading that records a divergence where the tradition is out of scope overstating what the author decided against". This is a new claim about another node's review, introduced by the amendment and not present in the previous reading, and `progressive-disclosure` is outside this delta's given neighbourhood; flag it for the node's next full reading or the frontier survey to check the characterization before the author rules on it.
+- Same option, same paragraph: "The place where a reading may be adopted in part and diverged in part is `readings`' open option `relation-per-holding`, and until that is ruled the choice here is between two whole words neither of which is the whole truth." Also a new cross-reference introduced by the amendment (not read by the previous reading); flag it for verification against `readings` at the next full reading or survey rather than accepted on this delta's word.
+
+On the facts and what they recommend: The diff raises the answer fact's boldness from moderate to high, exactly as the previous reading recommended, and adds a new viable option, `supports-the-gate-diverges-on-its-scope`, and an `against` clause naming the tension between `adopted` and the tier's wider scope; `as-read` still recommends and stands, so no `## Recommendation` fence is owed. It also moves the authority fact's recommendation from `delegated` to `deferred` (boldness stays moderate), reasoning from the two attribution defects the previous reading found, and adds an `against` clause naming the capture-limb counter-argument. The diff adds the `## Facts` section entirely (the sixth finding), places it between `## Rationale` and `## Account` as the node's shape requires, rewrites the `## Answer` to drop the superlative, cede the tier's-bound locus to `lint-and-the-false-positive-threshold`, and record the per-run/per-artifact divergence, and extends `source` with the 1986 citation and a locus caveat.
+
+On the viability of the options: All three authority options remain viable and unchanged in status. The answer fact gains exactly the viable option the previous reading found missing, `supports-the-gate-diverges-on-its-scope` (carries no `status: passed`), and `as-read` remains the only other option and the one that stands; nothing on either fact is left non-viable or contradicted by the diff.
+
+Strongest counter-argument (weak): The amended opening now reads "Supports, whole, within the locus this reading takes" rather than either of the previous reading's two clean resolutions (keep "Supports, whole." unqualified once the refinement moves away, or rename the divergence outright). A strict reader could see the inserted qualifier as a residual hedge against the frontmatter's unqualified `relation: adopted`, of the same shape the previous reading objected to in its second finding, until reaching the third paragraph two sentences later that names which locus is meant and cedes it to the sibling reading.
+
+The session's reply: Both citations were verified on the main thread before this reading was applied: `progressive-disclosure`'s review recorded, as the case against its answer fact, that a reading which records a divergence where the tradition is silent overstates what the author decided against, and `readings` carries the option `relation-per-holding` on its answer fact. The qualifier the counter reads as a hedge is the scope clause the second option contests: `adopted` holds within the locus the reading takes, and the divergence option says the locus is wrongly drawn, so the clause names the point the two options divide on rather than softening the first.

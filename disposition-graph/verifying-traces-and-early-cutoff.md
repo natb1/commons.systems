@@ -1,7 +1,7 @@
 ---
 question: Do verifying traces and early cutoff ground the delta survey's selection on section hashes?
 form: reading
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -25,11 +25,11 @@ facts:
     against: "The paper's two terms are its own named vocabulary and the author could confirm the relation in an afternoon, so a class that keeps the node on the frontier indefinitely may be buying a check the record can get more cheaply by asking for the afternoon."
 review:
   verdict: forward
-  strength: moderate
+  strength: weak
   date: 2026-09-07
-  of: b4a789969619b26bbaa4e05995456c435cac5627
-  commit: d35b0014367874f0376fea8e271f1737b798857c
-  against: "The analogy carries less than 'Supports, whole' claims, because the tradition's trace is sound and this one is stipulated. A build system's verifying trace records the hash of every input the task actually read, so a trace that has not moved is a guarantee the output cannot differ; the survey's five sections are an input set the record declares rather than derives, and the survey's true input is not the node but the frontier, since the judgment it reruns is a comparison of this node against others. Two nodes can come to contradict each other with no change in either's five sections — a third node amends what a shared term means — and no hash moves, which is a failure mode the tradition's own guarantee excludes by construction. The sibling `regression-test-selection` says exactly this in the tradition's terms, that no sound dependency relation exists here and so no selection can be safe, and records a divergence; this reading adopts a neighbouring tradition whole on the same structure and mentions no such limit. What blunts it is that the divergence is recorded next door on the same parent option, and that the form of the mechanism really is a verifying trace whatever the strength of its guarantee."
+  of: c90fdf22b0a5fa11a9570bf0a9c8c424cd00e38f
+  commit: 843c99c0003959178d387261b13d73cb0779fd26
+  against: "The previous review's own recorded counter-argument -- that the survey's five sections are an input set the record declares rather than derives, so the trace's guarantee is stipulated rather than sound, and a third node's redefinition can break the judgment with no hash moving -- is not something the amendment was asked to fix (it was not one of the five numbered findings), and it is not fixed: narrowing \"whole\" to the trace and the cutoff only restates which mechanism is being adopted, it does not touch whether that mechanism's guarantee is as sound within its own narrowed scope as the tradition's is, so the same weakness the review already accepted at moderate strength persists unchanged into the amended text."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: Mokhov, Mitchell and Peyton Jones, Build systems à la carte, ICFP 2018, on verifying traces and early cutoff; Shake's and Bazel's rebuild rules as the practice.
@@ -101,3 +101,22 @@ Strongest counter-argument (moderate): The analogy carries less than 'Supports, 
 ### Repaired after the reading of d35b0014, 2026-09-07
 
 Four of the five findings applied; the fifth is the brief generator's and is carried to reconciliation rather than answered here. The last sentence of the answer no longer claims a rule the tradition does not hold: `source` names Shake and Bazel as the practice, and both keep the verifying trace in one central store apart from the artifacts, so the clause asserting that the tradition puts the trace with the artifact it verifies was false against this node's own citation. What the tradition does hold, that a trace is recorded against the task and looked up rather than re-derived from a history walk, is kept, and the placement of the store is now stated as the record's own choice; the option `supports-the-trace-diverges-on-where-it-lives` is recorded live for the author who would rather see that on the dialogue option's row as a divergence, and is not taken, because the paper leaves the store open and a divergence where the tradition is silent overstates what was decided against. The word only in "reruns the survey's judgment on a node only where one of those hashes moved" is qualified to nodes a survey has already read, since `survey-selection` judges every node no survey has read and every node whose recommendation moved past its pin, and carries a cadence and a drift probe besides. "Supports, whole" is scoped in the same movement: the account's locus sentence is lifted into the answer, and the cadence and the guarantee are named as the siblings' loci, so whole is now whole of the trace and the cutoff and not of the option. The file gains the `## Facts` section it never had; the answer fact's boldness stays moderate, on the ground that the tradition half is the cited paper's own named vocabulary at the survey's high confidence and the claim that did rest wholly on unrecorded knowledge is the one struck, and the authority fact moves from delegated to deferred, no words of the author delegating the reading of traditions.
+
+### Clean-context re-reading, 2026-09-07, of c90fdf22
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `as-read`.
+
+Findings:
+
+- New option `supports-the-trace-diverges-on-where-it-lives`, "AI divergence" paragraph: "a divergence recorded where the tradition is silent overstates what the author decided against, which is the failure `progressive-disclosure`'s review names on this record." This is a new claim about another node's review, introduced by the amendment and not present in the previous reading, and `progressive-disclosure` is outside this delta's given neighbourhood; flag it for the node's next full reading or the frontier survey to check the characterization before the author rules on it.
+- `## Answer`, second paragraph: "the cadence and the probe are `acceptance-sampling-and-all-or-none`'s, and the guarantee the selection cannot have is `regression-test-selection`'s, which records what is given up on the same option." `regression-test-selection` was already named in the previous review's own counter-argument, but `acceptance-sampling-and-all-or-none` is a new node citation introduced by the amendment that this delta's given materials do not carry; flag it for verification at the next full reading or survey that it in fact reads the cadence and the drift probe as the answer here now delegates to it.
+
+On the facts and what they recommend: The diff adds a viable option, `supports-the-trace-diverges-on-where-it-lives`, and an `against` clause to the answer fact; `as-read` still recommends and stands, boldness unchanged at moderate (the tradition half is the cited paper's own vocabulary, and only the AI's own unsupported placement claim was struck), so no `## Recommendation` fence is owed. It moves the authority fact's recommendation from `delegated` to `deferred` (boldness stays moderate) and adds an `against` clause on the cost of deferring indefinitely versus asking the author directly. It also adds the whole `## Facts` section (`### answer` and `### authority`), rewrites `## Answer` to strike the false claim that the tradition dictates where the trace lives, scopes the selection claim to nodes a survey has already read, and scopes "whole" to the trace and the cutoff, naming `acceptance-sampling-and-all-or-none` and `regression-test-selection` as the siblings that read the cadence, probe and guarantee.
+
+On the viability of the options: The authority fact's three reserved options remain complete and viable and unchanged in status. The answer fact gains exactly the viable option the previous reading found missing, `supports-the-trace-diverges-on-where-it-lives` (carries no `status: passed`), and `as-read` remains the sole other option and the one that stands; nothing on either fact is left non-viable or newly contradicted.
+
+Strongest counter-argument (weak): The previous review's own recorded counter-argument -- that the survey's five sections are an input set the record declares rather than derives, so the trace's guarantee is stipulated rather than sound, and a third node's redefinition can break the judgment with no hash moving -- is not something the amendment was asked to fix (it was not one of the five numbered findings), and it is not fixed: narrowing "whole" to the trace and the cutoff only restates which mechanism is being adopted, it does not touch whether that mechanism's guarantee is as sound within its own narrowed scope as the tradition's is, so the same weakness the review already accepted at moderate strength persists unchanged into the amended text.
+
+The session's reply: Both citations were verified on the main thread before this reading was applied: `progressive-disclosure`'s review recorded that counter as the case against its answer fact, and `acceptance-sampling-and-all-or-none` reads the cadence, a whole survey after every fourth delta and at least once in thirty days, and the drift probe, on `a-whole-graph-reading-every-time`. The counter the re-reading carries forward, that the survey's five sections are stipulated and a third node's redefinition breaks the judgment with no hash moving, was not among the findings the amendment answered and is not answered by it; it stands as the case against the recommended option for the author to weigh.
