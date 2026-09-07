@@ -1,7 +1,7 @@
 ---
 question: Where does the page say that a node's text is a draft no one has confirmed?
 form: rule
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -47,11 +47,10 @@ facts:
     against: "The placement of one line is layout, reversible and cheap to get wrong, and a ratified ruling here stops any delegation from reaching it."
 review:
   verdict: forward
-  strength: moderate
+  strength: none
   date: 2026-09-07
-  of: 13a8ddc727783ed4262a0ecbea209afa98211760
-  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
-  against: "The answer's own argument, taken one step further, cuts against where it stops. It says the warning belongs in the path of the act and not in the path of the text, and then writes it on every node whose answer fact carries no ruling -- which today is every one of the 134 nodes that carry facts, and at three of the four stages is a node where the parent's own clause disables every input, so the act it warns about cannot be performed. A sentence that stands identically above the first fact of every node, on every node, at every stage, is the sentence a reader stops seeing after the second node; and the record knows this, because in this same movement `vocabulary-option-summary` demotes the authority gloss off the row on exactly that ground, that a sentence carried on 134 nodes \"is read once and skipped thereafter\". So the placement wins the argument about where the eye is and loses the argument about whether the eye still sees it, and the thing the line warns about -- the text -- is meanwhile a full column away, which is the objection the four earlier readings raised in the other direction and which this answer does not remove so much as reverse."
+  of: 4b2abc38e9e9dfd2175acca173d72e29705957f2
+  commit: f146f8f44b295c64e47a13bff338748035183d87
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:
@@ -926,3 +925,20 @@ stages where the author reads a draft as a preview the page now says nothing abo
 whose text it is.
 
 The amended answer owes its re-reading.
+
+### Clean-context re-reading, 2026-09-07, of 4b2abc38
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `line-only-where-the-act-is-live`.
+
+Findings:
+
+
+On the facts and what they recommend: The answer fact's recommendation moves from `on-the-answer-fact` to the new option `line-only-where-the-act-is-live` (moderate boldness unchanged, `stands` unchanged at `the-line-that-names-what-the-pane-shows`, fence still correctly present since nothing stands); the fact's `against` prose is lengthened to name both the placement objection and the new narrowing's own cost. The authority fact's recommendation (ratified, low) is unchanged by the diff.
+
+On the viability of the options: Every option remains viable; the diff adds `line-only-where-the-act-is-live` (source review, ref 2026-09-07) exactly as the previous reading's viability paragraph asked for, and the superseded `on-the-answer-fact` stays on the list as the placement without the narrowing.
+
+The review found no strong counter-argument.
+
+The session's reply: Forwarded with no finding; the parent's mark and the sibling's stage verified on the main thread. Nothing on the node changes.

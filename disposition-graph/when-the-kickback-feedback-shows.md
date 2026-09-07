@@ -1,6 +1,6 @@
 ---
 question: When is the kick-back's feedback control shown, and what becomes of what is written in it?
-stage: review
+stage: ruling
 form: rule
 under:
   - commons.systems/disposition-graph/alignment-page
@@ -60,11 +60,10 @@ facts:
     against: "It is a reveal rule on one textarea and a branch in a staging script, both undone by re-projecting the page; deferred would let it act while `where-a-change-request-goes`' reach into this control is still in front of the author on that node's own fact, where `kick-back-ask-unchanged` lets them refuse it."
 review:
   verdict: forward
-  strength: moderate
+  strength: none
   date: 2026-09-07
-  of: ad88dc645f14eb6b76a0231aad630b65d3c7ca0d
-  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
-  against: "The record already has a device for a control that must not collect what the page will not honour, and it is not hiding. The parent's answer, for the whole facts section at every stage before the ruling, is that everything is \"rendered and every input among them is disabled: the author sees exactly what will be asked and cannot yet answer it\" -- the fault being cured is the same one the author read here, a control that appears to take something the record will drop, and the cure the record chose there was visibility without capability. This answer applies the opposite cure to the one control the record has for dissent: the kick-back's feedback is the only channel by which the author tells the AI that its draft is not what they would confirm, and after this ruling it is not on the screen while they are deciding whether to use it. The fact's own `against` concedes the harm and `none-of-the-above-ballot`, the reading this answer adopts, names it precisely -- a refusal a voter has to express somewhere else is a refusal most voters never express -- and the answer's reply is only that the author asked for it, which is true of the reveal and not of the choice between hiding and disabling, which their words do not reach."
+  of: 9c0aa09f3ad04ed2e2be07f0cb1f4b4535fe62dc
+  commit: f146f8f44b295c64e47a13bff338748035183d87
 ---
 ## Disposition
 
@@ -597,3 +596,20 @@ theirs. The counter-argument goes on the row at the strength the reading gave it
 moderate, and the fact's `against` now names the device it rests on.
 
 The amended answer owes its re-reading.
+
+### Clean-context re-reading, 2026-09-07, of 9c0aa09f
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `revealed-with-the-choice`.
+
+Findings:
+
+
+On the facts and what they recommend: The answer fact's recommendation, boldness, and empty ## Answer/## Rationale (fence present, nothing stands) are unchanged by the diff; the diff adds the option `shown-disabled-until-chosen` (source review, ref 2026-09-07) to the answer fact's options and its subsection, and lengthens both the answer fact's and the fact-level `against` prose to name it as the device the record already uses for a control that must not collect yet. The authority fact's recommendation (ratified, low) and its prose are untouched by the diff.
+
+On the viability of the options: Every option remains viable after the diff; the one addition, `shown-disabled-until-chosen`, is recorded viable and not adopted with a reason that holds (the parent's disable-rather-than-hide precedent), matching exactly what the previous reading's viability finding asked for.
+
+The review found no strong counter-argument.
+
+The session's reply: Forwarded with no finding; the parent's mark and the option on where-a-change-request-goes verified on the main thread. Nothing on the node changes.

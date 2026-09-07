@@ -6,7 +6,7 @@ review:
   strength: none
   date: 2026-09-07
   of: 9972f0cfa1d3635eba4440a793ce96b6d88271e0
-  commit: 1f2caa98a5f69bcca4db3d38a6a3dee46a3d13dc
+  commit: f146f8f44b295c64e47a13bff338748035183d87
   against: "None found. Checked against the record rather than argued: `packages/clean-context-review/` and `.claude/skills/align-review/` still contain no mention of a wave (`grep -rin wave` empty), confirming the fence's disclosure is accurate; `disposition/disposition-graph/review-cost.md` now carries the `a-waves-brief-is-one-brief` option (source `clean-context-review`, ref 2026-09-07) with the byte figures moved there as the account claims; and the amended survey paragraph's division of labor with `frontier-consistency` (this node cites that node's validations rather than restating them) matches `frontier-consistency`'s own concurrent amendment, which independently records fixing the same contradiction against this node's prior text. All seven of the last reading's findings are answered in substance and nothing in the diff introduces a new false claim, contradiction, or stale pin."
   survey:
     date: 2026-09-05
