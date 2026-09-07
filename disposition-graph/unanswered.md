@@ -67,6 +67,9 @@ facts:
       - name: stage-keeps-a-node-on-the-frontier
         source: commons.systems/disposition-graph/recording
         ref: "2026-09-04"
+      - name: two-responses-where-the-page-offers-them
+        source: commons.systems/disposition-graph/where-a-change-request-goes
+        ref: "2026-09-06"
     recommends: unanswered-is-no-ruling
     boldness: moderate
     stands: unanswered-is-no-ruling
@@ -214,6 +217,28 @@ A confirmation with edits is recorded as a ruling on the edited option when it i
 #### stage-keeps-a-node-on-the-frontier
 
 A node carrying a stage is on the alignment frontier whatever class the rulings on its other facts confer, until the recording removes the stage. The frontier as this node, dialogue, and viable-options define it is every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling; a node whose answer fact the author confirmed and whose persistence or existence fact they kicked back stands at the maieutic stage in none of those three sets, and the frontier and the alignment page would drop it while a movement is owed on it. Recorded on 2026-09-04 with the recording node as its source.
+
+
+#### two-responses-where-the-page-offers-them
+
+Everything the recommended option says, with the roster read as three responses
+of which the alignment page offers two. `where-a-change-request-goes` recommends
+that every change request go to the kick-back and that the option's own control
+hold only the ruling's reason, which leaves the page with no route for a
+confirmation with edits: an author who wants an option changed denies it with
+feedback and the node returns to the maieutic movement. That answer does not
+strike the third response, because the roster is this node's, and it records the
+consequence here for the author to rule.
+
+Two ways to take it, and this option is the first. The response survives and is
+given in the interview, where the author can say "confirm, with this change" in
+prose and the session classifies it as `recording` says; the page is one surface
+among several and need not offer everything the record opens. Or the response
+collapses into the denial with feedback, on the author's own words of 2026-09-04
+that "any changes will necessarily require a kickback", and the roster becomes
+two. Against the first: a response the record opens and the author's one ruling
+surface does not offer is a response most authors will never use, and calling it
+open is then a fiction the record maintains about itself.
 
 ## Account
 
