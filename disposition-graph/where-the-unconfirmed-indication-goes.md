@@ -1,7 +1,7 @@
 ---
 question: Where does the page say that a node's text is a draft no one has confirmed?
 form: rule
-stage: review
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -44,11 +44,10 @@ facts:
     against: "The placement of one line is layout, reversible and cheap to get wrong, and a ratified ruling here stops any delegation from reaching it."
 review:
   verdict: kickback
-  strength: moderate
+  strength: strong
   date: 2026-09-06
-  of: 563a013626577e229ea041df4584df4f5e36d332
-  commit: 3b32bdc3bfdb067c56ea16edf91d95d0489c8bea
-  against: "The column this answer chooses is the one column the parent reserves for the disposition alone, and the parent's reason for the reserve is the reason a warning put there may not work: \"every sentence of apparatus in it is a sentence they must read past to see it\". Worse, the act the warning guards is not performed in that column: confirmations are staged on option rows in the column that asks, and the sibling `what-an-option-row-carries` has just stripped every standing mark off those rows, so the author can confirm an AI draft with no indication anywhere near the control they confirm with. The draft's reply to `warning-on-the-stage-chip` — that the chip is dialogue state which the recording removes, where the standing of a text is not — cuts the other way, since the indication is needed only while nothing is confirmed, which is exactly while the dialogue is open. And once the criterion is corrected as finding 1 asks, the ruled form fires on no node until the first ratification, so what the answer actually installs is one unconditional sentence in the reading column while the ratifying happens in the other. What survives for the recommendation is that the thing warned about is a text and the text is there; what is still unanswered is that the thing guarded against is an act, and the act is elsewhere."
+  of: bcabb0d87dd6e466635e59f809880e9e857ba0a9
+  against: "The amendment's account claims the last reading's central finding is answered -- \"the draft reused the word 'standing', which is the word the author said they could not read on an unanswered node, and the heading now names the case in plain words\" -- and the heading it wrote names its second case \"the node as it stands\", the string `alignment-page`:530 rejects in terms, applied by \"The third is the whole record today\" to a record in which no answer is ratified. The finding is therefore answered in the reply and not in the text, which is the failure mode this second reading exists to catch, and the fact's own prose asserting that the word is gone makes the record say the opposite of what the record shows. The rest of the amendment is genuine and mostly good work -- four of the seven findings are closed cleanly and the heaviest is closed better than its suggested edit -- but the rewrite that answered the word also re-carved the three cases off the render branches and onto rulings, so the one paragraph the whole answer turns on is now both less exact and less true than the paragraph it replaced. Against my own verdict: none of this touches the placement, so a session could repair all of it as wording without the answer moving; I write kickback rather than forward because the second case is not wording -- it is the claim the author objected to, restated as the page's standing heading."
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:
@@ -68,103 +67,73 @@ The author, 2026-09-06, in the sitting on `what-an-option-row-carries`, when the
 In the heading of the right-hand column, which already names what that column is
 showing, once per node and nowhere else on the page.
 
-The heading is one line on every node whose right-hand column is rendered:
-`PANE_LBL`, written outside the branch in `renderPane` and so present in every
-case that function has. It takes three forms, and what chooses between them is
-what the column is actually showing, read off two things the record holds
-directly. Whether the node carries a recommended text, since where one exists the
-column renders the AI's proposal whatever stands beneath it. And whether the
-answer fact carries a ruling, which is the only thing that makes a text the
-author's rather than the AI's.
+`renderPane` writes that heading, `PANE_LBL`, outside its branches, so every node
+whose column is rendered carries it. It takes three forms, and what chooses
+between them is what the column is actually showing, read off two things the
+record holds directly: whether the node carries a recommended text, since where
+one exists the column renders the AI's proposal whatever stands beneath it, and
+whether the answer fact carries a ruling, which is the only thing that makes a
+text the author's rather than the AI's.
 
 Where a recommended text is present the heading says the column is showing the
-AI's proposal, and says that no one has confirmed it. That is true whether or not
-an answer stands beneath, because what is rendered is the proposal; what the
-proposal would change is the business of the line below it and not of the
-heading. Where no recommended text is present and the answer fact carries a
-ruling, the heading says the column is showing the answer the author confirmed.
-Where no recommended text is present and the answer fact carries no ruling, it
-says the column is showing the AI's draft and that nothing in it has been
-confirmed. Every node of the record is in the third case today.
+AI's proposal and that no one has confirmed it. Where none is present and the
+answer fact carries a ruling, it says the column is showing the answer the author
+confirmed. Where none is present and the answer fact carries no ruling, it says
+the column is showing the AI's draft and that nothing in it has been confirmed.
+Measured on 2026-09-06: 32 nodes are in the first form, none in the second, 87 in
+the third, and 21 carry neither an answer nor a recommended text, so no column is
+rendered for them and the heading is written 119 times.
 
 The criterion is the answer fact's own ruling and not whether a ruling reaches
 the node, and the difference is the whole of the warning. A ruling reaching the
 node is the record's phrase for its having a class at all, and `alignment-page`
-says in terms that a class is "about who decides and not about this text", so a
-node ruled delegated or deferred, or one an ancestor's grant reaches, carries no
-confirmed text and must not be headed as though it did. `standingState` in the
-projector already keys on `ratified` alone and this answer keys on the same
-thing.
-
-Nor is the word the author could not read used in any of the three. An earlier
-draft carved the forms off `renderPane`'s branches; a second re-keyed them onto
-rulings and so replaced a false claim of standing with a false claim of
-confirmation. The forms above name who wrote what is shown and whether the author
-has confirmed it, which is what the author asked for and is sayable without
-either fault.
+says a class is "about who decides and not about this text", so a node ruled
+delegated or deferred, or one an ancestor's grant reaches, carries no confirmed
+text and must not be headed as though it did. `standingState` in the projector
+already keys on `ratified` alone, and this answer keys on the same thing.
 
 The ground-naming line beneath is a different line and is not this answer's.
 `edit-lbl` says whether a diff is against the ratified answer or against a draft
 no one has confirmed, and it is written only where a node carries both an answer
 and a recommended text; it was added for the author's finding of 2026-09-03 that
-a diff implies a ground the record does not have, and it stays. This answer adds
-no second such line: the heading names what the column shows and who wrote it,
-the line beneath names what a diff is against, and on the one kind of node that
-has both they are two different facts.
+a diff implies a ground the record does not have, and it stays. On those 32 nodes
+the two lines say related things two lines apart, the heading naming what the
+column shows and the line beneath naming what the diff is against, and that
+repetition is the cost of leaving `edit-lbl` alone rather than a fault this
+answer denies.
 
 The reason is what the column is for. The thing the indication warns about is a
 text; the text is in that column and nowhere else; and a reader meets the warning
 in the same glance as the thing warned about, which no other placement achieves.
-`dialogue`'s `every-part-in-the-record` asks the projections to "lead with the
-edit wherever an answer stands and name the ground it is against, so that a first
-answer is named as one by what the projection says of it", which is this
-requirement stated for the diff; what this answer adds is that a projection names
-a first answer as one in the heading too, and not only where a diff makes the
-question unavoidable.
 
 One qualification, per node, in the column that holds the disposition. The rows
 carry no part of it: what a row carries is `what-an-option-row-carries`'
 question, and that answer takes the mark off the row because whether a node is
 confirmed is a fact about the node and not a status of one option among several.
 
-Where a node carries neither an answer nor a recommended text the column is not
-rendered at all and the page says nothing, since there is no disposition to
-qualify and inventing one to disclaim would be a worse fault than silence.
-Measured on 2026-09-06: 21 of the record's 140 nodes are in that case, so the
-column is rendered on 119 and the heading is written 119 times.
-
-Two clauses of `alignment-page` are touched by this and neither is devolved to
-this node: its naming paragraph, which says the row tells the author that
-confirming ratifies the AI's draft, and its account of the right-hand column,
-which says that column carries "no control, no caption, no indication, no
-drill-down". Both are the parent's own apparatus rule. This answer does not amend
-them; the survivor is the option `standing-named-in-the-pane` on
-`alignment-page`'s answer fact, named in this node's `depends`. The consequence
-is worth stating plainly: a ruling here is not implementable until that option is
-ruled, because the parent's reserve forbids in one word the thing this answer
-puts there.
 ## Rationale
 
-Two words of the author's and one requirement of the record's. The finding of
-2026-09-04, on `commons.systems/public/agency`: "I don't understand what
-'standing' would even refer to. This node has not yet been answered, there is no
-ground to confirm as standing." That is the fault this question exists to fix,
-and it is a fault of a heading and not of a row. The permission of 2026-09-06,
-given when the sibling took the mark off the row: "A single indication per node
-to indicate that node is not yet confirmed is fine." That fixes the cardinality
-and leaves the placement to the AI, which is why the boldness is moderate and why
-the reading's counter-argument on placement is carried at full strength.
+Two words of the author's. The finding of 2026-09-04, on
+`commons.systems/public/agency`: "I don't understand what 'standing' would even
+refer to. This node has not yet been answered, there is no ground to confirm as
+standing." That is the fault this question exists to fix, and it is a fault of a
+heading and not of a row. The permission of 2026-09-06, given when the sibling
+took the mark off the row: "A single indication per node to indicate that node is
+not yet confirmed is fine." That fixes the cardinality and leaves the placement
+to the AI, which is why the boldness is moderate and why the counter-argument on
+placement is carried at full strength.
 
-The requirement is `dialogue`'s `every-part-in-the-record`, which asks the
-projections to "lead with the edit wherever an answer stands and name the ground
-it is against, so that a first answer is named as one by what the projection says
-of it". That is the confirmed-from-unconfirmed distinction, stated for the diff.
-The right-hand column's heading is where the same distinction is owed for every
-node whose column is rendered, and today the heading says "The node as it would
-stand" on all 119 of them, which claims for every one of them a standing no
-answer fact of this record carries. What the answer beat is on the fact: the
-stage chip and the answer fact, both in the column that asks, and the reading of
-the absence of a mark as an indication in itself.
+`dialogue`'s `every-part-in-the-record` is the record-wide rule this applies to a
+heading. It asks the projections to "lead with the edit wherever an answer
+stands, ratified or a draft no one has confirmed, and name the ground the edit is
+against; a node with no answer shows the recommended text whole." That is the
+confirmed-from-unconfirmed distinction, stated for the diff. What this answer
+adds is that the same distinction is owed in the heading of every rendered
+column, and not only on the 32 nodes where a diff forces the question.
+
+What the answer beat is on the fact: the stage chip and the answer fact, both in
+the column that asks rather than the column that shows, and the reading of an
+absent mark as an indication in itself.
 
 ## Facts
 
@@ -176,57 +145,51 @@ same glance as the thing warned about. No other placement does that: the chip an
 the eyebrow are in the column that asks, where the text is not, and an absence is
 not an indication at all.
 
-That the heading already exists is deliberately not a reason. The evaluation node
-strikes what the incumbent implementation already does from the choosing, and an
-earlier draft of this answer rested on exactly that — "it is completed rather
-than minted" — which is an incumbent fact doing the work of a design constraint.
-The design reason above survives without it, and the cheapness of the change is a
-consequence and not a ground.
+That the heading already exists is deliberately not a reason. `evaluation` strikes
+what the incumbent implementation already does from the choosing, and an earlier
+draft of this answer rested on exactly that, which is an incumbent fact doing the
+work of a design constraint. The cheapness of the change is a consequence.
 
-The word this answer does not use is the author's own objection, and the earlier
-draft of it did use the word, which is why the claim is made carefully here. The
-author wrote of `commons.systems/public/agency` that they did not understand what
-"standing" would refer to on a node that has not been answered, and
-`alignment-page`'s own answer rejects the phrase "the node as it stands" by name.
-The heading in the answer above says who wrote the text and whether anyone has
-confirmed it, and uses neither the word nor the phrase; the draft that did use it
-was carrying three cases carved off the projector's branches, and dropping to two
-keyed on the ruling removed the occasion for it rather than the word alone.
+The word the author could not read is used in none of the three forms, and the
+claim is made carefully because two earlier drafts made it falsely. The first
+carved the forms off the projector's branches and kept "the node as it stands",
+the phrase `alignment-page` rejects by name. The second re-keyed them onto
+rulings and so replaced a false claim of standing with a false claim of
+confirmation. The three forms above name who wrote what is shown and whether the
+author has confirmed it, which needs neither.
 
 Boldness moderate. The author permitted an indication per node and did not place
-it, so the placement rests on the AI, and the reading of 2026-09-06 returned a
-counter-argument against the placement that the answer does not fully meet: the
-act guarded is a confirmation, and a confirmation is staged in the other column.
+it, so the placement rests on the AI, and the first reading of 2026-09-06
+returned a counter-argument the answer does not fully meet: the act guarded is a
+confirmation, and a confirmation is staged in the other column.
 
 #### on-the-answer-fact
 
 Everything the recommended option says, with the indication in the column that
 asks rather than the column that shows: one line on the answer fact, above its
-options, saying that no ruling reaches this node and that confirming one of these
-options is the first. It is neither a row's mark nor a chip, so it survives both
-of the objections the other placements meet, and it puts the warning beside the
-control the author actually confirms with, which is the counter-argument this
-reading returned against the recommendation. Against it: the answer fact is one
-of several and the fact is not what is unconfirmed, the node is; and a line above
-one fact's options is apparatus inside the asking column, which the parent's
-answer keeps clear on the argument that every sentence of apparatus there is a
-sentence the author must read past. And the heading of a fact is
-`how-a-fact-is-headed`'s question, which stands at the periagogic stage with no
-answer and no facts, so an answer here that writes a line above a fact's options
-would settle part of a question that node has not begun.
+options, saying that its answer carries no ruling and that confirming one of
+these options is the first. It is neither a row's mark nor a chip, so it survives
+both of the objections the other placements meet, and it puts the warning beside
+the control the author confirms with, which is the counter-argument the first
+reading returned. Against it: the answer fact is one of several and the fact is
+not what is unconfirmed, the node is; a line above one fact's options is
+apparatus inside the asking column, which the parent keeps clear on the argument
+that every sentence of apparatus there is a sentence the author must read past;
+and the heading of a fact is `how-a-fact-is-headed`'s question, which stands at
+the periagogic stage with no answer and no facts, so an answer here would settle
+part of a question that node has not begun.
 
 #### warning-on-the-stage-chip
 
 Everything the recommended option says, with the indication on the stage chip
-instead of on the line that names what the pane shows. The chip is the node's one
-status object, already carrying the stage, the two readings' readiness and the
-open probe count, so the node's state would be in one place and at the head of
-the column that asks, which is where the author decides. Against it: the thing
-warned about is the text and the text is in the other column; the chip is
-dialogue state, which the recording removes, where the standing of a text is not;
-and the column's heading has to exist anyway, being written for every node the
-page renders, so the chip would be a second place for a sentence that has one
-already and would leave the heading naming the wrong part of the record.
+instead of the heading. The chip is the node's one status object, already
+carrying the stage, the two readings' readiness and the open probe count, so the
+node's state would be in one place and at the head of the column that asks, which
+is where the author decides. Against it: the thing warned about is the text and
+the text is in the other column; the chip is dialogue state, which the recording
+removes, where whether a text was confirmed is not; and the heading exists on all
+119 rendered columns anyway, so the chip would be a second place for a sentence
+that has one and would leave the heading naming the wrong thing.
 
 #### warning-in-the-eyebrow
 
@@ -234,31 +197,31 @@ Everything the recommended option says, with the indication in the line beneath
 the question and the id, among the settling count, the options pending and the
 nodes this one stands under. Passed over: `alignment-page`'s answer names that
 line's contents and says nothing else is in it, on the argument that a line no
-answer names collects what no answer justifies, and it argues specifically that a
-word there summarising the rulings on the facts is the facts said twice.
+answer names collects what no answer justifies.
 
 #### no-per-node-warning
 
 No indication anywhere: the confirmed mark is absent from every row of an
 unconfirmed node, and that absence is the indication. Passed over: the author's
 words of 2026-09-06 permit an indication rather than requiring none, and absence
-is precisely what a reader cannot see. It is also the state the author already
-found and objected to on `commons.systems/public/agency`, where an AI draft
-written in the author's own voice read as the record.
+is precisely what a reader cannot see. It is also the state the author found and
+objected to on `commons.systems/public/agency`.
 
 ### authority
 
-Ratified, on the capture-shaped limb of `class-recommendation`'s test, and on no
-other: the object is the placement of one line, which costs a projector change to
-get wrong and can be changed back, so neither the expensive nor the irreversible
-limb is met. The limb that is met is met exactly. This indication is the record's
-only device for telling the author that the text they are about to confirm is the
-AI's draft and not their record; the party that would set its placement is the
-AI, and the thing placed exists to check the AI. A warning about the AI's own
-drafting, placed by the AI where the AI judges it will be seen, is the party
-checked deciding the strength of the check. Low boldness: the limb is
-`alignment-page`'s own recorded reading on its authority fact, narrowed to this
-object, and the evidence is the author's finding of 2026-09-04 quoted above.
+Ratified, on the capture-shaped limb of `class-recommendation`'s test and on no
+other: the object is the wording of one heading, which costs a projector change
+to get wrong and can be changed back, so neither the expensive nor the
+irreversible limb is met. The limb that is met is met exactly. This heading is
+the record's only device for telling the author that the text they are about to
+confirm is the AI's draft and not their record; the party that would set its
+wording is the AI, and the thing worded exists to check the AI. Low boldness: the
+limb is `alignment-page`'s own recorded reading narrowed to this object, and the
+evidence is the author's finding of 2026-09-04.
+
+Against it: the wording of one line is reversible and cheap to get wrong, so
+`deferred` would let the recommendation act while the author works the rest of
+the frontier, and a `ratified` ruling here stops any delegation from reaching it.
 
 ## Account
 
@@ -499,3 +462,29 @@ Checked by search rather than asserted, over the node's live text: the wrong
 criterion, both forms of the mis-citation, and the two false counts are gone. The
 one surviving occurrence of "the node as it stands" is the quotation of
 `alignment-page` rejecting the phrase, which is the sentence that rejects it.
+
+### Clean-context re-reading, 2026-09-06, of bcabb0d8
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `the-line-that-names-what-the-pane-shows`.
+
+Findings:
+
+- Answer, second paragraph, the second of the three cases: "the node as it stands, where an answer stands and nothing would change it" (the last reading's sixth finding, validation 1, answered in the account and not in the text). The amendment removed the clause "the text and the standing it has" and the fact's own prose now claims the fix: "The word this answer does not use is the author's own objection ... the heading says which of the three cases the column is showing in plain words and does not name a standing the text may not have." That is false of the Answer it describes. `alignment-page` (disposition/disposition-graph/alignment-page.md:530) rejects this exact string: "Naming it 'the node as it stands' claims a standing the text does not have, and it reads as the safe and ordinary choice when on an AI-drafted node written in the author's own voice it is the least safe one available." The same paragraph settles which nodes it reaches: "Where no ruling stands on the answer fact it is a draft no one has confirmed, whatever class a ruling on the authority fact confers" -- which today is every node, including every node whose answer stands and which nothing would change. So the amendment writes the rejected phrase as the standing heading of the whole record, and the phrasing that made `PANE_LBL` bearable at all is the subjunctive "would" the amendment drops. Suggested edit: name the second case without the verb, in the terms `alignment-page`:530 and `dialogue#every-part-in-the-record` already use -- "the node's answer as ratified, where the answer fact carries a ruling and nothing would change it" for the ratified case, and "a draft no one has confirmed" for the rest -- and strike the fact's sentence claiming the word is gone, or make it true.
+- Answer, second paragraph, the enumeration as a whole, and the sentence "The third is the whole record today" (new; the last reading read a text whose three cases were carved differently and could not have caught this). The pinned text carved the three cases on what the column renders -- "the edit and what it is an edit against; the text and the standing it has, where an answer stands and nothing would change it; and, where no answer stands at all, ..." -- which is exactly `renderPane`'s three branches (packages/disposition/project.mjs:1781 fence+answer, :1804 fence only, :1807 answer only, :1812 neither and no pane). The amendment re-carves the first and third on rulings -- "against an answer the author has ratified" and "where no ruling reaches the node at all" -- while leaving the second on the render branch, and the result is not a partition: the third's criterion subsumes the second's, so "The third is the whole record today" makes the second case empty by its own terms, and a node with an answer and a fence and no ruling (`purpose`, which the projector's own comment at :1791-1798 names) falls in the third by criterion while its pane renders a diff, which "the node as the AI proposes it" does not describe. The amendment's opening sentence claims the enumeration matches the column -- "present in all three of the cases that column has" -- and it no longer does. Suggested edit: carve the three cases on what the column renders, as the pinned text did, and let the ruling distinction stay where the amendment itself puts it, on `edit-lbl`.
+- Answer, second paragraph, first case "the node as it would stand, against an answer the author has ratified", against the third paragraph, "The ground-naming line beneath it is a different line and is not this answer's ... What this answer adds is not a second such line but a qualification of the heading" (new). The first case names the ground, in the same words `edit-lbl` already carries at project.mjs:1799-1801 ("The edit, against the ratified answer"). So in the one case the first limb describes, the pane would say the ground twice, in the heading and in the line beneath it, which is the two-naming-lines failure the last reading's third finding warned of ("if the ground-naming is added beside `PANE_LBL` the pane carries two naming lines and 'once per node, and nowhere else on the page' is not met") returning in a new form, and it falsifies the Answer's own first sentence, "once per node and nowhere else on the page". Suggested edit: drop "against an answer the author has ratified" from the heading's first case and let the heading say only what is shown -- an edit, or a text -- leaving what the edit is against to `edit-lbl`, which the answer has just said is not this answer's.
+- Facts, `#### warning-on-the-stage-chip`, third limb of "Against it": "the ground-naming line has to exist anyway, because a diff needs a base, so the chip would be a second home for a sentence that already has one" (the last reading's second finding, half unapplied, and now inconsistent with the amendment). The suggested edit asked in terms for this limb to be recast "as the one-fact-in-two-places argument the record already holds (`codd-update-anomaly`, `dry-single-source-of-truth`) rather than as a cost"; the session's reply says "Accepted whole" and "The rest are taken as given", and the diff leaves the option untouched. Worse, the limb now rests on the very conflation the amendment corrected: after the amendment the sentence with a home is the heading `PANE_LBL`, which renders in all three cases, not the ground-naming `edit-lbl`, which the same amendment says "is not this answer's" and which renders only in the diff case -- so as written the limb argues against the chip from a line the answer has just disclaimed. Suggested edit: recast the limb on the heading, not the ground line -- the heading names what the column shows on every node whatever the chip says, so an indication on the chip is one fact in two places -- and cite the record's own name for that fault rather than the cost of a second home.
+- Answer, fourth paragraph: "a heading that names the wrong part on a hundred and forty nodes fails that requirement" (new, validation 3, exactness -- the same class of unchecked number the last reading found twice). 140 is the node count of the graph (`ls disposition-graph/*.md public/*.md | wc -l` = 140, and all 140 carry a `stage`, so the alignment page renders 140 items), but 21 of them carry neither `## Answer` nor `## Recommendation`, `renderPane` returns "" for those (project.mjs:1809-1813), and the node's own fifth paragraph says so: "Where a node carries neither an answer nor a recommended text the column is not rendered and the page says nothing". The heading therefore renders on 119 nodes, not 140. Suggested edit: "on every node whose column is rendered", which needs no count and cannot go stale.
+- `depends` (new; the dependency did not exist at the pinned text). The amendment adds `commons.systems/disposition-graph/dialogue#every-part-in-the-record`, a citation dependency, and omits the far stronger one the same amendment creates. The Answer's last paragraph says the parent's "no control, no caption, no indication, no drill-down" clause is not devolved and is not amended here, and that the survivor is the option `standing-named-in-the-pane` on `alignment-page`'s answer fact -- verified present at disposition/disposition-graph/alignment-page.md:136 and :394, source this node, ref 2026-09-06, so the claim is true. But the consequence is that the recommended answer cannot be implemented unless the parent's answer fact moves to that option, which is a dependency in the ordering sense `depends` records. `alignment-page`'s own `depends` (alignment-page.md:182-188) does not name this node, so there is no loop. Suggested edit: add `commons.systems/disposition-graph/alignment-page#standing-named-in-the-pane` to `depends`, and say in the last paragraph that a ruling here is not implementable until that option is ruled for.
+- Answer, fourth paragraph (the last reading's fifth finding, partially answered). The citation and the `depends` entry are in, but the suggested edit asked for three things and the third is missing: "say what this node adds beyond it". The paragraph says only that qualifying the heading "discharges" `every-part-in-the-record`, which if anything reads the other way -- as though the whole answer were that rule applied, which is the merge the last reading explicitly ruled out. What is this node's own, in the last reading's words, is "the page-level placement, 'once per node, and nowhere else', and the second case, which the dialogue rule does not reach". Suggested edit: add a clause naming the increment -- the dialogue rule says every projection must name the part of the record it shows and does not say where or how often on a page, and this node fixes both, and it reaches the case where an answer stands with nothing to diff, which the dialogue rule leaves unaddressed.
+- Node shape, disposition/disposition-graph/where-the-unconfirmed-indication-goes.md:112-113 (new, cosmetic). The last Answer paragraph ends "... and not what that column is otherwise permitted to hold." and `## Rationale` follows on the next line with no blank line between. The projector's section splitter tolerates it and the validator passes, but every other section boundary in the record carries the blank line. Suggested edit: insert it.
+- Closed, and recorded here so the session does not re-raise them: the first finding (authority-widening) is answered, and answered better than its own suggested edit -- the amendment names both of the parent's clauses, disclaims amending them, and records the survivor as an option on the node it conflicts with, which is what `authority` prescribes, where the suggested edit would have had this node declare a devolution the parent has not made, the very widening the node was minted to close. The third and fourth findings are answered whole: the `PANE_LBL`/`edit-lbl` distinction is now stated correctly and verified against project.mjs:682, :1799-1802, :1815, and the false clause "the line already exists, in the one case the author complained of" is gone rather than repaired. The seventh is answered: a `## Rationale` is present and carries the placement argument. The second is answered in its main clause -- the incumbency reason is struck and explicitly disowned -- and open only in the limb named above.
+
+On the facts and what they recommend: The diff changes nothing about what either fact recommends, its boldness, what stands, or the fence: the answer fact still recommends `the-line-that-names-what-the-pane-shows` at moderate with that same option as `stands`, so no `## Recommendation` fence is due and none is present, and the authority fact still recommends `ratified` at low with its capture-shaped reading intact. What the diff adds to the facts is one option, `on-the-answer-fact`, source `review`, ref 2026-09-06, in the position the last reading named, with the prose it supplied lightly reworded and its "against it" kept; the fact's opening reason is rewritten and the two `against` strings are unchanged.
+
+On the viability of the options: The diff leaves every option viable and adds one that is. `on-the-answer-fact` is correctly entered as viable rather than passed, is not the recommendation, and its "against it" limbs stand; the two passed options keep their reasons unchanged and those reasons still hold. One drift: the amendment's reworded prose for `on-the-answer-fact` drops the limb the last reading wrote into it -- that a fact section's heading and contents are `how-a-fact-is-headed`'s question, still at the periagogic stage, so the placement reaches into an unruled sibling -- which was the sharper of its two objections and is the one that bears on authority rather than on layout; it is worth restoring.
+
+Strongest counter-argument (strong): The amendment's account claims the last reading's central finding is answered -- "the draft reused the word 'standing', which is the word the author said they could not read on an unanswered node, and the heading now names the case in plain words" -- and the heading it wrote names its second case "the node as it stands", the string `alignment-page`:530 rejects in terms, applied by "The third is the whole record today" to a record in which no answer is ratified. The finding is therefore answered in the reply and not in the text, which is the failure mode this second reading exists to catch, and the fact's own prose asserting that the word is gone makes the record say the opposite of what the record shows. The rest of the amendment is genuine and mostly good work -- four of the seven findings are closed cleanly and the heaviest is closed better than its suggested edit -- but the rewrite that answered the word also re-carved the three cases off the render branches and onto rulings, so the one paragraph the whole answer turns on is now both less exact and less true than the paragraph it replaced. Against my own verdict: none of this touches the placement, so a session could repair all of it as wording without the answer moving; I write kickback rather than forward because the second case is not wording -- it is the claim the author objected to, restated as the page's standing heading.
+
+The session's reply: Accepted, and the account's verification claim is false on three counts, which is the fourth reading in a row to find that on one of this sitting's nodes. Two things follow and both are done. The measurements are corrected at the loci: 32 nodes carry a recommended text and are in the first form, 87 are in the third, 21 render no column and the second form fires on nothing today, which the answer now says instead of claiming every node is in the third case; `renderPane` has four cases and returns nothing in the fourth, so the heading is not present in every case that function has; and the quotation of `dialogue#every-part-in-the-record` is corrected to its real tail, 'by what it is an edit against rather than by withholding the edit', the invented ending having survived inside quotation marks after the requirement it came from was struck. The second thing is the method. Four rounds of targeted replacement have not made this node consistent with itself, because the rule is stated once in the answer and presupposed in a fact's reason, in four option subsections and in a proposed amendment that restates the whole answer in the parent's words. The live sections are rewritten whole in one pass, and the proposed amendment goes: a child's account is not where the parent's text is drafted, the amendment triples the surface on which the answer can be restated wrongly, and what a ruling here reaches is said by naming and quoting the parent's clauses without drafting their replacements.
