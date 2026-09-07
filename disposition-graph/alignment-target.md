@@ -158,3 +158,15 @@ Findings:
 Strongest counter-argument (strong): The answer instructs a session to trust the stage, and the stage is currently wrong on two thirds of the ruling-stage record by the projector's own reckoning. The rule that would keep it honest — that a recommendation moved at the ruling stage returns the node to review — lives on `evaluation` and is not applied, and this node's answer supplies the reason it is not: the stage is the record of what the dialogue has done and is trusted, so nothing in a sitting's ordinary path re-reads it. Trusting a derived-but-stored field, in a record whose model claims such things are never stored, is where that claim is actually paid for.
 
 The session's reply: Taken; this is the clause that turns a stale field into a wrong movement, and the survey is right to locate the defect here rather than only on `evaluation`. The session records the qualification as owed — a session checks the pin before trusting the stage — and does not write it, because the sentence is in the text the survey read. On the deeper point the counter-argument is correct and uncomfortable: `stage` is a derived-but-stored field in a record whose model says such things are never stored, and every stale-pin defect this survey found is that storage being paid for.
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+growth's recommended text orders the same frontier two ways. Its third usage reads "given nothing, it takes up the highest-ranked unanswered node, as the alignment-target node says", while its queue sentence in the same paragraph reads "the queue of un-aligned dispositions is therefore the set of such nodes, taken in the ruling order as the alignment-order node says and surviving every session, and the author's naming of a node is their order and needs no boost"; and the rationale of the same fence still opens "The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost." alignment-order, which growth names in depends, recommends "`/align` with nothing takes the first node of the ruling order; `/align <node id>` is the author's order and needs no boost." growth's own option `queue-in-ruling-order` was passed over on 2026-09-07 as "absorbed by the recommendation, whose queue sentence takes `alignment-order`'s ruling order and drops the boost", so the absorption reached one sentence of three.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/alignment-order.
+
+Proposed: growth is the node whose text must change: the third usage and the rationale sentence are brought into line with the queue sentence and with alignment-order's recommended answer, so that one order governs the whole fence. alignment-order survives as the owner of the order and is cited rather than contradicted; alignment-target already carries the matching option `ruling-order-not-rank`, sourced to the author, and needs no change from this finding.
+
+Recorded as an option on commons.systems/disposition-graph/growth's answer fact: `third-usage-in-the-ruling-order` (source review, 2026-09-07).

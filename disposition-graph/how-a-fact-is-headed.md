@@ -61,6 +61,9 @@ review:
   of: ffc2656dd3a15f8511154e684286ae01dfdb8027
   commit: f146f8f44b295c64e47a13bff338748035183d87
   against: "All five findings of the previous reading are answered, each verified at its locus: the false 'nothing in the record defines the term answer' claim is replaced with an accurate account of the bare entry at node.md:65; the passed-over reason and the fact's `against` on `heading-is-the-name-and-a-link` are corrected to the same effect; the fallback-to-dialogue clause is removed entirely rather than patched, since the new recommendation needs no fallback; every stale project.mjs/derive.mjs line citation is now given by function name; and the Account no longer calls the periagogic question a probe, instead correctly routing it through the fact's own options under `probe-or-node`. Question two also turns up nothing false: the new design (glossing `answer` and `persistence` on `dialogue` and releasing the bare entries on `node` and `transience`) is a genuinely new decision beyond what the previous reading's own suggested missing option sketched (which touched only two nodes, `node` and `transience`, by glossing them directly rather than writing to `dialogue`), but it is drawn from cited evidence (`glossary`/`definerIndex` both take the first definer and ignore later ones) and its cost is stated plainly in the fact's own `against`, so it reads as a defensible design choice made in the open rather than an unexamined addition."
+  survey:
+    date: 2026-09-07
+    of: ffc2656dd3a15f8511154e684286ae01dfdb8027
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -497,3 +500,26 @@ On the viability of the options: Every option remains viable after the diff. `na
 Strongest counter-argument (moderate): All five findings of the previous reading are answered, each verified at its locus: the false 'nothing in the record defines the term answer' claim is replaced with an accurate account of the bare entry at node.md:65; the passed-over reason and the fact's `against` on `heading-is-the-name-and-a-link` are corrected to the same effect; the fallback-to-dialogue clause is removed entirely rather than patched, since the new recommendation needs no fallback; every stale project.mjs/derive.mjs line citation is now given by function name; and the Account no longer calls the periagogic question a probe, instead correctly routing it through the fact's own options under `probe-or-node`. Question two also turns up nothing false: the new design (glossing `answer` and `persistence` on `dialogue` and releasing the bare entries on `node` and `transience`) is a genuinely new decision beyond what the previous reading's own suggested missing option sketched (which touched only two nodes, `node` and `transience`, by glossing them directly rather than writing to `dialogue`), but it is drawn from cited evidence (`glossary`/`definerIndex` both take the first definer and ignore later ones) and its cost is stated plainly in the fact's own `against`, so it reads as a defensible design choice made in the open rather than an unexamined addition.
 
 The session's reply: Forwarded with no finding; the counter-argument, that the recommendation now writes on dialogue as well as node and transience, is the cost the fact's own case against states, and it stands on the row at moderate strength. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of ffc2656d
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The recommendation buys its rule by writing on three nodes it does not own, and only one of the three carries the writing where the author would meet it. The gloss half is drafted on dialogue as `dialogue-glosses-the-four-fact-names`; "the release of the bare entries on `node` and `transience`" is on neither of those nodes, on no fact, and in no depends. So the answer's claim that "There is no fallback, because this ruling leaves no name without such an entry" rests on two edits the record has not proposed where they would be made, and the heading that appears on all 134 nodes carrying facts is the one whose link they secure.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+how-a-fact-is-headed's recommendation edits two other nodes' `defines` lists and neither node carries the edit. Its fact's case against says it "buys the link on every heading by writing on three nodes this ruling does not own: a gloss on `dialogue` for two of the four names and the release of the bare entries on `node` and `transience`", and its answer requires that "the bare entries at `disposition/disposition-graph/node.md:65` and `disposition/disposition-graph/transience.md:76` are released to it, so that one entry stands for each name." The gloss half is recorded where the author will meet it, as `dialogue-glosses-the-four-fact-names` on dialogue. The release half is recorded nowhere: node.md and transience.md name how-a-fact-is-headed at no locus, carry no option for the release, and are in no depends of that node. So the answer's claim that "There is no fallback, because this ruling leaves no name without such an entry" rests on two edits the record has not proposed on the nodes that would make them.
+
+Also named: commons.systems/disposition-graph/node, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/dialogue.
+
+Proposed: node and transience are where the release is missing. The release of each bare `defines` entry is recorded as an option on that node's answer fact, sourced to how-a-fact-is-headed, so each node's own ruler meets the edit their node would take, as dialogue's ruler already meets the gloss. how-a-fact-is-headed's answer stands; what it lacks is the two rows on the nodes it writes on.
+
+Recorded as an option on commons.systems/disposition-graph/node's answer fact: `answer-gloss-released-to-dialogue` (source review, 2026-09-07).
+
+Recorded as an option on commons.systems/disposition-graph/transience's answer fact: `persistence-gloss-released-to-dialogue` (source review, 2026-09-07).

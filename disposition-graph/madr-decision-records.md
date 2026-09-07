@@ -9,8 +9,8 @@ review:
   commit: 7650730028abdef429a8a94f4a11215917585581
   against: "The reading is three drafts deep and has never once left the AI's memory. Each redrawing has fitted it better to the record — every considered option kept, the class derived, supersession named — and each was made by a reader with the same second-hand knowledge of the template as the writer, so what has improved is the fit and not the fidelity, and the single test that would catch a misreading, somebody opening MADR, has been run at none of the three. This reading found two of its mappings wrong (rejected, decision-makers) by reading the record rather than the source, which is evidence that the remaining errors are of the kind only the source would catch. The entries make the point structurally: after two rounds of findings every relation is still `adopted`, and the two divergences the answer now states are carried by no entry at all, so the projection dialogue's ratifier reads still shows a tradition agreeing with the encoding in every particular. Delegated on the authority fact makes that permanent at the moment it matters most, and the record's reply — that readings' own rule confers delegated on exactly this case, and that the author's words of 2026-09-04 name this tradition in terms — answers less than it seems, since those words invoke 'ADR style \"alternatives considered\" documentation', the one clause of MADR nobody disputes, while the work this reading does is in the clauses about the status and the immutability that the author has never spoken to."
   survey:
-    date: 2026-09-05
-    of: 94664d547dacc5eb13b00d04766a5767f2671ce6
+    date: 2026-09-07
+    of: 5d80f9d0b0e57e6f006ecee3d51f568437f00e34
 facts:
   - name: answer
     options:
@@ -293,3 +293,12 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Frontier survey, 2026-09-07, of 5d80f9d0
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (weak): The reading's `bears` list gained an `adopted` entry on how-a-fact-is-headed's option `glosses-written-with-this-ruling`, and the argument for it is written on that node's account and not in this reading's answer, so a reader of this node meets a relation it does not argue. That widens the fact's own case against rather than answering it: the record's only examination of the tradition behind its central encoding is drawn from a template no one here has read, and it is now load-bearing on one more decision than when the case against was written.

@@ -51,6 +51,9 @@ review:
   date: 2026-09-07
   of: 01059350d1d2da037d38b5ada9e1e5e49463203f
   commit: f146f8f44b295c64e47a13bff338748035183d87
+  survey:
+    date: 2026-09-07
+    of: 01059350d1d2da037d38b5ada9e1e5e49463203f
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:
@@ -482,3 +485,12 @@ On the viability of the options: Every option remains viable. The new option `te
 The review found no strong counter-argument.
 
 The session's reply: Forwarded with no finding. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of 01059350
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (weak): The answer's reply to the record's own reason for the gloss is the fact's heading, "which under `how-a-fact-is-headed` is the fact's name linked to the node that defines it", and that sibling's recommendation itself turns on two glosses not yet written on dialogue and two bare `defines` entries not yet released on node and transience. This node names the sibling in prose and not in depends, so the row can be ruled bare before the heading it leans on can resolve; in that interval a reader who does not hold the vocabulary meets three words and no route, which is exactly the state the fact's own case against describes.

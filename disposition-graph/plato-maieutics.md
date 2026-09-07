@@ -1,6 +1,6 @@
 ---
 question: Does Plato's midwifery ground the maieutic conduct of the interview?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: strong
@@ -8,8 +8,8 @@ review:
   of: 4ebb5b6e5e722eb32986b93723f7c618e8adbca0
   against: "Socrates' midwifery rests on his being barren: he delivers nothing of his own, which is what makes the offspring the interlocutor's. The AI is the opposite — it drafts first and the author reacts — so the visible, refusable draft is an anchor, and the known effect of an anchor is that what is delivered is the drafter's. The node names this divergence and keeps 'adopted', which imports a guarantee about whose answer emerges that the mechanism does not provide. Growth compounds it by making the maieutic stage the one where the ruling is taken."
   survey:
-    date: 2026-09-05
-    of: deccaee9285054304590cec1a3004c383e2f9cf5
+    date: 2026-09-07
+    of: d1547e2467c59de6618c9afedd3fd1d5cdcc7588
 facts:
   - name: answer
     options:
@@ -22,6 +22,9 @@ facts:
       - name: propose-and-critique
         source: review
         ref: "2026-09-03"
+      - name: answer-argues-the-page-divergence
+        source: review
+        ref: "2026-09-07"
     recommends: standing
     boldness: high
     stands: standing
@@ -68,6 +71,10 @@ Both readings found the divergence named in the rationale, that the AI is not ba
 #### propose-and-critique
 
 The strong counter-argument, twice recorded: Socrates' midwifery rests on his being barren, and the AI is the opposite, drafting first while the author reacts, so the visible refusable draft is an anchor and what is delivered is the drafter's. On this reading the interview's actual method is a propose-and-critique loop, and calling it maieutic imports a guarantee about whose answer emerges that the mechanism does not provide. The alternative answers the question with a qualified no: the tradition names the test of the offspring and not the conduct, and the conduct is described in its own terms, which growth compounds by making the maieutic stage the one where the ruling is taken.
+
+#### answer-argues-the-page-divergence
+
+Everything `standing` says, with a paragraph saying why the alignment page's option `every-fact-every-option` departs from the tradition: a page that marks the AI's recommendation on every option of every fact before the author chooses is the drafter leading the delivery, which is the one thing the midwife may not do, and the record accepts it for the legitimacy the listing buys. It is on the table because this node's frontmatter already carries `diverged` on that option and `readings` requires "diverged, where the option departs from it and the reading's own answer says why", so the relation stands today on an argument written on the node it bears on and nowhere in the reading itself.
 
 ## Account
 
@@ -138,3 +145,25 @@ Findings:
 Strongest counter-argument (strong): Socrates' claim in the Theaetetus is that he contributes nothing of his own (150c-d), and the conduct this reading grounds proceeds by the AI writing visible drafts that the author may refuse. That is the opposite of contributing nothing: the drafts are the AI's content, offered first, and the author's role is reduced to acceptance or refusal. The record knows this — `growth` carries `boldness-reversed` and the `anchoring-and-adjustment` reading names the anchoring a draft creates — so the tradition is adopted for a practice its own source warns against, and no divergence is recorded. Boldness `high`, authority `delegated`: nothing puts it in front of the author.
 
 The session's reply: Taken, and no divergence is recorded where one is owed. Socrates' claim at Theaetetus 150c-d is that he contributes nothing of his own, and this record's conduct is the AI writing visible drafts first; that is a departure from the source and not an application of it. The record already knows the mechanism — `growth` carries `boldness-reversed` and the `anchoring-and-adjustment` reading names the anchoring a draft creates — so the divergence is derivable from nodes the reading does not cite. The session records the divergence as owed on this reading and does not write it, since a reading's relation is the reading's own text.
+
+### Frontier survey, 2026-09-07, of d1547e24
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+- ## Facts, `### answer`: the fact's subsection opens straight onto `#### relation-diverged` with no reason above it, and `### authority` does the same, so neither fact records why it recommends what it does. `review-cost`'s recommended answer names this as a defect an instrument decides — "on a fact whose prose opens straight onto an option subsection with no reason above it" — and until the validator holds the check a reading that meets one still reports it.
+
+Strongest counter-argument (moderate): The reading carries `diverged` on alignment-page's option `every-fact-every-option` and its answer argues nothing of the kind: the whole of it is "Yes, for the conduct in which the answer lives in the author, unrecorded", with no mention of that page, that option, or the anchoring the divergence is about. readings requires "diverged, where the option departs from it and the reading's own answer says why". So the relation is asserted in frontmatter and argued on the page's own node, which is the party the reading is supposed to check, and the recommendation `standing` is a recommendation to keep an answer that does not carry the relation the node now bears.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+plato-maieutics carries a `diverged` relation its own answer does not argue, which readings requires it to. Its frontmatter bears on commons.systems/disposition-graph/alignment-page, fact `answer`, option `every-fact-every-option`, relation `diverged`; its whole answer is "Yes, for the conduct in which the answer lives in the author, unrecorded. Socrates claims to bring forth what the interlocutor already carries and to contribute nothing of his own (150c to d), and then to test whether the offspring is genuine or a wind-egg (151e); the interview under this conduct draws the author's disposition out with visible drafts that the author may refuse, and the test of the draft against the author's intention is the midwife's test." readings' standing answer requires "diverged, where the option departs from it and the reading's own answer says why". The argument for the departure is written on alignment-page instead, which says of the anchor that it is "the anchor the record's reading on the maieutic conduct names twice and never answers" — that is, the reading is cited for a divergence the reading itself does not state.
+
+Also named: commons.systems/disposition-graph/readings, commons.systems/disposition-graph/alignment-page.
+
+Proposed: readings' rule is the survivor and plato-maieutics is where the text must change: the reading's answer says why the page's option departs from the tradition, in the reading's own words, so the relation the frontmatter asserts is readable from the reading rather than only from the node it bears on. The alternative, that the relation is retracted or narrowed, is the ruling the author takes instead; alignment-page's own text needs no change either way.
+
+Recorded as an option on this node's answer fact: `answer-argues-the-page-divergence` (source review, 2026-09-07).

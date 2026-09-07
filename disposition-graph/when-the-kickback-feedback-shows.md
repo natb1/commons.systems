@@ -64,6 +64,9 @@ review:
   date: 2026-09-07
   of: 9c0aa09f3ad04ed2e2be07f0cb1f4b4535fe62dc
   commit: f146f8f44b295c64e47a13bff338748035183d87
+  survey:
+    date: 2026-09-07
+    of: 9c0aa09f3ad04ed2e2be07f0cb1f4b4535fe62dc
 ---
 ## Disposition
 
@@ -613,3 +616,12 @@ On the viability of the options: Every option remains viable after the diff; the
 The review found no strong counter-argument.
 
 The session's reply: Forwarded with no finding; the parent's mark and the option on where-a-change-request-goes verified on the main thread. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of 9c0aa09f
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (weak): The caption clause is the AI's and it departs from a sibling's answer rather than applying it, which this node says in terms. What the frontier adds is the order: this node names where-a-change-request-goes in depends, so that node is ruled first with the sentence "that control is to ask for the change and not only for the ground of the refusal" confirmed, and this ruling then contradicts a clause the author has just taken. The divergence is recorded as an option on both facts and resolved on neither, so whichever is ruled second inherits the collision.

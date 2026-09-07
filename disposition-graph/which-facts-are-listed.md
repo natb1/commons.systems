@@ -64,6 +64,9 @@ review:
   date: 2026-09-07
   of: 49cbcabd7a9eed31b29063d6b2c11d46a17fda10
   commit: f146f8f44b295c64e47a13bff338748035183d87
+  survey:
+    date: 2026-09-07
+    of: 49cbcabd7a9eed31b29063d6b2c11d46a17fda10
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -564,3 +567,24 @@ On the viability of the options: Every option remains viable. The new option `ex
 The review found no strong counter-argument.
 
 The session's reply: Forwarded with no finding. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of 49cbcabd
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The answer finds a real asymmetry between its rule and another node's and then leaves it where it found it: "an option conditioning existence as persistence is conditioned belongs on that node, where its answer is", and unanswered carries no such option, names this node nowhere, and is not in this node's depends. So the one standing text that reads the other way — unanswered's sentence naming the node's existence among the decisions a ruling asks, unconditioned — is quoted rather than answered, and the author meets it at no row. A ruling here settles the page against a sentence that will still stand after it.
+
+### Frontier finding, 2026-09-07
+
+Kind: coverage.
+
+which-facts-are-listed identifies a standing text that reads against its answer, says where the repair belongs, and the repair is recorded nowhere. Its answer reads "The asymmetry between the two texts is real and is not resolved here: `unanswered`'s sentence conditions one of the pair and not the other, and an option conditioning existence as persistence is conditioned belongs on that node, where its answer is", and its account repeats it. unanswered's file names which-facts-are-listed at no locus and carries no such option; its standing answer still reads that a response is given on "the answer, the authority class a ruling would confer, the node's existence, and its persistence where the recommendation would change its shape", conditioning one of the pair and not the other. So a decision the record has identified as owed to one node is answered by no node at all.
+
+Also named: commons.systems/disposition-graph/unanswered.
+
+Proposed: unanswered is the survivor and the home: the option conditioning `existence` as `persistence` is conditioned is recorded on its answer fact, sourced to which-facts-are-listed, so the author rules the asymmetry once at the node whose sentence carries it. which-facts-are-listed's answer stands as written, since it declines the question deliberately and says so.
+
+Recorded as an option on commons.systems/disposition-graph/unanswered's answer fact: `existence-conditioned-as-persistence-is` (source review, 2026-09-07).

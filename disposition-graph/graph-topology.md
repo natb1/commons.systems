@@ -1,6 +1,6 @@
 ---
 question: What may the recorder do to the graph's topology without asking?
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -39,6 +39,9 @@ review:
   date: 2026-09-07
   of: 90a2d6e729a986e93df3e0a8d8e241fa7bf6e5b0
   commit: ca46f7ff9a913d8d696fdfa5fb535e0e35bd1ec2
+  survey:
+    date: 2026-09-07
+    of: 90a2d6e729a986e93df3e0a8d8e241fa7bf6e5b0
 depends:
   - commons.systems/disposition-graph/recording#prune-of-an-unruled-node-needs-no-ruling
 form: rule
@@ -476,3 +479,36 @@ On the viability of the options: All six options on the answer fact remain viabl
 The review found no strong counter-argument.
 
 The session's reply: Forwarded with no finding; the option on which-facts-are-listed verified on the main thread. The counter-argument stands on the row at strong strength. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of 90a2d6e7
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The one part of this answer that has effect before any ruling is the part whose citation fails. The interim says a prune "is taken on that word, wherever it was given, since a grant given in the author's words acts by right while nothing in the record is ratified", where what-acts-during-bootstrap defines a grant as "given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant, and never read from the announcement of one". The author's words of 2026-09-05 were said of one node in one sitting, so reading them as reaching any prune the author has ever directed, wherever given, is the carrying-over that node forbids — and the reading is made by the session that wants the file gone.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+Two nodes cite what-acts-during-bootstrap for an interim its answer does not carry and its nearest sentence forbids. graph-topology's recommended answer reads "a prune of a node no ruling reaches that the author has directed in their own words is taken on that word, wherever it was given, since a grant given in the author's words acts by right while nothing in the record is ratified", and probe-or-node's recommended answer says the same, "taken on that word wherever it was given, in the dialogue or at the node's row". what-acts-during-bootstrap's answer defines the thing cited: a grant is "the author's word, given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant, and never read from the announcement of one, as the authority node says". The words being relied on, the author's of 2026-09-05 — "Pruning doesn't require confirmation of explicitly granted in dialogue. just prune it" and "(Pruning of unratified nodes that is)" — were given in one sitting about one node, so reading them as reaching a prune "wherever it was given" is carrying a grant over from an earlier grant, which that node's definition excludes.
+
+Also named: commons.systems/disposition-graph/probe-or-node, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: what-acts-during-bootstrap owns what acts by right and is the survivor of the definition. Either its answer gains a third thing that acts, a standing direction of the author's about a class of act, which is the option recorded here for the author to rule; or the two citing nodes redraw their interim so that it names a grant given for the prune in hand and not a word given elsewhere. graph-topology and probe-or-node are the nodes whose text must change under the second, and the interim is the one clause of either that acts before any ruling, so it is the clause the author should meet with the definition beside it.
+
+Recorded as an option on commons.systems/disposition-graph/what-acts-during-bootstrap's answer fact: `a-standing-direction-acts-by-right` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+graph-topology holds open a surface that turn-form's rule excludes, and hands the question to turn-form, which carries nothing for it. graph-topology's option `prunes-reported-to-the-author` says "every prune taken under the delegation is reported to the author, the node, the survivor that keeps its question, and the reason the question was closed, at the next sitting and on the alignment page", and gives as its reason for not being adopted that "what it adds is a surface, and which surfaces reach the author is `turn-form`'s question for the sitting and `alignment-page`'s for the page". turn-form's answer says "Three things stand outside the rule" and names them exhaustively; a report of prunes taken is none of the four forms and none of the three exemptions, and turn-form carries no option for it and names graph-topology nowhere.
+
+Also named: commons.systems/disposition-graph/turn-form.
+
+Proposed: turn-form owns what may reach the author in a sitting and is where the question is decided. The option is recorded on turn-form so that the author rules whether a report of what the AI deleted under a delegation is a form the dialogue admits, rather than having it foreclosed by an exhaustive list that never met it. graph-topology's option stands as it is, since it already names turn-form as the decider.
+
+Recorded as an option on commons.systems/disposition-graph/turn-form's answer fact: `a-turn-that-reports-a-prune` (source review, 2026-09-07).

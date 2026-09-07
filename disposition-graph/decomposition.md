@@ -1,6 +1,6 @@
 ---
 question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
-stage: ruling
+stage: maieutic
 probes:
   - id: bundled-disposition-as-queued-questions
     asks: >-
@@ -70,6 +70,12 @@ facts:
       - name: a-unit-returns-the-amendment
         source: ai
         ref: "2026-09-07"
+      - name: citation-moves-to-unit-sizing
+        source: review
+        ref: "2026-09-07"
+      - name: units-are-readings-not-surveys
+        source: review
+        ref: "2026-09-07"
     recommends: a-unit-returns-the-amendment
     boldness: moderate
     against: "A per-draft brief carried the index of every standing answer, so a sitting of several questions read several times the tokens of the one batch it replaced, and the author's first-named judge is token efficiency; the design stood on their second, attention, and on timing, and the index was the lever against the cost. The `review-cost` node pulled that lever on 2026-09-05: the index is one line a node and a brief is roughly a third of what it was, so the case against is now the residue, that a sitting still pays a fixed cost of brief and contract per draft where the batch paid it once."
@@ -89,8 +95,8 @@ review:
   commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
   against: "The measured byte totals for the eight design units (16,432 to 44,306 bytes, 281,879 total) recompute today to 282,151 bytes across the same files, roughly 0.1% over the stated figure, which is within noise (the files may have been touched fractionally after the cited commit) and not a material misstatement. No other gap found."
   survey:
-    date: 2026-09-05
-    of: 036b9a00cb75d617527ad2193fdc1388cd7d5ed7
+    date: 2026-09-07
+    of: dd59cbca7f78752bac9704bc5eff7ed7a2b27990
 form: rule
 under:
   - commons.systems/disposition-graph/delegation
@@ -281,6 +287,14 @@ For it: a redraw makes the main thread diff a text against the record to learn w
 Against it, and on the fact: no whole text is written by anybody until the main thread splices, so the coherence of the amended answer is checked by nobody in between, and a design whose parts each read well and whose whole does not is what a redraw shows and a pair hides. A pair is also unreadable without the record in hand, which moves reading cost onto the thread the `delegation` node says is never delegated.
 
 Raised from the author's words of 2026-09-07 and from the measurement of this sitting's own design units. It is recorded here rather than on `review-cost` or `clean-context-review` because what a unit returns and how the main thread integrates it is this node's question; the reading's object is already the amendment on `review-cost`, and this clause makes the amendment a thing the record has rather than a thing each reader recomputes.
+
+#### citation-moves-to-unit-sizing
+
+Everything the recommendation says, with the analysis seam's citation of `delegation` for the model rule redirected to `unit-sizing`, the node delegation-bounds-and-sizing recommends minting beneath `delegation` to carry the sizing clauses. It is on the table because that node's answer says the move is made with the clauses — "the sibling is amended with the parent rather than left pointing at a gap" — and nothing on this node records it, so a ruling there would leave this answer citing a node that no longer carries the rule it cites. It acts on nothing until that node is ruled.
+
+#### units-are-readings-not-surveys
+
+Everything the recommendation says, with the three units of the analysis seam renamed so that "survey" is left to the reading frontier-consistency defines: the record reading, the tradition reading and the implementation reading, or another word the author prefers, with `delegation`'s clause on verbose investigations read as reaching them under the new name. It is on the table because the record uses one word for a sitting's unit and for the reading of the whole frontier, which the eleventh validation forbids, and because unit-skills' recommendation would carry the collision into four skill names; unit-skills' own rationale names the conflict and sends only the skill's name elsewhere, so the term itself is decided by nothing.
 
 ### authority
 
@@ -552,3 +566,36 @@ On the viability of the options: Every option on the answer and authority facts 
 Strongest counter-argument (weak): The measured byte totals for the eight design units (16,432 to 44,306 bytes, 281,879 total) recompute today to 282,151 bytes across the same files, roughly 0.1% over the stated figure, which is within noise (the files may have been touched fractionally after the cited commit) and not a material misstatement. No other gap found.
 
 The session's reply: Forwarded with no finding; the byte-count drift of 272 bytes across the eight design files is noted and not corrected, since the figure is dated to its commit and the drift is the files' later edits. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of dd59cbca
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The answer closes by saying it "is materialized by the alignment skill's list of a sitting's units, under the shim the growth node declares on that skill", and two siblings are moving that artifact under it. unit-skills proposes seven skills in its place, which is on this fact as `units-carried-by-their-own-skills`; delegation-bounds-and-sizing says of the model rule this answer applies that "citation moves to `unit-sizing` with the clauses and the sibling is amended with the parent rather than left pointing at a gap", and that amendment is on no fact here and in no depends. So a ruling here is taken without the author seeing that another node's ruling would rewrite the clause this answer's analysis seam turns on.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+delegation-bounds-and-sizing states an amendment to a sibling that the sibling carries nowhere. Its answer reads "`decomposition` cites `delegation` for the model rule it applies, so that citation moves to `unit-sizing` with the clauses and the sibling is amended with the parent rather than left pointing at a gap." decomposition's file names neither `unit-sizing` nor `delegation-bounds-and-sizing` at any locus: it carries no option for the move, and its depends names clean-context-review, frontier-consistency and tier only. Its own answer's analysis seam meanwhile applies the rule in terms — "each with its own contract and on the model that follows its kind of work, as the delegation node says" — so the citation a ruling on that node would move is in the text a ruling on decomposition would confirm.
+
+Also named: commons.systems/disposition-graph/delegation-bounds-and-sizing.
+
+Proposed: decomposition is where the amendment is missing and where the author meets it. The move is recorded as an option on decomposition's answer fact, sourced to delegation-bounds-and-sizing, so that the author rules on this node's answer knowing that a ruling on its sibling redirects the citation it rests on; delegation-bounds-and-sizing's sentence stands unchanged, since it is the node that owns the division.
+
+Recorded as an option on this node's answer fact: `citation-moves-to-unit-sizing` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+"Survey" names two different things across the frontier and no node decides which sense it carries. frontier-consistency defines it for one — its `defines` list holds `frontier survey`, and its recommended answer names "the survey, the frontier survey this node defines, the reading that judges the whole graph against itself". decomposition names three of a sitting's units by the same word: "the record survey, what the graph says on the question", "the tradition survey, the second evaluation", and "the implementation survey, what exists and what a named artifact or command does". delegation's answer uses it a third way, among verbose investigations: "Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys." unit-skills' rationale names the collision — "the record already carries the vocabulary conflict behind it, `frontier-consistency` defining survey as the reading of the frontier while `decomposition` calls three of a sitting's units surveys" — and sends only the skill's name to review-skills, where `align-survey-renamed-for-the-family` decides what one skill is called and not what the word means. So the conflict is stated in a rationale, which binds nothing, and recorded on no fact.
+
+Also named: commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/unit-skills, commons.systems/disposition-graph/review-skills, commons.systems/disposition-graph/delegation.
+
+Proposed: frontier-consistency's `frontier survey` is the defined term and survives; what moves is decomposition's use of the bare word for a sitting's units, which is where three of the four collisions come from and which unit-skills would multiply into four skill names. The option is recorded on decomposition so the author rules the term once; frontier-consistency, unit-skills and review-skills follow whichever way that ruling goes, and delegation's plural is read as the sitting's units under it.
+
+Recorded as an option on this node's answer fact: `units-are-readings-not-surveys` (source review, 2026-09-07).

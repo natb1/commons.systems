@@ -1,7 +1,7 @@
 ---
 question: What form does a turn of the alignment dialogue addressed to the author take?
 form: rule
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -24,6 +24,9 @@ facts:
       - name: a-turn-that-reports-an-impediment
         source: review
         ref: "2026-09-07"
+      - name: a-turn-that-reports-a-prune
+        source: review
+        ref: "2026-09-07"
     recommends: a-turn-that-reports-an-impediment
     boldness: moderate
     against: "The rule is drawn from a single turn the author disliked, and their own words in that message call the four forms what a prompt is expected to take rather than what every turn must be; the hardening into a bound is the AI's, and its cost is paid where it cannot be seen, in the turns a future session does not make. The impediment turn answers only the sitting that cannot continue: a session that has found something the author would want to know, and that is neither probe nor direction nor acknowledgement, is still told to write it to the record and let the projections carry it, and surviving in a record this size is not the same as reaching the author when it matters."
@@ -42,6 +45,9 @@ review:
   of: 387386abd5048685a94a39df8346873c76a4cc04
   commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
   against: "The rule is still drawn from a single turn the author disliked, and their own words call the four forms what a prompt is 'expected to take' rather than a bound; the impediment turn only covers the sitting that cannot continue, so a session that finds something true and interesting but not of the four forms (or the impediment) still has no way to say so and must trust the record's projections to carry it to the author in time."
+  survey:
+    date: 2026-09-07
+    of: 387386abd5048685a94a39df8346873c76a4cc04
 under:
   - commons.systems/disposition-graph/growth
 ---
@@ -254,6 +260,10 @@ the one case where proceeding silently is worse than any noise; and because the
 two exemptions the answer already carries are of the same kind, things that are
 not the AI's account put before the author's. Raised by the clean-context reading
 of 2026-09-07 as its fourth finding, and recommended over `four-forms` on it.
+
+#### a-turn-that-reports-a-prune
+
+Everything `a-turn-that-reports-an-impediment` says, with a fourth thing standing outside the rule: a turn reporting what the AI has deleted under a delegation — the node, the survivor that keeps its question, and the reason the question was closed — given at the next sitting and asking nothing. It is on the table because graph-topology's option `prunes-reported-to-the-author` proposes exactly that surface and declines to adopt it on the ground that "which surfaces reach the author is `turn-form`'s question for the sitting", and this answer's list of what stands outside the rule is exhaustive and does not reach it. Against it: a prune leaves its trace on the survivor's account, which the browser renders and the frontier lists, so the report may be the noise the rule exists to bound rather than the notice a deletion owes.
 
 ### authority
 
@@ -548,3 +558,24 @@ On the viability of the options: The diff leaves `four-forms`, `expected-not-req
 Strongest counter-argument (moderate): The rule is still drawn from a single turn the author disliked, and their own words call the four forms what a prompt is 'expected to take' rather than a bound; the impediment turn only covers the sitting that cannot continue, so a session that finds something true and interesting but not of the four forms (or the impediment) still has no way to say so and must trust the record's projections to carry it to the author in time.
 
 The session's reply: Forwarded with no finding; verified on the main thread that author-questions carries cites-turn-form-for-the-three-surfaces and that alignment-page cites turn-form for the three-surfaces rule. The counter-argument stands on the row at moderate strength. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of 387386ab
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The rule's force is its exhaustiveness, and the frontier already holds a surface it excludes and does not account for. graph-topology's option `prunes-reported-to-the-author` would have every prune taken under the delegation reported to the author at the next sitting, and says in terms that "which surfaces reach the author is `turn-form`'s question for the sitting"; this node carries no option for it, names that node nowhere, and says "Three things stand outside the rule." So a ruling here forecloses a report another node is holding open on this node's own authority, without the author being shown that the choice was made.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+graph-topology holds open a surface that turn-form's rule excludes, and hands the question to turn-form, which carries nothing for it. graph-topology's option `prunes-reported-to-the-author` says "every prune taken under the delegation is reported to the author, the node, the survivor that keeps its question, and the reason the question was closed, at the next sitting and on the alignment page", and gives as its reason for not being adopted that "what it adds is a surface, and which surfaces reach the author is `turn-form`'s question for the sitting and `alignment-page`'s for the page". turn-form's answer says "Three things stand outside the rule" and names them exhaustively; a report of prunes taken is none of the four forms and none of the three exemptions, and turn-form carries no option for it and names graph-topology nowhere.
+
+Also named: commons.systems/disposition-graph/graph-topology.
+
+Proposed: turn-form owns what may reach the author in a sitting and is where the question is decided. The option is recorded on turn-form so that the author rules whether a report of what the AI deleted under a delegation is a form the dialogue admits, rather than having it foreclosed by an exhaustive list that never met it. graph-topology's option stands as it is, since it already names turn-form as the decider.
+
+Recorded as an option on this node's answer fact: `a-turn-that-reports-a-prune` (source review, 2026-09-07).

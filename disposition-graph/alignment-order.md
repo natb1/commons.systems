@@ -541,3 +541,15 @@ Also named: commons.systems/disposition-graph/dialogue.
 Proposed: Dialogue is the survivor of what an unanswered node carries and nothing moves; what is owed is that the node say what it in fact has. Either the migration of the twenty-three prose conventions is named as part of what a confirmation orders, with the projector and the alignment page reading the field, or the answer says the field is defined and unused and that the prose conventions stand until the migration is ruled — which is the honest reading of the record today. The claim that the frontier will show the gap should be struck or made true, since it is the only thing standing between this gap and invisibility.
 
 Recorded as a pending alternative on commons.systems/disposition-graph/dialogue: `depends-migration-named` (source review, 2026-09-03).
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+growth's recommended text orders the same frontier two ways. Its third usage reads "given nothing, it takes up the highest-ranked unanswered node, as the alignment-target node says", while its queue sentence in the same paragraph reads "the queue of un-aligned dispositions is therefore the set of such nodes, taken in the ruling order as the alignment-order node says and surviving every session, and the author's naming of a node is their order and needs no boost"; and the rationale of the same fence still opens "The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost." alignment-order, which growth names in depends, recommends "`/align` with nothing takes the first node of the ruling order; `/align <node id>` is the author's order and needs no boost." growth's own option `queue-in-ruling-order` was passed over on 2026-09-07 as "absorbed by the recommendation, whose queue sentence takes `alignment-order`'s ruling order and drops the boost", so the absorption reached one sentence of three.
+
+Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/alignment-target.
+
+Proposed: growth is the node whose text must change: the third usage and the rationale sentence are brought into line with the queue sentence and with alignment-order's recommended answer, so that one order governs the whole fence. alignment-order survives as the owner of the order and is cited rather than contradicted; alignment-target already carries the matching option `ruling-order-not-rank`, sourced to the author, and needs no change from this finding.
+
+Recorded as an option on commons.systems/disposition-graph/growth's answer fact: `third-usage-in-the-ruling-order` (source review, 2026-09-07).

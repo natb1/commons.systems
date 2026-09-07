@@ -1,12 +1,15 @@
 ---
 question: How does the graph grow?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: none
   date: 2026-09-07
   of: 99d667c6fd7d8d8d7fb61bd1a5289ac8bb458c66
   commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
+  survey:
+    date: 2026-09-07
+    of: 99d667c6fd7d8d8d7fb61bd1a5289ac8bb458c66
 facts:
   - name: answer
     options:
@@ -122,6 +125,9 @@ facts:
         ref: "2026-09-07"
         status: passed
         reason: "carried by `commons.systems/disposition-graph/turn-form`, whose fourth form says which rulings were recorded and that the node moved and why"
+      - name: third-usage-in-the-ruling-order
+        source: review
+        ref: "2026-09-07"
 
     recommends: turn-form-to-a-child-and-terms-aligned
     boldness: moderate
@@ -457,6 +463,10 @@ begins, is outside the rule and not only the account of a landing. Raised by the
 clean-context reading of 2026-09-07. Passed over the same day: both clauses are
 carried by `commons.systems/disposition-graph/turn-form`, whose answer names what
 the fourth form contains and what stands outside the rule.
+
+#### third-usage-in-the-ruling-order
+
+Everything the recommendation says, with the third usage and the rationale brought into line with the queue sentence: given nothing, the skill takes the first node of the ruling order, as alignment-order says, and the rationale drops "The author's choice of what to propose next is itself a ranking act, recorded as boost" for the answer's own clause that the author's naming of a node is their order and needs no boost. It is on the table because the fence as it stands names rank in one clause and the ruling order in another for one and the same set of unanswered nodes, and a confirmation would ratify both.
 
 ### authority
 
@@ -930,3 +940,24 @@ On the viability of the options: Every option on all three facts stays viable an
 The review found no strong counter-argument.
 
 The session's reply: Forwarded with no finding; verified on the main thread that turn-form carries the four-forms rule and the absorbed options, and that the cites pin matches the working tree. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of 99d667c6
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The fence asks the author to ratify one text that answers the same question two ways. Its third usage says the skill takes a node "given nothing, it takes up the highest-ranked unanswered node, as the alignment-target node says", while its queue sentence says the set of unanswered nodes is "taken in the ruling order as the alignment-order node says and surviving every session, and the author's naming of a node is their order and needs no boost"; and the rationale it carries still opens "The author's choice of what to propose next is itself a ranking act, recorded as boost." alignment-order, which this node names in depends, recommends that "`/align` with nothing takes the first node of the ruling order". A confirmation would ratify rank and the ruling order at once, on the one decision this node's own passed-over option `queue-in-ruling-order` says the recommendation had already settled.
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+growth's recommended text orders the same frontier two ways. Its third usage reads "given nothing, it takes up the highest-ranked unanswered node, as the alignment-target node says", while its queue sentence in the same paragraph reads "the queue of un-aligned dispositions is therefore the set of such nodes, taken in the ruling order as the alignment-order node says and surviving every session, and the author's naming of a node is their order and needs no boost"; and the rationale of the same fence still opens "The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost." alignment-order, which growth names in depends, recommends "`/align` with nothing takes the first node of the ruling order; `/align <node id>` is the author's order and needs no boost." growth's own option `queue-in-ruling-order` was passed over on 2026-09-07 as "absorbed by the recommendation, whose queue sentence takes `alignment-order`'s ruling order and drops the boost", so the absorption reached one sentence of three.
+
+Also named: commons.systems/disposition-graph/alignment-order, commons.systems/disposition-graph/alignment-target.
+
+Proposed: growth is the node whose text must change: the third usage and the rationale sentence are brought into line with the queue sentence and with alignment-order's recommended answer, so that one order governs the whole fence. alignment-order survives as the owner of the order and is cited rather than contradicted; alignment-target already carries the matching option `ruling-order-not-rank`, sourced to the author, and needs no change from this finding.
+
+Recorded as an option on this node's answer fact: `third-usage-in-the-ruling-order` (source review, 2026-09-07).

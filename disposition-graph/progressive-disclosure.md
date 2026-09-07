@@ -34,8 +34,8 @@ review:
   commit: e8441ff74f7cfb583d4bb638a2803f1554335c5c
   against: "The half the reading calls adopted may be the empty half. What the page keeps of progressive disclosure is that a row has two levels and the second is reachable, which the author specified in their own words on 2026-09-04 before any tradition was consulted, and the criterion the page uses for that split, what is needed to choose against what is needed to check, is not the tradition's frequency and importance of use; strip the criterion and what remains is generic enough to be true of almost any interface, so calling it an adoption lends the tradition's name to a shape it did not supply. On that view the honest relation is `diverged` outright, with the convergence on shape recorded as convergence, and the record loses nothing but a chip. The reply available is that the never-lost rule is a real holding the page does follow and that a discoverable second level is exactly what the tradition names; but that holding is carried on this record by Krug and by hansard-verbatim-record as well, so it is over-determined, and this reading is now on its third drawing of the same two sources in two days, each fitted to whatever the page's text said at the time. That is the pattern a delegated class makes cheap and a deferred class exists to stop, which is why the `deferred` option beside it is more live than the fact's prose allows."
   survey:
-    date: 2026-09-05
-    of: d305538e3d2c9e03a244926d21844d05f1838b8f
+    date: 2026-09-07
+    of: fcf3e2d522b3ebdeedd6150afe25e55daca94d81
 form: reading
 under:
   - commons.systems/disposition-graph/alignment-page
@@ -277,3 +277,12 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Frontier survey, 2026-09-07, of fcf3e2d5
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (weak): The reading now carries `diverged` on a third option, vocabulary-option-summary's `term-at-the-first-level`, and its answer argues the row-level departure only in general — "the page's criterion is its own, 'what is needed to choose against what is needed to check', which is not frequency of use either" — without naming that node or that option. The fact's own case against bears harder on the third entry than on the first two, since what is deferred there is a definition rather than a decision, and a tradition whose criterion is frequency of use across readers has still less to say about a gloss the one reader has already learned.

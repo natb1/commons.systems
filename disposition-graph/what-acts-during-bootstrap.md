@@ -26,6 +26,9 @@ facts:
         ref: "2026-09-03"
         status: passed
         reason: "the author's words of 2026-09-04 make the grant a persistent rule of the authority node and no class, and the authority node passed the same option over on that ground"
+      - name: a-standing-direction-acts-by-right
+        source: review
+        ref: "2026-09-07"
     recommends: shim-and-grant
     boldness: high
     against: "Every rule file under `.claude/rules/` that a session loads, this node's own projection among them, is the projection of a node no ruling reaches, and the `session-context` node declares a shim on `CLAUDE.md` and on `.claude/settings.json` and on neither the rules projection nor this file, so this answer says the doctrine the record is running on today acts on nothing, and says it in a file that binds every session while saying it. It leaves a session no account at all of what those files bind it to, and the option that would give one is `projected-doctrine-acts`."
@@ -44,6 +47,9 @@ review:
   of: 978ae6c02bed0e9281b0b0c76daa5e5c761ba09c
   commit: 022448f548ba52bc6900dd2d7be9c8af11e44320
   against: "The amendment answers two of its five findings by adding a citation of a divergence rather than by removing one, so the rule the author is asked to ratify now says twice, in the text `.claude/rules/` carries, that the node it cites holds the other position, and each contest is parked as an option on a node that is itself unruled: a session that reads the notice has nowhere to go for the resolution, and at the first ruling `.claude/rules/authority.md` will still carry 'During bootstrap no class acts' with no notice in that file. Beside that, the standing objection is untouched: the answer still says only what does not make the rule files unsupported and never what makes them binding, and the amendment's own new work — a second row for `projected-doctrine-acts` at `session-context` — moves the remedy one node further from the recommendation without moving the recommendation. None of this defeats the amendment: each of the five defects is cured at its own locus, verified at the loci below, and what is left is the record's condition and not a fault of this text."
+  survey:
+    date: 2026-09-07
+    of: 102fdff47a95d8e89691c8905d9d1b9a3d3b7ad5
 form: rule
 under:
   - commons.systems/disposition-graph/authority
@@ -213,6 +219,10 @@ deferred, which the authority node would then define. Passed over on the
 same ground that node passed it over: the author's words of 2026-09-04 make
 the grant a persistent rule about reconciliation authority, and a rule is
 not a class.
+
+#### a-standing-direction-acts-by-right
+
+Everything `shim-and-grant` says, with a third thing acting by right beside the shim and the grant: a standing direction the author has given about a class of act, which acts on every instance of that class until a ruling confers the class, where a grant acts on the one reconciliation it names. It is on the table because graph-topology and probe-or-node both now take a prune on the author's word "wherever it was given" and cite this node for it, where this answer's grant is "given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant"; either the third limb is written here or those two clauses have no ground. Against it: it is a wider licence than the fact's own case against already worries about, and the party reading which direction reaches which act is the party the act benefits.
 
 ### authority
 
@@ -705,3 +715,24 @@ the other position, and each contest is parked on a node that is itself unruled.
 `.claude/rules/authority.md` will still carry "During bootstrap no class acts"
 with no notice in that file, which is a defect of `authority`'s answer, where
 the option that would cure it already stands.
+
+### Frontier survey, 2026-09-07, of 102fdff4
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): Two nodes at the ruling stage now read this answer's grant clause wider than it reads. graph-topology and probe-or-node both take a prune on the author's word "wherever it was given, since a grant given in the author's words acts by right while nothing in the record is ratified", where this answer says a grant is "given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant". A standing direction of the author's about a class of act is therefore a third thing acting today, and this answer names it nowhere; that is the same gap the fact's own case against names for the rule files, arriving from a second direction.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+Two nodes cite what-acts-during-bootstrap for an interim its answer does not carry and its nearest sentence forbids. graph-topology's recommended answer reads "a prune of a node no ruling reaches that the author has directed in their own words is taken on that word, wherever it was given, since a grant given in the author's words acts by right while nothing in the record is ratified", and probe-or-node's recommended answer says the same, "taken on that word wherever it was given, in the dialogue or at the node's row". what-acts-during-bootstrap's answer defines the thing cited: a grant is "the author's word, given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant, and never read from the announcement of one, as the authority node says". The words being relied on, the author's of 2026-09-05 — "Pruning doesn't require confirmation of explicitly granted in dialogue. just prune it" and "(Pruning of unratified nodes that is)" — were given in one sitting about one node, so reading them as reaching a prune "wherever it was given" is carrying a grant over from an earlier grant, which that node's definition excludes.
+
+Also named: commons.systems/disposition-graph/graph-topology, commons.systems/disposition-graph/probe-or-node.
+
+Proposed: what-acts-during-bootstrap owns what acts by right and is the survivor of the definition. Either its answer gains a third thing that acts, a standing direction of the author's about a class of act, which is the option recorded here for the author to rule; or the two citing nodes redraw their interim so that it names a grant given for the prune in hand and not a word given elsewhere. graph-topology and probe-or-node are the nodes whose text must change under the second, and the interim is the one clause of either that acts before any ruling, so it is the clause the author should meet with the definition beside it.
+
+Recorded as an option on this node's answer fact: `a-standing-direction-acts-by-right` (source review, 2026-09-07).

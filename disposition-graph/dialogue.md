@@ -2244,3 +2244,17 @@ What the existence fact is for is unchanged by this. A prune the author wants to
 rule is still asked at the node's row, and the fact is still how they are asked;
 what the delegation removes is the requirement that they be asked at all where
 the node carries no ruling.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+how-a-fact-is-headed's recommendation edits two other nodes' `defines` lists and neither node carries the edit. Its fact's case against says it "buys the link on every heading by writing on three nodes this ruling does not own: a gloss on `dialogue` for two of the four names and the release of the bare entries on `node` and `transience`", and its answer requires that "the bare entries at `disposition/disposition-graph/node.md:65` and `disposition/disposition-graph/transience.md:76` are released to it, so that one entry stands for each name." The gloss half is recorded where the author will meet it, as `dialogue-glosses-the-four-fact-names` on dialogue. The release half is recorded nowhere: node.md and transience.md name how-a-fact-is-headed at no locus, carry no option for the release, and are in no depends of that node. So the answer's claim that "There is no fallback, because this ruling leaves no name without such an entry" rests on two edits the record has not proposed on the nodes that would make them.
+
+Also named: commons.systems/disposition-graph/how-a-fact-is-headed, commons.systems/disposition-graph/node, commons.systems/disposition-graph/transience.
+
+Proposed: node and transience are where the release is missing. The release of each bare `defines` entry is recorded as an option on that node's answer fact, sourced to how-a-fact-is-headed, so each node's own ruler meets the edit their node would take, as dialogue's ruler already meets the gloss. how-a-fact-is-headed's answer stands; what it lacks is the two rows on the nodes it writes on.
+
+Recorded as an option on commons.systems/disposition-graph/node's answer fact: `answer-gloss-released-to-dialogue` (source review, 2026-09-07).
+
+Recorded as an option on commons.systems/disposition-graph/transience's answer fact: `persistence-gloss-released-to-dialogue` (source review, 2026-09-07).

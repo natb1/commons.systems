@@ -46,6 +46,9 @@ facts:
       - name: proposal-as-a-state-of-a-ratified-node
         source: commons.systems/disposition-graph/authority
         ref: "2026-09-05"
+      - name: answer-gloss-released-to-dialogue
+        source: review
+        ref: "2026-09-07"
 
     recommends: four-form-draft
     boldness: moderate
@@ -139,6 +142,10 @@ reason for passing it over.
 #### proposal-as-a-state-of-a-ratified-node
 
 The recommended `four-form-draft` says a proposal "is the alternative that arose outside alignment, as the authority node defines it", and cites a definition that node no longer gives: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source. The sentence drops the origin and cites the authority node for the state. Raised on commons.systems/disposition-graph/authority, by its clean-context reading of 2026-09-05.
+
+#### answer-gloss-released-to-dialogue
+
+Everything the recommendation says, with this node's bare `defines` entry for `answer` released, so that the term is defined once, on `dialogue`, the node that reserves the four fact names and would carry the gloss. It is on the table because how-a-fact-is-headed's recommended answer requires the release by name — the bare entry here "does not qualify" as the target of a fact heading's link, and `definerIndex` takes the first definer it meets — so a ruling there writes on this node's `defines` list, and this is where the author rules on that. It acts on nothing until that node is ruled.
 
 ## Recommendation
 
@@ -287,3 +294,17 @@ Two vocabulary questions are each pending as an unruled option on four separate 
 Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/authority, commons.systems/disposition-graph/instruments.
 
 Proposed: Strike the eight options and replace each with a citation. `commons.systems/disposition-graph/rejected` is the survivor for what a rejected alternative is, and `commons.systems/disposition-graph/authority` is the survivor for what a proposal is; each of the six bearer nodes cites the survivor's sentence where it currently carries the option. Where a bearer node believes its option means something the survivor's answer does not cover, that difference is the option, stated as the difference, and everything the survivor already says comes out. If the author would rather rule the two words once explicitly, mint the settling option on the survivor in the shape `instruments`' `one-ruling-for-the-word` takes, without a count in its prose.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+how-a-fact-is-headed's recommendation edits two other nodes' `defines` lists and neither node carries the edit. Its fact's case against says it "buys the link on every heading by writing on three nodes this ruling does not own: a gloss on `dialogue` for two of the four names and the release of the bare entries on `node` and `transience`", and its answer requires that "the bare entries at `disposition/disposition-graph/node.md:65` and `disposition/disposition-graph/transience.md:76` are released to it, so that one entry stands for each name." The gloss half is recorded where the author will meet it, as `dialogue-glosses-the-four-fact-names` on dialogue. The release half is recorded nowhere: node.md and transience.md name how-a-fact-is-headed at no locus, carry no option for the release, and are in no depends of that node. So the answer's claim that "There is no fallback, because this ruling leaves no name without such an entry" rests on two edits the record has not proposed on the nodes that would make them.
+
+Also named: commons.systems/disposition-graph/how-a-fact-is-headed, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/dialogue.
+
+Proposed: node and transience are where the release is missing. The release of each bare `defines` entry is recorded as an option on that node's answer fact, sourced to how-a-fact-is-headed, so each node's own ruler meets the edit their node would take, as dialogue's ruler already meets the gloss. how-a-fact-is-headed's answer stands; what it lacks is the two rows on the nodes it writes on.
+
+Recorded as an option on this node's answer fact: `answer-gloss-released-to-dialogue` (source review, 2026-09-07).
+
+Recorded as an option on commons.systems/disposition-graph/transience's answer fact: `persistence-gloss-released-to-dialogue` (source review, 2026-09-07).

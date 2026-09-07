@@ -1,6 +1,6 @@
 ---
 question: What does a clean-context review cost, and how is that cost bounded?
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -86,8 +86,8 @@ review:
   commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
   against: "The second reading's viability paragraph named two missing candidates for the option list; the amendment added one (`brief-carries-the-recount-command`) but not the other (`rules-of-the-reading-named-as-files`), so `viable-options`'s rule that a candidate never silently leaves the list is still only partly satisfied on this fact. This is a completeness gap rather than a substantive defect in the recommendation, and under this node's own cap the finding is properly recorded as an option for the author rather than redrawn a third time."
   survey:
-    date: 2026-09-05
-    of: 6e810cedd50278ba761aed96a897047c1d870409
+    date: 2026-09-07
+    of: b9e1b4e5b54bd35bfd1a6bc94aeaab7bfc8b9c32
 form: rule
 under:
   - commons.systems/disposition-graph/clean-context-review
@@ -764,3 +764,22 @@ On the viability of the options: All prior options remain viable and undisturbed
 Strongest counter-argument (weak): The second reading's viability paragraph named two missing candidates for the option list; the amendment added one (`brief-carries-the-recount-command`) but not the other (`rules-of-the-reading-named-as-files`), so `viable-options`'s rule that a candidate never silently leaves the list is still only partly satisfied on this fact. This is a completeness gap rather than a substantive defect in the recommendation, and under this node's own cap the finding is properly recorded as an option for the author rather than redrawn a third time.
 
 The session's reply: Accepted; verified on the main thread that rules-of-the-reading-named-as-files stood in the rationale and in the second reading's viability paragraph and on no fact. It is recorded on the answer fact, source review, ref 2026-09-05, passed with the double read as its reason, so the author sees the bytes it would save beside the read it would cost. The recommendation is unchanged and no third reading is owed.
+
+### Frontier survey, 2026-09-07, of b9e1b4e5
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The rationale's ground for giving the round as pointers is a measurement the record contradicts: it says the derived set was every node at the review or the ruling stage "because no survey has ever run and so no node carries a survey pin", and forty-five nodes carry a survey pin at the commit this survey read, which frontier-consistency states in terms. Since the round is derived as the set the survey owes a reading, a false premise about the survey's history is a false premise about the membership and the size of what every draft's reader is handed, and this node is where the size is priced.
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+Three nodes at the ruling stage disagree about whether a survey has ever run, and the round every draft's reader is handed is derived from the losing side. clean-context-review's recommended text says the round is derived "as every node the survey owes a reading, which is every node at the review or the ruling stage carrying no survey pin or one its recommendation has moved past; while no survey has run that is the whole of the review and ruling stages and not the sitting's own drafts alone, and it is given as pointers, one line a node, for that reason." review-cost's recommended rationale says the same: at graph commit 1cde11f6 the set was forty-eight nodes, "because no survey has ever run and so no node carries a survey pin." frontier-consistency's recommended text says the opposite and is right: "The survey of 2026-09-05 read the graph whole at graph commit 73e2a04f, and forty-five nodes carry its pin today." Counted at the graph commit this survey read, forty-five node files carry a `survey:` pin.
+
+Also named: commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/frontier-consistency.
+
+Proposed: frontier-consistency's sentence is the survivor. clean-context-review's derivation clause and review-cost's rationale are redrawn on the record as it stands: the round is the set the survey owes a reading, which since 2026-09-05 is a proper subset of the review and ruling stages, and the argument for giving it as pointers is restated on the size that set actually has rather than on a survey that has never run. The wave measurement and the pointer rule are untouched; what moves is the premise each is argued from.

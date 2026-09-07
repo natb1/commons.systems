@@ -70,6 +70,9 @@ review:
   date: 2026-09-07
   of: 76904185c4740a91851f800c31a0ea71cb6e9ab2
   commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
+  survey:
+    date: 2026-09-07
+    of: b89922c46f615f7d2ba8814aeeb6b8d431e50670
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:
@@ -1006,3 +1009,12 @@ On the viability of the options: Every option on both facts remains viable under
 The review found no strong counter-argument.
 
 The session's reply: Forwarded with no finding; the fact's own count, 53 cases against beside 247 recommendations, re-taken by the reading and exact. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of b89922c4
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (weak): The state this answer asks the author to ratify is a state another node's unruled option decides. The answer concedes that "a reading returns one counter-argument for a node, and `caseAgainst` substitutes it on the answer fact alone, so on every other fact of every node the row carries the mark", and whether a reading returns one line per fact is clean-context-review's `counter-argument-per-fact`, live and unruled there and named in no depends here. So the commonest appearance of the row the author is confirming holds only under an option elsewhere, and a ruling there would change what this ruling ratifies without returning the question here.

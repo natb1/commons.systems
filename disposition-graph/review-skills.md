@@ -780,3 +780,15 @@ this node's to decide because this node fixes the two names. No `depends` entry
 is added, since the child already depends on this node's recommended option and
 a reciprocal entry would put each ruling behind the other. The recommendation
 on this node has not moved and no reading is owed by these two options alone.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+"Survey" names two different things across the frontier and no node decides which sense it carries. frontier-consistency defines it for one — its `defines` list holds `frontier survey`, and its recommended answer names "the survey, the frontier survey this node defines, the reading that judges the whole graph against itself". decomposition names three of a sitting's units by the same word: "the record survey, what the graph says on the question", "the tradition survey, the second evaluation", and "the implementation survey, what exists and what a named artifact or command does". delegation's answer uses it a third way, among verbose investigations: "Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys." unit-skills' rationale names the collision — "the record already carries the vocabulary conflict behind it, `frontier-consistency` defining survey as the reading of the frontier while `decomposition` calls three of a sitting's units surveys" — and sends only the skill's name to review-skills, where `align-survey-renamed-for-the-family` decides what one skill is called and not what the word means. So the conflict is stated in a rationale, which binds nothing, and recorded on no fact.
+
+Also named: commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/unit-skills, commons.systems/disposition-graph/delegation.
+
+Proposed: frontier-consistency's `frontier survey` is the defined term and survives; what moves is decomposition's use of the bare word for a sitting's units, which is where three of the four collisions come from and which unit-skills would multiply into four skill names. The option is recorded on decomposition so the author rules the term once; frontier-consistency, unit-skills and review-skills follow whichever way that ruling goes, and delegation's plural is read as the sitting's units under it.
+
+Recorded as an option on commons.systems/disposition-graph/decomposition's answer fact: `units-are-readings-not-surveys` (source review, 2026-09-07).

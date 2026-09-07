@@ -9,8 +9,8 @@ review:
   commit: c15fcd502a47f4fc1dec420b1eb44d7a6b78a7f7
   against: "The amendment fixes the measured defect but leans for its mechanism on `dialogue`'s option `survey-pin-carries-its-commit`, whose own recorded prose still describes the birth-based comparison this very amendment abandons. An author or executor who follows the citation from frontier-consistency to `dialogue` to see what the `commit` key is for will read a description that contradicts what frontier-consistency now recommends, which is the same species of stale cross-reference (validation 12) this node's own validations exist to catch -- just relocated from frontier-consistency itself to a neighbour it newly depends on. It does not undermine the amendment's own correctness, only its assumption that the ground it rests on is already settled."
   survey:
-    date: 2026-09-05
-    of: a2c2689d209b460072bb623a2c2e7b2a3118cb1a
+    date: 2026-09-07
+    of: d5b28dd5e3c43d7355a82b50129b991bf8c06067
 facts:
   - name: answer
     options:
@@ -797,3 +797,44 @@ On the viability of the options: Every option on the answer fact remains viable 
 Strongest counter-argument (moderate): The amendment fixes the measured defect but leans for its mechanism on `dialogue`'s option `survey-pin-carries-its-commit`, whose own recorded prose still describes the birth-based comparison this very amendment abandons. An author or executor who follows the citation from frontier-consistency to `dialogue` to see what the `commit` key is for will read a description that contradicts what frontier-consistency now recommends, which is the same species of stale cross-reference (validation 12) this node's own validations exist to catch -- just relocated from frontier-consistency itself to a neighbour it newly depends on. It does not undermine the amendment's own correctness, only its assumption that the ground it rests on is already settled.
 
 The session's reply: Accepted, verified at its locus on the main thread: `dialogue`'s option `survey-pin-carries-its-commit` described the birth-based comparison this amendment passed over, "against the commit that first carried the node". The option's prose is amended in this landing to the text-based comparison, the text the survey reads of a node as it stands against the same at the commit the last survey read at; the key it asks for is the same either way, and nothing on `dialogue` moves. The stale cross-reference was of validation 12's kind and on a node this amendment newly depends on, which is where the survey's reading would have caught it; it is repaired before the survey runs.
+
+### Frontier survey, 2026-09-07, of d5b28dd5
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The one-line class the recommendation turns on is conditioned on a datum the record does not hold: the answer says of the commit a survey read at that "the record does not carry that commit today", and rests on dialogue's option `survey-pin-carries-its-commit`, which no ruling has reached, so until that node rules the condition is checked against a commit the session names at the launch, which is a session's word and not the record's. Meanwhile the parent clean-context-review copies the unconditioned form of the same clause, depends on nothing, and settles more, so it is ruled first and is stale the moment this node rules. What this survey can add for this node is that its account of the survey's own history is the one in the record that is right.
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+Three nodes at the ruling stage disagree about whether a survey has ever run, and the round every draft's reader is handed is derived from the losing side. clean-context-review's recommended text says the round is derived "as every node the survey owes a reading, which is every node at the review or the ruling stage carrying no survey pin or one its recommendation has moved past; while no survey has run that is the whole of the review and ruling stages and not the sitting's own drafts alone, and it is given as pointers, one line a node, for that reason." review-cost's recommended rationale says the same: at graph commit 1cde11f6 the set was forty-eight nodes, "because no survey has ever run and so no node carries a survey pin." frontier-consistency's recommended text says the opposite and is right: "The survey of 2026-09-05 read the graph whole at graph commit 73e2a04f, and forty-five nodes carry its pin today." Counted at the graph commit this survey read, forty-five node files carry a `survey:` pin.
+
+Also named: commons.systems/disposition-graph/clean-context-review, commons.systems/disposition-graph/review-cost.
+
+Proposed: frontier-consistency's sentence is the survivor. clean-context-review's derivation clause and review-cost's rationale are redrawn on the record as it stands: the round is the set the survey owes a reading, which since 2026-09-05 is a proper subset of the review and ruling stages, and the argument for giving it as pointers is restated on the size that set actually has rather than on a survey that has never run. The wave measurement and the pointer rule are untouched; what moves is the premise each is argued from.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+"Survey" names two different things across the frontier and no node decides which sense it carries. frontier-consistency defines it for one — its `defines` list holds `frontier survey`, and its recommended answer names "the survey, the frontier survey this node defines, the reading that judges the whole graph against itself". decomposition names three of a sitting's units by the same word: "the record survey, what the graph says on the question", "the tradition survey, the second evaluation", and "the implementation survey, what exists and what a named artifact or command does". delegation's answer uses it a third way, among verbose investigations: "Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys." unit-skills' rationale names the collision — "the record already carries the vocabulary conflict behind it, `frontier-consistency` defining survey as the reading of the frontier while `decomposition` calls three of a sitting's units surveys" — and sends only the skill's name to review-skills, where `align-survey-renamed-for-the-family` decides what one skill is called and not what the word means. So the conflict is stated in a rationale, which binds nothing, and recorded on no fact.
+
+Also named: commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/unit-skills, commons.systems/disposition-graph/review-skills, commons.systems/disposition-graph/delegation.
+
+Proposed: frontier-consistency's `frontier survey` is the defined term and survives; what moves is decomposition's use of the bare word for a sitting's units, which is where three of the four collisions come from and which unit-skills would multiply into four skill names. The option is recorded on decomposition so the author rules the term once; frontier-consistency, unit-skills and review-skills follow whichever way that ruling goes, and delegation's plural is read as the sitting's units under it.
+
+Recorded as an option on commons.systems/disposition-graph/decomposition's answer fact: `units-are-readings-not-surveys` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: placement.
+
+The parent restates a rule its child owns and conditions, while claiming not to restate it, and is ruled first. clean-context-review's recommended text says of the survey "What of each node reaches that context is what the frontier-consistency node's validations read of it, as that node states them and as this node does not restate", and then restates one of them unconditioned: "of a node no judged node reaches, its question alone, on one line with its id and its file, as a draft's reader is given it." frontier-consistency's recommendation conditions exactly that class — "a node whose text stands as an earlier survey read it is carried on one line, and a node minted or amended since is carried by what it answers until a survey has read it again". clean-context-review carries no depends at all, and settles 23 against the child's 3, so it comes first in the ruling order and the copy is stale the day the child rules. The child records the collision as the option `the-unreached-line-is-conditioned-by-frontier-consistency`, which the parent's fact has not adopted.
+
+Also named: commons.systems/disposition-graph/clean-context-review.
+
+Proposed: frontier-consistency's conditioned form is the survivor, since the condition is what its own validations decide. The parent's sentence is struck for a citation, which is what the parent already says it does, or the option `the-unreached-line-is-conditioned-by-frontier-consistency` is adopted into the parent's recommendation; either way frontier-consistency is entered in clean-context-review's depends, so the author is not asked to rule the parent before the child whose answer the parent copies.

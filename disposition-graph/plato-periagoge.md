@@ -8,8 +8,8 @@ review:
   of: b53f30941ddb339dc719cd8f186cb9eab6dd36fb
   against: "Republic VII's turning is away from appearance toward what is, and its authority is the reality the soul is turned toward. Here the author is turned back toward a record the AI drafted and the author has not ratified, and is asked to articulate it before the AI's account enters as counterpoint. That is induction into a text, with a predictable failure: the author's account converges on the record's wording, so the comprehension movement confirms the AI's framing rather than testing it. The node's defence — that the authority appealed to is the author's own past decision — is the claim that is false today, since nothing in the record is ratified, and the session's reply concedes exactly that."
   survey:
-    date: 2026-09-05
-    of: b53f30941ddb339dc719cd8f186cb9eab6dd36fb
+    date: 2026-09-07
+    of: f18b81948c13ca158c1e39b5ebc837b0ec7f184e
 facts:
   - name: answer
     options:
@@ -135,3 +135,13 @@ Findings:
 Strongest counter-argument (strong): The turning presupposes something real to be turned toward: in Republic 518b-d the soul is turned toward what is, and the whole force of the image is that the object is not the teacher's invention. In this record the thing the author is turned toward is text the AI wrote and the AI's readings of traditions the author has not read — `madr-decision-records` says of itself that it is "drawn from the AI's memory of a template no one here has read". So the conduct that claims the record is authoritative makes the AI's own drafts authoritative over the author, which is the `capture` node's question, and this reading does not cite it or record it as a divergence.
 
 The session's reply: Taken. The turning in Republic 518b-d is toward what is, and its force is that the object is not the teacher's invention; here the object is text the AI wrote and readings of traditions the author has not read, which is the `capture` node's question and is not cited. The session records the divergence and the missing citation as owed. It does not follow that the reading should be withdrawn: the practice it grounds is the author being turned toward the record rather than toward the session, and the departure is in what the record is made of, not in the direction of the turn.
+
+### Frontier survey, 2026-09-07, of f18b8194
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+- ## Facts, `### answer`: the fact's subsection opens straight onto `#### relation-diverged` with no reason above it, and `### authority` does the same, so neither fact records why it recommends what it does. `review-cost`'s recommended answer names this as a defect an instrument decides — "on a fact whose prose opens straight onto an option subsection with no reason above it" — and until the validator holds the check a reading that meets one still reports it.
+
+Strongest counter-argument (weak): The record still gives one conduct two citations and both sides carry the repair unadopted. This node's option `citation-once` says "Growth's answer cites 518b to d while this node's source adds 521c and 515c to 516a", and growth's option `cite-the-reading` says the same from the other end; neither is passed over and neither is recommended, and growth's own recommended fence still writes "(the turning of the soul, Republic VII 518b to d)". So a confirmation of `standing` here leaves the duplication in place whichever of the two nodes is ruled first.

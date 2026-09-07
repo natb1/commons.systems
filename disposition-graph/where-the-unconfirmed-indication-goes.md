@@ -51,6 +51,9 @@ review:
   date: 2026-09-07
   of: 4b2abc38e9e9dfd2175acca173d72e29705957f2
   commit: f146f8f44b295c64e47a13bff338748035183d87
+  survey:
+    date: 2026-09-07
+    of: 4b2abc38e9e9dfd2175acca173d72e29705957f2
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:
@@ -942,3 +945,32 @@ On the viability of the options: Every option remains viable; the diff adds `lin
 The review found no strong counter-argument.
 
 The session's reply: Forwarded with no finding; the parent's mark and the sibling's stage verified on the main thread. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of 4b2abc38
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The parent has not caught up with this node, and the parent is what the author reads the page through. alignment-page's option `standing-named-in-the-pane` still says "What the child recommends now is `on-the-answer-fact`" and "The child stands at the review stage with its recommendation moved and its reading owed", both false at this commit; and the parent's answer says of this node that it is not in depends and must not be, "under an option of this answer's own and the edge would close a cycle", where this node's `under` is that parent and its depends names only dialogue. So the two clauses a ruling here would move are described by a parent that has the child's state and its placement wrong.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+alignment-page's option `standing-named-in-the-pane` describes its child's state twice and both descriptions are false at this commit. It says "What the child recommends now is `on-the-answer-fact`, the indication above the answer fact's options", where where-the-unconfirmed-indication-goes recommends `line-only-where-the-act-is-live`, which is that option narrowed to the ruling stage; and it says "Recorded and not applied. The child stands at the review stage with its recommendation moved and its reading owed", where the child stands at the ruling stage on a forward review of 2026-09-07. The option's whole work is to tell the author what a ruling on the child would and would not move, so both errors bear on the ruling the option exists to inform.
+
+Also named: commons.systems/disposition-graph/alignment-page.
+
+Proposed: The child's own text is the survivor. alignment-page's option prose is redrawn to name `line-only-where-the-act-is-live` and the narrowing it adds, and to state the child's stage as it stands or not at all, since a stage restated in prose goes stale the day it is written — which is the argument the option `clauses-cited-not-restated` already makes against this answer's method.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+alignment-page's recommended answer gives a reason for a missing edge that the record contradicts. Of where-the-unconfirmed-indication-goes it says the node "is not in `depends` and must not be, since it stands" — the sentence continuing — "under an option of this answer's own and the edge would close a cycle." That child's `under` names commons.systems/disposition-graph/alignment-page, not an option of it, and its `depends` names only commons.systems/disposition-graph/dialogue#every-part-in-the-record, so no edge from this node to that one would close any cycle. The clause is the only account the answer gives of why the eighth child is treated differently from the seven named in depends.
+
+Also named: commons.systems/disposition-graph/alignment-page.
+
+Proposed: The child's fields are the survivor. The clause is redrawn to say what is actually true of the placement, or the edge is entered in depends like the other seven if nothing bars it; either way the reason given for the exception is not a fact about a cycle. Nothing on the child changes.

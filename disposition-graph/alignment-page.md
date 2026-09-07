@@ -1,6 +1,6 @@
 ---
 question: What does the author read to rule?
-stage: ruling
+stage: maieutic
 probes:
   - id: unit-of-a-ruling
     asks: >-
@@ -192,6 +192,9 @@ review:
   of: 94465d401a161fed15196ead1c0e71bd5950de58
   commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
   against: "The amendment is thorough and its own recounts (e.g. the five-links-on-four-rulings correction, done more precisely than the previous reading's own suggested wording) are internally verified against the fence, but one new sentence leans on `commons.systems/disposition-graph/turn-form`'s content, which is outside this delta's given scope; if that node's answer does not in fact state the three surfaces whole, the citation would be a new, unseen-by-the-last-reading inaccuracy. Nothing in the material given to this reading shows that to be the case."
+  survey:
+    date: 2026-09-07
+    of: 94465d401a161fed15196ead1c0e71bd5950de58
 depends:
   - commons.systems/disposition-graph/dialogue#every-part-in-the-record
   - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey
@@ -2779,3 +2782,44 @@ On the viability of the options: Every option on the node's facts is viable afte
 Strongest counter-argument (weak): The amendment is thorough and its own recounts (e.g. the five-links-on-four-rulings correction, done more precisely than the previous reading's own suggested wording) are internally verified against the fence, but one new sentence leans on `commons.systems/disposition-graph/turn-form`'s content, which is outside this delta's given scope; if that node's answer does not in fact state the three surfaces whole, the citation would be a new, unseen-by-the-last-reading inaccuracy. Nothing in the material given to this reading shows that to be the case.
 
 The session's reply: Forwarded with one finding, verified on the main thread: turn-form's recommended text states the three surfaces whole, so the citation holds. The counter-argument stands on the row at weak strength. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of 94465d40
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The answer's whole device for staying true to its children is the mark that a clause "stands only until that node rules", and the prose beside those marks has already gone stale inside a day. The option `standing-named-in-the-pane` says "What the child recommends now is `on-the-answer-fact`" where the child now recommends `line-only-where-the-act-is-live`, and says "The child stands at the review stage with its recommendation moved and its reading owed" where it stands at the ruling stage on a forward of 2026-09-07. That is the failure the option `clauses-cited-not-restated` predicts, met again by this survey rather than argued; a ruling here confirms a description of the page that its own children are moving under faster than the marks are maintained.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+alignment-page's option `standing-named-in-the-pane` describes its child's state twice and both descriptions are false at this commit. It says "What the child recommends now is `on-the-answer-fact`, the indication above the answer fact's options", where where-the-unconfirmed-indication-goes recommends `line-only-where-the-act-is-live`, which is that option narrowed to the ruling stage; and it says "Recorded and not applied. The child stands at the review stage with its recommendation moved and its reading owed", where the child stands at the ruling stage on a forward review of 2026-09-07. The option's whole work is to tell the author what a ruling on the child would and would not move, so both errors bear on the ruling the option exists to inform.
+
+Also named: commons.systems/disposition-graph/where-the-unconfirmed-indication-goes.
+
+Proposed: The child's own text is the survivor. alignment-page's option prose is redrawn to name `line-only-where-the-act-is-live` and the narrowing it adds, and to state the child's stage as it stands or not at all, since a stage restated in prose goes stale the day it is written — which is the argument the option `clauses-cited-not-restated` already makes against this answer's method.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+alignment-page's recommended answer gives a reason for a missing edge that the record contradicts. Of where-the-unconfirmed-indication-goes it says the node "is not in `depends` and must not be, since it stands" — the sentence continuing — "under an option of this answer's own and the edge would close a cycle." That child's `under` names commons.systems/disposition-graph/alignment-page, not an option of it, and its `depends` names only commons.systems/disposition-graph/dialogue#every-part-in-the-record, so no edge from this node to that one would close any cycle. The clause is the only account the answer gives of why the eighth child is treated differently from the seven named in depends.
+
+Also named: commons.systems/disposition-graph/where-the-unconfirmed-indication-goes.
+
+Proposed: The child's fields are the survivor. The clause is redrawn to say what is actually true of the placement, or the edge is entered in depends like the other seven if nothing bars it; either way the reason given for the exception is not a fact about a cycle. Nothing on the child changes.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+plato-maieutics carries a `diverged` relation its own answer does not argue, which readings requires it to. Its frontmatter bears on commons.systems/disposition-graph/alignment-page, fact `answer`, option `every-fact-every-option`, relation `diverged`; its whole answer is "Yes, for the conduct in which the answer lives in the author, unrecorded. Socrates claims to bring forth what the interlocutor already carries and to contribute nothing of his own (150c to d), and then to test whether the offspring is genuine or a wind-egg (151e); the interview under this conduct draws the author's disposition out with visible drafts that the author may refuse, and the test of the draft against the author's intention is the midwife's test." readings' standing answer requires "diverged, where the option departs from it and the reading's own answer says why". The argument for the departure is written on alignment-page instead, which says of the anchor that it is "the anchor the record's reading on the maieutic conduct names twice and never answers" — that is, the reading is cited for a divergence the reading itself does not state.
+
+Also named: commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/readings.
+
+Proposed: readings' rule is the survivor and plato-maieutics is where the text must change: the reading's answer says why the page's option departs from the tradition, in the reading's own words, so the relation the frontmatter asserts is readable from the reading rather than only from the node it bears on. The alternative, that the relation is retracted or narrowed, is the ruling the author takes instead; alignment-page's own text needs no change either way.
+
+Recorded as an option on commons.systems/disposition-graph/plato-maieutics's answer fact: `answer-argues-the-page-divergence` (source review, 2026-09-07).

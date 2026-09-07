@@ -59,6 +59,9 @@ review:
   of: dd941452f4bc7e69dc8c8268bce53c394681479b
   commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
   against: "No defect was found in what this node's own diff shows; the only residual risk is that the amendment's own account of what it did to `review-skills`, `session-context`, `class-recommendation` and `instruments` cannot be checked from this node's file alone, so if any of those four cross-node claims turns out false the amendment would be resting on an unverified premise the last reading had no chance to catch either."
+  survey:
+    date: 2026-09-07
+    of: dd941452f4bc7e69dc8c8268bce53c394681479b
 form: rule
 under:
   - commons.systems/disposition-graph/decomposition
@@ -542,3 +545,24 @@ On the viability of the options: The diff leaves every option on all three facts
 Strongest counter-argument (weak): No defect was found in what this node's own diff shows; the only residual risk is that the amendment's own account of what it did to `review-skills`, `session-context`, `class-recommendation` and `instruments` cannot be checked from this node's file alone, so if any of those four cross-node claims turns out false the amendment would be resting on an unverified premise the last reading had no chance to catch either.
 
 The session's reply: Forwarded with one finding, verified on the main thread: class-recommendation carries the open probe which-classes-of-decision-have-you-said, review-skills carries the option fragments-move-to-the-units-package and session-context the option skills-among-what-a-session-loads, both with this node as source, and instruments records no instrument for the units package. The counter-argument stands on the row at weak strength. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of dd941452
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The answer names three of its five new skills `align-survey-*` while the record uses "survey" for two different things, which this node's own rationale calls "the vocabulary conflict behind it, `frontier-consistency` defining survey as the reading of the frontier while `decomposition` calls three of a sitting's units surveys." That conflict is recorded on no fact of any node: what is recorded on review-skills is a rename of one skill, not a decision about which sense the word carries. A ruling here multiplies an undecided term from one name to four, in a record whose eleventh validation asks that every term be used with one meaning across the frontier.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+"Survey" names two different things across the frontier and no node decides which sense it carries. frontier-consistency defines it for one — its `defines` list holds `frontier survey`, and its recommended answer names "the survey, the frontier survey this node defines, the reading that judges the whole graph against itself". decomposition names three of a sitting's units by the same word: "the record survey, what the graph says on the question", "the tradition survey, the second evaluation", and "the implementation survey, what exists and what a named artifact or command does". delegation's answer uses it a third way, among verbose investigations: "Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys." unit-skills' rationale names the collision — "the record already carries the vocabulary conflict behind it, `frontier-consistency` defining survey as the reading of the frontier while `decomposition` calls three of a sitting's units surveys" — and sends only the skill's name to review-skills, where `align-survey-renamed-for-the-family` decides what one skill is called and not what the word means. So the conflict is stated in a rationale, which binds nothing, and recorded on no fact.
+
+Also named: commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/review-skills, commons.systems/disposition-graph/delegation.
+
+Proposed: frontier-consistency's `frontier survey` is the defined term and survives; what moves is decomposition's use of the bare word for a sitting's units, which is where three of the four collisions come from and which unit-skills would multiply into four skill names. The option is recorded on decomposition so the author rules the term once; frontier-consistency, unit-skills and review-skills follow whichever way that ruling goes, and delegation's plural is read as the sitting's units under it.
+
+Recorded as an option on commons.systems/disposition-graph/decomposition's answer fact: `units-are-readings-not-surveys` (source review, 2026-09-07).

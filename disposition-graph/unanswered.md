@@ -70,6 +70,9 @@ facts:
       - name: two-responses-where-the-page-offers-them
         source: commons.systems/disposition-graph/where-a-change-request-goes
         ref: "2026-09-06"
+      - name: existence-conditioned-as-persistence-is
+        source: review
+        ref: "2026-09-07"
     recommends: unanswered-is-no-ruling
     boldness: moderate
     stands: unanswered-is-no-ruling
@@ -239,6 +242,10 @@ that "any changes will necessarily require a kickback", and the roster becomes
 two. Against the first: a response the record opens and the author's one ruling
 surface does not offer is a response most authors will never use, and calling it
 open is then a fiction the record maintains about itself.
+
+#### existence-conditioned-as-persistence-is
+
+Everything the recommendation says, with the sentence naming the decisions a ruling asks conditioning `existence` as it already conditions `persistence`: the node's existence is among them where a prune is proposed, and not otherwise. It is on the table because which-facts-are-listed reads this node's unconditioned sentence as making the existence decision one a ruling asks wherever a ruling can be given, while `dialogue` makes the pair conditional together and gives the reason that "a choice nobody has raised is not a candidate the record lists", and that node says in terms that the option conditioning existence "belongs on that node, where its answer is".
 
 ## Account
 
@@ -473,3 +480,15 @@ Nine nodes carry, inside `## Facts`, a `#### <option>` subsection for the option
 Also named: commons.systems/disposition-graph/authority, commons.systems/disposition-graph/delegation, commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/recording, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/viable-options, commons.systems/disposition-graph/alignment-page.
 
 Proposed: Rule it once, on `commons.systems/disposition-graph/dialogue`, whose answer states the rule and whose fact already carries the option. If the standing option keeps no subsection, delete the nine subsections — the text is not lost, since `## Answer` carries the answer and the account carries the history of the change. If the standing option is to carry one, the rule in `dialogue`'s answer changes and the nine subsections are rewritten to carry the answer's first sentences rather than a description of a change. Either way the nine conform to one ruling and no node is left implementing the losing side. Until it is ruled, the six whose stored prose the projections render are the urgent half, because those are the ones showing the author the wrong text.
+
+### Frontier finding, 2026-09-07
+
+Kind: coverage.
+
+which-facts-are-listed identifies a standing text that reads against its answer, says where the repair belongs, and the repair is recorded nowhere. Its answer reads "The asymmetry between the two texts is real and is not resolved here: `unanswered`'s sentence conditions one of the pair and not the other, and an option conditioning existence as persistence is conditioned belongs on that node, where its answer is", and its account repeats it. unanswered's file names which-facts-are-listed at no locus and carries no such option; its standing answer still reads that a response is given on "the answer, the authority class a ruling would confer, the node's existence, and its persistence where the recommendation would change its shape", conditioning one of the pair and not the other. So a decision the record has identified as owed to one node is answered by no node at all.
+
+Also named: commons.systems/disposition-graph/which-facts-are-listed.
+
+Proposed: unanswered is the survivor and the home: the option conditioning `existence` as `persistence` is conditioned is recorded on its answer fact, sourced to which-facts-are-listed, so the author rules the asymmetry once at the node whose sentence carries it. which-facts-are-listed's answer stands as written, since it declines the question deliberately and says so.
+
+Recorded as an option on this node's answer fact: `existence-conditioned-as-persistence-is` (source review, 2026-09-07).

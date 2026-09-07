@@ -1,6 +1,6 @@
 ---
 question: When is an open question a probe, an option, or a node?
-stage: ruling
+stage: maieutic
 probes:
   - id: a-delegable-review-finding-question
     asks: >-
@@ -85,6 +85,9 @@ review:
   of: 7bd00f2a353005aebe5c3a8f16a0a381deb8ebe6
   commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
   against: "The four tests that answer the author's actual 2026-09-04 request still wait behind a `depends` on `graph-topology`, itself only at the review stage, so the substance of this node is still gated on a sibling node's ruling; and the interim this amendment adds is honoured on trust in the pruning session's own account of which of the author's words reached a given prune, with no fact or ruling checking that account until `graph-topology` is ruled."
+  survey:
+    date: 2026-09-07
+    of: 7bd00f2a353005aebe5c3a8f16a0a381deb8ebe6
 depends:
   - commons.systems/disposition-graph/graph-topology
 form: rule
@@ -697,3 +700,24 @@ On the viability of the options: The diff leaves `by-what-is-asked`, `prune-gran
 Strongest counter-argument (moderate): The four tests that answer the author's actual 2026-09-04 request still wait behind a `depends` on `graph-topology`, itself only at the review stage, so the substance of this node is still gated on a sibling node's ruling; and the interim this amendment adds is honoured on trust in the pruning session's own account of which of the author's words reached a given prune, with no fact or ruling checking that account until `graph-topology` is ruled.
 
 The session's reply: Forwarded with no finding; verified on the main thread that recording carries prune-of-an-unruled-node-needs-no-ruling and that the two-homes sentence matches graph-topology's. The counter-argument stands on the row at moderate strength. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of 7bd00f2a
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): `interim-follows-the-authors-word` is the one clause of this answer that acts before any ruling, and it rests on a citation that fails. It takes a prune "on that word wherever it was given, in the dialogue or at the row" because "a grant given in the author's words acts by right while nothing in the record is ratified", where what-acts-during-bootstrap defines a grant as "given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant". So the recommendation over `delegation-carried-by-its-own-node` is bought by reading a general direction as a standing grant, which the node it cites forbids, and the reading is made by the session that wants the file gone.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+Two nodes cite what-acts-during-bootstrap for an interim its answer does not carry and its nearest sentence forbids. graph-topology's recommended answer reads "a prune of a node no ruling reaches that the author has directed in their own words is taken on that word, wherever it was given, since a grant given in the author's words acts by right while nothing in the record is ratified", and probe-or-node's recommended answer says the same, "taken on that word wherever it was given, in the dialogue or at the node's row". what-acts-during-bootstrap's answer defines the thing cited: a grant is "the author's word, given for one named reconciliation of one unanswered node, never assumed, never carried over from an earlier grant, and never read from the announcement of one, as the authority node says". The words being relied on, the author's of 2026-09-05 — "Pruning doesn't require confirmation of explicitly granted in dialogue. just prune it" and "(Pruning of unratified nodes that is)" — were given in one sitting about one node, so reading them as reaching a prune "wherever it was given" is carrying a grant over from an earlier grant, which that node's definition excludes.
+
+Also named: commons.systems/disposition-graph/graph-topology, commons.systems/disposition-graph/what-acts-during-bootstrap.
+
+Proposed: what-acts-during-bootstrap owns what acts by right and is the survivor of the definition. Either its answer gains a third thing that acts, a standing direction of the author's about a class of act, which is the option recorded here for the author to rule; or the two citing nodes redraw their interim so that it names a grant given for the prune in hand and not a word given elsewhere. graph-topology and probe-or-node are the nodes whose text must change under the second, and the interim is the one clause of either that acts before any ruling, so it is the clause the author should meet with the definition beside it.
+
+Recorded as an option on commons.systems/disposition-graph/what-acts-during-bootstrap's answer fact: `a-standing-direction-acts-by-right` (source review, 2026-09-07).

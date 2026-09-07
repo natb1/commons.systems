@@ -75,6 +75,9 @@ review:
   date: 2026-09-07
   of: b41bd908254e08cdd52e3dd02a06a241d83a429c
   commit: 98c4c8df3fa173654332bb33435ce145b57c2e1a
+  survey:
+    date: 2026-09-07
+    of: b41bd908254e08cdd52e3dd02a06a241d83a429c
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -762,3 +765,13 @@ On the facts and what they recommend: The diff touches only the answer fact: bol
 On the viability of the options: No existing option's viability changes: every option already viable or passed-over keeps its status and reason. The one addition, `residue-raised-as-a-finding`, is recorded viable-and-not-adopted with its own case for and against, consistent with the previous reading's viability note that it is dominated by no other option on the fact.
 
 The review found no strong counter-argument.
+
+### Frontier survey, 2026-09-07, of b41bd908
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+- ## Rationale, the coverage paragraph: the answer re-took its measurement at graph commit `62121b69` and the rationale beside it still argues from the superseded one. The answer says "the references reach 113 of the entries and miss 142" of 255 dated entries, and the rationale says "That 121 of 222 entries are named by no option is a fact about the references", with no commit named. The whole case for this answer over `section-folded-and-quotation-narrowed` is that the coverage gap is curable at the references, so the author is shown two arithmetics for one argument and neither is marked as the one that stands.
+
+Strongest counter-argument (moderate): The answer's force is exclusivity — that nothing else on the page is the author's words — and its own coverage figure is the case against it: at graph commit `62121b69` "the references reach 113 of the entries and miss 142", while projection's standing answer holds the record is read "Through projections, never by opening node files". So the majority of what the author has said reaches no projection at the moment of ruling, and the remedy the answer offers, writing the eleven references and recording the options the unreferenced entries lack, is owed rather than made. The rationale still argues the point from a superseded count, which is the record's own measurement of how quickly this argument goes stale.

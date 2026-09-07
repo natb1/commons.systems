@@ -1,6 +1,6 @@
 ---
 question: Which model runs the clean-context review's readings?
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -40,6 +40,9 @@ facts:
       - name: effort-graded-by-the-readings-object
         source: review
         ref: "2026-09-07"
+      - name: the-larger-model-on-a-re-reading
+        source: review
+        ref: "2026-09-07"
     recommends: the-smaller-model-on-a-re-reading
     boldness: moderate
     against: "The clause spends the record's scarcest guarantee to buy its smallest saving. The re-reading is the last reader between an amendment and the author's ruling, and it is also the cheapest of the three readings by this node's own measurement, so the rule downgrades the reader exactly where a miss is least recoverable and saves least. The argument that its contract determines the answer holds for the first of its two questions and not the second, whether the amendment introduces anything the last reading had no chance to see, which is a fresh judgment of a text -- the fact's own reasoning concedes this, and the clause is recommended anyway. And the reply that what the weaker eye misses falls to the survey rests on a reading that, by the parent node's own rationale, no sitting has yet generated, so the fallback the clause leans on has never once run."
@@ -59,8 +62,8 @@ review:
   commit: f146f8f44b295c64e47a13bff338748035183d87
   against: "None found. Verified at the loci the diff touches: `.claude/skills/align-review/SKILL.md` lines 221-223 name the draft reading on the larger/most-capable model and the re-reading on the smaller model, matching the fence's corrected rank and `delegation.md`'s fixed vocabulary (line 85, 'the smaller model for mechanical tooling... the larger model for design and judgment'). `tmp/review/delta-*.brief.md` today holds 18 files, not the five the account measured -- but the node itself discloses that `tmp/review/` is gitignored and that 'the figures stand with the commit that produced them or not at all', so this is the disclosed staleness of an ephemeral measurement rather than a new defect the amendment introduced. All seven of the last reading's findings are answered in substance: the fence's rank, the missing `bears` entries, the pinned measurement, the `delegation` citation's phrasing, the fallback's second instance, and the costs paragraph's answer to the author's question of 2026-09-07."
   survey:
-    date: 2026-09-05
-    of: a4d0e9bfc37dd059ae51672c6b770665c073f3dc
+    date: 2026-09-07
+    of: e27a2e7326a338bd4f519b1e55dfccc2394da68c
 form: rule
 under:
   - commons.systems/disposition-graph/clean-context-review
@@ -246,6 +249,10 @@ For it: it is the one option on this fact that answers the author's question of 
 Viable and not adopted: the model is the lever for what a reader holds at once, and what the re-reading must hold is its object, the amendment with the findings it answers; that is what the rank is chosen for and it is what the clause moves. Effort is the depth lever, and the delta's contract already bounds the re-reading's depth, two questions put to a stated diff and a stated list of findings, so lowering the effort spends a lever the contract has spent and leaves untouched the one the object sets. If the author rules for this option instead, the divergence from `scholarly-peer-review` recorded on the recommended one is lifted with it.
 
 Raised at the clean-context reading of 2026-09-07, in its viability paragraph.
+
+#### the-larger-model-on-a-re-reading
+
+Everything `the-smaller-model-on-a-re-reading` says, with the fence corrected to the rank that option and the two readings on it already name: the re-reading runs one model down, on the larger model the delegation node gives a reconciliation session's main thread, and not on the smaller. It is on the table because the fence and the option it is the text of name two ranks that delegation's answer keeps apart, so a ruling for the option as recorded and a ruling for the fence as written are two different rulings, and the record has to say which one the author is being asked for.
 
 ### authority
 
@@ -796,3 +803,26 @@ On the viability of the options: Every option on the answer fact remains viable;
 Strongest counter-argument (none): None found. Verified at the loci the diff touches: `.claude/skills/align-review/SKILL.md` lines 221-223 name the draft reading on the larger/most-capable model and the re-reading on the smaller model, matching the fence's corrected rank and `delegation.md`'s fixed vocabulary (line 85, 'the smaller model for mechanical tooling... the larger model for design and judgment'). `tmp/review/delta-*.brief.md` today holds 18 files, not the five the account measured -- but the node itself discloses that `tmp/review/` is gitignored and that 'the figures stand with the commit that produced them or not at all', so this is the disclosed staleness of an ephemeral measurement rather than a new defect the amendment introduced. All seven of the last reading's findings are answered in substance: the fence's rank, the missing `bears` entries, the pinned measurement, the `delegation` citation's phrasing, the fallback's second instance, and the costs paragraph's answer to the author's question of 2026-09-07.
 
 The session's reply: Forwarded with no finding; the rank, the bears entries and the pinned measurements verified on the main thread. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of e27a2e73
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (strong): The option the answer fact recommends and the fence a ruling for it would adopt name two different ranks for one reading. `the-smaller-model-on-a-re-reading` says the re-reading runs "one model down, on the larger model the `delegation` node gives a reconciliation session's main thread", and the fence says "The re-reading of an amendment runs on the smaller model, the delegation node's own name for that rank"; in delegation's own vocabulary those are two ranks and not one. The two readings recorded as bearing on that option say "a re-reading one rank down", which supports the option's rank and not the fence's. A confirmation would ratify a rank the node's own option prose denies and no reading has read.
+
+The session's reply: Accepted, verified at both loci on the main thread: the option prose says one model down, the larger model, and the fence says the smaller model, and delegation's answer keeps the two ranks apart. The option's rank is the one the readings read and the one the sitting has run on today, the re-reading on the model one rank below the first reading; the fence is corrected to it in the repair this finding kicks back, and the survey's option `the-larger-model-on-a-re-reading` is recorded so the author meets the two rulings as two.
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+review-model's recommended option and the fence a ruling for it would adopt name two different ranks for the re-reading. The option `the-smaller-model-on-a-re-reading` reads "the re-reading of an amendment runs one model down, on the larger model the `delegation` node gives a reconciliation session's main thread, at the same effort and chosen by no session"; the fence reads "The re-reading of an amendment runs on the smaller model, the delegation node's own name for that rank, at the same effort, and is chosen by no session either." delegation's answer keeps the two apart — "the smaller model for mechanical tooling, tests, format work, and anything whose contract determines the answer; the larger model for design and judgment" — and gives a reconciliation session's main thread the larger model, so one model down from the most capable is the larger and not the smaller. The two readings recorded as bearing on that option take the option's rank: n-version-programming says "a re-reading one rank down is the first difference the record puts between two readers of one text", and brooks-surgical-team says "this clause makes the check a lesser reader for the first time". The node's own account records that the correction was applied in one place only.
+
+Also named: commons.systems/disposition-graph/delegation, commons.systems/disposition-graph/brooks-surgical-team, commons.systems/disposition-graph/n-version-programming.
+
+Proposed: The option's rank and the readings' rank are the survivor, since three texts name it against the fence's one: the fence is corrected to the larger model, the rank delegation gives a reconciliation session's main thread and one down from the model the other two readings run on, and the fence's citation of delegation's smaller-model clause is redrawn to the ground the option actually gives, that the re-reading's contract fixes what it looks for. The option is recorded so the author may instead rule for the smaller model, in which case the option's prose and both readings' entries move with it.
+
+Recorded as an option on this node's answer fact: `the-larger-model-on-a-re-reading` (source review, 2026-09-07).

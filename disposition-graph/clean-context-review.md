@@ -1,6 +1,6 @@
 ---
 question: How is the clean-context review run?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: none
@@ -9,8 +9,8 @@ review:
   commit: f146f8f44b295c64e47a13bff338748035183d87
   against: "None found. Checked against the record rather than argued: `packages/clean-context-review/` and `.claude/skills/align-review/` still contain no mention of a wave (`grep -rin wave` empty), confirming the fence's disclosure is accurate; `disposition/disposition-graph/review-cost.md` now carries the `a-waves-brief-is-one-brief` option (source `clean-context-review`, ref 2026-09-07) with the byte figures moved there as the account claims; and the amended survey paragraph's division of labor with `frontier-consistency` (this node cites that node's validations rather than restating them) matches `frontier-consistency`'s own concurrent amendment, which independently records fixing the same contradiction against this node's prior text. All seven of the last reading's findings are answered in substance and nothing in the diff introduces a new false claim, contradiction, or stale pin."
   survey:
-    date: 2026-09-05
-    of: 2be1aaec7b5494e97b4c74de6d66ade15373da92
+    date: 2026-09-07
+    of: 9972f0cfa1d3635eba4440a793ce96b6d88271e0
 facts:
   - name: answer
     options:
@@ -803,3 +803,32 @@ On the viability of the options: The diff adds the two options the last reading 
 Strongest counter-argument (none): None found. Checked against the record rather than argued: `packages/clean-context-review/` and `.claude/skills/align-review/` still contain no mention of a wave (`grep -rin wave` empty), confirming the fence's disclosure is accurate; `disposition/disposition-graph/review-cost.md` now carries the `a-waves-brief-is-one-brief` option (source `clean-context-review`, ref 2026-09-07) with the byte figures moved there as the account claims; and the amended survey paragraph's division of labor with `frontier-consistency` (this node cites that node's validations rather than restating them) matches `frontier-consistency`'s own concurrent amendment, which independently records fixing the same contradiction against this node's prior text. All seven of the last reading's findings are answered in substance and nothing in the diff introduces a new false claim, contradiction, or stale pin.
 
 The session's reply: Forwarded with no finding; verified on the main thread that no wave code exists in the units package or the review skill, as the fence discloses. The counter-argument stands on the row at the strength the last reading gave it. Nothing on the node changes.
+
+### Frontier survey, 2026-09-07, of 9972f0cf
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict. It read the graph at graph commit `e4c87ed083180d8ddd57045a20a5df80704787a5`, which the record carries in no key until `dialogue`'s option `survey-pin-carries-its-commit` is ruled.
+
+Findings:
+
+
+Strongest counter-argument (moderate): The fence derives the round from a premise the record contradicts. It says the derived set is, "while no survey has run", the whole of the review and ruling stages and not the sitting's own drafts alone, and forty-five nodes carry a survey pin at the commit this survey read, which frontier-consistency states in terms. So the round every draft's reader is handed is sized and populated against a frontier that no longer exists, and the wave whose case is built on the size of those briefs is priced against it. The same false premise is carried on review-cost, the node that owns what a reading is given, so one wrong fact has two homes.
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+Three nodes at the ruling stage disagree about whether a survey has ever run, and the round every draft's reader is handed is derived from the losing side. clean-context-review's recommended text says the round is derived "as every node the survey owes a reading, which is every node at the review or the ruling stage carrying no survey pin or one its recommendation has moved past; while no survey has run that is the whole of the review and ruling stages and not the sitting's own drafts alone, and it is given as pointers, one line a node, for that reason." review-cost's recommended rationale says the same: at graph commit 1cde11f6 the set was forty-eight nodes, "because no survey has ever run and so no node carries a survey pin." frontier-consistency's recommended text says the opposite and is right: "The survey of 2026-09-05 read the graph whole at graph commit 73e2a04f, and forty-five nodes carry its pin today." Counted at the graph commit this survey read, forty-five node files carry a `survey:` pin.
+
+Also named: commons.systems/disposition-graph/review-cost, commons.systems/disposition-graph/frontier-consistency.
+
+Proposed: frontier-consistency's sentence is the survivor. clean-context-review's derivation clause and review-cost's rationale are redrawn on the record as it stands: the round is the set the survey owes a reading, which since 2026-09-05 is a proper subset of the review and ruling stages, and the argument for giving it as pointers is restated on the size that set actually has rather than on a survey that has never run. The wave measurement and the pointer rule are untouched; what moves is the premise each is argued from.
+
+### Frontier finding, 2026-09-07
+
+Kind: placement.
+
+The parent restates a rule its child owns and conditions, while claiming not to restate it, and is ruled first. clean-context-review's recommended text says of the survey "What of each node reaches that context is what the frontier-consistency node's validations read of it, as that node states them and as this node does not restate", and then restates one of them unconditioned: "of a node no judged node reaches, its question alone, on one line with its id and its file, as a draft's reader is given it." frontier-consistency's recommendation conditions exactly that class — "a node whose text stands as an earlier survey read it is carried on one line, and a node minted or amended since is carried by what it answers until a survey has read it again". clean-context-review carries no depends at all, and settles 23 against the child's 3, so it comes first in the ruling order and the copy is stale the day the child rules. The child records the collision as the option `the-unreached-line-is-conditioned-by-frontier-consistency`, which the parent's fact has not adopted.
+
+Also named: commons.systems/disposition-graph/frontier-consistency.
+
+Proposed: frontier-consistency's conditioned form is the survivor, since the condition is what its own validations decide. The parent's sentence is struck for a citation, which is what the parent already says it does, or the option `the-unreached-line-is-conditioned-by-frontier-consistency` is adopted into the parent's recommendation; either way frontier-consistency is entered in clean-context-review's depends, so the author is not asked to rule the parent before the child whose answer the parent copies.

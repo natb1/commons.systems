@@ -462,3 +462,15 @@ Two nodes maintain a hand-written census of the same population, and they disagr
 Also named: commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/codd-update-anomaly, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/materialization, commons.systems/disposition-graph/validation-order.
 
 Proposed: The survivor is `commons.systems/disposition-graph/readings`, which owns how references to tradition are recorded. Its answer already says "the rationale of a node never repeats its readings", which is the rule the censuses are counting violations of, so the count belongs to an instrument and not to an option's prose: derive the list of rationales carrying prose tradition lists rather than writing it down, and have `stub-traditions`' options cite `readings` instead of recounting. Strike the numbers from both option texts. `traditions-to-readings` is settled once, on `readings`, and cited from the four nodes rather than pending on each.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+plato-maieutics carries a `diverged` relation its own answer does not argue, which readings requires it to. Its frontmatter bears on commons.systems/disposition-graph/alignment-page, fact `answer`, option `every-fact-every-option`, relation `diverged`; its whole answer is "Yes, for the conduct in which the answer lives in the author, unrecorded. Socrates claims to bring forth what the interlocutor already carries and to contribute nothing of his own (150c to d), and then to test whether the offspring is genuine or a wind-egg (151e); the interview under this conduct draws the author's disposition out with visible drafts that the author may refuse, and the test of the draft against the author's intention is the midwife's test." readings' standing answer requires "diverged, where the option departs from it and the reading's own answer says why". The argument for the departure is written on alignment-page instead, which says of the anchor that it is "the anchor the record's reading on the maieutic conduct names twice and never answers" — that is, the reading is cited for a divergence the reading itself does not state.
+
+Also named: commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/alignment-page.
+
+Proposed: readings' rule is the survivor and plato-maieutics is where the text must change: the reading's answer says why the page's option departs from the tradition, in the reading's own words, so the relation the frontmatter asserts is readable from the reading rather than only from the node it bears on. The alternative, that the relation is retracted or narrowed, is the ruling the author takes instead; alignment-page's own text needs no change either way.
+
+Recorded as an option on commons.systems/disposition-graph/plato-maieutics's answer fact: `answer-argues-the-page-divergence` (source review, 2026-09-07).
