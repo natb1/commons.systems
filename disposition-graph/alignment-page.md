@@ -1,6 +1,6 @@
 ---
 question: What does the author read to rule?
-stage: maieutic
+stage: review
 probes:
   - id: unit-of-a-ruling
     asks: >-
@@ -209,6 +209,7 @@ depends:
   - commons.systems/disposition-graph/which-facts-are-listed
   - commons.systems/disposition-graph/when-the-kickback-feedback-shows
   - commons.systems/disposition-graph/where-a-change-request-goes
+  - commons.systems/disposition-graph/where-the-unconfirmed-indication-goes
 under:
   - commons.systems/disposition-graph/projection
 ---
@@ -424,8 +425,8 @@ which the indication goes in the right-hand column's heading, and which that
 node no longer recommends; the two clauses are this node's and not that one's,
 which is why they are an option here rather than an amendment there.
 
-What the child recommends now is `on-the-answer-fact`, the indication above the
-answer fact's options, which leaves the right-hand column's heading unqualified
+What the child recommends now is `line-only-where-the-act-is-live`, the
+indication above the answer fact's options at the ruling stage alone, which leaves the right-hand column's heading unqualified
 and takes the standing off the row without putting it in the pane; so a ruling
 there for the recommendation moves the first of these two clauses and not the
 second, and the naming paragraph is marked above as standing only until that
@@ -445,9 +446,8 @@ and one qualification of a heading that already exists is the smallest
 exception that reason admits, which is the case for making it rather than
 widening the reserve.
 
-Recorded and not applied. The child stands at the review stage with its
-recommendation moved and its reading owed, and a ruling here is what would move
-these two clauses; the reading of 2026-09-06 on that node found that the child
+Recorded and not applied. The child's stage is the frontier's to show and is not
+restated here; a ruling here is what would move these two clauses; the reading of 2026-09-06 on that node found that the child
 had amended them itself, which is authority widening on the way down.
 #### standing-sentence-stored
 
@@ -626,8 +626,7 @@ takes in prose. Seven are named in `depends` and a ruling here waits on them:
 page lists on a node. An eighth,
 `where-the-unconfirmed-indication-goes`, was minted on 2026-09-06 from a
 finding on the first of those and decides where this page says that a node's
-text is unconfirmed; it is not in `depends` and must not be, since it stands
-under an option of this answer's own and the edge would close a cycle. Two of
+text is unconfirmed; it is in `depends` with the other seven, entered on 2026-09-07 when the survey found the reason this answer gave for leaving it out, that the edge would close a cycle, to be false: the child stands under this node and its `depends` names only the dialogue node. Two of
 the nine minted on 2026-09-05 are gone: `input-for-an-unfinished-movement`,
 answered outright by the author's rule of 2026-09-06 which this answer now
 states, and `the-account-on-the-page`, whose remaining half is the option
@@ -2823,3 +2822,7 @@ Also named: commons.systems/disposition-graph/plato-maieutics, commons.systems/d
 Proposed: readings' rule is the survivor and plato-maieutics is where the text must change: the reading's answer says why the page's option departs from the tradition, in the reading's own words, so the relation the frontmatter asserts is readable from the reading rather than only from the node it bears on. The alternative, that the relation is retracted or narrowed, is the ruling the author takes instead; alignment-page's own text needs no change either way.
 
 Recorded as an option on commons.systems/disposition-graph/plato-maieutics's answer fact: `answer-argues-the-page-divergence` (source review, 2026-09-07).
+
+### Amended after the frontier survey, 2026-09-07
+
+Two findings of the survey, validated at their loci on the main thread. The option `standing-named-in-the-pane` named the child's recommendation as `on-the-answer-fact` and its stage as review; the child recommends `line-only-where-the-act-is-live` and stands at ruling. The prose now names the child's recommendation and restates no stage. The answer's reason for keeping the eighth child out of `depends`, a cycle, was false; the child is entered in `depends` with the other seven and the sentence says so. The amended recommendation owes its re-reading, whose object is this repair.

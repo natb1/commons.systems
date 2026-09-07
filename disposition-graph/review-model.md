@@ -1,6 +1,6 @@
 ---
 question: Which model runs the clean-context review's readings?
-stage: maieutic
+stage: review
 facts:
   - name: answer
     options:
@@ -232,7 +232,7 @@ proposes the option and does not write this node's answer.
 
 #### the-smaller-model-on-a-re-reading
 
-`fable-for-both-readings` with one clause: the review of a draft and the survey run where the author's words of 2026-09-04 put them, and the re-reading of an amendment runs one model down, on the larger model the `delegation` node gives a reconciliation session's main thread, at the same effort and chosen by no session. It changes the recommended rule in that one place. The instrument's note changes with it, since the differential the note says the rule cannot measure is what the re-reading now supplies.
+`fable-for-both-readings` with one clause: the review of a draft and the survey run where the author's words of 2026-09-04 put them, and the re-reading of an amendment runs on the smaller model, the `delegation` node's own name for the rank it gives mechanical work and anything whose contract determines the answer, at the same effort and chosen by no session; the amendment of 2026-09-07 corrected the fence to that rank and left this prose naming the larger, which the survey of the same day found. It changes the recommended rule in that one place. The instrument's note changes with it, since the differential the note says the rule cannot measure is what the re-reading now supplies.
 
 For it: the re-reading's object is the amendment and not the answer, its brief forbids it to re-run the first reading's validations, and its two questions are put to a stated diff and a stated list of findings, so its contract determines what it looks for; that is the delegation node's own test for the smaller model. It also unlocks the measurement this node declares and cannot take under a flat rule.
 
@@ -252,7 +252,7 @@ Raised at the clean-context reading of 2026-09-07, in its viability paragraph.
 
 #### the-larger-model-on-a-re-reading
 
-Everything `the-smaller-model-on-a-re-reading` says, with the fence corrected to the rank that option and the two readings on it already name: the re-reading runs one model down, on the larger model the delegation node gives a reconciliation session's main thread, and not on the smaller. It is on the table because the fence and the option it is the text of name two ranks that delegation's answer keeps apart, so a ruling for the option as recorded and a ruling for the fence as written are two different rulings, and the record has to say which one the author is being asked for.
+Everything `the-smaller-model-on-a-re-reading` says, with the fence corrected to the rank that option and the two readings on it already name: the re-reading runs one model down, on the larger model the delegation node gives a reconciliation session's main thread, and not on the smaller. It is on the table because the fence and the option it is the text of name two ranks that delegation's answer keeps apart, so a ruling for the option as recorded and a ruling for the fence as written are two different rulings, and the record has to say which one the author is being asked for. The repair of 2026-09-07 corrected the option's prose to the fence's rank, the smaller model, since the fence was the text the amendment of that day corrected on purpose and the re-readings of the sitting ran there; this option stands as the ruling for the larger model, viable and not adopted.
 
 ### authority
 
@@ -826,3 +826,7 @@ Also named: commons.systems/disposition-graph/delegation, commons.systems/dispos
 Proposed: The option's rank and the readings' rank are the survivor, since three texts name it against the fence's one: the fence is corrected to the larger model, the rank delegation gives a reconciliation session's main thread and one down from the model the other two readings run on, and the fence's citation of delegation's smaller-model clause is redrawn to the ground the option actually gives, that the re-reading's contract fixes what it looks for. The option is recorded so the author may instead rule for the smaller model, in which case the option's prose and both readings' entries move with it.
 
 Recorded as an option on this node's answer fact: `the-larger-model-on-a-re-reading` (source review, 2026-09-07).
+
+### Amended after the frontier survey, 2026-09-07
+
+The survey's finding, validated at both loci on the main thread: the option's prose named the larger model where the fence names the smaller. The amendment of 2026-09-07 corrected the fence deliberately, as the account above records, and left the option's prose behind; the prose is corrected to the fence, and not the fence to the prose, because the smaller model is the rank the sitting's five re-readings ran on and what they returned is the record's only evidence on the differential. The survey's option `the-larger-model-on-a-re-reading` stays viable for the author. The bears prose on `n-version-programming` said "one rank down", which was true of the text it was written on; it now says a lesser model. The recommendation does not move; the amended prose owes its re-reading, whose object is this repair.

@@ -57,6 +57,8 @@ Adopted as the name and the ground of the periagogic conduct. The divergence to 
 
 ### answer
 
+The reading recommends `relation-diverged`: the turning here is toward a record the author wrote or accepted and not toward the forms, and a relation of adopted left that departure stated in prose only, which the evaluation node calls an unrecorded conflict.
+
 #### relation-diverged
 
 The reading's relation becomes diverged rather than adopted, recording what the rationale already names: Plato's turning is toward the forms, while here the turning is toward a record the author wrote or accepted, so the authority appealed to is the author's own past decision and not a truth above the author. Two reviews found the divergence stated in prose under a relation of adopted, which readings provides diverged for, and the session's reply says the author may rule the relation diverged.
@@ -145,3 +147,7 @@ Findings:
 - ## Facts, `### answer`: the fact's subsection opens straight onto `#### relation-diverged` with no reason above it, and `### authority` does the same, so neither fact records why it recommends what it does. `review-cost`'s recommended answer names this as a defect an instrument decides — "on a fact whose prose opens straight onto an option subsection with no reason above it" — and until the validator holds the check a reading that meets one still reports it.
 
 Strongest counter-argument (weak): The record still gives one conduct two citations and both sides carry the repair unadopted. This node's option `citation-once` says "Growth's answer cites 518b to d while this node's source adds 521c and 515c to 516a", and growth's option `cite-the-reading` says the same from the other end; neither is passed over and neither is recommended, and growth's own recommended fence still writes "(the turning of the soul, Republic VII 518b to d)". So a confirmation of `standing` here leaves the duplication in place whichever of the two nodes is ruled first.
+
+### Amended after the frontier survey, 2026-09-07
+
+The survey's node finding, validated on the main thread: the answer fact and the authority fact opened straight onto an option subsection with no reason above. Both now open with their reason. The facts prose is not part of the pinned text, so neither pin moves and the node stays at ruling.

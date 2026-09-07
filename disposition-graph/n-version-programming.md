@@ -42,7 +42,7 @@ Diverged on `fable-for-both-readings`. Two readings on one model share a prior; 
 
 The tradition's own standard is failed on both sides, and the reading says so rather than resting on the concession. Knight and Leveson measured correlation and did not assume it; here nothing is measured, so the claim that four models of one lineage fail together is the AI's from its knowledge of how they are built, which is the kind of claim the experiment exists to distrust. What the record could do about it is bought in the brief and not in the reader, since the brief is where a reading's framing is set. Shelved once by a constraint that has gone: N-version programming died because paying several teams to build one artifact was uneconomic, and a second reader that is a different model costs a token bill, so the caution is actionable here in a way it was not where it was raised.
 
-Adopted in part on `the-smaller-model-on-a-re-reading`. Two readings on one model share a prior, and a re-reading one rank down is the first difference the record puts between two readers of one text. It is a difference of capability inside one lineage, which this reading has already said is not the independence the experiment demanded, so the support reaches the direction of the move and not its sufficiency.
+Adopted in part on `the-smaller-model-on-a-re-reading`. Two readings on one model share a prior, and a re-reading on a lesser model is the first difference the record puts between two readers of one text. It is a difference of capability inside one lineage, which this reading has already said is not the independence the experiment demanded, so the support reaches the direction of the move and not its sufficiency.
 
 ## Rationale
 

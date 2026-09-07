@@ -1,6 +1,6 @@
 ---
 question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
-stage: maieutic
+stage: ruling
 probes:
   - id: bundled-disposition-as-queued-questions
     asks: >-
@@ -599,3 +599,7 @@ Also named: commons.systems/disposition-graph/frontier-consistency, commons.syst
 Proposed: frontier-consistency's `frontier survey` is the defined term and survives; what moves is decomposition's use of the bare word for a sitting's units, which is where three of the four collisions come from and which unit-skills would multiply into four skill names. The option is recorded on decomposition so the author rules the term once; frontier-consistency, unit-skills and review-skills follow whichever way that ruling goes, and delegation's plural is read as the sitting's units under it.
 
 Recorded as an option on this node's answer fact: `units-are-readings-not-surveys` (source review, 2026-09-07).
+
+### Amended after the frontier survey, 2026-09-07
+
+Two findings of the survey named this node and each is recorded as an option on the answer fact, `citation-moves-to-unit-sizing` and `units-are-readings-not-surveys`; neither is adopted. The first acts only when delegation-bounds-and-sizing is ruled, and the author meets it here. The second proposes "reading" for the three units, a word the record already gives to a tradition's node and to the two readings of the clean-context review, so the collision it would cure it would also move; which word the units take is the author's, and the option stands for the ruling that decides it. No text moves, both pins hold, and the node returns to ruling.

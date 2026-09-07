@@ -1,6 +1,6 @@
 ---
 question: Does Plato's midwifery ground the maieutic conduct of the interview?
-stage: maieutic
+stage: review
 review:
   verdict: forward
   strength: strong
@@ -56,6 +56,8 @@ bears:
 
 Yes, for the conduct in which the answer lives in the author, unrecorded. Socrates claims to bring forth what the interlocutor already carries and to contribute nothing of his own (150c to d), and then to test whether the offspring is genuine or a wind-egg (151e); the interview under this conduct draws the author's disposition out with visible drafts that the author may refuse, and the test of the draft against the author's intention is the midwife's test.
 
+The alignment page's option `every-fact-every-option` departs from this conduct, and the departure is the record's: a page that marks the AI's recommendation on every option of every fact before the author chooses is the drafter leading the delivery, which the midwife does not do; the record takes that for the legitimacy the full listing buys, every candidate the AI considered on the table with its status, so that what the author refuses is a draft they can see whole. The relation recorded on that option is diverged for that reason.
+
 ## Rationale
 
 Adopted as the name and the ground of the maieutic conduct. The divergence to keep in view: the AI is not barren; it drafts, and the draft can lead. That is why the draft must be visible and refusable, and why the periagogic conduct runs first when the ground is already recorded.
@@ -63,6 +65,8 @@ Adopted as the name and the ground of the maieutic conduct. The divergence to ke
 ## Facts
 
 ### answer
+
+The reading keeps its standing relation, adopted with the divergence named, because the conduct is what the maieutic stage is named for and the divergence is in the drafter and not in the conduct; `relation-diverged` stays viable for the author.
 
 #### relation-diverged
 
@@ -74,7 +78,7 @@ The strong counter-argument, twice recorded: Socrates' midwifery rests on his be
 
 #### answer-argues-the-page-divergence
 
-Everything `standing` says, with a paragraph saying why the alignment page's option `every-fact-every-option` departs from the tradition: a page that marks the AI's recommendation on every option of every fact before the author chooses is the drafter leading the delivery, which is the one thing the midwife may not do, and the record accepts it for the legitimacy the listing buys. It is on the table because this node's frontmatter already carries `diverged` on that option and `readings` requires "diverged, where the option departs from it and the reading's own answer says why", so the relation stands today on an argument written on the node it bears on and nowhere in the reading itself.
+Everything `standing` says, with a paragraph saying why the alignment page's option `every-fact-every-option` departs from the tradition: a page that marks the AI's recommendation on every option of every fact before the author chooses is the drafter leading the delivery, which is the one thing the midwife may not do, and the record accepts it for the legitimacy the listing buys. It is on the table because this node's frontmatter already carries `diverged` on that option and `readings` requires "diverged, where the option departs from it and the reading's own answer says why", so the relation stands today on an argument written on the node it bears on and nowhere in the reading itself. Adopted into the answer on 2026-09-07: the paragraph is written.
 
 ## Account
 
@@ -167,3 +171,7 @@ Also named: commons.systems/disposition-graph/readings, commons.systems/disposit
 Proposed: readings' rule is the survivor and plato-maieutics is where the text must change: the reading's answer says why the page's option departs from the tradition, in the reading's own words, so the relation the frontmatter asserts is readable from the reading rather than only from the node it bears on. The alternative, that the relation is retracted or narrowed, is the ruling the author takes instead; alignment-page's own text needs no change either way.
 
 Recorded as an option on this node's answer fact: `answer-argues-the-page-divergence` (source review, 2026-09-07).
+
+### Amended after the frontier survey, 2026-09-07
+
+The survey's finding and its own node finding, validated on the main thread: the frontmatter bore `diverged` on the alignment page's option and the answer did not say why, which the readings node requires; and the answer fact opened straight onto an option subsection. The answer now carries the paragraph the survey's option `answer-argues-the-page-divergence` proposed, adopted, and both facts open with their reason. The amended answer owes its re-reading, whose object is this repair.

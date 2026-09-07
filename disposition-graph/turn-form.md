@@ -1,7 +1,7 @@
 ---
 question: What form does a turn of the alignment dialogue addressed to the author take?
 form: rule
-stage: maieutic
+stage: ruling
 facts:
   - name: answer
     options:
@@ -579,3 +579,7 @@ Also named: commons.systems/disposition-graph/graph-topology.
 Proposed: turn-form owns what may reach the author in a sitting and is where the question is decided. The option is recorded on turn-form so that the author rules whether a report of what the AI deleted under a delegation is a form the dialogue admits, rather than having it foreclosed by an exhaustive list that never met it. graph-topology's option stands as it is, since it already names turn-form as the decider.
 
 Recorded as an option on this node's answer fact: `a-turn-that-reports-a-prune` (source review, 2026-09-07).
+
+### Amended after the frontier survey, 2026-09-07
+
+The survey's finding named this node and is recorded as the option `a-turn-that-reports-a-prune`, not adopted: a prune leaves its trace on the survivor's account, which the browser renders and the frontier lists, and a turn that reports it would be the noise the rule bounds. The option stands for the author's ruling. No text moves, both pins hold, and the node returns to ruling.
