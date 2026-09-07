@@ -15,7 +15,7 @@ facts:
         source: ai
         ref: "2026-09-06"
         status: passed
-        reason: "a section running to 1,986 words placed under the stage chip makes the first thing on the node a thing the author scrolls past, which is the fault the parent names against apparatus moved one column over"
+        reason: "a section running to some two thousand words placed under the stage chip makes the first thing on the node a thing the author scrolls past, which is the fault the parent names against apparatus moved one column over"
       - name: residue-in-the-drill-down
         source: ai
         ref: "2026-09-06"
@@ -54,8 +54,11 @@ facts:
       - name: address-for-the-words-no-option-names
         source: review
         ref: "2026-09-07"
+      - name: residue-raised-as-a-finding
+        source: review
+        ref: "2026-09-07"
     recommends: per-option-only
-    boldness: low
+    boldness: moderate
     against: "The only words the author has given on this node are a release with one named exception, and this answer reads 'does not need to be played back' as 'must nowhere appear' and extends a sentence about the periagogic response to every dated entry a node's `## Disposition` holds, two readings of the AI's resting on the author's one sentence. What that costs, re-taken at graph commit 62121b69: 142 of 255 dated entries are named by no option and 39 of the 71 nodes that carry words have none named at all, while `projection`'s standing answer holds that the record is read through projections and never by opening node files, so the majority of what the author has said reaches no projection they read at the moment of ruling; and this very ruling leans on the author's rule of 2026-09-06, which lives in `alignment-page`'s `## Disposition` and not in this node's, with `ancestors-words-too` passed over, so the author rules here without seeing on the page the later words the answer rests on."
     stands: per-option-only
   - name: authority
@@ -67,12 +70,12 @@ facts:
     boldness: low
     against: "Whichever way this goes the author's words stay in the node unaltered and are read in full in the `/align` interview their own rule of 2026-09-06 sends everything else to, so nothing is lost that a session cannot show them on request; ratifying it spends the author's scarcest act on which dated entries a projector quotes beside an option, and the capture the reading names is already answered by the parent's own authority fact, under which the whole shape of this page is the author's to confirm."
 review:
-  verdict: kickback
+  verdict: forward
   strength: strong
   date: 2026-09-07
   of: c48996dc6997e0445b1ff385d558a8c8d0eed9be
-  commit: f146f8f44b295c64e47a13bff338748035183d87
-  against: "The amendment repairs seven of the eight findings precisely and verifiably (the exclusivity sentence, the authority 'owed' claim, all stale project.mjs/read.mjs citations, the four unqualified figures, the words-first-in-the-column status, and the missing viable option), but the eighth — the stale 'five clauses' count in the parent-reach account section — is left completely untouched by the diff while the amendment's own closing account section falsely asserts it was fixed. That is not a partial answer to a finding; it is a false statement about what this very amendment did, on the same locus that has already produced two prior rounds of the identical false claim, which is exactly the kind of thing question 2 asks a re-reading to catch."
+  commit: 51769bb92848017d1aa8779cb526e40b114f8ea6
+  against: "The answer's one guard against the AI deciding which of the author's own words the author sees is the mechanical finding for a `ref` that names no entry — and that guard catches only the eleven references that resolve to nothing, never the 142 of 255 entries that no option names at all. Verified at `ca46f7ff`: `deriveMechanicalFindings` raises a finding for an author-sourced option whose `ref` names no entry (`packages/disposition/read.mjs:1828-1833`) and raises nothing for an entry no option names, so under this answer the AI's broken selections are published and its silent omissions are not, which is precisely the shape `bentham-publicity` — adopted on this option — is against, a recommender that 'publishes some of its decisions and withholds others by its own measure'. The answer's remedy for the residue, that 'an entry that bears on a fact the record asks and that no option names is recorded as an option on that fact', is a judgment the AI makes with no instrument behind it and no finding when it is not made, which is the capture shape this node's own authority fact gives as its ground for recommending ratified. So the answer buys exclusivity today and defers its only check to a back-fill nothing measures, on 39 of the 71 nodes that carry the author's words — while `projection`'s standing answer holds that the record is read 'through projections, never by opening node files', so the majority of what the author has said reaches the ruler nowhere. The reply the answer gives, that this is a defect of the references and curable exactly there, is right and is not yet true: the record can see the eleven and cannot see the hundred and forty-two."
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -96,17 +99,18 @@ periagogic movement "does not need to be played back in the alignment artifact
 expect as quotes supporting or refuting fact options", and a quotation on the row
 of the option it supports or refutes is the one form those words name.
 
-An entry is a dated paragraph beginning "The author, <date>" together with the
-blockquote it introduces, which is the projector's own rule (`AUTHOR_ENTRY_RE`,
+An entry is a dated paragraph beginning "The author, <date>" together with
+everything beneath it up to the next such paragraph, which is the projector's own
+rule (`AUTHOR_ENTRY_RE`,
 `packages/disposition/project.mjs:1405`, applied by `authorEntries` at `:1407`,
 at implementation commit cb0e02c6).
 An option's `ref` is the date the words were given, and the match is by that date
 alone: where a date carries more than one entry the row shows all of them, in the
 order the section keeps them, which is what `authorWordsFor` does today
 (`packages/disposition/project.mjs:1421-1427` at cb0e02c6). That is coarse and this answer
-does not refine it — on this page's own parent fourteen of the twenty-four
-entries are dated 2026-09-04, so an option referring to that date carries all
-fourteen. What an option's `source` and `ref` are is
+does not refine it — on this page's own parent fourteen of the twenty-five
+entries, at graph commit `ca46f7ff`, are dated 2026-09-04, so an option referring
+to that date carries all fourteen. What an option's `source` and `ref` are is
 `commons.systems/disposition-graph/dialogue`'s question; this answer reads them
 and adds nothing to them. On this node the recommended option's own reference
 resolves to one entry, so the row the author rules on carries the sentence it
@@ -137,11 +141,12 @@ of the words should be is a finding and not a fact". A reference resolving to no
 entry is that same defect wearing the right shape, and a page that fills the gap
 with the whole section makes it unfindable.
 
-What this costs is measured, at graph commit `ec6e2300` and re-taken by the
-reading of 2026-09-07. Of 140 nodes, 68 carry a `## Disposition`, holding 222
-dated entries; 45 options are sourced to the author, of which 34 carry a
-reference naming at least one entry and 11 name none; the references reach 101 of
-the entries and miss 121, and reach none at all on 43 of the 68 nodes. So on the
+What this costs is measured, at graph commit `62121b69`, re-taken there by the
+reading of 2026-09-07 from the measurement first made at `ec6e2300`. Of 143
+nodes, 71 carry a `## Disposition`, holding 255 dated entries; 56 options are
+sourced to the author, of which 45 carry a reference naming at least one entry
+and 11 name none; the references reach 113 of the entries and miss 142, and reach
+none at all on 39 of the 71 nodes. So on the
 day this answer is projected the page carries a minority of what the author has
 said to the record, and eleven rows carry nothing where a quotation is owed. That
 is the cost, and it is the reconciliation this answer owes rather than a reason
@@ -232,7 +237,12 @@ words, the AI's case". This answer puts the author's words exactly there and
 nowhere else. The earlier draft read that reading's guard, that the second level
 is always present and one step away, at a node-level drill-down the reading never
 read; the extension is not made here, and the reading is cited only for what it
-says.
+says. Within that scope the answer departs from the reading's substitute guard in
+one case and says so: on an author-sourced option whose reference names no entry,
+the eleven at `ca46f7ff`, the author's words exist on the node and appear at
+neither level, by choice, the finding standing in place of a plausible render, so
+the omission is discoverable on the frontier and not on the row; the entry on
+that reading stays adopted on the rule and the departure is recorded here.
 
 The reach is bounded by where authority lies. The parent devolved this question
 and marks both clauses a ruling here reaches as standing only until this node
@@ -260,14 +270,18 @@ half is unchanged from the draft and is where the author's exception does its
 work: the entries the reference names, on the row of the option they bear on, and
 nothing where the reference names nothing.
 
-Boldness is low because the recommendation rests on the author's words rather
-than against them, which is the measure `dialogue` gives boldness: the option is
-sourced to the author and referenced to their sentence, and every clause of the
-answer is that sentence applied. What is the AI's here is the disposal of the
-consequence — that an unresolving reference is a finding, and the locus it is
-raised at — and neither is a departure from anything the author has said. The
-draft's moderate mark was for a reading of "played back" that this answer no
-longer needs.
+Boldness is moderate, on the measure `dialogue` gives it. The option is sourced
+to the author and referenced to their sentence, and the row is that sentence
+applied; but the answer's force is exclusivity, that nothing else on the page is
+the author's words under `## Disposition`, and the author's sentence is a release
+and not a prohibition, so the exclusivity is the AI's reading of "does not need
+to be played back" as "must nowhere appear", extended from the periagogic
+response to every dated entry a node holds. Those two readings rest on the AI
+against the plainest sense of the author's one sentence, which is what the
+fact's case against says, and the mark says the same thing rather than
+contradicting it. What else is the AI's here is the disposal of the
+consequence, that an unresolving reference is a finding, and the locus it is
+raised at.
 
 The case against is on the fact, at full strength: on the day this is projected
 the page shows the author a minority of what they have said to the record, and
@@ -305,7 +319,7 @@ facts, rather than last. For it: the words are the ground the draft answers, and
 reading the ground before the options is the order of the argument rather than
 the order of the page. Against it, and decisive: the column's own ask is the
 facts, and the parent's recommended text puts the drill-downs last for that
-reason; a section running to 1,986 words on this page's parent makes the first
+reason; a section running to some two thousand words on this page's parent makes the first
 thing under the chip a thing the author scrolls past on every node that carries
 words, which is the fault the parent names against apparatus in the right-hand
 column, moved one column over. Passed over on that ground, and it falls with the
@@ -391,7 +405,7 @@ Everything `section-folded-and-quotation-narrowed` says, with its drill-down
 rendered open rather than folded, so that the author meets their own words
 without a click. For it: a fold is a step the reader may not take, and on that
 option the section is the one text in the column the AI did not write. Against
-it, and decisive on the measurement: a section running to 1,986 words on this
+it, and decisive on the measurement: a section running to some two thousand words on this
 page's own parent would stand between the stage chip and the facts the ruling
 asks about, which is the fault the parent names against apparatus, and the
 two-level form the record reads under this page is the answer to it. Passed over.
@@ -418,6 +432,26 @@ for that reason. Raised at the clean-context reading of 2026-09-07, in its
 viability paragraph; if the line in the column heading is the parent's clause
 and not devolved here, the same option belongs on `alignment-page` with this
 node as its source.
+
+#### residue-raised-as-a-finding
+
+Everything the recommended option says, with one addition to the check the
+answer already commissions: an entry of a node's `## Disposition` that no
+option's `ref` names is raised as a finding on the node, listed by the frontier
+beside the finding for a reference that names no entry, so that the AI's silent
+omissions are published the way its broken selections are. For it: it answers
+the fact's strongest case against, that the guard catches the eleven and never
+the 142, without moving a word of the page, and it makes the answer's own remedy
+for the residue, that such an entry is recorded as an option on the fact it bears
+on, a thing an instrument checks rather than a judgment the AI makes alone.
+Against it, and why it is not adopted: not every entry bears on a fact the record
+asks, a grant, a direction to a sitting, or a queued disposition among them, so a
+finding per unnamed entry is one that nothing can clear on those, and a finding
+that cannot be cleared is noise the frontier carries forever; the remedy would
+need a way to mark an entry as bearing on no fact, which is a decision the record
+does not yet encode. Viable and not adopted, for the author to weigh against the
+residue. Raised at the clean-context reading of 2026-09-07, in its viability
+paragraph.
 
 ### authority
 
@@ -687,3 +721,30 @@ On the viability of the options: Every option on both facts remains viable after
 Strongest counter-argument (strong): The amendment repairs seven of the eight findings precisely and verifiably (the exclusivity sentence, the authority 'owed' claim, all stale project.mjs/read.mjs citations, the four unqualified figures, the words-first-in-the-column status, and the missing viable option), but the eighth — the stale 'five clauses' count in the parent-reach account section — is left completely untouched by the diff while the amendment's own closing account section falsely asserts it was fixed. That is not a partial answer to a finding; it is a false statement about what this very amendment did, on the same locus that has already produced two prior rounds of the identical false claim, which is exactly the kind of thing question 2 asks a re-reading to catch.
 
 The session's reply: Accepted. The amendment struck the count in the bracketed restatement of the paragraph and not in the paragraph itself, and its account claimed the strike; the paragraph's count is now struck and the account says what happened. The recommendation does not move; the repaired answer owes its own reading.
+
+### Clean-context review, 2026-09-07, of c48996dc
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Recommended at this reading: `per-option-only`.
+
+Findings:
+
+- Facts, '### answer', the boldness paragraph, against the same fact's own `against`: the two contradict each other and both are on the page the author reads. The boldness paragraph says 'Boldness is low because the recommendation rests on the author's words rather than against them, which is the measure `dialogue` gives boldness: the option is sourced to the author and referenced to their sentence, and every clause of the answer is that sentence applied.' and closes 'The draft's moderate mark was for a reading of "played back" that this answer no longer needs.' The fact's `against`, written this same sitting, says 'this answer reads 'does not need to be played back' as 'must nowhere appear' and extends a sentence about the periagogic response to every dated entry a node's `## Disposition` holds, two readings of the AI's resting on the author's one sentence.' Both cannot stand: the answer's whole force is exclusivity ('On the option rows, and nowhere else', 'There is no drill-down holding the section whole, neither folded nor open, at any stage'), and the author's sentence is a release and not a prohibition, so the exclusivity is exactly a reading of the AI's set against the plainest sense of the author's words — which is what `dialogue` says boldness measures ('how much of the recommendation rests on the AI's own knowledge against the record and the author's words'). `alignment-page` has the author read boldness 'to know how far to trust the mark beside an option', so a `low` mark one line above a case-against reporting two of the AI's own readings misinforms the author at the moment of ruling. Suggested edit: restore `boldness: moderate` on the answer fact and replace the last sentence of the boldness paragraph with the reason moderate is right — that the answer needs the release read as a prohibition and the periagogic sentence read as reaching every dated entry, which is what the `against` says.
+- Answer, the cost paragraph, first sentence: 'What this costs is measured, at graph commit `ec6e2300` and re-taken by the' [reading of 2026-09-07]. The re-take was in fact done and its result is elsewhere on this node, not here: the answer fact's `against` says 're-taken at graph commit 62121b69: 142 of 255 dated entries are named by no option and 39 of the 71 nodes that carry words have none named at all', and the option `address-for-the-words-no-option-names` says 'at graph commit `62121b69` 142 of 255 dated entries are named by no option'. The paragraph beneath the sentence still reports the superseded figures: 'Of 140 nodes, 68 carry a `## Disposition`, holding 222' dated entries, '45 options are sourced to the author, of which 34 carry a reference naming at least one entry and 11 name none', 'the references reach 101 of the entries and miss 121, and reach none at all on 43 of the 68 nodes'. So one node carries two measurements of one quantity, the fresher one is in the case against and the staler one in the text that stands, and the author meets both in one glance (the answer in the right-hand column, the `against` on the recommended row). Re-taken by this reading at the disposition worktree's head `ca46f7ff`, the true figures are: 143 nodes, 71 carrying a `## Disposition`, 255 dated entries, 56 options sourced to the author of which 45 carry a reference naming at least one entry and 11 name none, the references reaching 113 entries and missing 142, and reaching none at all on 39 of the 71 nodes. The `against`'s two figures are exact; the answer's are not the same measurement re-taken. Suggested edit: replace the cost paragraph's figures with the `ca46f7ff` (or `62121b69`) set the `against` already carries, so that the sentence's claim of a re-take is true of the numbers that follow it.
+- Answer, second paragraph, and the option prose of `words-first-in-the-column` and `section-open-not-folded`: three figures about the parent carry no graph commit, unlike every other measurement on this node, and two of them are now wrong. The answer says 'does not refine it — on this page's own parent fourteen of the twenty-four' entries are dated 2026-09-04; at `ca46f7ff` `commons.systems/disposition-graph/alignment-page` carries 25 entries, of which 14 are dated 2026-09-04, a 2026-09-07 entry having been added since. `words-first-in-the-column` and `section-open-not-folded` each say 'a section running to 1,986 words' on the parent; at `ca46f7ff` that section is 2,041 words by a whitespace count. Suggested edit: label all three with the graph commit they were taken at, as the rest of this node's measurements are, and re-take them — 'fourteen of the twenty-five' and '2,041 words' at `ca46f7ff` — or drop the totals and keep only what the argument needs ('fourteen entries', 'a section running to two thousand words').
+- Answer, second paragraph: 'An entry is a dated paragraph beginning "The author, <date>" together with the' blockquote it introduces, cited to `AUTHOR_ENTRY_RE` and `authorEntries` at `packages/disposition/project.mjs:1405` and `:1407`. The citations are exact (verified at cb0e02c6) but the description is narrower than the code. `authorEntries` opens a new entry only where `AUTHOR_ENTRY_RE` matches a block, or where the list is still empty, and appends every other block to the entry before it (`if (m || out.length === 0) out.push(...); else out[out.length - 1].blocks.push(block)`, project.mjs:1412-1413), so an entry runs to the next dated paragraph and holds everything between it and that one — further prose and further blockquotes alike, not one blockquote — and an undated opening block becomes an entry of its own carrying `date: null`. This matters to the answer's own rule, since what a resolving `ref` puts on the row is the whole of such an entry. Suggested edit: 'An entry is a dated paragraph beginning "The author, <date>" together with everything beneath it up to the next such paragraph'.
+- Rationale, the readings paragraph, on `commons.systems/disposition-graph/hansard-verbatim-record`: the reading is recorded `adopted` on `per-option-only` with no divergence, while the recommended answer departs from the substitute guard that reading names, inside the scope the rationale says it is cited for. That reading's own divergence paragraph says 'What the record puts in its place is that the second level is always present and one step away rather than sometimes omitted, so an edit that fails the test is discoverable by the reader rather than only by the speaker.' The rationale answers this only for a node-level drill-down — 'the extension is not made here, and the reading is cited only for what it' says — but the departure also occurs at the option's own second level, which is exactly the object the reading is cited for: under the answer's rule 'Where a `ref` names no entry the row carries nothing for the author's words', so on the eleven author-sourced options whose reference resolves to nothing (11 at `ca46f7ff`, unchanged since `ec6e2300`) the author's words exist on the node and appear at neither level, which is the omission the reading's substitute guard was put in place of. The answer chooses that deliberately and gives its reason (a finding rather than a plausible render), so the fix is disclosure and not a change of choice. Suggested edit: add one sentence to the readings paragraph recording the departure as the answer records its others — that within the reading's own scope the second level is not always present, since a row whose reference resolves to nothing carries no words at all, and that what stands in the guard's place here is the mechanical finding — rather than leaving the reading marked adopted with the departure unstated.
+- Viability: one viable option is missing from the answer fact, and it is the one that answers the strongest case against the recommendation. Its prose is in the `viability` field of this reading; the name it would take is `residue-raised-as-a-finding`, source review, ref 2026-09-07. It is not `address-for-the-words-no-option-names`, which turns on `projection` ruling `browser-renders-the-authors-words`, and it is not `section-folded-and-quotation-narrowed`, which puts the words back on the page: it leaves the page exactly as the recommended option leaves it and makes the residue visible where the answer already sends the eleven, on the frontier.
+
+On the facts and what they recommend: Two facts, which is right: no prune is proposed and the recommendation changes no shape, so no `existence` or `persistence` fact is owed. The answer fact recommends `per-option-only`, which is also `stands`, and there is correctly no `## Recommendation` fence; the option is a listed one, sourced to the author with `ref 2026-09-04`, which resolves to this node's single dated entry (verified at `ca46f7ff`). The authority fact recommends `ratified` at low boldness with the `### authority` reading `class-recommendation` requires, naming the capture-shaped limb and saying why the other two are not met; that class is the one the session means to present and I would keep it — the answer makes the AI's references the only route the author's own words have to the page, which is the party the words check setting what the checker sees. The one mark I would move is the answer fact's boldness, from low to moderate, for the reason in the first finding; note that boldness is inside the pin `dialogue` defines, so applying that finding stales the review pin and the node returns for a reading, which is the record's own machinery and not a reason to leave the mark wrong.
+
+On the viability of the options: Every option listed on both facts is viable or correctly passed over with its reason: `section-folded-and-quotation-narrowed` is properly left viable and unmarked with the measurement as its case, so the author may take the rival reading in one ruling; `address-for-the-words-no-option-names` is correctly viable-and-not-adopted, its dependence on `projection`'s unruled option stated; the seven passed-over options each carry a reason that names what displaced them; and the authority fact carries the record's whole vocabulary. One viable option is missing, and it is the one that meets the answer's own strongest objection without moving a word of the page. `residue-raised-as-a-finding` (source review, ref 2026-09-07): 'Everything the recommended option says, with one addition to the check the answer already commissions: an entry of a node's `## Disposition` that no option's `ref` names is raised as a finding on that node too, beside the finding for a reference that names no entry, so that the residue the answer leaves is counted rather than lost. For it: under the recommended option the AI's references decide which of the author's words the author sees, and the only guard on that selection is a finding that fires when a reference resolves to nothing — 11 rows at `ca46f7ff` — while the far larger class, the 142 of 255 entries no option names at all, on 39 of the 71 nodes that carry words, fires nothing; so the AI's broken selections are published and its silent omissions are not, which is the asymmetry `bentham-publicity`, adopted on this very option, is against. It is also what the answer already promises as its own reconciliation — that an entry bearing on a fact the record asks and named by no option is recorded as an option on that fact — turned from a promise into something the record measures, which is what `not-proven-third-verdict` calls earning a measurement rather than a change. It costs one branch beside the existing one in `deriveMechanicalFindings` (`packages/disposition/read.mjs:1828-1833`) and no change to the page. Against it: it would raise a finding for every entry that bears on no fact at all, which the answer expressly leaves in the record, so the count would be a standing number rather than a defect list, and no instrument can tell the two apart.' It is not dominated by any option on the fact: it changes nothing the page shows, so the arguments that pass over the section options do not reach it, and unlike `address-for-the-words-no-option-names` it waits on no other node's ruling.
+
+Strongest counter-argument (strong): The answer's one guard against the AI deciding which of the author's own words the author sees is the mechanical finding for a `ref` that names no entry — and that guard catches only the eleven references that resolve to nothing, never the 142 of 255 entries that no option names at all. Verified at `ca46f7ff`: `deriveMechanicalFindings` raises a finding for an author-sourced option whose `ref` names no entry (`packages/disposition/read.mjs:1828-1833`) and raises nothing for an entry no option names, so under this answer the AI's broken selections are published and its silent omissions are not, which is precisely the shape `bentham-publicity` — adopted on this option — is against, a recommender that 'publishes some of its decisions and withholds others by its own measure'. The answer's remedy for the residue, that 'an entry that bears on a fact the record asks and that no option names is recorded as an option on that fact', is a judgment the AI makes with no instrument behind it and no finding when it is not made, which is the capture shape this node's own authority fact gives as its ground for recommending ratified. So the answer buys exclusivity today and defers its only check to a back-fill nothing measures, on 39 of the 71 nodes that carry the author's words — while `projection`'s standing answer holds that the record is read 'through projections, never by opening node files', so the majority of what the author has said reaches the ruler nowhere. The reply the answer gives, that this is a defect of the references and curable exactly there, is right and is not yet true: the record can see the eleven and cannot see the hundred and forty-two.
+
+The session's reply: Accepted on all six, each verified at its locus on the main thread. The boldness moves to moderate, since the exclusivity is the AI's reading of a release; the cost paragraph carries the figures re-taken at 62121b69 in place of the superseded ones; the three figures about the parent are dated and re-taken; an entry is defined as the code defines it, everything beneath a dated paragraph up to the next; the departure from hansard-verbatim-record's substitute guard on the eleven options is disclosed in the readings paragraph; and residue-raised-as-a-finding is recorded on the answer fact, source review, viable and not adopted, since an entry that bears on no fact would be a finding nothing can clear. The recommendation does not move. The counter-argument stands on the row at strong strength.
+
+### Amended after the second fresh reading, 2026-09-07
+
+The fresh reading of the repaired answer forwarded at strong strength with six findings and no probes, every one validated at its locus on the main thread and every one accepted. The recommendation does not move. The boldness moves to moderate, since the answer's exclusivity is the AI's reading of a release, and the mark now agrees with the case against beside it; the cost paragraph carries the figures re-taken at `62121b69` in place of the superseded ones; the three figures about the parent are dated to `ca46f7ff` and re-taken; an entry is defined as `authorEntries` defines it, everything beneath a dated paragraph up to the next; the departure from `hansard-verbatim-record`'s substitute guard on the eleven options is disclosed in the readings paragraph; and `residue-raised-as-a-finding` is recorded on the answer fact, source `review`, viable and not adopted. The counter-argument stands on the row at strong strength. The amended answer owes its re-reading.
