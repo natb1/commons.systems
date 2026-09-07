@@ -1,6 +1,6 @@
 ---
 question: How are references to tradition recorded?
-stage: maieutic
+stage: review
 review:
   verdict: kickback
   strength: moderate
@@ -45,7 +45,7 @@ facts:
         ref: "2026-09-07"
     recommends: the-relation-is-projected-onto-the-option-as-one-of-three
     boldness: moderate
-    against: "The per-option relation binds a tradition's verdict to option names, which are the AI's handles and move under it as options are added, renamed, and composed, so the option the author confirms can show no tradition beside it while a rival shows one; and a reading per node multiplies files, whose queue effect is the cost the author will feel."
+    against: "The projection is only as complete as the `bears` entries are: a tradition read under one node and bearing on an option of another reaches that option only where the reading's author remembered the cross-node entry, which no validator can check, so the traditions' accumulation the author's words require is exact where it exists and silent where it does not, and a row showing no tradition cannot be told from a row no reading reached; the per-option relation beneath it still binds a verdict to option names that move under it, and a reading per node still multiplies files."
     stands: relation-per-option
   - name: authority
     options:
@@ -176,7 +176,7 @@ What the readings bear on an option is projected onto it as the traditions' accu
 
 ### authority
 
-Ratified is recommended because the rule fixes how tradition binds the record, which is the capture-shaped case the record's escalation rule names: a divergence recorded as the author's decision cannot be overruled by the tradition, and a rule that decides what a divergence is decides that for every reading after it. Boldness moderate: the classes a reading may carry are the author's words of 2026-09-02, the rule that a reading is a node and the per-option relation's consequences are the AI's. The case against is delegated: the relations are the AI's readings, every reading on the record recommends delegated for itself, and the author may hold the rule as loosely as its instances.
+Ratified is recommended because the rule fixes how tradition binds the record, which is the capture-shaped case the record's escalation rule names: a divergence recorded as the author's decision cannot be overruled by the tradition, and a rule that decides what a divergence is decides that for every reading after it. Boldness moderate: the classes a reading may carry are the author's words of 2026-09-02, the rule that a reading is a node and the per-option relation's consequences are the AI's. The case against is delegated: the relations are the AI's readings, each reading node recommends its own class for itself, and the author may hold the rule as loosely as its instances.
 
 ## Recommendation
 
@@ -566,3 +566,7 @@ On the facts and what they recommend: The diff moves the `answer` fact's `recomm
 On the viability of the options: The diff does not invalidate any existing viable option on either fact and introduces no new contradiction among options; the new answer option's own AI-support/AI-divergence subsection is internally consistent. The two open gaps are drafting-consistency defects (a stale `against` and an uncorrected duplicate sentence), not viability defects in the options themselves.
 
 Strongest counter-argument (moderate): The amendment does make real progress: it correctly moves `recommends` and the fence to the new option, adds a justifying paragraph, and fixes the false census in the one place templated output actually surfaces first (the frontmatter summary). The two defects that remain are narrow, mechanical, and already half-done rather than untouched — a case exists for treating them as small residue for the next pass on the same footing the previous reading extended to the explicitly-blocked findings F3 and F4, rather than as grounds for a further kickback, especially since `## Answer` itself is unchanged and correct.
+
+### Repaired after the second re-reading, 2026-09-07
+
+The two residues the second re-reading found, repaired on the main thread: the authority fact's reason no longer carries the census the frontmatter's case against had already dropped, and the answer fact's case against argues against the option recommended, the completeness of `bears`. Pin-neutral; the node returns to review for the re-reading the record's mechanics require of a kickback, which is the defect of the instrument the reconciliation list names.
