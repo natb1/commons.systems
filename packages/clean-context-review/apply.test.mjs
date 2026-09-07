@@ -1988,6 +1988,227 @@ describe("apply.mjs: a merge finding is recorded as an option on the answer fact
 });
 
 // --------------------------------------------------------------------------
+// apply.mjs: a merge finding's option on a node in the *content* encoding
+// moves the node's own recommendation hash, because `contentFactRecommendationHash`
+// (packages/disposition/derive.mjs) hashes every option's name/source/ref/
+// status/reason/supports/diverges -- unlike the legacy encoding, where the
+// hash tracked only the recommended option. The survey's pin still names the
+// hash it read (the pre-edit one); the post-edit mismatch is expected and
+// noted rather than refused, since recording the option is exactly what
+// moved it.
+// --------------------------------------------------------------------------
+
+describe("apply.mjs: a merge finding's option on a content-encoding node moves the recommendation hash", () => {
+  /**
+   * A content-encoding node at the review stage, standing in for review-b:
+   * one answer option ('standing'), an authority fact, and the content the
+   * encoding owes an answer option at the review stage (`read.mjs`
+   * `parseContentOptions`: content is owed from the review stage on).
+   */
+  const CONTENT_NODE_TEXT = `---
+question: Review-stage node B -- what does it answer?
+stage: review
+facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-08-01"
+    recommends: standing
+    boldness: high
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
+    recommends: delegated
+    boldness: high
+---
+
+## Facts
+
+### answer
+
+The standing option is recommended, and stands alone before the frontier adds
+another beside it.
+
+#### standing
+
+The node answers with its standing sentence.
+
+**Content.**
+
+\`\`\`markdown
+---
+question: Review-stage node B -- what does it answer?
+form: rule
+---
+
+## Answer
+
+The node's standing answer, whole.
+\`\`\`
+
+## Account
+
+Fixture body for the content-encoding recommendation-hash-moved test.
+`;
+
+  test("produces a plan (no problem); the pin's 'of' is the pre-edit hash; a note names the moved hash", async () => {
+    const rootDir = await freshFrontierFixture("content-option-");
+    const file = nodePath(rootDir, "review-b");
+    await writeFile(file, CONTENT_NODE_TEXT);
+
+    const before = await parseAt(rootDir, "review-b", REVIEW_B);
+    assert.equal(before.encoding, "content", "fixture precondition: review-b is written in the content encoding");
+    const beforeHash = before.recommendationHash;
+
+    const pins = await pinsFor(rootDir);
+    assert.equal(pins.pins[REVIEW_B], beforeHash, "fixture precondition: the pin names the pre-edit hash");
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input: surveyInput({
+        nodes: [{ id: REVIEW_B, findings: [], counter_argument: null, strength: "none" }],
+        frontier: [{
+          kind: "merge",
+          nodes: [REVIEW_B],
+          finding: "A new answer belongs beside the standing one.",
+          proposal: "Record it as an option on review-b.",
+          stages: { [REVIEW_B]: "maieutic" },
+          options: [{ node: REVIEW_B, name: "another-answer", text: "A different sentence answering the same question." }],
+        }],
+      }),
+      replies: {},
+    });
+
+    // No problem: applyReviews would have thrown (planProblems) had the
+    // moved-hash check been reported as an internal error.
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.ok(result.plans.some((p) => p.id === REVIEW_B), "a plan is produced for the node");
+
+    const after = await readFile(file, "utf8");
+    const parsedAfter = parseNode(after, { id: REVIEW_B, graph: "main", slug: "review-b", path: file });
+
+    // The pin written on the node names the hash the survey read, not the
+    // hash the edit produced: a pin names what was read.
+    assert.equal(parsedAfter.review.survey.of, beforeHash, "the pin's 'of' is the pre-edit hash");
+    assert.notEqual(parsedAfter.recommendationHash, beforeHash, "fixture precondition: the option did move the hash");
+
+    // The note explains the move rather than leaving it silent.
+    const note = result.notes.find((n) => n.includes(REVIEW_B) && n.includes("moved the recommendation hash"));
+    assert.ok(note, `no note recorded the moved hash: ${result.notes.join(" | ")}`);
+    assert.ok(note.includes("another-answer"), `note does not name the option: ${note}`);
+    assert.ok(result.report.includes(note), "the note lands in the report too");
+  });
+});
+
+// --------------------------------------------------------------------------
+// apply.mjs: `upsertAnswerOptions` finds the true end of the `options:` list
+// even when the list carries a blank line between two entries -- YAML allows
+// one there, and `disposition/disposition-graph/quotes.md` has one (between
+// the 'facts-state-the-count' option, ending in a long `reason:` string, and
+// the option after it). The scan `upsertAnswerOptions` and
+// `findFrontmatterBlock` used stopped at the first blank line, so an option
+// appended after it landed mid-list, and the '#### <name>' subsections (which
+// must follow the options in order) went out of order with them.
+// --------------------------------------------------------------------------
+
+describe("apply.mjs: an options list with a blank line between entries still gets the new option appended at its true end", () => {
+  const BLANK_LINE_NODE_TEXT = `---
+question: Review-stage node B -- what does it answer?
+form: rule
+stage: review
+facts:
+  - name: answer
+    options:
+      - name: standing
+        source: ai
+        ref: "2026-08-01"
+
+      - name: narrower
+        source: ai
+        ref: "2026-08-01"
+    recommends: standing
+    boldness: high
+    stands: standing
+  - name: authority
+    options:
+      - name: ratified
+      - name: delegated
+      - name: deferred
+    recommends: delegated
+    boldness: high
+---
+
+## Disposition
+
+Open question B, drafted and awaiting review.
+
+## Answer
+
+B stands on this provisional answer, with one further option on the table
+that the answer fact does not recommend.
+
+## Facts
+
+### answer
+
+The standing option is recommended: the narrower reading answers less than
+the author's words ask for.
+
+#### narrower
+
+Answer B only for the case the author named, leaving the general case to a
+node of its own.
+`;
+
+  test("the frontier option is appended after the list's last entry, not after the blank line; the node parses and its subsections stay in order", async () => {
+    const rootDir = await freshFrontierFixture("blank-line-options-");
+    const file = nodePath(rootDir, "review-b");
+    await writeFile(file, BLANK_LINE_NODE_TEXT);
+
+    const pins = await pinsFor(rootDir);
+
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      input: surveyInput({
+        frontier: [{
+          kind: "merge",
+          nodes: [REVIEW_B],
+          finding: "A third answer belongs on the table beside the other two.",
+          proposal: "Record it as an option on review-b.",
+          stages: { [REVIEW_B]: "maieutic" },
+          options: [{ node: REVIEW_B, name: "appended-last", text: "A third reading, distinct from both on the table." }],
+        }],
+      }),
+      replies: {},
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+
+    const after = await readFile(file, "utf8");
+    // parseNode throws on a malformed frontmatter list or on out-of-order
+    // '#### ' subsections -- reaching here at all is part of the assertion.
+    const parsed = parseNode(after, { id: REVIEW_B, graph: "main", slug: "review-b", path: file });
+
+    assert.deepEqual(
+      parsed.answerFact.options.map((o) => o.name),
+      ["standing", "narrower", "appended-last"],
+      "the new option lands after the list's true last entry, blank line and all",
+    );
+    assert.ok(
+      after.indexOf("#### narrower") < after.indexOf("#### appended-last"),
+      "the '#### ' subsections follow the options' order",
+    );
+    // The blank line inside the options list is untouched, not swallowed by
+    // the fix.
+    assert.ok(after.includes("        ref: \"2026-08-01\"\n\n      - name: narrower"), "the original blank line in the list is preserved");
+  });
+});
+
+// --------------------------------------------------------------------------
 // apply.mjs: subtree_divergences (frontier-consistency.md
 // validation 13, alignment-order): a tangle between two unruled subtrees
 // standing under different options of one ancestor's answer fact, written on

@@ -326,13 +326,40 @@ function appendAnswerOptionSubsections(text, entries) {
 function findFrontmatterBlock(fmLines, key) {
   const start = fmLines.findIndex((l) => new RegExp(`^${key}:`).test(l));
   if (start === -1) return null;
-  let end = start + 1;
-  while (end < fmLines.length && /^[ \t]/.test(fmLines[end]) && fmLines[end].trim() !== "") end += 1;
+  const end = indentedBlockEnd(fmLines, start + 1, fmLines.length, 0);
   return [start, end];
 }
 
 function indentOf(line) {
   return (line.match(/^[ \t]*/) || [""])[0];
+}
+
+/**
+ * The end of a run of lines indented past `minIndentLen`, starting at
+ * `start` and bounded by `limit`. YAML allows a blank line inside a block
+ * scalar or list (`disposition/disposition-graph/quotes.md` has one in its
+ * `options:` list), so a blank line does not end the block by itself: it is
+ * skipped over when the next non-blank line before `limit` is still
+ * indented past `minIndentLen`, and only ends the block when no such line
+ * follows (the block is over, or what follows is a trailing blank run at
+ * `limit`).
+ */
+function indentedBlockEnd(lines, start, limit, minIndentLen) {
+  let end = start;
+  while (end < limit) {
+    if (lines[end].trim() === "") {
+      let next = end + 1;
+      while (next < limit && lines[next].trim() === "") next += 1;
+      if (next < limit && indentOf(lines[next]).length > minIndentLen) {
+        end = next;
+        continue;
+      }
+      break;
+    }
+    if (indentOf(lines[end]).length <= minIndentLen) break;
+    end += 1;
+  }
+  return end;
 }
 
 // an all-digit sha1 would parse as a YAML integer and fail the reader's
@@ -574,8 +601,7 @@ function upsertAnswerOptions(fmLines, options, date) {
     // guessing where the list belongs.
     throw new Error("the answer fact carries no 'options' list to append to");
   }
-  let listEnd = optionsIdx + 1;
-  while (listEnd < itemEnd && indentOf(lines[listEnd]).length > keyIndent.length) listEnd += 1;
+  const listEnd = indentedBlockEnd(lines, optionsIdx + 1, itemEnd, keyIndent.length);
   const firstOption = lines.slice(optionsIdx + 1, listEnd).find((l) => /^\s*- /.test(l));
   const optionIndent = firstOption ? indentOf(firstOption) : `${keyIndent}  `;
   lines.splice(listEnd, 0, ...options.flatMap((o) => renderOptionEntry({ ...o, date }, optionIndent)));
@@ -1712,7 +1738,11 @@ async function planTouchedNode(id, t, ctx) {
     return { id, problems: [`${id}: internal error -- the standing hash changed by the edit (${parsedBefore.standingHash} -> ${parsedAfter.standingHash}); this script writes dialogue state and the account only`] };
   }
   if (surveyPin !== null && parsedAfter.recommendationHash !== surveyPin.of) {
-    return { id, problems: [`${id}: internal error -- the edit moved the recommendation hash (${surveyPin.of} -> ${parsedAfter.recommendationHash}); the survey's pin must name the recommendation as it stands`] };
+    if (newOptions.length > 0) {
+      notes.push(`${id}: recording option${newOptions.length > 1 ? "s" : ""} ${newOptions.map((a) => `'${a.name}'`).join(", ")} moved the recommendation hash (${surveyPin.of} -> ${parsedAfter.recommendationHash}), because the content encoding hashes every option; the node stands as moved past its survey pin and is judged again by the next survey`);
+    } else {
+      return { id, problems: [`${id}: internal error -- the edit moved the recommendation hash (${surveyPin.of} -> ${parsedAfter.recommendationHash}); the survey's pin must name the recommendation as it stands`] };
+    }
   }
 
   return { id, file, labels, notes, oldStage: currentStage, newStage: finalStage, rawTextBefore, rawTextAfter: text };
