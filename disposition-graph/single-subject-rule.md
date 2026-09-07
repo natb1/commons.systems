@@ -25,6 +25,9 @@ bears:
   - fact: answer
     option: every-part-in-the-record
     relation: diverged
+  - fact: answer
+    option: the-survey-block-carries-what-the-next-survey-selects-on
+    relation: diverged
   - node: commons.systems/disposition-graph/recording
     fact: answer
     option: per-fact-after-two-readings
@@ -78,3 +81,7 @@ Also named: commons.systems/disposition-graph/anchoring-and-adjustment, commons.
 Proposed: Strike the census from all forty-six and from `readings`' `against`, replacing it with the rule rather than the count: the class recommended is delegated because the relation is the AI's from its own knowledge of the source and the author has not read it here — which is the reason, and which stands whatever other readings recommend. `madr-decision-records` and `progressive-disclosure` have already made this correction in their live text and are the model. Where a node wants to say that this is the record's settled practice for readings, it cites `commons.systems/disposition-graph/class-recommendation` rather than counting. `srs-introduction`'s `deferred` and `npm-committed-lockfile`'s absent recommendation are left as they are: they are the two counterexamples, and the point of the fix is that a rule stated as a rule does not need them to disappear.
 
 Recorded as an option on commons.systems/disposition-graph/authority's answer fact: `no-census-anywhere-in-a-node` (source review, 2026-09-05).
+
+### Bears entry added, 2026-09-07
+
+The re-reading of `dialogue` of 2026-09-07 found its rationale naming this tradition as the case against the option that fact now recommends, `the-survey-block-carries-what-the-next-survey-selects-on`, while this node's `bears` named only the option it was first read against, `every-part-in-the-record`, which that recommendation absorbed. The divergence is the same and falls on what absorbed the option, so a second entry names the recommended option and the first stays, since the reading was made against it and the record keeps what it was made against.

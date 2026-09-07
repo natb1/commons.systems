@@ -1,6 +1,6 @@
 ---
 question: What does the author read to rule?
-stage: review
+stage: ruling
 probes:
   - id: unit-of-a-ruling
     asks: >-
@@ -189,12 +189,12 @@ facts:
     boldness: low
     against: "The shim describes a read-back mechanism the ruling-transport node owns, and could leave that clause to that node's shim."
 review:
-  verdict: kickback
-  strength: moderate
+  verdict: forward
+  strength: weak
   date: 2026-09-07
   of: 57589470c9e634aa20420adc80b317c74079cc23
-  commit: d35b0014367874f0376fea8e271f1737b798857c
-  against: "The diff fully carries out the context-pane refinement the author dictated and does not touch or contradict anything the previous reading or the survey's three findings addressed, so as against those two questions it stands. The strongest case against forwarding as-is is that the amendment itself introduces a fresh, small instance of the exact class of drift the last reading's own counter-argument warned would recur: `every-fact-every-option`'s closing sentence now falsely claims to be the option \"set out in the fence\" once `recommends` moves off it, and the new option's `source` is recorded as a node id (`dialogue`) though its own account grounds it entirely in a quoted author refinement, which the record's vocabulary would call `source: author`. Both are narrow, mechanical corrections rather than substantive disagreements with the amendment's design, but the record's own rule against self-contradiction and against structural fields recording something other than the true source counts them as defects to redraw before this recommendation goes to the author."
+  commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
+  against: "The rewritten closing sentence for `every-fact-every-option` adopts the previous reading's own suggested wording almost verbatim, including the claim that the fence is extended by exactly \"one sentence\"; the fence's middle-column paragraph (unchanged by this diff, and outside this delta's scope since it predates the pinned commit) arguably carries more than one new clause/sentence describing the re-rendering behaviour, so the amendment's self-description may slightly overstate its own precision. This is inherited from the previous reading's suggested text rather than introduced independently by this repair, and it does not touch anything the previous reading or the survey's three findings actually raised, so it does not block forwarding."
   survey:
     date: 2026-09-07
     of: 94465d401a161fed15196ead1c0e71bd5950de58
@@ -2900,3 +2900,20 @@ Strongest counter-argument (moderate): The diff fully carries out the context-pa
 ### Repaired after the re-reading of d35b0014, 2026-09-07
 
 The re-reading of 2026-09-07 kicked the node back with two findings, both introduced by the amendment it read. `every-fact-every-option`'s closing sentence said it was adopted by the recommendation and set out in the fence, which stopped being true when `the-context-pane-previews-the-selected-option` took the recommendation; it now states the option's history. And the new option's source was recorded as the dialogue node where its own support quotes the author's refinement of 2026-09-07 and nothing else, so its source is the author, with the date of the words as its ref. The node returns to the review stage with a re-reading owed on the amendment.
+
+### Clean-context re-reading, 2026-09-07, of 57589470 (ii)
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-context-pane-previews-the-selected-option`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff touches only the answer fact: the newly-added option `the-context-pane-previews-the-selected-option` has its `source` corrected from the node id `commons.systems/disposition-graph/dialogue` to `author` (matching its own account, which grounds it entirely in a quoted author refinement), and the superseded option `every-fact-every-option`'s closing sentence is rewritten from the now-false "Adopted by the recommendation, and set out in the fence" to a sentence stating its supersession history ("Recommended from 2026-09-04 to 2026-09-07, when ... superseded it, keeping its text as the base the fence extends by one sentence"). `recommends` (still `the-context-pane-previews-the-selected-option`), `boldness` (moderate), `against`, and the `authority`/`persistence` facts are untouched; the `review` block's `verdict`/`strength`/`date`/`of`/`commit`/`against` fields are updated only to record the previous reading's own kickback outcome, and an `## Account` subsection recording that reading and the repair is appended.
+
+On the viability of the options: The diff adds, removes, or re-marks no option's viability or status; it only corrects two pieces of prose (a source attribution and a stale self-description) on options whose recommendation and standing were already set by the prior commit. Every option on the answer fact remains exactly as viable as before the diff.
+
+Strongest counter-argument (weak): The rewritten closing sentence for `every-fact-every-option` adopts the previous reading's own suggested wording almost verbatim, including the claim that the fence is extended by exactly "one sentence"; the fence's middle-column paragraph (unchanged by this diff, and outside this delta's scope since it predates the pinned commit) arguably carries more than one new clause/sentence describing the re-rendering behaviour, so the amendment's self-description may slightly overstate its own precision. This is inherited from the previous reading's suggested text rather than introduced independently by this repair, and it does not touch anything the previous reading or the survey's three findings actually raised, so it does not block forwarding.
+
+The session's reply: The sentence describes the fence as it stands: the option's text and the fence differ by that one sentence, which the reading's scope excluded and this session checked.

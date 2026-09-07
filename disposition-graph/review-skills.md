@@ -1,6 +1,6 @@
 ---
 question: Is each reading of the clean-context review its own skill?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -60,11 +60,10 @@ facts:
     against: "The skills project the parent's mechanics as much as this node's split, and a reader of clean-context-review, where the record has declared the review skill since 2026-09-03, would find no shim there."
 review:
   verdict: forward
-  strength: moderate
+  strength: none
   date: 2026-09-07
-  of: 5373d9a414132821d1e35eb37da539ed9d98aaf3
-  commit: d35b0014367874f0376fea8e271f1737b798857c
-  against: "The whole split rests on a premise about an instrument the record does not own and declines to verify — that the harness attributes usage to a skill's directory — and the answer's own reading `operation-naming-in-telemetry` records that the tradition's remedy for the author's stated motive is to name the operation rather than divide the program. A ruling of ratified here does not just fix two names: it makes that unverified premise doctrine, and `unit-skills` is already proposing to multiply it from two skills to seven, so the author would be ratifying, once, a premise that five further artifacts will inherit. Against that unmeasured gain the cost is measured and rising: the two hand-written files shared 34 lines when this answer was drafted and share 47 today, and the very sentences the answer offers as its evidence of drift have themselves drifted into falsehood without the currency step catching it (finding 5), which is the answer's own guard failing on its own text. The reply the record has is that the author asked for the telemetry now, that the interval is disclosed, and that the split stands on the contracts as well as on the premise; that reply is sound but it does not reach the class, and a deferred or delegated ruling would buy the same split without freezing the premise into doctrine."
+  of: 6765725eec753d378fb50ccf10b4d95654d39acd
+  commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   survey:
     date: 2026-09-05
     of: ce9e11aaecf2e702ccf703c6a0898894a9661c68
@@ -896,3 +895,18 @@ Strongest counter-argument (moderate): The whole split rests on a premise about 
 ### Repaired after the reading of d35b0014, 2026-09-07
 
 The clean-context reading of 2026-09-07 forwarded the node with eleven findings and a moderate counter-argument, and the amendment made for them is recorded here, so the node returns to the review stage with a re-reading owed on the amendment. The fence's `## Answer` and `## Rationale` are rewritten: the `/align-survey` paragraph cites `survey-selection` for the judged set, the frozen set and the comparisons and `frontier-consistency` for the validations instead of restating them, its apply step writes the whole survey block the dialogue node's recommended option carries, and its closing sentence discloses that none of the selection is built at implementation commit `ca64407d`, `parseArgs` taking `--node`, `--survey`, `--date`, `--dry` and `--draft` with its alias `--fresh` and no `--whole`, `surveyPins` writing one hash a node, and `renderReviewBlock` writing `date` and `of` alone; the `/align-review` paragraph states the mode choice `chooseMode` makes off `review.commit` and the file's movement since it, and `--draft`; the drift claims are re-taken, neither file naming `fable` and both naming `fallback-when-the-model-is-unavailable`, so one divergence of the three stands, the shim notices'; the shared-line measure is re-taken at `ca64407d`, forty-seven identical non-blank lines of three hundred and sixty-eight and two hundred and fifty-six, thirty-eight over forty characters, against thirty-four at the split, and the pin is an implementation commit because the files measured live on that ref; and a second paragraph answers the author's words of 2026-09-07 in their three clauses, the family's other units being `unit-skills`' question, neither reading superseded, nothing liquidated. The option `one-generator-for-every-brief` is recorded, viable and not adopted, with `unit-skills` as its source. The `### authority` reading is rewritten to apply all three limbs of `class-recommendation`'s test, and none holds, so the recommendation moves from ratified to deferred at low boldness and the argument for ratified becomes the fact's case against. The sentence `review-model` carries with the same falsified measurement is recorded there as the option `the-measurement-re-taken-at-ca64407d`, and that node's recommendation moves to it. No `depends` entry is added for `unit-skills`: this node rules the move of what it enumerates, and waits on nothing there.
+
+### Clean-context re-reading, 2026-09-07, of 6765725e
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-survey-skill-launches-a-selected-reading`.
+
+Findings:
+
+
+On the facts and what they recommend: The answer fact still recommends `the-survey-skill-launches-a-selected-reading` at moderate boldness, now with a new viable option `one-generator-for-every-brief` (source `unit-skills`) added and left unadopted with a non-dominance argument recorded against `fragments-move-to-the-units-package`. The fence's `/align-survey` paragraph now cites `survey-selection` and `frontier-consistency` for the judged set, frozen set, comparisons and validations instead of restating them, extends the apply step to write the full accumulation state (commit, section hashes, findings register, pair keys) rather than `date`/`of` alone, and closes with an explicit disclosure that the tier, `--whole`, the section hashes, the frozen set and the survey block's register are unbuilt at implementation commit ca64407d; the `/align-review` paragraph now states the delta-vs-draft mode choice and the `--draft`/`--fresh` flag, matching the node's own third shim row. The authority fact's recommendation moves from ratified to deferred at low boldness, now applying all three limbs of `class-recommendation`'s test explicitly (none holds) rather than departing from the test on a fourth ground, with the prior ratified argument preserved as the fact's own `against`. The persistence fact is unchanged. The Rationale and Answer gained a new paragraph answering the author's 2026-09-07 words directly: neither skill is superseded by the `unit-skills` family, and that question belongs to `unit-skills` rather than to this node.
+
+On the viability of the options: The diff adds exactly one option, `one-generator-for-every-brief`, sourced from `unit-skills`, correctly recorded as viable and not adopted with a stated reason it is not dominated by the sibling option already on the fact; no other option's viability is touched by the diff, and none of the diff's changes make any listed option non-viable.
+
+The review found no strong counter-argument.

@@ -1,7 +1,7 @@
 ---
 question: What does an unconfirmed node carry between sittings, and what is left to git?
 form: rule
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -45,12 +45,12 @@ facts:
     boldness: low
     against: "The author asked for the fold, named what the node is for and granted its reconciliation in the same sitting, and a class that returns every later adjustment of the fold's list to them spends the attention the accumulation exists to save; delegated within the list the author gave is the live alternative."
 review:
-  verdict: kickback
-  strength: moderate
+  verdict: forward
+  strength: weak
   date: 2026-09-07
-  of: b6352d0a9bbdc41fbddb0e29c8ed5c729be3d2ca
-  commit: d35b0014367874f0376fea8e271f1737b798857c
-  against: "Most of the previous reading's findings are answered on their merits: the materialization gap is now named, absorption is bound to the same push condition as the fold and given an address back into the history, the checkpoint trigger cites the checkpoint node's own sense, the fold now spares the section a re-reading needs, and depends now names a dialogue option. But the merge finding (Validation 15) is answered only by adding a sentence that claims the duplication was removed while the duplicated text sits unedited immediately after it, and the missing-option critique is not addressed at all since `## Facts` was never touched. A verdict of forward would let a node ship with a false claim about its own structure standing next to the very passage it claims not to be."
+  of: 10d93a148b2f67d4948fdda5ac9861c71ca310cc
+  commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
+  against: "All three findings are answered on the text itself, but one loose end survives: the repaired sentence fixes the contradiction by saying `## Disposition` absorption happens 'once for each node... at the migration' and that 'no node gains the section again,' yet it never states when 'the migration' occurs relative to a node's own first checkpoint — whether it is a single graph-wide event this node either falls before or after, or something folded into each node's own first fold. This node currently carries a live `## Disposition` section and no migration has run, so the amendment's fix is consistent as written, but the timing question it leaves open could recreate the previous contradiction for a node minted between the migration and its own first checkpoint if 'the migration' turns out not to be a single one-time event. This is an underspecified point, not a restated contradiction, so it does not by itself defeat the amendment."
 under:
   - commons.systems/disposition-graph/dialogue
 defines:
@@ -244,3 +244,18 @@ Strongest counter-argument (moderate): Most of the previous reading's findings a
 ### Repaired after the re-reading of d35b0014, 2026-09-07
 
 The re-reading of 2026-09-07 kicked the node back with three findings. Repaired here: the enumeration of what a node carries is cited to the dialogue node and no longer restated, this answer keeping only the closure, the parts that encoding does not enumerate; the rival the previous reading named, `the-projections-read-the-list-and-the-file-keeps-everything`, is recorded on the answer fact and passed over with its reason; and the sentence on which hashes an absorption moves is made consistent with the list of what is absorbed, since the absorption of `## Disposition` happens once for each node at the migration and no node gains the section after it, which the list now says too. The node returns to the review stage with a re-reading owed on the amendment.
+
+### Clean-context re-reading, 2026-09-07, of 10d93a14
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff touches only the answer fact, and only by adding one new passed-over option, `the-projections-read-the-list-and-the-file-keeps-everything` (source review, ref 2026-09-07, with its reason and its `#### ` prose subsection); `recommends`, `boldness`, `stands` and the absent `## Recommendation` fence are all unchanged, matching the previous reading's own note that the diff otherwise changed no fact.
+
+On the viability of the options: The diff leaves every previously-listed option viable and repairs the one viability gap the previous reading flagged: the rival design where projections filter and the file keeps everything is now recorded as a proper passed-over option with a reason, so the author sees the choice actually being made rather than an unlisted alternative.
+
+Strongest counter-argument (weak): All three findings are answered on the text itself, but one loose end survives: the repaired sentence fixes the contradiction by saying `## Disposition` absorption happens 'once for each node... at the migration' and that 'no node gains the section again,' yet it never states when 'the migration' occurs relative to a node's own first checkpoint — whether it is a single graph-wide event this node either falls before or after, or something folded into each node's own first fold. This node currently carries a live `## Disposition` section and no migration has run, so the amendment's fix is consistent as written, but the timing question it leaves open could recreate the previous contradiction for a node minted between the migration and its own first checkpoint if 'the migration' turns out not to be a single one-time event. This is an underspecified point, not a restated contradiction, so it does not by itself defeat the amendment.

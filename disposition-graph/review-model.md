@@ -1,6 +1,6 @@
 ---
 question: Which model runs the clean-context review's readings?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -61,9 +61,9 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: f647e854ed2c1893d7c492fd7299f95432f3cbb1
-  commit: 72e1715faca6cfa2f0704c4da7baffad760bcdf6
-  against: "The previous reading raised no findings to answer (verdict forward, strength none), so on question 1 there is nothing outstanding. On question 2, the amendment does resolve the frontier's contradiction within review-model.md itself (option prose and fence now agree on 'smaller model'), but its account rests part of that resolution on an unverified claim that a sibling node (n-version-programming) has already been edited to match; if that edit was not actually made, the record still carries the fence/option pair correctly aligned here while a sibling's bears text contradicts the corrected rank, which is exactly the kind of cross-node drift the frontier survey exists to catch and this delta reading cannot check."
+  of: c36c59413397a8835ebb87d117e438bc2b4595bb
+  commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
+  against: "The new option's own 'AI support' text asserts that `review-skills`'s drift sentence carries the same figures and that 'the two nodes must move together or disagree,' naming this option as 'the half of that movement that belongs here' -- but this delta's scope excludes `review-skills` itself, so whether its matching half has actually landed is unverifiable from here. If it has not, the record corrects this node's sentence while a sibling keeps citing the stale, falsified measurement, which is the same shape of unverifiable cross-node claim the previous reading raised about `n-version-programming` and that the session then had to confirm on the main thread before closing."
   survey:
     date: 2026-09-07
     of: e27a2e7326a338bd4f519b1e55dfccc2394da68c
@@ -880,3 +880,21 @@ The session's reply: Verified on the main thread: `n-version-programming`'s bear
 ### Recommendation moved after the reading of review-skills, 2026-09-07
 
 The clean-context reading of `review-skills` on 2026-09-07 found the sentence this node's recommended text carries on where a skill writes the model's name down falsified at implementation commit `ca64407d`: neither skill names `fable`, both name the model at the launch by its relation to the other reader, and both name `fallback-when-the-model-is-unavailable`. The option `the-measurement-re-taken-at-ca64407d` records the sentence re-taken, with the case against pinning a measurement of two moving files in a rule at all, and the answer fact's recommendation moves to it, since a text put before the author for confirmation should not carry a sentence the record knows to be false; the move is a substance change at the ruling stage, so the node returns to the review stage with a re-reading owed on the amendment, and its survey pin is stale with it.
+
+### Clean-context re-reading, 2026-09-07, of c36c5941
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-measurement-re-taken-at-ca64407d`.
+
+Findings:
+
+- Facts > answer > `the-measurement-re-taken-at-ca64407d` ("AI support"): the option states, "The sentence also attributes the measurement to `review-skills`, whose own drift sentence carries the same figures, so the two nodes must move together or disagree; this option is the half of that movement that belongs here." This asserts a dependency on a sibling node's own edit that this delta's scope (this node only, no siblings) cannot verify. Suggest: before the ruling, have the survey or a full reading confirm `review-skills`'s own drift sentence has in fact been corrected to match (or is being corrected in step), so the two nodes do not end up disagreeing on the very measurement each cites as its warrant.
+
+On the facts and what they recommend: The diff moves the answer fact's `recommends` from `the-smaller-model-on-a-re-reading` to the newly added option `the-measurement-re-taken-at-ca64407d`; `boldness` stays `moderate` and `stands` stays absent (nothing stands on this node yet). The `## Recommendation` fence's second paragraph has its sentence on where a skill writes the model's name down replaced with one saying no skill names it and both skills use the relation-to-the-other-reader form as of implementation commit `ca64407d`, matching the new option's own 'Content' description. The fact-level `against` text is unchanged and still applies to the new recommendation, since the new option keeps the same re-reading-model-downgrade design the `against` critiques and only repairs one factual sentence unrelated to that critique.
+
+On the viability of the options: Every option already on the answer fact remains viable and undisturbed; the diff adds one new viable option, `the-measurement-re-taken-at-ca64407d` (source review, 2026-09-07), without passing over, displacing, or re-ranking any existing option -- including `the-smaller-model-on-a-re-reading`, the option it supersedes as recommendation, which stays viable and carries no `status`. Authority and existence facts are untouched.
+
+Strongest counter-argument (weak): The new option's own 'AI support' text asserts that `review-skills`'s drift sentence carries the same figures and that 'the two nodes must move together or disagree,' naming this option as 'the half of that movement that belongs here' -- but this delta's scope excludes `review-skills` itself, so whether its matching half has actually landed is unverifiable from here. If it has not, the record corrects this node's sentence while a sibling keeps citing the stale, falsified measurement, which is the same shape of unverifiable cross-node claim the previous reading raised about `n-version-programming` and that the session then had to confirm on the main thread before closing.
+
+The session's reply: Validated on the main thread: review-skills' drift sentence was re-measured in its own repair of 2026-09-07 and carries the same figures at implementation commit ca64407d, so the two nodes moved together; its delta re-reading of the same date forwarded with no finding.

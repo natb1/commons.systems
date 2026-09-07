@@ -1,7 +1,7 @@
 ---
 question: How does a survey narrow its object without narrowing what it can find?
 form: rule
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -41,12 +41,12 @@ facts:
     boldness: low
     against: "The author's words of 2026-09-07 ask the AI to make its own recommendation about how to optimize and to fold it into the reconciliation, which reads as the delegation of right-sizing their words of 2026-09-04 already gave; a class that returns every later adjustment of the survey's selection to the author spends the attention they asked to be spared."
 review:
-  verdict: kickback
-  strength: moderate
+  verdict: forward
+  strength: weak
   date: 2026-09-07
-  of: 3e1b937797cf1903f96b575b5df8fc930fb305f5
-  commit: d35b0014367874f0376fea8e271f1737b798857c
-  against: "The amendment repairs eight of nine findings cleanly but leaves the ninth -- the divergence from `evaluation`'s unconditional rule that every surfaced tradition is recorded as a reading -- exactly where the previous reading found it, merely narrating the gap in the account rather than closing it. Four traditions (tolerated inconsistency, lint/Coverity, MapReduce, Deming) are load-bearing in this node's own rationale for parts of the design that remain unratified and quantitatively unaudited, so leaving them unminted keeps a documented rule violation live on a node about to go to the author's ruling. Since `class-recommendation` and `evaluation` bind every node in the record, an amendment that answers eight defects but knowingly leaves a ninth, rule-mandated one open has not fully closed the previous reading's findings."
+  of: 5b7146faad57c25c3df6cb60385e71e93e559d50
+  commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
+  against: "The amendment's claim of having minted four reading nodes is attested only by this file's own prose and by the brief's synthesized 'Readings bearing on it' lines; a delta reading of survey-selection.md alone is never given the four new reading-node files themselves, so a defect internal to one of them -- a bears entry pointed at the wrong option, or a gloss too thin to count as 'recording a tradition' under evaluation's rule -- would not surface in this diff or this reading. The arithmetic is internally consistent (4 already read + 1 read elsewhere + 4 newly minted + 15 owed = 24 surfaced, matching the survey's count) and the bearings line up with the Rationale's own description, which is the strongest verification available at this reading's scope, but it stops short of reading the minted nodes' own content."
 under:
   - commons.systems/disposition-graph/review-cost
 defines:
@@ -223,3 +223,18 @@ Strongest counter-argument (moderate): The amendment repairs eight of nine findi
 ### Four readings minted, 2026-09-07
 
 The one finding the clean-context reading of that day left open is discharged. The four traditions the draft leant on without recording are minted as readings under this node: `tolerated-inconsistency`, adopted on the register the delta leaves and the condition that discharges an entry, and on `dialogue`'s survey block where the register is kept; `lint-and-the-false-positive-threshold`, adopted on the tier's bound; `mapreduce-and-cross-shard-blindness`, adopted on the partition this answer does not take and on the pairs, for the rule that what crosses between readings is keys with their loci and never summaries; and `acceptance-sampling-and-all-or-none`, adopted on the drift probe and on the whole reading this answer passed over. Two of them bear adopted on an option the answer does not recommend, which is the record's `chosen over` doing its work: a tradition read for the reason the record declines a design is recorded against the option it supports and not against the option that won. Of the twenty-four traditions the survey of 2026-09-07 surfaced, four were read here at the mint, one is read under `unconfirmed-accumulation` as `event-sourcing-with-snapshots`, four are minted now, and fifteen stay owed: self-adjusting computation; incremental view maintenance and differential dataflow; Datalog as the decidable tier; diff-based review; minhash and locality-sensitive near-duplicate detection; the concordance and KWIC; Shepard's citator; conforming amendments; ontology modularity and locality; justifications and incremental reasoning; competency questions; wiki maintenance queues; retrieval by similarity; orthogonal defect classification; and assume-guarantee compositional verification. Each of the fifteen bears on an instrument this answer names but does not size — the concordance the tier reads, the citator behind the cross-reference validation, the sketch behind the resemblance key — or on a design the answer does not take, so each is a reading owed under `evaluation`'s rule and not one this node's ruling waits on. The tradition survey itself stands at `tmp/align/survey-opt-tradition.md` on the implementation checkout and is not part of the record.
+
+### Clean-context re-reading, 2026-09-07, of 5b7146fa
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `candidate-pairs-with-their-nominating-key`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff removes a stray blank line inside the `a-whole-graph-reading-every-time` option's frontmatter mapping (the artifact the previous reading flagged), replaces the stale review block (verdict forward/strong, of 9da7e7f1) with the previous re-reading's own kickback/moderate verdict (of 3e1b937797cf1903f96b575b5df8fc930fb305f5, commit d35b0014...), and rewrites `## Rationale`'s tradition count from "Four traditions are read... Nineteen further... owed" to "Eight traditions are read... Fifteen further... owed", naming `tolerated-inconsistency`, `lint-and-the-false-positive-threshold`, `mapreduce-and-cross-shard-blindness`, and `acceptance-sampling-and-all-or-none` as the four newly minted readings, plus two new account sections recording the previous reading verbatim and the mint itself. `recommends`, `boldness`, `stands`, and the absence of a `## Recommendation` fence are unchanged on both the answer and authority facts.
+
+On the viability of the options: Every option on the answer and authority facts remains viable after the diff; the mint only adds `bears` annotations to options that already existed and changes no option's viability, recommendation, or ranking. This is corroborated by the node's own current rendering: `lint-and-the-false-positive-threshold` now shows adopted on `the-mechanical-tier-gates-the-launch`, `tolerated-inconsistency` and `acceptance-sampling-and-all-or-none` on `the-delta-survey-with-a-periodic-whole`, and `mapreduce-and-cross-shard-blindness` adopted on `candidate-pairs-with-their-nominating-key` and diverged on `several-readers-over-a-partition` -- exactly the bearings the Rationale and the account's mint description claim.
+
+Strongest counter-argument (weak): The amendment's claim of having minted four reading nodes is attested only by this file's own prose and by the brief's synthesized 'Readings bearing on it' lines; a delta reading of survey-selection.md alone is never given the four new reading-node files themselves, so a defect internal to one of them -- a bears entry pointed at the wrong option, or a gloss too thin to count as 'recording a tradition' under evaluation's rule -- would not surface in this diff or this reading. The arithmetic is internally consistent (4 already read + 1 read elsewhere + 4 newly minted + 15 owed = 24 surfaced, matching the survey's count) and the bearings line up with the Rationale's own description, which is the strongest verification available at this reading's scope, but it stops short of reading the minted nodes' own content.

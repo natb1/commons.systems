@@ -1,13 +1,13 @@
 ---
 question: What is materialized implementation, and where does it live?
-stage: review
+stage: ruling
 review:
-  verdict: kickback
-  strength: strong
+  verdict: forward
+  strength: weak
   date: 2026-09-07
-  of: edc049a5b146b0bce74966d85bb4580f8f4fba96
-  commit: d35b0014367874f0376fea8e271f1737b798857c
-  against: "The amendment makes the record's most widely loaded rule depend on an unruled design decision taken elsewhere. `materialization` is `tier: global` and projects into `.claude/rules/materialization.md`, which every session writing the implementation ref loads; after this amendment what that rule says the disposition ref may hold is settled by `quotes`, a node at the maieutic stage whose reading of 2026-09-07 kicked its ledger option back and argued that the rival needs \"no amendment to `materialization`\". The coupling buys nothing a citation would not: the enumeration could name the ledger and send the reader to the node that owns it, which is what the missing option above does. Behind that stands the older case, recorded on the fact and unanswered: ratifying this node at all arms the swap's deletion of whatever no disposition supports, under a rule no instrument checks and which its own projector already breaks, `writeRules` in `packages/disposition/project.mjs` deleting a rule file with no proposal and no ruling. The reply the record can make is that `depends` discloses the coupling and the alignment page will not put this question before the one it rests on — but disclosure in dialogue state that the recording removes is not disclosure in the rule, and the rule is what the sessions read."
+  of: c9e84f735d26fb0f1b7637d503bea88be8e878cf
+  commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
+  against: "A critic could still say the amendment does not remove the underlying coupling, only discloses it better: ratifying this node still binds the record's most widely loaded rule to an enumeration whose third term depends on `quotes`, a node under active redraft. But the previous reading explicitly offered this as one of two acceptable repairs (revert the recommendation to `standing`, or keep the option and disclose in the rule's own text what the ground leaves of the support), and the amendment takes the second path faithfully: the Answer now states outright that the ledger is unmaterialized before the cited migration, the fact's `against` now argues against the recommended option and not the superseded one, and the safer alternative is recorded on the list for the author to choose instead. The objection is therefore answered on its own stated terms, not merely deflected."
   survey:
     date: 2026-09-05
     of: cbba0b60e00ca8fe2232504854f0a1840fcacb0c
@@ -479,3 +479,18 @@ The session's reply: The coupling the counter-argument names is now disclosed in
 ### Repaired after the reading of d35b0014, 2026-09-07
 
 The clean-context reading of 2026-09-07 kicked the node back with seven findings and a strong counter-argument, that the amendment makes the record's most widely loaded rule depend on an unruled decision taken on `quotes`. Repaired here: the fence's `## Rationale` is rewritten to the enumeration the answer makes and carries the reason the ledger is admitted, which had stood only in the option's own support; the `### answer` reason says that the author's words of 2026-09-07 put the ledger choice to their confirmation and made nothing, and what that leaves of the support; the answer says the ledger is written by the migration under the author's grant of that day and that a session reading the rule before it lands finds the third term unmaterialized, in words that stay true after it lands; the clause arguing `quotes`' question inside this answer is cut and that node cited; the case against argues the option now recommended; `#### cite-persistence-for-the-disposition-ref` records that the restatement has become a divergence, and the option `the-tree-holds-the-ledger-beside-the-graphs` is recorded on `persistence` with this node as its source; `term: ledger` is defined on `quotes`, which owns it; and the option the reading found missing, `name-the-ledger-and-cite-quotes`, is recorded and not adopted. The counter-argument's reply is on the account entry above. The recommendation is not moved back: the reading offered that or full disclosure, and disclosure is taken. The node returns to the review stage with a re-reading owed on the amendment, and the rule projection under `.claude/rules/` is regenerated on the implementation ref with it.
+
+### Clean-context re-reading, 2026-09-07, of c9e84f73
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-ref-carries-the-ledger-beside-the-graphs`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff changes no fact's `recommends`, `boldness`, or `stands`: the answer fact still recommends `the-ref-carries-the-ledger-beside-the-graphs` at low boldness with `stands: standing`, and the authority fact is untouched. It adds one new viable option, `name-the-ledger-and-cite-quotes` (source review, ref 2026-09-07), to the answer fact's option list without adopting it, appends a clause to the answer fact's `against` naming the coupling to `quotes`, and rewrites the Recommendation fence's `## Answer` and `## Rationale` and the `### answer` / `#### cite-persistence-for-the-disposition-ref` prose to disclose the ledger's unmaterialized state and the dependency on `quotes` in the text sessions actually load, rather than only in dialogue state.
+
+On the viability of the options: Every option the diff touches or adds remains viable and undominated: the newly added `name-the-ledger-and-cite-quotes` carries its own AI support and divergence and is not dominated by the recommendation, and no option's viability is undercut by the rewritten prose.
+
+Strongest counter-argument (weak): A critic could still say the amendment does not remove the underlying coupling, only discloses it better: ratifying this node still binds the record's most widely loaded rule to an enumeration whose third term depends on `quotes`, a node under active redraft. But the previous reading explicitly offered this as one of two acceptable repairs (revert the recommendation to `standing`, or keep the option and disclose in the rule's own text what the ground leaves of the support), and the amendment takes the second path faithfully: the Answer now states outright that the ledger is unmaterialized before the cited migration, the fact's `against` now argues against the recommended option and not the superseded one, and the safer alternative is recorded on the list for the author to choose instead. The objection is therefore answered on its own stated terms, not merely deflected.

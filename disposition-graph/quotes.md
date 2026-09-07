@@ -1,13 +1,13 @@
 ---
 question: How are the author's words retained when a ruling is recorded?
-stage: review
+stage: ruling
 review:
-  verdict: kickback
-  strength: moderate
+  verdict: forward
+  strength: weak
   date: 2026-09-07
   of: 8895ea94ffb09a942f8f7a40c22fd2830dca9d74
-  commit: 19221a31878688d880ddd56b273e56994c87335a
-  against: "The dropped `recording` claim is about another node's content, not this node's own answer, facts, or options, and the previous reading itself treated both cross-node claims as things it \"cannot verify... without those nodes\" and explicitly deferred them to \"the survey or the next full reading\" rather than demanding this amendment resolve them. Read that way, silence on `recording` is not a failure to answer the finding but a continuation of the same deferral the previous reading itself proposed, and the session may simply have judged the `dialogue` note worth adding (because it was actively rewriting that node in the same sitting) while `recording` needed no comment because nothing about it changed. But the account explicitly tallies \"four items\" it resolved from the re-reading without including this one, so the record does not show whether the omission is a judgment or an oversight, and an author or later reader cannot tell which from the node alone."
+  commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
+  against: "The disclaim answering Finding 4 is itself a new, unverified assertion about `recording`'s current answer fact and its recommended option's fence content, made in a delta-scoped reading that has no access to `recording`'s file to confirm it. If `recording` in fact carries some form of the promised option under a different name, or its cited fence does not do what this account claims, the repair would be inaccurate rather than merely silent — a stronger defect than the silence it replaces. But this is the same category of cross-node uncertainty the previous reading itself accepted as deferrable to the survey (its Finding 3 on the `commit` field), so treating this disclaim the same way is consistent rather than a double standard."
   survey:
     date: 2026-09-05
     of: 2bc62fd8426b1e3b5af8410c96d37bb154cc3eb1
@@ -415,3 +415,21 @@ Strongest counter-argument (moderate): The dropped `recording` claim is about an
 ### Repaired after the third reading of 2026-09-07
 
 The re-reading of 2026-09-07 found one half of an earlier finding unanswered: whether `recording` gained the option `the-words-are-in-the-ledger-and-referenced` that this node's account said it would. It did not, under that name or any other: `recording`'s answer fact carries no such option, and what carries the rule there is its recommended option `the-confirmation-folds-an-already-accumulated-node`, whose fence, repaired for that node's own reading of 2026-09-07, sends the author's words to the ledger as this node decides in every place it names them, so the rule is in that node's recommended text and no separate option is owed. The account entry that promised the option is superseded by this one and left as the record of what was said. The node returns to the review stage with a re-reading owed on the amendment.
+
+### Clean-context re-reading, 2026-09-07, of 8895ea94 (iii)
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `words-in-a-ledger-on-the-ref`.
+
+Findings:
+
+- Account, "### Repaired after the third reading of 2026-09-07": the amendment answers the previous reading's Finding 4 (the dropped `recording` claim) with a definitive disclaim — "It did not, under that name or any other: `recording`'s answer fact carries no such option, and what carries the rule there is its recommended option `the-confirmation-folds-an-already-accumulated-node`, whose fence, repaired for that node's own reading of 2026-09-07, sends the author's words to the ledger as this node decides in every place it names them, so the rule is in that node's recommended text and no separate option is owed." This is a new claim about a sibling node's current facts that this delta-scoped reading cannot verify against `recording`'s own file; it should be checked at the next full reading or by the survey, the same way this node's own prior `commit`-field claim was passed through rather than verified in scope.
+
+On the facts and what they recommend: The diff makes no change to any fact's `recommends`, `boldness`, option list, or the `## Recommendation` fence's content — those were already settled by the prior amendment this brief's "node as it now stands" reflects. The only substantive change is frontmatter: a new `defines` entry glosses the term `ledger` (added in response to a finding from a different reading, of `materialization`), which by the account's own statement moves this node's pin; the three new `## Account` entries narrate that addition and the amendment's disclaim of the `recording` claim, and change nothing else on the node's own facts.
+
+On the viability of the options: The diff neither adds nor removes any option on the answer or authority facts and does not touch the status or reason of any already-passed option (`fence-carries-the-ruling`, `one-ruling-for-the-unquoted-stamp`); every option already on the list remains exactly as viable, passed, or recommended as it stood at the last reading's pin.
+
+Strongest counter-argument (weak): The disclaim answering Finding 4 is itself a new, unverified assertion about `recording`'s current answer fact and its recommended option's fence content, made in a delta-scoped reading that has no access to `recording`'s file to confirm it. If `recording` in fact carries some form of the promised option under a different name, or its cited fence does not do what this account claims, the repair would be inaccurate rather than merely silent — a stronger defect than the silence it replaces. But this is the same category of cross-node uncertainty the previous reading itself accepted as deferrable to the survey (its Finding 3 on the `commit` field), so treating this disclaim the same way is consistent rather than a double standard.
+
+The session's reply: Validated on the main thread against recording's file: its answer fact carries no option mirroring this node's ledger rule, and the rule is in the recommended option's fence at the two places it names the author's words, so the disclaim is true as written.
