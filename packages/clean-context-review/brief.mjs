@@ -451,6 +451,88 @@ function factsSummary(node) {
 }
 
 /**
+ * The name of the answer fact's confirmed-or-recommended option, in the
+ * content encoding only: the option a ruling confirms (`confirmedOption`),
+ * or, where none is confirmed -- almost every node, before bootstrap's first
+ * ruling -- the option the fact recommends. Null where the fact has neither.
+ * The legacy encoding has no analogue; it is asked only from the two helpers
+ * below, both already gated on `node.encoding === "content"`.
+ */
+function contentAnswerOptionName(node) {
+  const fact = node.answerFact ?? null;
+  if (!fact) return null;
+  return confirmedOption(node, ANSWER_FACT) ?? fact.recommends ?? null;
+}
+
+/**
+ * The text that stands on a node's answer fact, or an honest line about why
+ * there is none, encoding-aware.
+ *
+ * The legacy encoding takes the old path, unchanged: `node.answer`, the
+ * '## Answer' section's own text, or "nothing stands on this node yet"
+ * where the node carries none. That section is legacy vocabulary the
+ * content encoding struck (`materialization`, `session-context`'s
+ * `disposition/read.mjs` comment on `answerText`), so a content node never
+ * has one to read -- which is the defect this function and
+ * `recommendedOptionText` below repair: every content node's neighbour
+ * rendered blank, "(no '## Answer' section...)", whatever it answered,
+ * because the render read a section only the legacy encoding ever wrote.
+ *
+ * In the content encoding the text that stands is the resolved content of
+ * `contentAnswerOptionName`'s option -- confirmed if a ruling names one,
+ * recommended otherwise, which is exactly how `answerText` (imported above)
+ * answers the same question for the node under review itself. Where that
+ * option carries no content yet (the record has not written a case for it),
+ * or the fact recommends and confirms nothing at all, an honest line says
+ * so instead of silently reusing the legacy wording for a different reason.
+ */
+function renderedAnswerText(node) {
+  if ((node.encoding ?? "legacy") !== "content") {
+    return node.answer || "(no '## Answer' section: nothing stands on this node yet)";
+  }
+  const name = contentAnswerOptionName(node);
+  if (!name) return "(no '## Answer' section: nothing stands on this node yet)";
+  const fact = node.answerFact;
+  const option = (fact.options || []).find((o) => o.name === name) ?? null;
+  const text = optionContentText(node, ANSWER_FACT, option);
+  return text || `(the recommended option \`${name}\` carries no content yet: nothing resolves to render)`;
+}
+
+/**
+ * Whether the answer fact's recommendation differs from what actually
+ * stands on it, encoding-aware: the legacy encoding compares against
+ * `fact.stands`, unchanged, so a node with nothing standing but something
+ * recommended still counts as differing there, as it always has. The
+ * content encoding struck `stands`; there nothing differs unless something
+ * is genuinely confirmed (`confirmedOption`) and the recommendation names a
+ * different option, since `renderedAnswerText` above already carries the
+ * recommendation itself wherever nothing is confirmed, and showing it twice
+ * would be the double carriage the record's own account of `renderJudgedNode`
+ * forbids.
+ */
+function recommendationDiffersFromStanding(node) {
+  const fact = node.answerFact ?? null;
+  if (!fact || !fact.recommends) return false;
+  if ((node.encoding ?? "legacy") !== "content") return fact.recommends !== fact.stands;
+  const standing = confirmedOption(node, ANSWER_FACT);
+  return standing !== null && fact.recommends !== standing;
+}
+
+/**
+ * The recommended option's own resolved content, content encoding only,
+ * for the two call sites that render it once `recommendationDiffersFromStanding`
+ * says it differs from what stands: `renderNeighbourNode`'s "Now recommends"
+ * and `renderWholeNode`'s "Recommendation" section, where the legacy
+ * encoding reads the '## Recommendation' fence instead and never calls this.
+ */
+function recommendedOptionText(node) {
+  const fact = node.answerFact;
+  const option = (fact.options || []).find((o) => o.name === fact.recommends) ?? null;
+  return optionContentText(node, ANSWER_FACT, option)
+    || `(the recommended option \`${fact.recommends}\` carries no content yet: nothing resolves to render)`;
+}
+
+/**
  * Every fact of one node, whole: the reason the recommendation gives, then
  * each option with its source and reference, whether it is the recommended
  * one, the one that stands, or the ruled one, the readings that bear on it,
@@ -521,7 +603,7 @@ function renderWholeNode(node, { account = true, byId = null } = {}) {
     "",
     "#### Answer (the text that stands)",
     "",
-    node.answer || "(no '## Answer' section: nothing stands on this node yet)",
+    renderedAnswerText(node),
     "",
     "#### Rationale",
     "",
@@ -535,6 +617,8 @@ function renderWholeNode(node, { account = true, byId = null } = {}) {
   parts.push("#### Recommendation (the recommended node in full, when the recommended option is not the one that stands)", "");
   if (node.fence && typeof node.fence.raw === "string") {
     parts.push("```markdown", node.fence.raw, "```", "");
+  } else if ((node.encoding ?? "legacy") === "content" && recommendationDiffersFromStanding(node)) {
+    parts.push("```markdown", recommendedOptionText(node), "```", "");
   } else {
     parts.push("(no '## Recommendation' fence: the answer fact recommends the option that stands, or recommends nothing)", "");
   }
@@ -606,17 +690,20 @@ export function renderNeighbourNode(node, reviewedId) {
     "",
     "#### Answer (the text that stands)",
     "",
-    node.answer || "(no '## Answer' section: nothing stands on this node yet)",
+    renderedAnswerText(node),
   ];
 
   const fact = node.answerFact;
-  if (fact && fact.recommends && fact.recommends !== fact.stands) {
-    const recommendedAnswer = node.fence && node.fence.sections ? node.fence.sections.Answer : null;
+  if (recommendationDiffersFromStanding(node)) {
+    const recommendedAnswer = (node.encoding ?? "legacy") === "content"
+      ? recommendedOptionText(node)
+      : (node.fence && node.fence.sections ? node.fence.sections.Answer : null)
+        || "(no '## Answer' in the '## Recommendation' fence)";
     parts.push(
       "",
       `#### Now recommends \`${fact.recommends}\` (differs from what stands)`,
       "",
-      recommendedAnswer || "(no '## Answer' in the '## Recommendation' fence)",
+      recommendedAnswer,
     );
   }
 

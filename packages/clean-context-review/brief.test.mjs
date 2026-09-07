@@ -562,6 +562,200 @@ describe("writeDraftBrief", () => {
   });
 });
 
+// ---------------------------------- the answer in both encodings (2026-09-07)
+//
+// The survey reader of 2026-09-07 found every one of a survey's 97
+// neighbourhood nodes rendered "(no '## Answer' section: nothing stands on
+// this node yet)", whatever it actually answered: `renderNeighbourNode` (and
+// `renderWholeNode`, which shares the fix) read `node.answer`, the legacy
+// encoding's '## Answer' section, and every node in the record is now in the
+// content encoding, which struck that section -- the answer there is the
+// resolved content of the answer fact's confirmed or, where nothing is
+// confirmed yet, recommended option. These hand-built fixtures exercise both
+// encodings directly, the way `handBuiltJudgedNode` above does for
+// `renderJudgedNode`.
+
+describe("renderNeighbourNode: the answer in both encodings", () => {
+  test("a content-encoding neighbour renders the resolved content of its recommended option, with nothing confirmed", () => {
+    const answerFact = {
+      name: "answer",
+      options: [
+        {
+          name: "recommended-option",
+          source: "ai",
+          ref: "2026-09-07",
+          sentence: "The recommended option's own sentence.",
+          content: { form: "whole", text: "The resolved content of the recommended option." },
+        },
+        { name: "rival-option", source: "ai", ref: "2026-09-06", sentence: "A rival's own sentence.", content: null },
+      ],
+      recommends: "recommended-option",
+      stands: null,
+    };
+    const neighbour = {
+      id: "synthetic/content-neighbour", graph: "synthetic-graph", slug: "content-neighbour",
+      question: "What does the content-encoded neighbour ask?", rank: 0, stage: "ruling",
+      status: "unanswered", class: "unanswered", classSource: null, settles: 0,
+      encoding: "content", answer: null, facts: [answerFact], answerFact,
+    };
+
+    const rendered = renderNeighbourNode(neighbour, null);
+
+    assert.ok(
+      rendered.includes("The resolved content of the recommended option."),
+      `the resolved content of the recommended option is rendered where nothing is confirmed:\n${rendered}`,
+    );
+    assert.ok(
+      !rendered.includes("no '## Answer' section: nothing stands on this node yet"),
+      "a node that recommends something is not rendered as though nothing stood on it",
+    );
+    // Nothing is confirmed, so the answer above already carries the
+    // recommendation; a second 'Now recommends' section repeating the same
+    // text would be the double carriage the record forbids.
+    assert.ok(!rendered.includes("Now recommends"), `no duplicate carriage of the same text:\n${rendered}`);
+  });
+
+  test("a content-encoding neighbour with a confirmed option distinct from its recommendation renders both, once each", () => {
+    const answerFact = {
+      name: "answer",
+      options: [
+        {
+          name: "confirmed-option",
+          source: "author",
+          ruling: { response: "confirm", date: "2026-09-06" },
+          sentence: "The confirmed option's own sentence.",
+          content: { form: "whole", text: "The resolved content of the confirmed option." },
+        },
+        {
+          name: "recommended-option",
+          source: "ai",
+          sentence: "The recommended option's own sentence.",
+          content: { form: "whole", text: "The resolved content of the recommended option." },
+        },
+      ],
+      recommends: "recommended-option",
+      stands: null,
+    };
+    const neighbour = {
+      id: "synthetic/content-neighbour-confirmed", graph: "synthetic-graph", slug: "content-neighbour-confirmed",
+      question: "What does the content-encoded, confirmed neighbour ask?", rank: 0, stage: "ruling",
+      status: "ratified", class: "ratified", classSource: null, settles: 0,
+      encoding: "content", answer: null, facts: [answerFact], answerFact,
+    };
+
+    const rendered = renderNeighbourNode(neighbour, null);
+    const answerSection = rendered.slice(
+      rendered.indexOf("#### Answer"),
+      rendered.indexOf("#### Now recommends"),
+    );
+    assert.ok(
+      answerSection.includes("The resolved content of the confirmed option."),
+      `the text that stands is the confirmed option's, not the recommended one's:\n${rendered}`,
+    );
+    assert.ok(
+      rendered.includes("#### Now recommends `recommended-option` (differs from what stands)"),
+      `the recommendation, which differs from what is confirmed, gets its own section:\n${rendered}`,
+    );
+    assert.ok(
+      rendered.includes("The resolved content of the recommended option."),
+      `and that section carries its own resolved content:\n${rendered}`,
+    );
+  });
+
+  test("a content-encoding neighbour whose recommended option carries no content yet gets an honest line, not a blank one", () => {
+    const answerFact = {
+      name: "answer",
+      options: [
+        { name: "recommended-option", source: "ai", sentence: "Owed.", content: null },
+      ],
+      recommends: "recommended-option",
+      stands: null,
+    };
+    const neighbour = {
+      id: "synthetic/content-neighbour-owed", graph: "synthetic-graph", slug: "content-neighbour-owed",
+      question: "What does the owed neighbour ask?", rank: 0, stage: "maieutic",
+      status: "unanswered", class: "unanswered", classSource: null, settles: 0,
+      encoding: "content", answer: null, facts: [answerFact], answerFact,
+    };
+
+    const rendered = renderNeighbourNode(neighbour, null);
+    assert.ok(
+      rendered.includes("(the recommended option `recommended-option` carries no content yet: nothing resolves to render)"),
+      `an honest line names the option and says why, rather than the wrong 'nothing stands' wording:\n${rendered}`,
+    );
+    assert.ok(
+      !rendered.includes("no '## Answer' section: nothing stands on this node yet"),
+      "the old legacy wording is not reused for a different reason (something is recommended, it just carries no content)",
+    );
+  });
+
+  test("a content-encoding neighbour that recommends nothing and confirms nothing keeps the existing 'nothing stands' wording", () => {
+    const answerFact = { name: "answer", options: [{ name: "only-option", source: "ai", sentence: "Not yet recommended." }], recommends: null, stands: null };
+    const neighbour = {
+      id: "synthetic/content-neighbour-nothing", graph: "synthetic-graph", slug: "content-neighbour-nothing",
+      question: "What does the neighbour with no recommendation ask?", rank: 0, stage: "periagogic",
+      status: "unanswered", class: "unanswered", classSource: null, settles: 0,
+      encoding: "content", answer: null, facts: [answerFact], answerFact,
+    };
+
+    const rendered = renderNeighbourNode(neighbour, null);
+    assert.ok(
+      rendered.includes("(no '## Answer' section: nothing stands on this node yet)"),
+      `the existing wording is kept for a node that genuinely recommends and confirms nothing:\n${rendered}`,
+    );
+  });
+
+  test("a legacy neighbour still renders its own '## Answer' section unchanged (the old path)", () => {
+    const answerFact = {
+      name: "answer",
+      options: [{ name: "recommended-option", source: "ai", ref: "2026-09-07" }],
+      recommends: "recommended-option",
+      stands: "recommended-option",
+    };
+    const neighbour = {
+      id: "synthetic/legacy-neighbour", graph: "synthetic-graph", slug: "legacy-neighbour",
+      question: "What does the legacy neighbour ask?", rank: 0, stage: "ruling",
+      status: "standing", class: "delegated", classSource: { kind: "ancestor", id: "synthetic/root" },
+      settles: 0, answer: "The legacy '## Answer' section's own text.", answerFact,
+      // no `encoding` field at all -- exactly as a node `read.mjs` never
+      // stamped one on, which every legacy node before this migration was.
+    };
+
+    const rendered = renderNeighbourNode(neighbour, null);
+    assert.ok(
+      rendered.includes("The legacy '## Answer' section's own text."),
+      `a legacy node's own '## Answer' text is unchanged by the content-encoding fix:\n${rendered}`,
+    );
+    // recommends === stands, so no 'Now recommends' section either -- also
+    // unchanged from the old path.
+    assert.ok(!rendered.includes("Now recommends"));
+  });
+
+  test("a legacy neighbour whose recommendation differs from what stands still reads the '## Recommendation' fence, not an option's content", () => {
+    const answerFact = {
+      name: "answer",
+      options: [
+        { name: "standing-option", source: "author" },
+        { name: "recommended-option", source: "ai" },
+      ],
+      recommends: "recommended-option",
+      stands: "standing-option",
+    };
+    const neighbour = {
+      id: "synthetic/legacy-neighbour-diverged", graph: "synthetic-graph", slug: "legacy-neighbour-diverged",
+      question: "What does the diverged legacy neighbour ask?", rank: 0, stage: "ruling",
+      status: "standing", class: "deferred", classSource: null, settles: 0,
+      answer: "What stands, unchanged.", answerFact,
+      fence: { raw: "irrelevant", sections: { Answer: "The fenced recommendation's own '## Answer' text." } },
+    };
+
+    const rendered = renderNeighbourNode(neighbour, null);
+    assert.ok(rendered.includes("What stands, unchanged."));
+    assert.ok(rendered.includes("#### Now recommends `recommended-option` (differs from what stands)"));
+    assert.ok(rendered.includes("The fenced recommendation's own '## Answer' text."));
+  });
+});
+
 // -------------------------------------------------------- the survey
 
 describe("writeSurveyBrief", () => {
