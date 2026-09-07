@@ -91,6 +91,15 @@ The author, 2026-09-06, on where the warning goes that a node's text is an uncon
 
 > A single indication per node to indicate that node is not yet confirmed is fine.
 
+The author, 2026-09-07, after the session described the recommended accumulation strategy, refining the disposition on what an option carries and what an unconfirmed node keeps: carried here because this node's question is one the refinement reaches,
+
+> record this refinement to disposition and ensure the accumulation strategy supports it:
+> - each option for each fact is recorded with its actual fact content so that when the author selects an option via the alignment artifact the context pane is dynamically updated to preview the node that is being confirmed.
+> - "standing" is just a label that can be applied to an option (similar to an AI recommendation) to indicate that it was the last confirmed option for that fact on that node.
+> - the expanded details of an option (before and also after confirmation) shows a) the history of author quotes that both support and/or contradict the option (implies that one quote may be reference by multiple options) b) the accumulated/current AI support and/or rejection rationale for that option (independent of ultimate recommendation)
+>
+> Anything else that doesn't support the alignment dialogue/artifact disposition is subject to accumulation/removal.
+
 ## Answer
 
 A row leads with what the option would answer, in the sentence the record holds

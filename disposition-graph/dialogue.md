@@ -355,6 +355,15 @@ The author, 2026-09-07, when the design of the accumulation had been drafted and
 
 > stop before reconciling the accumulation strategy. First describe the recommended strategy to let me review.
 
+The author, 2026-09-07, after the session described the recommended accumulation strategy, refining the disposition on what an option carries and what an unconfirmed node keeps:
+
+> record this refinement to disposition and ensure the accumulation strategy supports it:
+> - each option for each fact is recorded with its actual fact content so that when the author selects an option via the alignment artifact the context pane is dynamically updated to preview the node that is being confirmed.
+> - "standing" is just a label that can be applied to an option (similar to an AI recommendation) to indicate that it was the last confirmed option for that fact on that node.
+> - the expanded details of an option (before and also after confirmation) shows a) the history of author quotes that both support and/or contradict the option (implies that one quote may be reference by multiple options) b) the accumulated/current AI support and/or rejection rationale for that option (independent of ultimate recommendation)
+>
+> Anything else that doesn't support the alignment dialogue/artifact disposition is subject to accumulation/removal.
+
 ## Answer
 
 Its question, its fields, its facts with their options, and its answer as it stands; and, while a dialogue is active on it, the dialogue state. A dialogue is active on every node of the alignment frontier: every node with no ruling, every deferred node, and every ratified node whose recommendation has moved since its ruling. The class is derived from the rulings on the facts, as the authority node says, and a confirmed choice of any class keeps its full authority while an option is pending beside it, until the author rules for another. At the recording the dialogue folds: the stage, the review, the dependencies and the account go, the author's words stay as the quotes node decides, and the facts stay with their options, their recommendation, their readings and the rulings the author gave, so that a later session meets what was considered and why before proposing it again. Three requirements fix what the state must be: it must survive the session that held it, so that a session which loses its context resumes every node from its stage; it must hold the author's intention against the account that accumulates around it, the requirement the fidelity node asks; and it must give the author, at the moment of ruling, the context to see how this question stands to the rest of the frontier, and, reading a node that already has an answer, whether options are pending on it and where each came from. It has these parts, each holding only what cannot be re-derived.
