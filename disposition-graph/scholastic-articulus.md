@@ -28,6 +28,10 @@ bears:
   - fact: answer
     option: every-fact-every-option
     relation: adopted
+  - node: commons.systems/disposition-graph/what-an-option-row-carries
+    fact: answer
+    option: three-marks-and-the-case-against
+    relation: diverged
 ---
 ## Answer
 
