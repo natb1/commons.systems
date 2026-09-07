@@ -52,6 +52,9 @@ facts:
       - name: cap-warned-by-the-instrument
         source: review
         ref: "2026-09-05"
+      - name: cites-turn-form-for-the-three-surfaces
+        source: review
+        ref: "2026-09-07"
     recommends: probes-on-the-node
     boldness: moderate
     stands: probes-on-the-node
@@ -286,6 +289,25 @@ author's, and that a session may write past the warning and record nothing about
 having done so. It is here and not recommended because the choice between a bound
 the movement keeps and a bound the instrument counts is the author's. Raised by
 the second clean-context reading of 2026-09-05, as its counter-argument.
+
+#### cites-turn-form-for-the-three-surfaces
+
+Everything the recommended option says, with `the-sitting-stops-only-on-intent`
+citing `commons.systems/disposition-graph/turn-form` for the three surfaces and
+the four forms instead of restating them. That option today carries the author's
+fuller words of 2026-09-06 in full — the three surfaces the dialogue has and no
+fourth, the periagogic movement, the maieutic movement and the alignment artifact
+— and `turn-form` was minted on 2026-09-07 to hold that rule and the four forms a
+turn addressed to the author takes, so the rule is now written in two places and
+would be ruled in two. Under this option the option keeps what is this node's, the
+consequence for a probe, that a sitting stops for the author only where there is a
+question about their intent and a session with no probe to raise has nothing to
+stop for, and cites `turn-form` for the surfaces and the forms themselves. Raised
+by the clean-context reading of `turn-form` of 2026-09-07, whose first finding
+found that node's claim to state the rule once contradicted by this one; it is
+recorded here so the amendment is ruled and not discovered, and it is not adopted
+because this node is at the ruling stage and its recommendation does not move
+before the author has ruled on it.
 
 ### authority
 

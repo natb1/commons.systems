@@ -40,6 +40,10 @@ bears:
   - fact: answer
     option: standing
     relation: adopted
+  - node: commons.systems/disposition-graph/turn-form
+    fact: answer
+    option: a-turn-that-reports-an-impediment
+    relation: adopted
 ---
 ## Answer
 

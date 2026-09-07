@@ -44,6 +44,10 @@ bears:
     fact: answer
     option: every-fact-every-option
     relation: diverged
+  - node: commons.systems/disposition-graph/turn-form
+    fact: answer
+    option: a-turn-that-reports-an-impediment
+    relation: adopted
 ---
 ## Answer
 
