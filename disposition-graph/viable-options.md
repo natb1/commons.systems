@@ -144,6 +144,10 @@ The author, 2026-09-07, after the session described the recommended accumulation
 >
 > Anything else that doesn't support the alignment dialogue/artifact disposition is subject to accumulation/removal.
 
+The author, 2026-09-07, in the next turn, granting the reconciliation of the refinement above:
+
+> reconciliation of that disposition in included in the bootstrap reconciliation authority for this sitting
+
 ## Answer
 
 Yes. A node's authority is read off the rulings recorded on its facts, and no stamp is written beside them. Every decision on a node is a fact with a list of viable options, possibly one: the answer, whose options are the candidate answers to the node's question, and the reserved three the dialogue node names, authority, existence, and persistence; any other decision the author would rule on separately is a question and a node under this one. An option carries its name, its source and reference, in prose what it would answer, and in full the text where it would stand as the answer and differs from what stands; the readings that bear on it, each saying whether the tradition supports or contradicts it; and, on the one option of each fact the AI recommends, why and with what boldness. A ruling is the author's act on the option they chose, recorded on it: the response, the date, and a pin of the recommendation it answered. Only the author rules, on the alignment page or in prose, and the AI writes no ruling and no class for itself.
