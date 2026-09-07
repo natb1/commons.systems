@@ -1,12 +1,12 @@
 ---
 question: How is the clean-context review run?
-stage: review
+stage: ruling
 review:
   verdict: forward
   strength: none
   date: 2026-09-07
-  of: d3f8d73731fce5eab04745b1b2809d784704636c
-  commit: 9d663f3eed01799da963cc1da55f37af631de36c
+  of: dfc0024692847d355b614dd2a3486d0fefbda0cf
+  commit: d35b0014367874f0376fea8e271f1737b798857c
   survey:
     date: 2026-09-07
     of: 9972f0cfa1d3635eba4440a793ce96b6d88271e0
@@ -870,3 +870,20 @@ The review found no strong counter-argument.
 ### Option adopted, 2026-09-07
 
 One option recorded from `survey-selection`, on what the survey judges, when a whole reading runs and what apply writes. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `wave-membership-derived-from-the-record`; The text `wave-membership-derived-from-the-record` recommended stands whole in this node's fence at graph commit `c55c9ebb`, and the migration under the author's grant of 2026-09-07 recovers it there as that option's content. The stage returns to review and the amendment owes a reading.
+
+### Clean-context re-reading, 2026-09-07, of dfc00246
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `a-surveys-selection-and-its-state-are-the-selection-nodes`.
+
+Findings:
+
+- In the '## Recommendation' fence (mirrored in the answer fact's option prose for `a-surveys-selection-and-its-state-are-the-selection-nodes`), the survey paragraph's definition of what the survey judges is migrated from an inline rule to a citation: "It judges the nodes the `survey-selection` node's judged set names, each against the nodes that node's selection puts before it". But the sibling paragraph on the draft-review's 'round', in the same fence, still carries the old inline rule verbatim and was not touched by this amendment: "The round is derived from the record and never named by the session, as every node the survey owes a reading, which is every node at the review or the ruling stage carrying no survey pin or one its recommendation has moved past". If `survey-selection`'s judged set (named by 'candidate pairs' and a 'nominating key', per the new `depends` entry `survey-selection#candidate-pairs-with-their-nominating-key`) is not simply every unpinned review/ruling-stage node, the round handed to a draft's reader and the set the survey now actually judges have silently diverged -- the same restates-a-rule-its-sibling-now-owns pattern the frontier already caught once between this node and `frontier-consistency` (the placement finding this node's last two readings answered). Suggested edit: either state explicitly that the round is (or is not) the same set `survey-selection` names, or point the round's definition at `survey-selection` the way the survey paragraph now does for its own object.
+- In '## Account', '### Option adopted, 2026-09-07', the sentence "applied to the recommended text of `wave-membership-derived-from-the-record`; The text `wave-membership-derived-from-the-record` recommended stands whole in this node's fence at graph commit `c55c9ebb`, and the migration under the author's grant of 2026-09-07 recovers it there as that option's content." capitalizes 'The' mid-sentence after a semicolon, reading as a dropped period or leftover edit. Suggested edit: lowercase 'the' (or split into two sentences at the semicolon).
+
+On the facts and what they recommend: Since the last reading's pin, a second change landed on top of that reading's own apply: the answer fact's `recommends` moves from `wave-membership-derived-from-the-record` to a newly added option, `a-surveys-selection-and-its-state-are-the-selection-nodes` (boldness stays high, `stands` stays `standing`, so the '## Recommendation' fence stays required and present). The new option is `wave-membership-derived-from-the-record` with exactly three sentences of the fence's survey paragraph amended -- the judged-set, whole-reading-cadence, and apply-writes sentences -- matching the option's own account text ('three sentences amended') sentence for sentence. The authority and persistence facts, and the fact's own `against` text (the attention-cost case against the wave), are untouched by this diff and still read coherently against the new option, since it keeps the wave mechanic the `against` argues about.
+
+On the viability of the options: The diff only adds the one new option, immediately adopted as `recommends` rather than left merely viable, and touches no other option's reasoning on any of the three facts; the reworded survey-paragraph sentences are not the ground any existing option's passed-over or viable-not-adopted reason cites. All prior options on all three facts remain viable. Both of the two 2026-09-07 frontier findings the previous reading closed (the false 'no survey has run' premise, and the unconditioned restatement of `frontier-consistency`'s rule) remain fixed in the current fence text -- neither of the three re-amended sentences touches either repair -- so this second change does not reopen either finding.
+
+The review found no strong counter-argument.

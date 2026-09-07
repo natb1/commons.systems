@@ -1,6 +1,6 @@
 ---
 question: How are the author's words retained when a ruling is recorded?
-stage: maieutic
+stage: review
 review:
   verdict: kickback
   strength: moderate
@@ -411,3 +411,7 @@ On the facts and what they recommend: The diff marks `fence-carries-the-ruling` 
 On the viability of the options: Every option now on the answer fact's own list carries either a `status: passed` reason or stands live and named with support/divergence; nothing on this node's own facts is left unaccounted for by the diff. The one open item is not a viability gap on this node but an unconfirmed claim about a sibling node (`recording`) that this delta cannot check.
 
 Strongest counter-argument (moderate): The dropped `recording` claim is about another node's content, not this node's own answer, facts, or options, and the previous reading itself treated both cross-node claims as things it "cannot verify... without those nodes" and explicitly deferred them to "the survey or the next full reading" rather than demanding this amendment resolve them. Read that way, silence on `recording` is not a failure to answer the finding but a continuation of the same deferral the previous reading itself proposed, and the session may simply have judged the `dialogue` note worth adding (because it was actively rewriting that node in the same sitting) while `recording` needed no comment because nothing about it changed. But the account explicitly tallies "four items" it resolved from the re-reading without including this one, so the record does not show whether the omission is a judgment or an oversight, and an author or later reader cannot tell which from the node alone.
+
+### Repaired after the third reading of 2026-09-07
+
+The re-reading of 2026-09-07 found one half of an earlier finding unanswered: whether `recording` gained the option `the-words-are-in-the-ledger-and-referenced` that this node's account said it would. It did not, under that name or any other: `recording`'s answer fact carries no such option, and what carries the rule there is its recommended option `the-confirmation-folds-an-already-accumulated-node`, whose fence, repaired for that node's own reading of 2026-09-07, sends the author's words to the ledger as this node decides in every place it names them, so the rule is in that node's recommended text and no separate option is owed. The account entry that promised the option is superseded by this one and left as the record of what was said. The node returns to the review stage with a re-reading owed on the amendment.
