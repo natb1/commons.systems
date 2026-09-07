@@ -1,6 +1,6 @@
 ---
 question: What may the recorder do to the graph's topology without asking?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -37,8 +37,8 @@ review:
   verdict: forward
   strength: none
   date: 2026-09-07
-  of: 90a2d6e729a986e93df3e0a8d8e241fa7bf6e5b0
-  commit: ca46f7ff9a913d8d696fdfa5fb535e0e35bd1ec2
+  of: 45efbd610e6028085e2233fa7faed9075010db93
+  commit: 1c0b5372d26e0340f42179fe949bc8bbd389c677
   survey:
     date: 2026-09-07
     of: 90a2d6e729a986e93df3e0a8d8e241fa7bf6e5b0
@@ -517,3 +517,18 @@ Recorded as an option on commons.systems/disposition-graph/turn-form's answer fa
 ### Amended after the frontier survey, 2026-09-07
 
 The survey's finding, validated at its locus on the main thread: the interim cited what-acts-during-bootstrap for a grant that reaches a class of act, where that node's grant reaches one named reconciliation. The author's words of 2026-09-05 are a direction about a class, pruning of unratified nodes, and not a grant for one prune; the interim now says so, rests on the survey's option `a-standing-direction-acts-by-right` on that node, entered in `depends`, and is applied meanwhile as the words directed. The amended recommendation owes its re-reading, whose object is this repair.
+
+### Clean-context re-reading, 2026-09-07, of 45efbd61
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `delegation-with-two-bounds`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff touches only the answer fact's recommended text inside the `## Recommendation` fence and the frontmatter: `recommends` stays `delegation-with-two-bounds` at moderate boldness, the fence is still present since nothing stands, and the `against` on both facts is unchanged. In the third paragraph the clause 'since a grant given in the author's words acts by right while nothing in the record is ratified' is replaced with 'as a standing direction of the author's about a class of act; the grant the what-acts-during-bootstrap node defines reaches one named reconciliation and no class, so a direction about a class acts by right only if that node's option `a-standing-direction-acts-by-right` is ruled...and until which it is applied as the author's words of 2026-09-05 directed'; `depends` gains `commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right`; and the `review` block is otherwise untouched by this second amendment (still pinned `of 90a2d6e7`, which is exactly why the node's own status line marks the review and survey stale).
+
+On the viability of the options: Unaffected: the diff changes only interim justificatory prose in the recommended answer's third paragraph plus the `depends` list, not any of the answer fact's six options or the authority fact's two, so every option remains exactly as viable as it was at the last reading.
+
+The review found no strong counter-argument.
