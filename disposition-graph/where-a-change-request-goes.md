@@ -129,9 +129,7 @@ the response they were written under, the option's name or the kick-back, so a
 reason and a change request are told apart by the control they were written in,
 and the ruling-transport node's rule that every route emits one and the same text
 is untouched.
-```
 
----
 
 ## Rationale
 
@@ -161,9 +159,7 @@ in prose is classified is `commons.systems/disposition-graph/recording`'s. This
 answer states the consequence for both and rules neither: the recording node
 already carries `edits-only-through-the-kick-back` from these same words, and the
 unanswered node takes the matching option, each for the author's own ruling.
-```
 
----
 
 ## Facts
 
@@ -306,9 +302,7 @@ they take if they want this answer to act while the question stays in front of
 them, and it is the reasonable choice if they read the reach past the page as the
 only contested part. Boldness low because the class follows the stated test rather
 than the AI's judgment of this node alone.
-```
 
----
 
 ## Account
 
@@ -431,4 +425,3 @@ script nor `alInstructionAll` needs a change: the instruction already hangs the
 words on the option's name or on "kick back", which is the distinction this answer
 draws.
 
----
