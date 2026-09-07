@@ -1,6 +1,6 @@
 ---
 question: Who may change an answer?
-stage: maieutic
+stage: review
 review:
   verdict: forward
   strength: moderate
@@ -68,7 +68,10 @@ facts:
       - name: no-census-anywhere-in-a-node
         source: review
         ref: "2026-09-05"
-    recommends: authority-derived
+      - name: the-ruling-is-quoted-in-the-record-and-referenced-by-the-option
+        source: commons.systems/disposition-graph/quotes
+        ref: "2026-09-07"
+    recommends: the-ruling-is-quoted-in-the-record-and-referenced-by-the-option
     boldness: moderate
     stands: authority-derived
   - name: authority
@@ -100,6 +103,7 @@ defines:
 depends:
   - commons.systems/disposition-graph/viable-options#adopted-is-a-status
   - commons.systems/disposition-graph/unanswered
+  - commons.systems/disposition-graph/quotes#words-in-a-ledger-on-the-ref
 ---
 ## Disposition
 
@@ -238,9 +242,77 @@ because the sentence is this node's and the author rules on it here.
 
 The existing option `no-census-in-a-standing-answer` reaches a node's standing answer. This one would extend the same rule to every part of a node a session or a projection reads as current — a fact's prose, an option's prose, and a fact's `against` — since the forty-six false census sentences this survey found are all in `### authority` prose and none in a `## Answer`, so the narrower rule would have caught none of them. What it would answer: whether the prohibition on counting the record inside the record is a rule about the answer or a rule about the node. It is on the table because the record has now measured the failure at forty-seven loci in the place the narrower option does not reach.
 
+#### the-ruling-is-quoted-in-the-record-and-referenced-by-the-option
+
+The words that earn a ruling are entered in the ledger and referenced by the option ruled on, and a ruling whose words are not in the record, or whose option carries no reference to them, is invalid.
+
+**AI support.** The rule's purpose is unchanged, that a ruling is valid only where the words that earned it are in the record and reachable from it, and the guard against a rubber stamp is still the dialectic and not the location; what changes is that the words are stored once, where `quotes` now keeps them, and the option's reference is the reachability. The second limb, that the option must carry the reference, is stricter than the sentence it replaces, since words present in the record but attached to nothing earned no ruling.
+
+**AI divergence.** The validity of a ruling now depends on a resolution across two files, and a ledger entry struck or renumbered would invalidate a ruling by accident, which the ledger's rule that entries are appended and never reordered exists to prevent and which the validator must check; and the option stands or falls with `quotes#words-in-a-ledger-on-the-ref`.
+
 ### authority
 
 Ratified, at moderate boldness: this node defines the classes themselves and what each lets act, so a wrong answer is expensive and capture-shaped, which is the escalation test the answer now states, and every consequence of the rule is ruled per fact under it. Moderate because the author has spoken to the classes in three sittings and never to this text whole, and the AI's additions are named on the answer fact.
+
+## Recommendation
+
+```markdown
+---
+question: Who may change an answer?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+tier: global
+instrument:
+  kind: check
+  ref: "the reader derives every node's class from the rulings on its facts and rejects a node carrying a stamp key, `packages/disposition/read.mjs` and `derive.mjs`, run by the validator on every landing"
+  note: guards the derivation and the absence of stamps; that a ruling's words are in the record is checked by nothing yet, which is owed on the quotes node
+defines:
+  - term: authority
+    gloss: "The standing that lets a recorded answer act, conferred only by a ruling of the author's on one of a node's facts and never by a mark, a command, or a class the AI writes for itself."
+  - term: ratified
+    gloss: "Ratified means the author ruled on the answer fact, in the alignment dialogue after its dialectic, and wants to be asked before it changes; the confirmed choice acts. A ruling of ratified on the authority fact is a different act: it says the answer must be ratified, confers nothing until the answer fact is ruled, and stops an ancestor's delegation from reaching that node, though not from reaching the nodes beneath it."
+  - term: delegated
+    gloss: "Delegated means the author ruled delegated on the authority fact: the recommendation acts, the delegation covers the class of decision it names below the node, and the author does not want to be asked again."
+  - term: deferred
+    gloss: "Deferred means the author ruled deferred on the authority fact: the recommendation acts, and the node stays on the alignment frontier until the author returns to it."
+  - doctrine
+  - proposal
+---
+## Answer
+
+Every answer carries its authority in the rulings recorded on its facts, and no stamp is written beside them: a node's class is read off those rulings, and a node no ruling grants is unanswered, as the unanswered node says. Ratified means the author ruled on the answer fact, in the alignment dialogue after its dialectic, and wants to be asked before it changes; the confirmed choice acts. Ratification happens only through that dialogue: the session that ran the sitting records the ruling on the option the author chose, with the response, the date, and the pin of the recommendation it answered, and the words that earned it are entered in the ledger and referenced by the option ruled on; a ruling whose words are not in the record, or whose option carries no reference to them, is invalid; transcribing the author's words from any other record confers nothing, and no command does, since a script that rules on request is a rubber stamp and the guard against rubber stamps is the dialectic itself, whose steps the round accounts for. Delegated means the author ruled delegated on the authority fact: the recommendation acts, the delegation covers the class of decision it names below the node, and the author does not want to be asked again. Deferred means the author ruled deferred on the authority fact: the recommendation acts, and the node stays on the alignment frontier until the author returns to it. A ruling of ratified on the authority fact is a different act from a ratification: it says the answer must be ratified, so it confers nothing until the answer fact is ruled, and it stops an ancestor's delegation from reaching that node. It stops it for that node alone: the walk continues past it, so a delegation ruled further up reaches the nodes beneath, and sealing a subtree takes a ruling on each node in it. Where a node refines more than one question and two ancestors at the same distance confer different classes, the narrower acts. A ruling on an ancestor grants the decisions its scope covers to the nodes beneath it, and authority only narrows on the way down. A class the AI writes for itself is not a grant: the deferred stamps the bootstrap wrote were unanswered, as the author classified them on 2026-09-03, and the record no longer carries them. Unanswered means no ruling grants the node: nothing on it acts, and reconciling anything under it takes an explicit grant from the author for that reconciliation, given in their words and never assumed, never carried over from an earlier grant, and never read from the announcement of one; that is a standing rule of this record and not a shim, and it does not expire. Doctrine is the ratified answers taken together. A confirmed choice of any class keeps its full authority while an option is pending beside it, until the author rules for another. A proposal is technical vocabulary and is not overloaded: it is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from, the origin being the option's source, evidence, a signal, an instrument, a criterion, a conflict identified in reconciliation, or the loop on itself. In that state the confirmed choice keeps its full authority and the node returns to the alignment frontier for re-confirmation, at the movement the recording node's classification calls for, the review where only the recommendation moved. The AI exercises authority within scope: it may answer under a ratified ancestor, may add an option to any fact, may pass an option over and lift a status it wrote, may move a fact's recommendation on any node within the scope its class allows, what a move does being read from the class as the evaluation node says, and records anything that would contradict doctrine or exceed its scope as an option on the node it conflicts with, which acts on nothing until the author rules; an option that would leave a delegation's scope returns that node to the author with its class intact. What class the AI recommends on a node's authority fact is the question of the node beneath this one, class-recommendation; what it recommends there is a recommendation and confers nothing. During bootstrap no class acts; neither a declared shim nor the author's grant names a class, and what does act while nothing is ratified, and how that state ends, is the question of the node beneath this one, what-acts-during-bootstrap.
+
+## Rationale
+
+Attenuation: authority only narrows as it is handed down, never widens, so a breakout would have to be written up the tree, and nothing writes up. The ratify command the record carried on 2026-09-02 is the option `ratify-command`, passed over on the author's words quoted there. The readings that bear here are `ocap-attenuation`, for the rule that authority only narrows, and `approval-directed-agents`, for deferred as action under a review that is owed, both under the viable-options node and bearing on `authority-derived`; ultra vires with enabling acts, and delegation containment in cgroup v2, were surfaced on 2026-09-02 and are owed as readings.
+
+The author, 2026-09-03, on the bootstrap ledger: "The ledger is a shim, it shouldn't receive standing disposition. Ratified as a shim. The standing disposition (ratified) is that ratification happens only through alignment dialogue." And later that day: "The ledger is expected to be sunset and encoded as deferred dispositions. I am concerned that it has not been, I am concerned about drift between the ledger and the greenfield graph." The ledger shim declared here on 2026-09-02 was liquidated on 2026-09-03: every entry was sorted, by the survey `bootstrap/ledger-migration-survey-2026-09-03.md` on the implementation ref and by the session for the entries after it, into a node amendment, a shim declaration, an un-aligned disposition, or nothing, and the file was deleted. While it stood no stamp was ratified, and none is yet; the first ratified stamps are those the sitting on purpose writes.
+
+The author, 2026-09-03, in the sitting on the dialogue node, quoted above, narrowed the word proposal: the draft of this node had defined it as any candidate answer, amendment, or finding with no authority, recorded in a stamped node or in a sitting's record, and the author ruled that the term is technical vocabulary for a conflicting answer arising outside alignment, that it must not be overloaded, and that conflicting answers evaluated in alignment are recorded differently, as alternatives in the dialogue state. The same day the author ruled that a standing answer of any class, ratified, delegated, or deferred, keeps its full authority while an alternative is pending, and that a proposal from outside alignment opens the dialogue on its node. This answer was written from the draft under the author's bootstrap grant on the dialogue node, folding the draft's text into the standing answer with the narrowing; the ratified stamp the draft carried is what a confirmation confers and is not written before it.
+
+Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Is 'unanswered' just an authority - as in no authority granted for reconciliation. Or, more precicely, explicit bootstrap authority required for reconciliation - in this way bootstrap authority is not a shim, but a persistent disposition about reconciliation authority." The stamp goes because the record stores the ruling on the fact with its response, date and pin, and a stamp beside it is a copy that drifts, the reason the unanswered node gave for deriving the status; deferred becomes a class the author confers, since every class in this record traces to a ruling and, as this answer already said, no command confers one. The bootstrap-authority shim declared here on 2026-09-03 is liquidated into the standing rule above, which strikes its expiry at bootstrap exit against the author's words of that day quoted above: a rule that reconciles an unanswered node only on the author's explicit word is the right rule at any time and not a bootstrap expedient, and the author may strike this line; `bootstrap-authority-as-class` is thereby decided in favour of the rule. The word proposal keeps what the author's narrowing of 2026-09-03 fixed, that it is technical vocabulary and not overloaded, and takes its definition from the author's words of 2026-09-04, quoted above, which supersede the origin in their words of 2026-09-03: a proposal is a state of a ratified node and not an origin, the origin being the option's source. Four nodes still cite this node for the origin definition: transience's standing answer, node's recommended `four-form-draft`, growth's standing answer and its recommended `boldness-reversed`, and frontier-consistency's validation 2 in both its standing answer and its recommended `split-survey-from-per-draft`, where the rule this node's own reading runs under becomes unreadable. The same move is recorded on each as the option `proposal-as-a-state-of-a-ratified-node`. The test the AI applies when it recommends a class, recorded here on 2026-09-04 as the option `escalate-toward-ratified` from the recording node's reading, is absorbed into the answer and the option kept, marked as adopted, since no candidate leaves the list: the rule lived in the alignment skill alone, a shim, while the nodes whose authority fact rests on it cite it as the record's own test, and a rule the record applies is stated where the classes are defined. The answer as it stood is kept as the option `stamped-classes`, and the review of this text is owed.
+
+Amended 2026-09-05, after the second reading of that day. Three moves, each the
+AI's. The rule that a ruling of ratified on the authority fact is a different
+act, saying the answer must be ratified and conferring nothing until the answer
+fact is ruled, was read off `classAndSource` in `packages/disposition/derive.mjs`
+and is supported by no words of the author's; it is stated here because a class
+the record computes and the answer does not define is a definition completed in
+code, which is the capture shape this node's own escalation test names, and the
+third reading of 2026-09-05 found two further rules of that walk unstated and
+they are now in the answer with it. The scope sentence was widened, to a move of
+a fact's recommendation on any node within the scope its class allows and the
+passing over of an option the AI itself wrote, because as it stood it forbade
+the move that produced this amendment and six of this node's own options carry
+a status it forbade the AI to write. And the bootstrap clause left this node for
+`what-acts-during-bootstrap`, because the question of what acts while nothing is
+ratified survives the recording, is cited by sessions that never saw it asked,
+and is not answered by a definition of the classes. The escalation test left the
+same day and for the same reasons, to `class-recommendation`, the third reading
+having found that the test which minted the first node reaches it with more
+force.
+```
 
 ## Account
 
@@ -721,3 +793,7 @@ Two vocabulary questions are each pending as an unruled option on four separate 
 Also named: commons.systems/disposition-graph/growth, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/projection, commons.systems/disposition-graph/transience, commons.systems/disposition-graph/node, commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/rejected, commons.systems/disposition-graph/instruments.
 
 Proposed: Strike the eight options and replace each with a citation. `commons.systems/disposition-graph/rejected` is the survivor for what a rejected alternative is, and `commons.systems/disposition-graph/authority` is the survivor for what a proposal is; each of the six bearer nodes cites the survivor's sentence where it currently carries the option. Where a bearer node believes its option means something the survivor's answer does not cover, that difference is the option, stated as the difference, and everything the survivor already says comes out. If the author would rather rule the two words once explicitly, mint the settling option on the survivor in the shape `instruments`' `one-ruling-for-the-word` takes, without a count in its prose.
+
+### Option adopted, 2026-09-07
+
+One option recorded from `quotes`' recommended answer, restating where a ruling's words are and how the ruled option reaches them. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `authority-derived`; The text `authority-derived` stands in this node's `## Answer`, which the new option's fence amends and which the migration under the author's grant of 2026-09-07 carries as that option's content. The stage returns to review and the amendment owes a reading.

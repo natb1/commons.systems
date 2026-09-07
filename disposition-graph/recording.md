@@ -1,6 +1,6 @@
 ---
 question: How is a disposition confirmed and recorded?
-stage: maieutic
+stage: review
 review:
   verdict: forward
   strength: moderate
@@ -99,7 +99,10 @@ facts:
       - name: prune-of-an-unruled-node-needs-no-ruling
         source: commons.systems/disposition-graph/graph-topology
         ref: "2026-09-07"
-    recommends: per-fact-after-two-readings
+      - name: the-confirmation-folds-an-already-accumulated-node
+        source: commons.systems/disposition-graph/unconfirmed-accumulation
+        ref: "2026-09-07"
+    recommends: the-confirmation-folds-an-already-accumulated-node
     boldness: moderate
     against: "Both readings must pin the recommendation as it stands before the author may answer a single row, so every ruling waits on two readings of the AI's own drafting, while the one judgment no instrument can check, whether a denial is about the options or about the ground, is made by the party the denial was aimed at."
     stands: options-persist-at-the-recording
@@ -115,6 +118,7 @@ depends:
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
   - commons.systems/disposition-graph/viable-options
   - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey
+  - commons.systems/disposition-graph/unconfirmed-accumulation#the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed
 form: rule
 under:
   - commons.systems/disposition-graph/growth
@@ -367,6 +371,14 @@ line exists.
 
 Where no ruling reaches the node, the prune needs no ruling: the recorder takes it under the delegation of graph topology, writes the reason the question was closed on the node that keeps the question before the file goes, and the requirement that a ruling precede the deletion binds only a node the author has ruled. Raised by `commons.systems/disposition-graph/graph-topology` at its minting on 2026-09-07: that node's recommended answer, drawn from the author's words of 2026-09-06 that the prune grant is standing, departs from this answer's requirement that "a ruling that the node not exist is recorded before the node is deleted", and the evaluation node forbids adopting a contradiction rather than recording it. Viable and not recommended here: the delegation acts only from a ruling of `delegated` on that node's authority fact, and until then this answer's rule stands as written and the row asks every prune.
 
+#### the-confirmation-folds-an-already-accumulated-node
+
+The test that separates what persists from what does not, the dialogue node's, does not wait for the confirmation: the `unconfirmed-accumulation` node applies it to a node still in dialogue, and the confirmation folds a node the accumulation has already reached.
+
+**AI support.** The reason this node gives for the fold at confirmation, that re-running a reading reconstructs an account and nothing reconstructs a ruling, holds of a node before a ruling exactly as after one; the author's words of 2026-09-07 ask for an accumulation between the full record and the post-confirmation fold, and this clause is what keeps the two folds one rule applied at two times.
+
+**AI divergence.** A node reaching confirmation already folded leaves the confirmation's own fold with less to do, so the clause is a statement of consistency more than a change of behaviour; and where the two instruments disagree on what the last section is, the confirmation's fold is the one the record has held longest and the accumulation's the one that runs more often.
+
 ### authority
 
 Ratified, at low boldness. This is the node that says what a ruling is and where it is written, so an error here is an error in every ruling the record will ever hold: a response mis-classified confers a class the author did not confer, a ruling recorded on the wrong option records a choice they did not make, and a recording that drops the wrong field loses the reason a question was closed. That is expensive, irreversible in the way a mis-recorded ruling is irreversible, and capture-shaped, which is the test the authority node's answer now states for escalating toward ratified, absorbed there on 2026-09-05 from the option this node sourced on 2026-09-04, and which the frontier applies across the nodes below it. Delegated would let the recommendation act on how the author's own words are read, which is the one thing a delegation cannot cover; deferred is on the fact because the record's classes are three and the author's third exit stays open, and it is what the author takes if they want the recommendation to act while the question stays before them. Boldness low because the class follows that test, stated in the skill and applied across the frontier, rather than the AI's judgment of this node alone.
@@ -423,7 +435,7 @@ Why the kick-back is typed and the classifier still runs. The row's meaning is f
 
 Why an edit is ruled and not held. A ruling the author gave is a ruling; holding it until a reading runs would make their ratification wait on a step in producing the draft they have already replaced, which is the reasoning the unanswered node used to reject holding a child's ruling until its parent. The edits are the author's own text, so the ruling records them and the pin names them, and what the reading is owed on afterwards is the AI's application of them, which is why substance and not the edit decides. This diverges from the unanswered node's sentence that the edited draft goes through the review again before the ruling is recorded, and the divergence is recorded as an option there rather than settled here.
 
-Why the facts persist and the account does not. The author's reason is regression: a later session that cannot see what was considered proposes it again. The test that separates them is the dialogue node's, that what persists is judgment re-derivation cannot reconstruct; re-running a reading reconstructs an account, and nothing reconstructs a ruling, a recommendation, or a viability call. The class follows the same test and is read off the rulings rather than stored, since a stored class is a copy of what the rulings already say.
+Why the facts persist and the account does not. The author's reason is regression: a later session that cannot see what was considered proposes it again. The test that separates them is the dialogue node's, that what persists is judgment re-derivation cannot reconstruct; re-running a reading reconstructs an account, and nothing reconstructs a ruling, a recommendation, or a viability call. That test does not wait for the confirmation: what re-running a reading reconstructs is no more the record's before a ruling than after it, and the `unconfirmed-accumulation` node applies the same test to a node still in dialogue, so the confirmation folds a node the accumulation has already reached. The class follows the same test and is read off the rulings rather than stored, since a stored class is a copy of what the rulings already say.
 
 What the design costs, as a consequence of it and not a reason for it: a ruling waits on two readings rather than one, a substantive edit buys a third, and a kickback on one fact spends the node's whole stage while keeping the rulings already given. The traditions this answer rests on are the readings that bear on the recommended option.
 ```
@@ -1016,3 +1028,7 @@ before its account is written and the account names what it swept; or an
 instrument's, that the loci a reading names are checked against the diff the
 session lands; or the reading's, that a re-reading is given the diff rather than
 the node. `review-cost` holds the third, since it prices the re-reading.
+
+### Option adopted, 2026-09-07
+
+One option recorded from `unconfirmed-accumulation`, the child minted this sitting under `dialogue` on the author's words of 2026-09-07. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `per-fact-after-two-readings`; The text `per-fact-after-two-readings` recommended stands whole in this node's fence at graph commit `c55c9ebb`, and the migration under the author's grant of 2026-09-07 recovers it there as that option's content. The stage returns to review and the amendment owes a reading.

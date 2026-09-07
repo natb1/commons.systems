@@ -1,6 +1,6 @@
 ---
 question: What is materialized implementation, and where does it live?
-stage: ruling
+stage: review
 review:
   verdict: forward
   strength: strong
@@ -38,7 +38,10 @@ facts:
       - name: unsupported-where-authority-is-missing
         source: commons.systems/disposition-graph/what-acts-during-bootstrap
         ref: "2026-09-05"
-    recommends: standing
+      - name: the-ref-carries-the-ledger-beside-the-graphs
+        source: commons.systems/disposition-graph/quotes
+        ref: "2026-09-07"
+    recommends: the-ref-carries-the-ledger-beside-the-graphs
     boldness: low
     against: "Ratifying this text arms a deletion whose scope no one has ruled: the shim's liquidation prunes at the swap whatever no disposition supports, nothing derives unsupported implementation onto the frontier, the gate is the coverage node at the periagogic stage, and what survives on main is decided by a census the author has instructed sessions not to repeat. The reading of 2026-09-05 sharpened it: the rule is already contradicted where it is automated, `writeRules` in `packages/disposition/project.mjs` deleting a rule file with no proposal and no ruling, so a rule no instrument guards is being asked for at the record's highest class while its own projector prunes without one."
     stands: standing
@@ -65,6 +68,8 @@ shims:
     for: the implementation ref this node names
     liquidation: "`greenfield` is swapped with `main` at bootstrap exit, after whatever on `main` is to survive has been reconciled into `greenfield` under a supporting disposition; and the coverage node has been ruled on what the record covers, which is a condition of bootstrap exit and not of the swap alone"
     declared: 2026-09-02
+depends:
+  - commons.systems/disposition-graph/quotes#words-in-a-ledger-on-the-ref
 ---
 ## Disposition
 
@@ -138,9 +143,47 @@ where it belongs, and that node cites this one rather than restating it. What
 it would cost, if ruled: on the day it lands, every projection of an unruled
 node is unsupported implementation, which today is nearly all of them.
 
+#### the-ref-carries-the-ledger-beside-the-graphs
+
+The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author's words the quotes node keeps, and nothing else; the ledger holds no node and is the record's third kind of file.
+
+**AI support.** The words are the record's ground, every ruling's validity rests on them, and a reference into version control is not a reference the projections can resolve; so if the words are stored once, as `quotes` now recommends, the one place is on the ref. The rule is not loosened: what may be on the ref is still enumerated, and the enumeration grows by one named kind.
+
+**AI divergence.** The sentence this amends was the ref's whole discipline, and every kind of file it admits is a kind a reader must know how to read; a second kind is a second parser and a second thing a validator must check, and the option stands or falls with `quotes#words-in-a-ledger-on-the-ref`, on which it depends.
+
 ### authority
 
 Ratified, at low boldness: a global-tier rule every session writing to the implementation ref runs under, whose shim's liquidation deletes whatever no disposition supports, is expensive and irreversible if wrong, which is the escalation test the `class-recommendation` node states; low because the rule is the author's words. The case against is on the fact.
+
+## Recommendation
+
+```markdown
+---
+question: What is materialized implementation, and where does it live?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+tier: global
+defines:
+  - materialized implementation
+  - term: package
+    gloss: "One directory under `packages/` with its own manifest, the unit a workspace declares and the root manifest's scripts run."
+  - term: greenfield ref
+    gloss: "The implementation ref during bootstrap, carried as the shim on this node and swapped with `main` at bootstrap exit."
+shims:
+  - artifact: the `greenfield` ref, carrying the materialized implementation beside the incumbent code on `main`
+    for: the implementation ref this node names
+    liquidation: "`greenfield` is swapped with `main` at bootstrap exit, after whatever on `main` is to survive has been reconciled into `greenfield` under a supporting disposition; and the coverage node has been ruled on what the record covers, which is a condition of bootstrap exit and not of the swap alone"
+    declared: 2026-09-02
+---
+## Answer
+
+Everything a repository holds other than the graph itself: code, skills, rules, pages, and the graph's own tooling. The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author's words the quotes node keeps, and nothing else. The ledger is not a graph and holds no node; it is the record's third kind of file, and it is on the ref because the words are the record's ground and a reference into version control is not a reference the projections can resolve. All materialized implementation is a projection of the graph, the browser and the graph's own tooling included: each artifact is the instrument or the projection of the node whose answer it checks or renders, and anything no disposition justifies is unsupported implementation, on the frontier and liquidated through reconciliation, where pruning is proposed and the author rules on it. Materialized implementation is organized by the JavaScript monorepo convention: one repository, a root manifest declaring workspaces, and one directory per package under `packages/`.
+
+## Rationale
+
+The author's ruling of 2026-09-03, quoted above, that all materialized implementation, the browser included, is a projection of the graph and that anything the graph does not justify is liquidated through reconciliation. Keeping the disposition ref to the graph alone keeps its writes small, its history legible, and its readers simple; tooling changes never land as graph changes. The monorepo convention is a tradition the reading `npm-committed-lockfile`, under this node, bears on for the npm strand; readings on Lerna, Yarn workspaces, and the single-repository practice Potvin and Levenberg describe are owed. The incumbent repository already uses `packages/`, which is evidence, not authority. The third ref has one consequence to keep in view: whatever on `main` is to survive the swap must be reconciled into `greenfield` under a supporting disposition before exit, or it is pruned by the swap. The term "implementation unit" is struck for the reason the author gave in the words quoted above: what is materialized here is standing, and what passes takes one of the shapes `transience` names, so the record calls it materialized implementation and nothing that sounds like a unit of work. This node binds every session that writes to the implementation ref, subagents included, so it is projected as a rule.
+```
 
 ## Account
 
@@ -369,3 +412,7 @@ Two nodes maintain a hand-written census of the same population, and they disagr
 Also named: commons.systems/disposition-graph/stub-traditions, commons.systems/disposition-graph/readings, commons.systems/disposition-graph/codd-update-anomaly, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/instruments, commons.systems/disposition-graph/validation-order.
 
 Proposed: The survivor is `commons.systems/disposition-graph/readings`, which owns how references to tradition are recorded. Its answer already says "the rationale of a node never repeats its readings", which is the rule the censuses are counting violations of, so the count belongs to an instrument and not to an option's prose: derive the list of rationales carrying prose tradition lists rather than writing it down, and have `stub-traditions`' options cite `readings` instead of recounting. Strike the numbers from both option texts. `traditions-to-readings` is settled once, on `readings`, and cited from the four nodes rather than pending on each.
+
+### Option adopted, 2026-09-07
+
+One option recorded from `quotes`' recommended answer, under which the author's words are stored once on the ref. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `standing`; The text `standing` stands in this node's `## Answer`, which the new option's fence amends and which the migration under the author's grant of 2026-09-07 carries as that option's content. The stage returns to review and the amendment owes a reading.

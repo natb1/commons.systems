@@ -1,7 +1,7 @@
 ---
 question: What does an option's row carry at the first level?
 form: rule
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -46,7 +46,10 @@ facts:
       - name: a-term-is-its-own-sentence
         source: commons.systems/disposition-graph/vocabulary-option-summary
         ref: "2026-09-07"
-    recommends: three-marks-and-the-case-against
+      - name: the-details-carry-the-three-accumulations
+        source: commons.systems/disposition-graph/dialogue
+        ref: "2026-09-07"
+    recommends: the-details-carry-the-three-accumulations
     boldness: moderate
     against: "The record asks the AI for a case against every recommendation — `dialogue`'s recommended text makes a fact's `against` the argument the recommendation had to beat, written when the recommendation is recorded — and under this answer the author never sees it at the level they read: on every fact of every node but one, the row carries a mark saying no reader's line bears and the AI's written objection, where one exists, sits behind a fold, because a reading returns one counter-argument for a node and `caseAgainst` substitutes it on the answer fact alone. The rule is mostly unmet today, 53 fact-level `against` fields beside 247 recommendations at this head, so on most rows the mark replaces nothing yet; that is back-fill debt against the rule, as `dialogue`'s own account records, and not a reason the rule will stay unmet, so what the fold hides grows as the debt is paid. The arrangement this answer forbids, the AI's line at the first level, is the only one under which an objection the record holds is always where the author reads."
     stands: three-marks-and-the-case-against
@@ -390,6 +393,14 @@ authority fact a lead this answer's own words call a defect to be found. Under
 this option those two clauses say what they mean for a per-node fact and say what
 a vocabulary fact does instead; nothing else in the answer changes.
 
+#### the-details-carry-the-three-accumulations
+
+The row's three marks are unchanged, the confirmed mark being the derived label on the option last ruled confirm; the expanded details carry three accumulations and no more, the author's words each way as one quotation, the traditions' from the readings, and the AI's support and divergence whether or not the fact recommends the option, and beneath them the node as it would stand under this option, which the context pane previews when the option is selected.
+
+**AI support.** The author's refinement of 2026-09-07 names the expanded details' contents, before and after confirmation; the row's first level is unchanged, so the marks this answer settled stay settled and only the drill-down grows. The preview beneath the details is what makes the context pane's preview and the details one thing, resolved from the same content.
+
+**AI divergence.** Three accumulations in a drill-down is the most the details have carried, and where an option has been argued across many sittings the AI's accumulated divergence alone can be longer than the answer, so the details need the order this answer gives them and a projection that folds each accumulation closed by default.
+
 ### authority
 
 Ratified, on the capture-shaped limb of `class-recommendation`'s test. The other
@@ -416,6 +427,138 @@ Against it: layout is reversible and cheap to fix, so `deferred` would let the
 recommendation act on the row while the author works the rest of the frontier,
 and a `ratified` ruling here stops any delegation from ever reaching the page's
 presentation, which is most of what this subtree decides.
+
+## Recommendation
+
+```markdown
+---
+question: What does an option's row carry at the first level?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+## Answer
+
+A row leads with what the option would answer, in the sentence the record holds
+for it, and carries the option's name nowhere. Every option has such a sentence:
+the parent's clause requires one and has the page supply the two kinds the node
+does not write, a vocabulary fact's options and the option that stands. Where the
+record holds none for one yet, the row falls back to the bare name, and that
+fallback is the projector's defence against incomplete data rather than a form
+this answer or the parent provides for — `renderOption` writes a `choicename`
+span where the record yields no sentence, in
+`packages/disposition/project.mjs` — so a bare name on the page is a
+record not yet written and a defect to be found. The name also stays in the row's
+markup, where a ruling is staged from it.
+
+Beside that sentence the row carries three status marks and no others. That the recommendation adopts it, with its boldness. For each reading that bears on it, whether the tradition supports it or departs from it, by the reading's name. And, where the author has ruled for it with the response confirm, that it is the confirmed disposition, marked confirmed where it is the last so ruled on this fact, and keeps its authority until the author rules for another, with the response and the date. The row's expanded details carry three accumulations and no more, at every stage and before and after any confirmation: the author's words, the entries the option references, each marked support or divergence and shown as one quotation concatenated in date order; the traditions', projected from the readings that bear on the option, each marked the same way; and the AI's accumulated support and divergence, shown whether or not the fact recommends the option. Beneath them, the node as it would stand under this option, resolved from the option's content, which the page previews in the context pane when the option is selected.
+The first two are the author's words of 2026-09-04. The third is what their
+answer of 2026-09-06 puts where the `stands` chip was: a mark records the prior
+confirmed disposition, if any, so it appears on an option the author has ruled
+for and nowhere else, and with no confirmed disposition in the record it appears
+nowhere.
+
+It is one mark and not two. On the answer fact the option the author ruled for is
+the option that stands, which the reader of the graph enforces, so two marks
+would be one fact said twice; on the other facts nothing stands and only the
+ruling can appear. Nor can position replace it: `dialogue` has every projection
+show the confirmed choice first and say that it keeps its authority, and a row
+distinguished only by being above its neighbours says neither.
+
+Everything else the record holds on an option is one step down, with the rest of
+its text, the author's words it rests on, and each reading's account: where the
+option came from, by its source and reference; that the AI holds it dominated,
+marked passed over with the clause saying why, in the gloss `viable-options`
+recommends for that status and not in the projector's own words — a gloss its
+standing `defines` does not yet carry, so the projection of it is owed with that
+node's answer and is not this ruling's to find already made; and, where a ruling
+stands on it, the reason the author gave and the pin the ruling answered. The
+author's words send the passed-over status down by name, and the source goes with
+it as the same kind of thing, an account of how the option came to be on the list
+rather than what a reader chooses by. What that costs is stated rather than
+argued away: an option the author put on the table is no longer distinguishable
+at a glance from one the AI invented.
+
+On the recommended option's row of each fact, and on no other row, one line
+against the recommendation, and the AI never writes it. The author's words move
+the AI's reasoning to the details "not in a chip", and the AI's own case against
+is the AI's reasoning however it is set, so it goes down on every fact, with no
+exception. Where it goes is the recommended option's drill-down: the case against
+is a fact's line and a drill-down is an option's, and the recommended option's is
+the one it belongs to, being the argument that option had to beat. It appears
+there as text, beside the source and the passed-over clause, and not as a pill
+re-declared one level down, since "not in a chip" reaches the thing wherever it
+is set. What stands in its place at the first level is the counter-argument the
+clean-context review returned for that fact, with the strength that reading gave
+it. That is not the recommending party's reasoning, and the record already draws
+the line there: `alignment-page` says "that counter-argument is the line and
+carries the strength the review gave it", and `scholastic-articulus` says that
+here "the case against the recommended option is written by the party that
+recommends, so the guarantee is gone and what stands in its place is the
+clean-context review, whose counter-argument replaces the AI's own on the row
+when the review returns one". That reading is cited for that and for no more. Its
+substitution is conditioned on a returned line, and it closes by saying the
+substitution "is weaker than the tradition's guarantee and the record should not
+pretend otherwise", so it licenses nothing at all for the case where no reader's
+line bears, which is the case the next paragraph settles.
+
+Where no reader's line bears on a fact the row carries, in the line's place, one
+mark saying so, and no argument. The two ways that happens — no reading has run
+on the node, and a reading ran and returned nothing for that fact — are one fact
+about the row, and a reader cannot tell them apart by looking. Collapsing them is
+what makes the row legible without knowing the node's stage, and it keeps this
+answer out of a question that is not its own: whether a recommendation with no
+reader's line beside it may be called unopposed is `recording`'s, where the
+conflict between that node's rule and `dialogue`'s requirement of an `against` on
+every recommendation is recorded.
+
+What that costs, stated and not hidden: a reading returns one counter-argument
+for a node, and `caseAgainst` substitutes it on the answer fact alone, so on
+every other fact of every node the row carries the mark and the AI's written
+objection is one step down. Whether a reading should return one line per fact is
+`clean-context-review`'s question, recorded there as `counter-argument-per-fact`.
+It is also a divergence from two readings, recorded here rather than absorbed.
+`hansard-verbatim-record` holds of this very line that it "illustrates the
+argument, so by this standard it cannot be edited out" of the first level, and
+this answer edits it out of the first level on every fact. And
+`scholastic-articulus` licenses the substitution of the reader's line for the
+AI's only "when the review returns one", warning that even there it "is weaker
+than the tradition's guarantee": for the case where no reader's line bears it
+says nothing, so the mark that stands in that case departs from it rather than
+applying it. The option `ai-case-against-on-the-row` is the side both traditions
+take, and each divergence is carried on that reading's own `bears` entry as well
+as here.
+
+What leaves the row entirely is whether the node's text has been confirmed. That
+is a fact about the node and not a status of one option among several, so it is
+not a row's business; where the page says it instead is
+`where-the-unconfirmed-indication-goes`, named in `depends`, and this answer
+settles only that the row does not carry it.
+
+## Rationale
+
+The author's layout words of 2026-09-04 carry the row's whole shape: "For each
+option, list only a short text summary, a simple indicator if it is the
+recommended choice of the ai and with what boldness, and keep the chips that
+indicate support or divergence by tradition. Move AI reasoning (such as 'passed
+over') to the details area for each option - not in a chip." Every mark this
+answer keeps or moves is read off that sentence.
+
+Their answer of 2026-09-06 to the probe the same words raised — "What 'stands'
+could represent is the prior confirmed disposition (if any). There are no
+confirmed dispositions currently, so we would expect to see no indication of
+that." — turns a chip that named the absence of a ruling into a mark that names
+one, and so takes the question of confirmation off the row entirely.
+
+The third ground is not the author's and is named as such. Four clean-context
+readings on this node's line of drafts found, in turn, that the choice on the
+contested clause was never binary; that the record already holds the third
+answer, the reader's line in place of the AI's; and that the two cases with no
+reader's line are one. What the answer beat is on the fact:
+`ai-case-against-on-the-row`, which every one of those drafts recommended before
+the readings, and `case-against-to-the-details`, which is the author's placement
+with no line at the first level at all.
+```
 
 ## Account
 
@@ -1039,3 +1182,7 @@ Findings:
 
 
 Strongest counter-argument (weak): The state this answer asks the author to ratify is a state another node's unruled option decides. The answer concedes that "a reading returns one counter-argument for a node, and `caseAgainst` substitutes it on the answer fact alone, so on every other fact of every node the row carries the mark", and whether a reading returns one line per fact is clean-context-review's `counter-argument-per-fact`, live and unruled there and named in no depends here. So the commonest appearance of the row the author is confirming holds only under an option elsewhere, and a ruling there would change what this ruling ratifies without returning the question here.
+
+### Option adopted, 2026-09-07
+
+One option recorded from `dialogue`'s recommended encoding, on the author's refinement of 2026-09-07 quoted under `## Disposition`; the first level is unchanged and the details grow. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `three-marks-and-the-case-against`; The text `three-marks-and-the-case-against` stands in this node's `## Answer`, which the new option's fence amends and which the migration under the author's grant of 2026-09-07 carries as that option's content. The stage returns to review and the amendment owes a reading.

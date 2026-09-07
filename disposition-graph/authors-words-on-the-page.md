@@ -1,7 +1,7 @@
 ---
 question: Where does the alignment page show the author's recorded words?
 form: rule
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -57,7 +57,10 @@ facts:
       - name: residue-raised-as-a-finding
         source: review
         ref: "2026-09-07"
-    recommends: per-option-only
+      - name: the-words-are-referenced-both-ways-and-not-matched-by-date
+        source: commons.systems/disposition-graph/dialogue
+        ref: "2026-09-07"
+    recommends: the-words-are-referenced-both-ways-and-not-matched-by-date
     boldness: moderate
     against: "The only words the author has given on this node are a release with one named exception, and this answer reads 'does not need to be played back' as 'must nowhere appear' and extends a sentence about the periagogic response to every dated entry a node's `## Disposition` holds, two readings of the AI's resting on the author's one sentence. What that costs, re-taken at graph commit 62121b69: 142 of 255 dated entries are named by no option and 39 of the 71 nodes that carry words have none named at all, while `projection`'s standing answer holds that the record is read through projections and never by opening node files, so the majority of what the author has said reaches no projection they read at the moment of ruling; and this very ruling leans on the author's rule of 2026-09-06, which lives in `alignment-page`'s `## Disposition` and not in this node's, with `ancestors-words-too` passed over, so the author rules here without seeing on the page the later words the answer rests on."
     stands: per-option-only
@@ -80,6 +83,8 @@ review:
     of: b41bd908254e08cdd52e3dd02a06a241d83a429c
 under:
   - commons.systems/disposition-graph/alignment-page
+depends:
+  - commons.systems/disposition-graph/quotes#words-in-a-ledger-on-the-ref
 ---
 ## Disposition
 
@@ -476,6 +481,14 @@ does not yet encode. Viable and not adopted, for the author to weigh against the
 residue. Raised at the clean-context reading of 2026-09-07, in its viability
 paragraph.
 
+#### the-words-are-referenced-both-ways-and-not-matched-by-date
+
+Every option's row carries, one step down, the entries of the author's words it references as supporting it and those it references as diverging from it, marked which and shown as one quotation concatenated in date order, resolved from the ledger; the match is by reference and not by the option's `ref` date, and not conditioned on the option's source being the author.
+
+**AI support.** The author's words of 2026-09-07 ask for the history of quotes that both support and contradict each option, before and after confirmation, and a match by date on author-sourced options could show only supporting words on the options the author raised. A reference names one entry, so a date carrying several entries is addressed entry by entry and an entry may be referenced by options across nodes.
+
+**AI divergence.** The date match needed no data the record lacked, and this needs a reference on every option that has words behind it, which the migration seeds from the `ref` dates and which is complete only as far as sittings keep it so; a word the AI omitted to reference is a word the page does not show.
+
 ### authority
 
 Ratified, at low boldness. `class-recommendation`'s test asks whether being wrong
@@ -517,6 +530,181 @@ now that the recommendation is their own sentence read plainly and the contested
 part is the coverage rather than the rule. Boldness low because the class follows
 the stated test applied to a stated fact, and not the AI's judgment of this node
 alone.
+
+## Recommendation
+
+```markdown
+---
+question: Where does the alignment page show the author's recorded words?
+form: rule
+under:
+  - commons.systems/disposition-graph/alignment-page
+---
+## Answer
+
+On the option rows, and nowhere else. Every option's row carries, one step down, the entries of the author's words the option references as supporting it and the entries it references as diverging from it, each marked which and the two shown as one quotation concatenated in date order, resolved from the ledger, and no others. It is not matched by the option's `ref` and not conditioned on the option's source being the author, which between them could show only words that support and only on an option the author raised, while the author's words of 2026-09-07 ask for the history both ways on every option. Nothing else on the page is the author's words under `## Disposition`;
+the reason the author gives with a ruling is the other kind `dialogue` names,
+and it stays where `what-an-option-row-carries` puts it. There is no
+drill-down holding the section whole, neither folded nor open, at any stage, and
+none at the foot of the middle column. This is the author's sentence of
+2026-09-04 read at its plainest: whatever response they provide in the
+periagogic movement "does not need to be played back in the alignment artifact
+expect as quotes supporting or refuting fact options", and a quotation on the row
+of the option it supports or refutes is the one form those words name.
+
+An entry is a dated paragraph beginning "The author, <date>" together with
+everything beneath it up to the next such paragraph, which is the projector's own
+rule (`AUTHOR_ENTRY_RE`,
+`packages/disposition/project.mjs:1405`, applied by `authorEntries` at `:1407`,
+at implementation commit cb0e02c6).
+An option's references name the ledger entry and not the date alone, by the entry's ordinal within its date, so that a date carrying more than one entry is addressed entry by entry and one entry may be referenced by several options and by options on several nodes, in the
+order the section keeps them, which is what `authorWordsFor` does today
+(`packages/disposition/project.mjs:1421-1427` at cb0e02c6). That is coarse and this answer
+does not refine it — on this page's own parent fourteen of the twenty-five
+entries, at graph commit `ca46f7ff`, are dated 2026-09-04, so an option referring
+to that date carries all fourteen. What an option's `source` and `ref` are is
+`commons.systems/disposition-graph/dialogue`'s question; this answer reads them
+and adds nothing to them. On this node the recommended option's own reference
+resolves to one entry, so the row the author rules on carries the sentence it
+rests on and nothing besides.
+
+Where a `ref` names no entry the row carries nothing for the author's words, and
+the mismatch is a finding on the option rather than an occasion to quote. The
+fallback the projector runs today goes with it: at
+`packages/disposition/project.mjs:1425` at cb0e02c6 a date matching nothing returns the whole
+`## Disposition`, which, shown under the label the row gives it, asserts as the
+ground of one option words that may bear on another option on the same fact —
+the whole-section playback the author's sentence releases the page from, wearing
+a per-option label — and converts a broken reference into a plausible render. The
+finding is raised by the graph's validator, beside the check that already
+requires a `ref` on every option of an answer fact
+(`packages/disposition/read.mjs:496-499` at cb0e02c6), and it is listed by the frontier on the
+node that carries it. It is a finding and not a parse error, so the graph still
+reads and still projects while the eleven are outstanding, on the reader's own
+principle that an attention rule never turns into one
+(`packages/disposition/read.mjs:1391-1394` at cb0e02c6). Both were owed when this answer was
+written; the check landed on the implementation ref at commit cb0e02c6 of
+2026-09-07, as `deriveMechanicalFindings` in the same file, and the frontier lists
+what it raises. The direction is
+`commons.systems/disposition-graph/viable-options`' recommended text, which no
+ruling has reached and which this answer reads as direction rather than as
+doctrine: an option sourced to the author "carrying a graph commit where the date
+of the words should be is a finding and not a fact". A reference resolving to no
+entry is that same defect wearing the right shape, and a page that fills the gap
+with the whole section makes it unfindable.
+
+What this costs is measured, at graph commit `62121b69`, re-taken there by the
+reading of 2026-09-07 from the measurement first made at `ec6e2300`. Of 143
+nodes, 71 carry a `## Disposition`, holding 255 dated entries; 56 options are
+sourced to the author, of which 45 carry a reference naming at least one entry
+and 11 name none; the references reach 113 of the entries and miss 142, and reach
+none at all on 39 of the 71 nodes. So on the
+day this answer is projected the page carries a minority of what the author has
+said to the record, and eleven rows carry nothing where a quotation is owed. That
+is the cost, and it is the reconciliation this answer owes rather than a reason
+to show the section. Three things discharge it: the eleven references are
+written; an entry that bears on a fact the record asks and that no option names is
+recorded as an option on that fact, sourced to the author and referenced by its
+date, which is what puts it on the page at the place it decides something; and an
+entry that bears on no fact is left in the record, where the browser may yet
+render it. What the record does not do is show every entry beside every option to
+cure the arithmetic.
+
+What this answer does not decide, and where each belongs. Whether the browser
+renders a node's `## Disposition` is
+`commons.systems/disposition-graph/projection`'s, and the measurement above is an
+argument put to that node, recorded there as the option
+`browser-renders-the-authors-words`, and not a decision taken here. Whether the
+AI's account is shown as a drill-down is the parent's, carried there as the option
+`account-not-on-the-page`, and nothing here touches it. Whether the author's
+words may share the right-hand column is not open: that column is the disposition
+and nothing else, which is the parent's clause and not devolved here. How the
+words are retained, rolled up and dated is
+`commons.systems/disposition-graph/quotes`'.
+
+## Rationale
+
+Recorded on the author's disposition of 2026-09-04, queued from the sitting on
+`commons.systems/disposition-graph/author-questions` and carried under
+`## Disposition`:
+
+> Whatever response is provided in periagoge it does not need to be played back
+> in the alignment artifact expect as quotes supporting or refuting fact options.
+
+The sentence releases the page from playing the author's response back and names
+one exception to the release, and this answer is that sentence with nothing added
+to either half. The exception is where the author's words live on the page:
+quotes, on options, supporting or refuting them. Its narrowing work is done by
+"supporting or refuting fact options" — the words the row shows are the words
+that bear on the option the row is, which is what fixes the quotation to the
+entries the reference names and leaves the row silent where it names none. The
+earlier draft kept the whole section on the page under a distinction between a
+playback and the record shown once at one remove; that distinction is the AI's
+word set against the author's, and on the author's own question about the author's
+own words it is not a ground.
+
+The later rule cuts the same way. On 2026-09-06 the author fixed the page's
+scope: "The scope of alignment artifact is limited to final confirmation and
+previews/read only indicators of other phases of the dialogue. All other
+information from the author is done via the `/align` session interview." That is a
+rule about what the page does with the author, and its direction is inward: the
+confirmation stays, and everything else about the author goes to the interview.
+Reading out of it a permission for the page to carry more of the author's words
+than their own sentence of 2026-09-04 allowed inverts it. Nothing is lost in the
+narrowing that a session cannot restore: the words stay in the node, unaltered,
+and the interview the rule names is where they are read whole.
+
+The coverage measurement is the strongest thing said against this answer, and it
+argues for the other remedy. That 121 of 222 entries are named by no option is a
+fact about the references and the options rather than about the page: an entry
+that bears on a fact the record asks and that no option names is an option the
+record has not yet recorded, and eleven references naming no entry are eleven
+defects this answer itself makes findable. Curing them by showing the section
+entire makes the projection the place to make up what the encoding has not done,
+which is the error `commons.systems/disposition-graph/evaluation` exists to catch,
+an incumbent fact doing the work of a design constraint: the section would be on
+the page because the references are thin, and it would still be on the page after
+they were thick. The cure the record's own machinery gives is cheap where the
+display is not — a reference is a date and an option is a sentence with a source —
+and it puts each of the author's words at the place where they decide something
+rather than in a column of prose the author scrolls past.
+
+Two traditions were surfaced and each is recorded as a reading bearing on this
+fact. `commons.systems/disposition-graph/bentham-publicity` is why the finding is
+part of this answer and not an accessory to it: publicity's rule, as that reading
+takes it, is against a recommender that "publishes some of its decisions and
+withholds others by its own measure", and under this answer it is the AI's
+references that decide which of the author's words the author sees, so the
+selection itself must be published — a reference naming no entry is a finding on
+the frontier and never a silent row. The reading is adopted on this option for
+that reason, and adopted on `section-folded-and-quotation-narrowed` too, that
+option being disclosure of another kind; the principle supports both and does not
+choose between them, and marking the option the recommendation left as a
+divergence would recruit the tradition for a choice made on the author's words.
+`commons.systems/disposition-graph/hansard-verbatim-record` supports this option
+in terms, within the scope it records, which is the option's row: "The first
+level is the option's sentence, its status and the mark on the recommendation …
+the second level, one step under it, is the full text of the fact, the author's
+words, the AI's case". This answer puts the author's words exactly there and
+nowhere else. The earlier draft read that reading's guard, that the second level
+is always present and one step away, at a node-level drill-down the reading never
+read; the extension is not made here, and the reading is cited only for what it
+says. Within that scope the answer departs from the reading's substitute guard in
+one case and says so: on an author-sourced option whose reference names no entry,
+the eleven at `ca46f7ff`, the author's words exist on the node and appear at
+neither level, by choice, the finding standing in place of a plausible render, so
+the omission is discoverable on the frontier and not on the row; the entry on
+that reading stays adopted on the rule and the departure is recorded here.
+
+The reach is bounded by where authority lies. The parent devolved this question
+and marks both clauses a ruling here reaches as standing only until this node
+rules; the account half of the same sentence is the parent's own, the right-hand
+column's reserve is the parent's and untouched, the browser is `projection`'s,
+and what a `source` and a `ref` mean is `dialogue`'s. In the parent's recommended
+text this answer narrows one clause, the option drill-down's third item, to the
+entries the reference names and no others, and strikes one, the author's words as
+a drill-down of the column.
+```
 
 ## Account
 
@@ -796,3 +984,7 @@ Findings:
 - ## Rationale, the coverage paragraph: the answer re-took its measurement at graph commit `62121b69` and the rationale beside it still argues from the superseded one. The answer says "the references reach 113 of the entries and miss 142" of 255 dated entries, and the rationale says "That 121 of 222 entries are named by no option is a fact about the references", with no commit named. The whole case for this answer over `section-folded-and-quotation-narrowed` is that the coverage gap is curable at the references, so the author is shown two arithmetics for one argument and neither is marked as the one that stands.
 
 Strongest counter-argument (moderate): The answer's force is exclusivity — that nothing else on the page is the author's words — and its own coverage figure is the case against it: at graph commit `62121b69` "the references reach 113 of the entries and miss 142", while projection's standing answer holds the record is read "Through projections, never by opening node files". So the majority of what the author has said reaches no projection at the moment of ruling, and the remedy the answer offers, writing the eleven references and recording the options the unreferenced entries lack, is owed rather than made. The rationale still argues the point from a superseded count, which is the record's own measurement of how quickly this argument goes stale.
+
+### Option adopted, 2026-09-07
+
+One option recorded from `dialogue`'s recommended encoding, on the author's refinement of 2026-09-07 quoted under `## Disposition`. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `per-option-only`; The text `per-option-only` stands in this node's `## Answer`, which the new option's fence amends and which the migration under the author's grant of 2026-09-07 carries as that option's content. The stage returns to review and the amendment owes a reading.

@@ -1,6 +1,6 @@
 ---
 question: How are the author's words retained when a ruling is recorded?
-stage: maieutic
+stage: review
 review:
   verdict: forward
   strength: strong
@@ -34,7 +34,16 @@ facts:
       - name: one-ruling-for-the-unquoted-stamp
         source: review
         ref: "2026-09-03"
-    recommends: ruling-stays-in-node
+      - name: words-in-a-ledger-on-the-ref
+        source: author
+        ref: "2026-09-07"
+      - name: words-under-the-node-they-were-said-on
+        source: ai
+        ref: "2026-09-07"
+      - name: the-quotation-is-copied-onto-every-option
+        source: ai
+        ref: "2026-09-07"
+    recommends: the-quotation-is-copied-onto-every-option
     boldness: moderate
   - name: authority
     options:
@@ -46,9 +55,29 @@ facts:
 under:
   - commons.systems/disposition-graph/authority
 ---
+## Disposition
+
+The author, 2026-09-07, answering the three calls the session put before them on the revised accumulation strategy, carried here because this node's question is one the answer reaches:
+
+> 1. named-change form legibility tradeoff is acceptable as long as the exact node preview can be mechanically derived (eg. via patch syntax)
+> 2. previously confirmed and standing are just one and the same thing (we can probably just remove reference to "standing" and replace it with "confirmed"
+> 3. All of AI and author rationale and references to tradition are recorded as support and/or divergence for each option. AI response is accumulated, reference to tradition is accumulated, author response is concatenated quotation. AI support and divergence can be recorded for any option. The AI recommendation is the judgement that weighs AI support/divergence for each option.
+>
+> This implies guidance for which quotes from the author need to be retained and which options need to be recorded. We don't need to retain author quotes that neither support or diverge from an option. If a quote from an author expresses support or divergence from an option then that option must be recorded. Any option with support or divergence in tradition must be recorded. If an option is weighed by the AI for any reason including its own internal assessment of viability then that option must be recorded.
+
+The author, 2026-09-07, asking where the words an option cites are kept:
+
+> Does the disposition for author quoting suggest that author quotes are kept in a ledger outside the graph and referenced by options? A single quote may be referenced by options across nodes.
+
+The author, 2026-09-07, on the ledger question and on how the sitting proceeds:
+
+> choice is for confirmation. if there is periagogic grounding or meiutic clarification required then do so, otherwise make a recommendation and proceed to bootstrap reconciliation.
+
 ## Facts
 
 ### answer
+
+`words-in-a-ledger-on-the-ref` is recommended, on the author's question of 2026-09-07 quoted under `## Disposition` and their words of the same day that the choice is for confirmation: the words are stored once, on the ref, and every option that rests on them or departs from them references them, which is the only arrangement of the three under which the retention rule loses nothing and coverage stays a query. Moderate boldness: the measurement is the AI's, the three options are drawn where the author's question drew them, and the author's phrase "concatenated quotation" reads as naturally on the copy as on the projection.
 
 #### ruling-stays-in-node
 
@@ -78,6 +107,30 @@ The answer says what a recommendation fence carries of the author's words, not o
 
 Quotes' answer says what becomes of a node recommending ratification with no ruling quoted in it, and that ruling governs every such node rather than each carrying its own alternative. Verified that the same question is pending under three different names on six nodes — `deferred-rather-than-ratified` on legacy and recording, `deferred-until-ruling-quoted` on validation-order and evaluation, `deferred-not-ratified` on review and persistence — and that twenty-three of sixty-eight nodes carry no '## Disposition' section, so the population is larger than the six that happen to carry an entry. On this alternative quotes' answer states the consequence once, that such a node either gains the ruling it rests on or its recommendation drops to deferred, and the six entries become consequences of it; it is on the table because one question is currently on the author's queue six times under three names, and inconsistently, since seventeen nodes in the same position carry no entry at all.
 
+#### words-in-a-ledger-on-the-ref
+
+One ledger of the author's words on the `disposition` ref beside the node files, `disposition/words/<date>.md`, each entry stored once, addressed by its date and its ordinal within the date, and referenced from any option on any node; the per-option quotation is a projection.
+
+**AI support.** `dialogue`'s rule is that every part a ruling or a projection needs is in the record, in one place, and that a copy is what drifts. Measured at graph commit `32cd2e18` over all 143 nodes: 288 `## Disposition` entries, 208 distinct texts, 131,688 bytes of which 37,081, 28%, are copies beyond the first, one quotation standing on eight nodes, every copy hand-made and none checked against another. It is the only option of the three under which the retention rule loses nothing, an entry no option carries staying in the ledger unreferenced and addressable for a later sitting to attach, and the only one under which coverage stays a mechanical query, an unreferenced entry being computable from the record. The address is an ordinal and not a hash because a quotation is transcribed by hand and sometimes corrected, and a hash would break every reference on a correction while an ordinal survives both append and correction, the reader recording each entry's own sha so that a reference to text since changed is reportable.
+
+**AI divergence.** It puts a second kind of file on a ref whose rule is that it carries the graphs and only the graphs, which `materialization` must amend; and a node file stops being readable on its own, the words that ground it being one resolution away, which is the second legibility trade this design makes after the named-change form.
+
+#### words-under-the-node-they-were-said-on
+
+Entries stay under `## Disposition` of the node where they were said and are referenced across nodes by node id and entry ordinal.
+
+**AI support.** It is the smallest change, it keeps a node readable on its own for its own words, and it needs no amendment to what the ref carries.
+
+**AI divergence.** It keeps `## Disposition` as a section, so the absorption the accumulation asks for is half taken; the node where a word was said is a fact about the sitting and not about the word, so the address of a quotation depends on which node a session happened to record it on first; and it leaves the measured duplication in place for every quotation already copied, since a second node that carries the words either copies them again or points at a node with no better claim to them.
+
+#### the-quotation-is-copied-onto-every-option
+
+Each option carries the quotation itself, concatenated in date order, with no ledger and no reference, and a validator check that copies of one entry agree.
+
+**AI support.** It is the plainest reading of the author's phrase that the author's response is concatenated quotation, it needs no resolver, and every option is legible with nothing else open.
+
+**AI divergence.** It multiplies the duplication already measured by the number of options that cite an entry rather than reducing it, so the 28% becomes the smaller share of a larger number; and the record's cure for one text in two places is a check that the copies agree, which is the update anomaly answered rather than avoided. Where the author prefers the copy, this option takes it and the check comes with it.
+
 ## Recommendation
 
 ```markdown
@@ -87,27 +140,9 @@ form: rule
 under:
   - commons.systems/disposition-graph/authority
 ---
-## Disposition
-
-The author, 2026-09-07, answering the three calls the session put before them on the revised accumulation strategy, carried here because this node's question is one the answer reaches:
-
-> 1. named-change form legibility tradeoff is acceptable as long as the exact node preview can be mechanically derived (eg. via patch syntax)
-> 2. previously confirmed and standing are just one and the same thing (we can probably just remove reference to "standing" and replace it with "confirmed"
-> 3. All of AI and author rationale and references to tradition are recorded as support and/or divergence for each option. AI response is accumulated, reference to tradition is accumulated, author response is concatenated quotation. AI support and divergence can be recorded for any option. The AI recommendation is the judgement that weighs AI support/divergence for each option.
->
-> This implies guidance for which quotes from the author need to be retained and which options need to be recorded. We don't need to retain author quotes that neither support or diverge from an option. If a quote from an author expresses support or divergence from an option then that option must be recorded. Any option with support or divergence in tradition must be recorded. If an option is weighed by the AI for any reason including its own internal assessment of viability then that option must be recorded.
-
-The author, 2026-09-07, asking where the words an option cites are kept:
-
-> Does the disposition for author quoting suggest that author quotes are kept in a ledger outside the graph and referenced by options? A single quote may be referenced by options across nodes.
-
-The author, 2026-09-07, on the ledger question and on how the sitting proceeds:
-
-> choice is for confirmation. if there is periagogic grounding or meiutic clarification required then do so, otherwise make a recommendation and proceed to bootstrap reconciliation.
-
 ## Answer
 
-The verbatim ruling stays in the node. When a sitting records a ruling, the author's words are quoted in the node's Disposition section with their date, and the message of the commit that lands the node carries them in addition. The rationale restates the ruling in the record's own register; the quotation is what the restatement is of, and is never replaced by it. The section accumulates, and each sitting on the node rolls up the quotations its answer has absorbed, version control holding what the roll-up drops. A ratified stamp whose ruling is not in the node is invalid, and the ruling a stamp requires is the one the author gives at that sitting, quoted then; words the author said earlier are the ground a draft rests on and bar no stamp.
+The verbatim ruling stays in the record, once. When a sitting records a ruling, the author's words are written as an entry of the ledger, `disposition/words/<date>.md` on the disposition ref beside the graphs, verbatim and dated, and the option the author ruled on carries the reference to it; the message of the commit that lands the node carries the words in addition. The ledger holds no node — no question, no facts, no options and no class — so it is outside the graph and inside the record, the record being the ref and the graph being the nodes on it. The rationale restates the ruling in the record's own register; the quotation is what the restatement is of, and is never replaced by it. The ledger accumulates and is append-only; what a node carries of it is the references its options hold, and an entry no option anywhere references stays in the ledger unreferenced, addressable by a later sitting rather than dropped. An entry is retained on a node only where an option of that node supports it or diverges from it, which is the roll-up rule this answer once owed and could not state, given by the author's words of 2026-09-07. A ratified stamp whose ruling is not in the record is invalid, and the ruling a stamp requires is the one the author gives at that sitting, entered in the ledger then and referenced by the option ruled on; words the author said earlier are the ground a draft rests on and bar no stamp.
 
 ## Rationale
 
@@ -276,3 +311,7 @@ One question — whether a node whose ruling was never quoted may be classed rat
 Also named: commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/evaluation, commons.systems/disposition-graph/review, commons.systems/disposition-graph/validation-order, commons.systems/disposition-graph/legacy, commons.systems/disposition-graph/recording.
 
 Proposed: Settle the question once on `commons.systems/disposition-graph/quotes`, which owns how the author's words are retained, and strike the six local options in favour of a citation to that ruling. In the same movement, remove both measurements from `quotes`' option prose: a count of the record inside the record is what `authority`'s `no-census-in-a-standing-answer` option is about, and both of these counts have already gone false. The set of unquoted-ratified nodes is derivable — nodes with no `## Disposition` whose authority fact recommends `ratified` — so the frontier or the alignment page should compute it and the node should name the rule. `evaluation`'s option is amended to drop the clause about carrying no Disposition section, which is no longer true of it.
+
+### Option adopted, 2026-09-07
+
+Three options recorded on the author's question of 2026-09-07 whether the words are kept in a ledger outside the graph and referenced by options across nodes; the first is recommended, and the author's words of the same day put the choice up for confirmation. The recommendation moves from `ruling-stays-in-node`. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `ruling-stays-in-node`; The text `ruling-stays-in-node` recommended stands whole in this node's fence at graph commit `c55c9ebb`, and the migration under the author's grant of 2026-09-07 recovers it there as that option's content. The stage returns to review and the amendment owes a reading.

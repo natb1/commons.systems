@@ -1,6 +1,6 @@
 ---
 question: How are references to tradition recorded?
-stage: maieutic
+stage: review
 review:
   verdict: forward
   strength: moderate
@@ -40,7 +40,10 @@ facts:
       - name: relation-per-holding
         source: commons.systems/disposition-graph/progressive-disclosure
         ref: "2026-09-05"
-    recommends: relation-per-option
+      - name: the-relation-is-projected-onto-the-option-as-one-of-three
+        source: commons.systems/disposition-graph/dialogue
+        ref: "2026-09-07"
+    recommends: the-relation-is-projected-onto-the-option-as-one-of-three
     boldness: moderate
     against: "The per-option relation binds a tradition's verdict to option names, which are the AI's handles and move under it as options are added, renamed, and composed, so the option the author confirms can show no tradition beside it while a rival shows one; and a reading per node multiplies files, whose queue effect is the cost the author will feel."
     stands: relation-per-option
@@ -161,9 +164,43 @@ on 2026-09-05, as the gap the double entry was reaching for; recorded as an
 option and not taken, the double entry being struck for a net `diverged` in the
 same landing.
 
+#### the-relation-is-projected-onto-the-option-as-one-of-three
+
+What the readings bear on an option is projected onto it as the traditions' accumulated support and divergence, one of the three accumulations beside the AI's and the author's own; `bears` stays on the reading and nothing is stored twice.
+
+**AI support.** This node's answer already puts the relation on the reading and derives the option's readings as the inverse; the author's words of 2026-09-07 ask that references to tradition be recorded as support and divergence per option, and the projection of that inverse, headed support or divergence, is that record without a second copy. One reading of a shared source stays stored once and refined under each node it grounds.
+
+**AI divergence.** A projection is only as complete as the `bears` entries are, and a tradition read under one node and bearing on an option of another is recorded only where the reading's author remembered to add the cross-node entry, which the validator cannot check; the derived inverse is exact and the coverage is not.
+
 ### authority
 
 Ratified is recommended because the rule fixes how tradition binds the record, which is the capture-shaped case the record's escalation rule names: a divergence recorded as the author's decision cannot be overruled by the tradition, and a rule that decides what a divergence is decides that for every reading after it. Boldness moderate: the classes a reading may carry are the author's words of 2026-09-02, the rule that a reading is a node and the per-option relation's consequences are the AI's. The case against is delegated: the relations are the AI's readings, every reading on the record recommends delegated for itself, and the author may hold the rule as loosely as its instances.
+
+## Recommendation
+
+```markdown
+---
+question: How are references to tradition recorded?
+form: rule
+under:
+  - commons.systems/disposition-graph/model
+defines:
+  - reading
+  - tradition
+  - adopted
+  - diverged
+  - chosen over
+---
+## Answer
+
+As readings under the node that refers, and traditions they refer to. A tradition is a mount: a philosophical tradition, a body of research, or another repository, which could be a disposition graph of its own with its own archē and its own readings, and where it lives until it is articulated, carrying the name it defines and its primary references, is the traditions-home node's question; until that is ruled a reading names its tradition in its source alone, and the tradition node is owed, and with it the tradition's page and the defined name by which prose reaches it, both of which two clauses below presume. A reading sits under one node it bears on and may bear on the options of any node, naming the node wherever it is not the parent; it names the tradition it reads, its sources and loci, and what it bears on: for each option of a fact that the tradition speaks to, adopted, where the tradition supports the option, or diverged, where the option departs from it and the reading's own answer says why. A move of a recommendation re-points the readings that bear on the option it leaves, and that a recommended option stands unread beside a rival that does not is a finding the review should make, which the frontier-consistency node's validation 4 does not yet ask for and which is recorded there as an option; until it is ruled the check is owed and no instrument performs it, and the duty to re-point is stated here and unchecked, unmet across the record at this commit as the account measures. A tradition adopted on an option not chosen is what chosen over names, and it is derived and never stored; the option's readings are the derived inverse of what the readings bear on, and that inverse is what the projections show on the option as the traditions' accumulated support and divergence, one of the three the author's words of 2026-09-07 require beside the AI's and the author's own. `bears` stays on the reading, so one reading of a shared source is stored once and refined under each node it grounds, and what reaches the option is a projection and never a second copy. A reading has a class like any node, read from the rulings on its own facts: ratified when the author has read the primary source or understands the mounted graph and confirms the relations, delegated when the AI's reading stands and the author declines to review it, deferred when the author accepts it for now and queues the primary reading. Deferred reading is recursive: one source leads to another, and a reading may sit under a reading. A reading whose verdict changes on re-reading is a re-grasp trigger for the node it grounds, not an automatic failure of it. Many questions that read one tradition are many readings naming that tradition, and the tradition's page shows every reading that cites it, as each option shows every reading that bears on it. Prose reaches a tradition through the name it defines, and the rationale of a node never repeats its readings.
+
+## Rationale
+
+The author's disposition of 2026-09-02 that tradition references carry authority classes. Making them nodes rather than field entries buys four things: one reading of a shared source is stored once and refined under each node it grounds; readings nest, which is what recursion needs; a reading has its own hash and pin, so a changed reading is distinguishable from a changed answer; and there is one write path, one queue, and one stamp vocabulary. The alternative, stamped entries in a field with a derived reading frontier, is workable and was the author's framing; the difference is parsimony of mechanism against parsimony of files.
+
+Amended 2026-09-04 under the author's bootstrap grant of that day, recorded on the viable-options node, from the author's words there: "Each fact on a node ... has viable options list ... with ... b) support or divergence from tradition for each option". The reading stays a node with its own class, as the author's disposition of 2026-09-02 asks, and its relation moves from the node to the options it bears on, so that a tradition can support one option and contradict another on the same fact, and so that chosen over is derived rather than stored. The answer as it stood is kept as the option `relation-on-the-node`, and `traditions-as-mounts` is that answer with the mount, which this one includes. The review of this text is owed.
+```
 
 ## Account
 
@@ -482,3 +519,7 @@ Also named: commons.systems/disposition-graph/plato-maieutics, commons.systems/d
 Proposed: readings' rule is the survivor and plato-maieutics is where the text must change: the reading's answer says why the page's option departs from the tradition, in the reading's own words, so the relation the frontmatter asserts is readable from the reading rather than only from the node it bears on. The alternative, that the relation is retracted or narrowed, is the ruling the author takes instead; alignment-page's own text needs no change either way.
 
 Recorded as an option on commons.systems/disposition-graph/plato-maieutics's answer fact: `answer-argues-the-page-divergence` (source review, 2026-09-07).
+
+### Option adopted, 2026-09-07
+
+One option recorded from `dialogue`'s recommended encoding: the traditions' support and divergence on an option is the projection of what the readings bear, one of three accumulations the author's words of 2026-09-07 require. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `relation-per-option`; The text `relation-per-option` stands in this node's `## Answer`, which the new option's fence amends and which the migration under the author's grant of 2026-09-07 carries as that option's content. The stage returns to review and the amendment owes a reading.
