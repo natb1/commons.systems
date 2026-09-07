@@ -35,7 +35,7 @@ under:
 source: Rothermel and Harrold, Analyzing regression test selection techniques, IEEE TSE 22(8), 1996, and A safe, efficient regression test selection technique, TOSEM 6(2), 1997; industrial test-impact analysis as the practice.
 bears:
   - fact: answer
-    option: the-delta-survey-with-a-periodic-whole
+    option: candidate-pairs-with-their-nominating-key
     relation: adopted
   - fact: answer
     option: a-whole-graph-reading-every-time
@@ -49,7 +49,7 @@ What the record took is the tradition's other strand, and this node's `source` n
 
 The relations follow from that division. `the-delta-survey-with-a-periodic-whole` is the industrial strand's own shape and the relation to it is adoption. `a-whole-graph-reading-every-time` is what safety reduces to where no sound dependency relation is available, the identity selection, every test every time, and the tradition supports it; the record is chosen over it, which is what `readings` means by a tradition adopted on an option not chosen, and is where the departure from the guarantee is recorded in the record's own vocabulary rather than in a word on a row.
 
-What this reading does not take from the tradition is its measurement apparatus. Inclusiveness and precision as degrees rather than as a binary, and the cost model that trades them, are what the framework offers a selection that cannot be safe, and they are the vocabulary in which the cadence, the sample and the resemblance threshold could be sized; sizing them is `survey-selection`'s question and not this reading's, and the reading names the apparatus so that the parent's own recorded case against, that its numbers are unstated, has somewhere to go.
+What this reading does not take from the tradition is its measurement apparatus. Inclusiveness and precision as degrees rather than as a binary, and the cost model that trades them, are what the framework offers a selection that cannot be safe, and they are the vocabulary in which the cadence, the sample and the resemblance threshold could be sized; sizing them is `survey-selection`'s question and not this reading's, and the reading names the apparatus so that the parent's own recorded case against, that its numbers are unstated, has somewhere to go. The entry on `survey-selection` is recorded on `candidate-pairs-with-their-nominating-key`, the option that stands, because the delta survey this reading grounds is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen.
 
 ## Rationale
 
@@ -127,3 +127,7 @@ The session's reply: The first finding holds: the earlier reading named two loci
 ### Repaired after the re-reading of abb15a3e, 2026-09-07
 
 The re-reading found the earlier reading's first finding half-applied: the answer was rewritten and the `### Minted` entry's clause was left saying the opposite of it, with the repair's own entry claiming all five findings applied. The repair's entry is amended to say what it did with that clause and why it stands, and nothing else moves: the answer, the facts and the relations are as the re-reading read them. The amendment is the object of the reading this entry owes.
+
+### Re-pointed after the readings of abb15a3e, 2026-09-07
+
+The `bears` entry on `survey-selection` moves from `the-delta-survey-with-a-periodic-whole`, a rung the standing option contains, to `candidate-pairs-with-their-nominating-key`, the option that stands, and the answer's last sentence says why: `survey-selection`'s options are a ladder, each rung carrying everything above it, and `readings` derives chosen over for a tradition adopted on an option not chosen, so a relation stored on a contained rung projected as the opposite of what this reading says. The clean-context reading of `tolerated-inconsistency` at abb15a3e found it, and the same move is made on every reading under `survey-selection` that bore on a contained rung. Nothing else moves. The amendment is the object of the reading this entry owes.

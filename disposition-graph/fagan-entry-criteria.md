@@ -1,7 +1,7 @@
 ---
 question: Does Fagan's entry criterion ground the mechanical tier that gates a survey's launch?
 form: reading
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -35,7 +35,7 @@ under:
 source: Fagan, Design and code inspections to reduce errors in program development, IBM Systems Journal 15(3), 1976, and Advances in software inspections, 1986, for the entry criterion as a named gate; Gilb and Graham, Software Inspection (1993), on entry criteria. Locus to be checked, the entry criterion as a stated and checked gate, which is explicit in the 1986 paper and in Gilb and Graham and implicit in the 1976 paper's moderator readiness check; the tradition survey of 2026-09-07 cited only the 1976 paper and the 1993 book, so the 1986 citation is the AI's own and is given by title and year without its venue.
 bears:
   - fact: answer
-    option: the-mechanical-tier-gates-the-launch
+    option: candidate-pairs-with-their-nominating-key
     relation: adopted
 ---
 ## Answer
@@ -44,7 +44,7 @@ Supports, whole, within the locus this reading takes. The tradition holds that a
 
 The record's tier is wider than the tradition's gate, and the divergence is recorded rather than left in the gap between the two texts. An entry criterion is per-artifact: the failing document is returned to its author while every other inspection proceeds. The tier is per-run — "no reader is launched while one of them reports a finding" — so one failing node stops the reading of every node. The refusal to spend an expensive reader on material a cheap check condemns is the tradition's and is taken whole; the widening of that refusal from the failing node to the whole run is the record's own choice, and the tradition supplies no warrant for it. The net relation stays adopted, the record's convention being one relation per option with the nuance in the answer, and the option that makes the relation itself partial is beside this one for the author to take.
 
-What may be an entry criterion at all is not read here. That is the locus of the reading beside this one, `lint-and-the-false-positive-threshold`, which grounds the tier's bound — a check enters only where it is obviously right when it fires — on lint's economics and on Coverity's field experience of belief and false positives. The tradition's own requirement that entry criteria be stated and objective is consistent with that bound and does not supply it, and this reading claims nothing of it. The two readings on this option divide as that node's account has it: Fagan grounds the refusal to convene a reading over material that fails entry, and lint grounds what may be an entry criterion at all.
+What may be an entry criterion at all is not read here. That is the locus of the reading beside this one, `lint-and-the-false-positive-threshold`, which grounds the tier's bound — a check enters only where it is obviously right when it fires — on lint's economics and on Coverity's field experience of belief and false positives. The tradition's own requirement that entry criteria be stated and objective is consistent with that bound and does not supply it, and this reading claims nothing of it. The two readings on this option divide as that node's account has it: Fagan grounds the refusal to convene a reading over material that fails entry, and lint grounds what may be an entry criterion at all. The entry on `survey-selection` is recorded on `candidate-pairs-with-their-nominating-key`, the option that stands, because the gate this reading grounds is a lower rung of the same ladder, `the-mechanical-tier-gates-the-launch`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen.
 
 ## Rationale
 
@@ -117,3 +117,7 @@ On the viability of the options: All three authority options remain viable and u
 Strongest counter-argument (weak): The amended opening now reads "Supports, whole, within the locus this reading takes" rather than either of the previous reading's two clean resolutions (keep "Supports, whole." unqualified once the refinement moves away, or rename the divergence outright). A strict reader could see the inserted qualifier as a residual hedge against the frontmatter's unqualified `relation: adopted`, of the same shape the previous reading objected to in its second finding, until reaching the third paragraph two sentences later that names which locus is meant and cedes it to the sibling reading.
 
 The session's reply: Both citations were verified on the main thread before this reading was applied: `progressive-disclosure`'s review recorded, as the case against its answer fact, that a reading which records a divergence where the tradition is silent overstates what the author decided against, and `readings` carries the option `relation-per-holding` on its answer fact. The qualifier the counter reads as a hedge is the scope clause the second option contests: `adopted` holds within the locus the reading takes, and the divergence option says the locus is wrongly drawn, so the clause names the point the two options divide on rather than softening the first.
+
+### Re-pointed after the readings of abb15a3e, 2026-09-07
+
+The `bears` entry on `survey-selection` moves from `the-mechanical-tier-gates-the-launch`, a rung the standing option contains, to `candidate-pairs-with-their-nominating-key`, the option that stands, and the answer's last sentence says why: `survey-selection`'s options are a ladder, each rung carrying everything above it, and `readings` derives chosen over for a tradition adopted on an option not chosen, so a relation stored on a contained rung projected as the opposite of what this reading says. The clean-context reading of `tolerated-inconsistency` at abb15a3e found it, and the same move is made on every reading under `survey-selection` that bore on a contained rung. Nothing else moves. The amendment is the object of the reading this entry owes.

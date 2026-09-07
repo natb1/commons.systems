@@ -1,7 +1,7 @@
 ---
 question: Do verifying traces and early cutoff ground the delta survey's selection on section hashes?
 form: reading
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -35,7 +35,7 @@ under:
 source: Mokhov, Mitchell and Peyton Jones, Build systems à la carte, ICFP 2018, on verifying traces and early cutoff; Shake's and Bazel's rebuild rules as the practice.
 bears:
   - fact: answer
-    option: the-delta-survey-with-a-periodic-whole
+    option: candidate-pairs-with-their-nominating-key
     relation: adopted
   - node: commons.systems/disposition-graph/dialogue
     fact: answer
@@ -48,7 +48,7 @@ Supports on the trace and the cutoff, whole, and is read for nothing else. The t
 
 The locus is the trace and the cutoff and not the build system's scheduling, which the record does not adopt, and the tradition is not read here for the rest of the option it bears on. `the-delta-survey-with-a-periodic-whole` also carries a whole survey on a cadence and a drift probe, and neither is this tradition's: the cadence and the probe are `acceptance-sampling-and-all-or-none`'s, and the guarantee the selection cannot have is `regression-test-selection`'s, which records what is given up on the same option. Nor does the trace decide the whole judged set: a node no survey has read carries no hash that could have moved and is judged all the same.
 
-Where the trace is kept is the record's choice and not the tradition's. The dialogue option this reading also bears on puts each node's trace in the survey's own block on that node, which the tradition supports so far as it holds a trace to be recorded against the task and looked up, rather than the change being re-derived from a history walk or inferred from timestamps; where the store lives it leaves open, and in the two practices this node's `source` names it is one central store apart from the artifacts, Shake a single database and Bazel an action cache keyed by the action. So the relation on that option is adoption of the lookup and not of the placement, and the reading that makes the placement a divergence is the option beside this one.
+Where the trace is kept is the record's choice and not the tradition's. The dialogue option this reading also bears on puts each node's trace in the survey's own block on that node, which the tradition supports so far as it holds a trace to be recorded against the task and looked up, rather than the change being re-derived from a history walk or inferred from timestamps; where the store lives it leaves open, and in the two practices this node's `source` names it is one central store apart from the artifacts, Shake a single database and Bazel an action cache keyed by the action. So the relation on that option is adoption of the lookup and not of the placement, and the reading that makes the placement a divergence is the option beside this one. The entry on `survey-selection` is recorded on `candidate-pairs-with-their-nominating-key`, the option that stands, because the trace and the cutoff this reading grounds is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen.
 
 ## Rationale
 
@@ -120,3 +120,7 @@ On the viability of the options: The authority fact's three reserved options rem
 Strongest counter-argument (weak): The previous review's own recorded counter-argument -- that the survey's five sections are an input set the record declares rather than derives, so the trace's guarantee is stipulated rather than sound, and a third node's redefinition can break the judgment with no hash moving -- is not something the amendment was asked to fix (it was not one of the five numbered findings), and it is not fixed: narrowing "whole" to the trace and the cutoff only restates which mechanism is being adopted, it does not touch whether that mechanism's guarantee is as sound within its own narrowed scope as the tradition's is, so the same weakness the review already accepted at moderate strength persists unchanged into the amended text.
 
 The session's reply: Both citations were verified on the main thread before this reading was applied: `progressive-disclosure`'s review recorded that counter as the case against its answer fact, and `acceptance-sampling-and-all-or-none` reads the cadence, a whole survey after every fourth delta and at least once in thirty days, and the drift probe, on `a-whole-graph-reading-every-time`. The counter the re-reading carries forward, that the survey's five sections are stipulated and a third node's redefinition breaks the judgment with no hash moving, was not among the findings the amendment answered and is not answered by it; it stands as the case against the recommended option for the author to weigh.
+
+### Re-pointed after the readings of abb15a3e, 2026-09-07
+
+The `bears` entry on `survey-selection` moves from `the-delta-survey-with-a-periodic-whole`, a rung the standing option contains, to `candidate-pairs-with-their-nominating-key`, the option that stands, and the answer's last sentence says why: `survey-selection`'s options are a ladder, each rung carrying everything above it, and `readings` derives chosen over for a tradition adopted on an option not chosen, so a relation stored on a contained rung projected as the opposite of what this reading says. The clean-context reading of `tolerated-inconsistency` at abb15a3e found it, and the same move is made on every reading under `survey-selection` that bore on a contained rung. Nothing else moves. The amendment is the object of the reading this entry owes.
