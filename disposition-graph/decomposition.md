@@ -156,6 +156,10 @@ The author, 2026-09-07, later in the same turn:
 
 > begin applying the optimizations as you progress
 
+The author, 2026-09-07, on the sitting's units and the skills that carry them, said after the session had launched design, survey and reconciliation units on ad-hoc briefs beside the two review skills:
+
+> also include this in the list of dispositions we are progressing up to confirmation and reconciling: it sounds like recommended alignment subagents have extended beyond (or superceded) align-review and align-survey. If so, each subagent have its instructions codified in a skill. And if align-review or align-survey are superceded, they must be liquidated by reconciliation.
+
 ## Facts
 
 ### answer
