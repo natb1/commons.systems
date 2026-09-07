@@ -16,8 +16,8 @@ import path from "node:path";
 import { after, describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { applyReviews } from "./apply.mjs";
-import { parseNode, readGraph, surveyJudges } from "@commons.systems/disposition/read.mjs";
+import { applyReviews, renderSurveyLines, surveyBlock, surveyRegister } from "./apply.mjs";
+import { parseNode, readGraph, surveyJudges, REVIEW_SURVEY_KEYS } from "@commons.systems/disposition/read.mjs";
 import { deriveClass, deriveRecommendationHash } from "@commons.systems/disposition/derive.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -286,8 +286,8 @@ describe("apply.mjs: draft, review.commit", () => {
     assert.equal(parsed.review.commit, sha);
   });
 
-  test("a dirty checkout writes no commit: it must not silently pin a tree the checkout no longer matches", async () => {
-    const { rootDir } = await freshGitFixture("commit-dirty-");
+  test("a dirty checkout writes HEAD too: the commit dates the reading, and the pin is what attests to the text", async () => {
+    const { rootDir, sha } = await freshGitFixture("commit-dirty-");
     const file = reviewNodePath(rootDir);
     // Untracked change after the fixture's commit: the checkout is dirty.
     await writeFile(path.join(rootDir, "untracked.txt"), "dirty\n");
@@ -309,10 +309,10 @@ describe("apply.mjs: draft, review.commit", () => {
 
     const afterText = await readFile(file, "utf8");
     const block = reviewBlockOf(afterText);
-    assert.equal(fieldValue(block, "commit"), null, "no 'commit' line: a dirty tree records none rather than a stale one");
+    assert.equal(fieldValue(block, "commit"), sha, "'review.commit' is HEAD whether or not the tree is clean: a reading is nearly always taken over a working tree, and an absent commit says nothing rather than 'dirty'");
 
     const parsed = parseNode(afterText, { id: REVIEW_NODE, graph: "main", slug: "review-node", path: file });
-    assert.equal(parsed.review.commit, null);
+    assert.equal(parsed.review.commit, sha);
   });
 });
 
@@ -2194,5 +2194,176 @@ describe("apply.mjs: a reading's heading is an address", () => {
     assert.ok(afterSecond.includes(`${head}\n`), "the first heading survives untouched");
     assert.ok(afterSecond.includes(`${head} (ii)\n`), `the second heading is not disambiguated:\n${afterSecond.slice(-600)}`);
     assert.equal(afterSecond.split(`${head}\n`).length - 1, 1, "exactly one section carries the bare heading");
+  });
+});
+
+// ------------------------------------ what the survey leaves on a node
+
+describe("apply.mjs: the survey block", () => {
+  const fullBlock = () => surveyBlock({
+    date: SURVEY_DATE,
+    of: "a".repeat(40),
+    commit: COMMIT,
+    text: { question: "q", answer: "a", options: "o", rivals: "r", words: "w" },
+    findings: [{ finding: "one", kind: "coverage", status: "new", since: SURVEY_DATE, supports: ["answer"], discharge: "when it is answered", nodes: [REVIEW_A] }],
+    pairs: [{ with: REVIEW_B, keys: ["parent:x"] }],
+  });
+
+  test("the block is built whole: the six keys survey-selection names", () => {
+    assert.deepEqual(Object.keys(fullBlock()), ["date", "of", "commit", "text", "findings", "pairs"]);
+  });
+
+  test("what is written is exactly the block's keys the reader admits, and nothing else", () => {
+    // The bound: read.mjs's `surveyOk` requires the survey block's key set to
+    // be exactly REVIEW_SURVEY_KEYS, so a key written ahead of the reader
+    // would make every node it touched unreadable. This assertion is written
+    // against REVIEW_SURVEY_KEYS itself rather than against ['date', 'of'],
+    // so it keeps holding as the reader grows and never has to be edited to
+    // stay true.
+    const lines = renderSurveyLines(fullBlock(), "    ");
+    const keys = lines.filter((l) => /^ {4}\S/.test(l)).map((l) => l.trim().split(":")[0]);
+    assert.deepEqual(keys, REVIEW_SURVEY_KEYS.filter((k) => Object.keys(fullBlock()).includes(k)));
+    for (const line of lines) assert.match(line, /^ {4}/, "every line is indented under 'survey:'");
+  });
+
+  test("a null value is omitted rather than written as 'null'", () => {
+    const lines = renderSurveyLines({ ...fullBlock(), of: null }, "    ");
+    assert.equal(lines.some((l) => l.includes("of:")), false);
+  });
+
+  test("an all-digit hash is quoted, so YAML does not read it as an integer", () => {
+    const lines = renderSurveyLines({ date: SURVEY_DATE, of: "1".repeat(40) }, "    ");
+    assert.ok(lines.includes(`    of: "${"1".repeat(40)}"`));
+  });
+});
+
+describe("apply.mjs: surveyRegister", () => {
+  const finding = (text, extra = {}) => ({ kind: "coverage", finding: text, proposal: "p", otherIds: [], ...extra });
+
+  test("a finding not in the register is new, dated this survey, resting on all five sections", () => {
+    const [entry] = surveyRegister({
+      id: REVIEW_A, findings: [finding("something")], before: null, text: null, date: SURVEY_DATE,
+    });
+    assert.equal(entry.status, "new");
+    assert.equal(entry.since, SURVEY_DATE);
+    assert.deepEqual(entry.supports, ["question", "answer", "options", "rivals", "words"]);
+    assert.match(entry.discharge, /is ruled/);
+    assert.deepEqual(entry.nodes, [REVIEW_A]);
+  });
+
+  test("a finding whose support is unmoved is carried forward as standing, keeping the date it was first seen", () => {
+    const text = { question: "q", answer: "a", options: "o", rivals: "r", words: "w" };
+    const before = {
+      date: "2026-08-01",
+      text,
+      findings: [{ finding: "something", since: "2026-08-01" }],
+    };
+    const [entry] = surveyRegister({
+      id: REVIEW_A, findings: [finding("something")], before, text, date: SURVEY_DATE,
+    });
+    assert.equal(entry.status, "standing");
+    assert.equal(entry.since, "2026-08-01");
+  });
+
+  test("a finding one of whose supports moved is re-derived", () => {
+    const text = { question: "q", answer: "a", options: "o", rivals: "r", words: "w" };
+    const before = { date: "2026-08-01", text, findings: [{ finding: "something", since: "2026-08-01" }] };
+    const [entry] = surveyRegister({
+      id: REVIEW_A,
+      findings: [finding("something")],
+      before,
+      text: { ...text, answer: "moved" },
+      date: SURVEY_DATE,
+    });
+    assert.equal(entry.status, "re-derived");
+    assert.equal(entry.since, "2026-08-01", "re-derived is not new: it keeps the date it was first seen");
+  });
+
+  test("a reading that names its own supports narrows what re-derives it", () => {
+    const text = { question: "q", answer: "a", options: "o", rivals: "r", words: "w" };
+    const before = { date: "2026-08-01", text, findings: [{ finding: "something", since: "2026-08-01" }] };
+    const args = {
+      id: REVIEW_A,
+      findings: [finding("something", { supports: ["question"] })],
+      before,
+      text: { ...text, answer: "moved" },
+      date: SURVEY_DATE,
+    };
+    const [entry] = surveyRegister(args);
+    assert.deepEqual(entry.supports, ["question"]);
+    assert.equal(entry.status, "standing", "the answer moved and this finding never read it");
+  });
+
+  test("a reading may state the condition that discharges its finding", () => {
+    const [entry] = surveyRegister({
+      id: REVIEW_A,
+      findings: [finding("something", { discharges: "when the sibling is minted" })],
+      before: null, text: null, date: SURVEY_DATE,
+    });
+    assert.equal(entry.discharge, "when the sibling is minted");
+  });
+
+  test("a finding that names other nodes carries them, this node first", () => {
+    const [entry] = surveyRegister({
+      id: REVIEW_A,
+      findings: [finding("something", { otherIds: [REVIEW_B] })],
+      before: null, text: null, date: SURVEY_DATE,
+    });
+    assert.deepEqual(entry.nodes, [REVIEW_A, REVIEW_B]);
+  });
+});
+
+describe("apply.mjs: survey, the pairs it read", () => {
+  const selectionOf = (live, probe = []) => ({ pairs: { nominated: live.length + probe.length, live, frozen: [], probe } });
+
+  test("a survey applied with its selection sidecar records the pairs that touch each judged node", async () => {
+    const rootDir = await freshFrontierFixture("survey-pairs-");
+    const pins = await pinsFor(rootDir);
+    const result = await applyReviews({
+      rootDir,
+      pins,
+      selection: selectionOf([{ a: REVIEW_A, b: REVIEW_B, keys: ["parent:x", "cites"] }]),
+      input: surveyInput(),
+      replies: {},
+    });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.equal(
+      result.notes.some((n) => n.includes("survey.selection.json")),
+      false,
+      "the sidecar was given, so nothing is reported missing",
+    );
+    // The pair is on the block this run built; what lands in the file is
+    // what the reader admits, which is still the pin alone.
+    const reviewA = await parseAt(rootDir, "review-a", REVIEW_A);
+    assert.deepEqual(reviewA.review.survey, { date: SURVEY_DATE, of: pins.pins[REVIEW_A] });
+  });
+
+  test("a survey applied without one says so per node: the next cut will freeze more than it should", async () => {
+    const rootDir = await freshFrontierFixture("survey-nopairs-");
+    const pins = await pinsFor(rootDir);
+    const result = await applyReviews({ rootDir, pins, input: surveyInput(), replies: {} });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    const note = result.notes.find((n) => n.includes("survey.selection.json"));
+    assert.ok(note, "the absence of the sidecar is reported and not silent");
+    assert.match(note, /the next survey's cut falls back to the survey date/);
+  });
+
+  test("a frozen pair that was not probed is never recorded as read", async () => {
+    const rootDir = await freshFrontierFixture("survey-frozen-");
+    const pins = await pinsFor(rootDir);
+    const selection = {
+      pairs: {
+        nominated: 1,
+        live: [],
+        frozen: [{ a: REVIEW_A, b: REVIEW_B, keys: ["parent:x"], probe: false }],
+        probe: [],
+      },
+    };
+    const result = await applyReviews({ rootDir, pins, selection, input: surveyInput(), replies: {} });
+    assert.equal(result.validation.ok, true, result.validation.message);
+    assert.ok(
+      result.notes.some((n) => n.includes("survey.selection.json")) === false,
+      "the sidecar was given",
+    );
   });
 });

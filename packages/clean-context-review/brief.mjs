@@ -62,11 +62,16 @@
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { readGraph, surveyJudges } from "@commons.systems/disposition/read.mjs";
+import {
+  readGraph, surveyJudges, answerText, confirmedOption, resolveOptionContent,
+} from "@commons.systems/disposition/read.mjs";
 import { renderFrontier } from "@commons.systems/disposition/project.mjs";
+import { concordance, nodeText } from "@commons.systems/disposition/concordance.mjs";
+import { checkTier, tierNotes, loadFoldable, TIER_CHECKS } from "@commons.systems/disposition/tier.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRAFT_TEMPLATE_PATH = path.join(HERE, "brief-draft.md");
@@ -91,8 +96,9 @@ const draftOutFile = (slug) => `tmp/review/draft-${slug}.json`;
 const deltaOutFile = (slug) => `tmp/review/delta-${slug}.json`;
 
 export const USAGE = [
-  "usage: node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry] [--draft]",
-  "       node brief.mjs --survey    [rootDir] [--date YYYY-MM-DD] [--dry]",
+  "usage: node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry] [--draft] [--out <file>]",
+  "       node brief.mjs --survey    [rootDir] [--date YYYY-MM-DD] [--dry] [--whole]",
+  "                                  [--validations-changed] [--force-tier] [--out <file>]",
   "exactly one of --node <id> and --survey is given: the review of one draft,",
   "or the survey of the frontier. The choice between a draft brief and a",
   "delta (re-reading) brief is read off the record and not off a flag: a",
@@ -111,7 +117,10 @@ function todayIsoUtc() {
  * stderr and exits 2 on.
  */
 export function parseArgs(argv) {
-  const opts = { node: null, survey: false, rootDir: null, date: null, dry: false, draft: false };
+  const opts = {
+    node: null, survey: false, rootDir: null, date: null, dry: false, draft: false,
+    whole: false, forceTier: false, validationsChanged: false, out: null,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--node") {
@@ -132,6 +141,22 @@ export function parseArgs(argv) {
       // invocation (the align-review skill's own doc names it) still forces
       // the draft brief rather than failing on an unknown flag.
       opts.draft = true;
+    } else if (a === "--whole") {
+      // The whole survey, in which nothing is frozen (`survey-selection`:
+      // "A whole survey, in which nothing is frozen, runs after every fourth
+      // delta survey, at least once in any thirty days, and unconditionally
+      // after any amendment to the validations").
+      opts.whole = true;
+    } else if (a === "--force-tier") {
+      // For diagnosis only: the tier gates the launch, and a brief written
+      // over a failing tier is stamped as one, in the brief itself.
+      opts.forceTier = true;
+    } else if (a === "--validations-changed") {
+      opts.validationsChanged = true;
+    } else if (a === "--out") {
+      const v = argv[++i];
+      if (v === undefined) throw new Error("--out needs a file");
+      opts.out = v;
     } else if (a.startsWith("--")) {
       throw new Error(`unknown flag ${a}`);
     } else if (opts.rootDir === null) {
@@ -148,6 +173,11 @@ export function parseArgs(argv) {
   }
   if (opts.draft && opts.survey) {
     throw new Error("--draft forces the draft brief on a re-reading; the survey has no re-reading to force");
+  }
+  for (const [flag, on] of [["--whole", opts.whole], ["--validations-changed", opts.validationsChanged]]) {
+    if (on && !opts.survey) {
+      throw new Error(`${flag} is the survey's: a draft's reading selects nothing and freezes nothing`);
+    }
   }
   return opts;
 }
@@ -319,11 +349,53 @@ function bearsText(node) {
   return entries.map((b) => `${b.node ?? "(unresolved)"}#${b.fact}#${b.option} (${b.relation})`).join(", ");
 }
 
-/** The readings that bear on one option, as the reader's inverse derives them. */
-function readingsText(option) {
+/**
+ * The readings that bear on one option, as the reader's inverse derives
+ * them, each with the `source` its own node records -- the locus of the
+ * tradition, which is what makes a reading citable and what
+ * `frontier-consistency`'s reading of a tradition is checked against. A
+ * reading listed by id alone tells the reader that a tradition was read and
+ * not which one. `byId` is the graph's index where the caller holds one;
+ * without it the source is simply not shown, since this must render for a
+ * node object standing on its own.
+ */
+function readingsText(option, byId = null) {
   const readings = option.readings || [];
   if (readings.length === 0) return null;
-  return readings.map((r) => `${r.id} (${r.relation})`).join(", ");
+  return readings.map((r) => {
+    const source = byId ? (byId.get(r.id) || {}).source : null;
+    return source ? `${r.id} (${r.relation}) — source: ${source}` : `${r.id} (${r.relation})`;
+  }).join(", ");
+}
+
+/**
+ * The readings that bear on one node, derived from the same data as the
+ * per-option lines and not from a second scan: the reader writes every
+ * reading's `bears` onto the option it bears on (`deriveReadings`), so the
+ * node's own facts already carry the answer, and the two can no longer
+ * disagree.
+ *
+ * They disagreed until 2026-09-07, and this is that fix. The neighbourhood
+ * derivation asked which nodes' `bears` named this one and took that part
+ * *after* `children`; but a reading is mounted `under` the node it bears on,
+ * so every reading was claimed as a child first and the readings part came
+ * out empty -- a brief saying "no reading bears on this node" directly above
+ * option lines naming eight of them.
+ *
+ * @param {object} node
+ * @returns {string[]} the reading ids, in the order the options list them,
+ *   each once.
+ */
+export function readingIdsOn(node) {
+  const ids = [];
+  for (const fact of node.facts || []) {
+    for (const option of fact.options || []) {
+      for (const r of option.readings || []) {
+        if (!ids.includes(r.id)) ids.push(r.id);
+      }
+    }
+  }
+  return ids;
 }
 
 function ruledOptionName(fact) {
@@ -374,7 +446,7 @@ function factsSummary(node) {
  * one, the one that stands, or the ruled one, the readings that bear on it,
  * and the prose that says what it would answer.
  */
-function renderFacts(node, headingPrefix) {
+function renderFacts(node, headingPrefix, byId = null) {
   const facts = node.facts || [];
   if (facts.length === 0) return ["(no facts: no decision is recorded on this node yet)", ""];
   const out = [];
@@ -395,7 +467,7 @@ function renderFacts(node, headingPrefix) {
       const origin = [option.source ? `source ${option.source}` : null, option.ref ? `ref ${option.ref}` : null]
         .filter(Boolean).join(", ") || "no source recorded (a reserved fact's option needs none)";
       out.push(`- \`${option.name}\` — ${origin}${marks.length > 0 ? ` — ${marks.join("; ")}` : ""}`);
-      const readings = readingsText(option);
+      const readings = readingsText(option, byId);
       if (readings) out.push(`  - Readings bearing on it: ${readings}`);
       const prose = option.prose && option.prose.length > 0 ? option.prose : missingProseText(fact, option);
       for (const line of prose.split("\n")) out.push(`  ${line}`);
@@ -416,7 +488,7 @@ function renderFacts(node, headingPrefix) {
  * nodes of a draft's brief; the draft under review carries its own, since a
  * verdict on it answers the dialogue that produced it.
  */
-function renderWholeNode(node, { account = true } = {}) {
+function renderWholeNode(node, { account = true, byId = null } = {}) {
   const parts = [
     `### ${node.id}`,
     "",
@@ -448,7 +520,7 @@ function renderWholeNode(node, { account = true } = {}) {
     "#### Facts (every decision on this node, and every option it holds viable)",
     "",
   );
-  parts.push(...renderFacts(node, "#####"));
+  parts.push(...renderFacts(node, "#####", byId));
 
   parts.push("#### Recommendation (the recommended node in full, when the recommended option is not the one that stands)", "");
   if (node.fence && typeof node.fence.raw === "string") {
@@ -1039,22 +1111,31 @@ export function draftNeighbourhood(graph, node) {
 
   const rules = take(READING_RULES.map((id) => byId.get(id)));
 
+  // Taken before 'children', 'siblings' and 'cited', and derived from the
+  // node's own options first. A reading is mounted `under` the node it bears
+  // on, so taking 'children' first claimed every reading as a child and left
+  // this part empty: the brief then said "no reading bears on this node"
+  // directly above option lines naming several of them. That was the state
+  // until 2026-09-07, and this is the fix. `readingIdsOn` reads the ids off
+  // the same `option.readings` the per-option lines render, so the two
+  // cannot disagree; the `bears` scan stays beside it for a reading whose
+  // `bears` names no option and which therefore reaches no option's list. A
+  // 'bears' entry may omit 'node' -- it then means the node the reading is
+  // mounted under -- and the reader canonicalizes that to the reading's sole
+  // 'under' parent when there is exactly one, but this function trusts its
+  // inputs and does not assume that resolution has already run, so the same
+  // fallback is applied here.
+  const readings = take([
+    ...readingIdsOn(node).map((id) => byId.get(id)),
+    ...graph.nodes.filter((n) => (n.bears || []).some(
+      (b) => b.node === node.id || (!b.node && (n.under || []).includes(node.id)),
+    )),
+  ]);
+
   const children = take((node.children || []).map((id) => byId.get(id)));
 
   const parents = new Set(node.under || []);
   const siblings = take(graph.nodes.filter((n) => (n.under || []).some((p) => parents.has(p))));
-
-  // Taken before 'cited': a node whose 'bears' names this one is otherwise
-  // always claimed first by 'cited', since every option's own rendering
-  // below quotes the readings that bear on it. A 'bears' entry may omit
-  // 'node' -- it then means the node the reading is mounted under -- and the
-  // reader canonicalizes that to the reading's sole 'under' parent when
-  // there is exactly one, but this function trusts its inputs and does not
-  // assume that resolution has already run, so the same fallback is applied
-  // here.
-  const readings = take(graph.nodes.filter((n) => (n.bears || []).some(
-    (b) => b.node === node.id || (!b.node && (n.under || []).includes(node.id)),
-  )));
 
   // The node's own text, as this brief renders it, is what "the nodes it
   // names" is read from: every section, every fact, every option's prose and
@@ -1170,20 +1251,21 @@ async function resolveReviewNode(rootDir, id) {
  *   siblingCount: number, citedCount: number, readingsCount: number,
  *   roundCount: number, indexCount: number, lines: number, bytes: number}>}
  */
-export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry = false }) {
+export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry = false, out = null }) {
   const { graph, node } = await resolveReviewNode(rootDir, id);
 
   const effectiveDate = date ?? todayIsoUtc();
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const { ancestry, rules, children, siblings, cited, readings, round, index } = draftNeighbourhood(graph, node);
   const outFile = draftOutFile(node.slug);
-  const briefPath = path.join(reviewDir, `draft-${node.slug}.brief.md`);
+  const briefPath = out ?? path.join(reviewDir, `draft-${node.slug}.brief.md`);
 
   const template = await readTemplate(DRAFT_TEMPLATE_PATH);
   const withoutNav = fill(template, {
     date: effectiveDate,
     repo: path.resolve(rootDir, ".."),
     id: node.id,
-    node: renderWholeNode(node),
+    node: renderWholeNode(node, { byId }),
     ancestry: renderNeighbourNodeList(ancestry, "(no node above it and no rule that binds everywhere: this node is a root)", node.id),
     rules: renderNeighbourNodeList(rules, "(none of the twelve rule nodes are in this graph: this is a fixture or test graph, not the record)", node.id),
     children: renderNeighbourNodeList(children, "(no node under it: nothing stands on this node)", node.id),
@@ -1218,6 +1300,7 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
   if (dry) return result;
 
   await mkdir(reviewDir, { recursive: true });
+  await mkdir(path.dirname(briefPath), { recursive: true });
   await writeFile(briefPath, filled);
   return result;
 }
@@ -1238,8 +1321,9 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
  * @returns {Promise<{briefPath: string, outFile: string, lines: number,
  *   bytes: number}>}
  */
-export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry = false }) {
-  const { node } = await resolveReviewNode(rootDir, id);
+export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry = false, out = null }) {
+  const { graph, node } = await resolveReviewNode(rootDir, id);
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const mode = chooseMode(node, { rootDir, draft: false });
   if (mode.mode !== "delta") {
     const err = new Error(`${id} cannot take a re-reading brief: ${mode.reason} -- write the draft brief instead`);
@@ -1249,14 +1333,14 @@ export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry
 
   const effectiveDate = date ?? todayIsoUtc();
   const outFile = deltaOutFile(node.slug);
-  const briefPath = path.join(reviewDir, `delta-${node.slug}.brief.md`);
+  const briefPath = out ?? path.join(reviewDir, `delta-${node.slug}.brief.md`);
 
   const template = await readTemplate(DELTA_TEMPLATE_PATH);
   const withoutNav = fill(template, {
     date: effectiveDate,
     repo: path.resolve(rootDir, ".."),
     id: node.id,
-    node: renderWholeNode(node),
+    node: renderWholeNode(node, { byId }),
     commit: mode.commit,
     diff: mode.diff.trim().length > 0
       ? mode.diff
@@ -1278,8 +1362,626 @@ export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry
   if (dry) return result;
 
   await mkdir(reviewDir, { recursive: true });
+  await mkdir(path.dirname(briefPath), { recursive: true });
   await writeFile(briefPath, filled);
   return result;
+}
+
+// ------------------------------------------- the survey's own selection
+//
+// Everything below is `survey-selection`'s answer, made mechanical: the
+// judged node carried once, the tier that gates the launch, the cuts that
+// leave the frozen set behind with the evidence of what they cost, the two
+// backstops, and the candidate pairs each handed to the reader with the key
+// that nominated it.
+
+/** The sidecar naming the cuts: what was frozen, what the probe drew, and
+ * on what seed. `survey.pins.json` stays what the apply step compares
+ * against; this is what a reader or a later survey audits the selection by,
+ * since "what was not read is a fact of the run and not an inference from
+ * the generator". */
+const SURVEY_SELECTION_FILE = "tmp/review/survey.selection.json";
+/** The record of which surveys ran whole and which ran as deltas. The two
+ * backstops are counted over surveys and not over nodes, and no node
+ * carries the count, so the generator keeps it itself. It lives under
+ * `tmp/` with the briefs, so a lost history is read as "unknown", which
+ * demands a whole survey rather than certifying a delta on no evidence. */
+const SURVEY_HISTORY_FILE = "tmp/review/survey.history.json";
+
+const ANSWER_FACT = "answer";
+/** The backstops, in the answer's own numbers: a whole survey "runs after
+ * every fourth delta survey, at least once in any thirty days", and the
+ * probe is "one in twenty of the frozen pairs and never fewer than ten". */
+const WHOLE_AFTER_DELTAS = 4;
+const WHOLE_AFTER_DAYS = 30;
+const PROBE_DENOMINATOR = 20;
+const PROBE_FLOOR = 10;
+/** "near-duplicate resemblance, a Jaccard similarity over word shingles of
+ * a half or more". The shingle length is not fixed by the answer; three
+ * words is the usual choice and is stated here rather than buried. */
+const SHINGLE_WORDS = 3;
+const JACCARD_THRESHOLD = 0.5;
+
+function sha256(text) {
+  return createHash("sha256").update(String(text), "utf8").digest("hex");
+}
+
+/**
+ * The sentence saying what one option would answer -- "which is what the
+ * fifteenth validation reads of an option".
+ *
+ * In the content encoding that is the option's own `sentence`, the prose
+ * before its content. In the legacy encoding an option has no sentence and
+ * carries `prose` instead, the whole `#### <name>` subsection, which is the
+ * same text playing the same part; 152 of the record's 154 nodes are legacy
+ * on 2026-09-07, so a survey that read only `sentence` would carry no
+ * option text at all.
+ */
+export function optionSentence(option) {
+  const sentence = option?.sentence;
+  if (typeof sentence === "string" && sentence.trim().length > 0) return sentence.trim();
+  const prose = option?.prose;
+  if (typeof prose === "string" && prose.trim().length > 0) return prose.trim();
+  return null;
+}
+
+/**
+ * One option's resolved content, or null where the encoding carries none.
+ * A resolution that throws is reported in place rather than thrown: the
+ * tier's `option-content-unresolvable` check is what refuses the launch for
+ * it, and a brief written over a forced tier must still say what it found.
+ */
+export function optionContentText(node, factName, option) {
+  if (!option || !option.content) return null;
+  try {
+    return resolveOptionContent(node, factName, option.name);
+  } catch (err) {
+    return `(unresolvable: ${err.message})`;
+  }
+}
+
+/** The option whose content is "the one answer that binds": the option last
+ * confirmed, or, where none is confirmed, the one the answer fact
+ * recommends. The other options of that fact are the rivals. */
+export function carriedOptionName(node) {
+  const fact = node?.answerFact ?? null;
+  if (!fact) return null;
+  return confirmedOption(node, ANSWER_FACT) ?? fact.recommends ?? null;
+}
+
+/**
+ * The author's words one node's options carry, resolved from the ledger:
+ * one entry per reference, in option order and, within an option, date
+ * order, which is the order the fifth section hash is taken over. A
+ * reference the ledger does not resolve is carried as an unresolved entry
+ * rather than dropped -- the tier's `unresolved-words-reference` check is
+ * what gates on it.
+ */
+export function nodeWords(node, words) {
+  const ledger = words instanceof Map ? words : new Map();
+  const out = [];
+  for (const fact of node?.facts ?? []) {
+    for (const option of fact.options ?? []) {
+      const refs = [];
+      for (const key of ["supports", "diverges"]) {
+        for (const ref of option?.[key] ?? []) refs.push({ ref, relation: key });
+      }
+      refs.sort((a, b) => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0));
+      for (const { ref, relation } of refs) {
+        const entry = ledger.get(ref) ?? null;
+        out.push({
+          fact: fact.name,
+          option: option.name,
+          relation,
+          address: ref,
+          date: entry ? entry.date : null,
+          context: entry ? entry.context : null,
+          text: entry ? entry.text : null,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The hashes of the five sections a survey's validations read, which is what
+ * the survey leaves on the node and what the next survey's delta is taken
+ * over: the question; the answer, being the resolved content of the option
+ * last confirmed or, where none is, of the option the answer fact
+ * recommends; the option names with their statuses and their sentences; the
+ * resolved content of every other option on the answer fact; and the
+ * author's words the options carry.
+ *
+ * The source of each option is in the third hash beside its status, since
+ * the brief carries it and a source that moved is a different option; the
+ * `ref` likewise. Nothing else is: "a change to the AI's accumulated support
+ * or divergence on an option, to an account, or to a fact's reason
+ * propagates nothing", which is what makes the accumulation's fold cost the
+ * survey nothing.
+ *
+ * @returns {{question: string, answer: string, options: string, rivals: string, words: string}}
+ */
+export function sectionHashes(node, words = null) {
+  const fact = node?.answerFact ?? null;
+  const options = fact?.options ?? [];
+  const carried = carriedOptionName(node);
+  const optionLines = options
+    .map((o) => [o.name, o.source ?? "", o.ref ?? "", o.status ?? "", optionSentence(o) ?? ""].join(" | "))
+    .join("\n");
+  const rivalLines = options
+    .filter((o) => o.name !== carried)
+    .map((o) => `${o.name} | ${optionContentText(node, ANSWER_FACT, o) ?? ""}`)
+    .join("\n");
+  const wordLines = nodeWords(node, words)
+    .map((w) => `${w.address} | ${w.text ?? ""}`)
+    .join("\n");
+  return {
+    question: sha256(node?.question ?? ""),
+    answer: sha256(answerText(node) ?? ""),
+    options: sha256(optionLines),
+    rivals: sha256(rivalLines),
+    words: sha256(wordLines),
+  };
+}
+
+export const SECTION_HASH_KEYS = ["question", "answer", "options", "rivals", "words"];
+
+/** Which of the five sections moved since a pin, in the pin's own terms. An
+ * empty list is a node whose read text is what the survey read. */
+export function movedSections(pinned, now) {
+  if (!pinned || typeof pinned !== "object") return [];
+  return SECTION_HASH_KEYS.filter((k) => typeof pinned[k] === "string" && pinned[k] !== now[k]);
+}
+
+/**
+ * The judged set: "every node at the review or the ruling stage whose
+ * recommendation has moved past its survey pin or that no survey has read"
+ * -- which is `surveyJudges`, unchanged -- "together with every node whose
+ * read text differs from the hash the last survey wrote on it".
+ *
+ * The second limb carries no stage: a node the survey read and whose text
+ * has since moved is judged again wherever it stands, because the silence
+ * of the earlier reading was about text that is no longer there. It can
+ * only fire on a node carrying the five hashes, so it is inert until the
+ * survey block records them.
+ *
+ * @returns {{judged: object[], reasons: Map<string, string>}}
+ */
+export function judgedSet(graph) {
+  const words = graph?.words ?? null;
+  const owed = new Set(surveyJudges(graph).map((n) => n.id));
+  const judged = [];
+  const reasons = new Map();
+  for (const node of graph?.nodes ?? []) {
+    if (owed.has(node.id)) {
+      const pinned = node?.review?.survey ?? null;
+      reasons.set(node.id, pinned === null
+        ? "no survey has read it"
+        : "its recommendation has moved past its survey pin");
+      judged.push(node);
+      continue;
+    }
+    const pinned = node?.review?.survey?.text ?? null;
+    if (pinned === null || pinned === undefined) continue;
+    const moved = movedSections(pinned, sectionHashes(node, words));
+    if (moved.length === 0) continue;
+    reasons.set(node.id, `its read text moved since the survey pinned it: ${moved.join(", ")}`);
+    judged.push(node);
+  }
+  return { judged, reasons };
+}
+
+// ------------------------------------------------------- candidate pairs
+
+const pairId = (a, b) => (a < b ? `${a}\t${b}` : `${b}\t${a}`);
+
+function addPair(map, a, b, key) {
+  if (a === b) return;
+  const id = pairId(a, b);
+  let entry = map.get(id);
+  if (!entry) {
+    entry = { a: a < b ? a : b, b: a < b ? b : a, keys: [] };
+    map.set(id, entry);
+  }
+  if (!entry.keys.includes(key)) entry.keys.push(key);
+}
+
+function pairsAmong(map, ids, key) {
+  const list = [...new Set(ids)];
+  for (let i = 0; i < list.length; i += 1) {
+    for (let j = i + 1; j < list.length; j += 1) addPair(map, list[i], list[j], key);
+  }
+}
+
+/** The word shingles of one node's text: `SHINGLE_WORDS` consecutive
+ * lowercased words, as a set, which is what the Jaccard is taken over. */
+export function shingles(text) {
+  const words = String(text).toLowerCase().match(/[a-z0-9']+/g) ?? [];
+  const out = new Set();
+  for (let i = 0; i + SHINGLE_WORDS <= words.length; i += 1) {
+    out.add(words.slice(i, i + SHINGLE_WORDS).join(" "));
+  }
+  return out;
+}
+
+export function jaccard(a, b) {
+  if (a.size === 0 || b.size === 0) return 0;
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+  let shared = 0;
+  for (const s of small) if (large.has(s)) shared += 1;
+  return shared / (a.size + b.size - shared);
+}
+
+/**
+ * Every candidate pair the cheap keys nominate, each with the keys that
+ * nominated it: a defined term shared, an entry of the author's words
+ * referenced by options on both, a citation either way in prose or in
+ * `depends`, a shared parent, and near-duplicate resemblance.
+ *
+ * "A key narrows attention and never the corpus": this list orders the
+ * reading and does not partition the brief, and every node the brief
+ * carries stays readable whether a key reached it or not.
+ *
+ * @param {object} graph
+ * @param {{concordance?: object}} [options] - a concordance already
+ *   computed (the tier has one), to save the second walk.
+ * @returns {Array<{a: string, b: string, keys: string[]}>}
+ */
+export function candidatePairs(graph, { concordance: conc = null } = {}) {
+  const nodes = graph?.nodes ?? [];
+  const ids = new Set(nodes.map((n) => n.id));
+  const map = new Map();
+
+  // a defined term shared
+  const terms = (conc ?? concordance(graph)).terms;
+  for (const entry of terms) {
+    pairsAmong(map, [entry.defines, ...entry.users.map((u) => u.node)], `term:${entry.term}`);
+  }
+
+  // an entry of the author's words referenced by options on both
+  const byWord = new Map();
+  for (const node of nodes) {
+    for (const w of nodeWords(node, graph?.words ?? null)) {
+      if (!byWord.has(w.address)) byWord.set(w.address, new Set());
+      byWord.get(w.address).add(node.id);
+    }
+  }
+  for (const [address, users] of byWord) pairsAmong(map, [...users], `words:${address}`);
+
+  // a shared parent
+  const byParent = new Map();
+  for (const node of nodes) {
+    for (const parent of node.under ?? []) {
+      if (!byParent.has(parent)) byParent.set(parent, new Set());
+      byParent.get(parent).add(node.id);
+    }
+  }
+  for (const [parent, kin] of byParent) pairsAmong(map, [...kin], `parent:${parent}`);
+
+  // a citation either way, in prose or in `depends`
+  const texts = new Map(nodes.map((n) => [n.id, nodeText(n)]));
+  for (const node of nodes) {
+    for (const d of node.depends ?? []) {
+      if (ids.has(d.id)) addPair(map, node.id, d.id, "depends");
+    }
+    const text = texts.get(node.id) ?? "";
+    for (const other of nodes) {
+      if (other.id === node.id) continue;
+      if (namesNode(text, other)) addPair(map, node.id, other.id, "cites");
+    }
+  }
+
+  // near-duplicate resemblance
+  const shingled = nodes.map((n) => ({ id: n.id, set: shingles(texts.get(n.id) ?? "") }));
+  for (let i = 0; i < shingled.length; i += 1) {
+    for (let j = i + 1; j < shingled.length; j += 1) {
+      const score = jaccard(shingled[i].set, shingled[j].set);
+      if (score >= JACCARD_THRESHOLD) {
+        addPair(map, shingled[i].id, shingled[j].id, `jaccard:${score.toFixed(2)}`);
+      }
+    }
+  }
+
+  const out = [...map.values()];
+  out.sort((x, y) => (x.a < y.a ? -1 : x.a > y.a ? 1 : x.b < y.b ? -1 : x.b > y.b ? 1 : 0));
+  return out;
+}
+
+// ------------------------------------------------- the cut, and the probe
+
+/**
+ * Whether one earlier survey read these two nodes together. The pairs a
+ * survey read are what it leaves on each node it touched
+ * (`review.survey.pairs`), so that is read first; where a node carries none
+ * -- every node of the record on 2026-09-07, the survey block being `date`
+ * and `of` alone -- two nodes pinned by the same survey date were in the
+ * same survey's one context and were read together, which is the weaker
+ * fact the record can still tell today.
+ */
+export function readTogether(a, b) {
+  const pairsOf = (node) => node?.review?.survey?.pairs ?? null;
+  const names = (list, id) => (list ?? []).some((p) => (
+    typeof p === "string" ? p === id : (p?.node === id || p?.with === id)
+  ));
+  if (pairsOf(a) !== null || pairsOf(b) !== null) {
+    return names(pairsOf(a), b.id) || names(pairsOf(b), a.id);
+  }
+  const da = a?.review?.survey?.date ?? null;
+  const db = b?.review?.survey?.date ?? null;
+  return da !== null && da === db;
+}
+
+/**
+ * The cut: "a pair both of whose members are unchanged since a survey read
+ * them together is not compared. The frozen set is everything so struck."
+ * `whole` freezes nothing, which is what a whole survey is.
+ */
+export function cutPairs(pairs, { byId, judgedIds, whole = false }) {
+  if (whole) return { live: pairs, frozen: [] };
+  const live = [];
+  const frozen = [];
+  for (const pair of pairs) {
+    const a = byId.get(pair.a);
+    const b = byId.get(pair.b);
+    const unchanged = a && b && !judgedIds.has(pair.a) && !judgedIds.has(pair.b);
+    if (unchanged && readTogether(a, b)) frozen.push(pair);
+    else live.push(pair);
+  }
+  return { live, frozen };
+}
+
+/** A 32-bit seed from the run's own two facts, the date and the graph
+ * commit, so that the draw is reproducible from what the brief already
+ * records and the seed is not a number out of nowhere. */
+export function probeSeed(date, commit) {
+  return parseInt(sha256(`${date} ${commit ?? "none"}`).slice(0, 8), 16) >>> 0;
+}
+
+/** mulberry32: a seeded generator small enough to read, which is what the
+ * answer asks for -- "drawn by a seeded generator whose seed the run
+ * records". */
+export function seededRandom(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * The drift probe: "a random sample of one in twenty of the frozen pairs
+ * and never fewer than ten", drawn on the seed, and the whole frozen set
+ * where it holds fewer than ten pairs.
+ */
+export function drawProbe(frozen, seed) {
+  const want = Math.max(PROBE_FLOOR, Math.ceil(frozen.length / PROBE_DENOMINATOR));
+  if (frozen.length <= want) return [...frozen];
+  const random = seededRandom(seed);
+  const pool = [...frozen];
+  const out = [];
+  for (let i = 0; i < want; i += 1) {
+    const k = i + Math.floor(random() * (pool.length - i));
+    const swap = pool[i];
+    pool[i] = pool[k];
+    pool[k] = swap;
+    out.push(pool[i]);
+  }
+  out.sort((x, y) => (x.a < y.a ? -1 : x.a > y.a ? 1 : x.b < y.b ? -1 : x.b > y.b ? 1 : 0));
+  return out;
+}
+
+// ------------------------------------------------------- the two backstops
+
+function daysBetween(fromIso, toIso) {
+  const from = Date.parse(`${fromIso}T00:00:00Z`);
+  const to = Date.parse(`${toIso}T00:00:00Z`);
+  if (Number.isNaN(from) || Number.isNaN(to)) return Infinity;
+  return Math.round((to - from) / 86400000);
+}
+
+/**
+ * Whether this survey must run whole, and why.
+ *
+ * Three conditions, all of them the answer's: a whole survey "runs after
+ * every fourth delta survey, at least once in any thirty days, and
+ * unconditionally after any amendment to the validations, to what a reading
+ * is given, or to the tier".
+ *
+ * The third is a flag and not a derivation, and deliberately: the record
+ * cannot detect a validations amendment mechanically. The validations are
+ * prose in `frontier-consistency`'s answer, what a reading is given is
+ * prose in `review-cost`'s, and the tier is code in this repository and a
+ * paragraph in `survey-selection`'s -- three places in two refs, none of
+ * which is marked as "the validations" in a way a generator could hash. A
+ * derivation that hashed those three nodes whole would fire on any
+ * amendment to any part of them, which is a different rule from the one the
+ * answer states and would quietly make every survey whole. So the caller
+ * says so, `--validations-changed`, and the fact that it was said is
+ * recorded in the brief and in the history, where a later reader can check
+ * it against the amendment.
+ *
+ * A history the generator cannot read is unknown and not clean: with no
+ * record of when the last whole survey ran, neither backstop can be
+ * certified, so the survey runs whole.
+ */
+export function wholeDemand(history, { date, validationsChanged = false, forced = false }) {
+  const surveys = Array.isArray(history?.surveys) ? history.surveys : null;
+  if (validationsChanged) {
+    return {
+      whole: true,
+      demanded: true,
+      why: "the caller passed --validations-changed: an amendment to the validations, to what a reading is given, or to the tier invalidates every earlier reading's silence",
+    };
+  }
+  if (surveys === null) {
+    return {
+      whole: true,
+      demanded: true,
+      why: `no survey history at ${SURVEY_HISTORY_FILE}: neither backstop can be certified, so nothing is frozen`,
+    };
+  }
+  const lastWhole = [...surveys].reverse().find((s) => s && s.whole === true) ?? null;
+  if (lastWhole === null) {
+    return {
+      whole: true,
+      demanded: true,
+      why: "no whole survey in the history: the thirty-day backstop has never been met",
+    };
+  }
+  const age = daysBetween(lastWhole.date, date);
+  if (age > WHOLE_AFTER_DAYS) {
+    return {
+      whole: true,
+      demanded: true,
+      why: `the last whole survey was ${lastWhole.date}, ${age} days ago: a whole survey runs at least once in any thirty days`,
+    };
+  }
+  const sinceWhole = surveys.slice(surveys.lastIndexOf(lastWhole) + 1).filter((s) => s && s.whole !== true);
+  if (sinceWhole.length >= WHOLE_AFTER_DELTAS) {
+    return {
+      whole: true,
+      demanded: true,
+      why: `${sinceWhole.length} delta survey(s) have run since the last whole one on ${lastWhole.date}: a whole survey runs after every fourth`,
+    };
+  }
+  return {
+    whole: forced,
+    demanded: false,
+    why: forced
+      ? "the caller passed --whole: nothing is frozen"
+      : `the last whole survey was ${lastWhole.date} (${age} day(s) ago) with ${sinceWhole.length} delta(s) since: both backstops are met, so this survey is a delta`,
+  };
+}
+
+/** The history, or null where there is none to read. A malformed file is
+ * unknown for the same reason a missing one is, and demands a whole survey
+ * rather than being repaired in silence. */
+export async function readSurveyHistory(historyPath) {
+  try {
+    const parsed = JSON.parse(await readFile(historyPath, "utf8"));
+    return Array.isArray(parsed?.surveys) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function appendSurveyHistory(historyPath, history, entry) {
+  const surveys = Array.isArray(history?.surveys) ? [...history.surveys] : [];
+  surveys.push(entry);
+  await writeFile(historyPath, `${JSON.stringify({ surveys }, null, 2)}\n`);
+}
+
+// ------------------------------------------- rendering what the cut left
+
+/**
+ * One judged node, carried once (`survey-selection`: "The judged node is
+ * carried once"): its question, the author's words its options carry, the
+ * one answer that binds it, and, of its answer fact, each option's name,
+ * source, ref and status with the sentence saying what it would answer,
+ * then the resolved content of every other option on that fact.
+ *
+ * What is not here is the point of it. The prose of its facts and the AI's
+ * accumulated support and divergence on its options are struck, because no
+ * validation from the seventh to the sixteenth reads them and
+ * `review-cost`'s rule is that a part no validation reaches is struck
+ * rather than shortened. The account is struck for the reason
+ * `clean-context-review` gives. And the answer appears once: the structured
+ * render of the standing node that `renderWholeNode` puts beside it is the
+ * same text twice, which is exactly the double carriage the answer forbids.
+ *
+ * The heading, the file and the stage line stay: a reading's heading is an
+ * address, and a finding names the node it is written on.
+ */
+export function renderJudgedNode(node, words = null, byId = null) {
+  const parts = [
+    `### ${node.id}`,
+    "",
+    `- File: ${nodeFile(node)}`,
+    `- Question: ${node.question}`,
+    `- Stage: ${node.stage} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | status ${node.status} | class: ${classText(node)}`,
+    `- Depends: ${dependsText(node)} | under: ${(node.under || []).join(", ") || "none"}`,
+  ];
+  const defines = definesText(node);
+  if (defines) parts.push(`- Defines: ${defines}`);
+  const bears = bearsText(node);
+  if (bears) parts.push(`- Bears on (this node is a reading): ${bears}`);
+  parts.push(`- Review state: ${reviewLine(node)}`);
+
+  const carried = carriedOptionName(node);
+  const fact = node.answerFact ?? null;
+  const options = fact ? (fact.options || []) : [];
+
+  parts.push("", "#### The author's words its options carry", "");
+  const said = nodeWords(node, words);
+  if (said.length === 0) {
+    parts.push("(no option on this node references an entry of the ledger of the author's words)");
+  } else {
+    for (const w of said) {
+      parts.push(`- \`${w.option}\` (${w.fact}) ${w.relation} ${w.address}${w.date ? `, ${w.date}` : ""}${w.context ? ` — ${w.context}` : ""}`);
+      const text = w.text ?? "(unresolved: the ledger has no such entry)";
+      for (const line of text.split("\n")) parts.push(`  > ${line}`);
+    }
+  }
+
+  parts.push(
+    "",
+    `#### The one answer that binds${carried ? ` (the resolved content of \`${carried}\`)` : ""}`,
+    "",
+    answerText(node) || "(no answer stands and none is recommended: nothing binds on this node yet)",
+    "",
+    "#### The options on its answer fact",
+    "",
+  );
+  if (options.length === 0) {
+    parts.push("(no answer fact: no decision is recorded on this node yet)");
+  } else {
+    for (const option of options) {
+      const bits = [
+        option.source ? `source ${option.source}` : "no source recorded",
+        option.ref ? `ref ${option.ref}` : "no ref",
+        option.status ? `status ${option.status}` : "no status",
+      ];
+      if (fact.recommends === option.name) bits.push(`recommended, boldness ${fact.boldness}`);
+      if (option.name === carried) bits.push("this is the answer above");
+      if (option.ruling) bits.push(`ruled ${option.ruling.response} on ${option.ruling.date}, pinning ${option.ruling.of}`);
+      parts.push(`- \`${option.name}\` — ${bits.join(", ")}`);
+      const readings = readingsText(option, byId);
+      if (readings) parts.push(`  - Readings bearing on it: ${readings}`);
+      const sentence = optionSentence(option);
+      for (const line of (sentence ?? "(no sentence: this option says nothing about what it would answer)").split("\n")) {
+        parts.push(`  ${line}`);
+      }
+    }
+  }
+
+  parts.push("", "#### The content of every other option on the answer fact", "");
+  const rivals = options.filter((o) => o.name !== carried);
+  if (rivals.length === 0) {
+    parts.push("(no rival: the answer fact carries one option, or none)");
+  } else {
+    for (const option of rivals) {
+      const content = optionContentText(node, ANSWER_FACT, option);
+      parts.push(`##### \`${option.name}\``, "");
+      if (content === null) {
+        parts.push("(this node is in the legacy encoding: the option carries no content of its own, and what it would answer is its sentence above)", "");
+      } else {
+        parts.push("```markdown", content, "```", "");
+      }
+    }
+  }
+
+  return `${parts.join("\n").replace(/\n+$/, "")}\n`;
+}
+
+/** One candidate pair, as the reader is handed it: the two nodes and the
+ * keys that nominated it, "so the reader is told where to look and what to
+ * look for". */
+export function pairLine(pair) {
+  return `- ${pair.a} + ${pair.b} — key(s): ${pair.keys.join("; ")}`;
 }
 
 // ------------------------------------------------------ the frontier survey
@@ -1298,42 +2000,168 @@ export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry
  */
 export function surveyPins({ graph, judged, date, commit, dirty }) {
   const pins = {};
-  for (const n of graph.nodes) pins[n.id] = n.recommendationHash;
-  return { commit, dirty, date, judged: judged.map((n) => n.id), pins };
+  const text = {};
+  for (const n of graph.nodes) {
+    pins[n.id] = n.recommendationHash;
+    // The five section hashes beside the recommendation hash, so the apply
+    // step writes what the survey actually read rather than deriving it
+    // again from a tree that may have moved between the brief and the apply
+    // (`survey-selection`: "the hashes of the five sections its validations
+    // read"). The next survey's delta is taken over these.
+    text[n.id] = sectionHashes(n, graph.words);
+  }
+  return { commit, dirty, date, judged: judged.map((n) => n.id), pins, text };
 }
 
 /**
- * Write the survey's brief and its pins sidecar. The judged set is
- * `surveyJudges` -- every node at the review or ruling stage whose
- * recommendation has moved since the survey last pinned it, and every such
- * node no survey has read -- in the ruling order, carried whole (`## Facts`,
- * `## Rationale`, `## Disposition`, `## Recommendation`, no `## Account`).
+ * Write the survey's brief and its two sidecars.
+ *
+ * The judged set is `judgedSet` -- every node at the review or ruling stage
+ * whose recommendation has moved past its survey pin or that no survey has
+ * read, together with every node whose read text differs from the five
+ * hashes the last survey wrote on it -- in the ruling order, each carried
+ * once (`renderJudgedNode`).
+ *
  * The **neighbourhood** of the judged set (`surveyNeighbourhoodIds`) --
  * everything their ancestry, the reading rules, children, siblings, cited
  * nodes and readings reach -- is carried leanly, by what it answers
- * (`renderNeighbourNode`), in the frontier's order. Every other node is one
- * line, in the frontier's order. No account goes into any of the three.
+ * (`renderNeighbourNode`), in the frontier's order, except for a neighbour
+ * "whose read text has not changed since that survey", which is carried on
+ * one line "because the pair has already been read once". Every other node
+ * is one line, in the frontier's order. No account goes into any of them.
  *
- * @returns {Promise<{briefPath: string, pinsPath: string, outFile: string,
- *   batchCount: number, neighbourhoodCount: number, contextCount: number,
- *   lines: number, bytes: number, commit: string|null, dirty: boolean}>}
+ * Three things happen before any of that, and they are the answer's order:
+ * the mechanical tier runs over the whole graph and refuses the launch on a
+ * finding (`forceTier` bypasses it and stamps the brief); the two backstops
+ * are checked and may demand a whole survey; and the candidate pairs are
+ * nominated and cut, leaving the frozen set and the drift probe drawn from
+ * it on the recorded seed.
+ *
+ * @returns {Promise<object>} the counts the CLI prints, the selection it
+ *   took, and the paths it wrote.
  */
-export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = false }) {
+export async function writeSurveyBrief({
+  rootDir, reviewDir, date = null, dry = false,
+  whole = false, forceTier = false, validationsChanged = false, out = null,
+}) {
   const graph = await readGraph(rootDir);
   const effectiveDate = date ?? todayIsoUtc();
   const { commit, dirty } = graphCommit(rootDir);
 
+  // The tier gates the launch: "no reader is launched while one of them
+  // reports a finding". It runs over the whole graph and not over the judged
+  // set, because a finding on a node the survey merely reads as context is
+  // still a defect the reader would spend its context on.
+  const conc = concordance(graph);
+  const foldable = await loadFoldable();
+  const tierFindings = checkTier(graph, { words: graph.words, foldable, concordance: conc });
+  const notes = tierNotes(graph, { words: graph.words });
+  if (tierFindings.length > 0 && !forceTier) {
+    const shown = tierFindings.slice(0, 20)
+      .map((f) => `  ${f.check}: ${f.node ?? "(graph)"}: ${f.detail}`);
+    const err = new Error(
+      `the mechanical tier reports ${tierFindings.length} finding(s) over ${TIER_CHECKS.length} checks, `
+      + "so no reader is launched: repair the nodes or kick them back.\n"
+      + `${shown.join("\n")}\n`
+      + (tierFindings.length > shown.length ? `  ... and ${tierFindings.length - shown.length} more (node packages/disposition/validate.mjs ${rootDir} --tier)\n` : "")
+      + "Pass --force-tier to write the brief anyway, for diagnosis; the brief then says it was launched over a failing tier.",
+    );
+    err.exitCode = 3;
+    err.tierFindings = tierFindings;
+    throw err;
+  }
+
+  // The two backstops. `--whole` forces a whole survey; the history may
+  // demand one whether the caller asked or not, and the demand is recorded
+  // with its reason so the run says why nothing was frozen.
+  const historyPath = path.join(reviewDir, "survey.history.json");
+  const history = await readSurveyHistory(historyPath);
+  const demand = wholeDemand(history, {
+    date: effectiveDate, validationsChanged, forced: whole,
+  });
+  const isWhole = demand.whole;
+
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   const ordered = frontierOrderIds(graph).map((id) => byId.get(id)).filter(Boolean);
 
-  const judged = [...surveyJudges(graph)].sort(rulingOrderCompare);
+  const { judged: judgedUnordered, reasons } = judgedSet(graph);
+  const judged = [...judgedUnordered].sort(rulingOrderCompare);
   const judgedIds = new Set(judged.map((n) => n.id));
   const neighbourIds = surveyNeighbourhoodIds(graph, judged);
-  const neighbourNodes = ordered.filter((n) => neighbourIds.has(n.id));
+
+  // "a node the judged set reaches but whose read text has not changed since
+  // that survey is carried on one line rather than by what it answers": a
+  // neighbour a survey has already read and that is not judged this round.
+  // A whole survey freezes nothing and carries every neighbour by what it
+  // answers.
+  const reached = ordered.filter((n) => neighbourIds.has(n.id));
+  const unchangedReached = isWhole
+    ? []
+    : reached.filter((n) => (n.review?.survey ?? null) !== null);
+  const unchangedIds = new Set(unchangedReached.map((n) => n.id));
+  const neighbourNodes = reached.filter((n) => !unchangedIds.has(n.id));
   const contextNodes = ordered.filter((n) => !judgedIds.has(n.id) && !neighbourIds.has(n.id));
 
-  const briefPath = path.join(reviewDir, "survey.brief.md");
+  // The pairs, and the cut that leaves the frozen set behind.
+  const pairs = candidatePairs(graph, { concordance: conc });
+  const { live, frozen } = cutPairs(pairs, { byId, judgedIds, whole: isWhole });
+  const seed = probeSeed(effectiveDate, commit);
+  const probe = isWhole ? [] : drawProbe(frozen, seed);
+  const probeIds = new Set(probe.map((p) => `${p.a}\t${p.b}`));
+
+  const briefPath = out ?? path.join(reviewDir, "survey.brief.md");
   const pinsPath = path.join(reviewDir, "survey.pins.json");
+  const selectionPath = path.join(reviewDir, "survey.selection.json");
+
+  const selectionBlock = [
+    "### The selection this survey took, and what it cost",
+    "",
+    `- **This survey is ${isWhole ? "whole" : "a delta"}.** ${demand.why}`,
+    `- The mechanical tier ran ${TIER_CHECKS.length} checks (${TIER_CHECKS.join(", ")}) and reported `
+      + `${tierFindings.length} finding(s)${notes.length > 0 ? `, with ${notes.length} note(s) beside it, gating nothing` : ""}.`
+      + " A clean tier is not a clean frontier: these checks are what a machine can decide, and nothing else.",
+    tierFindings.length > 0
+      ? `- **This brief was launched over a failing tier (\`--force-tier\`), for diagnosis.** ${tierFindings.length} finding(s) stand unrepaired; treat what they name with suspicion.`
+      : null,
+    `- The judged set is ${judged.length} node(s); the neighbourhood carried by what it answers is ${neighbourNodes.length}; `
+      + `${unchangedReached.length} node(s) the judged set reaches are carried on one line, their read text unchanged since a survey read them; `
+      + `${contextNodes.length} node(s) are context.`,
+    `- The keys nominated ${pairs.length} candidate pair(s): ${live.length} are live and listed below, `
+      + `${frozen.length} are frozen (both members unchanged since a survey read them together) and named in \`${SURVEY_SELECTION_FILE}\`.`,
+    isWhole
+      ? "- Nothing is frozen and there is no drift probe: this survey is whole."
+      : `- The drift probe draws ${probe.length} of the ${frozen.length} frozen pair(s), one in ${20} and never fewer than ${10}, on seed \`${seed}\` (mulberry32, seeded from the date and the graph commit). A finding anywhere in the probe forces a whole survey next time: say so in your report.`,
+    "",
+    "The frozen set is named so that what was not read is a fact of this run and not an inference from the generator. A finding on a pair no key nominated is a finding like any other, and is the one worth most: it measures what the keys miss.",
+    "",
+    "### The judged set, in the ruling order",
+    "",
+    judged.length > 0
+      ? judged.map((n) => `${indexLine(n)} | judged because ${reasons.get(n.id) ?? "the survey owes it a reading"}`).join("\n")
+      : "(nothing is judged: every node at the review or ruling stage carries a survey pin on the recommendation it now stands on)",
+  ].filter((line) => line !== null).join("\n");
+
+  const pairsBlock = [
+    "",
+    "",
+    `### The candidate pairs (${live.length} live${isWhole ? "" : `, ${probe.length} of them the drift probe`}), each with the key that nominated it`,
+    "",
+    "A key narrows attention and never the corpus: every node this brief carries stays readable, and this list orders your reading rather than partitioning it. Record the key with any finding it produced, so a key's yield is measurable across surveys.",
+    "",
+    live.length > 0 ? live.map(pairLine).join("\n") : "(no key nominated a live pair this round)",
+    "",
+    probe.length > 0
+      ? `#### The drift probe (${probe.length} frozen pair(s), drawn on seed \`${seed}\`; read them like any other pair)`
+      : null,
+    probe.length > 0 ? "" : null,
+    probe.length > 0 ? probe.map(pairLine).join("\n") : null,
+    "",
+    unchangedReached.length > 0
+      ? `#### Reached but unchanged (${unchangedReached.length} node(s), one line each: a survey has read each of them and its text has not moved since)`
+      : null,
+    unchangedReached.length > 0 ? "" : null,
+    unchangedReached.length > 0 ? unchangedReached.map(contextIndexLine).join("\n") : null,
+  ].filter((line) => line !== null).join("\n");
 
   const template = await readTemplate(SURVEY_TEMPLATE_PATH);
   const withoutNav = fill(template, {
@@ -1342,34 +2170,64 @@ export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = 
     commit: commitText({ commit, dirty }),
     batch_count: String(judged.length),
     neighbourhood_count: String(neighbourNodes.length),
-    context_count: String(contextNodes.length),
-    batch_index: judged.length > 0
-      ? judged.map(indexLine).join("\n")
-      : "(nothing is judged: every node at the review or ruling stage carries a survey pin on the recommendation it now stands on)",
+    context_count: String(contextNodes.length + unchangedReached.length),
+    batch_index: `${selectionBlock}${pairsBlock}`,
     neighbourhood_index: neighbourNodes.length > 0
       ? neighbourNodes.map(contextIndexLine).join("\n")
-      : "(nothing judged has a neighbour outside the judged set)",
+      : "(nothing judged has a neighbour outside the judged set whose text has moved since a survey read it)",
     context_index: contextNodes.length > 0
       ? contextNodes.map(contextIndexLine).join("\n")
       : "(no other node: the judged set and its neighbourhood are the whole graph)",
     batch: judged.length > 0
-      ? judged.map((n) => renderWholeNode(n, { account: false })).join("\n")
+      ? judged.map((n) => renderJudgedNode(n, graph.words, byId)).join("\n")
       : "(nothing is judged: there is no entry to write in `nodes`)",
     neighbourhood: neighbourNodes.length > 0
       ? neighbourNodes.map((n) => renderNeighbourNode(n, null)).join("\n")
-      : "(nothing judged has a neighbour outside the judged set)",
+      : "(nothing judged has a neighbour outside the judged set whose text has moved since a survey read it)",
     out: SURVEY_OUT_FILE,
     pins: SURVEY_PINS_FILE,
   });
   const { text: filled, lines, bytes } = fillNav(withoutNav);
 
+  const selection = {
+    date: effectiveDate,
+    commit,
+    dirty,
+    whole: isWhole,
+    demand,
+    seed,
+    tier: { checks: TIER_CHECKS, findings: tierFindings, notes, forced: forceTier && tierFindings.length > 0 },
+    judged: judged.map((n) => ({ node: n.id, why: reasons.get(n.id) ?? null })),
+    unchangedReached: unchangedReached.map((n) => n.id),
+    pairs: {
+      nominated: pairs.length,
+      live: live.map((p) => ({ ...p, probe: false })),
+      frozen: frozen.map((p) => ({ ...p, probe: probeIds.has(`${p.a}\t${p.b}`) })),
+      probe,
+    },
+  };
+
   const result = {
     briefPath,
     pinsPath,
+    selectionPath,
+    historyPath,
     outFile: SURVEY_OUT_FILE,
     batchCount: judged.length,
     neighbourhoodCount: neighbourNodes.length,
     contextCount: contextNodes.length,
+    unchangedReachedCount: unchangedReached.length,
+    pairCount: pairs.length,
+    livePairCount: live.length,
+    frozenPairCount: frozen.length,
+    probeCount: probe.length,
+    seed,
+    whole: isWhole,
+    wholeDemanded: demand.demanded,
+    wholeWhy: demand.why,
+    tierFindingCount: tierFindings.length,
+    tierNoteCount: notes.length,
+    tierForced: forceTier && tierFindings.length > 0,
     lines,
     bytes,
     commit,
@@ -1378,11 +2236,23 @@ export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = 
   if (dry) return result;
 
   await mkdir(reviewDir, { recursive: true });
+  await mkdir(path.dirname(briefPath), { recursive: true });
   await writeFile(briefPath, filled);
   await writeFile(
     pinsPath,
     `${JSON.stringify(surveyPins({ graph, judged, date: effectiveDate, commit, dirty }), null, 2)}\n`,
   );
+  await writeFile(selectionPath, `${JSON.stringify(selection, null, 2)}\n`);
+  await appendSurveyHistory(historyPath, history, {
+    date: effectiveDate,
+    whole: isWhole,
+    commit,
+    judged: judged.length,
+    frozen: frozen.length,
+    probe: probe.length,
+    seed,
+    validationsChanged,
+  });
   return result;
 }
 
@@ -1414,7 +2284,7 @@ if (isMain) {
           process.stderr.write(`falling back to the draft brief: ${mode.reason}\n`);
         }
         if (mode.mode === "delta") {
-          const r = await writeDeltaBrief({ rootDir, reviewDir, id: opts.node, date: opts.date, dry: opts.dry });
+          const r = await writeDeltaBrief({ rootDir, reviewDir, id: opts.node, date: opts.date, dry: opts.dry, out: opts.out });
           console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
           console.log(`delta: ${opts.node}; ${r.bytes} bytes over ${r.lines} lines`);
           console.log(`the reviewer's output file: ${r.outFile}`);
@@ -1422,7 +2292,7 @@ if (isMain) {
             process.stderr.write(`note: this brief is ${r.bytes} bytes over ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);
           }
         } else {
-          const r = await writeDraftBrief({ rootDir, reviewDir, id: opts.node, date: opts.date, dry: opts.dry });
+          const r = await writeDraftBrief({ rootDir, reviewDir, id: opts.node, date: opts.date, dry: opts.dry, out: opts.out });
           console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
           console.log(`draft: ${opts.node}; ancestry ${r.ancestryCount}, rules ${r.rulesCount}, children ${r.childrenCount}, siblings ${r.siblingCount}, cited ${r.citedCount}, readings ${r.readingsCount}, round ${r.roundCount}, index ${r.indexCount}; ${r.bytes} bytes over ${r.lines} lines`);
           console.log(`the reviewer's output file: ${r.outFile}`);
@@ -1431,10 +2301,18 @@ if (isMain) {
           }
         }
       } else {
-        const r = await writeSurveyBrief({ rootDir, reviewDir, date: opts.date, dry: opts.dry });
+        const r = await writeSurveyBrief({
+          rootDir, reviewDir, date: opts.date, dry: opts.dry,
+          whole: opts.whole, forceTier: opts.forceTier, validationsChanged: opts.validationsChanged,
+          out: opts.out,
+        });
         console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
-        console.log(`survey: ${r.batchCount} node(s) judged; neighbourhood ${r.neighbourhoodCount} node(s); context: ${r.contextCount} node(s); ${r.bytes} bytes over ${r.lines} lines; graph commit ${commitText({ commit: r.commit, dirty: r.dirty })}`);
+        console.log(`survey: ${r.batchCount} node(s) judged; neighbourhood ${r.neighbourhoodCount} node(s); reached but unchanged, one line each: ${r.unchangedReachedCount}; context: ${r.contextCount} node(s); ${r.bytes} bytes over ${r.lines} lines; graph commit ${commitText({ commit: r.commit, dirty: r.dirty })}`);
+        console.log(`tier: ${r.tierFindingCount} finding(s) over ${TIER_CHECKS.length} checks, ${r.tierNoteCount} note(s)${r.tierForced ? " -- LAUNCHED OVER A FAILING TIER (--force-tier)" : ""}`);
+        console.log(`survey: ${r.whole ? "whole" : "delta"}${r.wholeDemanded ? " (demanded)" : ""}: ${r.wholeWhy}`);
+        console.log(`pairs: ${r.pairCount} nominated; ${r.livePairCount} live, ${r.frozenPairCount} frozen, ${r.probeCount} drawn as the drift probe on seed ${r.seed}`);
         console.log(opts.dry ? `the pins sidecar: ${r.pinsPath} (dry run: nothing written)` : `the pins sidecar: ${r.pinsPath}`);
+        console.log(opts.dry ? `the selection sidecar: ${r.selectionPath} (dry run: nothing written)` : `the selection sidecar: ${r.selectionPath}`);
         console.log(`the reviewer's output file: ${r.outFile}`);
         if (r.lines > 4000) {
           process.stderr.write(`note: this brief is ${r.bytes} bytes over ${r.lines} lines; one reviewer may not hold it whole. Say so in the report if the reviewer could not read it all.\n`);

@@ -64,8 +64,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 
-import { readGraph, parseNode, FACT_NAMES } from "@commons.systems/disposition/read.mjs";
-import { graphCommit } from "./brief.mjs";
+import { readGraph, parseNode, FACT_NAMES, REVIEW_SURVEY_KEYS } from "@commons.systems/disposition/read.mjs";
+import { graphCommit, SECTION_HASH_KEYS, movedSections } from "./brief.mjs";
 
 const STAGE_ORDER = ["periagogic", "maieutic", "review", "ruling"];
 // the two stages a reading may send a node back to: the ground, or the draft
@@ -93,8 +93,21 @@ const SECTIONS_AFTER_FACTS = ["Recommendation", "Account"];
 // the sidecar brief.mjs writes beside the survey's brief, and the file this
 // script compares every hash against -- never a hash the reviewer copied.
 const PINS_BASENAME = "survey.pins.json";
+// the second sidecar brief.mjs writes beside the survey's brief: the
+// selection the survey took, including the pairs it actually read (the live
+// pairs and the drift probe). What a survey leaves on a node includes "the
+// pairs read that touch that node, each with the key it was drawn on"
+// (survey-selection), and the next survey's cut is taken over exactly those,
+// so a pair that was frozen and not probed is never recorded as read. The
+// file is optional: a survey applied without it records no pairs and says so.
+const SELECTION_BASENAME = "survey.selection.json";
+// The default condition on which a register entry is discharged, where the
+// reading states none. `tolerated-inconsistency` is read under
+// survey-selection for the register and for this condition: an entry is
+// carried openly with the condition that retires it written beside it.
+const DEFAULT_DISCHARGE = "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it";
 
-const USAGE = "usage: node apply.mjs <json file> --replies <file> [--overrides <file>] [--pins <file>] [--date YYYY-MM-DD] [--dry]";
+const USAGE = "usage: node apply.mjs <json file> --replies <file> [--overrides <file>] [--pins <file>] [--selection <file>] [--date YYYY-MM-DD] [--dry]";
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -106,8 +119,8 @@ function isNonEmptyString(x) {
 
 function parseArgs(argv) {
   const files = [];
-  const opts = { repliesFile: null, overridesFile: null, pinsFile: null, date: null, dry: false };
-  const valueFlags = { "--replies": "repliesFile", "--overrides": "overridesFile", "--pins": "pinsFile", "--date": "date" };
+  const opts = { repliesFile: null, overridesFile: null, pinsFile: null, selectionFile: null, date: null, dry: false };
+  const valueFlags = { "--replies": "repliesFile", "--overrides": "overridesFile", "--pins": "pinsFile", "--selection": "selectionFile", "--date": "date" };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a in valueFlags) {
@@ -348,9 +361,132 @@ function renderReviewBlock({ verdict = null, strength = null, date = null, of = 
     if (against !== null) lines.push(`  against: ${JSON.stringify(against)}`);
   }
   if (survey !== null) {
-    lines.push("  survey:", `    date: ${survey.date}`, `    of: ${hashScalar(survey.of)}`);
+    lines.push("  survey:", ...renderSurveyLines(survey, "    "));
   }
   return lines;
+}
+
+/**
+ * What one survey leaves on one judged node, whole: the six keys
+ * `survey-selection` names. It is built whether or not the reader admits
+ * every key yet -- `renderSurveyLines` writes the ones it does -- so that the
+ * shape the record is owed is in one place and not scattered through the
+ * write step.
+ */
+export function surveyBlock({ date, of, commit = null, text = null, findings = [], pairs = [] }) {
+  return { date, of, commit, text, findings, pairs };
+}
+
+/**
+ * The survey's own block, as `survey-selection` says what a survey leaves on
+ * a node: `date`, the recommendation it pinned (`of`), `commit`, the graph
+ * commit it read; `text`, the hashes of the five sections its validations
+ * read; `findings`, the register of what it left open on the node, each with
+ * the support it rests on and the condition that discharges it; and `pairs`,
+ * the pairs it read that touch this node, each with the key it was drawn on.
+ *
+ * Only the keys the reader admits are written. `read.mjs`'s `surveyOk`
+ * requires the survey block's key set to be exactly `REVIEW_SURVEY_KEYS`
+ * (today `['date', 'of']`), so writing `commit:` now would make every node
+ * this touched unreadable. The whole block is built regardless and filtered
+ * here: when `REVIEW_SURVEY_KEYS` grows, the rest of the block lands with no
+ * further change to this file. Extending that check is the reader's own
+ * unit's, not this one's.
+ */
+export function renderSurveyLines(survey, indent) {
+  const out = [];
+  for (const key of REVIEW_SURVEY_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(survey, key)) continue;
+    const value = survey[key];
+    if (value === null || value === undefined) continue;
+    if (key === "date") out.push(`${indent}date: ${value}`);
+    else if (key === "of" || key === "commit") out.push(`${indent}${key}: ${hashScalar(value)}`);
+    else out.push(...yamlBlock(key, value, indent));
+  }
+  return out;
+}
+
+// A plain-data YAML emitter for the survey block's nested keys (`text`,
+// `findings`, `pairs`). Every string is double-quoted, which is valid YAML
+// for any content and keeps a hash-shaped or date-shaped scalar a string.
+function yamlScalar(value) {
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return JSON.stringify(String(value));
+}
+
+function yamlBlock(key, value, indent) {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return [`${indent}${key}: []`];
+    return [`${indent}${key}:`, ...value.flatMap((item) => yamlItem(item, `${indent}  `))];
+  }
+  if (value !== null && typeof value === "object") {
+    const keys = Object.keys(value);
+    if (keys.length === 0) return [`${indent}${key}: {}`];
+    return [`${indent}${key}:`, ...keys.flatMap((k) => yamlBlock(k, value[k], `${indent}  `))];
+  }
+  return [`${indent}${key}: ${yamlScalar(value)}`];
+}
+
+function yamlItem(item, indent) {
+  if (item !== null && typeof item === "object" && !Array.isArray(item)) {
+    const keys = Object.keys(item);
+    if (keys.length === 0) return [`${indent}- {}`];
+    const [first, ...rest] = keys;
+    const firstLines = yamlBlock(first, item[first], indent);
+    return [
+      `${indent}- ${firstLines[0].slice(indent.length)}`,
+      ...firstLines.slice(1).map((l) => `  ${l}`),
+      ...rest.flatMap((k) => yamlBlock(k, item[k], `${indent}  `)),
+    ];
+  }
+  return [`${indent}- ${yamlScalar(item)}`];
+}
+
+/**
+ * The register of findings one survey leaves open on one judged node, as
+ * `survey-selection` describes it: each finding with the support it rests on
+ * and the condition on which it is discharged, classified against the
+ * register the last survey left there. "A finding whose support is unmoved is
+ * carried forward and reported as standing rather than as new; a finding one
+ * of whose supports moved is re-derived; a finding not in the register is
+ * new."
+ *
+ * The register is taken over the frontier findings this survey records on the
+ * node, which are what it leaves open: the node entry's own reading is the
+ * survey's account of the node and is closed by being written, and any
+ * proposal it makes reaches the record as a frontier finding or as an option.
+ *
+ * A finding's support is which of the five sections it rests on. A reading
+ * may name them (`supports`, filtered to the five); where it names none the
+ * support is all five, which is the conservative reading and the only sound
+ * one -- a finding whose support is unstated must be re-derived on any
+ * change, because the record cannot tell what it read.
+ */
+export function surveyRegister({ id, findings, before, text, date }) {
+  const priorEntries = Array.isArray(before && before.findings) ? before.findings : [];
+  const priorText = (before && before.text) || null;
+  // Which of the five sections moved since the last survey read this node.
+  // With no prior text every section counts as moved, which changes nothing:
+  // with no prior register every finding is new anyway.
+  const moved = new Set(priorText ? movedSections(priorText, text || {}) : SECTION_HASH_KEYS);
+  return (findings || []).map((f) => {
+    const named = Array.isArray(f.supports) ? f.supports.filter((s) => SECTION_HASH_KEYS.includes(s)) : [];
+    const rests = named.length > 0 ? named : [...SECTION_HASH_KEYS];
+    const prior = priorEntries.find((e) => e && e.finding === f.finding) || null;
+    const status = prior === null
+      ? "new"
+      : rests.some((s) => moved.has(s)) ? "re-derived" : "standing";
+    return {
+      finding: f.finding,
+      kind: f.kind,
+      status,
+      since: status === "new" ? date : (prior.since || prior.date || date),
+      supports: rests,
+      discharge: isNonEmptyString(f.discharges) ? f.discharges : DEFAULT_DISCHARGE,
+      nodes: [id, ...(f.otherIds || [])],
+    };
+  });
 }
 
 /**
@@ -1010,12 +1146,24 @@ async function planDraft(input, ctx) {
   const survey = (parsedBefore.review && parsedBefore.review.survey) || null;
   const against = input.counter_argument ?? null;
   // The commit this reading read, the same way the survey's sidecar records
-  // one (`graphCommit`, `writeSurveyBrief`) -- except a node's `commit` is a
-  // bare sha1 with no `dirty` flag beside it (review-cost's schema carries
-  // only the one key), so a dirty tree records nothing rather than a commit
-  // that would silently claim to describe text it does not.
-  const { commit: graphCommitSha, dirty: graphDirty } = graphCommit(ctx.rootDir);
-  const commit = graphDirty ? null : graphCommitSha;
+  // one (`graphCommit`, `writeSurveyBrief`): the graph's HEAD, whether or not
+  // the tree was clean when the reading ran.
+  //
+  // It used to be written only over a clean tree, on the ground that a bare
+  // sha1 with no `dirty` flag beside it would claim to describe text it does
+  // not. That reasoning gets the cost backwards. A reading is nearly always
+  // taken over a working tree with the amendment in it, so the condition
+  // dropped the commit exactly when a reading happened, and a review with no
+  // commit is not a review that says "the tree was dirty" -- it is a review
+  // that says nothing, and the record cannot tell the two apart. HEAD is a
+  // true and useful fact either way: it is the last committed state the
+  // reading read from, so it dates the reading and bounds what could have
+  // moved. Whether the tree was clean is a separate fact, and the record
+  // that wants it should carry it as one rather than encode it as an
+  // absence. What the `of` pin attests to is unaffected: the pin, not the
+  // commit, is what says which text was read.
+  const { commit: graphCommitSha } = graphCommit(ctx.rootDir);
+  const commit = graphCommitSha;
   const build = (of) => upsertDialogueFields(appendToAccount(rawTextBefore, subsection), {
     stage: newStage,
     reviewLines: renderReviewBlock({ verdict: input.verdict, strength: input.strength, date: ctx.date, of, against, commit, survey }),
@@ -1085,6 +1233,30 @@ function checkPinsShape(pins, from) {
     throw new Error(`${from}: 'pins' must be an object of node id to recommendation hash`);
   }
   return pins;
+}
+
+/**
+ * The pairs a survey actually read, from its selection sidecar: the live
+ * pairs and the drift probe drawn from the frozen set. A frozen pair that
+ * was not probed was not read, and is deliberately absent -- recording it
+ * would freeze it again next time on a reading that never happened, which is
+ * the one error the frozen set exists to make visible.
+ */
+function readPairs(selection) {
+  const pairs = selection && selection.pairs;
+  if (!pairs || typeof pairs !== "object") return [];
+  const live = Array.isArray(pairs.live) ? pairs.live : [];
+  const probe = Array.isArray(pairs.probe) ? pairs.probe : [];
+  const seen = new Set();
+  const out = [];
+  for (const p of [...live, ...probe]) {
+    if (!p || typeof p !== "object") continue;
+    const key = `${p.a}\t${p.b}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
 }
 
 // ----------------------------------------------------------- survey checks
@@ -1306,6 +1478,12 @@ function collectTouched({ nodes, frontier, probes }) {
         stage: f.stages ? f.stages[id] : undefined,
         otherIds: f.nodes.filter((x) => x !== id),
         options,
+        // Carried for the register a survey leaves on a judged node: which
+        // of the five sections the finding rests on, and the condition that
+        // discharges it. Both are optional; `surveyRegister` supplies the
+        // conservative default where a reading names neither.
+        supports: Array.isArray(f.supports) ? f.supports : null,
+        discharges: isNonEmptyString(f.discharges) ? f.discharges : null,
       });
     }
     for (const a of options) {
@@ -1455,7 +1633,23 @@ async function planTouchedNode(id, t, ctx) {
       accountText: parsedBefore.account,
     }));
     labels.push("Frontier survey");
-    surveyPin = { date: ctx.date, of: ctx.pinOf(id) };
+    surveyPin = surveyBlock({
+      date: ctx.date,
+      of: ctx.pinOf(id),
+      commit: ctx.surveyCommit,
+      text: ctx.textOf(id),
+      findings: surveyRegister({
+        id,
+        findings: t.findings,
+        before: parsedBefore.review?.survey ?? null,
+        text: ctx.textOf(id),
+        date: ctx.date,
+      }),
+      pairs: ctx.pairsOf(id),
+    });
+    if (ctx.pairsOf(id).length === 0 && ctx.pairsKnown === false) {
+      notes.push(`${id}: the survey's selection sidecar (${SELECTION_BASENAME}) was not beside its pins, so no pairs are recorded on this node; the next survey's cut falls back to the survey date, which freezes more than it should`);
+    }
   }
 
   for (const f of t.findings) {
@@ -1624,7 +1818,7 @@ async function planDivergenceNode(id, entry, ctx, existingPlan) {
  * divergence onto the same plans, refuse (still writing nothing) on any
  * planning problem, and otherwise write every plan and report.
  */
-async function applySurvey({ rootDir, manifest, input, pins, replies, overrides, date, dry }) {
+async function applySurvey({ rootDir, manifest, input, pins, selection = null, replies, overrides, date, dry }) {
   const graph = await readGraph(rootDir);
   const checkProblems = validateSurvey(input, graph, { replies, overrides, pins });
   if (checkProblems.length > 0) {
@@ -1683,7 +1877,30 @@ async function applySurvey({ rootDir, manifest, input, pins, replies, overrides,
     notes.push(`note: the survey names graph commit ${input.commit}, the pins sidecar ${pins.commit}; the sidecar's hashes decide, as they are what this run compared against`);
   }
 
-  const ctx = { rootDir, manifest, replies, overrides, date: effectiveDate, pinOf };
+  // What the survey leaves on each judged node beside its pin: the commit it
+  // read, the five section hashes of the text it read (both from the pins
+  // sidecar, which is what this run compared against, and never re-derived
+  // from a tree that may have moved between the brief and the apply), and the
+  // pairs it actually read that touch that node -- the live pairs and the
+  // drift probe from the selection sidecar, never a frozen pair, since the
+  // next survey's cut is taken over exactly what is recorded here.
+  const surveyCommit = isNonEmptyString(pins.commit) ? pins.commit : null;
+  const textOf = (id) => (pins.text && pins.text[id]) || null;
+  const pairsKnown = selection !== null;
+  const pairsByNode = new Map();
+  for (const p of readPairs(selection)) {
+    for (const [self, other] of [[p.a, p.b], [p.b, p.a]]) {
+      if (!isNonEmptyString(self) || !isNonEmptyString(other)) continue;
+      if (!pairsByNode.has(self)) pairsByNode.set(self, []);
+      pairsByNode.get(self).push({ with: other, keys: Array.isArray(p.keys) ? p.keys : [] });
+    }
+  }
+  const pairsOf = (id) => pairsByNode.get(id) || [];
+
+  const ctx = {
+    rootDir, manifest, replies, overrides, date: effectiveDate, pinOf,
+    surveyCommit, textOf, pairsOf, pairsKnown,
+  };
 
   const touched = collectTouched({ nodes: keptNodes, frontier: keptFrontier, probes: keptProbes });
   const plans = [];
@@ -1767,6 +1984,8 @@ export async function applyReviews({
   input: providedInput = null,
   pins: providedPins = null,
   pinsFile = null,
+  selection: providedSelection = null,
+  selectionFile = null,
   replies = {},
   overrides = {},
   date = null,
@@ -1788,8 +2007,10 @@ export async function applyReviews({
   }
 
   let pins = providedPins;
+  let pinsFrom = null;
   if (pins === null) {
     const from = pinsFile ?? (file === null ? null : path.join(path.dirname(path.resolve(file)), PINS_BASENAME));
+    pinsFrom = from;
     if (from === null) {
       throw new Error(`the survey is serialized by its pins: give --pins <file>, or put ${PINS_BASENAME} beside the input`);
     }
@@ -1803,7 +2024,24 @@ export async function applyReviews({
     checkPinsShape(pins, "the pins given");
   }
 
-  return applySurvey({ rootDir, manifest, input, pins, replies, overrides, date, dry });
+  // The selection sidecar is optional, and its absence is not an error: a
+  // survey applied without it records no pairs on the nodes it judged, and
+  // says so per node. It is looked for beside the pins, which is where
+  // brief.mjs writes both.
+  let selection = providedSelection;
+  if (selection === null) {
+    const beside = selectionFile
+      ?? (pinsFrom !== null ? path.join(path.dirname(path.resolve(pinsFrom)), SELECTION_BASENAME) : null);
+    if (beside !== null) {
+      try {
+        selection = JSON.parse(await readFile(path.resolve(beside), "utf8"));
+      } catch {
+        selection = null;
+      }
+    }
+  }
+
+  return applySurvey({ rootDir, manifest, input, pins, selection, replies, overrides, date, dry });
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
@@ -1827,6 +2065,7 @@ if (isMain) {
         rootDir,
         file: opts.file,
         pinsFile: opts.pinsFile,
+        selectionFile: opts.selectionFile,
         replies,
         overrides,
         date: opts.date,

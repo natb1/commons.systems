@@ -19,8 +19,10 @@ import {
   chooseMode, nodeDiffSinceCommit, lastCleanContextReviewSection,
   lastAccountSectionOnly, renderNeighbourNode, surveyNeighbourhoodIds,
   frontierFindingSectionsSince,
+  sectionHashes, movedSections, SECTION_HASH_KEYS, judgedSet, candidatePairs,
+  cutPairs, probeSeed, drawProbe, wholeDemand,
 } from "./brief.mjs";
-import { readGraph } from "@commons.systems/disposition/read.mjs";
+import { readGraph, surveyJudges } from "@commons.systems/disposition/read.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "../..");
@@ -103,9 +105,9 @@ function runCliExpectingFailure(args, cwd) {
 
 describe("brief.mjs: the two readings", () => {
   test("parseArgs takes exactly one reading, and refuses neither, both, and an unknown flag", () => {
-    assert.deepEqual(parseArgs(["--node", "x"]), { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: false });
+    assert.deepEqual(parseArgs(["--node", "x"]), { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: false, whole: false, forceTier: false, validationsChanged: false, out: null });
     assert.deepEqual(parseArgs(["--survey", "root", "--date", "2026-09-04", "--dry"]),
-      { node: null, survey: true, rootDir: "root", date: "2026-09-04", dry: true, draft: false });
+      { node: null, survey: true, rootDir: "root", date: "2026-09-04", dry: true, draft: false, whole: false, forceTier: false, validationsChanged: false, out: null });
     assert.throws(() => parseArgs([]), /no reading named/);
     assert.throws(() => parseArgs(["--node", "x", "--survey"]), /one invocation runs one of them/);
     assert.throws(() => parseArgs(["--survey", "--frontier"]), /unknown flag --frontier/);
@@ -114,9 +116,9 @@ describe("brief.mjs: the two readings", () => {
 
   test("--draft forces the draft brief, and refuses beside --survey; --fresh is a deprecated alias", () => {
     assert.deepEqual(parseArgs(["--node", "x", "--draft"]),
-      { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: true });
+      { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: true, whole: false, forceTier: false, validationsChanged: false, out: null });
     assert.deepEqual(parseArgs(["--node", "x", "--fresh"]),
-      { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: true });
+      { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: true, whole: false, forceTier: false, validationsChanged: false, out: null });
     assert.throws(() => parseArgs(["--survey", "--draft"]), /--draft forces the draft brief on a re-reading/);
     assert.throws(() => parseArgs(["--survey", "--fresh"]), /--draft forces the draft brief on a re-reading/);
   });
@@ -226,17 +228,17 @@ describe("writeDraftBrief", () => {
     assert.deepEqual(parts.ancestry.map((n) => n.id), [ANSWERED, REVIEW_GLOBAL],
       "the under chain, then every global-tier node not already in it");
     assert.deepEqual(parts.rules, [], "this fixture graph carries none of the twelve production rule ids");
-    assert.deepEqual(parts.children.map((n) => n.id), [CHILD_AND_READING_OF_REVIEW_LOW, CHILD_OF_REVIEW_LOW],
-      "every node whose 'under' names this node, sorted");
+    assert.deepEqual(parts.children.map((n) => n.id), [CHILD_OF_REVIEW_LOW],
+      "every node whose 'under' names this node, minus the one 'readings' claimed first");
     assert.deepEqual(parts.siblings.map((n) => n.id), [SIBLING], "the node under the same parent");
-    // 'readings' is taken before 'cited' (review-cost: a node whose 'bears'
-    // names this one is otherwise always claimed first by 'cited', since
-    // every option's own rendering quotes the readings that bear on it), so
-    // reading-of-review-low lands in 'readings' now.
-    // child-and-reading-of-review-low bears on the same option too, but it
-    // is already taken by 'children'.
-    assert.deepEqual(parts.readings.map((n) => n.id), [READING_OF_REVIEW_LOW],
-      "the reading bearing on this node, taken before 'cited' gets a chance to claim it");
+    // 'readings' is taken first of all the parts (2026-09-07): a reading is
+    // mounted `under` the node it bears on, so 'children' claimed every
+    // reading before this part ever ran and the brief said "no reading bears
+    // on this node" above option lines naming several. Both readers land
+    // here now, in the order `readingIdsOn` reads them off the options.
+    assert.deepEqual([...parts.readings.map((n) => n.id)].sort(),
+      [CHILD_AND_READING_OF_REVIEW_LOW, READING_OF_REVIEW_LOW],
+      "every reading bearing on this node, taken before 'children' and 'cited' can claim it");
     assert.deepEqual(parts.cited.map((n) => n.id), [RULING_A],
       "the node its own text names, minus the reading 'readings' already took");
     assert.deepEqual(parts.round.map((n) => n.id), [REVIEW_SETTLES, REVIEW_A, REVIEW_B],
@@ -250,10 +252,10 @@ describe("writeDraftBrief", () => {
     const result = await writeDraftBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-04" });
     assert.equal(result.ancestryCount, 2);
     assert.equal(result.rulesCount, 0);
-    assert.equal(result.childrenCount, 2);
+    assert.equal(result.childrenCount, 1);
     assert.equal(result.siblingCount, 1);
     assert.equal(result.citedCount, 1);
-    assert.equal(result.readingsCount, 1);
+    assert.equal(result.readingsCount, 2);
     assert.equal(result.roundCount, 3);
     assert.equal(result.indexCount, graph.nodes.length - takenIds.length);
 
@@ -270,13 +272,15 @@ describe("writeDraftBrief", () => {
 
     assert.ok(ancestry.includes(`### ${ANSWERED}`) && ancestry.includes(`### ${REVIEW_GLOBAL}`));
     assert.ok(rules.includes("none of the twelve rule nodes are in this graph"), "the fallback text: no production rule ids here");
-    assert.ok(children.includes(`### ${CHILD_OF_REVIEW_LOW}`) && children.includes(`### ${CHILD_AND_READING_OF_REVIEW_LOW}`));
+    assert.ok(children.includes(`### ${CHILD_OF_REVIEW_LOW}`));
+    assert.ok(!children.includes(`### ${CHILD_AND_READING_OF_REVIEW_LOW}`), "a child that is also a reading is carried in 'readings'");
     assert.ok(!index.includes(CHILD_OF_REVIEW_LOW), "a child is carried whole above, not repeated in the index");
     assert.ok(siblings.includes(`### ${SIBLING}`));
     assert.ok(cited.includes(`### ${RULING_A}`));
     assert.ok(cited.includes("Answered whole: one node, one question, one answer."), "a cited node's now-recommended answer is carried");
     assert.ok(!cited.includes(`### ${READING_OF_REVIEW_LOW}`), "the reading is no longer in 'cited': 'readings' claims it first");
     assert.ok(readings.includes(`### ${READING_OF_REVIEW_LOW}`), "the reading is carried in its own part now");
+    assert.ok(readings.includes(`### ${CHILD_AND_READING_OF_REVIEW_LOW}`), "and so is the reading that is also a child, which 'children' used to swallow");
     assert.ok(round.includes(REVIEW_SETTLES) && round.includes("now recommends:"), "the round names the drafts that moved and what they now recommend");
     assert.ok(!round.includes(`### ${REVIEW_SETTLES}`), "the round is pointers, never a whole node");
     for (const id of [PERIAGOGIC_NODE, MAIEUTIC_NODE, SURVEY_PINNED]) {
@@ -285,19 +289,19 @@ describe("writeDraftBrief", () => {
     assert.ok(!index.includes("#### Other options on its answer"), "the index is one line a node, not the standing answer and its options");
   });
 
-  test("a node claimed by an earlier part is never duplicated in a later one: a node both under this node and a reading of it lands only in 'children'", async () => {
+  test("a node claimed by an earlier part is never duplicated in a later one: a node both under this node and a reading of it lands only in 'readings'", async () => {
     const rootDir = await freshFrontierFixture("draft-dedup-");
     const reviewDir = path.join(rootDir, "_review");
     const graph = await readGraph(rootDir);
     const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
     const parts = draftNeighbourhood(graph, node);
 
-    assert.ok(parts.children.some((n) => n.id === CHILD_AND_READING_OF_REVIEW_LOW),
-      "it is under review-low, so 'children' claims it first");
+    assert.ok(parts.readings.some((n) => n.id === CHILD_AND_READING_OF_REVIEW_LOW),
+      "it bears on review-low, and 'readings' is taken first, so it is carried as a reading");
     assert.ok(!parts.cited.some((n) => n.id === CHILD_AND_READING_OF_REVIEW_LOW),
       "not repeated in 'cited', though its 'Readings bearing on it' line names it too");
-    assert.ok(!parts.readings.some((n) => n.id === CHILD_AND_READING_OF_REVIEW_LOW),
-      "not repeated in 'readings' either, though it carries a 'bears' entry naming this node");
+    assert.ok(!parts.children.some((n) => n.id === CHILD_AND_READING_OF_REVIEW_LOW),
+      "not repeated in 'children' either, though its 'under' names this node");
     assert.ok(!parts.index.some((n) => n.id === CHILD_AND_READING_OF_REVIEW_LOW),
       "and not repeated in the index");
 
@@ -311,7 +315,7 @@ describe("writeDraftBrief", () => {
     // What must hold is that the node is carried *whole* -- a '### <id>'
     // heading -- exactly once, and that is in 'children'.
     const headingOccurrences = [...brief.matchAll(new RegExp(`^### ${CHILD_AND_READING_OF_REVIEW_LOW.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "gm"))].length;
-    assert.equal(headingOccurrences, 1, "the node is carried whole exactly once in the whole brief: once, in 'children'");
+    assert.equal(headingOccurrences, 1, "the node is carried whole exactly once in the whole brief: once, in 'readings'");
     assert.ok(!brief.includes(`- ${CHILD_AND_READING_OF_REVIEW_LOW} | `), "and never as an index pointer line");
   });
 
@@ -523,7 +527,7 @@ describe("writeDraftBrief", () => {
     const dry = runCli(["--node", REVIEW_LOW, rootDir, "--date", "2026-09-04", "--dry"], cwd);
     assert.doesNotMatch(dry, /model/i, "the script prints no model: it computes none");
     assert.match(dry, /\(dry run: nothing written\)/);
-    assert.match(dry, /draft: clean-context-review\.test\/main\/review-low; ancestry 2, rules 0, children 2, siblings 1, cited 1, readings 1, round 3, index \d+; \d+ bytes over \d+ lines/);
+    assert.match(dry, /draft: clean-context-review\.test\/main\/review-low; ancestry 2, rules 0, children 1, siblings 1, cited 1, readings 2, round 3, index \d+; \d+ bytes over \d+ lines/);
     assert.match(dry, /the reviewer's output file: tmp\/review\/draft-review-low\.json/);
     await assert.rejects(readFile(path.join(cwd, "tmp/review/draft-review-low.brief.md")), { code: "ENOENT" });
 
@@ -623,7 +627,7 @@ describe("writeSurveyBrief", () => {
     assert.equal(result.pinsPath, path.join(reviewDir, "survey.pins.json"));
     const pins = JSON.parse(await readFile(result.pinsPath, "utf8"));
 
-    assert.deepEqual(Object.keys(pins).sort(), ["commit", "date", "dirty", "judged", "pins"]);
+    assert.deepEqual(Object.keys(pins).sort(), ["commit", "date", "dirty", "judged", "pins", "text"]);
     assert.equal(pins.date, "2026-09-04");
     // the fixture copy is not a git checkout, so there is no commit to name
     assert.equal(pins.commit, null);
@@ -655,7 +659,11 @@ describe("writeSurveyBrief", () => {
     const cwd = path.dirname(rootDir);
     const dry = runCli(["--survey", rootDir, "--date", "2026-09-04", "--dry"], cwd);
     assert.doesNotMatch(dry, /model/i, "the script prints no model: it computes none");
-    assert.match(dry, /survey: 6 node\(s\) judged; neighbourhood 5 node\(s\); context: 3 node\(s\); \d+ bytes over \d+ lines; graph commit \(unknown/);
+    assert.match(dry, /survey: 6 node\(s\) judged; neighbourhood 5 node\(s\); reached but unchanged, one line each: \d+; context: 3 node\(s\); \d+ bytes over \d+ lines; graph commit \(unknown/);
+    assert.match(dry, /tier: 0 finding\(s\) over 8 checks, 0 note\(s\)/, "the run always says which tier ran and what it found");
+    assert.match(dry, /survey: whole \(demanded\): no survey history/, "with no history neither backstop can be certified, so the survey runs whole");
+    assert.match(dry, /pairs: \d+ nominated; \d+ live, 0 frozen, 0 drawn as the drift probe on seed \d+/);
+    assert.match(dry, /the selection sidecar: .*survey\.selection\.json \(dry run: nothing written\)/);
     assert.match(dry, /the pins sidecar: .*survey\.pins\.json \(dry run: nothing written\)/);
     await assert.rejects(readFile(path.join(cwd, "tmp/review/survey.brief.md")), { code: "ENOENT" });
     await assert.rejects(readFile(path.join(cwd, "tmp/review/survey.pins.json")), { code: "ENOENT" });
@@ -1347,5 +1355,370 @@ describe("CLI: --node derives its mode from the record, prints it, and --draft f
     assert.match(stdout, /^mode: draft \(.*names no commit/m);
     assert.match(stdout, /draft: clean-context-review\.test\/main\/review-low;/, "still writes the draft brief");
     assert.match(stderr, /falling back to the draft brief: .*names no commit/);
+  });
+});
+
+// ------------------------------------------------- the survey's selection
+
+describe("sectionHashes and movedSections: the five sections a delta compares", () => {
+  test("the five keys, each a hash, and two identical nodes hash the same", async () => {
+    const graph = await readGraph(await freshFrontierFixture("hash-"));
+    const node = graph.nodes.find((n) => n.id === REVIEW_A);
+    const hashes = sectionHashes(node, graph.words);
+    assert.deepEqual(Object.keys(hashes), SECTION_HASH_KEYS);
+    for (const key of SECTION_HASH_KEYS) assert.match(hashes[key], /^[0-9a-f]{64}$/);
+    assert.deepEqual(sectionHashes(node, graph.words), hashes, "the hash is of the text and nothing else");
+  });
+
+  test("movedSections names which of the five moved, and nothing where none did", () => {
+    const pinned = { question: "q", answer: "a", options: "o", rivals: "r", words: "w" };
+    assert.deepEqual(movedSections(pinned, pinned), []);
+    assert.deepEqual(movedSections(pinned, { ...pinned, answer: "A", words: "W" }), ["answer", "words"]);
+  });
+
+  test("a key the pin does not carry is not a move: an older pin is read for what it says", () => {
+    assert.deepEqual(movedSections({ question: "q" }, { question: "q", answer: "different" }), []);
+  });
+});
+
+describe("judgedSet", () => {
+  test("carries every node a survey owes a reading, with the reason it was judged", async () => {
+    const graph = await readGraph(await freshFrontierFixture("judged-"));
+    const { judged, reasons } = judgedSet(graph);
+    const owed = new Set(surveyJudges(graph).map((n) => n.id));
+    for (const id of owed) {
+      assert.ok(judged.some((n) => n.id === id), `${id} is owed a reading and is judged`);
+      assert.match(reasons.get(id), /no survey has read it|moved past its survey pin/);
+    }
+    assert.equal(new Set(judged.map((n) => n.id)).size, judged.length, "each node once");
+  });
+
+  test("a node whose read text moved since its survey pinned it is judged, and names which section moved", async () => {
+    const graph = await readGraph(await freshFrontierFixture("judged-text-"));
+    const node = graph.nodes.find((n) => (n.review?.survey ?? null) === null && n.answerFact);
+    // Give it a survey pin that is current on the recommendation and stale on
+    // the text: the delta compares hashes, so this is the one thing that
+    // brings a node back that `surveyJudges` would not.
+    node.review = {
+      ...(node.review ?? { verdict: null, strength: null, date: null, of: null, against: null, commit: null }),
+      survey: {
+        date: "2026-09-01",
+        of: node.recommendationHash,
+        text: { ...sectionHashes(node, graph.words), answer: "0".repeat(64) },
+      },
+    };
+    const { judged, reasons } = judgedSet(graph);
+    assert.ok(judged.some((n) => n.id === node.id));
+    assert.match(reasons.get(node.id), /read text moved since the survey pinned it: answer/);
+  });
+
+  test("a node whose text is exactly what the survey pinned is not judged again", async () => {
+    const graph = await readGraph(await freshFrontierFixture("judged-unchanged-"));
+    const node = graph.nodes.find((n) => (n.review?.survey ?? null) === null && n.answerFact);
+    node.review = {
+      ...(node.review ?? {}),
+      survey: { date: "2026-09-01", of: node.recommendationHash, text: sectionHashes(node, graph.words) },
+    };
+    const { judged } = judgedSet(graph);
+    assert.equal(judged.some((n) => n.id === node.id), false);
+  });
+});
+
+describe("candidatePairs: the five keys, each nominating on its own", () => {
+  const bare = (id, extra = {}) => ({
+    id, question: `What is ${id}?`, under: [], depends: [], cites: [], bears: [],
+    defines: [], facts: [], stage: null, review: null, account: null,
+    recommendationHash: "a".repeat(40), ...extra,
+  });
+  const keysOf = (pairs, a, b) => (pairs.find((p) => p.a === a && p.b === b) ?? { keys: [] }).keys;
+
+  test("a shared defined term", () => {
+    const pairs = candidatePairs({ nodes: [
+      bare("g/def", { defines: ["judged set"] }),
+      bare("g/x", { answer: "The judged set is read." }),
+      bare("g/y", { answer: "A judged set again." }),
+    ] });
+    assert.ok(keysOf(pairs, "g/def", "g/x").includes("term:judged set"));
+    assert.ok(keysOf(pairs, "g/x", "g/y").includes("term:judged set"), "two users of one term are a pair too");
+  });
+
+  test("a shared entry of the author's words", () => {
+    const withRef = (id) => bare(id, {
+      facts: [{ name: "answer", options: [{ name: "x", supports: ["words/2026-09-05/1"] }] }],
+    });
+    const words = new Map([["words/2026-09-05/1", { address: "words/2026-09-05/1", text: "said" }]]);
+    const pairs = candidatePairs({ nodes: [withRef("g/a"), withRef("g/b")], words });
+    assert.ok(keysOf(pairs, "g/a", "g/b").includes("words:words/2026-09-05/1"));
+  });
+
+  test("a shared parent", () => {
+    const pairs = candidatePairs({ nodes: [
+      bare("g/p"), bare("g/a", { under: ["g/p"] }), bare("g/b", { under: ["g/p"] }),
+    ] });
+    assert.ok(keysOf(pairs, "g/a", "g/b").includes("parent:g/p"));
+  });
+
+  test("a citation either way, in `depends` or in prose", () => {
+    const pairs = candidatePairs({ nodes: [
+      bare("g/t", { question: "What is the target?" }),
+      bare("g/d", { depends: [{ id: "g/t", option: null }] }),
+      bare("g/p", { answer: "As `g/t` says." }),
+    ] });
+    assert.ok(keysOf(pairs, "g/d", "g/t").includes("depends"));
+    assert.ok(keysOf(pairs, "g/p", "g/t").includes("cites"));
+  });
+
+  test("resemblance over word shingles, at or above the threshold and not below it", () => {
+    const long = "the record keeps the author's standing answers and the work is derived from that record rather than from prompts or chat and this sentence is long enough to shingle";
+    const near = `${long} with one clause added at the end`;
+    const far = "a wholly different sentence about nothing this record says anywhere else at all whatever";
+    const pairs = candidatePairs({ nodes: [
+      bare("g/a", { answer: long }), bare("g/b", { answer: near }), bare("g/c", { answer: far }),
+    ] });
+    assert.ok(keysOf(pairs, "g/a", "g/b").some((k) => k.startsWith("jaccard:")));
+    assert.deepEqual(keysOf(pairs, "g/a", "g/c"), []);
+  });
+
+  test("one pair carries every key that nominated it, and each pair appears once", () => {
+    const pairs = candidatePairs({ nodes: [
+      bare("g/p", { defines: ["judged set"] }),
+      bare("g/a", { under: ["g/p"], answer: "The judged set." }),
+      bare("g/b", { under: ["g/p"], answer: "The judged set." }),
+    ] });
+    const keys = keysOf(pairs, "g/a", "g/b");
+    assert.ok(keys.includes("parent:g/p"));
+    assert.ok(keys.includes("term:judged set"));
+    assert.equal(pairs.filter((p) => p.a === "g/a" && p.b === "g/b").length, 1);
+  });
+});
+
+describe("cutPairs, probeSeed and drawProbe", () => {
+  const pinned = (id, date) => ({
+    id, review: { survey: { date, of: "a".repeat(40) } },
+  });
+
+  test("a pair both of whose members are unchanged since a survey read them together is frozen", () => {
+    const a = pinned("g/a", "2026-09-01");
+    const b = pinned("g/b", "2026-09-01");
+    const c = pinned("g/c", "2026-09-02");
+    const byId = new Map([a, b, c].map((n) => [n.id, n]));
+    const pairs = [{ a: "g/a", b: "g/b", keys: ["parent:x"] }, { a: "g/a", b: "g/c", keys: ["parent:x"] }];
+    const { live, frozen } = cutPairs(pairs, { byId, judgedIds: new Set() });
+    assert.deepEqual(frozen.map((p) => p.b), ["g/b"]);
+    assert.deepEqual(live.map((p) => p.b), ["g/c"], "read by no one survey together: live");
+  });
+
+  test("a judged member thaws the pair, and a whole survey freezes nothing", () => {
+    const a = pinned("g/a", "2026-09-01");
+    const b = pinned("g/b", "2026-09-01");
+    const byId = new Map([a, b].map((n) => [n.id, n]));
+    const pairs = [{ a: "g/a", b: "g/b", keys: ["parent:x"] }];
+    assert.equal(cutPairs(pairs, { byId, judgedIds: new Set(["g/a"]) }).frozen.length, 0);
+    assert.equal(cutPairs(pairs, { byId, judgedIds: new Set(), whole: true }).frozen.length, 0);
+    assert.equal(cutPairs(pairs, { byId, judgedIds: new Set(), whole: true }).live.length, 1);
+  });
+
+  test("the pairs a survey recorded on a node decide, where it recorded any", () => {
+    const a = { id: "g/a", review: { survey: { date: "2026-09-01", pairs: [{ with: "g/b", keys: ["parent:x"] }] } } };
+    const b = { id: "g/b", review: { survey: { date: "2026-09-02", pairs: [] } } };
+    const c = { id: "g/c", review: { survey: { date: "2026-09-01", pairs: [] } } };
+    const byId = new Map([a, b, c].map((n) => [n.id, n]));
+    const pairs = [{ a: "g/a", b: "g/b", keys: ["k"] }, { a: "g/a", b: "g/c", keys: ["k"] }];
+    const { frozen } = cutPairs(pairs, { byId, judgedIds: new Set() });
+    assert.deepEqual(frozen.map((p) => p.b), ["g/b"], "a recorded pair freezes; a shared date does not, once pairs are recorded");
+  });
+
+  test("the seed is a function of the date and the commit, and the draw is reproducible on it", () => {
+    assert.equal(probeSeed("2026-09-07", "abc"), probeSeed("2026-09-07", "abc"));
+    assert.notEqual(probeSeed("2026-09-07", "abc"), probeSeed("2026-09-08", "abc"));
+    assert.notEqual(probeSeed("2026-09-07", "abc"), probeSeed("2026-09-07", "def"));
+
+    const frozen = Array.from({ length: 400 }, (_, i) => ({ a: `g/a${i}`, b: `g/b${i}`, keys: ["k"] }));
+    const seed = probeSeed("2026-09-07", "abc");
+    assert.deepEqual(drawProbe(frozen, seed), drawProbe(frozen, seed), "same seed, same draw");
+    assert.notDeepEqual(drawProbe(frozen, seed), drawProbe(frozen, seed + 1));
+  });
+
+  test("one in twenty, and never fewer than ten", () => {
+    const frozen = (n) => Array.from({ length: n }, (_, i) => ({ a: `g/a${i}`, b: `g/b${i}`, keys: ["k"] }));
+    assert.equal(drawProbe(frozen(400), 1).length, 20, "one in twenty of four hundred");
+    assert.equal(drawProbe(frozen(100), 1).length, 10, "the floor, not five");
+    assert.equal(drawProbe(frozen(7), 1).length, 7, "fewer frozen than the floor: all of them");
+    assert.equal(drawProbe([], 1).length, 0);
+    const drawn = drawProbe(frozen(400), 1);
+    assert.equal(new Set(drawn.map((p) => p.a)).size, drawn.length, "no pair drawn twice");
+  });
+});
+
+describe("wholeDemand: the two backstops and the two overrides", () => {
+  const s = (date, whole) => ({ date, whole });
+
+  test("no history at all demands a whole survey", () => {
+    const d = wholeDemand(null, { date: "2026-09-07" });
+    assert.equal(d.whole, true);
+    assert.equal(d.demanded, true);
+    assert.match(d.why, /no survey history/);
+  });
+
+  test("four deltas since the last whole survey demand one", () => {
+    const history = { surveys: [s("2026-09-01", true), s("2026-09-02"), s("2026-09-03"), s("2026-09-04")] };
+    assert.equal(wholeDemand(history, { date: "2026-09-05" }).whole, false, "three deltas is not yet four");
+    history.surveys.push(s("2026-09-05"));
+    const d = wholeDemand(history, { date: "2026-09-06" });
+    assert.equal(d.whole, true);
+    assert.match(d.why, /4 delta survey\(s\) have run/);
+  });
+
+  test("a whole survey older than thirty days demands one", () => {
+    const history = { surveys: [s("2026-08-01", true)] };
+    const d = wholeDemand(history, { date: "2026-09-07" });
+    assert.equal(d.whole, true);
+    assert.match(d.why, /at least once in any thirty days/);
+    assert.equal(wholeDemand({ surveys: [s("2026-09-01", true)] }, { date: "2026-09-07" }).whole, false);
+  });
+
+  test("--validations-changed demands one whatever the history says", () => {
+    const d = wholeDemand({ surveys: [s("2026-09-06", true)] }, { date: "2026-09-07", validationsChanged: true });
+    assert.equal(d.whole, true);
+    assert.match(d.why, /--validations-changed/);
+  });
+
+  test("--whole takes one without demanding it: the caller asked, no backstop fired", () => {
+    const d = wholeDemand({ surveys: [s("2026-09-06", true)] }, { date: "2026-09-07", forced: true });
+    assert.equal(d.whole, true);
+    assert.equal(d.demanded, false);
+    assert.match(d.why, /--whole/);
+  });
+});
+
+describe("writeSurveyBrief: the tier gates the launch", () => {
+  /** The fixture, with a duplicated passage written into two of its nodes. */
+  async function withTierFinding(prefix) {
+    const rootDir = await freshFrontierFixture(prefix);
+    const passage = "A paragraph long enough to clear the two hundred byte floor the tier holds, written into two node files of this fixture so that the duplicated-passage check has something to find, and byte-identical in both of them.";
+    for (const id of [REVIEW_A, REVIEW_B]) {
+      const file = path.join(rootDir, "main", `${id.split("/").pop()}.md`);
+      await writeFile(file, `${await readFile(file, "utf8")}\n${passage}\n`);
+    }
+    return rootDir;
+  }
+
+  test("a finding refuses the launch, names the count and the checks, and writes nothing", async () => {
+    const rootDir = await withTierFinding("tier-gate-");
+    const reviewDir = path.join(rootDir, "out");
+    const err = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" }).then(() => null, (e) => e);
+    assert.ok(err !== null, "the tier refuses the launch");
+    assert.equal(err.exitCode, 3);
+    assert.match(err.message, /the mechanical tier reports \d+ finding\(s\) over 8 checks/);
+    assert.match(err.message, /duplicated-passage/);
+    assert.match(err.message, /--force-tier/);
+    await assert.rejects(readFile(path.join(reviewDir, "survey.brief.md"), "utf8"), "nothing written");
+  });
+
+  test("--force-tier writes the brief and stamps it as launched over a failing tier", async () => {
+    const rootDir = await withTierFinding("tier-force-");
+    const reviewDir = path.join(rootDir, "out");
+    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07", forceTier: true });
+    assert.ok(result.tierFindingCount > 0);
+    assert.equal(result.tierForced, true);
+    const brief = await readFile(path.join(reviewDir, "survey.brief.md"), "utf8");
+    assert.match(brief, /launched over a failing tier/);
+    assert.match(brief, /A clean tier is not a clean frontier/);
+  });
+
+  test("a clean tier writes the brief, says how many checks ran, and says a clean tier is not a clean frontier", async () => {
+    const rootDir = await freshFrontierFixture("tier-clean-");
+    const reviewDir = path.join(rootDir, "out");
+    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
+    assert.equal(result.tierFindingCount, 0);
+    const brief = await readFile(path.join(reviewDir, "survey.brief.md"), "utf8");
+    assert.match(brief, /ran 8 checks/);
+    assert.match(brief, /A clean tier is not a clean frontier/);
+    assert.doesNotMatch(brief, /launched over a failing tier/);
+  });
+});
+
+describe("writeSurveyBrief: the selection, the sidecars and --out", () => {
+  test("the brief names the judged set with its reasons, the pairs with their keys, and the frozen set", async () => {
+    const rootDir = await freshFrontierFixture("selection-");
+    const reviewDir = path.join(rootDir, "out");
+    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
+    const brief = await readFile(path.join(reviewDir, "survey.brief.md"), "utf8");
+    assert.match(brief, /### The selection this survey took, and what it cost/);
+    assert.match(brief, /### The judged set, in the ruling order/);
+    assert.match(brief, /judged because /);
+    assert.match(brief, /### The candidate pairs \(\d+ live/);
+    assert.match(brief, /key\(s\): /);
+    assert.equal(result.pairCount, result.livePairCount + result.frozenPairCount);
+  });
+
+  test("the pins sidecar carries the five section hashes of every node, beside its recommendation hash", async () => {
+    const rootDir = await freshFrontierFixture("pins-text-");
+    const reviewDir = path.join(rootDir, "out");
+    await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
+    const pins = JSON.parse(await readFile(path.join(reviewDir, "survey.pins.json"), "utf8"));
+    const graph = await readGraph(rootDir);
+    for (const node of graph.nodes) {
+      assert.deepEqual(Object.keys(pins.text[node.id]), SECTION_HASH_KEYS, node.id);
+      assert.equal(pins.pins[node.id], node.recommendationHash);
+    }
+  });
+
+  test("the selection sidecar names the frozen set, the probe and the seed, so what was not read is a fact of the run", async () => {
+    const rootDir = await freshFrontierFixture("selection-json-");
+    const reviewDir = path.join(rootDir, "out");
+    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
+    const selection = JSON.parse(await readFile(path.join(reviewDir, "survey.selection.json"), "utf8"));
+    assert.equal(selection.date, "2026-09-07");
+    assert.equal(selection.seed, result.seed);
+    assert.equal(selection.pairs.nominated, result.pairCount);
+    assert.equal(selection.pairs.live.length, result.livePairCount);
+    assert.equal(selection.pairs.frozen.length, result.frozenPairCount);
+    assert.deepEqual(selection.tier.checks.length, 8);
+    for (const entry of selection.judged) assert.ok(entry.why, `${entry.node} carries the reason it was judged`);
+  });
+
+  test("the history sidecar is appended, and a second run reads what the first wrote", async () => {
+    const rootDir = await freshFrontierFixture("history-");
+    const reviewDir = path.join(rootDir, "out");
+    const first = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
+    assert.equal(first.whole, true, "no history: the backstop demands a whole survey");
+    const history = JSON.parse(await readFile(path.join(reviewDir, "survey.history.json"), "utf8"));
+    assert.equal(history.surveys.length, 1);
+    assert.equal(history.surveys[0].whole, true);
+
+    const second = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-08" });
+    assert.equal(second.whole, false, "a whole survey ran yesterday: this one is a delta");
+    assert.match(second.wholeWhy, /both backstops are met/);
+    const after2 = JSON.parse(await readFile(path.join(reviewDir, "survey.history.json"), "utf8"));
+    assert.equal(after2.surveys.length, 2);
+  });
+
+  test("--whole freezes nothing and says so", async () => {
+    const rootDir = await freshFrontierFixture("whole-");
+    const reviewDir = path.join(rootDir, "out");
+    await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07" });
+    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-08", whole: true });
+    assert.equal(result.whole, true);
+    assert.equal(result.frozenPairCount, 0);
+    assert.equal(result.probeCount, 0);
+    const brief = await readFile(path.join(reviewDir, "survey.brief.md"), "utf8");
+    assert.match(brief, /Nothing is frozen and there is no drift probe: this survey is whole\./);
+  });
+
+  test("--out writes the brief where the caller asked, and the sidecars beside it", async () => {
+    const rootDir = await freshFrontierFixture("out-");
+    const out = path.join(rootDir, "elsewhere", "my-survey.md");
+    const result = await writeSurveyBrief({ rootDir, reviewDir: path.join(rootDir, "out"), date: "2026-09-07", out });
+    assert.equal(result.briefPath, out);
+    assert.match(await readFile(out, "utf8"), /### The selection this survey took/);
+  });
+
+  test("a dry run writes nothing at all", async () => {
+    const rootDir = await freshFrontierFixture("dry-");
+    const reviewDir = path.join(rootDir, "out");
+    await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07", dry: true });
+    await assert.rejects(readFile(path.join(reviewDir, "survey.brief.md"), "utf8"));
+    await assert.rejects(readFile(path.join(reviewDir, "survey.history.json"), "utf8"));
   });
 });
