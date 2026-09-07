@@ -25,6 +25,12 @@ facts:
         ref: "2026-09-04"
         status: passed
         reason: "it answers the author's purpose by a mechanism their words did not ask for and the repository cannot verify"
+      - name: two-skills-under-the-general-rule
+        source: commons.systems/disposition-graph/unit-skills
+        ref: "2026-09-07"
+      - name: align-survey-renamed-for-the-family
+        source: commons.systems/disposition-graph/unit-skills
+        ref: "2026-09-07"
     recommends: two-skills-one-package
     boldness: moderate
     against: "The two readings share the one decision that matters, what a clean-context reading is, and until the projector writes the skills that decision is guarded by two hand-written files with nothing checking that they still agree; the telemetry motive is the observer's need, whose tradition's remedy is to name the operation and not to refactor the program, so the split bends the design to a limitation of a harness the record does not own."
@@ -178,6 +184,47 @@ words did not ask for and the repository cannot verify: no telemetry
 configuration and no reading of it is in the record, and a design resting on an unverifiable property of an
 instrument the record does not own is not the AI's to recommend over the
 author's stated premise.
+
+#### two-skills-under-the-general-rule
+
+Yes, two skills, because every unit of a sitting is its own skill: the general
+rule is `commons.systems/disposition-graph/unit-skills`, minted under
+`decomposition` on 2026-09-07 from the author's words of that day, and this
+node's answer becomes the application of that rule to the two readings rather
+than a rule of its own — the names, the package and the node-held common text
+staying exactly as `two-skills-one-package` states them, and the ground for the
+split moving from this node's own two-contracts argument to the parent rule
+that carries it for all seven kinds. On the table because the author's words of
+2026-09-07 ask that each subagent's instructions be codified in a skill, which
+is a question about every unit and not about the two readings, and a reader may
+hold that the two readings are the only units that need it and that the general
+question therefore belongs here. Against it: the question the new node asks
+reaches `decomposition`'s list of kinds, which is not below this node, and
+authority only narrows on the way down, so a ruling here could not confer it;
+`node`'s rule that a text answering two questions is two nodes sends it to a
+node of its own, and `probe-or-node`'s four tests each agree. If the author
+rules for this option the new node is pruned and its answer folds into this
+one's, its account and the author's words moving here as `probe-or-node`'s
+independence test requires.
+
+#### align-survey-renamed-for-the-family
+
+The same as `two-skills-one-package` except that the survey's skill is
+`/align-survey-frontier` and not `/align-survey`. Raised by
+`commons.systems/disposition-graph/unit-skills` on 2026-09-07, which names five
+more skills of the family and found under the greenfield lens that from
+scratch every name in it would say its object and no name would be a prefix of
+another: `/align-decompose`, `/align-survey-record`,
+`/align-survey-tradition`, `/align-survey-implementation`, `/align-design`,
+`/align-review`, `/align-survey-frontier`. The incumbent `/align-survey` is the
+one name that does not say its object, and the vocabulary conflict behind it is
+already in the record, `frontier-consistency` defining survey as the reading of
+the frontier while `decomposition` calls three of a sitting's units surveys.
+Against it: the name was fixed by this node's answer on 2026-09-04 and is what
+the record and the telemetry cite; a rename costs both, and the cost is not a
+reason either way under `evaluation`, which is why the option is recorded here
+for the author rather than taken by the child. The child's answer does not
+depend on it and names the incumbent.
 
 ### authority
 
@@ -678,3 +725,30 @@ Findings:
 Strongest counter-argument (strong): The two readings share the one decision that matters, what a clean-context reading is, and until the projector writes the skills that decision is guarded by two hand-written files with nothing checking that they still agree. Worse for the recommendation: the motive for the split is the observer's need to see which reading ran, a limitation of a harness the record does not own, and `commons.systems/disposition-graph/evaluation` strikes exactly that class of argument from the choosing — "an incumbent fact doing the work of a design constraint" is the failure the greenfield lens exists to catch. The convention the `utility-syntax-flag-or-subcommand` reading applies decides the invocation surface and says in its own words that it "grounds no part of" the package question, so the recommendation's second half is unsupported by the reading cited for its first.
 
 The session's reply: Taken on the second half and contested on the first. The `utility-syntax-flag-or-subcommand` reading says in its own words that it grounds no part of the package question, so citing it for the division of the skills is unsupported, and that is a defect in the recommendation's stated ground rather than in its content. On the first half the session does not concede: the observer's need to see which reading ran is a fact about what the author can check, not about the incumbent harness, and `evaluation` strikes arguments from the incumbent's shape and not arguments from what the author can see. That distinction is the one the node must state, and it does not state it.
+
+### The general question moved to a node of its own, 2026-09-07
+
+The author, 2026-09-07, quoted under `## Disposition` above, asked that each
+alignment subagent's instructions be codified in a skill and that either review
+skill be liquidated if it were superseded. Neither is superseded: verified that
+`.claude/skills/` holds exactly the four skills, that
+`.claude/skills/align/SKILL.md` still invokes `/align-review <node id>` at line
+751 and `/align-survey` at line 815 at the same two moments, and that the units
+this sitting launched — ten design units, one periagogic reading, one
+implementation survey and three reconciliation units, all on hand-written
+briefs under `tmp/align/` — are the other units `decomposition` already names.
+Nothing is liquidated by these words.
+
+The words themselves are about every kind of unit and not about the two
+readings, which is this node's whole question, so the general question was
+minted as `commons.systems/disposition-graph/unit-skills` under
+`decomposition`, on `node`'s rule that a text answering two questions is two
+nodes and on `probe-or-node`'s four tests, each applied in that node's
+rationale. This node gains two options with that node as their source: the
+placement the sitting did not take, `two-skills-under-the-general-rule`, so the
+author may rule the question back here; and `align-survey-renamed-for-the-family`,
+raised by the child's greenfield reading of the family of seven names, which is
+this node's to decide because this node fixes the two names. No `depends` entry
+is added, since the child already depends on this node's recommended option and
+a reciprocal entry would put each ruling behind the other. The recommendation
+on this node has not moved and no reading is owed by these two options alone.

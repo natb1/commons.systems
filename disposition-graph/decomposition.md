@@ -64,6 +64,9 @@ facts:
         ref: "2026-09-05"
         status: passed
         reason: "the assignment of each seam to a model is what the rationale calls new, and a seam named without a model leaves each sitting the choice the author asked to be standardized"
+      - name: units-carried-by-their-own-skills
+        source: commons.systems/disposition-graph/unit-skills
+        ref: "2026-09-07"
     recommends: seams-and-split-review
     boldness: moderate
     against: "A per-draft brief carried the index of every standing answer, so a sitting of several questions read several times the tokens of the one batch it replaced, and the author's first-named judge is token efficiency; the design stood on their second, attention, and on timing, and the index was the lever against the cost. The `review-cost` node pulled that lever on 2026-09-05: the index is one line a node and a brief is roughly a third of what it was, so the case against is now the residue, that a sitting still pays a fixed cost of brief and contract per draft where the batch paid it once."
@@ -235,6 +238,32 @@ standardized. Raised by the clean-context reading of 2026-09-05, which found it
 turned down in prose in the reply to the reading before it and never put on the
 fact, where the viable-options node holds that a candidate never silently leaves
 the list.
+
+#### units-carried-by-their-own-skills
+
+The five seams, the units and their order are unchanged, and the answer's
+closing sentence on how it is materialized moves: instead of "This answer is
+materialized by the alignment skill's list of a sitting's units, under the shim
+the growth node declares on that skill", each kind of unit is carried by a
+skill of its own, and the alignment skill keeps the seams, the map from kind to
+skill and the models, while each kind's object, brief, launch and integration
+move into that kind's `SKILL.md`. Raised by
+`commons.systems/disposition-graph/unit-skills`, minted under this node on
+2026-09-07 from the author's words of that day, which asks whether each unit of
+a sitting is its own skill and answers yes. For it: the materialization this
+sentence claims is already the weaker of the two things this node's reading of
+2026-09-05 disclosed about it — the alignment skill still carries a superseded
+escalation trigger, and `growth`'s shim is declared for that node and its
+siblings while this node is its grandchild — so the sentence points at an
+artifact that neither matches this answer nor is covered by the shim it cites;
+seven skills, each a declared shim on the node it projects, replace both
+defects with a declaration that reaches. Against it: the kinds and their models
+are this node's answer, and moving their instructions into seven files puts
+seven hand-written projections of this node's list in the interval
+`hand-written-projection-drift` asks about, where one file stands today. The
+option acts on nothing until the author rules; the child's answer names this
+sentence as what the sitting would amend and does not amend it, since another
+unit is amending this node's fence in the same sitting.
 
 ### authority
 
@@ -450,3 +479,28 @@ Findings:
 
 
 Strongest counter-argument (moderate): The design was priced against a batch whose cost driver, the full index carried per draft, `review-cost` removed on 2026-09-05, so the measurement that decided the split no longer describes either side. What remains is the residue the node states: a sitting of several questions pays a fixed brief-and-contract cost per draft where the batch paid it once — and this survey is that residue realised, an 8,674-line brief for one reading of forty-eight drafts. The author's first-named judge is token efficiency, and the node's own case for the split now rests on attention and timing rather than on the judge the author named first.
+
+### The units' instrument moved to a node of its own, 2026-09-07
+
+The author's words of 2026-09-07, quoted under `## Disposition` above, ask that
+each alignment subagent's instructions be codified in a skill. The question is
+about what carries a unit's instructions, where this node's is about what the
+units are and which model each runs on, so it was minted as
+`commons.systems/disposition-graph/unit-skills` under this node, on `node`'s
+rule that a text answering two questions is two nodes and on `probe-or-node`'s
+four tests. Its recommendation is `a-skill-per-unit-kind`: seven kinds and
+seven skills, `/align-decompose`, `/align-survey-record`,
+`/align-survey-tradition`, `/align-survey-implementation`, `/align-design` and
+the two review skills that stand already, with the periagogic reading collapsed
+into the record and implementation surveys, whose corpora it names, and the
+reconciliation unit left to `/reconcile`, whose contract already carries it.
+
+Two things follow here and neither is written into this node's recommended
+text, which another unit of this sitting is amending. The closing sentence on
+how this answer is materialized would move from the alignment skill's list to
+the seven skills, which is the option `units-carried-by-their-own-skills`
+above. And the divergence the child's design records rather than answers: this
+sitting launched three reconciliation units from the alignment thread on briefs
+of its own rather than through `/reconcile`, where the bite is derived from the
+frontier and not named by a grant; that is `work-loop`'s question and an option
+is owed there.
