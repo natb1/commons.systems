@@ -89,6 +89,9 @@ facts:
       - name: proposal-as-a-state-of-a-ratified-node
         source: commons.systems/disposition-graph/authority
         ref: "2026-09-05"
+      - name: the-dialogue-is-grounding-intent-and-confirmation
+        source: author
+        ref: "2026-09-06"
 
     recommends: boldness-reversed
     boldness: low
@@ -169,6 +172,10 @@ The author, 2026-09-04, revising the disposition on when a recommendation may be
 The author, 2026-09-04, while the wave-one readings were being applied, naming the sitting's final task and granting it:
 
 > the final task for this sitting will be to reconcile the aligment/review/survey skills and alignment artifact against all reviewed (but not yet confirmed) recommendations in the graph. Do not liquidate existing functionality unless it is contradicted by recommended disposition. you have bootstrap authority for this.
+
+The author, 2026-09-06, on what the alignment dialogue is for and what it is not for:
+
+> Record the disposition that alignment dialogue must focus on establishing common grounding (peraigogic) and clarifying ambiguities is author intent (meiutic). use the alignment artifact for confirmation of disposition fact, and otherwise minimize noise about mechanical/encoding concerns.
 
 ## Answer
 
@@ -277,6 +284,33 @@ The standing answer's sentence "a steer enters the node's rationale as a rejecte
 
 The standing answer and the recommended `boldness-reversed` both list what a recorded thing may be, and among them "a proposal when it arose outside alignment". The origin no longer defines the word: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from. The list item becomes a proposal on a ratified node whose recommendation has moved, and the authority node is cited for the state. Raised on commons.systems/disposition-graph/authority, by its clean-context reading of 2026-09-05.
 
+
+#### the-dialogue-is-grounding-intent-and-confirmation
+
+Everything the recommended option says, with the author's words of 2026-09-06
+fixing what each movement is for and what the dialogue may spend the author's
+attention on. The periagogic movement establishes common grounding. The maieutic
+movement clarifies ambiguities in the author's intent. The alignment artifact
+takes the confirmation of a disposition's facts. Everything else the sitting does
+— the readings and what they return, the instruments it runs, the mechanical and
+encoding defects it finds and fixes — is the sitting's own and is not brought to
+the author, and its appearance in a turn addressed to them is noise to be
+minimised rather than thoroughness.
+
+It names the three surfaces exhaustively, which is what makes it a rule and not a
+preference: a thing the sitting wants to tell the author that is not grounding, is
+not a question about their intent, and is not a fact for them to confirm has no
+place to be said. The record already carries the two movements' conduct on this
+node and the artifact's scope on `alignment-page`, as the option
+`page-collects-only-the-confirmation`; what it does not carry is that the three
+together bound what reaches the author at all, and that is what these words add.
+`author-questions` carries the same rule from the other side, as
+`the-sitting-stops-only-on-intent`: a sitting stops for the author only where
+there is a question about their intent.
+
+The evidence is the sitting it was said in, which reported a reading's verdict,
+its findings and the byte cost of a brief to the author and asked them whether to
+run the next one, none of which is grounding, intent, or a fact to confirm.
 ### persistence
 
 The recommendation drops one of this node's two shims: the alignment page, which moves to `commons.systems/disposition-graph/alignment-page` with its declaration date and its liquidation condition intact. The skill shim stays, because this node is still what the alignment skill projects. Confirming it leaves one shim here; denying it leaves the page described in two places, which is what minting the page's own node was for. The two nodes rule together, and `alignment-page` carries the matching decision.

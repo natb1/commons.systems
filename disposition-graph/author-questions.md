@@ -148,6 +148,10 @@ The author, 2026-09-06, in the sitting on `what-an-option-row-carries`, when the
 
 > I'm not sure what "run the reading" means. Are there questions for the author to clarify my intent? This is only reason to stop for meiutic. Otherwise, just correct the mechanical/encoding issues with the record and proceed.
 
+The author, 2026-09-06, on what the alignment dialogue is for and what it is not for:
+
+> Record the disposition that alignment dialogue must focus on establishing common grounding (peraigogic) and clarifying ambiguities is author intent (meiutic). use the alignment artifact for confirmation of disposition fact, and otherwise minimize noise about mechanical/encoding concerns.
+
 ## Answer
 
 In the dialogue state, as `probes`, one list on the node beside `stage`, `review` and `depends`. A probe is a question the AI needs the author to answer before it can recommend, and whose answer is not itself a disposition: it disambiguates what the author meant where the record leaves it open, and when it is answered it binds nothing and stands nowhere. The word is the record's already, used in fourteen nodes when this was drafted on 2026-09-04 and defined in none, and the growth node's periagogic conduct, one probe per turn from the page and not from memory, is where it entered; this answer defines it, extends it to every movement rather than the periagogic one alone, and gives it a shape. One list and not one per fact: an entry names the `fact` it bears on where it bears on one, and names none where it bears on the node's ground. The author's words, a list of the questions needed to disambiguate intention and to make recommendations for each of the facts, admit both readings, and this one is taken because a node at the periagogic stage carries no facts at all, and the periagoge is the first moment the author's words name; a home that cannot hold the first probe it is asked to hold is not the home. What makes the list a list of decisions rather than of decisions repeated is the same rule the parent applies to everything else on a node: a probe is one thing the author must settle, a probe that compounds two is two probes, and a probe whose answer would itself stand as an answer to a question of the record is not a probe at all but a node.
@@ -242,6 +246,13 @@ for the author only where there is a question about the author's intent, which i
 what the maieutic movement is for; everything else — the mechanical and the
 encoding defects of the record, the instruments the sitting runs, the readings
 and what they return — the sitting corrects and proceeds through without asking.
+The author's fuller words of the same day fix the three surfaces the dialogue
+has and no fourth: the periagogic movement establishes common grounding, the
+maieutic clarifies ambiguities in the author's intent, and the alignment artifact
+takes the confirmation of a disposition's facts. `growth` carries that statement
+as `the-dialogue-is-grounding-intent-and-confirmation`, since the conduct of the
+two movements is its answer; what this node adds is the consequence for a probe.
+
 Under this option the probe is not merely the form a question to the author takes
 but the only occasion for one, so a session that has no probe to raise has nothing
 to stop for, and reporting an instrument's state to the author, or offering them a
