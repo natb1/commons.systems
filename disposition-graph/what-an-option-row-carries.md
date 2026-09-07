@@ -104,6 +104,14 @@ The author, 2026-09-07, in the next turn, granting the reconciliation of the ref
 
 > reconciliation of that disposition in included in the bootstrap reconciliation authority for this sitting
 
+The author, 2026-09-07, answering the three calls the session put before them on the revised accumulation strategy: carried here because this node's question is one the answer reaches,
+
+> 1. named-change form legibility tradeoff is acceptable as long as the exact node preview can be mechanically derived (eg. via patch syntax)
+> 2. previously confirmed and standing are just one and the same thing (we can probably just remove reference to "standing" and replace it with "confirmed"
+> 3. All of AI and author rationale and references to tradition are recorded as support and/or divergence for each option. AI response is accumulated, reference to tradition is accumulated, author response is concatenated quotation. AI support and divergence can be recorded for any option. The AI recommendation is the judgement that weighs AI support/divergence for each option.
+>
+> This implies guidance for which quotes from the author need to be retained and which options need to be recorded. We don't need to retain author quotes that neither support or diverge from an option. If a quote from an author expresses support or divergence from an option then that option must be recorded. Any option with support or divergence in tradition must be recorded. If an option is weighed by the AI for any reason including its own internal assessment of viability then that option must be recorded.
+
 ## Answer
 
 A row leads with what the option would answer, in the sentence the record holds

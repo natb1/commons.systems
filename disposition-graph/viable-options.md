@@ -148,6 +148,14 @@ The author, 2026-09-07, in the next turn, granting the reconciliation of the ref
 
 > reconciliation of that disposition in included in the bootstrap reconciliation authority for this sitting
 
+The author, 2026-09-07, answering the three calls the session put before them on the revised accumulation strategy: carried here because this node's question is one the answer reaches,
+
+> 1. named-change form legibility tradeoff is acceptable as long as the exact node preview can be mechanically derived (eg. via patch syntax)
+> 2. previously confirmed and standing are just one and the same thing (we can probably just remove reference to "standing" and replace it with "confirmed"
+> 3. All of AI and author rationale and references to tradition are recorded as support and/or divergence for each option. AI response is accumulated, reference to tradition is accumulated, author response is concatenated quotation. AI support and divergence can be recorded for any option. The AI recommendation is the judgement that weighs AI support/divergence for each option.
+>
+> This implies guidance for which quotes from the author need to be retained and which options need to be recorded. We don't need to retain author quotes that neither support or diverge from an option. If a quote from an author expresses support or divergence from an option then that option must be recorded. Any option with support or divergence in tradition must be recorded. If an option is weighed by the AI for any reason including its own internal assessment of viability then that option must be recorded.
+
 ## Answer
 
 Yes. A node's authority is read off the rulings recorded on its facts, and no stamp is written beside them. Every decision on a node is a fact with a list of viable options, possibly one: the answer, whose options are the candidate answers to the node's question, and the reserved three the dialogue node names, authority, existence, and persistence; any other decision the author would rule on separately is a question and a node under this one. An option carries its name, its source and reference, in prose what it would answer, and in full the text where it would stand as the answer and differs from what stands; the readings that bear on it, each saying whether the tradition supports or contradicts it; and, on the one option of each fact the AI recommends, why and with what boldness. A ruling is the author's act on the option they chose, recorded on it: the response, the date, and a pin of the recommendation it answered. Only the author rules, on the alignment page or in prose, and the AI writes no ruling and no class for itself.
