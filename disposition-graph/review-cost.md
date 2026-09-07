@@ -311,11 +311,11 @@ Raised on `commons.systems/disposition-graph/clean-context-review`, whose recomm
 
 #### the-surveys-unreached-node-is-one-line
 
-Everything `one-answer-a-node-and-one-read` says, with the survey's own graph priced by the same rule: a node the judged set reaches is carried by what it answers, and a node no judged node reaches is the id, the question and the file on one line, on the ground that the validations which read text reach only what the judged set reaches.
+Everything `one-answer-a-node-and-one-read` says, with the survey's own graph priced by this node and its reach rule cited rather than restated: what the survey reads of a node it is not judging is `commons.systems/disposition-graph/frontier-consistency`'s, stated in its validations and conditioned there on the node; this node prices what that costs and states the bound, and restates neither the reach rule nor the one-line class.
 
 Measured on the survey brief of 2026-09-07: 1,202,450 bytes at implementation commit `87e4b24e`, before the cut, of which the eight judged nodes are 233,716 and the hundred and thirty-three context nodes 710,747; 994,467 bytes at implementation commit `cb0e02c6`, after it, which is the shape `packages/clean-context-review/brief.mjs` now writes.
 
-Against it: at a hundred and forty-three nodes neither shape is held whole by one reader, so what the cut buys is a smaller brief and not a brief that fits; and the one-line class rests on an earlier survey having read those nodes, and no survey has yet run.
+Against it: at a hundred and forty-three nodes neither shape is held whole by one reader, so what the cut buys is a smaller brief and not a brief that fits; and the one-line class rests on an earlier survey having read those nodes, which the survey of 2026-09-05 did for every node the record then had and does for none minted since.
 
 Raised on `commons.systems/disposition-graph/frontier-consistency`, whose validations state the inputs, and recorded here because what a reading is given is this node's. The author then rules the placement once rather than meeting the same rule on two nodes.
 
