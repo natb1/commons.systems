@@ -2,6 +2,28 @@
 question: When is an open question a probe, an option, or a node?
 stage: maieutic
 probes:
+  - id: does-the-standing-prune-grant-act-wherever-given
+    asks: >-
+      Does the prune grant the author made standing on 2026-09-06 ("the prune
+      grant is standard disposition") act wherever it was given, in the dialogue
+      or at the node's row, as a standing direction about a class of act, or only
+      for the node it was given about, as what-acts-during-bootstrap's definition
+      of a grant, one named reconciliation of one unanswered node, would have it?
+    fact: answer
+    why: >-
+      The recommended text's interim takes a directed prune on the author's word
+      wherever it was given; two re-readings of 2026-09-07 held that this exceeds
+      a grant's scope under what-acts-during-bootstrap and that the text applies
+      an authority whose standing is unruled, and the cap of two readings sends
+      the surviving finding to the author rather than to a third reading. The
+      option a-standing-direction-acts-by-right on what-acts-during-bootstrap
+      asks the same question from that node's side.
+    discharges: >-
+      The author's answer is recorded as a ruling on that option, or as words
+      here that narrow or keep the interim's scope; the fence is amended to match
+      and read once more.
+    source: review
+    raised: 2026-09-07
   - id: a-delegable-review-finding-question
     asks: >-
       When a review-finding question's response would be a delegation, is it
@@ -763,3 +785,7 @@ On the facts and what they recommend: The diff touches only review/survey frontm
 On the viability of the options: No option is added or struck by this diff, and the authority and existence facts are untouched; the amendment reworks only the grounding clause of the already-recommended option's own text, so the viability of every listed option is unaffected by the diff considered in isolation. The unresolved substantive issue above bears on whether interim-follows-the-authors-word is the soundest choice, but that is a question for the next full reading or the author's ruling, not a change in what options this diff makes viable or not.
 
 Strongest counter-argument (moderate): The amendment can be read as a real repair rather than a relocation: by explicitly disclaiming reliance on the unruled 'a-standing-direction-acts-by-right' option ('rests... on nothing that node confers until the option is ruled') it stops claiming record-conferred authority altogether and instead treats the interim as a bounded, honest description of what one session does on its own account -- the same posture the fact's own `against` and the option's own prose already concede and price in ('honoured on trust', 'the same session that wants the file gone'). Read that way there is no new claim of right, only an accurate label for a stopgap already disclosed elsewhere on the node, and the remaining objection is to the interim's existence (already argued and already priced into its moderate boldness), not to anything this diff newly asserts.
+
+### After the second re-reading, 2026-09-07
+
+The second re-reading of the day kicked the amended fence back again, on the same ground: the interim applies a standing direction wherever it was given while its standing by right is unruled, and the survey's objection to "wherever it was given" survives the re-grounding on the author's words of 2026-09-06. The finding is validated on the main thread as a question the record cannot settle for itself, since it turns on the scope of the author's own standing grant. Under `review-cost`'s cap no third reading runs on this answer: the finding goes to the author as the probe `does-the-standing-prune-grant-act-wherever-given`, and the node waits at the maieutic stage for the answer. The fence stands as amended, its interim resting on the author's words until they say how far those words reach.
