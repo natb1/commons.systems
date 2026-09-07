@@ -1,13 +1,13 @@
 ---
 question: How does the graph grow?
-stage: review
+stage: ruling
 review:
-  verdict: kickback
-  strength: moderate
+  verdict: forward
+  strength: weak
   date: 2026-09-07
   of: 89f4bffabf8e00af74bee0c8b4f32b26581c9f1c
-  commit: 72e1715faca6cfa2f0704c4da7baffad760bcdf6
-  against: "The amendment can be read as fully closing the survey's finding: the fence's third usage and rationale now agree with the queue sentence and with `alignment-order`'s recommended answer, so the substantive contradiction the survey named -- rank in one clause, ruling order in two others -- is gone, and the missing `status`/`reason` on the new option is a bookkeeping gap rather than a reopening of that contradiction; a reader could judge it non-blocking for forwarding to the author's ruling. But this record treats exactly this omission as a defect elsewhere on the very same fact -- six sibling options record their absorption with `status: passed` and a reason, and an earlier reading on this node raised the identical gap as a finding that was then fixed -- so leaving the one new option unmarked is the one inconsistency in a fence otherwise being presented to the author as internally settled."
+  commit: 56df6ed5b3ebb24c5c71164a1189f798877a77d3
+  against: "The option's account prose, left untouched by this diff, still reads \"Adopted into the recommendation on 2026-09-07: the fence's third usage and its rationale now carry it,\" where every sibling option on this fact marked `status: passed` instead closes its prose with \"Passed over ...\" -- exactly the wording the previous reading's suggested edit asked this repair to adopt. The repair carried out only the frontmatter half of that two-part suggested edit and left the account-sentence half undone, so a strict reading of the previous finding is only partly satisfied, even though the substantive defect it named (an option that reads as undecided when the account says it was folded in) is resolved by the added status and reason."
   survey:
     date: 2026-09-07
     of: 99d667c6fd7d8d8d7fb61bd1a5289ac8bb458c66
@@ -990,3 +990,21 @@ The session's reply: Validated on the main thread: the option carried no status 
 ### Repaired after the re-reading, 2026-09-07
 
 The re-reading's one finding, validated on the main thread: the option `third-usage-in-the-ruling-order` carried neither status nor reason where the account says the recommendation absorbed it. The option now carries `status: passed` with the reason the sibling options carry; the recommendation, its pins, and the survey's pin are untouched. The reader's verdict is kickback, and the record's instrument admits no ruling stage on a kickback verdict, so the repaired node returns to review and owes a re-reading whose object is this repair; that the repair moves no pin and the cap of two readings would spare it is recorded on the reconciliation list as the instrument's gap.
+
+### Clean-context re-reading, 2026-09-07, of 89f4bffa (ii)
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `turn-form-to-a-child-and-terms-aligned`.
+
+Findings:
+
+- In `## Facts`, the `answer` fact's option `third-usage-in-the-ruling-order`: the header now reads "passed over -- absorbed by the recommendation, whose third usage and rationale now carry it" (frontmatter `status: passed` / `reason` added by this diff), but the option's own prose paragraph, unchanged by this diff, still ends "Adopted into the recommendation on 2026-09-07: the fence's third usage and its rationale now carry it." Every other option on this fact marked `status: passed` ends its prose with "Passed over ..." (e.g. `queue-in-ruling-order`: "Passed over on 2026-09-07: the recommendation takes it..."; `turn-forms-as-its-own-node`: "Passed over the same day: the recommendation is this option..."), and the previous reading's suggested edit explicitly asked for this: "change its account sentence from 'Adopted into the recommendation on 2026-09-07' to 'Passed over on 2026-09-07' to match the sibling options' wording." The repair applied only the frontmatter half of that suggested edit; the account-sentence half is still open. Non-blocking: the added `status`/`reason` already remove the substantive confusion the previous finding named (the option no longer reads as an ordinary undecided option), and "adopted into the recommendation" and "absorbed by the recommendation" carry the same sense, so this is a residual wording inconsistency rather than a reopened contradiction. Suggested edit: change the option's closing sentence to "Passed over on 2026-09-07: the fence's third usage and its rationale now carry it."
+
+On the facts and what they recommend: The diff touches only the `answer` fact's option list: it adds `status: passed` and `reason: "absorbed by the recommendation, whose third usage and rationale now carry it"` to the previously-unmarked option `third-usage-in-the-ruling-order`. `recommends` (`turn-form-to-a-child-and-terms-aligned`), `boldness` (moderate), and `stands` (`standing`) are unchanged; the `authority` and `persistence` facts are untouched by this diff.
+
+On the viability of the options: Every other option on the answer fact is untouched. The newly-marked option now reads as `passed` (dominated, never the recommendation), matching the record's own vocabulary and the marking convention of its seven sibling options folded into the same recommendation, so no option's viability is left ambiguous by this diff.
+
+Strongest counter-argument (weak): The option's account prose, left untouched by this diff, still reads "Adopted into the recommendation on 2026-09-07: the fence's third usage and its rationale now carry it," where every sibling option on this fact marked `status: passed` instead closes its prose with "Passed over ..." -- exactly the wording the previous reading's suggested edit asked this repair to adopt. The repair carried out only the frontmatter half of that two-part suggested edit and left the account-sentence half undone, so a strict reading of the previous finding is only partly satisfied, even though the substantive defect it named (an option that reads as undecided when the account says it was folded in) is resolved by the added status and reason.
+
+The session's reply: Validated on the main thread: the option's paragraph now reads passed over, absorbed by the recommendation, as its siblings do.
