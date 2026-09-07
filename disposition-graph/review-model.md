@@ -73,7 +73,183 @@ review:
   against: "The new option's own 'AI support' text asserts that `review-skills`'s drift sentence carries the same figures and that 'the two nodes must move together or disagree,' naming this option as 'the half of that movement that belongs here' -- but this delta's scope excludes `review-skills` itself, so whether its matching half has actually landed is unverifiable from here. If it has not, the record corrects this node's sentence while a sibling keeps citing the stale, falsified measurement, which is the same shape of unverifiable cross-node claim the previous reading raised about `n-version-programming` and that the session then had to confirm on the main thread before closing."
   survey:
     date: 2026-09-07
-    of: e27a2e7326a338bd4f519b1e55dfccc2394da68c
+    of: 6c026933881c7d4137fb31e4a7fcfc6bfd030164
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "3dfcd8cceb86a0d69691e6cdb2331103bb5f09ae56e31ea301c3c579796bddf5"
+      answer: "aa389e4c5d8a002cf11a70d1abad0ddedd54d6ffb0d89edc474b81147911d0c9"
+      options: "f0c66d36aa7b957d293e50da18d23456cbc5c94c9e4aa4699162ceb8f16f3c83"
+      rivals: "537cfef30cb29af992d603efd7067dc789f75091e0d12157c119039469c6c1db"
+      words: "a4ac82934694af59fd2d6f230d2b98b29a9859f29851d63873d6448f33585fa4"
+    findings: []
+    pairs:
+      - with: "commons.systems/disposition-graph/appellate-review-en-banc"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
+      - with: "commons.systems/disposition-graph/brooks-surgical-team"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "words:words/2026-09-07/5"
+          - "words:words/2026-09-07/6"
+          - "words:words/2026-09-07/7"
+          - "words:words/2026-09-07/8"
+          - "cites"
+          - "depends"
+      - with: "commons.systems/disposition-graph/decomposition"
+        keys:
+          - "words:words/2026-09-07/5"
+          - "words:words/2026-09-07/6"
+          - "words:words/2026-09-07/7"
+          - "words:words/2026-09-07/8"
+          - "cites"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:main thread (defines: commons.systems/disposition-graph/delegation)"
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+          - "term:unit (defines: commons.systems/disposition-graph/delegation)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:existence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:standing answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "term:adversarial review (defines: commons.systems/disposition-graph/evaluation)"
+          - "term:greenfield (defines: commons.systems/disposition-graph/evaluation)"
+      - with: "commons.systems/disposition-graph/frontier-consistency"
+        keys:
+          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
+          - "words:words/2026-09-07/5"
+          - "words:words/2026-09-07/6"
+          - "words:words/2026-09-07/7"
+          - "words:words/2026-09-07/8"
+          - "parent:commons.systems/disposition-graph/clean-context-review"
+          - "cites"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:assessment (defines: commons.systems/disposition-graph/instruments)"
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
+          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
+      - with: "commons.systems/disposition-graph/materialization"
+        keys:
+          - "term:greenfield ref (defines: commons.systems/disposition-graph/materialization)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/n-version-programming"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+      - with: "commons.systems/disposition-graph/promotor-fidei"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "term:steelman (defines: commons.systems/disposition-graph/recording)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/review-cost"
+        keys:
+          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
+          - "words:words/2026-09-07/5"
+          - "words:words/2026-09-07/6"
+          - "words:words/2026-09-07/7"
+          - "words:words/2026-09-07/8"
+          - "parent:commons.systems/disposition-graph/clean-context-review"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review-skills"
+        keys:
+          - "parent:commons.systems/disposition-graph/clean-context-review"
+          - "cites"
+      - with: "commons.systems/disposition-graph/scholarly-peer-review"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/scope"
+        keys:
+          - "term:section (defines: commons.systems/disposition-graph/scope)"
+      - with: "commons.systems/disposition-graph/segregation-of-duties"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/session-context"
+        keys:
+          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "term:shim (defines: commons.systems/disposition-graph/transience)"
+          - "term:standing (defines: commons.systems/disposition-graph/transience)"
+          - "term:un-aligned disposition (defines: commons.systems/disposition-graph/transience)"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:ceiling (defines: commons.systems/disposition-graph/under)"
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:rank (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/value-of-information"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "term:bootstrap (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
+          - "term:reconcile (defines: commons.systems/disposition-graph/work-loop)"
 form: rule
 under:
   - commons.systems/disposition-graph/clean-context-review
@@ -684,3 +860,13 @@ The session's reply: Validated on the main thread: review-skills' drift sentence
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/review-model stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `the-measurement-re-taken-at-ca64407d`; 5 `## Disposition` entries became the ledger entries words/2026-09-04/37, words/2026-09-07/5, words/2026-09-07/6, words/2026-09-07/7, words/2026-09-07/8, referenced by 1 option the entry's own date names and by the recommended option for 4 the date named none. The content of `fable-for-both-readings (at 6a84b48e)`, `the-smaller-model-on-a-re-reading (at 1c0b5372)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `conditional-by-boldness`, `strongest-on-the-survey`, `chosen-for-difference`, `fable-until-the-yield-is-measured`, `fallback-when-the-model-is-unavailable`, `wait-for-the-named-model`, `alignment-main-thread-named`, `effort-graded-by-the-readings-object`, `the-larger-model-on-a-re-reading`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `c36c59413397a8835ebb87d117e438bc2b4595bb` is re-computed for the encoding as `6c026933881c7d4137fb31e4a7fcfc6bfd030164`; nothing it read changed. The survey's pin `e27a2e7326a338bd4f519b1e55dfccc2394da68c` was already past the recommendation and is left as it stood.
+
+### Frontier survey, 2026-09-07, of 6c026933
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Placement and order (13). The answer fixes the model for readings whose object is an answer — "On fable, the two readings whose object is an answer" and "The re-reading of an amendment runs on the smaller model" — while `delegation-bounds-and-sizing`, projected at .claude/rules/delegation-bounds-and-sizing.md, holds that "a model another node's answer fixes is that node's and moves by that node's class, which is where `review-model`'s answer on the readings and `decomposition`'s answer on a sitting's units live". This node's class is unanswered, so the model it fixes moves by nothing, and the rule that points at it is at the ruling stage above ground that grants no class.
+
+Strongest counter-argument (moderate): The recommendation rests on a measurement re-taken at ca64407d, and the measurement's object has moved since: the brief generated at this commit reports a mechanical tier and a whole-graph selection that the same family of nodes states do not exist. A model choice sized on a reading whose brief has since grown to 1,111,970 bytes is sized on the wrong workload, and the author's words of 2026-09-07 asked precisely whether "the model choice (fable/opus/sonnet)" is right for the cost. The node answers that question with a measurement taken before the cost was questioned.

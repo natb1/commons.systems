@@ -1,6 +1,6 @@
 ---
 question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
-stage: ruling
+stage: maieutic
 probes:
   - id: bundled-disposition-as-queued-questions
     asks: >-
@@ -632,3 +632,13 @@ Two findings of the survey named this node and each is recorded as an option on 
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/decomposition stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `a-unit-returns-the-amendment`; 8 `## Disposition` entries became the ledger entries words/2026-09-04/24, words/2026-09-04/23, words/2026-09-05/1, words/2026-09-07/5, words/2026-09-07/6, words/2026-09-07/7, words/2026-09-07/8, words/2026-09-07/10, referenced by 1 option the entry's own date names and by the recommended option for 7 the date named none. The content of `seams-and-split-review (at 4337d260)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `pre-review-under-the-batch`, `decomposition-before-minting`, `main-thread-performs-the-surveys`, `one-unit-per-disposition`, `decomposition-by-the-author`, `reviewer-on-a-fixed-model`, `no-carrier-and-the-questions-are-progressed`, `unit-models-left-to-delegation`, `units-carried-by-their-own-skills`, `citation-moves-to-unit-sizing`, `units-are-readings-not-surveys`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `dd59cbca7f78752bac9704bc5eff7ed7a2b27990` is re-computed for the encoding as `5e56e6b8fed51a4739882eb744083fd913ec916e`; nothing it read changed. The survey's pin `dd59cbca7f78752bac9704bc5eff7ed7a2b27990` is re-computed for the encoding as `5e56e6b8fed51a4739882eb744083fd913ec916e`; nothing it read changed.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+The term survey is used with two meanings across the frontier. `frontier-consistency`'s answer defines it as the reading of the whole graph, while `delegation`'s answer, projected at .claude/rules/delegation.md, makes it a kind of subagent unit: "Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys." `review-skills` records the collision on its own face in `align-survey-renamed-for-the-family`: "the vocabulary conflict behind it is already in the record, `frontier-consistency` defining survey as the reading of the frontier while `decomposition` calls three of a sitting's units surveys". A term the record has made a skill name (`/align-survey`) and a validation subject cannot also name an ordinary unit.
+
+Also named: commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/delegation, commons.systems/disposition-graph/review-skills, commons.systems/disposition-graph/clean-context-review.
+
+Proposed: The survivor is `frontier-consistency`'s sense: survey is the reading of the frontier, and the skill family keeps the name. `decomposition` already carries the repair as the option `units-are-readings-not-surveys`, so no new option is needed there; `delegation`'s answer loses the word from its list of verbose investigations, which is a sizing clause `delegation-bounds-and-sizing` has already assigned to `unit-sizing`, so the amendment travels with that move rather than reopening the bound.

@@ -1,7 +1,7 @@
 ---
 question: What does an unconfirmed node carry between sittings, and what is left to git?
 form: rule
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -59,6 +59,306 @@ review:
   of: f77ad34cb474cebe27f97d061fad03e6ebe63d21
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "All three findings are answered on the text itself, but one loose end survives: the repaired sentence fixes the contradiction by saying `## Disposition` absorption happens 'once for each node... at the migration' and that 'no node gains the section again,' yet it never states when 'the migration' occurs relative to a node's own first checkpoint — whether it is a single graph-wide event this node either falls before or after, or something folded into each node's own first fold. This node currently carries a live `## Disposition` section and no migration has run, so the amendment's fix is consistent as written, but the timing question it leaves open could recreate the previous contradiction for a node minted between the migration and its own first checkpoint if 'the migration' turns out not to be a single one-time event. This is an underspecified point, not a restated contradiction, so it does not by itself defeat the amendment."
+  survey:
+    date: 2026-09-07
+    of: f77ad34cb474cebe27f97d061fad03e6ebe63d21
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "f2034682be427b21ad0af7010b7363b1177b4e78619b218a9d26b2da9c243549"
+      answer: "9bd75a163bd4d6dbc789369c844a7f143c04efeee821b6835f6d4c3fc83d03dd"
+      options: "467b688ad1ad73632584bddf6047a3cab588aecc6bcf5b8e173380cca91532b7"
+      rivals: "54743dfaf7303bb59911109cbd929ba1993534e09bb805f305df9f4657fecab5"
+      words: "ff75e583d296f4db7a75ac698870314917835b5f774bb0bb19cecd17e21f0dcf"
+    findings:
+      - finding: "Five judged nodes stand at the ruling stage on ground still at the maieutic stage without saying so, which the thirteenth validation forbids: \"no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so\". `tolerated-inconsistency` and `verifying-traces-and-early-cutoff` each bear on `commons.systems/disposition-graph/dialogue#answer#the-survey-block-carries-what-the-next-survey-selects-on (adopted)`; `unconfirmed-accumulation` depends on `commons.systems/disposition-graph/dialogue#an-option-carries-its-content-its-words-and-its-case`; `event-sourcing-with-snapshots` stands under `unconfirmed-accumulation` which does; and `madr-decision-records` stands under `dialogue` and depends on `viable-options`. The brief lists the ground as \"commons.systems/disposition-graph/dialogue | unanswered | stage maieutic | rank 0.0017 | settles 31\". The author would rule five nodes whose ground has no drafted answer."
+        kind: "placement"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/unconfirmed-accumulation"
+          - "commons.systems/disposition-graph/tolerated-inconsistency"
+          - "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+          - "commons.systems/disposition-graph/madr-decision-records"
+          - "commons.systems/disposition-graph/event-sourcing-with-snapshots"
+          - "commons.systems/disposition-graph/dialogue"
+          - "commons.systems/disposition-graph/viable-options"
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-order"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/alignment-page"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+      - with: "commons.systems/disposition-graph/alignment-target"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/anchoring-and-adjustment"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/attention"
+        keys:
+          - "term:boost (defines: commons.systems/disposition-graph/attention)"
+      - with: "commons.systems/disposition-graph/audience"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "parent:commons.systems/disposition-graph/dialogue"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
+      - with: "commons.systems/disposition-graph/authors-words-on-the-page"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+      - with: "commons.systems/disposition-graph/bentham-publicity"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/change-reviewed-as-a-diff"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+      - with: "commons.systems/disposition-graph/checkpoint"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+          - "cites"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+      - with: "commons.systems/disposition-graph/decomposition"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+      - with: "commons.systems/disposition-graph/deprecation-not-deletion"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+          - "words:words/2026-09-07/11"
+          - "words:words/2026-09-07/12"
+          - "words:words/2026-09-07/13"
+          - "words:words/2026-09-07/14"
+          - "words:words/2026-09-07/15"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/event-sourcing-derived-view"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/event-sourcing-with-snapshots"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:manifest line (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/form-vocabulary"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/frontier-consistency"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/harness-tradition"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/hexis"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
+      - with: "commons.systems/disposition-graph/legislative-amendment-in-context"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+      - with: "commons.systems/disposition-graph/level-triggered-reconciliation"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/madr-decision-records"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/montgomery-informed-consent"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+      - with: "commons.systems/disposition-graph/pareto-frontier"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/progressive-disclosure"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+      - with: "commons.systems/disposition-graph/prose-and-structure"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/purpose"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
+          - "words:words/2026-09-07/4"
+          - "words:words/2026-09-07/14"
+          - "words:words/2026-09-07/15"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "words:words/2026-09-07/4"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:manifest line (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/review-approval-pinned-to-a-revision"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+      - with: "commons.systems/disposition-graph/review-cost"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+          - "words:words/2026-09-07/11"
+          - "words:words/2026-09-07/12"
+          - "words:words/2026-09-07/13"
+          - "words:words/2026-09-07/15"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review-skills"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/rfc-pep-status-field"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "parent:commons.systems/disposition-graph/dialogue"
+      - with: "commons.systems/disposition-graph/scholastic-articulus"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/scope"
+        keys:
+          - "term:order (defines: commons.systems/disposition-graph/scope)"
+          - "term:section (defines: commons.systems/disposition-graph/scope)"
+      - with: "commons.systems/disposition-graph/second-stop"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/self-documentation"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/single-subject-rule"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+      - with: "commons.systems/disposition-graph/special-verdict-form"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+      - with: "commons.systems/disposition-graph/survey-selection"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "words:words/2026-09-07/11"
+          - "words:words/2026-09-07/12"
+          - "words:words/2026-09-07/13"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/unit-skills"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+          - "parent:commons.systems/disposition-graph/dialogue"
+          - "cites"
+      - with: "commons.systems/disposition-graph/vocabulary-option-summary"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/what-an-option-row-carries"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+      - with: "commons.systems/disposition-graph/which-facts-are-listed"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
 under:
   - commons.systems/disposition-graph/dialogue
 defines:
@@ -316,3 +616,39 @@ Strongest counter-argument (weak): All three findings are answered on the text i
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/unconfirmed-accumulation stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed`; the `## Rationale` its `**AI support.**`; 8 `## Disposition` entries became the ledger entries words/2026-09-07/11, words/2026-09-07/12, words/2026-09-07/13, words/2026-09-07/2, words/2026-09-07/3, words/2026-09-07/4, words/2026-09-07/14, words/2026-09-07/15, referenced by 8 options the entry's own date names; and `stands` left the answer fact. The record wrote no text of its own for `the-node-is-what-the-artifact-reads`, `the-rest-is-folded-or-absorbed`, `keep-a-node-level-rationale`, `a-passed-option-keeps-its-reason-and-not-its-prose`, `no-fold-before-confirmation`, `the-projections-read-the-list-and-the-file-keeps-everything`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `10d93a148b2f67d4948fdda5ac9861c71ca310cc` is re-computed for the encoding as `f77ad34cb474cebe27f97d061fad03e6ebe63d21`; nothing it read changed.
+
+### Frontier survey, 2026-09-07, of f77ad34c
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Placement and order (13). The recommendation is `the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed` and the answer carries the paragraph "**When it runs, and the condition on it.**", yet `checkpoint`, the node whose question is "When is the dialogue's state written to the record?", is absent from this node's `depends`, which lists only `dialogue#an-option-carries-its-content-its-words-and-its-case`, `review-cost#one-answer-a-node-and-one-read`, `recording#per-fact-after-two-readings` and `quotes#words-in-a-ledger-on-the-ref`. The answer presupposes another node's answer without being placed under it or after it.
+- Placement and order (13). This node stands at the ruling stage on ground still at the maieutic stage without saying so: it depends on `commons.systems/disposition-graph/dialogue#an-option-carries-its-content-its-words-and-its-case`, and the brief lists that node as "commons.systems/disposition-graph/dialogue | unanswered | stage maieutic | rank 0.0017 | settles 31".
+
+Strongest counter-argument (moderate): The fold's list of what a node keeps is read off what one projection needs, and the node's own `against` names the consequence: "a page whose design moves takes the record's shape with it, and material struck for not supporting today's artifact cannot be un-struck when tomorrow's asks for it". No survey has ever read this node, and the fold is irreversible in `class-recommendation`'s sense while three of the four answers it depends on are themselves unruled. Folding at the checkpoint therefore discards reasoning under a rule the record has not settled and cannot restore.
+
+### Frontier finding, 2026-09-07
+
+Kind: placement.
+
+Five judged nodes stand at the ruling stage on ground still at the maieutic stage without saying so, which the thirteenth validation forbids: "no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so". `tolerated-inconsistency` and `verifying-traces-and-early-cutoff` each bear on `commons.systems/disposition-graph/dialogue#answer#the-survey-block-carries-what-the-next-survey-selects-on (adopted)`; `unconfirmed-accumulation` depends on `commons.systems/disposition-graph/dialogue#an-option-carries-its-content-its-words-and-its-case`; `event-sourcing-with-snapshots` stands under `unconfirmed-accumulation` which does; and `madr-decision-records` stands under `dialogue` and depends on `viable-options`. The brief lists the ground as "commons.systems/disposition-graph/dialogue | unanswered | stage maieutic | rank 0.0017 | settles 31". The author would rule five nodes whose ground has no drafted answer.
+
+Also named: commons.systems/disposition-graph/tolerated-inconsistency, commons.systems/disposition-graph/verifying-traces-and-early-cutoff, commons.systems/disposition-graph/madr-decision-records, commons.systems/disposition-graph/event-sourcing-with-snapshots, commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/viable-options.
+
+Proposed: No merge and no survivor: the placement is corrected by the record saying so. Either `dialogue` is advanced to the ruling stage before the five are put to the author, or each of the five states in its answer that it rests on a `dialogue` option still at the maieutic stage and what it would lose if that option moves. The ruling order is derived from the placement, as `alignment-order` requires, and is not recommended here in prose.
+
+### A survey finding the apply discarded, 2026-09-07
+
+The survey of 2026-09-07 returned a cross-node finding that names this node
+and `survey-selection`, and `survey-selection` moved after the survey read it,
+its recommendation having been recorded anew at f57877f9 on the author's words
+of 2026-09-07, so the apply discarded the finding whole and wrote nothing on
+any node it names. It was validated at its loci on the main thread and is not
+withdrawn. It proposes no option on this node. The finding
+named no stage for this node and none is set; no survey pin is written by hand.
+The finding is recorded so that the sitting that takes this node up finds it.
+
+The `contradiction` finding on the dated materialization sentences, as the survey wrote it: Three judged answers assert that nothing they name is materialized on 2026-09-07, and the brief generated on 2026-09-07 falsifies two of the assertions. `survey-selection` states "Nothing this answer names is materialized on 2026-09-07: the validator holds no tier, the projector emits no concordance, the brief generator selects on pins alone" and `review-skills` states "None of that selection is built: at implementation commit ca64407d `brief.mjs` holds no mechanical tier and no `--whole`", while the brief reports "The mechanical tier ran 8 checks (unresolved-reference, recommendation-past-its-pin, duplicate-option-name, option-content-unresolvable, term-without-a-path, unresolved-words-reference, duplicated-passage, unfolded-account-section) and reported 3351 finding(s)", "The keys nominated 4677 candidate pair(s)", and "This survey is whole." `unconfirmed-accumulation` carries the same form of sentence — "Nothing this answer names is materialized on 2026-09-07: no instrument folds, no manifest line exists, and the validator checks none" — which this survey did not test. A dated negative measurement written into an answer expires without notice and cannot be checked by any instrument the record has.
+
+Its proposal: The survivor is the practice, not one of the two sentences: a materialization claim in an answer names the implementation commit it was taken at and states what it measured, as `review-skills` half does with ca64407d, rather than dating itself to a calendar day the answer outlives. `survey-selection`'s and `review-skills`' sentences are amended to that form before either is ruled, and `unconfirmed-accumulation`'s is re-measured with them.

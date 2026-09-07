@@ -1,7 +1,7 @@
 ---
 question: Do verifying traces and early cutoff ground the delta survey's selection on section hashes?
 form: reading
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -29,6 +29,169 @@ review:
   of: 7225c82b45cc4826cfad03ec9b7eb358e612ca67
   commit: 2b934c69754bc5938e8374a0aab095b4526e6565
   against: "The previous reading's two findings (the `progressive-disclosure` citation and the `acceptance-sampling-and-all-or-none` citation) and its own carried-forward counter-argument (the five sections being stipulated rather than derived) were already addressed inline by the session's reply recorded in that same reading's own account, before this diff; the amendment this reading actually judges is only the bears retargeting. If `the-delta-survey-with-a-periodic-whole` is not in fact contained in `candidate-pairs-with-their-nominating-key` on `survey-selection`'s own terms, the retargeting would silently misrecord which option this reading adopts, and nothing in this delta's given scope can rule that out."
+  survey:
+    date: 2026-09-07
+    of: 7225c82b45cc4826cfad03ec9b7eb358e612ca67
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "97b7f28cb599343faca8c5ea4b6818d7094084a61dd0af93f03d22b4fd947dd3"
+      answer: "0db8ba5649b7cc85de463593e16f2366ccc5a5755fd49ecceb5349dd1753c7f2"
+      options: "0ea7ea1b6ff7b2a87d13008f15ea7cc7913ccf39f8f2746f63bb68be779f1333"
+      rivals: "a786e6915ba6cac3b2c9577c479f2e6e3caad0d9735250c5de67c956a45e0fc2"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    findings:
+      - finding: "One clause of `readings`' derivation is restated verbatim in six reading nodes: \"is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen\" stands in `acceptance-sampling-and-all-or-none`, `fagan-entry-criteria`, `lint-and-the-false-positive-threshold`, `regression-test-selection`, `tolerated-inconsistency` and `verifying-traces-and-early-cutoff`, and `blocking-and-canopies` carries the same sentence. The clause explains a derivation `readings` owns, so an amendment to that derivation must today be chased through six leaves, which is the restatement the ninth validation names."
+        kind: "redundancy"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+          - "commons.systems/disposition-graph/readings"
+          - "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
+          - "commons.systems/disposition-graph/fagan-entry-criteria"
+          - "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
+          - "commons.systems/disposition-graph/regression-test-selection"
+          - "commons.systems/disposition-graph/tolerated-inconsistency"
+      - finding: "Five judged nodes stand at the ruling stage on ground still at the maieutic stage without saying so, which the thirteenth validation forbids: \"no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so\". `tolerated-inconsistency` and `verifying-traces-and-early-cutoff` each bear on `commons.systems/disposition-graph/dialogue#answer#the-survey-block-carries-what-the-next-survey-selects-on (adopted)`; `unconfirmed-accumulation` depends on `commons.systems/disposition-graph/dialogue#an-option-carries-its-content-its-words-and-its-case`; `event-sourcing-with-snapshots` stands under `unconfirmed-accumulation` which does; and `madr-decision-records` stands under `dialogue` and depends on `viable-options`. The brief lists the ground as \"commons.systems/disposition-graph/dialogue | unanswered | stage maieutic | rank 0.0017 | settles 31\". The author would rule five nodes whose ground has no drafted answer."
+        kind: "placement"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+          - "commons.systems/disposition-graph/tolerated-inconsistency"
+          - "commons.systems/disposition-graph/madr-decision-records"
+          - "commons.systems/disposition-graph/event-sourcing-with-snapshots"
+          - "commons.systems/disposition-graph/unconfirmed-accumulation"
+          - "commons.systems/disposition-graph/dialogue"
+          - "commons.systems/disposition-graph/viable-options"
+    pairs:
+      - with: "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
+          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
+      - with: "commons.systems/disposition-graph/blocking-and-canopies"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/fagan-entry-criteria"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
+          - "term:re-grasp (defines: commons.systems/disposition-graph/instruments)"
+      - with: "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/mapreduce-and-cross-shard-blindness"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
+          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+      - with: "commons.systems/disposition-graph/regression-test-selection"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/scope"
+        keys:
+          - "term:section (defines: commons.systems/disposition-graph/scope)"
+      - with: "commons.systems/disposition-graph/session-context"
+        keys:
+          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
+      - with: "commons.systems/disposition-graph/survey-selection"
+        keys:
+          - "term:judged set (defines: commons.systems/disposition-graph/survey-selection)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/tolerated-inconsistency"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+      - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:bite (defines: commons.systems/disposition-graph/work-loop)"
+          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
+      - with: "commons.systems/public/agency"
+        keys:
+          - "term:capture (defines: commons.systems/public/agency)"
 under:
   - commons.systems/disposition-graph/survey-selection
 source: Mokhov, Mitchell and Peyton Jones, Build systems à la carte, ICFP 2018, on verifying traces and early cutoff; Shake's and Bazel's rebuild rules as the practice.
@@ -151,3 +314,37 @@ The session's reply: [object Object]
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/verifying-traces-and-early-cutoff stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `as-read`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `supports-the-trace-diverges-on-where-it-lives`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `c7b836e102c0851a79c0245633b93dc633ba2c8f` is re-computed for the encoding as `7225c82b45cc4826cfad03ec9b7eb358e612ca67`; nothing it read changed.
+
+### Frontier survey, 2026-09-07, of 7225c82b
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Placement and order (13). It stands at the ruling stage bearing on `commons.systems/disposition-graph/dialogue#answer#the-survey-block-carries-what-the-next-survey-selects-on (adopted)`, a node the brief lists at "stage maieutic", without saying so.
+- Redundancy (9). It carries the six-times-repeated ladder clause, "is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen".
+- Coverage (14). No survey has read this node.
+
+Strongest counter-argument (moderate): An early cutoff is sound only where the trace it verifies is complete up to the cut, and the survey block this reading bears on records what a reading read, not what it could not reach: this brief carries the 97-node neighbourhood with no answer text at all, every entry printing "(no `## Answer` section: nothing stands on this node yet)". A cutoff taken over a trace whose unread part is invisible in the trace itself gives the appearance of verification without its guarantee.
+
+### Frontier finding, 2026-09-07
+
+Kind: redundancy.
+
+One clause of `readings`' derivation is restated verbatim in six reading nodes: "is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen" stands in `acceptance-sampling-and-all-or-none`, `fagan-entry-criteria`, `lint-and-the-false-positive-threshold`, `regression-test-selection`, `tolerated-inconsistency` and `verifying-traces-and-early-cutoff`, and `blocking-and-canopies` carries the same sentence. The clause explains a derivation `readings` owns, so an amendment to that derivation must today be chased through six leaves, which is the restatement the ninth validation names.
+
+Also named: commons.systems/disposition-graph/readings, commons.systems/disposition-graph/acceptance-sampling-and-all-or-none, commons.systems/disposition-graph/fagan-entry-criteria, commons.systems/disposition-graph/lint-and-the-false-positive-threshold, commons.systems/disposition-graph/regression-test-selection, commons.systems/disposition-graph/tolerated-inconsistency.
+
+Proposed: The survivor is `readings`: the clause is stated once in its answer, as the rule that a relation is not stored on a rung of a ladder whose containing option was not declined, and each reading cites `readings` for it instead of restating it. Nothing else moves; the six leaves keep their own verdicts.
+
+Recorded as an option on commons.systems/disposition-graph/readings's answer fact: `the-rung-clause-is-stated-once` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: placement.
+
+Five judged nodes stand at the ruling stage on ground still at the maieutic stage without saying so, which the thirteenth validation forbids: "no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so". `tolerated-inconsistency` and `verifying-traces-and-early-cutoff` each bear on `commons.systems/disposition-graph/dialogue#answer#the-survey-block-carries-what-the-next-survey-selects-on (adopted)`; `unconfirmed-accumulation` depends on `commons.systems/disposition-graph/dialogue#an-option-carries-its-content-its-words-and-its-case`; `event-sourcing-with-snapshots` stands under `unconfirmed-accumulation` which does; and `madr-decision-records` stands under `dialogue` and depends on `viable-options`. The brief lists the ground as "commons.systems/disposition-graph/dialogue | unanswered | stage maieutic | rank 0.0017 | settles 31". The author would rule five nodes whose ground has no drafted answer.
+
+Also named: commons.systems/disposition-graph/tolerated-inconsistency, commons.systems/disposition-graph/madr-decision-records, commons.systems/disposition-graph/event-sourcing-with-snapshots, commons.systems/disposition-graph/unconfirmed-accumulation, commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/viable-options.
+
+Proposed: No merge and no survivor: the placement is corrected by the record saying so. Either `dialogue` is advanced to the ruling stage before the five are put to the author, or each of the five states in its answer that it rests on a `dialogue` option still at the maieutic stage and what it would lose if that option moves. The ruling order is derived from the placement, as `alignment-order` requires, and is not recommended here in prose.

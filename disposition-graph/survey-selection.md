@@ -1,7 +1,7 @@
 ---
 question: How does a survey narrow its object without narrowing what it can find?
 form: rule
-stage: review
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -48,6 +48,9 @@ facts:
         ref: "2026-09-07"
         status: passed
         reason: "measured at graph commit 3eb4942b it nominated every candidate pair the generator produced, 11,781 of them, so the key ordered nothing"
+      - name: the-materialization-sentence-is-dated-to-its-commit
+        source: review
+        ref: "2026-09-07"
     recommends: options-by-sentence-and-status-and-words-by-address
     boldness: moderate
     against: "Every clause narrows what the record's only whole-graph reader is shown, and it narrows on a dependency relation this record does not have: semantic contradiction respects neither `under` nor citation nor shared vocabulary, so the pair the survey exists to find, two nodes that disagree in disjoint words and never name each other, is exactly the pair the delta freezes, no nominating key nominates, and only a drift probe whose size this same design chose could ever catch."
@@ -376,6 +379,10 @@ defines:
 `candidate-pairs-with-their-nominating-key` with the term key read as it was first written: every two nodes that share a defined term are a candidate pair, the definer and its users among themselves alike, so that the answer's clause "a defined term, the node that defines it paired with each node that uses it" reads "a defined term shared".
 ```
 
+#### the-materialization-sentence-is-dated-to-its-commit
+
+The answer's statement of what is and is not built names the implementation commit it was measured at and the command that measured it, instead of naming a calendar date. It is on the table because the sentence as it stands — that the validator holds no tier and the brief generator selects on pins alone on 2026-09-07 — is contradicted by the brief generated on 2026-09-07, which reports a mechanical tier of eight checks and 4677 nominated candidate pairs, so the answer misinforms the author on the day they would rule it.
+
 ### authority
 
 Ratified, on the capture-shaped limb of `class-recommendation`'s test and on that limb alone. This node decides how much of the record the survey is shown, and the survey is the only reader whose object is the AI's whole frontier judged against itself; the party that would set the answer is the party the answer checks. Two features make it the sharp case. A narrowing is invisible in the record's own terms — a survey that reads less returns fewer findings, and fewer findings on a frontier are indistinguishable from a cleaner frontier — so being wrong here leaves no trace the author could read. And a clean mechanical tier is an affirmative signal that something was checked, so a tier the AI sizes can make the record look audited exactly where it stopped auditing. The parent's authority fact recommends ratified on the identical limb and the identical ground, that a rule letting the drafter narrow the review's object is capture-shaped and that a review reading too little looks cheaper and no worse, and no ruling has reached either node; this node is that rule one step narrower, so a delegation here would reach past the ratification recommended there. Not irreversible: nothing here deletes, swaps or lands; the gate opens, the selection widens, and a design changed back at the next sitting leaves the graph as it was — which is where this node and the accumulation node part, since a fold does not. Not expensive, or weakly so: a wrong selection is paid in a survey that missed something, recovered by the whole survey this answer schedules. Boldness low: the test is stated and the limb is the parent's own.
@@ -418,3 +425,58 @@ Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of 
 ### Option recorded on the author's words, 2026-09-07, at 6611799a
 
 The author asked whether the 1.11 MB survey brief was measured after the accumulation strategy (words/2026-09-07/20); it was, at graph commit 6611799a, and the session answered with the brief's composition and recommended one more cut, the option list by sentence and status and the author's words by address. The author's words of the same day (words/2026-09-07/21) direct that the optimization be recorded and reconciled for future surveys, that the running survey not be interrupted, and that no survey be rerun for it. The option `options-by-sentence-and-status-and-words-by-address` is recorded as a named change against `candidate-pairs-with-their-nominating-key`, amending the paragraph on what a judged node is carried by, and the answer fact's recommendation moves to it, at moderate boldness, the measurement being the session's own. The recommendation having moved, the node returns to the review stage and owes a re-reading of the amendment; the survey pin of 6611799a names the recommendation before the move, and, on the author's words, no survey is rerun for that. The brief tool is reconciled to the option on the implementation ref under the author's grant of 2026-09-07 (words/2026-09-07/11, "begin applying the optimizations as you progress"), for the surveys that follow.
+
+### Reconciled for future surveys, 2026-09-07, at implementation commit c4cb63db
+
+Under the author's words of 2026-09-07 (words/2026-09-07/21), the brief
+generator's judged-node render was reconciled to
+`options-by-sentence-and-status-and-words-by-address` on `greenfield` at
+c4cb63db, and no survey was rerun for it. The option's AI support estimated
+the cut at about 250 KB from the two blocks' sizes at 6611799a; measured at
+graph commit f57877f9 with `brief.mjs --survey disposition --force-tier`, the
+brief went from 1,117,752 bytes over 9,298 lines to 1,032,848 bytes over
+9,177 lines, a cut of 84,904 bytes, because the sentences, which the option
+keeps, are most of the option list, and the quotations the carried options
+reference are most of the words block. The estimate stands in the support
+as written and the measure is here. `sectionHashes` was not changed, so
+every survey pin written before the change names the same recommendation
+after it.
+
+### Two survey findings the apply discarded, 2026-09-07
+
+This node moved after the survey read it: the survey of 2026-09-07 pinned it at
+graph commit 6611799a, and the option
+`options-by-sentence-and-status-and-words-by-address` was recorded as its
+recommendation at f57877f9 on the author's words of 2026-09-07
+(words/2026-09-07/20 and words/2026-09-07/21), so the apply wrote nothing here
+and discarded the two cross-node findings that name it, together with those
+findings' entries on the four other nodes they name, `review-skills`,
+`unconfirmed-accumulation`, `review-cost` and `clean-context-review`, and with
+this node's own reading, which was discarded whole and is not written by hand.
+Both findings were validated at their loci on the main thread against the text
+as it now stands: the sentence the first quotes is carried unchanged by the
+recommended option's content, since the move amended one paragraph, on what the
+judged node carries, and no other; and the brief the second measures is the
+brief this survey read. Neither is withdrawn. The option
+`the-materialization-sentence-is-dated-to-its-commit` the first proposes is
+added to the answer fact by hand, here and on `review-skills`, and the option
+`the-brief-is-bounded-by-what-one-call-holds` the second proposes is added on
+`review-cost`, which is an act the AI has on any fact and which settles nothing.
+The stage the findings named, maieutic, is set by hand here and on
+`review-skills` and `review-cost`, since the record requires every answer
+option of a node at the review or ruling stage to carry its content, and an
+option the reader proposed carries its sentence only, so the node cannot stand
+at either stage until the option is given content or passed over; the
+precedent of 2026-09-05 on `delegation-bounds-and-sizing`, which left the stage
+alone, predates that requirement. No stage is set on
+`unconfirmed-accumulation` or `clean-context-review`, on which the findings
+named none. No survey pin is written by hand: the next survey judges this node
+again, and its pin will name the recommendation as it now stands.
+
+The `contradiction` finding on the dated materialization sentences, as the survey wrote it: Three judged answers assert that nothing they name is materialized on 2026-09-07, and the brief generated on 2026-09-07 falsifies two of the assertions. `survey-selection` states "Nothing this answer names is materialized on 2026-09-07: the validator holds no tier, the projector emits no concordance, the brief generator selects on pins alone" and `review-skills` states "None of that selection is built: at implementation commit ca64407d `brief.mjs` holds no mechanical tier and no `--whole`", while the brief reports "The mechanical tier ran 8 checks (unresolved-reference, recommendation-past-its-pin, duplicate-option-name, option-content-unresolvable, term-without-a-path, unresolved-words-reference, duplicated-passage, unfolded-account-section) and reported 3351 finding(s)", "The keys nominated 4677 candidate pair(s)", and "This survey is whole." `unconfirmed-accumulation` carries the same form of sentence — "Nothing this answer names is materialized on 2026-09-07: no instrument folds, no manifest line exists, and the validator checks none" — which this survey did not test. A dated negative measurement written into an answer expires without notice and cannot be checked by any instrument the record has.
+
+Its proposal: The survivor is the practice, not one of the two sentences: a materialization claim in an answer names the implementation commit it was taken at and states what it measured, as `review-skills` half does with ca64407d, rather than dating itself to a calendar day the answer outlives. `survey-selection`'s and `review-skills`' sentences are amended to that form before either is ruled, and `unconfirmed-accumulation`'s is re-measured with them.
+
+The `contradiction` finding on the brief's size against `review-cost`'s bound, as the survey wrote it: The bound `review-cost` states on a brief is contradicted by the brief the same family of nodes produced. Its answer holds that "A brief the reader cannot hold is a defect of the brief, cured by narrowing the object and never by asking the reader to skim" and that a brief that fits "is then read in the fewest pieces the reader's tool allows, and in one call where the tool's limit reaches the whole of it". The survey brief of 2026-09-07 is 9,277 lines and 1,111,970 bytes, roughly ten times a single call's cap, so the fewest pieces its reader's tool allows is nineteen, and the brief itself reports the selection that produced it as unnarrowed: "This survey is whole.", "4677 candidate pair(s), all live, 0 frozen". Either the bound is not a bound, or the object was not narrowed and the defect is the brief's.
+
+Its proposal: The survivor is the bound, made operative rather than aspirational: `review-cost` states the brief's size in what the reader's tool holds, and the generator refuses or splits a brief that exceeds it rather than emitting it, so that the clause about the fewest pieces describes an artifact that can satisfy it. `survey-selection` is where the narrowing happens and takes the number; `clean-context-review` and `review-skills` are named because the two readings and their generator are what the bound binds.

@@ -1,6 +1,6 @@
 ---
 question: Do architecture decision records in the MADR form support encoding the dialogue state as alternatives with a recommendation among them?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: moderate
@@ -10,7 +10,313 @@ review:
   against: "The reading is three drafts deep and has never once left the AI's memory. Each redrawing has fitted it better to the record — every considered option kept, the class derived, supersession named — and each was made by a reader with the same second-hand knowledge of the template as the writer, so what has improved is the fit and not the fidelity, and the single test that would catch a misreading, somebody opening MADR, has been run at none of the three. This reading found two of its mappings wrong (rejected, decision-makers) by reading the record rather than the source, which is evidence that the remaining errors are of the kind only the source would catch. The entries make the point structurally: after two rounds of findings every relation is still `adopted`, and the two divergences the answer now states are carried by no entry at all, so the projection dialogue's ratifier reads still shows a tradition agreeing with the encoding in every particular. Delegated on the authority fact makes that permanent at the moment it matters most, and the record's reply — that readings' own rule confers delegated on exactly this case, and that the author's words of 2026-09-04 name this tradition in terms — answers less than it seems, since those words invoke 'ADR style \"alternatives considered\" documentation', the one clause of MADR nobody disputes, while the work this reading does is in the clauses about the status and the immutability that the author has never spoken to."
   survey:
     date: 2026-09-07
-    of: 5d80f9d0b0e57e6f006ecee3d51f568437f00e34
+    of: 60be3584b42dcbffd09271ce14eb420d8c9292f3
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "a3895c5c1f746c361cc335146588a7693431be62fde123ccac8b9114e0d3e1fe"
+      answer: "a4a22f23ebb8186b3376d877e436fee3217d31d28e597db49b8fda6ffc8c9ff3"
+      options: "7c3be06104260c725f38e1e928352313925b45553ccc48dc9f724a14397b278f"
+      rivals: "c7061996d7a646d020af0c1b01691c7e96cc9e9e16cb1020758b6c799de96e7e"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    findings:
+      - finding: "Five judged nodes stand at the ruling stage on ground still at the maieutic stage without saying so, which the thirteenth validation forbids: \"no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so\". `tolerated-inconsistency` and `verifying-traces-and-early-cutoff` each bear on `commons.systems/disposition-graph/dialogue#answer#the-survey-block-carries-what-the-next-survey-selects-on (adopted)`; `unconfirmed-accumulation` depends on `commons.systems/disposition-graph/dialogue#an-option-carries-its-content-its-words-and-its-case`; `event-sourcing-with-snapshots` stands under `unconfirmed-accumulation` which does; and `madr-decision-records` stands under `dialogue` and depends on `viable-options`. The brief lists the ground as \"commons.systems/disposition-graph/dialogue | unanswered | stage maieutic | rank 0.0017 | settles 31\". The author would rule five nodes whose ground has no drafted answer."
+        kind: "placement"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/madr-decision-records"
+          - "commons.systems/disposition-graph/tolerated-inconsistency"
+          - "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+          - "commons.systems/disposition-graph/event-sourcing-with-snapshots"
+          - "commons.systems/disposition-graph/unconfirmed-accumulation"
+          - "commons.systems/disposition-graph/dialogue"
+          - "commons.systems/disposition-graph/viable-options"
+    pairs:
+      - with: "commons.systems/disposition-graph/anchoring-and-adjustment"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/appellate-review-en-banc"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/approval-directed-agents"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
+          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
+          - "term:doctrine (defines: commons.systems/disposition-graph/authority)"
+          - "term:proposal (defines: commons.systems/disposition-graph/authority)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/bentham-publicity"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/brooks-surgical-team"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/change-reviewed-as-a-diff"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+          - "cites"
+      - with: "commons.systems/disposition-graph/checkpoint"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+      - with: "commons.systems/disposition-graph/chenery-reasoned-decision"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/chestertons-fence"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+      - with: "commons.systems/disposition-graph/codd-update-anomaly"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+      - with: "commons.systems/disposition-graph/deprecation-not-deletion"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue state (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:persistence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:standing answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/dissent-and-reconsideration"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/dry-single-source-of-truth"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/event-sourcing-derived-view"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/fagan-inspection-roles"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/file-drawer-and-pre-registration"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/frontier-consistency"
+        keys:
+          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/hansard-verbatim-record"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/how-a-fact-is-headed"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/ibis-issue-based-information"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/information-hiding"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
+          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
+      - with: "commons.systems/disposition-graph/legislative-amendment-in-context"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+          - "cites"
+      - with: "commons.systems/disposition-graph/level-triggered-reconciliation"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/literate-programming"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/montgomery-informed-consent"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/multi-call-binary-and-facade"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/n-version-programming"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/nielsen-user-control-and-freedom"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/non-liquet"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/none-of-the-above-ballot"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/not-proven-third-verdict"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/notarial-minute"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/npm-committed-lockfile"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/ocap-attenuation"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/operation-naming-in-telemetry"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/pareto-frontier"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/peirce-paper-doubt"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/progressive-disclosure"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+      - with: "commons.systems/disposition-graph/promotor-fidei"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/prose-and-structure"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
+          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/review-approval-pinned-to-a-revision"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review-cost"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/rfc-pep-status-field"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+          - "cites"
+      - with: "commons.systems/disposition-graph/roberts-rules-commit-or-refer"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/scholarly-peer-review"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/scholastic-articulus"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/scope"
+        keys:
+          - "term:section (defines: commons.systems/disposition-graph/scope)"
+      - with: "commons.systems/disposition-graph/segregation-of-duties"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/self-contained-specification"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/single-subject-rule"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+          - "cites"
+      - with: "commons.systems/disposition-graph/special-verdict-form"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+          - "cites"
+      - with: "commons.systems/disposition-graph/srs-introduction"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/the-wrong-abstraction"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "term:persistence (defines: commons.systems/disposition-graph/transience)"
+          - "term:shim (defines: commons.systems/disposition-graph/transience)"
+          - "term:standing (defines: commons.systems/disposition-graph/transience)"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+          - "term:unanswered (defines: commons.systems/disposition-graph/unanswered)"
+      - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
+        keys:
+          - "parent:commons.systems/disposition-graph/dialogue"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/utility-syntax-flag-or-subcommand"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/value-of-information"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+          - "parent:commons.systems/disposition-graph/dialogue"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "term:bootstrap (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
 facts:
   - name: answer
     options:
@@ -423,3 +729,24 @@ Strongest counter-argument (weak): The reading's `bears` list gained an `adopted
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/madr-decision-records stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `storage-and-supersession-diverge`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The content of `divergence-narrows (at 546fdbec)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `status-derived-from-stamp`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `9c0f951e94dee8342bfeeb9b8b99f7b81f2b127f` was already past the recommendation and is left as it stood. The survey's pin `5d80f9d0b0e57e6f006ecee3d51f568437f00e34` was already past the recommendation and is left as it stood.
+
+### Frontier survey, 2026-09-07, of 60be3584
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Cross-reference (12) and staleness. Both of this node's readings are stale, its draft review and its survey each pinned to a recommendation the node has left, while it carries ten `bears` entries — the largest projection surface of any judged reading — into a derivation `readings` describes as "stated here and unchecked, unmet across the record at this commit". Ten unverified pointers behind a stale reading is the drift the twelfth validation exists to catch.
+- Placement and order (13). It stands at the ruling stage under `commons.systems/disposition-graph/dialogue`, which the brief lists at "stage maieutic", and depends on `viable-options`, also maieutic, without saying so.
+
+Strongest counter-argument (moderate): The recommendation is `storage-and-supersession-diverge` at high boldness with the authority fact recommending delegated, also high, so the reading asks for the class to be handed over on the judgment it is least confident in. Its two divergences are precisely where MADR's discipline bites — one record per decision, superseded records kept and marked — and this record instead accumulates options on one node and folds what it passes over, so a reader could hold that what is recorded as two local divergences is a rejection of the tradition's central practice, which the answer's "the record adopts its form with two divergences of its own" understates.
+
+### Frontier finding, 2026-09-07
+
+Kind: placement.
+
+Five judged nodes stand at the ruling stage on ground still at the maieutic stage without saying so, which the thirteenth validation forbids: "no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so". `tolerated-inconsistency` and `verifying-traces-and-early-cutoff` each bear on `commons.systems/disposition-graph/dialogue#answer#the-survey-block-carries-what-the-next-survey-selects-on (adopted)`; `unconfirmed-accumulation` depends on `commons.systems/disposition-graph/dialogue#an-option-carries-its-content-its-words-and-its-case`; `event-sourcing-with-snapshots` stands under `unconfirmed-accumulation` which does; and `madr-decision-records` stands under `dialogue` and depends on `viable-options`. The brief lists the ground as "commons.systems/disposition-graph/dialogue | unanswered | stage maieutic | rank 0.0017 | settles 31". The author would rule five nodes whose ground has no drafted answer.
+
+Also named: commons.systems/disposition-graph/tolerated-inconsistency, commons.systems/disposition-graph/verifying-traces-and-early-cutoff, commons.systems/disposition-graph/event-sourcing-with-snapshots, commons.systems/disposition-graph/unconfirmed-accumulation, commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/viable-options.
+
+Proposed: No merge and no survivor: the placement is corrected by the record saying so. Either `dialogue` is advanced to the ruling stage before the five are put to the author, or each of the five states in its answer that it rests on a `dialogue` option still at the maieutic stage and what it would lose if that option moves. The ruling order is derived from the placement, as `alignment-order` requires, and is not recommended here in prose.

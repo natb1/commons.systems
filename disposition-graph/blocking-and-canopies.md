@@ -29,6 +29,120 @@ review:
   of: 3ed3f788f16dfb67d2c63f33cc75f58f0abeb3cb
   commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
   against: "All five of the previous reading's findings are answered essentially verbatim against their suggested edits: the rationale/authority class agreement, the `bears` relation and closing sentence on `several-readers-over-a-partition`, the new option, and the removal of the appeal to a survey not in the record. The one soft residual is that after the fix, `as-read` (which stands) and the new option `supports-the-nomination-and-is-chosen-over-on-the-partition` now carry nearly identical `bears` entries and very similar prose, distinguished only by whether the answer calls the partition a genuine divergence the record repairs or an out-of-scope case the tradition never decided; the account's new 'AI divergence' paragraph names this distinction explicitly, so it is not a defect the diff leaves unexplained, only a close call worth the author's attention when choosing between the two."
+  survey:
+    date: 2026-09-07
+    of: 3ed3f788f16dfb67d2c63f33cc75f58f0abeb3cb
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "22cf599316cb51e13b25affc35d06c1e6c782a77d46381d3018f8e299de3861d"
+      answer: "ace1daefd9decb9421c72535c50397a0b4bbbd690962585768bcc2cfd5a7bd48"
+      options: "db89333885a6bcf19630308870e80d1a59403849c5e38d0cc46adc805347f569"
+      rivals: "58651adbf3ab9d754824d29c13031ee9cdff169254437d46c1d76305d8142bff"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    findings: []
+    pairs:
+      - with: "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
+          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/fagan-entry-criteria"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:re-grasp (defines: commons.systems/disposition-graph/instruments)"
+      - with: "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/mapreduce-and-cross-shard-blindness"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
+          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "term:substance (defines: commons.systems/disposition-graph/recording)"
+      - with: "commons.systems/disposition-graph/regression-test-selection"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/survey-selection"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/tolerated-inconsistency"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:bite (defines: commons.systems/disposition-graph/work-loop)"
+      - with: "commons.systems/public/agency"
+        keys:
+          - "term:capture (defines: commons.systems/public/agency)"
 under:
   - commons.systems/disposition-graph/survey-selection
 source: Fellegi and Sunter, A theory for record linkage, JASA 64(328), 1969, on blocking; McCallum, Nigam and Ungar, Efficient clustering of high-dimensional data sets with application to reference matching, KDD 2000, on canopies.
@@ -143,3 +257,13 @@ Recorded in its own entry because the apply that landed the reading carried no r
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/blocking-and-canopies stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `as-read`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `supports-the-nomination-and-is-chosen-over-on-the-partition`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `68e8834bfd6fb5b88d06fec7d5485e8f6a1dfc97` is re-computed for the encoding as `3ed3f788f16dfb67d2c63f33cc75f58f0abeb3cb`; nothing it read changed.
+
+### Frontier survey, 2026-09-07, of 3ed3f788
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Coverage (14). No survey has read this node.
+
+Strongest counter-argument (moderate): The answer "Supports as nomination and diverges as partition" splits a tradition whose two halves are one mechanism: in record linkage a blocking key is chosen precisely because the pairs it drops are the pairs that could not have matched, and this record has no such guarantee — `survey-selection`'s own `against` says semantic contradiction "respects neither `under` nor citation nor shared vocabulary". Adopting the nomination while diverging on the partition therefore keeps the tradition's convenience and discards the argument that made it safe.

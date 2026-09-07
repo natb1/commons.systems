@@ -1,7 +1,7 @@
 ---
 question: Does acceptance sampling ground the drift probe, and what answers Deming's objection to it?
 form: reading
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -29,6 +29,147 @@ review:
   of: 335a4e4e1a0209e78d3db2029e7aa4aae1ff3310
   commit: 2b934c69754bc5938e8374a0aab095b4526e6565
   against: "The reply concedes, as the prior counter-argument itself said it must, that the record is not in the stable-defect-rate world Deming's rule presumes, yet the answer still leans on \"the tradition's escalation rule\" as the design's authority. Having granted that the rule's central premise fails here, the amendment does not explain why the escalation-rule mechanism survives that concession rather than the whole comparison being set aside as inapplicable; the answer separates the borrowed mechanism from the premise-dependent verdict (\"the tradition supplies the escalation rule and the objection, and the record's account of the two costs decides the rest\") but does not defend that separation as more than assertion."
+  survey:
+    date: 2026-09-07
+    of: 335a4e4e1a0209e78d3db2029e7aa4aae1ff3310
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "d1f4e4e42ecf748a0a3b6f1c12ef92013a52d3239e696f31a8e0635b45f213bb"
+      answer: "0a8c47050c953b60551fe1bd3e8c8c432e3f9a80f19655f6c3b7db330aacbffb"
+      options: "6e37fa706071b1ee40c20163697511f38067f9e514a069bcf584168e22025492"
+      rivals: "b69dcb6a564fe13f12ab7d9c54c77987da4cc7c272c462a52eb7015dada11b91"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    findings:
+      - finding: "One clause of `readings`' derivation is restated verbatim in six reading nodes: \"is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen\" stands in `acceptance-sampling-and-all-or-none`, `fagan-entry-criteria`, `lint-and-the-false-positive-threshold`, `regression-test-selection`, `tolerated-inconsistency` and `verifying-traces-and-early-cutoff`, and `blocking-and-canopies` carries the same sentence. The clause explains a derivation `readings` owns, so an amendment to that derivation must today be chased through six leaves, which is the restatement the ninth validation names."
+        kind: "redundancy"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
+          - "commons.systems/disposition-graph/readings"
+          - "commons.systems/disposition-graph/fagan-entry-criteria"
+          - "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
+          - "commons.systems/disposition-graph/regression-test-selection"
+          - "commons.systems/disposition-graph/tolerated-inconsistency"
+          - "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+    pairs:
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
+          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
+      - with: "commons.systems/disposition-graph/blocking-and-canopies"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/fagan-entry-criteria"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
+          - "term:re-grasp (defines: commons.systems/disposition-graph/instruments)"
+      - with: "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/mapreduce-and-cross-shard-blindness"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
+          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+      - with: "commons.systems/disposition-graph/regression-test-selection"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/review-cost"
+        keys:
+          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
+      - with: "commons.systems/disposition-graph/session-context"
+        keys:
+          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
+      - with: "commons.systems/disposition-graph/survey-selection"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/tolerated-inconsistency"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "term:standing (defines: commons.systems/disposition-graph/transience)"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:bite (defines: commons.systems/disposition-graph/work-loop)"
+      - with: "commons.systems/public/agency"
+        keys:
+          - "term:capture (defines: commons.systems/public/agency)"
 under:
   - commons.systems/disposition-graph/survey-selection
 source: Dodge and Romig's sampling inspection at Bell Labs, from 1929; Deming, Out of the Crisis, MIT Center for Advanced Engineering Study, 1982, cited elsewhere in this record as 1986, the year of the later printing, for the all-or-none rule.
@@ -142,3 +283,26 @@ The session's reply: [object Object]
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/acceptance-sampling-and-all-or-none stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `as-read`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `supports-the-probe-diverges-on-its-sizing`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `e55d2c6a05f8d1e94890624e7770eb15a2812977` is re-computed for the encoding as `335a4e4e1a0209e78d3db2029e7aa4aae1ff3310`; nothing it read changed.
+
+### Frontier survey, 2026-09-07, of 335a4e4e
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Redundancy (9). This node restates a clause of `readings`' derivation verbatim rather than citing it: "is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen". The same sentence stands in five sibling readings.
+- Coverage (14). No survey has read this node, so it reaches the ruling stage with one of the two readings `recording` requires.
+
+Strongest counter-argument (moderate): The answer recommends `as-read` at high boldness, which this record reads as low confidence, and the tradition it reads is the one that most directly indicts the selection it supports: acceptance sampling gives a bound on the average outgoing quality of a stream of lots, not on any one lot, and the survey's object is not a stream but a single record whose one undetected contradiction is what the reading exists to find. Carrying "the objection to it as its other half" leaves the author to weigh a tradition against itself with no recommendation between the halves.
+
+### Frontier finding, 2026-09-07
+
+Kind: redundancy.
+
+One clause of `readings`' derivation is restated verbatim in six reading nodes: "is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen" stands in `acceptance-sampling-and-all-or-none`, `fagan-entry-criteria`, `lint-and-the-false-positive-threshold`, `regression-test-selection`, `tolerated-inconsistency` and `verifying-traces-and-early-cutoff`, and `blocking-and-canopies` carries the same sentence. The clause explains a derivation `readings` owns, so an amendment to that derivation must today be chased through six leaves, which is the restatement the ninth validation names.
+
+Also named: commons.systems/disposition-graph/readings, commons.systems/disposition-graph/fagan-entry-criteria, commons.systems/disposition-graph/lint-and-the-false-positive-threshold, commons.systems/disposition-graph/regression-test-selection, commons.systems/disposition-graph/tolerated-inconsistency, commons.systems/disposition-graph/verifying-traces-and-early-cutoff.
+
+Proposed: The survivor is `readings`: the clause is stated once in its answer, as the rule that a relation is not stored on a rung of a ladder whose containing option was not declined, and each reading cites `readings` for it instead of restating it. Nothing else moves; the six leaves keep their own verdicts.
+
+Recorded as an option on commons.systems/disposition-graph/readings's answer fact: `the-rung-clause-is-stated-once` (source review, 2026-09-07).

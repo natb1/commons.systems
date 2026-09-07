@@ -1,6 +1,6 @@
 ---
 question: Does Plato's midwifery ground the maieutic conduct of the interview?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: moderate
@@ -10,7 +10,144 @@ review:
   against: "Socrates' midwifery rests on his own bareness: he claims to originate nothing and only tests what the interlocutor already carries. The AI drafts first, and a visible, refusable draft still anchors the author's response before they have spoken -- so what the maieutic label buys may be a guarantee about whose answer emerges that the mechanism does not actually provide, and 'propose-and-critique' may be the more honest name for the interview's real method."
   survey:
     date: 2026-09-07
-    of: d1547e2467c59de6618c9afedd3fd1d5cdcc7588
+    of: ea8b73d6fbbfec2c2de3f24ab6cb809ea0779a8c
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "e692eef086e42bf1128ece9cbc2c4c9ee89524f54e6acb381cddd0a26cd43907"
+      answer: "f031d529ef0b0aa4e2136e52be09d113ecb562a46959a6188387c4ffa35138f2"
+      options: "0603ed0c8de26500cb8b2c3c1480473ef5ed2901c95ef30908bfc6e286ae718c"
+      rivals: "dcaeeaa9e37d853e0c5ddab775c17142c3700b0f0458c6ff8452b046b4ec9741"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    findings:
+      - finding: "Two readings at the ruling stage bear on options their targets have left, so the record projects the opposite of what the readings say. `plato-maieutics` records `commons.systems/disposition-graph/growth#answer#standing (adopted)` and `plato-periagoge` records the same, while `growth`'s facts read `answer: recommends turn-form-to-a-child-and-terms-aligned (moderate)`; `plato-maieutics` further records `commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)` while `alignment-page` recommends `the-context-pane-previews-the-selected-option`. Under `readings`' own derivation, chosen over is derived for \"a tradition adopted on an option not chosen\", so both Platonic readings now project as considered and passed over on `growth`. `readings` states the duty that would prevent this and declares it unmet: the re-pointing is \"stated here and unchecked, unmet across the record at this commit\", over the 109 `bears` entries its option `re-pointing-checked` measures."
+        kind: "cross-reference"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/plato-maieutics"
+          - "commons.systems/disposition-graph/plato-periagoge"
+          - "commons.systems/disposition-graph/growth"
+          - "commons.systems/disposition-graph/alignment-page"
+          - "commons.systems/disposition-graph/readings"
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-page"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/alignment-target"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/aristotle-hexis"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:main thread (defines: commons.systems/disposition-graph/delegation)"
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/fidelity"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/frontier-consistency"
+        keys:
+          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+      - with: "commons.systems/disposition-graph/plato-periagoge"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+          - "cites"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "term:standing (defines: commons.systems/disposition-graph/transience)"
+      - with: "commons.systems/disposition-graph/turn-form"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+          - "cites"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "parent:commons.systems/disposition-graph/growth"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
+      - with: "commons.systems/public/aristotle-arche-of-action"
+        keys:
+          - "cites"
+      - with: "commons.systems/public/pettit-non-domination"
+        keys:
+          - "cites"
 facts:
   - name: answer
     options:
@@ -28,6 +165,9 @@ facts:
         ref: "2026-09-07"
         status: passed
         reason: "absorbed by the answer, which now carries the paragraph this option proposed"
+      - name: bears-repointed-to-the-recommended-option
+        source: review
+        ref: "2026-09-07"
     recommends: standing
     boldness: high
   - name: authority
@@ -207,6 +347,10 @@ bears:
 Everything `standing` says, with a paragraph saying why the alignment page's option `every-fact-every-option` departs from the tradition: a page that marks the AI's recommendation on every option of every fact before the author chooses is the drafter leading the delivery, which is the one thing the midwife may not do, and the record accepts it for the legitimacy the listing buys. It is on the table because this node's frontmatter already carries `diverged` on that option and `readings` requires "diverged, where the option departs from it and the reading's own answer says why", so the relation stands today on an argument written on the node it bears on and nowhere in the reading itself. Adopted into the answer on 2026-09-07: the paragraph is written. Passed over on 2026-09-07, absorbed by the answer as amended after the frontier survey, which carries the paragraph whole.
 ```
 
+#### bears-repointed-to-the-recommended-option
+
+The reading's `bears` entries name the option each target fact now recommends, not the option that stood when the reading was written, and the reading is re-read whenever a target's recommendation moves. It is on the table because this reading's entries name `growth#answer#standing` and `alignment-page#answer#every-fact-every-option`, both of which their nodes have left, so the record currently derives this tradition as chosen over on `growth` — the opposite of what the reading's own answer says.
+
 ## Account
 
 ### Manifest
@@ -245,3 +389,26 @@ The session's reply: Validated on the main thread: the account's claim was false
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/plato-maieutics stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `relation-diverged`, `propose-and-critique`, `answer-argues-the-page-divergence`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `f701b46afcd3803f812e58620dd48e6e22049906` is re-computed for the encoding as `ea8b73d6fbbfec2c2de3f24ab6cb809ea0779a8c`; nothing it read changed. The survey's pin `d1547e2467c59de6618c9afedd3fd1d5cdcc7588` was already past the recommendation and is left as it stood.
+
+### Frontier survey, 2026-09-07, of ea8b73d6
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Cross-reference (12). The reading's `bears` names an option its target has left: `commons.systems/disposition-graph/growth#answer#standing (adopted)`, while `growth` recommends `turn-form-to-a-child-and-terms-aligned`. Under `readings`' derivation — chosen over is derived for "a tradition adopted on an option not chosen" — the record now projects Plato's maieutics as considered and passed over on the node this reading was written to support.
+- Cross-reference (12). The same holds of its divergence: it bears on `commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)`, an option `alignment-page` no longer recommends, so the divergence is recorded against text the record has already moved off.
+
+Strongest counter-argument (moderate): The answer recommends `standing` at high boldness, which this record reads as low confidence, and its authority fact recommends delegated at high boldness too, so the reading asks the author to hand over the class of a judgment the AI states it is least sure of. Its verdicts also rest on three `bears` entries of which at least two point at options their targets no longer recommend, so the tradition's recorded relation to the record is, at this commit, a statement about text that has moved.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+Two readings at the ruling stage bear on options their targets have left, so the record projects the opposite of what the readings say. `plato-maieutics` records `commons.systems/disposition-graph/growth#answer#standing (adopted)` and `plato-periagoge` records the same, while `growth`'s facts read `answer: recommends turn-form-to-a-child-and-terms-aligned (moderate)`; `plato-maieutics` further records `commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)` while `alignment-page` recommends `the-context-pane-previews-the-selected-option`. Under `readings`' own derivation, chosen over is derived for "a tradition adopted on an option not chosen", so both Platonic readings now project as considered and passed over on `growth`. `readings` states the duty that would prevent this and declares it unmet: the re-pointing is "stated here and unchecked, unmet across the record at this commit", over the 109 `bears` entries its option `re-pointing-checked` measures.
+
+Also named: commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/growth, commons.systems/disposition-graph/alignment-page, commons.systems/disposition-graph/readings.
+
+Proposed: The survivor is `readings`' re-pointing duty, made checkable: `re-pointing-checked` is the option that carries it, and the two Platonic readings' `bears` entries are re-pointed at the options their targets now recommend before either node is ruled. Nothing merges; what moves is the pointer, and the check moves from prose into the validator so that the twelfth validation is not left to a reader's memory across 109 entries.
+
+Recorded as an option on this node's answer fact: `bears-repointed-to-the-recommended-option` (source review, 2026-09-07).

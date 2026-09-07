@@ -1,7 +1,7 @@
 ---
 question: Does event sourcing with snapshots ground the fold at the checkpoint and its condition on pushing?
 form: reading
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -29,6 +29,117 @@ review:
   of: c577f43f6f010c78428517f36ab6944cb698e9da
   commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
   against: "All five of the previous reading's findings are answered essentially verbatim against their suggested edits: the rationale/authority agreement, the `source` field's years and CQRS, the boldness figure and its `against`, the `## Answer` sentence scoping the `bears` relation away from absorption, and the new option. The remaining soft point is the same pattern seen on the sibling `blocking-and-canopies`: the answer fact's new `against` and the new option `diverges-on-the-snapshot` restate nearly the same argument (snapshot as state rather than cache) in two places, which is the shape finding five itself asked for (an argument on record both as a case-against and as a rulable option) rather than an unexplained duplication."
+  survey:
+    date: 2026-09-07
+    of: c577f43f6f010c78428517f36ab6944cb698e9da
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "894fec7c0a7bbaba00b8c70ba56978ae94469a5dfde2a95ed7fc5a9aef4cd191"
+      answer: "d28c0bb1f25e435a56286fd7531d1432c1c592c994d552db1bac5e0d171550b3"
+      options: "3a7a2805213a3118e4938263a33ff91c2e81021065e0de10b40ecb7403afad4c"
+      rivals: "65b1b9345270d52db283557be542dc50a21c188355174aef17249903d11911c5"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    findings:
+      - finding: "Five judged nodes stand at the ruling stage on ground still at the maieutic stage without saying so, which the thirteenth validation forbids: \"no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so\". `tolerated-inconsistency` and `verifying-traces-and-early-cutoff` each bear on `commons.systems/disposition-graph/dialogue#answer#the-survey-block-carries-what-the-next-survey-selects-on (adopted)`; `unconfirmed-accumulation` depends on `commons.systems/disposition-graph/dialogue#an-option-carries-its-content-its-words-and-its-case`; `event-sourcing-with-snapshots` stands under `unconfirmed-accumulation` which does; and `madr-decision-records` stands under `dialogue` and depends on `viable-options`. The brief lists the ground as \"commons.systems/disposition-graph/dialogue | unanswered | stage maieutic | rank 0.0017 | settles 31\". The author would rule five nodes whose ground has no drafted answer."
+        kind: "placement"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/event-sourcing-with-snapshots"
+          - "commons.systems/disposition-graph/tolerated-inconsistency"
+          - "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+          - "commons.systems/disposition-graph/madr-decision-records"
+          - "commons.systems/disposition-graph/unconfirmed-accumulation"
+          - "commons.systems/disposition-graph/dialogue"
+          - "commons.systems/disposition-graph/viable-options"
+    pairs:
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
+          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
+          - "term:re-grasp (defines: commons.systems/disposition-graph/instruments)"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+      - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:manifest line (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:bite (defines: commons.systems/disposition-graph/work-loop)"
+      - with: "commons.systems/public/agency"
+        keys:
+          - "term:capture (defines: commons.systems/public/agency)"
 under:
   - commons.systems/disposition-graph/unconfirmed-accumulation
 source: Event sourcing with snapshots, as described by Martin Fowler and by Greg Young; behind it the write-ahead log and the accountant's journal and ledger.
@@ -134,3 +245,24 @@ Recorded in its own entry because the apply that landed the reading carried no r
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/event-sourcing-with-snapshots stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `as-read`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `diverges-on-the-snapshot`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `24ef57032196a1b7085aee9abe49c5fb09b0acde` is re-computed for the encoding as `c577f43f6f010c78428517f36ab6944cb698e9da`; nothing it read changed.
+
+### Frontier survey, 2026-09-07, of c577f43f
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Placement and order (13). This reading stands at the ruling stage under `unconfirmed-accumulation` and bears on `commons.systems/disposition-graph/unconfirmed-accumulation#answer#the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed (adopted)`, whose own node depends on `commons.systems/disposition-graph/dialogue#an-option-carries-its-content-its-words-and-its-case`, a node the brief lists at "stage maieutic". Neither node says it rests on ground still at the maieutic stage.
+- Coverage (14). No survey has ever read this node — its review state carries no survey entry — so the reading reaches the author's ruling with only the per-draft half of the two readings `recording` requires: "Per fact, after two readings, and never in the AI's own hand."
+
+Strongest counter-argument (moderate): The answer is "Supports on the fold, and is silent on absorption.", and silence is the weak point: event sourcing's snapshot is a derived cache that never destroys the log, whereas the fold this reading supports discards the material it folds, so the tradition supports the shape and not the irreversibility. A reader could hold that the tradition, read whole, is a divergence rather than a support, since its whole force is that the events survive the snapshot.
+
+### Frontier finding, 2026-09-07
+
+Kind: placement.
+
+Five judged nodes stand at the ruling stage on ground still at the maieutic stage without saying so, which the thirteenth validation forbids: "no node at the ruling stage rests on ground still at the periagogic or maieutic stage without saying so". `tolerated-inconsistency` and `verifying-traces-and-early-cutoff` each bear on `commons.systems/disposition-graph/dialogue#answer#the-survey-block-carries-what-the-next-survey-selects-on (adopted)`; `unconfirmed-accumulation` depends on `commons.systems/disposition-graph/dialogue#an-option-carries-its-content-its-words-and-its-case`; `event-sourcing-with-snapshots` stands under `unconfirmed-accumulation` which does; and `madr-decision-records` stands under `dialogue` and depends on `viable-options`. The brief lists the ground as "commons.systems/disposition-graph/dialogue | unanswered | stage maieutic | rank 0.0017 | settles 31". The author would rule five nodes whose ground has no drafted answer.
+
+Also named: commons.systems/disposition-graph/tolerated-inconsistency, commons.systems/disposition-graph/verifying-traces-and-early-cutoff, commons.systems/disposition-graph/madr-decision-records, commons.systems/disposition-graph/unconfirmed-accumulation, commons.systems/disposition-graph/dialogue, commons.systems/disposition-graph/viable-options.
+
+Proposed: No merge and no survivor: the placement is corrected by the record saying so. Either `dialogue` is advanced to the ruling stage before the five are put to the author, or each of the five states in its answer that it rests on a `dialogue` option still at the maieutic stage and what it would lose if that option moves. The ruling order is derived from the placement, as `alignment-order` requires, and is not recommended here in prose.

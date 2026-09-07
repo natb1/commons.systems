@@ -243,7 +243,326 @@ review:
   against: "The rewritten closing sentence for `every-fact-every-option` adopts the previous reading's own suggested wording almost verbatim, including the claim that the fence is extended by exactly \"one sentence\"; the fence's middle-column paragraph (unchanged by this diff, and outside this delta's scope since it predates the pinned commit) arguably carries more than one new clause/sentence describing the re-rendering behaviour, so the amendment's self-description may slightly overstate its own precision. This is inherited from the previous reading's suggested text rather than introduced independently by this repair, and it does not touch anything the previous reading or the survey's three findings actually raised, so it does not block forwarding."
   survey:
     date: 2026-09-07
-    of: 94465d401a161fed15196ead1c0e71bd5950de58
+    of: 184c3341ed274c0a5ae84adef73d9df9363e2de8
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "f377cb1dcf1e03192d964e4a75f94e8544fffa461eef3638caed1ba332f5bbaa"
+      answer: "39fde58fdd30ed4d6f2d516d6535a3cc88c08c0f45a6ccaf1f020dedcf069b8d"
+      options: "5e62a39e70a49801d6ec48b72fe6ed5a9779810803666ba4b4ed17f3c8f6625e"
+      rivals: "008ce00527f3752eb385dadd122583129749e1ad74f327b0ad88ef13b1f7cbea"
+      words: "77f21fa4ba89481ea5b9f1c9adf571047baa30c8402b2474dd62db02c40ae234"
+    findings:
+      - finding: "Two readings at the ruling stage bear on options their targets have left, so the record projects the opposite of what the readings say. `plato-maieutics` records `commons.systems/disposition-graph/growth#answer#standing (adopted)` and `plato-periagoge` records the same, while `growth`'s facts read `answer: recommends turn-form-to-a-child-and-terms-aligned (moderate)`; `plato-maieutics` further records `commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)` while `alignment-page` recommends `the-context-pane-previews-the-selected-option`. Under `readings`' own derivation, chosen over is derived for \"a tradition adopted on an option not chosen\", so both Platonic readings now project as considered and passed over on `growth`. `readings` states the duty that would prevent this and declares it unmet: the re-pointing is \"stated here and unchecked, unmet across the record at this commit\", over the 109 `bears` entries its option `re-pointing-checked` measures."
+        kind: "cross-reference"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/alignment-page"
+          - "commons.systems/disposition-graph/plato-maieutics"
+          - "commons.systems/disposition-graph/plato-periagoge"
+          - "commons.systems/disposition-graph/growth"
+          - "commons.systems/disposition-graph/readings"
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-order"
+        keys:
+          - "words:words/2026-09-04/1"
+          - "cites"
+      - with: "commons.systems/disposition-graph/anchoring-and-adjustment"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/attention"
+        keys:
+          - "term:boost (defines: commons.systems/disposition-graph/attention)"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
+          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
+          - "term:proposal (defines: commons.systems/disposition-graph/authority)"
+          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
+      - with: "commons.systems/disposition-graph/authors-words-on-the-page"
+        keys:
+          - "words:words/2026-09-04/13"
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/bentham-publicity"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/chenery-reasoned-decision"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/codd-update-anomaly"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/decomposition"
+        keys:
+          - "term:seam (defines: commons.systems/disposition-graph/decomposition)"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:existence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:persistence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "term:adversarial review (defines: commons.systems/disposition-graph/evaluation)"
+          - "term:greenfield (defines: commons.systems/disposition-graph/evaluation)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/frontier-consistency"
+        keys:
+          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/frontier-metrics"
+        keys:
+          - "parent:commons.systems/disposition-graph/projection"
+          - "cites"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "words:words/2026-09-04/10"
+          - "cites"
+          - "depends"
+      - with: "commons.systems/disposition-graph/hansard-verbatim-record"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/how-a-fact-is-headed"
+        keys:
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/ibis-issue-based-information"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
+      - with: "commons.systems/disposition-graph/master-detail-selection"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/montgomery-informed-consent"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/namespaces"
+        keys:
+          - "term:id (defines: commons.systems/disposition-graph/namespaces)"
+      - with: "commons.systems/disposition-graph/nielsen-user-control-and-freedom"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+      - with: "commons.systems/disposition-graph/non-liquet"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/none-of-the-above-ballot"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/not-proven-third-verdict"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/plato-maieutics"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/progressive-disclosure"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/prose-and-structure"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/purpose"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
+          - "words:words/2026-09-07/4"
+          - "cites"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "words:words/2026-09-07/4"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
+          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
+          - "term:substance (defines: commons.systems/disposition-graph/recording)"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/rejected"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/review-cost"
+        keys:
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+      - with: "commons.systems/disposition-graph/review-skills"
+        keys:
+          - "words:words/2026-09-04/10"
+      - with: "commons.systems/disposition-graph/roberts-rules-commit-or-refer"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/ruling-transport"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/scholastic-articulus"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/scope"
+        keys:
+          - "term:order (defines: commons.systems/disposition-graph/scope)"
+          - "term:section (defines: commons.systems/disposition-graph/scope)"
+      - with: "commons.systems/disposition-graph/session-context"
+        keys:
+          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
+          - "parent:commons.systems/disposition-graph/projection"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "term:liquidation (defines: commons.systems/disposition-graph/transience)"
+          - "term:persistence (defines: commons.systems/disposition-graph/transience)"
+          - "term:shim (defines: commons.systems/disposition-graph/transience)"
+          - "term:standing (defines: commons.systems/disposition-graph/transience)"
+          - "term:un-aligned disposition (defines: commons.systems/disposition-graph/transience)"
+      - with: "commons.systems/disposition-graph/turn-form"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+          - "term:confirmation with edits (defines: commons.systems/disposition-graph/unanswered)"
+          - "term:denial with feedback (defines: commons.systems/disposition-graph/unanswered)"
+          - "term:unanswered (defines: commons.systems/disposition-graph/unanswered)"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
+        keys:
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:rank (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/vocabulary-option-summary"
+        keys:
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/vocabulary-view"
+        keys:
+          - "parent:commons.systems/disposition-graph/projection"
+      - with: "commons.systems/disposition-graph/web-routing"
+        keys:
+          - "parent:commons.systems/disposition-graph/projection"
+      - with: "commons.systems/disposition-graph/what-an-option-row-carries"
+        keys:
+          - "words:words/2026-09-06/2"
+          - "words:words/2026-09-06/3"
+          - "words:words/2026-09-07/2"
+          - "words:words/2026-09-07/3"
+          - "words:words/2026-09-07/4"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
+        keys:
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/where-a-change-request-goes"
+        keys:
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/where-the-unconfirmed-indication-goes"
+        keys:
+          - "words:words/2026-09-06/3"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/which-facts-are-listed"
+        keys:
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
+      - with: "commons.systems/public/agency"
+        keys:
+          - "term:agency (defines: commons.systems/public/agency)"
+          - "cites"
+      - with: "commons.systems/public/pettit-non-domination"
+        keys:
+          - "cites"
 depends:
   - commons.systems/disposition-graph/dialogue#every-part-in-the-record
   - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey
@@ -1306,3 +1625,25 @@ The session's reply: The sentence describes the fence as it stands: the option's
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/alignment-page stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `the-context-pane-previews-the-selected-option`; 28 `## Disposition` entries became the ledger entries words/2026-09-03/16, words/2026-09-03/17, words/2026-09-03/18, words/2026-09-03/19, words/2026-09-03/20, words/2026-09-03/21, words/2026-09-03/22, words/2026-09-04/1, words/2026-09-04/2, words/2026-09-04/3, words/2026-09-04/4, words/2026-09-04/5, words/2026-09-04/6, words/2026-09-04/7, words/2026-09-04/8, words/2026-09-04/9, words/2026-09-04/10, words/2026-09-04/11, words/2026-09-04/12, words/2026-09-06/1, words/2026-09-04/13, words/2026-09-04/14, words/2026-09-06/2, words/2026-09-06/3, words/2026-09-07/1, words/2026-09-07/2, words/2026-09-07/3, words/2026-09-07/4, referenced by 35 options the entry's own date names and by the recommended option for 7 the date named none. The content of `three-column-ruling-screen (at 2e6c3838)`, `every-fact-every-option (at 6c4d89c2)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `stage-counts-kept`, `metrics-link-into-the-page`, `decisions-are-the-widest-column`, `independent-decisions-as-children`, `case-against-in-the-drill-down`, `case-against-after-the-review-only`, `kick-back-feedback-one-step-down`, `eyebrow-settles-and-pending-only`, `open-probe-count-on-the-chip`, `page-collects-only-the-confirmation`, `standing-named-in-the-pane`, `standing-sentence-stored`, `kickback-count-metric`, `live-re-render-per-choice`, `progressive-disclosure-diverges-on-the-fold`, `account-not-on-the-page`, `copy-control-beside-the-launch-link`, `clauses-cited-not-restated`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `57589470c9e634aa20420adc80b317c74079cc23` is re-computed for the encoding as `184c3341ed274c0a5ae84adef73d9df9363e2de8`; nothing it read changed. The survey's pin `94465d401a161fed15196ead1c0e71bd5950de58` was already past the recommendation and is left as it stood.
+
+### Frontier survey, 2026-09-07, of 184c3341
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Cross-reference (12). A reading at the ruling stage records a divergence against an option of this node that its recommendation has left: `plato-maieutics` bears on `commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)`, while this node's answer opens "One node at a time, on a three-column screen, in the ruling order." and its recommendation is `the-context-pane-previews-the-selected-option`. A divergence recorded against an option the node no longer stands on tells the author that a tradition was refused where the record has already moved.
+
+Strongest counter-argument (weak): The context pane previewing the selected option adds a rendering duty to the one projection the author actually rules from, and the record has no instrument that checks the preview against the option's content, so a stale preview would be indistinguishable from a correct one at exactly the moment a ruling is recorded. The node also settles twenty-four others while nothing on it acts, so the page's shape is being fixed before the shape of what it renders — `what-an-option-row-carries` is itself at the ruling stage with both its readings stale.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+Two readings at the ruling stage bear on options their targets have left, so the record projects the opposite of what the readings say. `plato-maieutics` records `commons.systems/disposition-graph/growth#answer#standing (adopted)` and `plato-periagoge` records the same, while `growth`'s facts read `answer: recommends turn-form-to-a-child-and-terms-aligned (moderate)`; `plato-maieutics` further records `commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)` while `alignment-page` recommends `the-context-pane-previews-the-selected-option`. Under `readings`' own derivation, chosen over is derived for "a tradition adopted on an option not chosen", so both Platonic readings now project as considered and passed over on `growth`. `readings` states the duty that would prevent this and declares it unmet: the re-pointing is "stated here and unchecked, unmet across the record at this commit", over the 109 `bears` entries its option `re-pointing-checked` measures.
+
+Also named: commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/growth, commons.systems/disposition-graph/readings.
+
+Proposed: The survivor is `readings`' re-pointing duty, made checkable: `re-pointing-checked` is the option that carries it, and the two Platonic readings' `bears` entries are re-pointed at the options their targets now recommend before either node is ruled. Nothing merges; what moves is the pointer, and the check moves from prose into the validator so that the twelfth validation is not left to a reader's memory across 109 entries.
+
+Recorded as an option on commons.systems/disposition-graph/plato-maieutics's answer fact: `bears-repointed-to-the-recommended-option` (source review, 2026-09-07).

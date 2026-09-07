@@ -1,7 +1,7 @@
 ---
 question: Do lint's division of labour and Coverity's field experience of false positives ground the mechanical tier's bound, that a check gates only where it is obviously right when it fires?
 form: reading
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -29,6 +29,156 @@ review:
   of: 05264d830a1fe1637fc86b135efd33030a30cf44
   commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
   against: "All six of the previous reading's findings are answered, most matching the suggested edits verbatim: the rationale/authority class agreement, the missing divergence option, the question's naming of both sources, the tier-list claim narrowed to admission, the softened false-positive sentence, and the boldness raised to `high` with the transfer named as its reason. The retarget of the `bears` entry to `candidate-pairs-with-their-nominating-key` was not one of this node's own six findings, but it answers a defect the sibling `tolerated-inconsistency`'s own review named specifically against this node (\"`fagan-entry-criteria` and `lint-and-the-false-positive-threshold` on `the-mechanical-tier-gates-the-launch`\"), so it closes a real gap rather than introducing one. The one thing the amendment does not do is rebut the review's own strongest counter-argument (that the belief mechanism has no bearer in a clean-launched session) — it instead concedes the point by raising boldness to `high` and keeping the alternate reading on record as an option, which is a legitimate way to carry a strong counter-argument forward rather than a failure to answer it."
+  survey:
+    date: 2026-09-07
+    of: 05264d830a1fe1637fc86b135efd33030a30cf44
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "0e96e39a540d88321d4412297bedc023a3fb503016e5987e5827c71169f03c41"
+      answer: "e20ae62e8eb3603106fdfc8771ff6421826064c05f0db32a0296926a7f7b8ff0"
+      options: "9adb8670ce108f194816fb5fd29178517f6e9eec685869eaf043133bf963cb1a"
+      rivals: "ccdce964f952313f3073e904694c1ce33905b22e4e48c9806205d3bc4342a361"
+      words: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    findings:
+      - finding: "One clause of `readings`' derivation is restated verbatim in six reading nodes: \"is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen\" stands in `acceptance-sampling-and-all-or-none`, `fagan-entry-criteria`, `lint-and-the-false-positive-threshold`, `regression-test-selection`, `tolerated-inconsistency` and `verifying-traces-and-early-cutoff`, and `blocking-and-canopies` carries the same sentence. The clause explains a derivation `readings` owns, so an amendment to that derivation must today be chased through six leaves, which is the restatement the ninth validation names."
+        kind: "redundancy"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
+          - "commons.systems/disposition-graph/readings"
+          - "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
+          - "commons.systems/disposition-graph/fagan-entry-criteria"
+          - "commons.systems/disposition-graph/regression-test-selection"
+          - "commons.systems/disposition-graph/tolerated-inconsistency"
+          - "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+      - finding: "Two leaf readings assert a convention of the record that the node owning it does not state. `fagan-entry-criteria` and `lint-and-the-false-positive-threshold` both carry \"The net relation stays adopted, the record's convention being one relation per option with the nuance in the answer\", and `readings`' answer, whose recommendation is `the-relation-is-projected-onto-the-option-as-one-of-three`, carries no such clause. The convention is either doctrine, in which case its owner must state it, or it is not, in which case two readings are deciding their own verdict arithmetic and calling it the record's."
+        kind: "redundancy"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
+          - "commons.systems/disposition-graph/readings"
+          - "commons.systems/disposition-graph/fagan-entry-criteria"
+    pairs:
+      - with: "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
+          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
+      - with: "commons.systems/disposition-graph/blocking-and-canopies"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/fagan-entry-criteria"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
+          - "term:re-grasp (defines: commons.systems/disposition-graph/instruments)"
+      - with: "commons.systems/disposition-graph/mapreduce-and-cross-shard-blindness"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:chosen over (defines: commons.systems/disposition-graph/readings)"
+          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+      - with: "commons.systems/disposition-graph/regression-test-selection"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/session-context"
+        keys:
+          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
+      - with: "commons.systems/disposition-graph/survey-selection"
+        keys:
+          - "term:mechanical tier (defines: commons.systems/disposition-graph/survey-selection)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/tolerated-inconsistency"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+          - "term:unanswered (defines: commons.systems/disposition-graph/unanswered)"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+        keys:
+          - "parent:commons.systems/disposition-graph/survey-selection"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:bite (defines: commons.systems/disposition-graph/work-loop)"
+      - with: "commons.systems/public/agency"
+        keys:
+          - "term:capture (defines: commons.systems/public/agency)"
 under:
   - commons.systems/disposition-graph/survey-selection
 source: lint, Stephen C. Johnson, Bell Labs, 1978; Bessey and others, A Few Billion Lines of Code Later, CACM 2010, on Coverity's field experience.
@@ -136,3 +286,41 @@ Recorded in its own entry because the apply that landed the reading carried no r
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/lint-and-the-false-positive-threshold stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `as-read`; the `## Rationale` its `**AI support.**`; and `stands` left the answer fact. The record wrote no text of its own for `supports-the-bound-diverges-on-the-uncertain-check`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `28cd04e4d40663b0d13b6f80b6defc4fad7ee3da` is re-computed for the encoding as `05264d830a1fe1637fc86b135efd33030a30cf44`; nothing it read changed.
+
+### Frontier survey, 2026-09-07, of 05264d83
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Redundancy (9) and cross-reference (12). It asserts the same unowned convention as `fagan-entry-criteria`: "The net relation stays adopted, the record's convention being one relation per option with the nuance in the answer", which `readings` does not state.
+- Redundancy (9). It carries the six-times-repeated ladder clause, "is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen".
+- Coverage (14). No survey has read this node.
+
+Strongest counter-argument (strong): The answer "Supports on the bound, which is the half the answer needs." at high boldness reads the tradition for the half that flatters the design, and the brief in hand supplies the other half: the mechanical tier "reported 3351 finding(s)" and gated nothing, which is precisely the false-positive collapse this tradition warns of. A reading that supports the bound while the record's only instrument sits far outside it should record a divergence, not a support.
+
+The session's reply: The 3,351 findings the tier reported on 2026-09-07 are the collapse the tradition predicts, and the counter-argument is right that the record's only instrument sits outside the bound this reading supports. The support is for the bound and not for the instrument; the reading is amended to say that the tier as it stands fails the bound, and setting the term check's threshold so that it gates only where it is obviously right when it fires is the reconciliation item this reading grounds.
+
+### Frontier finding, 2026-09-07
+
+Kind: redundancy.
+
+One clause of `readings`' derivation is restated verbatim in six reading nodes: "is a lower rung of the same ladder, `the-delta-survey-with-a-periodic-whole`, contained in that option and not declined, and a relation stored on the rung would project as chosen over, which `readings` derives for a tradition adopted on an option not chosen" stands in `acceptance-sampling-and-all-or-none`, `fagan-entry-criteria`, `lint-and-the-false-positive-threshold`, `regression-test-selection`, `tolerated-inconsistency` and `verifying-traces-and-early-cutoff`, and `blocking-and-canopies` carries the same sentence. The clause explains a derivation `readings` owns, so an amendment to that derivation must today be chased through six leaves, which is the restatement the ninth validation names.
+
+Also named: commons.systems/disposition-graph/readings, commons.systems/disposition-graph/acceptance-sampling-and-all-or-none, commons.systems/disposition-graph/fagan-entry-criteria, commons.systems/disposition-graph/regression-test-selection, commons.systems/disposition-graph/tolerated-inconsistency, commons.systems/disposition-graph/verifying-traces-and-early-cutoff.
+
+Proposed: The survivor is `readings`: the clause is stated once in its answer, as the rule that a relation is not stored on a rung of a ladder whose containing option was not declined, and each reading cites `readings` for it instead of restating it. Nothing else moves; the six leaves keep their own verdicts.
+
+Recorded as an option on commons.systems/disposition-graph/readings's answer fact: `the-rung-clause-is-stated-once` (source review, 2026-09-07).
+
+### Frontier finding, 2026-09-07
+
+Kind: redundancy.
+
+Two leaf readings assert a convention of the record that the node owning it does not state. `fagan-entry-criteria` and `lint-and-the-false-positive-threshold` both carry "The net relation stays adopted, the record's convention being one relation per option with the nuance in the answer", and `readings`' answer, whose recommendation is `the-relation-is-projected-onto-the-option-as-one-of-three`, carries no such clause. The convention is either doctrine, in which case its owner must state it, or it is not, in which case two readings are deciding their own verdict arithmetic and calling it the record's.
+
+Also named: commons.systems/disposition-graph/readings, commons.systems/disposition-graph/fagan-entry-criteria.
+
+Proposed: The survivor is `readings`: the one-relation-per-option convention, with the nuance carried in the answer rather than in a second relation, is stated in its answer beside the three-valued projection it already recommends, and the two leaves cite it. Nothing moves out of the leaves but the assertion of ownership.
+
+Recorded as an option on commons.systems/disposition-graph/readings's answer fact: `the-one-relation-convention-is-stated-here` (source review, 2026-09-07).

@@ -1,6 +1,6 @@
 ---
 question: Is each reading of the clean-context review its own skill?
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -44,6 +44,9 @@ facts:
       - name: one-generator-for-every-brief
         source: commons.systems/disposition-graph/unit-skills
         ref: "2026-09-07"
+      - name: the-materialization-sentence-is-dated-to-its-commit
+        source: review
+        ref: "2026-09-07"
     recommends: the-survey-skill-launches-a-selected-reading
     boldness: moderate
     against: "The two readings share the one decision that matters, what a clean-context reading is, and until the projector writes the skills that decision is guarded by two hand-written files with nothing checking that they still agree; measured at implementation commit ca64407d they share forty-seven identical non-blank lines where they shared thirty-four at the split, so what the interim leaves unguarded grows with the files rather than closing. The telemetry motive is the observer's need, whose tradition's remedy is to name the operation and not to refactor the program, so the split bends the design to a limitation of a harness the record does not own."
@@ -69,8 +72,237 @@ review:
   of: 6eb680043b880246883c473aa1c8d7f4602d204b
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   survey:
-    date: 2026-09-05
-    of: ce9e11aaecf2e702ccf703c6a0898894a9661c68
+    date: 2026-09-07
+    of: 6eb680043b880246883c473aa1c8d7f4602d204b
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "dbe699c9d43ab54b06d23dd990054296ae76935e9f58d8aae5c39baae0290a72"
+      answer: "7601185917f215b028e80f7781e6da7469065e5f6a4e978ec5693e003f609987"
+      options: "ae7f9f9358444910529592c7ef9f63ac7e7513aa7deb9240174c03e01bc53a62"
+      rivals: "e5ae74dead19f69a37537cce6c9936998df4de76238dfbdd13b5ec7094c83e27"
+      words: "3663eb1c5777c4838cd5402c2d8b02a0a17233701e6ff6e556a166420ae40846"
+    findings:
+      - finding: "The term survey is used with two meanings across the frontier. `frontier-consistency`'s answer defines it as the reading of the whole graph, while `delegation`'s answer, projected at .claude/rules/delegation.md, makes it a kind of subagent unit: \"Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys.\" `review-skills` records the collision on its own face in `align-survey-renamed-for-the-family`: \"the vocabulary conflict behind it is already in the record, `frontier-consistency` defining survey as the reading of the frontier while `decomposition` calls three of a sitting's units surveys\". A term the record has made a skill name (`/align-survey`) and a validation subject cannot also name an ordinary unit."
+        kind: "vocabulary"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/review-skills"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/decomposition"
+          - "commons.systems/disposition-graph/delegation"
+          - "commons.systems/disposition-graph/clean-context-review"
+    pairs:
+      - with: "commons.systems/disposition-graph/alignment-page"
+        keys:
+          - "words:words/2026-09-04/10"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
+          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
+          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "cites"
+          - "depends"
+      - with: "commons.systems/disposition-graph/codd-update-anomaly"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/decomposition"
+        keys:
+          - "words:words/2026-09-07/10"
+          - "cites"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+          - "term:unit (defines: commons.systems/disposition-graph/delegation)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue state (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:persistence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/dry-single-source-of-truth"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "term:adversarial review (defines: commons.systems/disposition-graph/evaluation)"
+          - "term:greenfield (defines: commons.systems/disposition-graph/evaluation)"
+      - with: "commons.systems/disposition-graph/fagan-inspection-roles"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/frontier-consistency"
+        keys:
+          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
+          - "parent:commons.systems/disposition-graph/clean-context-review"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "words:words/2026-09-04/10"
+      - with: "commons.systems/disposition-graph/hand-written-projection-drift"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/information-hiding"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/literate-programming"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/materialization"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/multi-call-binary-and-facade"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/namespaces"
+        keys:
+          - "term:id (defines: commons.systems/disposition-graph/namespaces)"
+          - "term:module (defines: commons.systems/disposition-graph/namespaces)"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+      - with: "commons.systems/disposition-graph/operation-naming-in-telemetry"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/persistence"
+        keys:
+          - "term:disposition ref (defines: commons.systems/disposition-graph/persistence)"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+      - with: "commons.systems/disposition-graph/prose-and-structure"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:diverged (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
+          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
+          - "term:substance (defines: commons.systems/disposition-graph/recording)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/review-cost"
+        keys:
+          - "term:neighbourhood (defines: commons.systems/disposition-graph/review-cost)"
+          - "parent:commons.systems/disposition-graph/clean-context-review"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review-model"
+        keys:
+          - "parent:commons.systems/disposition-graph/clean-context-review"
+          - "cites"
+      - with: "commons.systems/disposition-graph/scope"
+        keys:
+          - "term:section (defines: commons.systems/disposition-graph/scope)"
+      - with: "commons.systems/disposition-graph/session-context"
+        keys:
+          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/survey-selection"
+        keys:
+          - "term:frozen set (defines: commons.systems/disposition-graph/survey-selection)"
+          - "term:judged set (defines: commons.systems/disposition-graph/survey-selection)"
+          - "term:mechanical tier (defines: commons.systems/disposition-graph/survey-selection)"
+          - "depends"
+      - with: "commons.systems/disposition-graph/the-wrong-abstraction"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "term:liquidation (defines: commons.systems/disposition-graph/transience)"
+          - "term:persistence (defines: commons.systems/disposition-graph/transience)"
+          - "term:shim (defines: commons.systems/disposition-graph/transience)"
+          - "term:standing (defines: commons.systems/disposition-graph/transience)"
+          - "term:un-aligned disposition (defines: commons.systems/disposition-graph/transience)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+      - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
+        keys:
+          - "term:accumulation (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+          - "term:fold (defines: commons.systems/disposition-graph/unconfirmed-accumulation)"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/unit-skills"
+        keys:
+          - "words:words/2026-09-07/10"
+          - "cites"
+          - "depends"
+      - with: "commons.systems/disposition-graph/utility-syntax-flag-or-subcommand"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "term:bootstrap (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "term:bootstrap authority (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
+          - "term:reconcile (defines: commons.systems/disposition-graph/work-loop)"
 form: rule
 under:
   - commons.systems/disposition-graph/clean-context-review
@@ -713,6 +945,10 @@ to rule, because the artifact it moves, `brief.mjs`, is one this node's answer
 enumerates among what its package holds.
 ```
 
+#### the-materialization-sentence-is-dated-to-its-commit
+
+The answer's statement of what is unbuilt names the implementation commit and the artifact measured, and is re-measured when the node is next read, instead of standing as a claim about a date. It is on the table because the sentence as it stands says `brief.mjs` holds no mechanical tier and no whole-graph mode at ca64407d, while the brief generated at this graph commit reports both, so a reader cannot tell whether the answer is stale or the measurement was wrong.
+
 ### authority
 
 Deferred, at low boldness. `class-recommendation` states its test as exhaustive, so
@@ -851,3 +1087,41 @@ The review found no strong counter-argument.
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/review-skills stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `the-survey-skill-launches-a-selected-reading`; 3 `## Disposition` entries became the ledger entries words/2026-09-04/38, words/2026-09-04/10, words/2026-09-07/10, referenced by 0 options the entry's own date names and by the recommended option for 3 the date named none. The content of `two-skills-one-package (at 425bbc55)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `one-skill-with-a-flag`, `two-skills-code-beside-one`, `split-at-liquidation`, `one-skill-named-operation`, `two-skills-under-the-general-rule`, `align-survey-renamed-for-the-family`, `fragments-move-to-the-units-package`, `one-generator-for-every-brief`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `6765725eec753d378fb50ccf10b4d95654d39acd` is re-computed for the encoding as `6eb680043b880246883c473aa1c8d7f4602d204b`; nothing it read changed. The survey's pin `ce9e11aaecf2e702ccf703c6a0898894a9661c68` was already past the recommendation and is left as it stood.
+
+### Frontier survey, 2026-09-07, of 6eb68004
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Contradiction (7) between the answer's dated measurement and the brief generated on the same date. The answer states "None of that selection is built: at implementation commit ca64407d `brief.mjs` holds no mechanical tier and no `--whole`", while the brief of 2026-09-07 reports both: "The mechanical tier ran 8 checks ... and reported 3351 finding(s)", and the launch itself is described as whole — "This survey is whole." The node's own next clause, "what this paragraph states of the survey's brief and apply steps is owed to this package and unbuilt on this date", is the sentence the brief contradicts.
+- Vocabulary (11). The node names the conflict and leaves it standing: `align-survey-renamed-for-the-family` says "the vocabulary conflict behind it is already in the record, `frontier-consistency` defining survey as the reading of the frontier while `decomposition` calls three of a sitting's units surveys". Reporting a term used with two meanings inside an option, while the recommendation adopts neither repair, leaves the eleventh validation unmet on the node that found it.
+
+Strongest counter-argument (moderate): The authority fact recommends deferred, and the node's own `against` puts the case that a landing other work is built on is irreversible in `class-recommendation`'s own gloss: the names `/align-review` and `/align-survey` are cited by the record, the alignment skill, the telemetry, and the proposed family of seven, so a recommendation may move them under a class that never returns to the author. The split is also measured to be growing apart rather than converging — forty-seven identical non-blank lines at ca64407d against thirty-four at the split — so the interim the deferral protects is the interval in which the two hand-written files silently diverge.
+
+### Frontier finding, 2026-09-07
+
+Kind: vocabulary.
+
+The term survey is used with two meanings across the frontier. `frontier-consistency`'s answer defines it as the reading of the whole graph, while `delegation`'s answer, projected at .claude/rules/delegation.md, makes it a kind of subagent unit: "Every investigation whose context is verbose is a unit whatever its size: debugging, driving a browser, reading logs, transcripts, or diagnostic output, and surveys." `review-skills` records the collision on its own face in `align-survey-renamed-for-the-family`: "the vocabulary conflict behind it is already in the record, `frontier-consistency` defining survey as the reading of the frontier while `decomposition` calls three of a sitting's units surveys". A term the record has made a skill name (`/align-survey`) and a validation subject cannot also name an ordinary unit.
+
+Also named: commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/decomposition, commons.systems/disposition-graph/delegation, commons.systems/disposition-graph/clean-context-review.
+
+Proposed: The survivor is `frontier-consistency`'s sense: survey is the reading of the frontier, and the skill family keeps the name. `decomposition` already carries the repair as the option `units-are-readings-not-surveys`, so no new option is needed there; `delegation`'s answer loses the word from its list of verbose investigations, which is a sizing clause `delegation-bounds-and-sizing` has already assigned to `unit-sizing`, so the amendment travels with that move rather than reopening the bound.
+
+### A survey finding the apply discarded, 2026-09-07
+
+The survey of 2026-09-07 returned a cross-node finding that names this node
+and `survey-selection`, and `survey-selection` moved after the survey read it,
+its recommendation having been recorded anew at f57877f9 on the author's words
+of 2026-09-07, so the apply discarded the finding whole and wrote nothing on
+any node it names. It was validated at its loci on the main thread and is not
+withdrawn. The option `the-materialization-sentence-is-dated-to-its-commit` it proposes on this node is added to the answer fact by
+hand, which is an act the AI has on any fact and which settles nothing. The stage
+the finding named, maieutic, is set by hand, since the record requires every
+answer option of a node at the ruling stage to carry its content and the
+option carries its sentence only; no survey pin is written by hand.
+
+The `contradiction` finding on the dated materialization sentences, as the survey wrote it: Three judged answers assert that nothing they name is materialized on 2026-09-07, and the brief generated on 2026-09-07 falsifies two of the assertions. `survey-selection` states "Nothing this answer names is materialized on 2026-09-07: the validator holds no tier, the projector emits no concordance, the brief generator selects on pins alone" and `review-skills` states "None of that selection is built: at implementation commit ca64407d `brief.mjs` holds no mechanical tier and no `--whole`", while the brief reports "The mechanical tier ran 8 checks (unresolved-reference, recommendation-past-its-pin, duplicate-option-name, option-content-unresolvable, term-without-a-path, unresolved-words-reference, duplicated-passage, unfolded-account-section) and reported 3351 finding(s)", "The keys nominated 4677 candidate pair(s)", and "This survey is whole." `unconfirmed-accumulation` carries the same form of sentence — "Nothing this answer names is materialized on 2026-09-07: no instrument folds, no manifest line exists, and the validator checks none" — which this survey did not test. A dated negative measurement written into an answer expires without notice and cannot be checked by any instrument the record has.
+
+Its proposal: The survivor is the practice, not one of the two sentences: a materialization claim in an answer names the implementation commit it was taken at and states what it measured, as `review-skills` half does with ca64407d, rather than dating itself to a calendar day the answer outlives. `survey-selection`'s and `review-skills`' sentences are amended to that form before either is ruled, and `unconfirmed-accumulation`'s is re-measured with them.

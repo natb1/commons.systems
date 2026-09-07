@@ -1,6 +1,6 @@
 ---
 question: What may the recorder do to the graph's topology without asking?
-stage: ruling
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -44,7 +44,168 @@ review:
   commit: 1c0b5372d26e0340f42179fe949bc8bbd389c677
   survey:
     date: 2026-09-07
-    of: 90a2d6e729a986e93df3e0a8d8e241fa7bf6e5b0
+    of: 14c7da6a681d2ed2b73919fcf7078ecd981de36e
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "ddb1baebe2f7cda3481951e6e65da50f2a13c41c266478acb2793ec00ad9c685"
+      answer: "a34fa142bfadb4320184594aa8977dd399e3a0414c200fc6c451cf7c0b949214"
+      options: "bbee324c779119c5d1572a468e0798cff1694aecb5df40191fd4050792dad820"
+      rivals: "443196964ab56f6176d1d29e6159b5a45f3fd92dccd9f0040d5d81186fcad18d"
+      words: "5f5f0f6a043a3815faca5fa6163922b2b36d3b73ae1967c16cd34478aa79dad6"
+    findings:
+      - finding: "Independence, the sixteenth validation. `hexis` asks \"In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?\" — a question whose only possible answer is a reading of `purpose`'s answer, whose facts repeat `purpose`'s, and which would be pruned the moment `purpose`'s recommendation moved; `purpose` already carries the answer as the option `knowledge-store-first` sourced from `commons.systems/disposition-graph/hexis`, and `hexis` itself carries the review option `sub-ruling-of-purpose`. The record has also recommended it away: `graph-topology`'s option `a-third-bound-for-open-business` \"cites `hexis`, whose existence fact has recommended `prune` since 2026-09-04\". The brief carries no `under` field for neighbourhood nodes, so the parent relation is read from the question's own wording and from the cross-sourced option rather than from a field."
+        kind: "decomposition"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/graph-topology"
+          - "commons.systems/disposition-graph/hexis"
+          - "commons.systems/disposition-graph/purpose"
+      - finding: "Four live options on `frontier-consistency`'s answer fact carry a validation list that ends at fifteen, while the node's account records the sixteenth as adopted into one of them: \"Adopted into `split-survey-from-per-draft` on 2026-09-05: the survey's list names the sixteenth\". The content fences of `split-survey-from-per-draft`, `the-survey-is-given-what-its-validations-read`, `one-line-only-where-a-survey-has-read-it` and `one-line-only-where-the-text-a-survey-read-still-stands` each end at \"15. Merge. The opportunities to merge unanswered nodes as alternate answers to the same question\", with no independence validation after it, and each is written in the struck term — \"the node as it stands or the alternative it names\" and \"it adopts a listed alternative or the node as it stands\". Ruling for any of the four would strike the independence validation and restore the word the recommended answer replaced, without saying it was doing either."
+        kind: "cross-reference"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/graph-topology"
+          - "commons.systems/disposition-graph/frontier-consistency"
+          - "commons.systems/disposition-graph/probe-or-node"
+    pairs:
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:delegated (defines: commons.systems/disposition-graph/authority)"
+          - "term:doctrine (defines: commons.systems/disposition-graph/authority)"
+          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "parent:commons.systems/disposition-graph/authority"
+          - "cites"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:existence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:prune (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/frontier-consistency"
+        keys:
+          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/hexis"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+      - with: "commons.systems/disposition-graph/probe-or-node"
+        keys:
+          - "words:words/2026-09-06/6"
+          - "words:words/2026-09-07/17"
+          - "cites"
+          - "depends"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
+          - "parent:commons.systems/disposition-graph/authority"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "term:substance (defines: commons.systems/disposition-graph/recording)"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/session-context"
+        keys:
+          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "term:standing (defines: commons.systems/disposition-graph/transience)"
+      - with: "commons.systems/disposition-graph/turn-form"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+          - "parent:commons.systems/disposition-graph/authority"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "parent:commons.systems/disposition-graph/authority"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/which-facts-are-listed"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
+      - with: "commons.systems/public/agency"
+        keys:
+          - "term:capture (defines: commons.systems/public/agency)"
 depends:
   - commons.systems/disposition-graph/recording#prune-of-an-unruled-node-needs-no-ruling
   - commons.systems/disposition-graph/what-acts-during-bootstrap#a-standing-direction-acts-by-right
@@ -441,3 +602,35 @@ The review found no strong counter-argument.
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/graph-topology stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Recommendation` fence became the content of `delegation-with-two-bounds`; 2 `## Disposition` entries became the ledger entries words/2026-09-06/6, words/2026-09-07/17, referenced by 1 option the entry's own date names and by the recommended option for 1 the date named none. The record wrote no text of its own for `every-prune-asked-at-the-row`, `a-third-bound-for-open-business`, `deprecation-rather-than-deletion`, `pruning-and-what-a-prune-needs`, `prunes-reported-to-the-author`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `45efbd610e6028085e2233fa7faed9075010db93` is re-computed for the encoding as `14c7da6a681d2ed2b73919fcf7078ecd981de36e`; nothing it read changed. The survey's pin `90a2d6e729a986e93df3e0a8d8e241fa7bf6e5b0` was already past the recommendation and is left as it stood.
+
+### Frontier survey, 2026-09-07, of 14c7da6a
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Independence (16), reported as decomposition. This node's option `a-third-bound-for-open-business` "cites `hexis`, whose existence fact has recommended `prune` since 2026-09-04", and `hexis` asks "In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?" — a question whose only possible answer is a reading of `purpose`'s answer, and which `purpose` already carries as the option `knowledge-store-first` sourced from `hexis`. A bound on open business that cites a node the record has recommended pruning rests its rule on the very artifact the sixteenth validation would fold away.
+
+Strongest counter-argument (moderate): The authority fact recommends delegated at moderate boldness on a node whose two bounds govern the shape of the graph itself, and delegation here means the AI decides, without returning to the author, how the record it is being checked by may be structured. `class-recommendation`'s capture limb is written for exactly that party relation: the party that would set the answer is the party the answer is meant to check. The node's own third-bound option shows the cost is live rather than theoretical, since the bound it proposes turns on a node already recommended for pruning.
+
+### Frontier finding, 2026-09-07
+
+Kind: decomposition.
+
+Independence, the sixteenth validation. `hexis` asks "In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?" — a question whose only possible answer is a reading of `purpose`'s answer, whose facts repeat `purpose`'s, and which would be pruned the moment `purpose`'s recommendation moved; `purpose` already carries the answer as the option `knowledge-store-first` sourced from `commons.systems/disposition-graph/hexis`, and `hexis` itself carries the review option `sub-ruling-of-purpose`. The record has also recommended it away: `graph-topology`'s option `a-third-bound-for-open-business` "cites `hexis`, whose existence fact has recommended `prune` since 2026-09-04". The brief carries no `under` field for neighbourhood nodes, so the parent relation is read from the question's own wording and from the cross-sourced option rather than from a field.
+
+Also named: commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/purpose.
+
+Proposed: The survivor is `purpose`, and `hexis` becomes a probe on it: asks — on the purpose answer, which does the record's claim rest on, the disposition of the person or the store of what they have said; why — `purpose`'s answer states both and the record has never said which is the claim and which its gloss, and `purpose` carries `knowledge-store-first` as an option sourced from `hexis` with no ruling between them; discharges — it settles the order of the two clauses in `purpose`'s answer and moves `purpose`'s recommendation on its answer fact; fact — answer. `graph-topology`'s third-bound option is redrawn to cite `purpose` rather than a node recommended for pruning. No probe is raised in this file's `probes` array, because raising it is the act of the step that applies this proposal and the node's own existence fact already carries the prune.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+Four live options on `frontier-consistency`'s answer fact carry a validation list that ends at fifteen, while the node's account records the sixteenth as adopted into one of them: "Adopted into `split-survey-from-per-draft` on 2026-09-05: the survey's list names the sixteenth". The content fences of `split-survey-from-per-draft`, `the-survey-is-given-what-its-validations-read`, `one-line-only-where-a-survey-has-read-it` and `one-line-only-where-the-text-a-survey-read-still-stands` each end at "15. Merge. The opportunities to merge unanswered nodes as alternate answers to the same question", with no independence validation after it, and each is written in the struck term — "the node as it stands or the alternative it names" and "it adopts a listed alternative or the node as it stands". Ruling for any of the four would strike the independence validation and restore the word the recommended answer replaced, without saying it was doing either.
+
+Also named: commons.systems/disposition-graph/frontier-consistency, commons.systems/disposition-graph/probe-or-node.
+
+Proposed: The survivor is the recommended answer's list of sixteen validations in the record's current vocabulary. The four live option fences are re-derived from it, each carrying only its own named change, so that the difference between an option and the answer is the change the option's name states and nothing else. `probe-or-node` is named because it owns the sixteenth validation the fences drop, and `graph-topology` because `sixteenth-validation-reads-the-delegation` makes that validation read the delegation off it.
+
+Recorded as an option on commons.systems/disposition-graph/frontier-consistency's answer fact: `the-live-options-carry-the-sixteenth-validation` (source review, 2026-09-07).

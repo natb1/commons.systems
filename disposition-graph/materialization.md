@@ -9,8 +9,264 @@ review:
   commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
   against: "A critic could still say the amendment does not remove the underlying coupling, only discloses it better: ratifying this node still binds the record's most widely loaded rule to an enumeration whose third term depends on `quotes`, a node under active redraft. But the previous reading explicitly offered this as one of two acceptable repairs (revert the recommendation to `standing`, or keep the option and disclose in the rule's own text what the ground leaves of the support), and the amendment takes the second path faithfully: the Answer now states outright that the ledger is unmaterialized before the cited migration, the fact's `against` now argues against the recommended option and not the superseded one, and the safer alternative is recorded on the list for the author to choose instead. The objection is therefore answered on its own stated terms, not merely deflected."
   survey:
-    date: 2026-09-05
-    of: cbba0b60e00ca8fe2232504854f0a1840fcacb0c
+    date: 2026-09-07
+    of: 1b0d01a13cc96521f432ad8b7358beefc8d0608e
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "bbf975e85f1b2cccfc472f9066dfaf0d4297733577fce1765ed9f30155e4a48e"
+      answer: "3e2dc664522653db1b02ec2cf0448ed35cec47cc94e76b56176f7f89c3986c7b"
+      options: "5c968bcce4a44558feb664d1bf257712bedf46c5440ea22cd29576ed44a2f66f"
+      rivals: "139eb82ac11b3b674c7010bb403ad3ab27f8568b31b4964d9485ab6f618764ee"
+      words: "df1befa0e261518e800d165dfd64620e85b3c7124a83f9c34e0ccafccdd5da38"
+    findings:
+      - finding: "Two nodes answer contrarily on what the disposition ref's tree may hold, and one side of the contradiction is projected into every implementation session as a rule. `materialization`'s answer, at .claude/rules/materialization.md, says \"The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author's words the quotes node keeps, and nothing else\", while `persistence` answers, as `materialization`'s own option `cite-persistence-for-the-disposition-ref` quotes it, \"The ref's tree holds the graphs and only the graphs: the manifest and the node files\". `quotes` is the third party: its recommendation `words-in-a-ledger-on-the-ref` is what put the ledger on the ref, and `materialization`'s `against` records the coupling — \"the enumeration's third term names a file the ref does not carry\"."
+        kind: "contradiction"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/materialization"
+          - "commons.systems/disposition-graph/persistence"
+          - "commons.systems/disposition-graph/quotes"
+    pairs:
+      - with: "commons.systems/disposition-graph/attention"
+        keys:
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:proposal (defines: commons.systems/disposition-graph/authority)"
+          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/bootstrap-exit-conditions"
+        keys:
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:expensive (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:irreversible (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+      - with: "commons.systems/disposition-graph/codd-update-anomaly"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/coverage"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+          - "term:unit (defines: commons.systems/disposition-graph/delegation)"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue state (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:keep (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:persistence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "term:greenfield (defines: commons.systems/disposition-graph/evaluation)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/frontier-consistency"
+        keys:
+          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/growth"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/hand-written-projection-drift"
+        keys:
+          - "term:materialized implementation (defines: commons.systems/disposition-graph/materialization)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/information-hiding"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
+          - "term:instrument (defines: commons.systems/disposition-graph/instruments)"
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
+      - with: "commons.systems/disposition-graph/legacy"
+        keys:
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
+      - with: "commons.systems/disposition-graph/lockfile"
+        keys:
+          - "term:materialized implementation (defines: commons.systems/disposition-graph/materialization)"
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:materialized implementation (defines: commons.systems/disposition-graph/materialization)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/multi-call-binary-and-facade"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+      - with: "commons.systems/disposition-graph/namespaces"
+        keys:
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
+      - with: "commons.systems/disposition-graph/npm-committed-lockfile"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/persistence"
+        keys:
+          - "term:disposition ref (defines: commons.systems/disposition-graph/persistence)"
+          - "term:land (defines: commons.systems/disposition-graph/persistence)"
+          - "term:materialized implementation (defines: commons.systems/disposition-graph/materialization)"
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/prose-and-structure"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/purpose"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "term:tradition (defines: commons.systems/disposition-graph/readings)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
+          - "term:kickback (defines: commons.systems/disposition-graph/recording)"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:materialized implementation (defines: commons.systems/disposition-graph/materialization)"
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review-cost"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+      - with: "commons.systems/disposition-graph/review-model"
+        keys:
+          - "term:greenfield ref (defines: commons.systems/disposition-graph/materialization)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review-skills"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/rsi"
+        keys:
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/ruling-transport"
+        keys:
+          - "term:materialized implementation (defines: commons.systems/disposition-graph/materialization)"
+      - with: "commons.systems/disposition-graph/scope"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/second-stop"
+        keys:
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/session-context"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/software-factories"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/spec-driven-development"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/stub-traditions"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "term:liquidation (defines: commons.systems/disposition-graph/transience)"
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+          - "term:persistence (defines: commons.systems/disposition-graph/transience)"
+          - "term:shim (defines: commons.systems/disposition-graph/transience)"
+          - "term:standing (defines: commons.systems/disposition-graph/transience)"
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/unit-skills"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+      - with: "commons.systems/disposition-graph/utility-syntax-flag-or-subcommand"
+        keys:
+          - "term:package (defines: commons.systems/disposition-graph/materialization)"
+      - with: "commons.systems/disposition-graph/validation-order"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:grant (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+      - with: "commons.systems/disposition-graph/web-routing"
+        keys:
+          - "cites"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "term:bootstrap (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "term:bootstrap exit (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
+          - "term:greenfield ref (defines: commons.systems/disposition-graph/materialization)"
+          - "term:materialized implementation (defines: commons.systems/disposition-graph/materialization)"
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
 facts:
   - name: answer
     options:
@@ -437,3 +693,26 @@ Strongest counter-argument (weak): A critic could still say the amendment does n
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/materialization stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `the-ref-carries-the-ledger-beside-the-graphs`; 1 `## Disposition` entry became the ledger entry words/2026-09-03/64, referenced by 0 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `facts-carry-each-shim-liquidation`, `disclose-that-sessions-run-under-this-rule`, `traditions-to-readings`, `layout-as-its-own-question`, `cite-persistence-for-the-disposition-ref`, `unsupported-where-authority-is-missing`, `name-the-ledger-and-cite-quotes`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `c9e84f735d26fb0f1b7637d503bea88be8e878cf` is re-computed for the encoding as `1b0d01a13cc96521f432ad8b7358beefc8d0608e`; nothing it read changed. The survey's pin `cbba0b60e00ca8fe2232504854f0a1840fcacb0c` was already past the recommendation and is left as it stood.
+
+### Frontier survey, 2026-09-07, of 1b0d01a1
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Contradiction (7) with `persistence`, and it reaches every session. This answer, projected at .claude/rules/materialization.md, says "The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author's words the quotes node keeps, and nothing else", while `persistence` answers, as this node's own option `cite-persistence-for-the-disposition-ref` quotes it, "The ref's tree holds the graphs and only the graphs: the manifest and the node files". Both sides carry a mirror option — `cite-persistence-for-the-disposition-ref` here and `the-tree-holds-the-ledger-beside-the-graphs` there — so the record knows of the conflict and has left the contradictory text in the rule every implementation session loads.
+- Shims and materialization (5) restated as a frontier finding. The rule states an enumeration whose third term names a file the ref does not carry, and the node's own `against` says so: "the enumeration's third term names a file the ref does not carry". The projected rule offers a reader no way to tell that limb from the two that hold.
+
+Strongest counter-argument (strong): This answer is recommended at low boldness on a fact whose authority fact recommends ratified, so the record is asking the author to give its highest class to the draft the AI is least sure of. Its own `against` puts the cost plainly: ratifying it "arms a deletion whose scope no one has ruled", nothing derives unsupported implementation onto the frontier, and the rule is already contradicted where it is automated, "`writeRules` in `packages/disposition/project.mjs` deleting a rule file with no proposal and no ruling". A rule ratified at the record's highest class while its own projector prunes without a ruling is a rule that cannot be enforced against the party it binds.
+
+The session's reply: Accepted. The contradiction with persistence is real and is projected into every session by the rule file; both sides carry the mirror option, and the sixth frontier finding sends the three nodes to one sitting. The projector's pruning of a rule file without a ruling is a reconciliation item already on the list of 2026-09-07 and is not a reason to lower the class this node recommends, since a rule that arms a deletion is the case for ratified and not against it.
+
+### Frontier finding, 2026-09-07
+
+Kind: contradiction.
+
+Two nodes answer contrarily on what the disposition ref's tree may hold, and one side of the contradiction is projected into every implementation session as a rule. `materialization`'s answer, at .claude/rules/materialization.md, says "The disposition ref stores the manifest, the node files of the graphs, and the ledger of the author's words the quotes node keeps, and nothing else", while `persistence` answers, as `materialization`'s own option `cite-persistence-for-the-disposition-ref` quotes it, "The ref's tree holds the graphs and only the graphs: the manifest and the node files". `quotes` is the third party: its recommendation `words-in-a-ledger-on-the-ref` is what put the ledger on the ref, and `materialization`'s `against` records the coupling — "the enumeration's third term names a file the ref does not carry".
+
+Also named: commons.systems/disposition-graph/persistence, commons.systems/disposition-graph/quotes.
+
+Proposed: The survivor is one ruling taken across the three nodes in one sitting rather than a repair on either side alone, since each already carries the other's answer as an option: `materialization` carries `cite-persistence-for-the-disposition-ref` and `persistence` carries `the-tree-holds-the-ledger-beside-the-graphs`. Whichever side the author takes, the ledger's location is decided on `quotes` and the other two cite it rather than restating it, so the enumeration lives in one place. No new options are proposed; the mirrors exist.

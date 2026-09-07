@@ -10,7 +10,754 @@ review:
   against: "The option's account prose, left untouched by this diff, still reads \"Adopted into the recommendation on 2026-09-07: the fence's third usage and its rationale now carry it,\" where every sibling option on this fact marked `status: passed` instead closes its prose with \"Passed over ...\" -- exactly the wording the previous reading's suggested edit asked this repair to adopt. The repair carried out only the frontmatter half of that two-part suggested edit and left the account-sentence half undone, so a strict reading of the previous finding is only partly satisfied, even though the substantive defect it named (an option that reads as undecided when the account says it was folded in) is resolved by the added status and reason."
   survey:
     date: 2026-09-07
-    of: 99d667c6fd7d8d8d7fb61bd1a5289ac8bb458c66
+    of: bed10a4712e392bc195d0d7d0ed20d7cf11994b0
+    commit: 6611799a1dd6276691cf61f482c8e593f0234200
+    text:
+      question: "040dd27b9342148a8226498a4ecb0299411ba7fe61cb75e3e8f7d98bc35e0440"
+      answer: "f576e79a3bc5b8a356d3fa28dd1ca66fd171219546eea982e4ed3316ebc2c7f7"
+      options: "051fb75f69241bc0c55773a6356830c2bfde7e5fba342eaa45a9ec51c21d5b11"
+      rivals: "79b6944acfc1770e74e1f3aa171ff899bf3fe5f27475b4e617ec77997b8e3ade"
+      words: "f9ef470f2cbdabb9d682cf2ba5ba416cdaca5a2ae1ed3905365994e3bd545776"
+    findings:
+      - finding: "Two readings at the ruling stage bear on options their targets have left, so the record projects the opposite of what the readings say. `plato-maieutics` records `commons.systems/disposition-graph/growth#answer#standing (adopted)` and `plato-periagoge` records the same, while `growth`'s facts read `answer: recommends turn-form-to-a-child-and-terms-aligned (moderate)`; `plato-maieutics` further records `commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)` while `alignment-page` recommends `the-context-pane-previews-the-selected-option`. Under `readings`' own derivation, chosen over is derived for \"a tradition adopted on an option not chosen\", so both Platonic readings now project as considered and passed over on `growth`. `readings` states the duty that would prevent this and declares it unmet: the re-pointing is \"stated here and unchecked, unmet across the record at this commit\", over the 109 `bears` entries its option `re-pointing-checked` measures."
+        kind: "cross-reference"
+        status: "new"
+        since: "2026-09-07"
+        supports:
+          - "question"
+          - "answer"
+          - "options"
+          - "rivals"
+          - "words"
+        discharge: "the option this finding proposes is ruled, or a later survey re-derives it over moved support and does not find it"
+        nodes:
+          - "commons.systems/disposition-graph/growth"
+          - "commons.systems/disposition-graph/plato-maieutics"
+          - "commons.systems/disposition-graph/plato-periagoge"
+          - "commons.systems/disposition-graph/alignment-page"
+          - "commons.systems/disposition-graph/readings"
+    pairs:
+      - with: "commons.systems/disposition-graph/acceptance-sampling-and-all-or-none"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/alignment-order"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+          - "depends"
+      - with: "commons.systems/disposition-graph/alignment-page"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "words:words/2026-09-04/10"
+          - "cites"
+          - "depends"
+      - with: "commons.systems/disposition-graph/alignment-target"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/anchoring-and-adjustment"
+        keys:
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/appellate-review-en-banc"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/approval-directed-agents"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/aristotle-hexis"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/assumption-form"
+        keys:
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/attention"
+        keys:
+          - "term:boost (defines: commons.systems/disposition-graph/attention)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/audience"
+        keys:
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/author-questions"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:probe (defines: commons.systems/disposition-graph/author-questions)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "words:words/2026-09-06/5"
+          - "cites"
+      - with: "commons.systems/disposition-graph/authority"
+        keys:
+          - "term:authority (defines: commons.systems/disposition-graph/authority)"
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:deferred (defines: commons.systems/disposition-graph/authority)"
+          - "term:doctrine (defines: commons.systems/disposition-graph/authority)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:proposal (defines: commons.systems/disposition-graph/authority)"
+          - "term:ratified (defines: commons.systems/disposition-graph/authority)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
+      - with: "commons.systems/disposition-graph/authors-words-on-the-page"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/blocking-and-canopies"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/bootstrap-exit-conditions"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/brooks-surgical-team"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/capture"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/capture-traditions"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:steer (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/checkpoint"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/chestertons-fence"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/class-recommendation"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:capture-shaped (defines: commons.systems/disposition-graph/class-recommendation)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/clean-context-review"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:clean-context review (defines: commons.systems/disposition-graph/clean-context-review)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/codd-update-anomaly"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/coverage"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/decomposition"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/delegation"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:main thread (defines: commons.systems/disposition-graph/delegation)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "term:subagent (defines: commons.systems/disposition-graph/delegation)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/delegation-bounds-and-sizing"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/deprecation-not-deletion"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/dialogue"
+        keys:
+          - "term:account (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:alternative (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:confirmed (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:dialogue (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:draft (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:fact (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:persistence (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:recommendation (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:ruling (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:stage (defines: commons.systems/disposition-graph/dialogue)"
+          - "term:standing answer (defines: commons.systems/disposition-graph/dialogue)"
+          - "words:words/2026-09-03/49"
+          - "words:words/2026-09-03/50"
+          - "words:words/2026-09-04/27"
+          - "cites"
+          - "depends"
+      - with: "commons.systems/disposition-graph/domain-assumptions-reading"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/dry-single-source-of-truth"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/evaluation"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/event-sourcing-with-snapshots"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/fagan-entry-criteria"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/fagan-inspection-roles"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/fidelity"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/file-drawer-and-pre-registration"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/form-vocabulary"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/forms"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/frontier-consistency"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:frontier survey (defines: commons.systems/disposition-graph/frontier-consistency)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/frontier-metrics"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/graph-topology"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/hand-written-projection-drift"
+        keys:
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/harness-tradition"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/hexis"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/how-a-fact-is-headed"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/information-hiding"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/instruments"
+        keys:
+          - "term:check (defines: commons.systems/disposition-graph/instruments)"
+          - "term:evidence (defines: commons.systems/disposition-graph/instruments)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
+      - with: "commons.systems/disposition-graph/knowledge-store"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/legacy"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
+      - with: "commons.systems/disposition-graph/legislative-amendment-in-context"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/lint-and-the-false-positive-threshold"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/literate-programming"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/lockfile"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/madr-decision-records"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/mapreduce-and-cross-shard-blindness"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/master-detail-selection"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/materialization"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/model"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:disposition (defines: commons.systems/disposition-graph/model)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:node (defines: commons.systems/disposition-graph/model)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/montgomery-informed-consent"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/multi-call-binary-and-facade"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/n-version-programming"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/namespaces"
+        keys:
+          - "term:id (defines: commons.systems/disposition-graph/namespaces)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/nielsen-user-control-and-freedom"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/node"
+        keys:
+          - "term:answer (defines: commons.systems/disposition-graph/node)"
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:form (defines: commons.systems/disposition-graph/node)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:question (defines: commons.systems/disposition-graph/node)"
+          - "term:rationale (defines: commons.systems/disposition-graph/node)"
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
+      - with: "commons.systems/disposition-graph/non-liquet"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/none-of-the-above-ballot"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/notarial-minute"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/npm-committed-lockfile"
+        keys:
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/operation-naming-in-telemetry"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/peirce-paper-doubt"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/persistence"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/plato-maieutics"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/plato-periagoge"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/probe-or-node"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/progressive-disclosure"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/projection"
+        keys:
+          - "term:graph browser (defines: commons.systems/disposition-graph/projection)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:projection (defines: commons.systems/disposition-graph/projection)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
+      - with: "commons.systems/disposition-graph/promotor-fidei"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/prose-and-structure"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/purpose"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/purpose-criteria"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/quotes"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:ledger (defines: commons.systems/disposition-graph/quotes)"
+      - with: "commons.systems/disposition-graph/rationale-edge"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/readings"
+        keys:
+          - "term:adopted (defines: commons.systems/disposition-graph/readings)"
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:reading (defines: commons.systems/disposition-graph/readings)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/reconciliation-reading"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/recording"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:confirmation (defines: commons.systems/disposition-graph/recording)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "term:substance (defines: commons.systems/disposition-graph/recording)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/regression-test-selection"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/rejected"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:rejected alternative (defines: commons.systems/disposition-graph/rejected)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:review (defines: commons.systems/disposition-graph/review)"
+      - with: "commons.systems/disposition-graph/review-approval-pinned-to-a-revision"
+        keys:
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/review-cost"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/review-model"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/review-skills"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "words:words/2026-09-04/10"
+      - with: "commons.systems/disposition-graph/rfc-pep-status-field"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/rsi"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/scholarly-peer-review"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/scholastic-articulus"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/scope"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:order (defines: commons.systems/disposition-graph/scope)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/second-stop"
+        keys:
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/segregation-of-duties"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/self-contained-specification"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/self-documentation"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/session-context"
+        keys:
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:rules (defines: commons.systems/disposition-graph/session-context)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/single-subject-rule"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/software-factories"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/spec-driven-development"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/special-verdict-form"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/srs-introduction"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/stub-traditions"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/survey-selection"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/the-wrong-abstraction"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/tier"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/tolerated-inconsistency"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/traditions-home"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/transience"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:liquidation (defines: commons.systems/disposition-graph/transience)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:persistence (defines: commons.systems/disposition-graph/transience)"
+          - "term:shim (defines: commons.systems/disposition-graph/transience)"
+          - "term:standing (defines: commons.systems/disposition-graph/transience)"
+          - "term:un-aligned disposition (defines: commons.systems/disposition-graph/transience)"
+          - "parent:commons.systems/disposition-graph/model"
+          - "cites"
+      - with: "commons.systems/disposition-graph/turn-form"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "words:words/2026-09-06/5"
+          - "words:words/2026-09-07/18"
+          - "depends"
+          - "cites"
+      - with: "commons.systems/disposition-graph/un-aligned-children"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/unanswered"
+        keys:
+          - "term:answered (defines: commons.systems/disposition-graph/unanswered)"
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+          - "term:unanswered (defines: commons.systems/disposition-graph/unanswered)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/unconfirmed-accumulation"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/under"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:context (defines: commons.systems/disposition-graph/under)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:rank (defines: commons.systems/disposition-graph/under)"
+          - "term:under (defines: commons.systems/disposition-graph/under)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/disposition-graph/unit-skills"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/utility-syntax-flag-or-subcommand"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/validation-order"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/value-of-information"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/verifying-traces-and-early-cutoff"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/viable-options"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:option (defines: commons.systems/disposition-graph/viable-options)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:viable (defines: commons.systems/disposition-graph/viable-options)"
+          - "cites"
+      - with: "commons.systems/disposition-graph/vocabulary-option-summary"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/vocabulary-view"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/web-routing"
+        keys:
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/what-acts-during-bootstrap"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:bootstrap (defines: commons.systems/disposition-graph/what-acts-during-bootstrap)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/what-an-option-row-carries"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/when-the-kickback-feedback-shows"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/where-a-change-request-goes"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/where-the-unconfirmed-indication-goes"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:ratify (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/which-facts-are-listed"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "term:propose (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/disposition-graph/work-loop"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:frontier (defines: commons.systems/disposition-graph/work-loop)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
+          - "parent:commons.systems/disposition-graph/model"
+      - with: "commons.systems/public/agency"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/public/aristotle-arche-of-action"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+      - with: "commons.systems/public/pettit-non-domination"
+        keys:
+          - "term:boldness (defines: commons.systems/disposition-graph/growth)"
+          - "term:maieutic (defines: commons.systems/disposition-graph/growth)"
+          - "term:periagogic (defines: commons.systems/disposition-graph/growth)"
+          - "term:project (defines: commons.systems/disposition-graph/growth)"
 facts:
   - name: answer
     options:
@@ -1662,3 +2409,26 @@ The session's reply: Validated on the main thread: the option's paragraph now re
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/growth stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `turn-form-to-a-child-and-terms-aligned`; 12 `## Disposition` entries became the ledger entries words/2026-09-03/58, words/2026-09-02/8, words/2026-09-03/59, words/2026-09-03/60, words/2026-09-03/50, words/2026-09-03/49, words/2026-09-04/27, words/2026-09-04/10, words/2026-09-06/5, words/2026-09-07/18, words/2026-09-03/61, words/2026-09-03/62, referenced by 9 options the entry's own date names and by the recommended option for 3 the date named none; and `stands` left the answer fact. The content of `boldness-reversed (at a86b9399)`, `the-turn-takes-one-of-four-forms (at b319e072)` was recovered from the commit at which the answer fact recommended it. The record wrote no text of its own for `split-presentation-and-movements`, `define-sitting`, `cite-unanswered-for-responses`, `facts-from-recommendation-field`, `partial-ratification`, `strike-phantom-depends`, `cite-the-reading`, `queue-in-ruling-order`, `boldness-left-and-dialogue-corrected`, `issue-trackers-as-the-loop`, `tactics-as-the-loop`, `phases-as-the-loop`, `the-router-and-its-gates`, `born-parked-review`, `placement-gates`, `the-curriculum`, `the-skills-own-text-as-authority`, `rejected-alternative-is-an-option`, `proposal-as-a-state-of-a-ratified-node`, `the-dialogue-is-grounding-intent-and-confirmation`, `turn-forms-as-its-own-node`, `the-fourth-form-carries-the-recording`, `third-usage-in-the-ruling-order`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `89f4bffabf8e00af74bee0c8b4f32b26581c9f1c` is re-computed for the encoding as `bed10a4712e392bc195d0d7d0ed20d7cf11994b0`; nothing it read changed. The survey's pin `99d667c6fd7d8d8d7fb61bd1a5289ac8bb458c66` was already past the recommendation and is left as it stood.
+
+### Frontier survey, 2026-09-07, of bed10a47
+
+Read in clean context by a subagent given the whole graph and nothing of the sitting, judging this node's recommendation against every other node. The survey gives no verdict.
+
+Findings:
+
+- Cross-reference (12), Readings bearing on it. Two readings at the ruling stage bear on this node's answer at an option its recommendation has left: `commons.systems/disposition-graph/plato-maieutics` and `commons.systems/disposition-graph/plato-periagoge` both record `commons.systems/disposition-graph/growth#answer#standing (adopted)`, while this node's facts read `answer: recommends turn-form-to-a-child-and-terms-aligned (moderate)`. By `readings`' own rule a tradition adopted on an option not chosen projects as chosen over, so the record now says Plato was considered and passed over on growth, which is not what either reading's answer says.
+- Redundancy (9), Answer and the reading beneath it. The Republic loci for the periagogic movement are stated in two places, and the repair is recorded as two uncoordinated options rather than one: this node carries `cite-the-reading` — "Growth's answer drops its own Republic citation for the periagogic movement and cites this reading instead, so the loci are stated in one place." — while `plato-periagoge` carries `citation-once` — "The Republic loci are stated once, on this reading, and growth cites the reading instead of restating them. Growth's answer cites 518b to d while this node's source adds 521c and 515c to 516a, so the record gives the same conduct two citations and growth's periagogic movement requires probes cited by locus." Ruling either alone leaves the duplication half-cured.
+
+Strongest counter-argument (moderate): The recommendation mints a child, `turn-form`, out of the answer of the node that settles sixty-eight others, and it does so while `turn-form` already stands in the graph at the ruling stage with its own recommendation, so the author is asked to authorize a decomposition that has already happened. The frontier reads the same shape elsewhere as the sixteenth validation's error: a node whose only possible answer is a reading of its parent's answer is a probe on the parent, and `turn-form`'s question, which of four forms a turn takes, is put most naturally as "on growth, which did you intend". Against that, the four turn forms are cited by `plato-periagoge` and `plato-maieutics` on their own account, which is the survival test the same validation sets, so the child survives it.
+
+### Frontier finding, 2026-09-07
+
+Kind: cross-reference.
+
+Two readings at the ruling stage bear on options their targets have left, so the record projects the opposite of what the readings say. `plato-maieutics` records `commons.systems/disposition-graph/growth#answer#standing (adopted)` and `plato-periagoge` records the same, while `growth`'s facts read `answer: recommends turn-form-to-a-child-and-terms-aligned (moderate)`; `plato-maieutics` further records `commons.systems/disposition-graph/alignment-page#answer#every-fact-every-option (diverged)` while `alignment-page` recommends `the-context-pane-previews-the-selected-option`. Under `readings`' own derivation, chosen over is derived for "a tradition adopted on an option not chosen", so both Platonic readings now project as considered and passed over on `growth`. `readings` states the duty that would prevent this and declares it unmet: the re-pointing is "stated here and unchecked, unmet across the record at this commit", over the 109 `bears` entries its option `re-pointing-checked` measures.
+
+Also named: commons.systems/disposition-graph/plato-maieutics, commons.systems/disposition-graph/plato-periagoge, commons.systems/disposition-graph/alignment-page, commons.systems/disposition-graph/readings.
+
+Proposed: The survivor is `readings`' re-pointing duty, made checkable: `re-pointing-checked` is the option that carries it, and the two Platonic readings' `bears` entries are re-pointed at the options their targets now recommend before either node is ruled. Nothing merges; what moves is the pointer, and the check moves from prose into the validator so that the twelfth validation is not left to a reader's memory across 109 entries.
+
+Recorded as an option on commons.systems/disposition-graph/plato-maieutics's answer fact: `bears-repointed-to-the-recommended-option` (source review, 2026-09-07).

@@ -1,6 +1,6 @@
 ---
 question: What is this repository for?
-stage: ruling
+stage: maieutic
 review:
   verdict: forward
   strength: moderate
@@ -512,3 +512,13 @@ Proposed: Record the independence test as the reason on each existence fact's `p
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/purpose stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `standing`; the `## Rationale` its `**AI support.**`; the `## Recommendation` fence became the content of `draft`; 9 `## Disposition` entries became the ledger entries words/2026-09-02/23, words/2026-09-02/24, words/2026-09-02/25, words/2026-09-02/26, words/2026-09-02/27, words/2026-09-02/28, words/2026-09-02/29, words/2026-09-02/30, words/2026-09-03/68, referenced by 8 options the entry's own date names and by the recommended option for 1 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `fold-option-nodes`, `disclose-unstated-arche`, `cite-forms`, `say-instrument-not-criterion`, `keep-the-authors-words`, `knowledge-store-first`, `define-by-its-parts`, `intent-in-prompts-chat-or-memory`, `issue-trackers-as-the-record-of-intent`, `data-structure-the-harness-consumes`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `5d11c3a38fbd5b02874305367c2b21e7183c28c7` was already past the recommendation and is left as it stood. The survey's pin `0d2481cf1b07f9f9afb3f5e76b4afea2a2b0aced` is re-computed for the encoding as `4720df14f032114a26a19af75e8d9d01bd57ef73`; nothing it read changed.
+
+### Frontier finding, 2026-09-07
+
+Kind: decomposition.
+
+Independence, the sixteenth validation. `hexis` asks "In the purpose answer, is the hexis claim stated first and the knowledge store as its gloss?" — a question whose only possible answer is a reading of `purpose`'s answer, whose facts repeat `purpose`'s, and which would be pruned the moment `purpose`'s recommendation moved; `purpose` already carries the answer as the option `knowledge-store-first` sourced from `commons.systems/disposition-graph/hexis`, and `hexis` itself carries the review option `sub-ruling-of-purpose`. The record has also recommended it away: `graph-topology`'s option `a-third-bound-for-open-business` "cites `hexis`, whose existence fact has recommended `prune` since 2026-09-04". The brief carries no `under` field for neighbourhood nodes, so the parent relation is read from the question's own wording and from the cross-sourced option rather than from a field.
+
+Also named: commons.systems/disposition-graph/hexis, commons.systems/disposition-graph/graph-topology.
+
+Proposed: The survivor is `purpose`, and `hexis` becomes a probe on it: asks — on the purpose answer, which does the record's claim rest on, the disposition of the person or the store of what they have said; why — `purpose`'s answer states both and the record has never said which is the claim and which its gloss, and `purpose` carries `knowledge-store-first` as an option sourced from `hexis` with no ruling between them; discharges — it settles the order of the two clauses in `purpose`'s answer and moves `purpose`'s recommendation on its answer fact; fact — answer. `graph-topology`'s third-bound option is redrawn to cite `purpose` rather than a node recommended for pruning. No probe is raised in this file's `probes` array, because raising it is the act of the step that applies this proposal and the node's own existence fact already carries the prune.
