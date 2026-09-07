@@ -54,6 +54,7 @@ review:
   strength: strong
   date: 2026-09-07
   of: 921e4c32742fc6d21509f15ba189eb1fc52adfc9
+  commit: 660d178d4d869254ec3a7f862dc9e122e5e3a69c
   against: "The answer's own strongest evidence argues against its shape. Its ground for moving a unit's instructions into the record is a measurement of drift among files nobody projects, and its remedy is five more files nobody projects, in a record that measured two hand-written skills diverging from each other on the model rule inside a single day and minted `hand-written-projection-drift` to ask what guards them -- a node still at the periagogic stage with no answer. Everything the author's words name is bought by the package and the generator alone: the instructions leave scratch, stop being rewritten each sitting, become an artifact a node projects and a reading can read. What the five directories add on top is the harness listing and the telemetry split, and the telemetry premise is one `review-skills` itself records as unverified in this repository. So the marginal five artifacts are spent on an unverified premise, in the interval whose danger this record has already measured, and the check the answer offers in exchange -- a currency step that reads the nodes at every invocation -- is the same check that failed to catch the divergence the record found by a reading and not by the step."
 form: rule
 under:

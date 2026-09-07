@@ -6,6 +6,7 @@ review:
   strength: strong
   date: 2026-09-07
   of: bd1ce88d1751f30cc38c571ed544976f3e35a2ae
+  commit: 660d178d4d869254ec3a7f862dc9e122e5e3a69c
   against: "The paragraph decides what the frontier's only reader may not see, on an untested inference, for a reading that has never once run. Validations seven, eleven and twelve -- contradiction, vocabulary and cross-reference -- read text, and topological reach is not semantic reach: two nodes can contradict each other, use one term two ways, or attribute a stale claim without either standing in the other's ancestry, children, siblings, names or readings. For every such pair outside the judged set's reach, the survey under this text sees two questions and no answers and reports nothing, and the clause's own fallback -- that an earlier survey read them -- is empty, because the record has never taken one. So the first survey the record ever runs, on a frontier of a hundred and forty nodes drafted without any survey behind it, is the one run for which the cut has nothing behind it, and it is also the run the record most needs to be complete. The saving is real and measured; the loss is unmeasured and falls on the single instrument this record has against the drift it was written to catch."
   survey:
     date: 2026-09-05

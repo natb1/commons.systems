@@ -53,6 +53,7 @@ review:
   strength: moderate
   date: 2026-09-07
   of: bc4d3457aa41f1e9a8470b1dfa533aed985c9c5a
+  commit: 660d178d4d869254ec3a7f862dc9e122e5e3a69c
   against: "The clause spends the record's scarcest guarantee to buy its smallest saving. The re-reading is the last reader between an amendment and the author's ruling, and it is also the cheapest of the three readings by this node's own measurement, so the rule downgrades the reader exactly where a miss is least recoverable and saves least. The argument that its contract determines the answer holds for the first of its two questions and not the second, whether the amendment introduces anything the last reading had no chance to see, which is a fresh judgment of a text -- the fact's own `against` concedes this, and the clause is recommended anyway. And the reply that what the weaker eye misses falls to the survey rests on a reading that, by the parent node's own rationale, no sitting has yet generated, so the fallback the clause leans on has never once run."
   survey:
     date: 2026-09-05
