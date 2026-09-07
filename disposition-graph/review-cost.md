@@ -83,6 +83,7 @@ review:
   strength: moderate
   date: 2026-09-07
   of: 0afcc1f1f65b18957dbddcdf2fd0c12e19672ebb
+  commit: 72e1715faca6cfa2f0704c4da7baffad760bcdf6
   against: "The amendment fixed the false 'no survey has ever run' premise exactly where the frontier survey's finding pointed -- the rationale paragraph -- but left the identical claim standing, word for word in substance, in the answer fact's own `against` field, which a reader meets as this node's account of the strongest case against its own recommendation. That field now contradicts both the corrected rationale beside it and this node's own review block, which recorded a survey dated 2026-09-05 before the amendment was even written. The survey's finding is therefore only partially closed, in the one place it named but not in the parallel place carrying the same error."
   survey:
     date: 2026-09-07

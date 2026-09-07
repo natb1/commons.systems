@@ -59,6 +59,7 @@ review:
   strength: weak
   date: 2026-09-07
   of: f647e854ed2c1893d7c492fd7299f95432f3cbb1
+  commit: 72e1715faca6cfa2f0704c4da7baffad760bcdf6
   against: "The previous reading raised no findings to answer (verdict forward, strength none), so on question 1 there is nothing outstanding. On question 2, the amendment does resolve the frontier's contradiction within review-model.md itself (option prose and fence now agree on 'smaller model'), but its account rests part of that resolution on an unverified claim that a sibling node (n-version-programming) has already been edited to match; if that edit was not actually made, the record still carries the fence/option pair correctly aligned here while a sibling's bears text contradicts the corrected rank, which is exactly the kind of cross-node drift the frontier survey exists to catch and this delta reading cannot check."
   survey:
     date: 2026-09-07

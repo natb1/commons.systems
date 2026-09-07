@@ -6,6 +6,7 @@ review:
   strength: moderate
   date: 2026-09-07
   of: 89f4bffabf8e00af74bee0c8b4f32b26581c9f1c
+  commit: 72e1715faca6cfa2f0704c4da7baffad760bcdf6
   against: "The amendment can be read as fully closing the survey's finding: the fence's third usage and rationale now agree with the queue sentence and with `alignment-order`'s recommended answer, so the substantive contradiction the survey named -- rank in one clause, ruling order in two others -- is gone, and the missing `status`/`reason` on the new option is a bookkeeping gap rather than a reopening of that contradiction; a reader could judge it non-blocking for forwarding to the author's ruling. But this record treats exactly this omission as a defect elsewhere on the very same fact -- six sibling options record their absorption with `status: passed` and a reason, and an earlier reading on this node raised the identical gap as a finding that was then fixed -- so leaving the one new option unmarked is the one inconsistency in a fence otherwise being presented to the author as internally settled."
   survey:
     date: 2026-09-07

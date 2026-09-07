@@ -190,6 +190,7 @@ review:
   strength: weak
   date: 2026-09-07
   of: 39f5c588d154ed762d724dc071ccc15686cd1256
+  commit: 72e1715faca6cfa2f0704c4da7baffad760bcdf6
   against: "The amendment corrects both false claims the survey found, but it does so by again restating, in this parent's own prose, a snapshot of what a child node currently recommends and at what stage — the very method that produced the staleness within a single day, as the option `clauses-cited-not-restated` already argues on this same fact. Nothing stops the same class of drift from recurring the next time `where-the-unconfirmed-indication-goes` moves. That risk is already named and recorded as an open, undecided option rather than hidden, and this reading finds no fresh instance of it in the diff, so the counter-argument bears on the durability of the fix rather than on whether it answers what was raised."
   survey:
     date: 2026-09-07
