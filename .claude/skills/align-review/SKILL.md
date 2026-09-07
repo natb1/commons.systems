@@ -32,7 +32,13 @@ description: The clean-context review of one draft. Invoked by node id the momen
 > which the round's other drafts reach the reader as pointers too.
 > `clean-context-review`'s answer fact now recommends that option, the node
 > standing at the review stage with a forward verdict of 2026-09-05 its
-> recommendation has since moved past, and nothing on it ruled. It has no authority of
+> recommendation has since moved past, and nothing on it ruled.
+> Reconciled again on 2026-09-07 under the author's words of that day,
+> "begin applying the optimizations as you progress" and the grant of
+> bootstrap reconciliation for the accumulation and the option encoding, to
+> the recommended text of `survey-selection`, `unconfirmed-accumulation`,
+> `quotes`, `viable-options` and `dialogue`; every recommendation unanswered.
+> It has no authority of
 > its own: where it differs from the graph at `origin/disposition`, the graph
 > wins and the difference is recorded as an un-aligned disposition on the node
 > it differs from. Liquidation: the projector materializes this skill from
@@ -187,10 +193,15 @@ the same; this reading gives the first of the two.
 
 ## 2. The brief
 
-`node packages/clean-context-review/brief.mjs --node <id> [--date YYYY-MM-DD]
-[--dry]` writes `tmp/review/draft-<slug>.brief.md` from `brief-draft.md` in
-that package, and names `tmp/review/draft-<slug>.json` as the reader's output
-file. It computes no model and prints none (`review-model`).
+`node packages/clean-context-review/brief.mjs --node <id> disposition
+[--date YYYY-MM-DD] [--dry] [--draft] [--out <file>]` writes
+`tmp/review/draft-<slug>.brief.md` (or `delta-<slug>.brief.md` for a
+re-reading) from `brief-draft.md` in that package, and names
+`tmp/review/draft-<slug>.json` (or `delta-<slug>.json`) as the reader's
+output file. `--draft` forces the draft brief regardless of what the record
+would otherwise choose (`--fresh` remains only as a deprecated alias, kept
+so an existing invocation still runs). It computes no model and prints none
+(`review-model`).
 
 The brief carries the validations this reading runs, the viability judgment,
 the admission test and the cap a probe is held to, the judging criteria from
@@ -206,7 +217,7 @@ stands, its difference from the pinned text, the last reading's findings, and
 the session's replies to them — while after a kickback the brief is a fresh
 reading's, because the answer was redrawn. The kickback is read off the node's
 own `review` block, which the apply step writes on a kickback exactly as on a
-forward, so no flag is passed for it; `--fresh` remains only for the case the
+forward, so no flag is passed for it; `--draft` remains only for the case the
 record cannot show, a redraw whose kickback was never applied. The brief states its own length and
 the discipline for reading it, and it is written to be held whole by the
 reader it is given to.
@@ -295,12 +306,20 @@ dies of its own context returns nothing and is paid for twice.
    `strength`, `date`, `against`, and `of`, the pin of the recommendation
    read, which goes stale when any fact's recommendation moves; on `kickback`
    it sets the stage the reader named and writes the same. It writes a fifth
-   key beside those, `commit`, the graph commit the reviewed text was read at,
-   which the re-reading diffs against; `dialogue`'s recommended text
-   enumerates the review's draft keys as four written together or not at all,
-   so the key is unsupported by that node and recorded there as the option
-   `commit-in-the-review-block`, written meanwhile under the author's grant
-   for that reconciliation. What the
+   key beside those, `commit`, the 40-hex graph HEAD the reviewed text was
+   read at, taken unconditionally, whether or not the tree was clean, since a
+   review with no commit cannot be told apart from a review that says
+   nothing, and it is what the re-reading diffs against. `dialogue`'s
+   recommended text of 2026-09-07 now enumerates `commit` among the review's
+   own draft keys, optional beside the four written together and required
+   with none of them; what stood here as the option
+   `commit-in-the-review-block`, recorded under the author's grant for an
+   earlier reconciliation, is carried forward by that recommendation and is
+   no longer an extension this skill argues alone. The JSON keys the reader
+   itself returns — `verdict`, `findings`, `facts_check`, `viability`,
+   `probes`, `counter_argument`, `strength` — are unchanged by any of this;
+   `commit` is computed and written at the apply step, never read from the
+   reader's output. What the
    counter-argument is for: the alignment page carries it, with the strength
    this reading gave it, on the recommended option's row, in place of the case
    against the session wrote when it recorded the recommendation, and the

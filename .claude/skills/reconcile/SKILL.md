@@ -27,7 +27,8 @@ disable-model-invocation: true
 > Hand-written from the nodes `work-loop`,
 > `materialization`, `review`, `validation-order`, `delegation`,
 > `session-context`, `projection`, `transience`, `evaluation`,
-> `authority`, `viable-options`, and `prose-and-structure` of
+> `authority`, `viable-options`, `prose-and-structure`, `survey-selection`,
+> `unconfirmed-accumulation`, and `quotes` of
 > `commons.systems/disposition-graph`, all unanswered, and
 > from the author's dispositions of 2026-09-03 and 2026-09-04 quoted on
 > `work-loop` and `viable-options`.
@@ -42,6 +43,11 @@ disable-model-invocation: true
 > `persistence` node prescribes and nothing has built, which the shim
 > declaration on `work-loop` already said and this artifact did not. That
 > recommendation is unanswered.
+> And reconciled on 2026-09-07 under the author's words of that day,
+> "begin applying the optimizations as you progress" and the grant of
+> bootstrap reconciliation for the accumulation and the option encoding, to
+> the recommended text of `survey-selection`, `unconfirmed-accumulation`,
+> `quotes`, `viable-options` and `dialogue`; every recommendation unanswered.
 
 `/reconcile` runs one iteration of reconciliation on the implementation
 ref (`greenfield` during bootstrap): derive the frontier, take the
@@ -100,7 +106,18 @@ judgment.
    stale, or projected from a node that is no longer `tier: global`. Use it
    where the answer is wanted without the write, such as in a report or a
    check on someone else's landing.
-4. Read this file against the nodes it projects. Where a node differs,
+4. `node packages/disposition/validate.mjs disposition --tier` reports the
+   mechanical tier the frontier stands at; a node's page is in one of two
+   encodings, `legacy` (`## Disposition`, `## Answer`, `## Rationale`, and
+   the rest) or `content` (frontmatter, `## Facts`, and `## Account` only,
+   every option of the answer or persistence fact carrying its own content
+   as a `#### ` subsection, per `dialogue`'s recommended, unratified text);
+   the migration between them is `packages/disposition/migrate.mjs`, run
+   once over the whole graph at graph commit `f0741490` on 2026-09-07 under
+   the author's grant of that day, so every node now stands in the content
+   encoding; the reader still accepts a legacy node, and this loop reads a
+   node in whichever encoding it stands in.
+5. Read this file against the nodes it projects. Where a node differs,
    follow the node and report the difference (§4). Apply every shim the
    nodes declare without being asked.
 
@@ -241,7 +258,17 @@ apply the write on top of `origin/disposition`, validate, commit that one
 node file by pathspec with a message naming the node and what was
 recorded, and `git push origin disposition`. On rejection, re-fetch and
 reapply the write on the new head; never rebase the commit over another
-session's, and never carry an unrelated change with it. The session names
+session's, and never carry an unrelated change with it. Where the write
+moves a node to the review stage (the state a proposal names, above),
+that is a stage transition and a checkpoint in `checkpoint`'s sense: once
+the push lands, run the fold
+(`unconfirmed-accumulation`, `the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed`)
+over that one node,
+`node packages/disposition/accumulate.mjs disposition --nodes <id> --dry
+--report <file>` first and the same command without `--dry` to write it;
+it strikes only account sections and superseded review blocks already
+reachable from `origin/disposition`, never text this session has not yet
+pushed. The session names
 in its report every node it wrote. This procedure is by hand, and it stands
 in for the landing instrument the `persistence` node prescribes and nothing
 has built: the compare-and-swap is a session following these steps, with no

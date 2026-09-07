@@ -28,6 +28,11 @@ description: The clean-context survey of the frontier. Invoked with no argument 
 > requires the launch to name it and no text that outlives the launch to
 > carry it; `.claude/skills/align-review/SKILL.md` already did so, and this
 > file now does the same. That recommendation is unanswered.
+> Reconciled again on 2026-09-07 under the author's words of that day,
+> "begin applying the optimizations as you progress" and the grant of
+> bootstrap reconciliation for the accumulation and the option encoding, to
+> the recommended text of `survey-selection`, `unconfirmed-accumulation`,
+> `quotes`, `viable-options` and `dialogue`; every recommendation unanswered.
 > Liquidation: the projector materializes this skill from
 > ratified nodes and this hand-written file is deleted.
 
@@ -46,23 +51,60 @@ nothing of it is here.
    it with a clean tree, except a sitting's own uncommitted drafts when
    invoked from a sitting. Run
    `node packages/disposition/validate.mjs disposition`.
-2. Read `clean-context-review`, `frontier-consistency`, `review-skills`, and
-   `review-model` at their current text. What a clean-context reading is, and
-   the instruction text common to both readings, live there and not here;
-   where a node differs from this file, follow the node and record the
-   difference as an un-aligned disposition on it.
+2. Read `clean-context-review`, `frontier-consistency`, `review-skills`,
+   `review-model`, and `survey-selection` at their current text. What a
+   clean-context reading is, and the instruction text common to both
+   readings, live there and not here; what the judged set is, what a
+   candidate pair and its nominating key are, what the mechanical tier
+   gates, and what a survey leaves on a node live on `survey-selection` and
+   not here; where a node differs from this file, follow the node and
+   record the difference as an un-aligned disposition on it.
+3. Run the mechanical tier: `node packages/disposition/validate.mjs
+   disposition --tier`. It is the gate on the launch (`survey-selection`):
+   a node the tier finds a problem with is repaired or kicked back, never
+   read for it, and no reader is launched while the tier reports a finding.
+   Launch only when the tier is clean, or forced with a reason recorded on
+   the launch (`--force-tier` at the brief step, §2): the tier is a bound on
+   what enters it, so a forced launch over a dirty tier is named as one in
+   the brief itself and is a deviation to report, not a default.
 
-## 1. The judged set, and the context
+## 1. The judged set, and the selection
 
 The context is the whole graph, answered and unanswered at every stage, read
 in one context without its `## Account` sections, which are the dialogue's
-history and not its text. The judged set is every node at the review or ruling
-stage whose recommendation hash differs from its survey pin or which carries
-none (`clean-context-review`); each of those is judged against every other
-node in the graph, on validations 7 to 15 of `frontier-consistency`, and
-the sixteenth, the independence test of `probe-or-node` —
-contradiction, supersession, redundancy, decomposition, vocabulary,
-cross-reference, placement and order, coverage, and merge.
+history and not its text. The judged set is every node at the review or the
+ruling stage whose recommendation has moved past its survey pin or that no
+survey has read, together with every node whose read text differs from the
+hash the last survey wrote on it (`survey-selection`); each of those is
+judged against every other node in the graph, on validations 7 to 15 of
+`frontier-consistency`, and the sixteenth, the independence test of
+`probe-or-node` — contradiction, supersession, redundancy, decomposition,
+vocabulary, cross-reference, placement and order, coverage, and merge.
+
+A pair both of whose members are unchanged since a survey last read them
+together is not compared, and a node the judged set reaches but whose read
+text has not changed since that survey is carried on one line rather than by
+what it answers, since the pair has already been read once; everything so
+struck is the frozen set, named in the survey's own output and in the
+reader's report. The selection is unsafe, and two backstops cover it. A
+whole survey, in which nothing is frozen, runs after every fourth delta
+survey, at least once in any thirty days, and unconditionally after any
+amendment to the validations, to what a reading is given, or to the tier.
+And every delta survey carries a drift probe, a random sample of one in
+twenty of the frozen pairs and never fewer than ten, drawn by a seeded
+generator whose seed the run records and handed to the reader like any other
+pair, marked as the probe; a finding anywhere in the sample forces a whole
+survey.
+
+A candidate pair is two nodes the generator nominates for comparison with the
+key that nominated it — a defined term (the node that defines it paired with
+each node that uses it), an entry of the author's words referenced by
+options on both, a citation either way in prose or in `depends`, a shared
+parent, or near-duplicate resemblance (Jaccard similarity over word shingles
+of a half or more). The key is recorded with any finding it produces and
+narrows attention, never the corpus: every node the brief carries stays
+readable, and a finding on a pair no key nominated is a finding like any
+other.
 
 A finding may name a node at any stage, judged or not, and it is applied to
 that node as the kickback flow says (the author, 2026-09-03: "Adversarial
@@ -96,19 +138,44 @@ survey pin on the same; this reading gives the second of the two.
 
 ## 2. The brief
 
-`node packages/clean-context-review/brief.mjs --survey [--date YYYY-MM-DD]
-[--dry]` writes `tmp/review/survey.brief.md` from `brief-survey.md` in that
-package, names `tmp/review/survey.json` as the reader's output file, and
-writes `tmp/review/survey.pins.json` beside the brief: the graph commit read
-and the recommendation hash of every node of the graph, judged and context
-alike. That sidecar is what the apply step compares against, and never a hash
-the reader copied — which is what serializes this reading, so nothing is
-locked. It computes no model and prints none (`review-model`).
+`node packages/clean-context-review/brief.mjs --survey disposition
+[--date YYYY-MM-DD] [--dry] [--whole] [--validations-changed] [--force-tier]
+[--out <file>] [--sidecar-dir <dir>]` writes the brief from `brief-survey.md`
+in that package and names the reader's output file. `--whole` forces a whole
+survey (nothing frozen); `--validations-changed` forces one after an
+amendment to the validations, to what a reading is given, or to the tier
+(`survey-selection`'s unconditional backstop); the tier gate of §0 is
+`--force-tier`'s, recorded there and not repeated here.
+
+Beside the brief it writes three sidecars, by default under `tmp/review/`:
+`survey.pins.json`, the graph commit read and the recommendation hash of
+every node of the graph, judged and context alike — what the apply step
+compares against, and never a hash the reader copied, which is what
+serializes this reading so nothing is locked; `survey.selection.json`, the
+selection this run made — the frozen set, the live candidate pairs with
+their nominating keys, and the drift probe drawn from the frozen set with
+its seed — which the apply step reads to record `pairs` on each judged node
+and which the next survey's cut is taken over exactly those entries
+(`survey-selection`); and `survey.history.json`, the record of which
+surveys ran whole and which ran as deltas, which is what the two backstops
+above are certified against. All three must be read at the graph commit the
+survey was launched at: a stale pair of sidecars compares against text the
+tree no longer holds. Writing the brief registers this survey in the
+history sidecar at once (a `--dry` run registers nothing), so a diagnostic
+or measurement run of this step must pass its own `--sidecar-dir` — a
+`tmp/review/` run against the live sidecars would frozen-count and register
+a survey that never reads or applies, corrupting the pins the next real
+apply reads against.
 
 The brief carries the validations this reading runs, how a tangle and a
 subtree divergence are recorded (`alignment-order`), the admission test and
-the cap a probe is held to, and nothing of the session. `tmp/` is gitignored
-scratch.
+the cap a probe is held to, the tier's own stamp (clean, or forced with the
+reason recorded at the launch), a summary of the selection (how many nodes
+judged, how many pairs live, how many frozen, whether this run is whole and
+why), the judged index, the live candidate pairs each with the key that
+nominated it, the drift probe, and the reached-unchanged list — the nodes
+the judged set reaches but carries on one line rather than by what they
+answer — and nothing of the session. `tmp/` is gitignored scratch.
 
 ## 3. The reader
 
@@ -171,15 +238,26 @@ reading rather than as a finding of nothing.
    page. Nothing is applied unvalidated.
 2. `node packages/clean-context-review/apply.mjs tmp/review/survey.json
    --replies tmp/review/replies.json [--overrides tmp/review/overrides.json]
-   [--pins tmp/review/survey.pins.json] [--date YYYY-MM-DD]`. It reads the
+   --pins tmp/review/survey.pins.json --selection tmp/review/survey.selection.json
+   [--date YYYY-MM-DD]`. It reads the
    reading from the file's own `scope`, and then:
    - for each judged node whose current recommendation hash equals the hash
-     the pins sidecar recorded, writes `review.survey` with its `date` and its
-     `of`, that same hash, and applies that node's findings; a judged node
+     the pins sidecar recorded, writes `review.survey` with `date`, `of` (that
+     same hash), `commit` (the graph commit the survey read), `text` (the
+     hashes of the five sections its validations read), `findings` (the
+     register of what the survey left open on the node, each with the
+     support it rests on and the condition that discharges it), and `pairs`
+     (the pairs the selection sidecar shows touching this node, each with
+     the nominating key it was drawn on) — the six keys `survey-selection`
+     names on a judged node — and applies that node's findings; a judged node
      whose recommendation moved since receives nothing, is reported, and is
      judged again by the next survey. A finding naming a node whose
      recommendation has moved since the graph commit read is discarded with a
-     note, for the same reason: a reading attests to the text it read;
+     note, for the same reason: a reading attests to the text it read. Giving
+     `--selection` is what lets `pairs` be recorded at all; omitting it
+     records the other five keys and notes that this survey's cut therefore
+     falls back to the survey date rather than to the pairs actually read,
+     which freezes more than it should on the next run;
    - appends `### Frontier finding, <date>` to every node a finding names, at
      whatever stage, with the kind, the finding, the other nodes named, the
      proposed edit, and where any proposed option was recorded, and sets each

@@ -78,6 +78,11 @@ description: Record or revise one node of the disposition graph by interview wit
 > `tier` vocabulary, and its clause that until `tier` is ruled the design
 > unit escalates on the first limb alone is carried. Both recommendations
 > are unanswered.
+> And reconciled on 2026-09-07 under the author's words of that day,
+> "begin applying the optimizations as you progress" and the grant of
+> bootstrap reconciliation for the accumulation and the option encoding, to
+> the recommended text of `survey-selection`, `unconfirmed-accumulation`,
+> `quotes`, `viable-options` and `dialogue`; every recommendation unanswered.
 > Every recommendation these reconciliations wrote is unanswered, and no
 > ruling is recorded on any of it while either reading of the
 > clean-context review is owed.)** Hand-materialized from
@@ -90,7 +95,8 @@ description: Record or revise one node of the disposition graph by interview wit
 > `viable-options`, `prose-and-structure`, `node`, `under`, `projection`,
 > `un-aligned-children`, `fidelity`,
 > `persistence`, `readings`, `review`, `evaluation`, `attention`,
-> `delegation`, and `transience` of `commons.systems/disposition-graph`,
+> `delegation`, `transience`, `survey-selection`,
+> `unconfirmed-accumulation`, and `quotes` of `commons.systems/disposition-graph`,
 > all unanswered, and from the author's rulings quoted
 > on them. This text has no authority of its own.
 > Where it conflicts with the graph at `origin/disposition`, the graph wins
@@ -139,7 +145,37 @@ skill only when the session starts in the checkout that carries it.
    (`authority`, `viable-options`), stated in §2, and the two-kinds
    reading it replaces, which had the same rule applied by default as a
    shim and withheld as a permission, goes with it.
-3. Sessions divide by ref (`work-loop`): this skill writes the
+3. A node file is in one of two encodings, `legacy` or `content`, and the
+   reader accepts either (`dialogue`'s recommended text, not yet ratified).
+   A legacy-encoded node carries `## Disposition`, `## Answer`, `##
+   Rationale`, `## Facts` and `## Account`, with the standing text held
+   whole in `## Answer` and the AI's recommended departure from it, where
+   there is one, held whole in a `## Recommendation` fence. A
+   content-encoded node has none of those four sections: it is its
+   frontmatter, `## Facts` and `## Account` alone, every option of the
+   answer or the persistence fact carries its own content under its `####`
+   subsection — whole, as a fenced `markdown` block holding the node as it
+   would stand under it, or as a named change, a `diff` block of hunks
+   applied strictly against another option's resolved content — and a
+   node's answer is the resolved content of the option labelled confirmed,
+   or, where none is confirmed, of the option the answer fact recommends.
+   The migration from legacy to content is `packages/disposition/migrate.mjs`,
+   run once over the whole graph at graph commit `f0741490` on 2026-09-07
+   under the author's grant of that day, after which every node stands in
+   the content encoding; the reader still accepts a legacy node, so read a
+   node in whichever encoding it stands in and never assume one from the
+   other's absence.
+4. The author's words are not a node's own section: a ruling's words are
+   entered in the ledger, `disposition/words/<date>.md` on this ref beside
+   the graphs, verbatim and dated, addressed `words/<date>/<n>` by the
+   date and the entry's ordinal within it, appended and never inserted,
+   reordered, or renumbered, and the option the words bear on carries the
+   reference to that address rather than a second copy of the words
+   (`quotes`'s recommended option `words-in-a-ledger-on-the-ref`). A ruling
+   whose words are entered anywhere else, or whose option carries no
+   reference to them, is invalid (`authority`). The ledger already holds
+   entries dated 2026-09-02 through 2026-09-07.
+5. Sessions divide by ref (`work-loop`): this skill writes the
    `disposition` ref and publishes pages, and never commits to the
    implementation ref; rules and the other projections are the
    reconciliation skill's. The division is not exclusive the other way: a
@@ -154,7 +190,7 @@ skill only when the session starts in the checkout that carries it.
    is the claim. Landing location is
    never a question for the author: place the node under the question it
    refines, and leave the author's overrule open.
-4. Read the open dialogue before opening a new one:
+6. Read the open dialogue before opening a new one:
    `node packages/disposition/project.mjs disposition --frontier -` lists
    every node with its status, its class and where the class comes from,
    `stage`, each fact's recommendation, review
@@ -173,7 +209,7 @@ skill only when the session starts in the checkout that carries it.
    stages a response on the node as a whole (`alignment-page`)). Act
    on every response before anything else (§5), then resume each sitting
    at its stage.
-5. `node packages/disposition/project.mjs disposition --rules .claude/rules
+7. `node packages/disposition/project.mjs disposition --rules .claude/rules
    --check` reports, and writes nothing, whether the rule projection under
    `.claude/rules/` is current with the graph. A rule file is a projection of
    a `tier: global` node's answer, so amending such a node stales it, and the
@@ -308,11 +344,13 @@ skill only when the session starts in the checkout that carries it.
   node id they name, is supported usage. Record it at once as an
   un-aligned disposition and land it (§6), then continue the sitting in
   hand: a node under the node the disposition would refine, with
-  `question`, `stage: periagogic`, a `## Disposition` section holding the
-  author's words verbatim and dated, and an `## Account` section naming
-  what the sitting would amend and its periagogic object; no `## Answer`,
-  no ruling. For a node the author names, set `stage` on that node and add
-  the `## Disposition` of their words. A disposition that asks or answers
+  `question`, `stage: periagogic`, the author's words entered in the
+  ledger verbatim and dated and referenced from the node (§0, `quotes`'s
+  recommended option `words-in-a-ledger-on-the-ref`), and an `## Account`
+  section naming what the sitting would amend and its periagogic object;
+  no `## Answer`, no ruling. For a node the author names, set `stage` on
+  that node and enter their words in the ledger the same way. A
+  disposition that asks or answers
   more than one question is queued as several such nodes, one per question,
   each carrying the author's words that bear on it and, in `depends`, the
   questions it rests on; the decomposition that yields them is the
@@ -333,13 +371,22 @@ skill only when the session starts in the checkout that carries it.
   loses its context resumes every node from its stage, and nothing the
   author said is held only in a context. When the graph cannot validate at
   a transition, write the node to the worktree anyway and report the
-  failure; never hold it back in context until it can land.
+  failure; never hold it back in context until it can land. Once the push
+  in §6 lands the transition, the checkpoint also runs the fold
+  (`unconfirmed-accumulation`, `the-fold-runs-at-the-checkpoint-and-only-over-what-is-pushed`):
+  `node packages/disposition/accumulate.mjs disposition --nodes <id> --dry
+  --report <file>` first, to see what it would strike from the node's
+  `## Account`, and the same command without `--dry` to write it. The fold
+  strikes only sections already reachable from `origin/disposition`, so it
+  never touches the unpushed text of the sitting in hand; the node set is
+  `--nodes <id>`, the node this transition just landed, named by the
+  checkpoint and never widened at a session's choosing.
 - **The dialogue's state** (`dialogue`, `facts-carry-options`) is on the
   node and nowhere else, and a node carries it while no ruling grants it,
   while the author has ruled it deferred, or while its recommendation has
   moved from a choice the author has ruled, whose confirmed choice, of any
   class, keeps its full authority until the author rules for another:
-  `stage`; `## Disposition`; `facts`, the
+  `stage`; `facts`, the
   decisions on the node, each with a `name` drawn from the four reserved
   names and no others, `answer`, the node's own question, and the three
   the dialogue node names, `authority`, the class a ruling would confer,
@@ -414,8 +461,8 @@ skill only when the session starts in the checkout that carries it.
   an option's source carries, and `raised`, the date; a probe discharged
   stays on the list with `status: discharged` and the `reason`, in the
   shape a passed option's status and reason have, the two reasons being
-  that the author answered it, the reason naming their words in
-  `## Disposition`, or that the AI withdrew it, the reason saying what in
+  that the author answered it, the reason naming their words' address in
+  the ledger, or that the AI withdrew it, the reason saying what in
   the record answers it (`author-questions`). And `## Account`, the account
   in prose, which is not a proposal and does not carry that name. A
   ruling-stage node without a forward verdict is invalid; a recommendation changed after its review is sent
@@ -460,7 +507,8 @@ skill only when the session starts in the checkout that carries it.
   when it is found at recording, as a probe, or as an option on the
   parent's fact where the AI holds its answer viable, with `source` naming
   the node it was, its account folded into the parent's, any words of the
-  author's on it moved to the parent's `## Disposition`, and its options
+  author's on it kept at their ledger address and referenced from the
+  parent, and its options
   struck, since options that were never candidates are the costumed
   options the author classified on 2026-09-04. A node already standing is
   not struck by the sitting: the survivor is recorded on the parent the
@@ -684,10 +732,17 @@ skill only when the session starts in the checkout that carries it.
 
 ## 3. Record
 
-- The author's words go into the node in the same turn they are given:
-  verbatim and dated in `## Disposition`, which stays at the recording as
-  the `quotes` node decides, the rationale restating the ruling in the
-  record's own register and never replacing the quotation. The options go
+- The author's words go into the ledger in the same turn they are given:
+  verbatim and dated in `disposition/words/<date>.md`, addressed
+  `words/<date>/<n>`, appended and never inserted, reordered, or
+  renumbered, and the option they bear on carries a reference to that
+  address rather than a second copy of the words (`quotes`'s recommended
+  option `words-in-a-ledger-on-the-ref`, §0). A node's own text is not
+  where the words stand; a legacy node's `## Disposition`, still read
+  until that node migrates, is the earlier form of the same requirement
+  and is not written into a node the sitting records fresh. The rationale
+  restates the ruling in the record's own register and never replaces the
+  quotation. The options go
   into their fact's `options` and into `## Facts` as they arise, each with
   its source and its ref, each carrying the sentence saying what it would
   answer — a `####` subsection on the answer and persistence facts, and
@@ -882,7 +937,8 @@ rule projections are regenerated by the next reconciliation run, not here.
   and the author's words. The `words` a response carries at the
   periagogic or maieutic stage are no ruling at all: they are the
   author's account of the ground, or their intention, appended verbatim
-  and dated to `## Disposition`, and the stage advances as the movement
+  and dated to the ledger and referenced from the fact the response bears
+  on, and the stage advances as the movement
   completes. Leaving a node unruled leaves it unanswered, in
   which state nothing on it acts, and the deferral the author confers is
   the `deferred` option on the authority fact, so no fourth response is
@@ -911,8 +967,9 @@ rule projections are regenerated by the next reconciliation run, not here.
 - **Record.** Write no stamp: the class is read off the rulings. Write the
   ruling on the option the author chose, with its `response`, its `date`,
   `of`, the pin of that fact's recommendation it answered, and its
-  `reason` where the author gave one, and quote
-  the author's words with their date in `## Disposition`, the rationale
+  `reason` where the author gave one, and enter
+  the author's words with their date in the ledger, referenced from the
+  option they rule on, the rationale
   restating the ruling in the record's own register and carrying no list
   a field carries, since the prose argues and the structure records
   (`prose-and-structure`); a ruling whose words
@@ -929,8 +986,11 @@ rule projections are regenerated by the next reconciliation run, not here.
   (`prose-and-structure`), and where the author has ruled for a passed
   option the recording clears its status. What
   the recording removes is the dialogue and nothing else: `stage`,
-  `review`, `depends`, `probes`, and `## Account`, `## Disposition` staying as the
-  `quotes` node decides. Validate and
+  `review`, `depends`, `probes`, and `## Account`; a legacy node's
+  `## Disposition` stays until that node migrates, and a node the sitting
+  records fresh carries none, its words living only in the ledger
+  (`quotes`'s recommended option `words-in-a-ledger-on-the-ref`).
+  Validate and
   land. A ruling that the node not exist, on its `existence` fact, is
   recorded before the node is deleted, on the node that proposed the prune
   where one did and otherwise on the parent, so the record keeps the
