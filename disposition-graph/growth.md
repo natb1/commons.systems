@@ -5,6 +5,7 @@ review:
   verdict: forward
   strength: strong
   date: 2026-09-07
+  commit: "b319e072bb983e08de11c64838ad3f2f36c1abd8"
   of: d3e9fa8a9dcd869cc2e6afa5317a86ac833996c8
   against: "The draft's own paragraph is the case against it. Growth's answer already answers, in one paragraph, the loop of three moves, the three usages, the two conducts with their Plato loci, the two periagogic objects, the six movements, the presentation rule with its three facts, the persistence list, the ban on transient dispositions, and the un-aligned queue; the 2026-09-07 amendment adds one more, and one that binds harder than any of them, since it governs every turn of every sitting and admits no fifth. Two clean-context readings of this node have already found that answer to break the rule it sits under — `node`: 'If a text answers two questions, it is two nodes' — and the session declined the split twice and referred it to the author, while the record has since done the opposite on a comparable node, minting nine children under `alignment-page` on 2026-09-05 for exactly this reason. The consequence is not formal: with one answer fact and one kick-back row, the author cannot confirm the four forms without ratifying nine other rules they were never asked about separately, and cannot refuse any one of them except by kicking the whole node back to the maieutic stage. And of all the clauses in the paragraph this is the one it is most costly to fold in unexamined, because it is the clause that decides what the author is allowed to be told."
 facts:
