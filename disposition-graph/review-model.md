@@ -1,6 +1,6 @@
 ---
 question: Which model runs the clean-context review's readings?
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -34,7 +34,10 @@ facts:
       - name: alignment-main-thread-named
         source: review
         ref: "2026-09-05"
-    recommends: fable-for-both-readings
+      - name: the-smaller-model-on-a-re-reading
+        source: ai
+        ref: "2026-09-07"
+    recommends: the-smaller-model-on-a-re-reading
     boldness: moderate
     against: "The draft's reading re-checks, on the same class of mind, a text the most capable model has just written at full attention, so the flat rule pays the top rate where the marginal detection is lowest, buys correlated blind spots where the review wanted independence, and, by pricing both readings the same, forecloses the measurement that would show it."
   - name: authority
@@ -99,42 +102,11 @@ The author, 2026-09-07, later in the same turn:
 
 ### answer
 
-The first option is recommended because it is the author's rule and because,
-judged from scratch, it is what a reading is for. The party whose blind spots
-a clean-context reading hunts is the main thread, which runs on the most
-capable model at full effort and reads its own integrated draft adversarially
-before the review, so a reader below the main thread's model finds what the
-main thread already saw, and that floor is the ceiling, since the harness
-offers nothing above it. The reviewer's strength is then a function of
-nothing the reviewed party sets, where the rule it replaces read it off
-boldness, which the drafter writes. And the price of a reading is bounded and
-known while the yield of a weaker one is unmeasured, which makes the
-strongest reader on every reading the allocation to make until the yield is
-measured. Three of the five others are passed over, the rule the record
-carried, the steelman's per-reading rule with the survey on the strongest
-model, and a reviewer chosen for difference from the drafter, each against
-the author's words and each on a merit stated on its row. Two stay viable
-beside the author's rule. The first is the same rule with its own return to a
-per-reading rule written in for when the measurement exists, which the author
-may prefer to a rule revisited by interview. The second is
-`fallback-when-the-model-is-unavailable`, raised by the author's own words of
-2026-09-05 when three readers died on the session limit inside a minute, and
-the recommendation is not moved to it for one reason only: what the author
-directed in that turn was a substitution for the day, and which of the two
-behaviours a rule should bind, waiting for the named model or running the next
-model down with the substitute recorded, is a choice the author has not made.
-It is the author's to make and not the AI's to read off a direction given in a
-sitting, so both sides are on the fact and the recommendation stays where the
-author's rule of 2026-09-04 put it. Until that ruling the substitution the
-skills run is unsupported implementation and the answer says so. Moderate boldness: the model for both
-readings is the author's words, and what rests on the AI is the effort, high
-and fixed by the skill and not an option of its own, since the question is
-the model and the effort is the brief's under the delegation node, full
-effort being the edit the author makes if they want the main thread's peer
-at its effort too; the reading of fable as the name of the delegation
-node's role for it, the most capable model, so that the rule outlives the
-name; the home of the rule on this node, with the two nodes that stated it
-citing it; and the script's silence on a model it no longer computes.
+`the-smaller-model-on-a-re-reading` is recommended: it is `fable-for-both-readings` with one clause added, and the argument for the two readings the author named is unchanged. The author's words of 2026-09-07 ask whether the model choice is right sized for the task, and the answer that was right on 2026-09-04 is silent on a reading that did not then exist: the author named the review of a draft and the survey, and the re-reading of an amendment was made by the `review-cost` node on 2026-09-05, so this clause narrows no rule the author gave and fills a gap the rule as written leaves open.
+
+Why it is the one reading of the three that moves. The argument that puts the other two at the top of the range is that the party whose blind spots a reading hunts is the main thread, which runs on the most capable model at full effort, so a reader below it finds what the main thread already saw; that argument is about judging an answer whole. The re-reading is not given an answer to judge. It is given the amendment, the findings the amendment answers, and two questions to ask of them, and its brief tells it in terms not to re-run the validations of the first reading -- so what it looks for and where it looks are fixed by its contract, which is the kind of work the `delegation` node's rule puts on the smaller of two models. The clause also buys the measurement this node's own answer says it forecloses: the instrument declares that it cannot price a weaker reader because every reading runs at the top, and under this clause every re-reading is a weaker reader on an object the stronger one has already read, which is the sample second reading the answer said it did not declare.
+
+Moderate boldness. What rests on the author is the model of the two readings they named, unchanged, and their question of 2026-09-07 asking whether the sizing is right; what rests on the AI is that the re-reading is not among the readings their words of 2026-09-04 reach, that its object is contract-shaped, and the reading of the harness's ranks by the `delegation` node's words rather than by their names.
 
 #### fable-for-both-readings
 
@@ -251,6 +223,16 @@ outright. Raised by the second clean-context reading of `delegation` on
 2026-09-05, which found the cross-node consequence at its locus; that review
 proposes the option and does not write this node's answer.
 
+#### the-smaller-model-on-a-re-reading
+
+`fable-for-both-readings` with one clause: the review of a draft and the survey run where the author's words of 2026-09-04 put them, and the re-reading of an amendment runs one model down, on the larger model the `delegation` node gives a reconciliation session's main thread, at the same effort and chosen by no session. It changes the recommended rule in that one place. The instrument's note changes with it, since the differential the note says the rule cannot measure is what the re-reading now supplies.
+
+For it: the re-reading's object is the amendment and not the answer, its brief forbids it to re-run the first reading's validations, and its two questions are put to a stated diff and a stated list of findings, so its contract determines what it looks for; that is the delegation node's own test for the smaller model. It also unlocks the measurement this node declares and cannot take under a flat rule.
+
+Against it, and the case is on the fact: the re-reading is the last reader before the author rules, and the second of its two questions -- whether the amendment introduces anything the last reading had no chance to see -- is a fresh judgment of a text and not a lookup, so the clause reasons from the easier half of the contract. What it saves is unmeasured; this record has no telemetry of a reading's cost, and the seven delta briefs on disk at `87e4b24e` run from 92,276 to 232,347 bytes, which prices the object and not the reading.
+
+Raised from the author's words of 2026-09-07 asking whether the model choice is right sized, and recorded here rather than on `review-cost` because the model of a reading is this node's question and is stated once.
+
 ### authority
 
 Ratified, at low boldness: the author stated the rule in their own words, it
@@ -275,15 +257,15 @@ under:
 instrument:
   kind: assessment
   ref: the cost and the yield of each reading, measured per reading, the yield being the findings that changed a verdict, judged by the author against this rule
-  note: not yet materialized; no telemetry records a reading's cost, the yield is unmeasured, and the evidence to date is the briefs' sizes on disk and the session's report, in the rationale. What it measures is the price and the yield of fable readings, which can show a reading whose yield is nil at that price and never what a weaker reader would have found; the differential takes a sample second reading on a weaker model, which this text does not declare
+  note: "not yet materialized; no telemetry records a reading's cost, the yield is unmeasured, and the evidence to date is the briefs' sizes on disk and the session's report, in the rationale. What it measures is the price and the yield of fable readings, which can show a reading whose yield is nil at that price and never what a weaker reader would have found; the re-reading is that sample: it runs one model down on an object the stronger reader has already read, so what it finds and what it misses beside the first reading of the same node is the differential, and the instrument compares the two"
 ---
 ## Answer
 
-On fable, both of them. The review of a draft and the survey each run on fable, the most capable model the harness offers and the one the delegation node gives the main thread, at high effort, whenever either runs during the dialogue, invoked by a sitting or directly; the model is read from nothing on the node, the draft, or the drafter, and is chosen by no session. What happens when that model cannot be reached is not answered here: it is open on the option `fallback-when-the-model-is-unavailable`, raised by the author's own words of 2026-09-05, and until the author rules there the substitute clauses the two review skills and the alignment skill carry are unsupported implementation by the materialization node's test, named as such rather than read into this rule. The effort is stated in each reading's brief, as the delegation node requires, and fixed by the skill. The rule is stated here and nowhere else: the clean-context-review node says how each reading is run and cites this node for its model; the decomposition node names the review of a draft among a sitting's units and cites this node the same way; the delegation node's rule that the model follows the kind of work is the genus of this one, which names the kind, a clean-context reading of what the main thread wrote or integrated, and fixes its model at the main thread's. The rule is the role's, and the role binds: when the harness's most capable model changes, the readings move with the main thread from that day, and fable, the author's word for it on 2026-09-04 and the harness's name for it, is a fact about the harness and not part of what this rule binds. That is the recording node's test applied and not asserted: what the rule binds is the role, so an executor under the corrected text launches whatever the harness's most capable model is that day, which is what it was already bound to do, and the name's correction changes nothing an executor does. What the AI may not do under that reading is decide for itself that the harness's most capable model has changed; the correction is a reading of the harness that belongs in the record beside the name, and a correction made without one is a move the author never saw.
+On fable, the two readings whose object is an answer. The review of a draft and the survey each run on fable, the most capable model the harness offers and the one the delegation node gives the main thread, at high effort, whenever either runs during the dialogue, invoked by a sitting or directly; the model is read from nothing on the node, the draft, or the drafter, and is chosen by no session. The re-reading of an amendment runs one model down, on the larger model the delegation node gives a reconciliation session's main thread, at the same effort, and is chosen by no session either. It is the one reading of the three whose object is not an answer: the review-cost node gives it the amendment, the findings the amendment answers, and two questions to ask of them, whether each finding is answered and whether the amendment introduces anything the last reading had no chance to see. Its contract fixes what it looks for and where, which is the kind of work the delegation node's rule puts on the smaller of two models, and the argument that puts the first reading at the top of the range does not reach it: that argument is that a reader below the main thread's model finds what the main thread already saw, and it is an argument about judging an answer whole, not about checking a stated finding against a stated diff. The author's words of 2026-09-04 name the two readings that then existed; the re-reading was made by the review-cost node on 2026-09-05 and is not among them, so this clause narrows no rule the author gave. What happens when that model cannot be reached is not answered here: it is open on the option `fallback-when-the-model-is-unavailable`, raised by the author's own words of 2026-09-05, and until the author rules there the substitute clauses the two review skills and the alignment skill carry are unsupported implementation by the materialization node's test, named as such rather than read into this rule. The effort is stated in each reading's brief, as the delegation node requires, and fixed by the skill. The rule is stated here and nowhere else: the clean-context-review node says how each reading is run and cites this node for its model; the decomposition node names the review of a draft among a sitting's units and cites this node the same way; the delegation node's rule that the model follows the kind of work is the genus of this one, which names the kind, a clean-context reading of what the main thread wrote or integrated, and fixes its model at the main thread's. The rule is the role's, and the role binds: when the harness's most capable model changes, the readings move with the main thread from that day, and fable, the author's word for it on 2026-09-04 and the harness's name for it, is a fact about the harness and not part of what this rule binds. That is the recording node's test applied and not asserted: what the rule binds is the role, so an executor under the corrected text launches whatever the harness's most capable model is that day, which is what it was already bound to do, and the name's correction changes nothing an executor does. What the AI may not do under that reading is decide for itself that the harness's most capable model has changed; the correction is a reading of the harness that belongs in the record beside the name, and a correction made without one is a move the author never saw.
 
 This answer is materialized by the two review skills and the brief templates and fragments on the implementation ref, the three shims the review-skills node declares, and by the alignment skill that invokes them, the shim the growth node declares. What this answer binds is that each reading's launch names the model and the effort, that no file computes either and no brief argues either, and that the rule is cited and never restated; the sites that must satisfy it are the two review skills' launch steps and their sections on model and delegation, the bounds fragment, and the alignment skill's three statements of the rule, in place of the rule that sized a draft's reviewer to boldness, tier, and settling and put the survey on opus. Where a skill writes the model's name down rather than citing this node for it, only `.claude/skills/align-survey/SKILL.md` does today, naming fable at high effort; `.claude/skills/align-review/SKILL.md` names the model in the prompt at the launch and writes none in the file, which is the divergence the review-skills node measures. `brief.mjs` computes no model and prints none: `reviewerModel`, the `model` field of both briefs' results, and the tests that pin them are deleted, since a script that prints a constant it does not compute is the projection of nothing. The bounds fragment both briefs open with tells the reader that the model and the effort are fixed by this node and stated at the launch, and argues neither; the effort reaches the reader in the launch prompt and not in the brief, which the first paragraph's clause about the brief overstated. The alignment skill's three statements of the replaced rule, in its list of a sitting's units, its review step, and its section on model and delegation, cite this node for the model and the effort of both readings and name neither. In the graph, the sentence of the clean-context-review node's recommended text that sizes the reviewer's model, with the rationale sentence and the rejected fixed model that argued it, and the clause of the decomposition node's recommended text that restates it, with the rationale clause and the rejected fixed model there, are replaced by citations of this node.
 
-What this costs, as a consequence and never a reason: every reading pays the top rate. Over the rule it replaces, the difference is the survey's reading and the review of a draft whose recommendation is at low boldness on a node that is not global-tier and settles nothing, each now on fable; every other draft's reading already ran there. What would lower the price of a reading is the brief it is handed and never the reader, and the `review-cost` node did that on 2026-09-05: the index that carried every standing answer whole is one line a node, and the briefs measured across the change fell by sixty to seventy percent. That is the lever this node declines to pull, and it has been pulled elsewhere.
+What this costs, as a consequence and never a reason: every reading pays the top rate. Over the rule it replaces, the difference is the survey's reading and the review of a draft whose recommendation is at low boldness on a node that is not global-tier and settles nothing, each now on fable; every other draft's reading already ran there. What would lower the price of a reading is the brief it is handed and never the reader, and the `review-cost` node did that on 2026-09-05: the index that carried every standing answer whole is one line a node, and the briefs measured across the change fell by sixty to seventy percent. That is the lever this node declines to pull, and it has been pulled elsewhere. What the re-reading's clause costs is that the second reading of an answer is made by a reader below the one that made the first, so a defect the first reading missed and the amendment did not touch is now looked for by a weaker eye. The reply is that the re-reading is not asked to look for it, its object being the amendment and not the node, and that what it misses falls to the survey exactly as the two-reading cap already leaves it; the reply is a reply and not a disproof, and the instrument this answer declares is what would show it wrong.
 
 ## Rationale
 
@@ -729,3 +711,15 @@ model section, where the record names them by relation everywhere and where its
 sibling `align/SKILL.md` was already reconciled, so the two operating skills
 stated one rule in two vocabularies. The `model:` frontmatter field stays: it is
 the harness's own interface and a launch fact, and the text now says so.
+
+### The re-reading's model, 2026-09-07
+
+The author, 2026-09-07, quoted under `## Disposition`: "this iterative clean-context reading is very expensive. Are there token/context optimizations that would achieve similar quality results? eg. is the model choice (fable/opus/sonnet) right sized for the task?"; and "record the recommended optimizations as dispositions, progress them up to confirmation".
+
+The measurement, at implementation commit `87e4b24e`: the seven delta briefs on disk, `tmp/review/delta-*.brief.md`, run from 92,276 to 232,347 bytes and total 1,038,349. That prices the object of a re-reading and not the reading, since the record holds no telemetry of what a reading costs; the yield of a re-reading against a first reading of the same node is the differential this node's instrument declares and has never been able to take, and the clause recorded here is what makes it takeable.
+
+What moved. The recommendation moves from `fable-for-both-readings` to `the-smaller-model-on-a-re-reading`, which is that rule with one clause: the re-reading of an amendment runs one model down, on the larger model the `delegation` node gives a reconciliation session's main thread, at the same effort. The instrument's note is amended with it, because the note's own statement that the differential takes a sample second reading which the text does not declare is no longer true of the text.
+
+What stays viable. Every option on the fact keeps its row, `fable-for-both-readings` first among them: it is the author's own rule of 2026-09-04 and is what this option amends, and a ruling for it is a refusal of the clause and not a return to an older text. `fable-until-the-yield-is-measured`, `fallback-when-the-model-is-unavailable`, `wait-for-the-named-model` and `alignment-main-thread-named` are untouched, and the last of those still asks which main thread the rule's rank is read from, which this clause does not settle.
+
+The reading of this amended recommendation is owed.
