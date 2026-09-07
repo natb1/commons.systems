@@ -2501,6 +2501,72 @@ describe('the content fixture graph', () => {
   });
 });
 
+describe("the content encoding: 'tier' and 'order' need no '## Answer' section", () => {
+  // A content-encoded node in the maieutic stage: the answer fact's one
+  // option states only its sentence (content is owed from the review stage
+  // on, not before), and '## Account' stands in for the '## Disposition' /
+  // '## Answer' the legacy encoding would otherwise require alongside stage.
+  const contentNode = (extraFm) => [
+    '---', 'question: Q?', 'stage: maieutic', ...(extraFm ?? []),
+    'facts:',
+    '  - name: answer',
+    '    options:',
+    '      - name: first',
+    '        source: ai',
+    '        ref: "2026-09-07"',
+    '  - name: authority',
+    '    options:',
+    '      - name: ratified',
+    '      - name: delegated',
+    '---', '',
+    '## Facts', '', '### answer', '', 'Why.', '', '#### first', '', 'The one option, said in a sentence.', '',
+    '## Account', '', 'Open.', '',
+  ].join('\n');
+
+  test("a content-encoded node may carry 'tier: global' with no '## Answer' section", () => {
+    const n = parseNode(contentNode(['tier: global']), loc2);
+    assert.equal(n.encoding, 'content');
+    assert.equal(n.tier, 'global');
+    assert.equal(n.answer, null);
+  });
+
+  test("a content-encoded node may carry 'order' with no '## Answer' section", () => {
+    const n = parseNode(contentNode(['order:', '  - example.test/main/other']), loc2);
+    assert.equal(n.encoding, 'content');
+    assert.deepEqual(n.order, [['example.test/main/other']]);
+    assert.equal(n.answer, null);
+  });
+
+  test("a content-encoded node carrying 'stands' is refused, not sent through the legacy 'tier'/'order' checks", () => {
+    const text = [
+      '---', 'question: Does the content encoding still carry stands?', 'stage: maieutic',
+      'facts:',
+      '  - name: answer',
+      '    options:',
+      '      - name: only-option',
+      '        source: ai',
+      '        ref: "2026-09-07"',
+      '    stands: only-option',
+      '  - name: authority',
+      '    options:',
+      '      - name: ratified',
+      '      - name: delegated',
+      '---', '',
+      '## Facts', '', '### answer', '', 'Why.', '',
+      '## Account', '', 'Open.', '',
+    ].join('\n');
+    assert.throws(
+      () => parseNode(text, loc2),
+      /fact 'answer' carries 'stands', which the content encoding struck: this node carries none of/,
+    );
+  });
+
+  test("a legacy node's 'tier' with no '## Answer' section is still refused", () => {
+    const text = '---\nquestion: Q?\nstage: periagogic\ntier: global\n---\n\n## Disposition\n\nStill open.\n';
+    assert.throws(() => parseNode(text, loc2), /'tier' requires an '## Answer' section/);
+  });
+});
+
 describe('the content encoding: what the pin covers', () => {
   test('editing a base the recommended option resolves through moves the pin; editing AI support does not', async () => {
     const graph = await readGraph(CONTENT_DIR);

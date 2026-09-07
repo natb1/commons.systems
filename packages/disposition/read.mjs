@@ -1943,10 +1943,14 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   if (hasAnswer && form === null) {
     problems.push("'form' is required when the body has an '## Answer' section");
   }
-  if (tier !== null && !hasAnswer) {
+  // `tier` and `order` ask for an '## Answer' section only in the legacy
+  // encoding, where the answer is that section's text; in the content
+  // encoding the answer is the resolved content of the confirmed or
+  // recommended option, and a node may carry either key with no '## Answer'.
+  if (tier !== null && !hasAnswer && encoding === 'legacy') {
     problems.push("'tier' requires an '## Answer' section");
   }
-  if (order.length > 0 && !hasAnswer) {
+  if (order.length > 0 && !hasAnswer && encoding === 'legacy') {
     problems.push("'order' requires an '## Answer' section");
   }
   if (stage !== null && !hasDisposition && !hasAnswer && sections.Account === null) {
@@ -1970,13 +1974,23 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
   // '## Answer' section holds the text of the option named by `stands`; a
   // fence holds the whole proposed node where the recommended option is not
   // that one.
-  if (hasAnswer && answerFact === null && factsShapeOk) {
+  // `stands` and the '## Answer' section are legacy-encoding vocabulary: in
+  // the content encoding no fact ever carries `stands` (the check above,
+  // keyed on the struck sections, reports that directly), so these three
+  // checks -- which read as a pair with '## Answer' -- apply only there.
+  // `hasAnswer` alone already implies `encoding === 'legacy'` (a node with a
+  // '## Answer' section cannot be content-encoded), so the guard changes
+  // nothing for the two checks gated on `hasAnswer`; it matters for the
+  // third, which is keyed on `!hasAnswer` and would otherwise also catch a
+  // content-encoded node's `stands` -- already reported, with a better
+  // message, above.
+  if (encoding === 'legacy' && hasAnswer && answerFact === null && factsShapeOk) {
     problems.push("an '## Answer' section requires an answer fact, whose options are the candidate answers to this question");
   }
-  if (hasAnswer && answerFact !== null && answerFact.stands === null) {
+  if (encoding === 'legacy' && hasAnswer && answerFact !== null && answerFact.stands === null) {
     problems.push("an '## Answer' section requires the answer fact to name the option it stands on ('stands')");
   }
-  if (!hasAnswer && answerFact !== null && answerFact.stands !== null) {
+  if (encoding === 'legacy' && !hasAnswer && answerFact !== null && answerFact.stands !== null) {
     problems.push("'stands' names the option whose text '## Answer' holds, so it requires an '## Answer' section");
   }
   const recommends = answerFact === null ? null : answerFact.recommends;
