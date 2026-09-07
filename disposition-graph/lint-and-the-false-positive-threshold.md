@@ -1,7 +1,7 @@
 ---
 question: Do lint's division of labour and Coverity's field experience of false positives ground the mechanical tier's bound, that a check gates only where it is obviously right when it fires?
 form: reading
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -25,11 +25,11 @@ facts:
     against: "Both sources are high-confidence and one of them is a widely-read CACM article, so a deferral queues a reading the author could do in an evening and meanwhile keeps a settled node on the frontier."
 review:
   verdict: forward
-  strength: strong
+  strength: weak
   date: 2026-09-07
-  of: abfd153bc823c1a5acea246a6ef8f9bc82f95927
-  commit: ed7d78d30fc534929dce9c889c9ad08bc1ef1219
-  against: "The mechanism the reading transfers has no bearer here. The field report's finding is about a belief that accumulates in a person across months: an engineer meets a checker's noise, then meets it again, and stops reading, which is why suppression is the remedy and why the threshold is a threshold at all. The parent's sentence the answer grounds, \"a tier the applying session learns to disbelieve is worth less than no tier\", asks a session to be that person, and a session cannot be: the record's readers are launched clean, one context each, with no memory of any earlier run's false positives, and the applying session is under a rule that a failing check stops the run rather than under a discretion it can quietly withdraw. Nothing in it learns, and nothing in it can decline. Strike the belief mechanism and the bound is not the field report's consequence; it is the ordinary claim that a wrong gate costs a repair, which is `review-cost`'s argument on its own authority and needs no tradition behind it. That is the node's whole thesis, that the bound is \"the tradition's reason rather than a preference\", so the objection goes to the thesis and not to its margin. What can be said back is that the record holds the belief the session cannot: the answer's own device, that \"a check's yield is measured across surveys and a check that has produced nothing may be demoted on the evidence instead of on a judgment made once\", is accumulated disbelief written down where a fresh reader will meet it, and the author, who does persist, is the party the tier's credibility is finally with. But that device is the record's invention and not the field report's, so using it to rescue the transfer concedes what the counter claims: the bound as stated survives, the tradition as its ground does not."
+  of: 28cd04e4d40663b0d13b6f80b6defc4fad7ee3da
+  commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
+  against: "All six of the previous reading's findings are answered, most matching the suggested edits verbatim: the rationale/authority class agreement, the missing divergence option, the question's naming of both sources, the tier-list claim narrowed to admission, the softened false-positive sentence, and the boldness raised to `high` with the transfer named as its reason. The retarget of the `bears` entry to `candidate-pairs-with-their-nominating-key` was not one of this node's own six findings, but it answers a defect the sibling `tolerated-inconsistency`'s own review named specifically against this node (\"`fagan-entry-criteria` and `lint-and-the-false-positive-threshold` on `the-mechanical-tier-gates-the-launch`\"), so it closes a real gap rather than introducing one. The one thing the amendment does not do is rebut the review's own strongest counter-argument (that the belief mechanism has no bearer in a clean-launched session) — it instead concedes the point by raising boldness to `high` and keeping the alternate reading on record as an option, which is a legitimate way to carry a strong counter-argument forward rather than a failure to answer it."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: lint, Stephen C. Johnson, Bell Labs, 1978; Bessey and others, A Few Billion Lines of Code Later, CACM 2010, on Coverity's field experience.
@@ -98,3 +98,18 @@ The session's reply: The record holds the belief a session cannot: a check's yie
 ### Repaired after the reading of abb15a3e, 2026-09-07
 
 All six findings applied. The rationale's class now matches the authority fact. The question names both sources, since the bound is grounded on the field report and lint supplies the division of labour. The `bears` entry on `survey-selection` moves from `the-mechanical-tier-gates-the-launch`, a rung the standing option contains, to `candidate-pairs-with-their-nominating-key`, the option that stands, so the relation projects as adopted and not as chosen over; the answer says why. The claim about the tier's list is now a claim about admission to the tier, and whether the concordance check meets the bound is `survey-selection`'s question, carried to the reconciliation list; the field report's finding is stated as it states it, adoption decided by the false-positive rate before recall. The answer fact's boldness is high, on the transfer, and the option `supports-the-bound-diverges-on-the-uncertain-check` is recorded from the reading's viability, source review. The reply to the counter is on the reading's entry above. The amendment is the object of the reading this entry owes.
+
+### Clean-context re-reading, 2026-09-07, of 28cd04e4
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `as-read`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff leaves `recommends` unchanged (`as-read` on answer, `deferred` on authority) and `as-read` still `stands`, so no `## Recommendation` fence is warranted; it raises the answer fact's boldness from `moderate` to `high` with the transfer named as the reason, adds the viable option `supports-the-bound-diverges-on-the-uncertain-check` (source review) with the answer's new sentence explaining why the net relation stays `adopted`, retitles the question to name both sources, rewrites the tier-list sentence as a claim about admission rather than present contents, softens the sharpened false-positive claim to match Bessey and the others, repoints the `bears` entry from `the-mechanical-tier-gates-the-launch` to `candidate-pairs-with-their-nominating-key` (the option that stands) with an added sentence explaining why, and corrects the rationale's class word from `delegated` to `deferred`.
+
+On the viability of the options: Every option remains viable: `as-read` (now narrowed and re-pointed) is still a defensible mapping, the new option `supports-the-bound-diverges-on-the-uncertain-check` is a genuine second reading rather than a duplicate, and the three reserved authority options are untouched record vocabulary.
+
+Strongest counter-argument (weak): All six of the previous reading's findings are answered, most matching the suggested edits verbatim: the rationale/authority class agreement, the missing divergence option, the question's naming of both sources, the tier-list claim narrowed to admission, the softened false-positive sentence, and the boldness raised to `high` with the transfer named as its reason. The retarget of the `bears` entry to `candidate-pairs-with-their-nominating-key` was not one of this node's own six findings, but it answers a defect the sibling `tolerated-inconsistency`'s own review named specifically against this node ("`fagan-entry-criteria` and `lint-and-the-false-positive-threshold` on `the-mechanical-tier-gates-the-launch`"), so it closes a real gap rather than introducing one. The one thing the amendment does not do is rebut the review's own strongest counter-argument (that the belief mechanism has no bearer in a clean-launched session) — it instead concedes the point by raising boldness to `high` and keeping the alternate reading on record as an option, which is a legitimate way to carry a strong counter-argument forward rather than a failure to answer it.

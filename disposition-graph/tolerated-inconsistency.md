@@ -1,7 +1,7 @@
 ---
 question: Does tolerated inconsistency ground the register the survey leaves on a node and the condition that discharges an entry?
 form: reading
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -25,11 +25,11 @@ facts:
     against: "The tradition's holding is uncontested and its titles are what a deferral would check, so the class is being set by a bibliographic risk rather than by anything the author's ruling turns on."
 review:
   verdict: forward
-  strength: moderate
+  strength: weak
   date: 2026-09-07
-  of: 2f4f2eda8771638b0b52ed992f2c40a52587b19c
-  commit: ed7d78d30fc534929dce9c889c9ad08bc1ef1219
-  against: "The tradition's substance is a claim about several parties, and the record has one. ViewPoints tolerates inconsistency because a specification is written by stakeholders who legitimately differ, and forcing a resolution at the moment of discovery destroys the record of who held what and why — that is the information the tradition says is lost, and it is the whole reason inconsistency is called normal rather than defective. Here there is one author and one representation, as the account concedes when it declines the framework's apparatus, so every inconsistency is one party's own error and none of it carries information that resolving would destroy. Strip the multi-party premise and what survives is a marker on the material and a re-check trigger — a defect list with a staleness rule, which is worth having and is not tolerated inconsistency; the reading's \"Supports, whole\" then borrows the tradition's respectability for a mechanism the tradition's own argument does not reach. The reply is real: the survey's reader and the node's drafter are two parties, and a finding held open on an unanswered node is genuinely their disagreement kept rather than forced, which is why this is a case for narrowing the claim to the marker and the trigger rather than for withdrawing the reading."
+  of: c72aae8f5079f08c27cfbcf5c85c792dff419fa1
+  commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
+  against: "All five of the previous reading's findings are answered: the rationale/authority class agreement, the `bears` retarget to the option that stands (with the reasoning stated in `## Answer`), the narrowed \"supports on the marker and the trigger\" opening with the handling-policy departure spelled out, the boldness figure and its against, and the removal of the bare attribution to Nuseibeh. The rationale's replacement clause paraphrases rather than quotes the finding's suggested text verbatim (it now reads \"the one holding this line of work is read as attaching to tolerance\" rather than \"the one holding attributed to a named person\"), but this tracks the fifth finding's own fix removing the named-person framing from `## Answer`, so the two edits are consistent with each other rather than in tension. The `## Facts` authority prose still speaks of \"the one named condition the answer leans on\", a phrase from before the fifth finding's fix, but it was untouched by this diff and is not itself false."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: The ViewPoints framework of Finkelstein, Kramer, Nuseibeh and Goedicke, early 1990s; Balzer, Tolerating inconsistency, ICSE 1991; Nuseibeh, Easterbrook and Russo on making inconsistency respectable and on leveraging inconsistency in software development, around 1999 to 2001.
@@ -99,3 +99,18 @@ The session's reply: The counter is recorded as the option `adopted-on-the-marke
 ### Repaired after the reading of abb15a3e, 2026-09-07
 
 All five findings applied. The rationale's class now matches the authority fact. The `bears` entry on `survey-selection` moves from `the-delta-survey-with-a-periodic-whole`, a rung the standing option contains, to `candidate-pairs-with-their-nominating-key`, the option that stands, so the relation projects as adopted and not as chosen over; the answer says why. The opening is narrowed to the marker and the trigger, the handling policy is named as a departure, and the condition the answer attributed to a named person is stated as the reading's own. The answer fact's boldness is moderate, on the relation, and its case against is the reading's counter, the multi-party premise, which is also recorded as the option `adopted-on-the-marker-and-the-trigger`, source review. The reply to the counter is on the reading's entry above. The amendment is the object of the reading this entry owes.
+
+### Clean-context re-reading, 2026-09-07, of c72aae8f
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `as-read`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff leaves `recommends` unchanged (`as-read` on answer, `deferred` on authority) and `as-read` still `stands`, so no `## Recommendation` fence is warranted; it drops the answer fact's boldness from `high` to `moderate` and replaces its `against` with the multi-party-premise counter-argument, adds the viable option `adopted-on-the-marker-and-the-trigger` (source review), repoints the first `bears` entry from `the-delta-survey-with-a-periodic-whole` to `candidate-pairs-with-their-nominating-key` (the option that actually stands on `survey-selection`) with a new closing sentence in `## Answer` explaining why, narrows the opening claim from "Supports, whole" to "Supports on the marker and on the trigger, departs on the handling policy", removes the unhedged attribution to Nuseibeh by name, and corrects the rationale's class word from `delegated` to `deferred`.
+
+On the viability of the options: Every option remains viable: `as-read` (now narrowed and re-pointed) is still a defensible reading, the new option `adopted-on-the-marker-and-the-trigger` is a genuine second reading rather than a duplicate, and the three reserved authority options are untouched record vocabulary.
+
+Strongest counter-argument (weak): All five of the previous reading's findings are answered: the rationale/authority class agreement, the `bears` retarget to the option that stands (with the reasoning stated in `## Answer`), the narrowed "supports on the marker and the trigger" opening with the handling-policy departure spelled out, the boldness figure and its against, and the removal of the bare attribution to Nuseibeh. The rationale's replacement clause paraphrases rather than quotes the finding's suggested text verbatim (it now reads "the one holding this line of work is read as attaching to tolerance" rather than "the one holding attributed to a named person"), but this tracks the fifth finding's own fix removing the named-person framing from `## Answer`, so the two edits are consistent with each other rather than in tension. The `## Facts` authority prose still speaks of "the one named condition the answer leans on", a phrase from before the fifth finding's fix, but it was untouched by this diff and is not itself false.

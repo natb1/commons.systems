@@ -1,7 +1,7 @@
 ---
 question: Do blocking and canopies ground the candidate pairs, and where does the answer depart from them?
 form: reading
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -25,11 +25,11 @@ facts:
     against: "Both sources are high-confidence and the divergence half rests on the record rather than on them, so the primary reading a deferral queues would confirm what is least in doubt and check nothing that is."
 review:
   verdict: forward
-  strength: moderate
+  strength: weak
   date: 2026-09-07
-  of: f6fc0de96a09ae3f0ad28c8f9847885afc984570
-  commit: ed7d78d30fc534929dce9c889c9ad08bc1ef1219
-  against: "The reading's whole structure assumes that blocking and canopies separate into a nomination half and a partition half, so that a record can take the first and leave the second. In the sources they are one act: a blocking key nominates precisely by excluding every pair it does not group, and the cost argument that justifies the method is the exclusion. Strip the exclusion and what remains is not the tradition minus a clause but a different technique that borrows its vocabulary — a ranking heuristic over a corpus small enough to read entire, which Fellegi and Sunter would not recognise as blocking at all. On that view the `adopted` relation on `candidate-pairs-with-their-nominating-key` is as overstated as the `diverged` on its rival, and the reading grounds `survey-selection`'s candidate pairs less than its confident division suggests. The defence is real but partial: canopies in McCallum, Nigam and Ungar are deliberately overlapping and approximate, and a union of overlapping canopies is nearer to an ordering than to a hard partition, so the nomination abstraction has something behind it — which is why this is a case for redrawing the reading's claim rather than for withdrawing it."
+  of: 68e8834bfd6fb5b88d06fec7d5485e8f6a1dfc97
+  commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
+  against: "All five of the previous reading's findings are answered essentially verbatim against their suggested edits: the rationale/authority class agreement, the `bears` relation and closing sentence on `several-readers-over-a-partition`, the new option, and the removal of the appeal to a survey not in the record. The one soft residual is that after the fix, `as-read` (which stands) and the new option `supports-the-nomination-and-is-chosen-over-on-the-partition` now carry nearly identical `bears` entries and very similar prose, distinguished only by whether the answer calls the partition a genuine divergence the record repairs or an out-of-scope case the tradition never decided; the account's new 'AI divergence' paragraph names this distinction explicitly, so it is not a defect the diff leaves unexplained, only a close call worth the author's attention when choosing between the two."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: Fellegi and Sunter, A theory for record linkage, JASA 64(328), 1969, on blocking; McCallum, Nigam and Ungar, Efficient clustering of high-dimensional data sets with application to reference matching, KDD 2000, on canopies.
@@ -98,3 +98,18 @@ The session's reply: The reading's own reply is the one the record keeps: canopi
 ### Repaired after the reading of abb15a3e, 2026-09-07
 
 All five findings applied. The rationale's class now matches the authority fact. The relation on `several-readers-over-a-partition` moves from diverged to adopted, which projects as chosen over, since the partition is the tradition's own shape and `diverged` names an option that departs from the tradition; the answer's closing sentence and the fact prose say so, and the entry now agrees with `mapreduce-and-cross-shard-blindness` on the same option. The option `supports-the-nomination-and-is-chosen-over-on-the-partition` is recorded from the reading's fourth finding, source review, and the appeal to a survey that is not in the record is replaced by the AI's own confidence. The reply to the counter is on the reading's entry above. The amendment is the object of the reading this entry owes.
+
+### Clean-context re-reading, 2026-09-07, of 68e8834b
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `as-read`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff leaves `recommends` unchanged on both facts (`as-read` on answer, `deferred` on authority) and boldness unchanged (moderate on both); `as-read` still `stands`, so no `## Recommendation` fence is warranted. It adds a new viable option `supports-the-nomination-and-is-chosen-over-on-the-partition` to the answer fact (source review, ref 2026-09-07), flips the `bears` entry on `several-readers-over-a-partition` from `diverged` to `adopted`, rewrites `## Answer`'s closing sentence and the answer fact's boldness sentence to match, and fixes the rationale's class word from `delegated` to `deferred` to agree with the authority fact.
+
+On the viability of the options: Every option remains viable after the diff: `as-read` is still a defensible reading with the corrected `chosen over` framing, the new option is a genuine second reading of the same sources rather than a duplicate that dominates or is dominated, and the three reserved authority options are the record's fixed vocabulary, untouched.
+
+Strongest counter-argument (weak): All five of the previous reading's findings are answered essentially verbatim against their suggested edits: the rationale/authority class agreement, the `bears` relation and closing sentence on `several-readers-over-a-partition`, the new option, and the removal of the appeal to a survey not in the record. The one soft residual is that after the fix, `as-read` (which stands) and the new option `supports-the-nomination-and-is-chosen-over-on-the-partition` now carry nearly identical `bears` entries and very similar prose, distinguished only by whether the answer calls the partition a genuine divergence the record repairs or an out-of-scope case the tradition never decided; the account's new 'AI divergence' paragraph names this distinction explicitly, so it is not a defect the diff leaves unexplained, only a close call worth the author's attention when choosing between the two.

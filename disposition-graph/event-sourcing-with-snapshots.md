@@ -1,7 +1,7 @@
 ---
 question: Does event sourcing with snapshots ground the fold at the checkpoint and its condition on pushing?
 form: reading
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -25,11 +25,11 @@ facts:
     against: "Event sourcing is a pattern the author may already hold from practice rather than from a paper, in which case the primary reading a deferral queues is a book that does not exist and the queue never clears."
 review:
   verdict: forward
-  strength: moderate
+  strength: weak
   date: 2026-09-07
-  of: 11f1dfc2b498b7bbe240bb17ffff851b4a51556e
-  commit: ed7d78d30fc534929dce9c889c9ad08bc1ef1219
-  against: "The mapping's weakest joint is the snapshot. In event sourcing the stream and the snapshot are two artifacts: the stream is appended to and never rewritten, and a snapshot is a cache over it that can be deleted at any moment without loss, which is precisely what makes the pattern safe. Here they are one artifact — the accumulated node file is what the dialogue reads, and the \"stream\" is the version control underneath that same file — so the fold does not materialize a view of a record kept elsewhere, it rewrites the record and relies on git to remember. The tell is in the answer itself: it needs a rule that the fold \"refuses to strike anything not already reachable from `origin/disposition`\", and no event-sourced system needs such a rule, because dropping a snapshot there costs nothing. A rule that exists to stop a deletion from being final is evidence that the thing being struck is state and not a cache, which is the property the tradition is being cited to supply. If that holds, \"The answer takes every part\" overstates: the relation is adoption on the journal and the fold, and divergence, repaired by the record's own condition, on the snapshot."
+  of: 24ef57032196a1b7085aee9abe49c5fb09b0acde
+  commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
+  against: "All five of the previous reading's findings are answered essentially verbatim against their suggested edits: the rationale/authority agreement, the `source` field's years and CQRS, the boldness figure and its `against`, the `## Answer` sentence scoping the `bears` relation away from absorption, and the new option. The remaining soft point is the same pattern seen on the sibling `blocking-and-canopies`: the answer fact's new `against` and the new option `diverges-on-the-snapshot` restate nearly the same argument (snapshot as state rather than cache) in two places, which is the shape finding five itself asked for (an argument on record both as a case-against and as a rulable option) rather than an unexplained duplication."
 under:
   - commons.systems/disposition-graph/unconfirmed-accumulation
 source: Event sourcing with snapshots, as described by Martin Fowler and by Greg Young; behind it the write-ahead log and the accountant's journal and ledger.
@@ -95,3 +95,18 @@ The session's reply: The counter is recorded as the option `diverges-on-the-snap
 ### Repaired after the reading of abb15a3e, 2026-09-07
 
 All five findings applied. The rationale's class now matches the authority fact. `source` names Fowler and Young without the years the survey did not license and without CQRS, which the account had already withdrawn, and the fact prose that reported the years is replaced. The answer fact's boldness is moderate, on the relation, the citation risk being carried in `source`, in the account and in the authority fact's argument; the fact's case against is now the reading's counter, the snapshot as state rather than cache, which is also recorded as the option `diverges-on-the-snapshot`, source review. The answer says what the single relation claims: the fold and its condition, and not the absorption rule. The reply to the counter is on the reading's entry above. The amendment is the object of the reading this entry owes.
+
+### Clean-context re-reading, 2026-09-07, of 24ef5703
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `as-read`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff leaves `recommends` unchanged (`as-read` on answer, `deferred` on authority) and `as-read` still `stands`, so no `## Recommendation` fence is warranted; it drops the answer fact's boldness from `high` to `moderate` and rewrites its `against` from a citation-risk complaint to the substantive snapshot-as-state counter-argument, adds the viable option `diverges-on-the-snapshot` (source review), fixes `source` to drop the unlicensed years and the withdrawn CQRS attribution, adds a sentence to `## Answer` scoping the stored `bears` relation to the fold and its condition rather than to absorption, and corrects the rationale's class word from `delegated` to `deferred`.
+
+On the viability of the options: Every option remains viable: `as-read` is still a defensible mapping, the new option `diverges-on-the-snapshot` is a genuine second reading of the same sources rather than a duplicate, and the three reserved authority options are untouched record vocabulary.
+
+Strongest counter-argument (weak): All five of the previous reading's findings are answered essentially verbatim against their suggested edits: the rationale/authority agreement, the `source` field's years and CQRS, the boldness figure and its `against`, the `## Answer` sentence scoping the `bears` relation away from absorption, and the new option. The remaining soft point is the same pattern seen on the sibling `blocking-and-canopies`: the answer fact's new `against` and the new option `diverges-on-the-snapshot` restate nearly the same argument (snapshot as state rather than cache) in two places, which is the shape finding five itself asked for (an argument on record both as a case-against and as a rulable option) rather than an unexplained duplication.

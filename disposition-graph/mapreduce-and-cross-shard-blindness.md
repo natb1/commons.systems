@@ -1,7 +1,7 @@
 ---
 question: Does MapReduce ground the partition `survey-selection` does not take, and what does that answer keep of it?
 form: reading
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -25,11 +25,11 @@ facts:
     against: "The paper is the most widely read of the nine sources and its cross-shard limit is not contested, so a deferral queues a check that will confirm the reading and leaves the transposition, which is the contestable part, unchecked either way."
 review:
   verdict: forward
-  strength: moderate
+  strength: weak
   date: 2026-09-07
-  of: 1c7265a2e20cd8b03c3a9cf076d378724399a12f
-  commit: ed7d78d30fc534929dce9c889c9ad08bc1ef1219
-  against: "Cross-shard blindness is not MapReduce's weakness; it is the premise the paper's second half exists to answer, and reading it as a limit reads the paper backwards. A mapper cannot see across shards, and the shuffle is exactly the mechanism that makes every relation expressible as a shared key visible at a reducer that holds both sides. So the tradition does not ground a refusal to partition; at most it grounds a refusal to partition a computation whose relations have no key. Whether the record's have one is a claim about the record, and the record's own recommended option answers it the other way: `candidate-pairs-with-their-nominating-key` is a key that nominates exactly the pairs a validation must see, so the pairwise validations do have a shard and the answer's contrary sentence is the finding above. What is left of the ground for not partitioning is the aggregate validations, which genuinely have no shard, and the cost argument that a split buys context capacity and not tokens — and that one is the record's economics of a context window, with no counterpart in the tradition at all. The node's claim that \"what decides against that option is the tradition's own support scope and not an objection to it\" therefore holds for one of its three limbs. The disposition survives the objection, but as a different sentence: the tradition supplies the shape and the emit-keys form and the condition on which the split would be taken, and the record's own economics decide against taking it now."
+  of: cbff56cfa25178c111ff32149216b9291a27c75f
+  commit: 7f9b25de3b0b74095c1dad1fd76824f5b6b814c5
+  against: "All six of the previous reading's findings are answered, most matching the suggested edits verbatim: the rationale/authority class agreement, the question's naming of `survey-selection` in backticks, the `source` field dropping the uncitable descendant strand into the `against` where it already did its work, the second point in `## Answer` reframed to quote the parent's own aggregate-versus-pairwise limb rather than the false whole-node claim, the boldness raised to `high` on the transposition, and the new option recording the divergence the viability assessment flagged as missing. The one item this node's own file cannot close is the sibling half of the second finding — correcting `survey-selection`'s own account text, which still (as far as this reading can see, since it is not given that node) may describe this node as diverged on `several-readers-over-a-partition` — but this node does its own part by recording in its account that the parent's entry was that reader's error and that this node has carried `adopted` on both bearings since it was minted, which is what the suggested edit asked of this node specifically."
 under:
   - commons.systems/disposition-graph/survey-selection
 source: MapReduce, Dean and Ghemawat, OSDI 2004.
@@ -99,3 +99,18 @@ The session's reply: Taken into the answer: the second point now says that the a
 ### Repaired after the reading of abb15a3e, 2026-09-07
 
 All six findings applied. The rationale's class now matches the authority fact, and the question names `survey-selection` rather than pointing at it with a demonstrative. `source` names the paper alone, the descendant strand that carries no citation being moved to the case against, where it was already doing its work. The answer's second point quotes the parent's own limb, that validations thirteen to sixteen are aggregate over the whole corpus and do not partition, says the pairwise ones shard with the candidate pair as their shard, and names the cost of a split as the record's economics with no counterpart in the tradition; the fact prose follows. The answer fact's boldness is high, on the transposition, and the option `diverges-on-the-emit-keys-form` is recorded from the reading's viability, source review. The parent's account entry that records this node as diverged on `several-readers-over-a-partition` was that reader's error and is left as its record; this node has carried adopted on both entries since it was minted. The reply to the counter is on the reading's entry above. The amendment is the object of the reading this entry owes.
+
+### Clean-context re-reading, 2026-09-07, of cbff56cf
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `as-read`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff leaves `recommends` unchanged on both facts (`as-read` on answer, `deferred` on authority) and `as-read` still `stands`, so no `## Recommendation` fence is warranted; it raises the answer fact's boldness from `moderate` to `high`, naming the emit-keys transposition as the reason, and adds the viable option `diverges-on-the-emit-keys-form` (source review) with the answer fact's `bears` entries left unchanged, both still `adopted`.
+
+On the viability of the options: Every option remains viable: `as-read` is still a defensible reading, and the new option `diverges-on-the-emit-keys-form` is a genuine second reading of the paper's guarantee rather than a duplicate.
+
+Strongest counter-argument (weak): All six of the previous reading's findings are answered, most matching the suggested edits verbatim: the rationale/authority class agreement, the question's naming of `survey-selection` in backticks, the `source` field dropping the uncitable descendant strand into the `against` where it already did its work, the second point in `## Answer` reframed to quote the parent's own aggregate-versus-pairwise limb rather than the false whole-node claim, the boldness raised to `high` on the transposition, and the new option recording the divergence the viability assessment flagged as missing. The one item this node's own file cannot close is the sibling half of the second finding — correcting `survey-selection`'s own account text, which still (as far as this reading can see, since it is not given that node) may describe this node as diverged on `several-readers-over-a-partition` — but this node does its own part by recording in its account that the parent's entry was that reader's error and that this node has carried `adopted` on both bearings since it was minted, which is what the suggested edit asked of this node specifically.
