@@ -1,12 +1,13 @@
 ---
 question: Does Plato's midwifery ground the maieutic conduct of the interview?
-stage: review
+stage: ruling
 review:
   verdict: forward
-  strength: strong
-  date: 2026-09-03
-  of: 4ebb5b6e5e722eb32986b93723f7c618e8adbca0
-  against: "Socrates' midwifery rests on his being barren: he delivers nothing of his own, which is what makes the offspring the interlocutor's. The AI is the opposite — it drafts first and the author reacts — so the visible, refusable draft is an anchor, and the known effect of an anchor is that what is delivered is the drafter's. The node names this divergence and keeps 'adopted', which imports a guarantee about whose answer emerges that the mechanism does not provide. Growth compounds it by making the maieutic stage the one where the ruling is taken."
+  strength: moderate
+  date: 2026-09-07
+  of: f701b46afcd3803f812e58620dd48e6e22049906
+  commit: cd53e4b67305b50128b2a2dd557228b6cde15aff
+  against: "Socrates' midwifery rests on his own bareness: he claims to originate nothing and only tests what the interlocutor already carries. The AI drafts first, and a visible, refusable draft still anchors the author's response before they have spoken -- so what the maieutic label buys may be a guarantee about whose answer emerges that the mechanism does not actually provide, and 'propose-and-critique' may be the more honest name for the interview's real method."
   survey:
     date: 2026-09-07
     of: d1547e2467c59de6618c9afedd3fd1d5cdcc7588
@@ -182,3 +183,23 @@ The survey's finding and its own node finding, validated on the main thread: the
 ### Repaired after the reading, 2026-09-07
 
 The reading's three findings, validated on the main thread. The account's claim that both facts opened with their reason was false, the authority fact carrying none; the sentence now says so. The option `answer-argues-the-page-divergence` had become the answer as amended, and is marked passed over as absorbed. The `bears` entry on `turn-form`'s option `a-turn-that-reports-an-impediment` is argued nowhere in this reading's answer: it was written when `turn-form` was minted, on that node's citation of the midwife for its fourth form, and the argument is owed to this answer at its next amendment rather than added now, since the answer's pin is what the two readings judged. None of the three moves a pin.
+
+### Clean-context review, 2026-09-07, of f701b46a
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Recommended at this reading: `standing`.
+
+Findings:
+
+- The account's own claim about the repair is inaccurate. `### Amended after the frontier survey, 2026-09-07` says: "The answer now carries the paragraph the survey's option `answer-argues-the-page-divergence` proposed, adopted, and both facts open with their reason." But the `##### authority` subsection of `## Facts` reads: "(no prose in '## Facts' for this fact: no reason is recorded for what it recommends)" -- only the `answer` fact opens with a reason ("The reading keeps its standing relation, adopted with the divergence named, because..."); the `authority` fact still opens onto its option list with no reason at all. Note: `class-recommendation`'s answer says a missing authority-fact reading is 'a reconciliation item... and not a defect the reviewer reports on each of them', so the missing reason itself is not the defect being raised here -- the defect is that the account describes the repair as reaching both facts when it reached only one. Suggested fix: either add the authority fact's reason (the class-recommendation test: expensive/irreversible/capture-shaped) or correct the account's sentence to say only the answer fact was given its reason.
+- The option `answer-argues-the-page-divergence` is now a duplicate of the option that stands, not a distinct viable alternative. Its subsection says: "Everything `standing` says, with a paragraph saying why the alignment page's option `every-fact-every-option` departs from the tradition: ... Adopted into the answer on 2026-09-07: the paragraph is written." The paragraph it describes ("The alignment page's option `every-fact-every-option` departs from this conduct...") is now verbatim the second paragraph of `## Answer` under the `standing` option. With the merge complete, `answer-argues-the-page-divergence` no longer names anything `standing` does not already say, so it is not a live candidate the author could choose that differs from `standing`; the viable-options rule (`an option no longer viable is marked passed over with its reason and stays on the list, and the option that displaced it says why`) calls for marking it `passed` (reason: absorbed into `standing`, 2026-09-07) rather than leaving it listed as though it were still a separate, undecided path.
+- Lower confidence, flagged for verification rather than asserted as an error: the frontmatter lists `commons.systems/disposition-graph/turn-form#answer#a-turn-that-reports-an-impediment (adopted)` among what this reading bears on, but nothing in the printed `## Answer`, `## Rationale`, or `## Facts` of this node mentions turn-form, impediments, or turn forms at all -- unlike the alignment-page bears entry, whose 'diverged' relation is explicitly argued in the Answer's second paragraph as the readings node requires. This node's account history (8 earlier '### ' sections) is not in this brief and may ground the connection; if it does not, this bears entry is stale or was never explained in the reading's own text.
+
+On the facts and what they recommend: The answer fact recommends `standing` (high boldness) of four options, `stands` also naming `standing`, so no `## Recommendation` fence is required or present -- correct. The answer fact's subsection now opens with a reason, added by this repair, resolving the survey's finding that it 'opened straight onto an option subsection.' The authority fact recommends `delegated` (high boldness) of the three reserved options, but carries no reason at all, contrary to what the account claims (see findings). `delegated` is a defensible class for a reading of this kind (a scholarly grounding claim, correctable by a later reading, rather than an expensive/irreversible/capture-shaped decision), but the class-recommendation test is not written on the node.
+
+On the viability of the options: The answer fact's three drafted alternatives (`relation-diverged`, `propose-and-critique`) remain genuinely distinct and viable for the author to choose. The fourth, `answer-argues-the-page-divergence`, is no longer distinct from `standing` now that its content has been folded into the Answer (see findings) and should be marked passed over rather than left as an apparently-live fourth choice. No viable option appears to be missing on either fact.
+
+Strongest counter-argument (moderate): Socrates' midwifery rests on his own bareness: he claims to originate nothing and only tests what the interlocutor already carries. The AI drafts first, and a visible, refusable draft still anchors the author's response before they have spoken -- so what the maieutic label buys may be a guarantee about whose answer emerges that the mechanism does not actually provide, and 'propose-and-critique' may be the more honest name for the interview's real method.
+
+The session's reply: Validated on the main thread: the account's claim was false and is corrected; the duplicate option is marked passed over as absorbed; the bears entry on turn-form's impediment option is unargued in the answer and is recorded in the account as owed at the answer's next amendment, since adding it now would move the pin the two readings judged.
