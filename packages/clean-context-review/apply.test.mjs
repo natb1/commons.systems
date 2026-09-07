@@ -1193,6 +1193,19 @@ const SURVEY_PINNED = "clean-context-review.test/main/survey-pinned";
 const SURVEY_DATE = "2026-09-03";
 const COMMIT = "1111111111111111111111111111111111111111";
 
+/**
+ * The `review.survey` block a plain survey run (no frontier findings naming
+ * the node, no selection sidecar) leaves on a judged node: the pin, this
+ * survey's commit, and the two collections it always writes even when they
+ * are empty -- `findings` (nothing in the register: no frontier finding named
+ * this node) and `pairs` (nothing recorded: no selection sidecar was given).
+ * `text` is absent because these fixtures' pins carry no `text` map, and
+ * `renderSurveyLines` omits a null value rather than writing it as `null`.
+ */
+function plainSurveyPin(of) {
+  return { date: SURVEY_DATE, of, commit: COMMIT, findings: [], pairs: [] };
+}
+
 function nodePath(rootDir, slug) {
   return path.join(rootDir, "main", `${slug}.md`);
 }
@@ -1247,18 +1260,18 @@ describe("apply.mjs: survey", () => {
     assert.deepEqual(result.moved, [], "nothing moved since the survey read it");
 
     const reviewA = await parseAt(rootDir, "review-a", REVIEW_A);
-    assert.deepEqual(reviewA.review.survey, { date: SURVEY_DATE, of: pins.pins[REVIEW_A] });
+    assert.deepEqual(reviewA.review.survey, plainSurveyPin(pins.pins[REVIEW_A]));
     assert.equal(reviewA.review.verdict, "forward", "the draft review already on the node is kept");
     assert.equal(reviewA.review.date, "2026-08-01");
     assert.equal(reviewA.surveyStale, false);
     assert.equal(reviewA.stage, "review", "the survey forwards nothing: only a finding moves a stage");
 
     const reviewB = await parseAt(rootDir, "review-b", REVIEW_B);
-    assert.deepEqual(reviewB.review.survey, { date: SURVEY_DATE, of: pins.pins[REVIEW_B] });
+    assert.deepEqual(reviewB.review.survey, plainSurveyPin(pins.pins[REVIEW_B]));
     assert.equal(reviewB.review.verdict, null, "a node with no draft review gets the survey's half alone");
 
     const rulingA = await parseAt(rootDir, "ruling-a", RULING_A);
-    assert.deepEqual(rulingA.review.survey, { date: SURVEY_DATE, of: pins.pins[RULING_A] });
+    assert.deepEqual(rulingA.review.survey, plainSurveyPin(pins.pins[RULING_A]));
     assert.equal(rulingA.readyToRule, true, "a forward verdict and a survey pin on the same recommendation: ready to rule");
 
     // the account subsection, and no verdict in it
@@ -1290,7 +1303,7 @@ describe("apply.mjs: survey", () => {
       "A stands only on a provisional reading; a fuller one may not agree.",
       "the draft review's own case against survives the survey's own write",
     );
-    assert.deepEqual(reviewA.review.survey, { date: SURVEY_DATE, of: pins.pins[REVIEW_A] }, "and the survey's pin is written beside it");
+    assert.deepEqual(reviewA.review.survey, plainSurveyPin(pins.pins[REVIEW_A]), "and the survey's pin is written beside it");
   });
 
   test("a judged node whose recommendation moved since the survey read it receives nothing and is reported", async () => {
@@ -1307,7 +1320,7 @@ describe("apply.mjs: survey", () => {
     assert.ok(result.report.includes(result.moved[0]), "the report carries the moved list");
 
     const reviewB = await parseAt(rootDir, "review-b", REVIEW_B);
-    assert.deepEqual(reviewB.review.survey, { date: SURVEY_DATE, of: pins.pins[REVIEW_B] }, "the rest of the run still applies");
+    assert.deepEqual(reviewB.review.survey, plainSurveyPin(pins.pins[REVIEW_B]), "the rest of the run still applies");
   });
 
   test("a frontier finding naming a node that moved is discarded with a note and applied to none of its nodes", async () => {
@@ -2315,10 +2328,15 @@ describe("apply.mjs: surveyRegister", () => {
 
 describe("apply.mjs: survey, the pairs it read", () => {
   const selectionOf = (live, probe = []) => ({ pairs: { nominated: live.length + probe.length, live, frozen: [], probe } });
+  // A syntactically valid sha256 hex digest -- its content is never checked,
+  // only its shape (`surveyTextOk`) -- used to give a judged node a `text`
+  // pin too, so the six-key shape can be asserted whole.
+  const TEXT_HASH = "a".repeat(64);
 
   test("a survey applied with its selection sidecar records the pairs that touch each judged node", async () => {
     const rootDir = await freshFrontierFixture("survey-pairs-");
     const pins = await pinsFor(rootDir);
+    pins.text = { [REVIEW_A]: { question: TEXT_HASH, answer: TEXT_HASH, options: TEXT_HASH, rivals: TEXT_HASH, words: TEXT_HASH } };
     const result = await applyReviews({
       rootDir,
       pins,
@@ -2332,10 +2350,24 @@ describe("apply.mjs: survey, the pairs it read", () => {
       false,
       "the sidecar was given, so nothing is reported missing",
     );
-    // The pair is on the block this run built; what lands in the file is
-    // what the reader admits, which is still the pin alone.
+    // The pair, this run's commit, an empty findings register (no frontier
+    // finding named this node), and the text pin given above: the full
+    // six-key shape `survey-selection` describes, and nothing else --
+    // `REVIEW_SURVEY_KEYS` is the whole vocabulary a survey block may use.
     const reviewA = await parseAt(rootDir, "review-a", REVIEW_A);
-    assert.deepEqual(reviewA.review.survey, { date: SURVEY_DATE, of: pins.pins[REVIEW_A] });
+    assert.deepEqual(reviewA.review.survey, {
+      date: SURVEY_DATE,
+      of: pins.pins[REVIEW_A],
+      commit: COMMIT,
+      text: { question: TEXT_HASH, answer: TEXT_HASH, options: TEXT_HASH, rivals: TEXT_HASH, words: TEXT_HASH },
+      findings: [],
+      pairs: [{ with: REVIEW_B, keys: ["parent:x", "cites"] }],
+    });
+    assert.deepEqual(
+      Object.keys(reviewA.review.survey).sort(),
+      [...REVIEW_SURVEY_KEYS].sort(),
+      "a node the survey judged carries exactly the six keys the survey block may use",
+    );
   });
 
   test("a survey applied without one says so per node: the next cut will freeze more than it should", async () => {
