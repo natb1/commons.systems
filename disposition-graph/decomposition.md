@@ -140,6 +140,22 @@ The author, 2026-09-05, in the periagogic movement of the sitting on `alignment-
 
 > But the nodes that are created are expected to be progressed through dialogue.
 
+The author, 2026-09-07, on the cost of the clean-context reading, asked of the session after a wave of readings on the alignment page's children:
+
+> this iterative clean-context reading is very expensive. Are there token/context optimizations that would achieve similar quality results? eg. is the model choice (fable/opus/sonnet) right sized for the task?
+
+The author, 2026-09-07, in the same turn's continuation:
+
+> also consider optimzations to the dialogue workflow
+
+The author, 2026-09-07, after the session's assessment of where the cost goes:
+
+> record the recommended optimizations as dispositions, progress them up to confirmation, and include them in the list of reconciliations of alignment dialogue/review/survey/artifact
+
+The author, 2026-09-07, later in the same turn:
+
+> begin applying the optimizations as you progress
+
 ## Facts
 
 ### answer

@@ -4,9 +4,9 @@ stage: review
 review:
   verdict: forward
   strength: strong
-  date: 2026-09-03
-  of: ba115e9727a9c3000ba85a9dca2cb63d7b1ebd70
-  against: "The node breaks the rule it sits under, and the cost is concrete rather than formal: growth is the alignment section of the author's own high-level order, so it is what a newcomer meets third, and an 816-word single paragraph answering seven separable questions is what they meet. The session's defence — that recording was split out when it needed a stamp of its own, and the presentation rule may be split the same way — concedes the principle and defers the act. Two of the questions the paragraph answers already have their own nodes (recording, alignment-target) and the paragraph restates both, which is exactly where drift enters."
+  date: 2026-09-07
+  of: d3e9fa8a9dcd869cc2e6afa5317a86ac833996c8
+  against: "The draft's own paragraph is the case against it. Growth's answer already answers, in one paragraph, the loop of three moves, the three usages, the two conducts with their Plato loci, the two periagogic objects, the six movements, the presentation rule with its three facts, the persistence list, the ban on transient dispositions, and the un-aligned queue; the 2026-09-07 amendment adds one more, and one that binds harder than any of them, since it governs every turn of every sitting and admits no fifth. Two clean-context readings of this node have already found that answer to break the rule it sits under — `node`: 'If a text answers two questions, it is two nodes' — and the session declined the split twice and referred it to the author, while the record has since done the opposite on a comparable node, minting nine children under `alignment-page` on 2026-09-05 for exactly this reason. The consequence is not formal: with one answer fact and one kick-back row, the author cannot confirm the four forms without ratifying nine other rules they were never asked about separately, and cannot refuse any one of them except by kicking the whole node back to the maieutic stage. And of all the clauses in the paragraph this is the one it is most costly to fold in unexamined, because it is the clause that decides what the author is allowed to be told."
 facts:
   - name: answer
     options:
@@ -22,6 +22,8 @@ facts:
       - name: cite-unanswered-for-responses
         source: review
         ref: "2026-09-03"
+        status: passed
+        reason: "already applied: the recommended text cites `unanswered` for the responses and restates none of them"
       - name: facts-from-recommendation-field
         source: review
         ref: "2026-09-03"
@@ -31,12 +33,16 @@ facts:
       - name: strike-phantom-depends
         source: review
         ref: "2026-09-03"
+        status: passed
+        reason: "already applied: the two dependencies naming no node were struck on 2026-09-03 and `depends` no longer carries them"
       - name: cite-the-reading
         source: review
         ref: "2026-09-03"
       - name: queue-in-ruling-order
         source: author
         ref: "2026-09-03"
+        status: passed
+        reason: "absorbed by the recommendation, whose queue sentence takes `alignment-order`'s ruling order and drops the boost"
       - name: boldness-reversed
         source: review
         ref: "2026-09-03"
@@ -47,57 +53,78 @@ facts:
         source: ai
         ref: "8938e2b7"
         status: passed
-        reason: "no reason recorded in the rationale"
+        reason: "an issue tracker is a queue of work beside the record, and the queue here is the set of un-aligned dispositions in the graph itself"
       - name: tactics-as-the-loop
         source: ai
         ref: "8938e2b7"
         status: passed
-        reason: "no reason recorded in the rationale"
+        reason: "a standing tactic node is a unit of work given a home in the record, and what a sitting's units are is `decomposition`'s question and not a shape of the graph"
       - name: phases-as-the-loop
         source: ai
         ref: "8938e2b7"
         status: passed
-        reason: "no reason recorded in the rationale"
+        reason: "the movements of a sitting are the stages this answer names, derived from the dialogue's own conduct rather than from a fixed phase ladder a router advances"
       - name: the-router-and-its-gates
         source: ai
         ref: "8938e2b7"
         status: passed
-        reason: "no reason recorded in the rationale"
+        reason: "what a session takes up next is the ruling order `alignment-order` derives from the record, so a router selecting and admitting work is machinery for a decision the graph already makes"
       - name: born-parked-review
         source: ai
         ref: "8938e2b7"
         status: passed
-        reason: "no reason recorded in the rationale"
+        reason: "when the clean-context review runs and what it gates is `recording`'s answer, read off the node's stage, and a park released by a gate stores that state a second time"
       - name: placement-gates
         source: ai
         ref: "8938e2b7"
         status: passed
-        reason: "no reason recorded in the rationale"
+        reason: "a node's placement is `under` and is ruled with the node, so a gate admitting placement is an authority the record confers on no instrument"
       - name: the-curriculum
         source: ai
         ref: "8938e2b7"
         status: passed
-        reason: "no reason recorded in the rationale"
+        reason: "the order of the author's attention is derived from the record by `alignment-order`, and a curriculum kept beside it is the ledger the record asked to sunset"
       - name: the-skills-own-text-as-authority
         source: ai
         ref: "8938e2b7"
         status: passed
-        reason: "no reason recorded in the rationale"
+        reason: "every rule a session works under is a node or a declared shim, and a skill whose own text bound the record would be authority the author never conferred"
       - name: rejected-alternative-is-an-option
         source: commons.systems/disposition-graph/rejected
         ref: "2026-09-05"
+        status: passed
+        reason: "absorbed by the recommendation, whose steer clause now puts a steer on the fact beside the confirmed choice, as `rejected` says"
       - name: proposal-as-a-state-of-a-ratified-node
         source: commons.systems/disposition-graph/authority
         ref: "2026-09-05"
+        status: passed
+        reason: "absorbed by the recommendation, whose persistence list now reads a proposal as `authority` defines it"
       - name: the-dialogue-is-grounding-intent-and-confirmation
         source: author
         ref: "2026-09-06"
+        status: passed
+        reason: "carried by `commons.systems/disposition-graph/turn-form`, where the three surfaces are the answer and not a clause of this one"
       - name: the-turn-takes-one-of-four-forms
         source: author
         ref: "2026-09-07"
+        status: passed
+        reason: "carried by `commons.systems/disposition-graph/turn-form`, where the four forms are the answer and not a clause of this one"
+      - name: turn-form-to-a-child-and-terms-aligned
+        source: ai
+        ref: "2026-09-07"
+      - name: turn-forms-as-its-own-node
+        source: review
+        ref: "2026-09-07"
+        status: passed
+        reason: "absorbed by the recommendation, which mints `commons.systems/disposition-graph/turn-form` and cites it"
+      - name: the-fourth-form-carries-the-recording
+        source: review
+        ref: "2026-09-07"
+        status: passed
+        reason: "carried by `commons.systems/disposition-graph/turn-form`, whose fourth form says which rulings were recorded and that the node moved and why"
 
-    recommends: the-turn-takes-one-of-four-forms
-    boldness: low
+    recommends: turn-form-to-a-child-and-terms-aligned
+    boldness: moderate
     stands: standing
   - name: authority
     options:
@@ -116,6 +143,8 @@ facts:
 depends:
   - commons.systems/disposition-graph/alignment-page
   - commons.systems/disposition-graph/dialogue#aspects-are-nodes
+  - commons.systems/disposition-graph/alignment-order
+  - commons.systems/disposition-graph/turn-form
 form: rule
 boost: 4
 under:
@@ -184,17 +213,27 @@ The author, 2026-09-07, on the form a turn addressed to them takes, after the se
 
 > To the point of the disposition recorded just priot, this kind of response includes a lot of "noise" and it's hard for the author to know what to do with this. Dialogue prompts for the author are expected to take the form of periagogic interview, meiutic interview, direct the author to the alignment artifact for confirmation, or a simple ackowledgement of confirmation. Reconciliation outputs may diverge from the alignment output disposition. Record and you have bootstrap authority to reconcile alignment dialogue/review/survey/artifact. Before beginning reconciliation list the AI recommendation dispositions that are queued for reconciliation.
 
+The author, 2026-09-03, on dispositions stated mid-sitting, carried here from the rationale on 2026-09-07:
+
+> we expect that alignment dialogues like this one (which is mixed in with ad-hoc reconciliation during bootstrap) will trigger recursive disposition statements from the author. This is supported usage of the alignment skill. The expected behavior of the skill is to queue each disposition (newly stated or via node_id) in some state that persists across alignment context compaction. Are these new un-aligned dispositions - dispositions that aren't just unratified/unreviewed, but haven't even survived the alignment dialog yet.
+
+The author, 2026-09-03, later that day, on where unanswered nodes are listed, carried here from the rationale on 2026-09-07:
+
+> Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact). The alignment artifacts outputs are consumed by the greenfield/shimmed alignment skill.
+
 ## Answer
 
 By a loop of three moves. Draft: the AI writes a node, or an amendment, in the record with no more authority than it holds. Project: the node's page in the graph browser is rendered, because every node has a documentation projection and the page is what the author reads. Ratify or steer: after the dialectic the author rules; a ratification is recorded as the stamp in the author's name with the ruling quoted, and a steer enters the node's rationale as a rejected alternative or an amendment before the page is rendered again. The dialectic runs both ways, on the AI's draft and on the author's intention, and ratification is its outcome, never a rubber stamp. The alignment skill has three usages, and each is a sitting in two separated stages: given a disposition in the author's words, it records or revises the node that answers it; given a node id, it ratifies the node or reviews its ratification; given nothing, it takes up the highest-ranked unanswered node, as the alignment-target node says. The periagogic object of a sitting on a node is the node's page and the readings under it. The periagogic object of a sitting on a disposition is the nodes the disposition would amend and the implementation their criteria point to, so that nothing recorded for a good reason is undone unread. The interview has two conducts, named from Plato. Periagogic: the record is authoritative and the author is turned back to it; the author articulates what the record and the readings under it say before the AI's account enters as counterpoint, probes cite the text by locus, and no verdict is in play (the turning of the soul, Republic VII 518b to d). Maieutic: the answer lives in the author, unrecorded, and the AI draws it out with visible, refusable drafts, testing each as the midwife tests the offspring (Theaetetus 148e to 151d). A sitting runs the periagogic stage, comprehension, first, and the maieutic stage, intention, second, where what the author means and intends to bind is elicited and tested and the ruling is taken. The periagogic stage is never skipped, and its object is the ground of the question, not the decision surface. The sitting moves in order: reading, the author is pointed to the node's page and the readings under it and nothing else is said; comprehension, one probe per turn from the page and not from memory, first on the answer alone, then on each reading's relation and locus, then on the rationale and the rejected alternatives, with the AI's account, findings, and drafts held back until the author has committed and entering only as counterpoint cited by locus; intention, where the findings, the evaluation twice, and the test against the record enter and the recommendation is put with its authority class, boldness, and alternatives; the review, where the recommended disposition is read adversarially in clean context and its strongest counter-argument, when there is one, is attached for the author with the reason the disposition stands regardless; the ruling, the author's confirmation on the alignment page or in prose; and the recording, where the response is classified, kicked back to the movement it calls for, or stamped and landed, as the recording node describes. Each sitting recursively identifies the follow-up readings, vocabulary, and key concepts it surfaces, which feed the review frontier. Every recommendation to record is presented for review before it is recorded, and states three things: the authority class under which it would stand; its boldness, how much of it rests on the record and the author's words against the AI's own knowledge; and its persistence, whether it is standing, a disposition or criterion that holds until re-answered, a shim declared with its liquidation condition, an alternative in a dialogue that dies at the ruling, a proposal when it arose outside alignment, an un-aligned disposition, evidence, or not recorded because it is derived at need or belongs to an operation's scaffolding. A transient disposition is a contradiction in terms: dispositions are standing, and what passes takes one of the other shapes. What the author directs to be recorded is reported with the same three facts. A disposition the author states during a sitting, or a node they name, is supported usage: the session records it at once as an un-aligned disposition, a node with the author's words and the stage of the dialogue under the node it would refine, and continues the sitting in hand; the queue of un-aligned dispositions is therefore the set of such nodes, ranked like any node and surviving every session, and the author's choice of what comes next is a boost. The alignment page lists every unanswered node in rank order, the purpose node first, each with its stage, the author's words, the node as it stands, the AI's account, and the three responses open, confirm, confirm with edits, and deny with feedback, on any subset at once, as the unanswered node says; the author rules there or in prose, and the session reads the responses back and resumes each dialogue at its stage. Legacy nodes are cited as evidence when a question needs them and never imported.
 
 ## Rationale
 
-The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost. The author, 2026-09-03, on the presentation of recommendations: "recommended disposition are always presented for review before recording and always include the authority, boldness AND if it is a persistent or some transient form of disposition (eg. shim) ... This way I know if I am approving some transient stop-gap or something that will persist in the graph." The author, 2026-09-03, on the two-stage rule and the skill shim: "Ratified on the rule. Ratified on the shim." The author, 2026-09-03, on dispositions stated mid-sitting: "we expect that alignment dialogues like this one (which is mixed in with ad-hoc reconciliation during bootstrap) will trigger recursive disposition statements from the author. This is supported usage of the alignment skill. The expected behavior of the skill is to queue each disposition (newly stated or via node_id) in some state that persists across alignment context compaction. Are these new un-aligned dispositions - dispositions that aren't just unratified/unreviewed, but haven't even survived the alignment dialog yet." And later that day: "Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact). The alignment artifacts outputs are consumed by the greenfield/shimmed alignment skill." Kept in force from the incumbent alignment skill, as principles and never as mechanics: fable as the default model, landing location never asked of the author, the mechanical floor, one question per node, whole-node amendment, doctrine currency before a round (evidence: `bootstrap/align-survey.md` on the implementation ref).
+The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost. The author, 2026-09-03, on the presentation of recommendations: "recommended disposition are always presented for review before recording and always include the authority, boldness AND if it is a persistent or some transient form of disposition (eg. shim) ... This way I know if I am approving some transient stop-gap or something that will persist in the graph." The author, 2026-09-03, on the two-stage rule and the skill shim: "Ratified on the rule. Ratified on the shim." The author's words of 2026-09-03 on dispositions stated mid-sitting, and their words later that day on where unanswered nodes are listed, are under `## Disposition` and are argued from here: a disposition the author states in a sitting is queued as a node that survives compaction, which is why the queue is the set of such nodes and not a list beside the record; and the alignment page lists the unanswered nodes the browser hides, its outputs consumed by the shimmed alignment skill, which is why the page and not the browser is where a recommendation stands for confirmation. Kept in force from the incumbent alignment skill, as principles and never as mechanics: fable as the default model, landing location never asked of the author, the mechanical floor, one question per node, whole-node amendment, doctrine currency before a round (evidence: `bootstrap/align-survey.md` on the implementation ref).
 
 ## Facts
 
 ### answer
+
+Recommended because three changes fall due on this node at once and one edit reconciles the whole of it. The rule that bounds what reaches the author leaves for `commons.systems/disposition-graph/turn-form`, on the author's words of 2026-09-07 that a persistent intent of theirs may require a node of its own and on `node`'s rule that a text answering two questions is two nodes; three terms are brought into line with the nodes that own them, a steer with `rejected`, a proposal with `authority`, and the queue's order with `alignment-order`; and nothing else in the text moves. Which clauses are whose: the loop of three moves, the three usages, the two conducts with their loci, the periagogic objects, the six movements of a sitting and the persistence list are the AI's drafting; the presentation rule with its three facts, the reversal of boldness, the queue of dispositions stated mid-sitting, and the timing of a recommendation are the author's words of 2026-09-03 and 2026-09-04; and the rule that used to sit between them, the author's words of 2026-09-06 and 2026-09-07, is what leaves. Boldness moderate, and not low: what a ruling here confirms is the whole fence, and this node's own account has already conceded of that text that "the movements are moderate boldness, not low", which stands whatever the boldness of the clause that moved. The author's ruling of 2026-09-03, "Ratified on the rule. Ratified on the shim.", covered two things and no more, the two-stage rule in both usages and the alignment-skill shim; no fact on this node carries a ruling, so the fresh ruling asked for here covers the whole answer, and `partial-ratification` stays on the list as the option under which the author is asked only for the rest.
 
 #### split-presentation-and-movements
 
@@ -206,7 +245,7 @@ Growth adds 'sitting' to its defines and one sentence saying what a sitting is: 
 
 #### cite-unanswered-for-responses
 
-Growth stops restating the alignment page's three responses and cites the unanswered node, which defines them and which the page implements. Three response vocabularies are live for one act across unanswered, recording and growth, and every restatement is a place they can drift; the response-vocabulary contradiction finding makes unanswered the survivor, so one node defines what the author may answer and the page implements that one list. The rest of the answer is untouched. Raised on commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/recording.
+Growth stops restating the alignment page's three responses and cites the unanswered node, which defines them and which the page implements. Three response vocabularies are live for one act across unanswered, recording and growth, and every restatement is a place they can drift; the response-vocabulary contradiction finding makes unanswered the survivor, so one node defines what the author may answer and the page implements that one list. The rest of the answer is untouched. Raised on commons.systems/disposition-graph/unanswered, commons.systems/disposition-graph/recording. Passed over on 2026-09-07: the recommended text already does it, ending the sentence "what the three responses are is the unanswered node's" and restating none of them.
 
 #### facts-from-recommendation-field
 
@@ -218,7 +257,7 @@ The author already ruled 'Ratified on the rule. Ratified on the shim.' in a sitt
 
 #### strike-phantom-depends
 
-The cross-reference finding carried on session-context proposes that growth's two dependencies naming no node — review-context and review-artifact — be struck as superseded in substance by clean-context-review and growth's own alignment-page shim, or minted as un-aligned dispositions, since a question that lives only on a page is the ledger the record asked to sunset. (Raised on commons.systems/disposition-graph/session-context.)
+The cross-reference finding carried on session-context proposes that growth's two dependencies naming no node — review-context and review-artifact — be struck as superseded in substance by clean-context-review and growth's own alignment-page shim, or minted as un-aligned dispositions, since a question that lives only on a page is the ledger the record asked to sunset. (Raised on commons.systems/disposition-graph/session-context.) Passed over on 2026-09-07: both were struck on 2026-09-03 and `depends` has not named either since.
 
 #### cite-the-reading
 
@@ -226,11 +265,11 @@ Growth's answer drops its own Republic citation for the periagogic movement and 
 
 #### queue-in-ruling-order
 
-This node's queue, the set of unanswered nodes in rank order, and its list of what the alignment page carries, every unanswered node in rank order, are amended by the alignment-order draft to the ruling order, with rank as tie-break; the author's choice of what comes next remains `/align <node id>` and needs no boost. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there.
+This node's queue, the set of unanswered nodes in rank order, and its list of what the alignment page carries, every unanswered node in rank order, are amended by the alignment-order draft to the ruling order, with rank as tie-break; the author's choice of what comes next remains `/align <node id>` and needs no boost. Raised on commons.systems/disposition-graph/alignment-order, from the author's words of 2026-09-03 recorded there. Passed over on 2026-09-07: the recommendation takes it, the queue sentence now running in the ruling order with the author's naming of a node as their order.
 
 #### boldness-reversed
 
-This node's definition sentence is reversed, so that boldness is how much of a recommendation rests on the AI's own knowledge against the record and the author's words, which is how the dialogue node words it, how the author worded it on 2026-09-03, and how every boldness stamp in the record was written. Two consequences of rulings on other nodes ride with it in the fence, because this node was restating questions that are not its own: the description of the alignment page leaves, with the shim that names the artifact, for the node that asks the page's question; and the clause placing the recommendation at the intention movement is loosened to say that the recommendation is put to the author there while it may be recorded at any stage, which is the author's revision of 2026-09-04 recorded on the dialogue node. Adopted by the recommendation, and set out in the fence.
+This node's definition sentence is reversed, so that boldness is how much of a recommendation rests on the AI's own knowledge against the record and the author's words, which is how the dialogue node words it, how the author worded it on 2026-09-03, and how every boldness stamp in the record was written. Two consequences of rulings on other nodes ride with it in the fence, because this node was restating questions that are not its own: the description of the alignment page leaves, with the shim that names the artifact, for the node that asks the page's question; and the clause placing the recommendation at the intention movement is loosened to say that the recommendation is put to the author there while it may be recorded at any stage, which is the author's revision of 2026-09-04 recorded on the dialogue node. It is the base the recommendation builds on and is not itself recommended, since the recommendation adds the move to `turn-form` and the three terms brought into line.
 
 #### boldness-left-and-dialogue-corrected
 
@@ -285,11 +324,11 @@ rule a session works under is a node or a declared shim.
 
 #### rejected-alternative-is-an-option
 
-The standing answer's sentence "a steer enters the node's rationale as a rejected alternative or an amendment before the page is rendered again." places a rejected alternative in the rationale, and under the rejected node's recommended text that is the wrong place: a rejected alternative is an option on the fact it answers, with its status and the reason it was not taken, and the rationale argues and may name it but does not hold it. Raised by the rejected node from its reading of 2026-09-05; the amendment is the one clause, and it acts on nothing until the author rules.
+The standing answer's sentence "a steer enters the node's rationale as a rejected alternative or an amendment before the page is rendered again." places a rejected alternative in the rationale, and under the rejected node's recommended text that is the wrong place: a rejected alternative is an option on the fact it answers, with its status and the reason it was not taken, and the rationale argues and may name it but does not hold it. Raised by the rejected node from its reading of 2026-09-05; the amendment is the one clause, and it acts on nothing until the author rules. Passed over on 2026-09-07: the recommendation makes that one-clause edit.
 
 #### proposal-as-a-state-of-a-ratified-node
 
-The standing answer and the recommended `boldness-reversed` both list what a recorded thing may be, and among them "a proposal when it arose outside alignment". The origin no longer defines the word: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from. The list item becomes a proposal on a ratified node whose recommendation has moved, and the authority node is cited for the state. Raised on commons.systems/disposition-graph/authority, by its clean-context reading of 2026-09-05.
+The standing answer and the recommended `boldness-reversed` both list what a recorded thing may be, and among them "a proposal when it arose outside alignment". The origin no longer defines the word: since the author's words of 2026-09-04 on the viable-options node, a proposal is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from. The list item becomes a proposal on a ratified node whose recommendation has moved, and the authority node is cited for the state. Raised on commons.systems/disposition-graph/authority, by its clean-context reading of 2026-09-05. Passed over on 2026-09-07: the recommendation makes that one-clause edit.
 
 
 #### the-dialogue-is-grounding-intent-and-confirmation
@@ -318,6 +357,11 @@ there is a question about their intent.
 The evidence is the sitting it was said in, which reported a reading's verdict,
 its findings and the byte cost of a brief to the author and asked them whether to
 run the next one, none of which is grounding, intent, or a fact to confirm.
+
+Passed over on 2026-09-07: the words are carried by
+`commons.systems/disposition-graph/turn-form`, where the three surfaces are the
+answer and not a clause of a node whose question is how the graph grows.
+
 #### the-turn-takes-one-of-four-forms
 
 Everything `the-dialogue-is-grounding-intent-and-confirmation` says, and through
@@ -350,10 +394,73 @@ prevent. `author-questions` carries the consequence for a probe, as
 as `page-collects-only-the-confirmation`; neither is amended by this option, and
 the rule is stated once, here, where the two conducts are.
 
-The evidence is the turn it answers, quoted in this node's account: a draft
+The evidence is the turn it answers, described in this node's account: a draft
 closed by reporting to the author a measurement of their words across the
 record, a repair of the parent's bookkeeping, and a marking rule applied at two
 clauses, none of which asked them anything or directed them anywhere.
+
+Passed over on 2026-09-07: the rule is carried by
+`commons.systems/disposition-graph/turn-form`, which the reading of that day and
+the author's words on `probe-or-node` both send it to, and where the two clauses
+this option leaves open — what the fourth form contains, and what stands outside
+the rule — are answered rather than deferred.
+
+#### turn-form-to-a-child-and-terms-aligned
+
+Everything `boldness-reversed` says, with the rule of 2026-09-07 moved to a node
+of its own and three terms brought into line with the nodes that own them, and
+nothing else changed. `commons.systems/disposition-graph/turn-form` is minted
+under this node, asking what form a turn addressed to the author takes and
+carrying the author's words of 2026-09-06 and 2026-09-07, the three surfaces, the
+four forms, what the fourth form contains, and what stands outside the rule; this
+node's answer says in one sentence that the question is that node's, and keeps the
+loop, the three usages, the two conducts and their objects, and the movements of a
+sitting. The three terms: a steer is recorded as a viable option not chosen, kept
+on the fact beside the confirmed choice, as `rejected` says, rather than entering
+the rationale; a proposal is the state of a ratified node whose recommendation has
+moved from its confirmed choice, as `authority` says, rather than a thing defined
+by where it arose; and the queue of un-aligned dispositions runs in the ruling
+order, with the author's naming of a node as their order and no boost, as
+`alignment-order` says. The presentation rule names the surface it happens on, the
+alignment page where a disposition's facts stand for confirmation, so that the
+presentation and the form of a turn name one surface and not two.
+
+Recommended because each of the four changes is owed to a node other than this
+one and none of them is this node's to decide: three are the record's own
+vocabulary catching up with rulings recommended elsewhere, and the fourth is where
+a rule lives. Against it, it asks the author to rule on a fence in which the one
+clause they spoke to most recently is absent, having moved to a child they must
+then rule separately; the answer is that the child is on the frontier beside this
+node and the author rules both, which is what `node`'s rule costs wherever it is
+kept.
+
+#### turn-forms-as-its-own-node
+
+The rule that every turn addressed to the author takes one of four forms leaves
+this node for a node of its own beneath it, asking what form a turn addressed to
+the author takes and carrying the author's words of 2026-09-06 and 2026-09-07, the
+four forms, and the exemption for what reconciliation outputs; growth keeps the
+loop, the usages and the two conducts and cites it, and `author-questions`'
+`the-sitting-stops-only-on-intent` and `alignment-page`'s
+`page-collects-only-the-confirmation` cite it rather than each carrying half of one
+rule. Raised by the clean-context reading of 2026-09-07. Passed over the same day:
+the recommendation is this option with the three vocabulary edits beside it, and
+mints the node.
+
+#### the-fourth-form-carries-the-recording
+
+The acknowledgement of a confirmation carries what the recording node requires the
+session to say in the same turn, which rulings were recorded and, where the
+response moved the node's stage, that it moved and why; and what a reconciliation
+session outputs, including a listing the author has asked for before reconciliation
+begins, is outside the rule and not only the account of a landing. Raised by the
+clean-context reading of 2026-09-07. Passed over the same day: both clauses are
+carried by `commons.systems/disposition-graph/turn-form`, whose answer names what
+the fourth form contains and what stands outside the rule.
+
+### authority
+
+Ratified, on the capture-shaped limb of `commons.systems/disposition-graph/class-recommendation`'s test. This node defines the vocabulary the author rules with — propose, project, ratify, steer, periagogic, maieutic, boldness — and states the conduct of the interview in which the author checks the AI; the party that would set that conduct is the party the conduct exists to check, which is the limb. The other two are not met on this recommendation's own object: the move of a rule to a child node and the alignment of three terms cost a landing to undo and undo cleanly. Boldness low on the class: it follows the stated test, and the author's ruling of 2026-09-03 on this node's rule shows they mean to be asked.
 
 ### persistence
 
@@ -393,7 +500,7 @@ under:
   - commons.systems/disposition-graph/model
 cites:
   - id: commons.systems/disposition-graph/author-questions
-    hash: ecb27431eafeb2630f72ee384cae4d62118de303
+    hash: e2791b5e23289f90a0e75b26c0227bf94dba5858
 defines:
   - propose
   - project
@@ -410,11 +517,11 @@ shims:
 ---
 ## Answer
 
-By a loop of three moves. Draft: the AI writes a node, or an amendment, in the record with no more authority than it holds. Project: the node's page in the graph browser is rendered, because every node has a documentation projection and the page is what the author reads. Ratify or steer: after the dialectic the author rules; a ratification is recorded as the stamp in the author's name with the ruling quoted, and a steer enters the node's rationale as a rejected alternative or an amendment before the page is rendered again. The dialectic runs both ways, on the AI's draft and on the author's intention, and ratification is its outcome, never a rubber stamp. The alignment skill has three usages, and each is a sitting in two separated stages: given a disposition in the author's words, it records or revises the node that answers it; given a node id, it ratifies the node or reviews its ratification; given nothing, it takes up the highest-ranked unanswered node, as the alignment-target node says. The periagogic object of a sitting on a node is the node's page and the readings under it. The periagogic object of a sitting on a disposition is the nodes the disposition would amend and the implementation their criteria point to, so that nothing recorded for a good reason is undone unread. The interview has two conducts, named from Plato. Periagogic: the record is authoritative and the author is turned back to it; the author articulates what the record and the readings under it say before the AI's account enters as counterpoint, probes cite the text by locus, and no verdict is in play (the turning of the soul, Republic VII 518b to d). Maieutic: the answer lives in the author, unrecorded, and the AI draws it out with visible, refusable drafts, testing each as the midwife tests the offspring (Theaetetus 148e to 151d). A sitting runs the periagogic stage, comprehension, first, and the maieutic stage, intention, second, where what the author means and intends to bind is elicited and tested and the ruling is taken. The periagogic stage is never skipped, and its object is the ground of the question, not the decision surface. What the dialogue is for bounds what reaches the author: the periagogic movement establishes common grounding, the maieutic movement clarifies ambiguities in the author's intent, and the alignment page takes the confirmation of a disposition's facts; the readings and what they return, the instruments the sitting runs, and the mechanical and encoding defects it finds and corrects are the sitting's own, corrected and proceeded through without asking, and their appearance in a turn addressed to the author is noise to be minimised and not thoroughness. So every turn of the alignment dialogue addressed to the author takes one of four forms and no fifth: a periagogic probe, a maieutic probe, a direction to the alignment page for the confirmation of a disposition's facts, or a plain acknowledgement of a confirmation; a session that has none of the four to give has nothing to stop for and proceeds. The rule binds the alignment dialogue alone, and a reconciliation session's report may diverge from it. The sitting moves in order: reading, the author is pointed to the node's page and the readings under it and nothing else is said; comprehension, one probe per turn from the page and not from memory, first on the answer alone, then on each reading's relation and locus, then on the rationale and the rejected alternatives, with the AI's account, findings, and drafts held back until the author has committed and entering only as counterpoint cited by locus; intention, where the findings, the evaluation twice, and the test against the record enter and the recommendation is put to the author with its authority class, boldness, and alternatives, though the recommendation may be recorded on the node at any stage of the dialogue, as the dialogue node says; the review, where the recommended disposition is read adversarially in clean context and its strongest counter-argument, when there is one, is attached for the author with the reason the disposition stands regardless; the ruling, the author's confirmation on the alignment page or in prose; and the recording, where the response is classified, kicked back to the movement it calls for, or stamped and landed, as the recording node describes. Each sitting recursively identifies the follow-up readings, vocabulary, and key concepts it surfaces, which feed the review frontier. Every recommendation to record is presented for review before it is recorded, and states three things: the authority class under which it would stand; its boldness, how much of it rests on the AI's own knowledge against the record and the author's words; and its persistence, whether it is standing, a disposition or criterion that holds until re-answered, a shim declared with its liquidation condition, an alternative in a dialogue that dies at the ruling, a proposal when it arose outside alignment, an un-aligned disposition, evidence, or not recorded because it is derived at need or belongs to an operation's scaffolding. A transient disposition is a contradiction in terms: dispositions are standing, and what passes takes one of the other shapes. What the author directs to be recorded is reported with the same three facts. A disposition the author states during a sitting, or a node they name, is supported usage: the session records it at once as an un-aligned disposition, a node with the author's words and the stage of the dialogue under the node it would refine, and continues the sitting in hand; the queue of un-aligned dispositions is therefore the set of such nodes, ranked like any node and surviving every session, and the author's choice of what comes next is a boost. The author rules on the alignment page or in prose, and the session reads the responses back and resumes each dialogue at its stage; what that page shows and in what order is the alignment-page node's question, and what the three responses are is the unanswered node's. Legacy nodes are cited as evidence when a question needs them and never imported.
+By a loop of three moves. Draft: the AI writes a node, or an amendment, in the record with no more authority than it holds. Project: the node's page in the graph browser is rendered, because every node has a documentation projection and the page is what the author reads. Ratify or steer: after the dialectic the author rules; a ratification is recorded as the stamp in the author's name with the ruling quoted, and a steer is recorded as a viable option not chosen, kept on the fact beside the confirmed choice as the rejected node says, or as an amendment, before the page is rendered again. The dialectic runs both ways, on the AI's draft and on the author's intention, and ratification is its outcome, never a rubber stamp. The alignment skill has three usages, and each is a sitting in two separated stages: given a disposition in the author's words, it records or revises the node that answers it; given a node id, it ratifies the node or reviews its ratification; given nothing, it takes up the highest-ranked unanswered node, as the alignment-target node says. The periagogic object of a sitting on a node is the node's page and the readings under it. The periagogic object of a sitting on a disposition is the nodes the disposition would amend and the implementation their criteria point to, so that nothing recorded for a good reason is undone unread. The interview has two conducts, named from Plato. Periagogic: the record is authoritative and the author is turned back to it; the author articulates what the record and the readings under it say before the AI's account enters as counterpoint, probes cite the text by locus, and no verdict is in play (the turning of the soul, Republic VII 518b to d). Maieutic: the answer lives in the author, unrecorded, and the AI draws it out with visible, refusable drafts, testing each as the midwife tests the offspring (Theaetetus 148e to 151d). A sitting runs the periagogic stage, comprehension, first, and the maieutic stage, intention, second, where what the author means and intends to bind is elicited and tested and the ruling is taken. The periagogic stage is never skipped, and its object is the ground of the question, not the decision surface. What form a turn addressed to the author takes, and what the dialogue may spend the author's attention on, is the question of the node beneath this one, turn-form. The sitting moves in order: reading, the author is pointed to the node's page and the readings under it and nothing else is said; comprehension, one probe per turn from the page and not from memory, first on the answer alone, then on each reading's relation and locus, then on the rationale and the rejected alternatives, with the AI's account, findings, and drafts held back until the author has committed and entering only as counterpoint cited by locus; intention, where the findings, the evaluation twice, and the test against the record enter and the recommendation is put to the author with its authority class, boldness, and alternatives, though the recommendation may be recorded on the node at any stage of the dialogue, as the dialogue node says; the review, where the recommended disposition is read adversarially in clean context and its strongest counter-argument, when there is one, is attached for the author with the reason the disposition stands regardless; the ruling, the author's confirmation on the alignment page or in prose; and the recording, where the response is classified, kicked back to the movement it calls for, or stamped and landed, as the recording node describes. Each sitting recursively identifies the follow-up readings, vocabulary, and key concepts it surfaces, which feed the review frontier. Every recommendation to record is presented on the alignment page, where its facts stand for confirmation, before it is recorded, and states three things: the authority class under which it would stand; its boldness, how much of it rests on the AI's own knowledge against the record and the author's words; and its persistence, whether it is standing, a disposition or criterion that holds until re-answered, a shim declared with its liquidation condition, an option in a dialogue that dies at the ruling, a proposal on a ratified node whose recommendation has moved from its confirmed choice, as the authority node defines it, an un-aligned disposition, evidence, or not recorded because it is derived at need or belongs to an operation's scaffolding. A transient disposition is a contradiction in terms: dispositions are standing, and what passes takes one of the other shapes. What the author directs to be recorded is reported with the same three facts. A disposition the author states during a sitting, or a node they name, is supported usage: the session records it at once as an un-aligned disposition, a node with the author's words and the stage of the dialogue under the node it would refine, and continues the sitting in hand; the queue of un-aligned dispositions is therefore the set of such nodes, taken in the ruling order as the alignment-order node says and surviving every session, and the author's naming of a node is their order and needs no boost. The author rules on the alignment page or in prose, and the session reads the responses back and resumes each dialogue at its stage; what that page shows and in what order is the alignment-page node's question, and what the three responses are is the unanswered node's. Legacy nodes are cited as evidence when a question needs them and never imported.
 
 ## Rationale
 
-The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost. The author, 2026-09-03, on the presentation of recommendations: "recommended disposition are always presented for review before recording and always include the authority, boldness AND if it is a persistent or some transient form of disposition (eg. shim) ... This way I know if I am approving some transient stop-gap or something that will persist in the graph." The author, 2026-09-03, on the two-stage rule and the skill shim: "Ratified on the rule. Ratified on the shim." The author, 2026-09-03, on dispositions stated mid-sitting: "we expect that alignment dialogues like this one (which is mixed in with ad-hoc reconciliation during bootstrap) will trigger recursive disposition statements from the author. This is supported usage of the alignment skill. The expected behavior of the skill is to queue each disposition (newly stated or via node_id) in some state that persists across alignment context compaction. Are these new un-aligned dispositions - dispositions that aren't just unratified/unreviewed, but haven't even survived the alignment dialog yet." And later that day: "Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact). The alignment artifacts outputs are consumed by the greenfield/shimmed alignment skill." Kept in force from the incumbent alignment skill, as principles and never as mechanics: fable as the default model, landing location never asked of the author, the mechanical floor, one question per node, whole-node amendment, doctrine currency before a round (evidence: `bootstrap/align-survey.md` on the implementation ref). Two amendments of 2026-09-04, from the sitting on the alignment page: the definition of boldness is reversed, because the dialogue node, the author's own words of 2026-09-03, and every stamp in the record run the other way and this node's sentence was the outlier; and the description of the alignment page leaves this node for the node that asks the page's question, taking with it the shim that names the artifact, because a page described in two places is ratified in two places, which is what minting that node was for. An amendment of 2026-09-07, from the author's words of 2026-09-06 and 2026-09-07 in the sitting on the alignment page's children: the three surfaces bound what reaches the author, and every turn addressed to them takes one of four forms, because the sitting had been closing its drafts by reporting readings, measurements and repairs to the author and asking whether to run the next reading, which the author found to be noise they could not act on; the rule is scoped to the alignment dialogue, and a reconciliation session's report may diverge from it.
+The loop is the alignment interview made incremental: one page, one ruling. The author's choice of what to propose next is itself a ranking act, recorded as boost. The author, 2026-09-03, on the presentation of recommendations: "recommended disposition are always presented for review before recording and always include the authority, boldness AND if it is a persistent or some transient form of disposition (eg. shim) ... This way I know if I am approving some transient stop-gap or something that will persist in the graph." The author, 2026-09-03, on the two-stage rule and the skill shim: "Ratified on the rule. Ratified on the shim." The author's words of 2026-09-03 on dispositions stated mid-sitting, and their words later that day on where unanswered nodes are listed, are under `## Disposition` and are argued from here: a disposition the author states in a sitting is queued as a node that survives compaction, which is why the queue is the set of such nodes and not a list beside the record; and the alignment page lists the unanswered nodes the browser hides, its outputs consumed by the shimmed alignment skill, which is why the page and not the browser is where a recommendation stands for confirmation. Kept in force from the incumbent alignment skill, as principles and never as mechanics: fable as the default model, landing location never asked of the author, the mechanical floor, one question per node, whole-node amendment, doctrine currency before a round (evidence: `bootstrap/align-survey.md` on the implementation ref). Two amendments of 2026-09-04, from the sitting on the alignment page: the definition of boldness is reversed, because the dialogue node, the author's own words of 2026-09-03, and every stamp in the record run the other way and this node's sentence was the outlier; and the description of the alignment page leaves this node for the node that asks the page's question, taking with it the shim that names the artifact, because a page described in two places is ratified in two places, which is what minting that node was for. An amendment of 2026-09-07, from the author's words of 2026-09-06 and 2026-09-07 in the sitting on the alignment page's children: the rule that bounds what reaches the author, the three surfaces and the four forms a turn addressed to them may take, is not carried here but on turn-form, the node beneath this one, because a rule that governs every turn of every sitting is its own question and the author's words of 2026-09-07 send a persistent intent of theirs to a node to be reconciled into the skill; this node keeps the loop, the three usages and the two conducts, and cites that node for the form of a turn. Three terms are brought into line with the nodes that own them in the same landing: a steer is an option on the fact and not a rejected alternative in the rationale, as rejected says; a proposal is the state of a ratified node whose recommendation has moved, as authority says; and the queue runs in the ruling order with the author's naming of a node as their order, as alignment-order says.
 ```
 
 ## Account
@@ -678,8 +785,10 @@ the definition on its own node, whose answer constitutes the thing, and its
 answer requires the citation added here so that every node using the word has a
 path to the node defining it, which the eleventh frontier validation requires
 and which the definition's placement does not by itself supply. The citation is
-pinned to that node's text as it stood at this commit, and that node is
-unanswered, so the pin will move as its dialogue does. Defining the term here
+pinned to that node's text as it stood at this commit, and nothing moves it: a
+pin is re-taken by hand at a landing that re-takes it, so a pin left alone goes
+stale as the cited node's dialogue proceeds, and whether a `cites` hash should
+track or freeze is `under`'s open option `cites-hash-tracks-or-freezes`. Defining the term here
 instead was considered and not recorded as an option: it would put the
 constitution of the instrument on a node whose question is how the graph grows,
 and `defines` is a field rather than a fact, so a placement disagreement is a
@@ -713,3 +822,94 @@ recommendation as it now stands is owed, and the reconciliation of the alignment
 skill to it runs under the author's grant of the same words, "you have bootstrap
 authority to reconcile alignment dialogue/review/survey/artifact", given for
 this sitting and for nothing else.
+
+### Clean-context review, 2026-09-07, of d3e9fa8a
+
+Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: forward to the author's ruling.
+
+Recommended at this reading: `the-turn-takes-one-of-four-forms`.
+
+Findings:
+
+- Answer (fence), the new rule, against the author's words of 2026-09-07 under '## Disposition': the author wrote 'Dialogue prompts for the author are expected to take the form of periagogic interview, meiutic interview, direct the author to the alignment artifact for confirmation, or a simple ackowledgement of confirmation', and the draft writes 'every turn of the alignment dialogue addressed to the author takes one of four forms and no fifth'. The hardening from 'expected to' to 'no fifth' is the AI's, and the same message closes with an instruction the hardened rule forbids: 'Before beginning reconciliation list the AI recommendation dispositions that are queued for reconciliation.' That listing is given in the dialogue before reconciliation begins, so the draft's own exemption does not reach it: the option's prose scopes it as 'a reconciliation session's report ... not a turn in the dialogue but the account of a landing', and a listing made before any landing is not that. Suggested edit: widen the exemption to what the author's words actually exempt, 'and what a reconciliation session outputs, including a listing or report the author has asked for, may diverge from it', or add one clause: 'a turn the author has expressly asked for takes the form they asked for.'
+- Answer (fence), the fourth form, against the recording node's recommended text: the draft says a turn may be 'a plain acknowledgement of a confirmation; a session that has none of the four to give has nothing to stop for and proceeds', while recording's recommended option `per-fact-after-two-readings` requires that the session 'tells the author in the turn it makes the move that the node has moved and why, since a movement the author did not ask for spends a sitting they did not budget'. A notice that a response moved the node back to the maieutic stage, and why, is none of the four unless 'a plain acknowledgement' may carry it, and 'plain' says it may not. An executor holding both rules cannot obey both. Suggested edit: name the content in the fourth form — 'a plain acknowledgement of a confirmation, which says which rulings were recorded and, where the response moved the node, that it moved and why, as the recording node requires' — or record the divergence as the author's.
+- Answer (fence), two clauses the draft keeps that are themselves turns of a fifth form: 'Every recommendation to record is presented for review before it is recorded, and states three things: the authority class ... its boldness ... and its persistence', and 'What the author directs to be recorded is reported with the same three facts.' Read with the new rule, presenting a recommendation with its three facts to the author, and reporting back what they directed to be recorded, are turns that are neither probe, nor direction to the page, nor acknowledgement of a confirmation. Suggested edit: say where the presentation happens, which the author's words of 2026-09-06 and the alignment-page node's `page-collects-only-the-confirmation` already fix — 'presented for review on the alignment page, where the facts stand for confirmation' — so the presentation rule and the four-forms rule name one surface instead of two.
+- Validation 15, merge: the four-forms rule is a new question carried on this node's dialogue, not a new answer to a question the record already asks. No node in the index of questions asks what form a turn addressed to the author takes; the nearest two carry the same rule from one side each and are named by the option itself — `commons.systems/disposition-graph/author-questions` ('What probes for the author does a node carry, and where are they asked?') as `the-sitting-stops-only-on-intent`, and `commons.systems/disposition-graph/alignment-page` ('What does the author read to rule?') as `page-collects-only-the-confirmation`. The remedy validation 15 prescribes is a node of its own: under `growth`, asking 'What form does a turn addressed to the author take?', carrying the author's words of 2026-09-06 and 2026-09-07, the four forms, the exemption for what reconciliation outputs, and what the fourth form contains; growth keeps the two conducts and the loop and cites it, and the two options above cite it rather than each holding half the rule. This reading proposes and does not mint; the session records it and the author rules.
+- '## Facts', `### answer` and `### authority`: neither records the reason for what it recommends. `### answer` opens directly on '#### split-presentation-and-movements' (disposition/disposition-graph/growth.md line 197), and `### authority` carries no prose either, while the dialogue node's standing answer says '`## Facts` holds one subsection per fact, in the same order, opening with the reason for its recommendation'. The answer fact is the one moved on 2026-09-07, and the reason for the move exists on the node — the account section 'The form of a turn, 2026-09-07' — but not where the fact holds it. Suggested edit: write the two opening paragraphs, the answer fact's being the account's own reasoning in one paragraph. I do not report the missing `### authority` reading of the three limbs: `class-recommendation`'s answer expressly makes that back-fill a reconciliation item on that node 'and not a defect the reviewer reports on each of them'.
+- '## Facts', answer fact, boldness: the fact recommends `the-turn-takes-one-of-four-forms` at boldness low, and that option is defined as 'Everything `the-dialogue-is-grounding-intent-and-confirmation` says, and through it everything `boldness-reversed` says' — so a ruling for it rules the whole fence, including the six movements of a sitting and the two periagogic objects. This node's own account records the earlier concession on exactly that text: 'the movements are moderate boldness, not low'. Low is right for the 2026-09-07 clause, which is nearly the author's words, and wrong for what rides with it. Suggested edit: moderate, or keep low and say in the fact's reason which clauses are the author's words and which are the AI's drafting.
+- Recommendation fence, frontmatter `cites`: the pin `ecb27431eafeb2630f72ee384cae4d62118de303` on `commons.systems/disposition-graph/author-questions` is stale. `git hash-object disposition/disposition-graph/author-questions.md` gives `e2791b5e23289f90a0e75b26c0227bf94dba5858`; `git cat-file -p ecb27431...` returns that node as it stood on 2026-09-04. This falsifies the node's own claim about the record, in the account section 'The term "probe" given a definition, 2026-09-04': 'The citation is pinned to that node's text as it stood at this commit, and that node is unanswered, so the pin will move as its dialogue does.' It has not moved while that node's dialogue has. Nothing enforces either behaviour — the reader checks only that the value is a 40-character blob sha, and whether a cites hash tracks or freezes is `under`'s open option `cites-hash-tracks-or-freezes`. Suggested edit: re-take the pin at this landing, and amend that account sentence to say what the pin does rather than what it does not.
+- '## Facts', answer fact, option `the-turn-takes-one-of-four-forms`, last paragraph: 'The evidence is the turn it answers, quoted in this node's account'. The account does not quote it: the section 'The form of a turn, 2026-09-07' describes it — 'The session closed the draft of `authors-words-on-the-page` with a turn that reported to the author a measurement of their words across the record, the repair of the parent's bookkeeping, and a marking rule applied at two clauses.' A claim that evidence is quoted, where it is paraphrased, is a claim a later reader cannot check. Suggested edit: quote the turn in the account, or write 'described in this node's account'.
+- '## Facts', answer fact, viability: two options are spent and should carry `passed` with the one clause saying why, as the viable-options node requires, instead of standing as live alternatives the author is asked to rule on. `strike-phantom-depends` proposes striking 'growth's two dependencies naming no node — review-context and review-artifact'; the node's `depends` is now `commons.systems/disposition-graph/alignment-page` and `commons.systems/disposition-graph/dialogue#aspects-are-nodes`, and the account's reply of 2026-09-03 already records 'the two dependencies on nodes that do not exist are struck'. `cite-unanswered-for-responses` proposes that 'Growth stops restating the alignment page's three responses and cites the unanswered node'; the fence already does it — 'what the three responses are is the unanswered node's'. Suggested edit: mark both passed, with 'already applied' and 'absorbed by the recommendation' as the reasons.
+- '## Facts', answer fact, the eight options sourced `ai, ref 8938e2b7` (`issue-trackers-as-the-loop`, `tactics-as-the-loop`, `phases-as-the-loop`, `the-router-and-its-gates`, `born-parked-review`, `placement-gates`, `the-curriculum`, `the-skills-own-text-as-authority`): each carries `status: passed` with, in place of a reason, the sentence 'no reason recorded in the rationale'. The viable-options node requires that a candidate the AI holds dominated 'carries the status passed with the one clause saying why'; a note that no reason exists is not that clause, and eight of the answer fact's twenty-three options are in that state. Suggested edit: write the clause for each — they are the incumbent skill's mechanics, dominated because work here is derived from the graph and every rule a session works under is a node or a declared shim — or, where the AI cannot say why, lift the status and let them stand as viable, which the same node permits it to do on its own authority.
+- Answer (fence), persistence list, two clauses the record's own definitional nodes contradict, each with its fix already on the option list and neither taken while the recommendation was being moved. 'a proposal when it arose outside alignment' against `authority`'s standing answer: 'A proposal is technical vocabulary and is not overloaded: it is the state of a ratified node whose recommendation has moved from its confirmed choice, wherever the move came from' — the option `proposal-as-a-state-of-a-ratified-node` sits unadopted beside it. 'a steer enters the node's rationale as a rejected alternative or an amendment' against `rejected`'s standing answer: 'As viable options not chosen, kept on the fact beside the confirmed choice' — the option `rejected-alternative-is-an-option` sits unadopted beside it. Both are one-clause edits. In the same list, 'an alternative in a dialogue that dies at the ruling' uses the word the re-encoding of 2026-09-03 replaced with `option`.
+- Answer (fence), the queue sentence, and `depends`: the draft keeps 'the queue of un-aligned dispositions is therefore the set of such nodes, ranked like any node and surviving every session, and the author's choice of what comes next is a boost', which `commons.systems/disposition-graph/alignment-order`'s recommended answer contradicts twice — 'The ruling order, derived from the tangle the record carries, and not rank' and '`/align <node id>` is the author's order and needs no boost'. The option `queue-in-ruling-order` records this, and `depends` does not name that node. Suggested edit: add `commons.systems/disposition-graph/alignment-order` to `depends`; and, since the four-forms rule is the same rule as `commons.systems/disposition-graph/author-questions#the-sitting-stops-only-on-intent` and `commons.systems/disposition-graph/alignment-page#page-collects-only-the-confirmation`, add those two entries as well, so that one rule is not ruled in three places in whatever order the three nodes happen to reach the author.
+- '## Rationale' (and the fence's rationale): two dated passages of the author's are quoted there and appear nowhere under '## Disposition' — 'we expect that alignment dialogues like this one (which is mixed in with ad-hoc reconciliation during bootstrap) will trigger recursive disposition statements from the author ...' and 'Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact (previously called the review artifact). The alignment artifacts outputs are consumed by the greenfield/shimmed alignment skill.' Verified: `grep -n '^## ' disposition/disposition-graph/growth.md` puts '## Disposition' at line 144 and '## Answer' at 187, and both passages occur only at lines 193 and 417, inside the two rationales. The dialogue node puts the author's words in '## Disposition', 'verbatim and dated, accumulating through the dialogue', which is also where the projections read them from. Suggested edit: carry both under '## Disposition' with their dates, leaving the rationale to argue from them.
+- The ruling the author gave and the facts do not carry. '## Disposition' holds 'The author, 2026-09-03: > Ratified on the rule. Ratified on the shim.', and this node's account of 2026-09-04 reads those two sentences as 'a ruling on the answer and a ruling on the persistence, given separately, which is exactly the shape `aspects-are-nodes` reserves'. No fact on this node carries a ruling, so the node's class is unanswered and the draft goes to the author as a first ruling on the whole node. The option `partial-ratification` is the vehicle and is still pending, and the earlier reading's finding — 'the author should not be asked twice for a ruling they gave' — was deferred to this node's sitting, which is the one now in hand. Suggested edit: have the recommendation say which clauses those words already covered and what the fresh ruling adds, or record the two rulings on the option that stands and on the persistence option with `of` pinned to the 2026-09-03 text, which makes the node what it in fact is, a node whose recommendation has moved since the words that ruled it.
+
+On the facts and what they recommend: The answer fact recommends `the-turn-takes-one-of-four-forms` over the standing option and a `## Recommendation` fence is present, which is right, but neither the answer fact nor the authority fact records the reason `dialogue` requires the subsection to open with, and boldness `low` is right for the 2026-09-07 clause and wrong for the six movements and two periagogic objects that ride with it, which this node's own account conceded are moderate. `ratified` is the class the session means to present and is right on `class-recommendation`'s capture-shaped limb, a rule bounding what the AI may say to the author being set by the party it checks; the missing `### authority` reading is not reported, that node's answer exempting the back-fill. Persistence, `the page's shim moved out`, matches the fence, which declares only `.claude/skills/align/SKILL.md` (verified present, 67584 bytes) with a liquidation condition; the fence's `cites` pin on `author-questions` is stale against that file's current blob.
+
+On the viability of the options: The authority and persistence facts are complete and every option on them is viable; on the answer fact two are spent (`strike-phantom-depends`, whose dependencies are already struck, and `cite-unanswered-for-responses`, which the fence already does) and eight carry `passed` with no reason at all, both of which the findings above name. Two viable options are missing and the author will not otherwise get to rule on them. `turn-forms-as-its-own-node`: 'The rule that every turn addressed to the author takes one of four forms leaves this node for a node of its own beneath it, asking what form a turn addressed to the author takes and carrying the author's words of 2026-09-06 and 2026-09-07, the four forms, and the exemption for what reconciliation outputs; growth keeps the loop, the usages and the two conducts and cites it, and `author-questions`' `the-sitting-stops-only-on-intent` and `alignment-page`'s `page-collects-only-the-confirmation` cite it rather than each carrying half of one rule.' And `the-fourth-form-carries-the-recording`: 'The acknowledgement of a confirmation carries what the recording node requires the session to say in the same turn, which rulings were recorded and, where the response moved the node's stage, that it moved and why; and what a reconciliation session outputs, including a listing the author has asked for before reconciliation begins, is outside the rule and not only the account of a landing.'
+
+Strongest counter-argument (strong): The draft's own paragraph is the case against it. Growth's answer already answers, in one paragraph, the loop of three moves, the three usages, the two conducts with their Plato loci, the two periagogic objects, the six movements, the presentation rule with its three facts, the persistence list, the ban on transient dispositions, and the un-aligned queue; the 2026-09-07 amendment adds one more, and one that binds harder than any of them, since it governs every turn of every sitting and admits no fifth. Two clean-context readings of this node have already found that answer to break the rule it sits under — `node`: 'If a text answers two questions, it is two nodes' — and the session declined the split twice and referred it to the author, while the record has since done the opposite on a comparable node, minting nine children under `alignment-page` on 2026-09-05 for exactly this reason. The consequence is not formal: with one answer fact and one kick-back row, the author cannot confirm the four forms without ratifying nine other rules they were never asked about separately, and cannot refuse any one of them except by kicking the whole node back to the maieutic stage. And of all the clauses in the paragraph this is the one it is most costly to fold in unexamined, because it is the clause that decides what the author is allowed to be told.
+
+The session's reply: Accepted on the merge finding and the counter-argument, which point the same way and are what this recording acts on: the four-forms rule is a new question, and with one answer fact the author could neither confirm it alone nor refuse it alone. The author's words of 2026-09-07 on probe-or-node decide it, so turn-form is minted beneath this node carrying the author's words of 2026-09-06 and 2026-09-07, the three surfaces, the four forms, what the fourth form contains, which is the recording node's notice of which rulings were recorded and that the node moved, and what stands outside the rule, a reconciliation session's output and a listing the author asked for. The recommendation moves to an option that makes that move and brings three terms into line with the nodes that own them: a steer is an option on the fact, a proposal is the state of a ratified node whose recommendation has moved, and the queue runs in the ruling order, with alignment-order and turn-form named in depends. The presentation rule names its surface, the alignment page. The two ### subsections open with the reason for what they recommend; boldness on the answer fact moves to moderate, since what a ruling confirms is the whole fence; the cites pin is re-taken in the recommended text, ecb27431 to e2791b5e, and the account sentence that said the pin would move is corrected; the two spent options are passed with the clause saying why; the eight options from the incumbent's mechanics get a reason each; the two dated passages of the author's move under ## Disposition and the rationale argues from them; the account says what the ruling of 2026-09-03 covered, the two-stage rule and the skill shim, so the fresh ruling asked for is visibly the rest. Not taken on this recording: the further splits the reading proposes stay viable and unadopted, each being the author's to rule. The recommendation has moved in substance and its reading is owed.
+
+### The reading of 2026-09-07 applied, and the turn rule moved to a child
+
+The clean-context reading of the draft of 2026-09-07 forwarded it with a strong
+counter-argument and fourteen findings. Its merge finding and its
+counter-argument point the same way and are what this recording acts on: the
+four-forms rule "is a new question carried on this node's dialogue, not a new
+answer to a question the record already asks", and with one answer fact the
+author could not confirm it without ratifying nine other rules they were never
+asked about separately, nor refuse it except by kicking the whole node back. The
+author's words of 2026-09-07 on `probe-or-node` decide it — "If author's intent
+is a peristent disposition, then it may require a new node to be reconciled into
+the alignment skill" — so `commons.systems/disposition-graph/turn-form` is minted
+under this node, carrying the author's words of 2026-09-06 and 2026-09-07, the
+three surfaces, the four forms, what the fourth form contains, and what stands
+outside the rule. The options `the-dialogue-is-grounding-intent-and-confirmation`
+and `the-turn-takes-one-of-four-forms` are passed over here as carried there, and
+the reading's two proposed options, `turn-forms-as-its-own-node` and
+`the-fourth-form-carries-the-recording`, are recorded and passed over the same
+way, so the author can see what was proposed and where it went.
+
+What else the reading found and this recording applies. Three terms are brought
+into line with the nodes that own them: a steer is an option on the fact, as
+`rejected` says; a proposal is the state of a ratified node whose recommendation
+has moved, as `authority` says; and the queue runs in the ruling order with the
+author's naming of a node as their order, as `alignment-order` says, which is now
+named in `depends` beside `turn-form`. The presentation rule names its surface,
+the alignment page where a disposition's facts stand for confirmation. Five
+options are passed over as spent or absorbed and eight more, the incumbent
+skill's mechanics, get the one clause the viable-options node requires in place
+of the note that the rationale recorded no reason; the clause is the same
+judgment in each case, that every rule a session works under is a node or a
+declared shim and the work is derived from the graph, made specific to what each
+option would have kept. The `## Facts` subsections for the answer and the
+authority facts now open with the reason for the recommendation, which `dialogue`
+requires and neither carried. Two dated passages of the author's that were quoted
+only in the rationale are carried under `## Disposition`, and the rationale argues
+from them. The fence's `cites` pin on `author-questions` is re-taken by hand,
+`ecb27431` to `e2791b5e`, and the account sentence that said the pin would move
+with the cited node's dialogue is corrected to say that nothing moves a pin.
+
+Boldness on the answer fact moves from low to moderate. Low was right for the
+clause of 2026-09-07 and wrong for what a ruling on this fence confirms with it,
+as this node's own account conceded in 2026-09-03 of the same text: "the
+movements are moderate boldness, not low". The `### answer` reason now says which
+clauses are the author's words and which are the AI's drafting, and says what the
+author's ruling of 2026-09-03 covered, the two-stage rule and the skill shim, so
+that the fresh ruling asked for is visibly the rest; `partial-ratification` stays
+on the list as the option under which the author is asked for the rest alone.
+
+Not applied, and why. `split-presentation-and-movements`, `define-sitting`,
+`facts-from-recommendation-field`, `partial-ratification` and `cite-the-reading`
+stay viable and unadopted: each is a change the author rules on, and this
+recording moves the one rule the author's words of 2026-09-07 send to a node and
+does not take the further splits on its own. The node's own `cites` pin is left as
+it stands, the re-taking being part of the recommended text.
+
+The reading of the recommendation as it now stands is owed, the recommendation
+having moved in substance since the reading of 2026-09-07, and the sitting on
+`turn-form` owes its own.

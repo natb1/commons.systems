@@ -105,6 +105,22 @@ The author, 2026-09-03, during the reconciliation under the bootstrap grant on t
 The author, 2026-09-04, on the decomposition node, whose recommendation stands under this node's option `split-survey-from-per-draft`:
 > go, and bootrap authority granted
 
+The author, 2026-09-07, on the cost of the clean-context reading, asked of the session after a wave of readings on the alignment page's children:
+
+> this iterative clean-context reading is very expensive. Are there token/context optimizations that would achieve similar quality results? eg. is the model choice (fable/opus/sonnet) right sized for the task?
+
+The author, 2026-09-07, in the same turn's continuation:
+
+> also consider optimzations to the dialogue workflow
+
+The author, 2026-09-07, after the session's assessment of where the cost goes:
+
+> record the recommended optimizations as dispositions, progress them up to confirmation, and include them in the list of reconciliations of alignment dialogue/review/survey/artifact
+
+The author, 2026-09-07, later in the same turn:
+
+> begin applying the optimizations as you progress
+
 ## Answer
 
 By the adversarial review, which at every invocation takes the batch of nodes at the review stage and evaluates it against the full graph, answered and unanswered at every stage, in one context, and runs the validations below. Inconsistency between a draft and the answered graph is surfaced to the author by the periagogic stage, where the dialogue turns the author toward the doctrine the draft would join; inconsistency within the frontier has no author to meet it, and the review is where it is surfaced. The validations, each producing findings that name the nodes and the sentences:

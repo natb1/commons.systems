@@ -25,6 +25,10 @@ bears:
   - fact: answer
     option: every-fact-every-option
     relation: adopted
+  - node: commons.systems/disposition-graph/authors-words-on-the-page
+    fact: answer
+    option: per-option-only
+    relation: adopted
 ---
 ## Answer
 

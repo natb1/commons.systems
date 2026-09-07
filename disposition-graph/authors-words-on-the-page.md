@@ -5,12 +5,12 @@ stage: review
 facts:
   - name: answer
     options:
-      - name: section-folded-and-quotation-narrowed
-        source: ai
-        ref: "2026-09-06"
       - name: per-option-only
         source: author
         ref: "2026-09-04"
+      - name: section-folded-and-quotation-narrowed
+        source: ai
+        ref: "2026-09-06"
       - name: words-first-in-the-column
         source: ai
         ref: "2026-09-06"
@@ -28,12 +28,12 @@ facts:
         source: ai
         ref: "2026-09-06"
         status: passed
-        reason: "it labels the whole section as the ground of one option, which is the playback the author's words strike, and it hides a broken reference where the record's rule is that a broken reference is a finding"
+        reason: "it labels the whole section as the ground of one option, which is the playback the author's words release the page from, and it hides a broken reference where this answer makes one a finding"
       - name: caption-where-the-node-carries-none
         source: ai
         ref: "2026-09-06"
         status: passed
-        reason: "it prints one sentence on seventy-two of a hundred and forty items to say what the absent drill-down already says, and its second half is what the standing-choice row says wherever there is an answer for it to be about"
+        reason: "it prints one sentence on seventy-two of a hundred and forty items to say what the rows already say by carrying no quotation, and its second half is what the standing-choice row says wherever there is an answer for it to be about"
       - name: one-drill-down-per-entry
         source: ai
         ref: "2026-09-06"
@@ -44,10 +44,15 @@ facts:
         ref: "2026-09-06"
         status: passed
         reason: "the ruling in front of the author is on this node's question, so the column would carry words no decision on it rests on"
-    recommends: section-folded-and-quotation-narrowed
-    boldness: moderate
-    against: "The author wrote that whatever they say in periagoge does not need to be played back in the alignment artifact except as quotes supporting or refuting fact options, and this answer keeps the whole of it on the page at every stage; that a folded section shown beside no control is not a playback is a distinction the author did not draw, and the measurement the answer leans on, that 121 of 222 recorded entries reach no option, is as good an argument for writing the references properly as for keeping the section."
-    stands: section-folded-and-quotation-narrowed
+      - name: section-open-not-folded
+        source: ai
+        ref: "2026-09-07"
+        status: passed
+        reason: "it puts up to two thousand words of the author's prose above the facts the ruling asks"
+    recommends: per-option-only
+    boldness: low
+    against: "Of the 222 dated entries the record carries, the references on the options reach 101 and 121 reach the page nowhere, none at all on 43 of the 68 nodes that carry words, and on eleven of the forty-five author-sourced options the reference names no entry at all, so until those references are written and the unreferenced entries are given the options they bear on, this answer rules the author on a page showing them a minority of what they have said to the record and eleven rows showing them nothing."
+    stands: per-option-only
   - name: authority
     options:
       - name: ratified
@@ -55,7 +60,7 @@ facts:
       - name: deferred
     recommends: ratified
     boldness: low
-    against: "Whichever way this is ruled the author's words stay in the node unaltered and are read in full in the `/align` interview the author's own rule of 2026-09-06 sends everything else to, so nothing is lost that a session cannot show them on request; ratifying it spends the author's scarcest act on which drill-down a projector folds, and the capture the reading names is already answered by the parent's own authority fact, under which the whole shape of this page is the author's to confirm."
+    against: "Whichever way this goes the author's words stay in the node unaltered and are read in full in the `/align` interview their own rule of 2026-09-06 sends everything else to, so nothing is lost that a session cannot show them on request; ratifying it spends the author's scarcest act on which dated entries a projector quotes beside an option, and the capture the reading names is already answered by the parent's own authority fact, under which the whole shape of this page is the author's to confirm."
 review:
   verdict: forward
   strength: moderate
@@ -72,117 +77,82 @@ The author, 2026-09-04, on the alignment page, queued from the sitting on author
 
 ## Answer
 
-In two places, and the second is not the first cut down. On each option's row,
-one step down, the entries of the node's `## Disposition` that option's `ref`
-names. And last in the middle column, at every stage alike, one folded
-drill-down holding that section whole, in the order it holds it.
+On the option rows, and nowhere else. Where an option's source is the author,
+its row carries, one step down, the author's words that option rests on: exactly
+the entries of this node's `## Disposition` that the option's `ref` names, and no
+others. Nothing else on the page is the author's recorded words. There is no
+drill-down holding the section whole, neither folded nor open, at any stage, and
+none at the foot of the middle column. This is the author's sentence of
+2026-09-04 read at its plainest: whatever response they provide in the
+periagogic movement "does not need to be played back in the alignment artifact
+expect as quotes supporting or refuting fact options", and a quotation on the row
+of the option it supports or refutes is the one form those words name.
 
-The per-option quotation is the form the author's words of 2026-09-04 name and
-allow, "quotes supporting or refuting fact options", and this answer narrows it
-to what those words say. It shows the entries the option's `ref` names and no
-others. Where the `ref` names no entry the row carries nothing for the author's
-words, and the mismatch is a finding on the option rather than an occasion to
-quote: the whole section shown under the label "the author's words it rests on"
-tells the author that everything they have said on the node supports this one
-option, which is false wherever a fact carries a second option they also sourced,
-and unwarranted everywhere else. The record already rules the kind of defect, on
-`commons.systems/disposition-graph/viable-options`, where "an option sourced to
-the author carrying a graph commit where the date of the words should be is a
-finding and not a fact". A reference resolving to no entry is that same defect
-wearing the right shape, and a page that fills the gap with the whole section
-makes it unfindable. So the row carries the quotation or it carries nothing, and
-the finding goes where findings go.
+An entry is a dated paragraph beginning "The author, <date>" together with the
+blockquote it introduces, which is the projector's own rule (`AUTHOR_ENTRY_RE`,
+`packages/disposition/project.mjs:1393`, applied by `authorEntries` at `:1395`).
+An option's `ref` is the date the words were given, and the match is by that date
+alone: where a date carries more than one entry the row shows all of them, in the
+order the section keeps them, which is what `authorWordsFor` does today
+(`packages/disposition/project.mjs:1409-1415`). That is coarse and this answer
+does not refine it — on this page's own parent fourteen of the twenty-four
+entries are dated 2026-09-04, so an option referring to that date carries all
+fourteen. What an option's `source` and `ref` are is
+`commons.systems/disposition-graph/dialogue`'s question; this answer reads them
+and adds nothing to them. On this node the recommended option's own reference
+resolves to one entry, so the row the author rules on carries the sentence it
+rests on and nothing besides.
 
-The section itself stays. What the author's words of 2026-09-04 struck was a
-playback: the page took their response at the periagogic and maieutic stages and
-echoed it back open beside the control that had just asked for it. The control is
-gone, struck by their rule of 2026-09-06 that the page collects the final
-confirmation and shows every other movement as "a preview and a read-only
-indicator", and with the control the echo goes; what is left is not a playback
-but the record shown once, at one remove, in the column where the author is being
-asked to confirm a text written in their own voice. That rule expressly permits a
-read-only view of a movement the page does not run, and the periagogic movement's
-product is such a movement's record. Whether that permission reaches the author's
-own words is the question this node was minted to answer, and the answer is that
-it does.
+Where a `ref` names no entry the row carries nothing for the author's words, and
+the mismatch is a finding on the option rather than an occasion to quote. The
+fallback the projector runs today goes with it: at
+`packages/disposition/project.mjs:1413` a date matching nothing returns the whole
+`## Disposition`, which, shown under the label the row gives it, asserts as the
+ground of one option words that may bear on another option on the same fact —
+the whole-section playback the author's sentence releases the page from, wearing
+a per-option label — and converts a broken reference into a plausible render. The
+finding is raised by the graph's validator, beside the check that already
+requires a `ref` on every option of an answer fact
+(`packages/disposition/read.mjs:491`), and it is listed by the frontier on the
+node that carries it. It is a finding and not a parse error, so the graph still
+reads and still projects while the eleven are outstanding, on the reader's own
+principle that an attention rule never turns into one
+(`packages/disposition/read.mjs:1386-1390`). Neither the check nor the listing
+exists today, and both are owed with this answer. The direction is
+`commons.systems/disposition-graph/viable-options`' recommended text, which no
+ruling has reached and which this answer reads as direction rather than as
+doctrine: an option sourced to the author "carrying a graph commit where the date
+of the words should be is a finding and not a fact". A reference resolving to no
+entry is that same defect wearing the right shape, and a page that fills the gap
+with the whole section makes it unfindable.
 
-It does because of what the section is for, and because nothing else on the page
-or in the record does it. `commons.systems/disposition-graph/quotes` holds that
-"the author's decisions are the one thing re-derivation cannot reconstruct, so
-they are what the record stores, and a restatement is by construction the AI's
-wording of them, which is the drift this record exists to resist". Everything
-else in the middle column is that restatement: the fact's prose, the option
-sentences, the recommendation, the case against, and the text in the right-hand
-column are the AI's words, and on an unanswered node they are the AI's words
-written in the author's voice. The `## Disposition` section is the only text on
-the page the AI did not write. It is the one thing the author can hold the draft
-against, and holding a draft against it is the act the page exists for. A page
-that shows the author only the excerpts the AI's own references selected has the
-recommender choosing the evidence its recommendation is judged by, which is what
-`commons.systems/disposition-graph/bentham-publicity`, already a reading under
-this page, calls defeating publicity at the source.
+What this costs is measured, at graph commit `ec6e2300` and re-taken by the
+reading of 2026-09-07. Of 140 nodes, 68 carry a `## Disposition`, holding 222
+dated entries; 45 options are sourced to the author, of which 34 carry a
+reference naming at least one entry and 11 name none; the references reach 101 of
+the entries and miss 121, and reach none at all on 43 of the 68 nodes. So on the
+day this answer is projected the page carries a minority of what the author has
+said to the record, and eleven rows carry nothing where a quotation is owed. That
+is the cost, and it is the reconciliation this answer owes rather than a reason
+to show the section. Three things discharge it: the eleven references are
+written; an entry that bears on a fact the record asks and that no option names is
+recorded as an option on that fact, sourced to the author and referenced by its
+date, which is what puts it on the page at the place it decides something; and an
+entry that bears on no fact is left in the record, where the browser may yet
+render it. What the record does not do is show every entry beside every option to
+cure the arithmetic.
 
-The measurement decides the rest, and it is a fact about coverage and not a cost.
-At graph commit `ec6e2300` the frontier is 140 nodes; 68 carry a `## Disposition`
-section, 14,784 words in 222 dated entries, a median of 69 words and a longest of
-1,986 on this page's own parent. Forty-five options are sourced to the author, of
-which 34 have a `ref` that names an entry and 11 name none. The references reach
-101 of the 222 entries. They reach none at all on 43 of the 68 nodes, which hold
-76 entries between them, and they miss a further 45 on the nodes they partly
-cover. So under the per-option form alone the majority of what the author has
-said to this record would appear in no projection:
-`commons.systems/disposition-graph/projection` renders no `## Disposition` in the
-browser, and holds that the record is read "through projections, never by opening
-node files, except in alignment sessions". The words would be stored, validated,
-and shown to no one. That is not the price of a design; it is the design failing
-at the thing this record is for.
-
-The section is therefore whole and in order, and not the residue. A drill-down
-carrying only the entries no option's reference names would cure a duplication
-that is not a defect and destroy the property that earns the section its place.
-Not a defect, because both places are projections of one stored section and
-neither is a second copy: nothing can drift where nothing is copied, which is the
-rule `commons.systems/disposition-graph/dialogue` states as keeping a thing once
-where it is decided and deriving the rest. The property, because a section whose
-contents depend on which entries the AI's references happened to name is a
-section the AI has edited, and the author reading it can no longer see the
-dialogue, only what is left of it. The order carries the same weight: the words
-on a node are a dialogue over days, and an entry's sense is often in what came
-before it.
-
-It is folded and never open. Open, it puts up to two thousand words of the
-author's own prose above the facts, which are what the ruling asks; folded, it is
-one line and one click, which is the two-level form
-`commons.systems/disposition-graph/hansard-verbatim-record` reads under this
-page, whose guard against an interested editor is "that the second level is
-always present and one step away rather than sometimes omitted". Always present
-is the operative half here. Its summary names the section as the node's own, so
-that it is not read as the ground of anything recommended, and it sits last in
-the column because the ruling's ask is the facts and the section is what the
-author consults against them rather than the thing being asked.
-
-Where the node carries no such section there is no drill-down and no caption
-stands in its place. The caption the page prints today was written as the
-companion of the free-text control, and the author's rule of 2026-09-06 struck it
-with the control; extending the drill-down to every stage does not bring its
-question back. An absent drill-down says the node carries no words of the
-author's, on 72 of the 140 items, without printing a sentence 72 times; and the
-caption's second half, that what the answer says the AI drafted, is what the
-standing choice's own row already says wherever there is an answer for it to be
-about, and is about nothing wherever there is not.
-
-What this answer does not decide, and where each belongs. Whether the AI's
-account is shown as the other drill-down is the parent's, carried there as the
-option `account-not-on-the-page`, and nothing here touches it. Whether the
-browser renders a node's `## Disposition` is
-`commons.systems/disposition-graph/projection`'s, and this answer's measurement
-is an argument to put to that node and not a ruling on it. Whether the author's
+What this answer does not decide, and where each belongs. Whether the browser
+renders a node's `## Disposition` is
+`commons.systems/disposition-graph/projection`'s, and the measurement above is an
+argument put to that node, recorded there as the option
+`browser-renders-the-authors-words`, and not a decision taken here. Whether the
+AI's account is shown as a drill-down is the parent's, carried there as the option
+`account-not-on-the-page`, and nothing here touches it. Whether the author's
 words may share the right-hand column is not open: that column is the disposition
 and nothing else, which is the parent's clause and not devolved here. How the
 words are retained, rolled up and dated is
-`commons.systems/disposition-graph/quotes`'. And what an option's `source` and
-`ref` mean is `commons.systems/disposition-graph/dialogue`'s; this answer reads
-them and adds nothing to them.
+`commons.systems/disposition-graph/quotes`'.
 
 ## Rationale
 
@@ -193,121 +163,180 @@ Recorded on the author's disposition of 2026-09-04, queued from the sitting on
 > Whatever response is provided in periagoge it does not need to be played back
 > in the alignment artifact expect as quotes supporting or refuting fact options.
 
-The sentence does two things and the answer takes both. Its exception is a
-positive grant, and the answer narrows the per-option quotation to exactly what
-it grants: the entries the option's reference names, supporting or refuting that
-option, and nothing where the reference names nothing. Its main clause releases
-the page from an obligation to play the response back, and it was said of a page
-that had just taken that response in a control of its own. The author's rule of
-2026-09-06 removed the control and, in the same breath, set the page's standing
-scope as the final confirmation and, of every other movement, a preview and a
-read-only indicator; the subsection recording that rule names this node as the
-one to say whether the author's recorded words may be shown back that way. This
-answer says they may, and it does not read the release as a prohibition.
+The sentence releases the page from playing the author's response back and names
+one exception to the release, and this answer is that sentence with nothing added
+to either half. The exception is where the author's words live on the page:
+quotes, on options, supporting or refuting them. Its narrowing work is done by
+"supporting or refuting fact options" — the words the row shows are the words
+that bear on the option the row is, which is what fixes the quotation to the
+entries the reference names and leaves the row silent where it names none. The
+earlier draft kept the whole section on the page under a distinction between a
+playback and the record shown once at one remove; that distinction is the AI's
+word set against the author's, and on the author's own question about the author's
+own words it is not a ground.
 
-What carries that reading past the author's authority is the record's own. The
-section is the only text in the column the AI did not write, so it is the only
-check the page offers on a draft written in the author's voice; the browser
-renders none of it; and the references that would replace it reach 101 of 222
-entries and none at all on 43 of 68 nodes. The reach is bounded by where
-authority lies: the parent devolved this question, the account half of the same
-clause is the parent's own, the browser is `projection`'s, and the right-hand
-column's reserve is the parent's and untouched.
+The later rule cuts the same way. On 2026-09-06 the author fixed the page's
+scope: "The scope of alignment artifact is limited to final confirmation and
+previews/read only indicators of other phases of the dialogue. All other
+information from the author is done via the `/align` session interview." That is a
+rule about what the page does with the author, and its direction is inward: the
+confirmation stays, and everything else about the author goes to the interview.
+Reading out of it a permission for the page to carry more of the author's words
+than their own sentence of 2026-09-04 allowed inverts it. Nothing is lost in the
+narrowing that a session cannot restore: the words stay in the node, unaltered,
+and the interview the rule names is where they are read whole.
+
+The coverage measurement is the strongest thing said against this answer, and it
+argues for the other remedy. That 121 of 222 entries are named by no option is a
+fact about the references and the options rather than about the page: an entry
+that bears on a fact the record asks and that no option names is an option the
+record has not yet recorded, and eleven references naming no entry are eleven
+defects this answer itself makes findable. Curing them by showing the section
+entire makes the projection the place to make up what the encoding has not done,
+which is the error `commons.systems/disposition-graph/evaluation` exists to catch,
+an incumbent fact doing the work of a design constraint: the section would be on
+the page because the references are thin, and it would still be on the page after
+they were thick. The cure the record's own machinery gives is cheap where the
+display is not — a reference is a date and an option is a sentence with a source —
+and it puts each of the author's words at the place where they decide something
+rather than in a column of prose the author scrolls past.
+
+Two traditions were surfaced and each is recorded as a reading bearing on this
+fact. `commons.systems/disposition-graph/bentham-publicity` is why the finding is
+part of this answer and not an accessory to it: publicity's rule, as that reading
+takes it, is against a recommender that "publishes some of its decisions and
+withholds others by its own measure", and under this answer it is the AI's
+references that decide which of the author's words the author sees, so the
+selection itself must be published — a reference naming no entry is a finding on
+the frontier and never a silent row. The reading is adopted on this option for
+that reason, and adopted on `section-folded-and-quotation-narrowed` too, that
+option being disclosure of another kind; the principle supports both and does not
+choose between them, and marking the option the recommendation left as a
+divergence would recruit the tradition for a choice made on the author's words.
+`commons.systems/disposition-graph/hansard-verbatim-record` supports this option
+in terms, within the scope it records, which is the option's row: "The first
+level is the option's sentence, its status and the mark on the recommendation …
+the second level, one step under it, is the full text of the fact, the author's
+words, the AI's case". This answer puts the author's words exactly there and
+nowhere else. The earlier draft read that reading's guard, that the second level
+is always present and one step away, at a node-level drill-down the reading never
+read; the extension is not made here, and the reading is cited only for what it
+says.
+
+The reach is bounded by where authority lies. The parent devolved this question
+and marks both clauses a ruling here reaches as standing only until this node
+rules; the account half of the same sentence is the parent's own, the right-hand
+column's reserve is the parent's and untouched, the browser is `projection`'s,
+and what a `source` and a `ref` mean is `dialogue`'s. In the parent's recommended
+text this answer narrows one clause, the option drill-down's third item, to the
+entries the reference names and no others, and strikes one, the author's words as
+a drill-down of the column.
 
 ## Facts
 
 ### answer
 
-Recommended: `section-folded-and-quotation-narrowed`, at moderate boldness. The
-narrowing half follows the author's words closely and is where their exception
-does its work; the retaining half departs from the plainest reading of their main
-clause, and the ground for the departure is stated rather than assumed. Three
-things carry it. The author's own later rule of 2026-09-06 permits a read-only
-view of a movement the page does not run, and the subsection recording it names
-this node as the place to say whether their words are one. The section is the
-only text in the column the AI did not write, which is what makes it the check
-and not decoration; `quotes` says in as many words why a restatement cannot serve
-instead. And the coverage is measured, not asserted: 101 of 222 entries reached,
-none at all on 43 of 68 nodes, and no other projection carrying them.
+Recommended: `per-option-only`, at low boldness, which is also what stands.
 
-Boldness is moderate and not low because one reading is load-bearing and it is
-the AI's: that "played back" describes the echo of a response the page had just
-collected, so that the same words leave a folded section standing once the
-control is gone. Everything else in the answer follows from that reading. It is
-not high because nothing here rests on the AI's knowledge from outside the
-record: the two grounds beneath the reading are the author's own rule of
-2026-09-06 and a count taken on the graph.
+The recommendation moved here on 2026-09-07 from
+`section-folded-and-quotation-narrowed`, on the counter-argument the clean-context
+reading of that draft returned; the account records the move. What carries it is
+that the only words the author has given on this node are a release with one
+named exception, that this option is that sentence and nothing else, and that the
+ground for keeping the section — that a section shown beside no control is not a
+playback — is a distinction the AI drew and the author did not. The narrowing
+half is unchanged from the draft and is where the author's exception does its
+work: the entries the reference names, on the row of the option they bear on, and
+nothing where the reference names nothing.
 
-The case against is on the fact. Its strongest form is that the author wrote a
-sentence about their words on this page, this answer keeps the words on the page,
-and the distinction that reconciles the two is the AI's. The reply is that the
-alternative is measurable and severe rather than a matter of taste, and that the
-author can take it in one ruling: `per-option-only` is on the fact, sourced to
-them and dated to their words, and is not passed over, because the AI does not
-hold the author's own reading of the author's own sentence dominated.
+Boldness is low because the recommendation rests on the author's words rather
+than against them, which is the measure `dialogue` gives boldness: the option is
+sourced to the author and referenced to their sentence, and every clause of the
+answer is that sentence applied. What is the AI's here is the disposal of the
+consequence — that an unresolving reference is a finding, and the locus it is
+raised at — and neither is a departure from anything the author has said. The
+draft's moderate mark was for a reading of "played back" that this answer no
+longer needs.
 
-#### per-option-only
+The case against is on the fact, at full strength: on the day this is projected
+the page shows the author a minority of what they have said to the record, and
+eleven rows show them nothing. The reply is that this is a defect of the
+references and of the options the unreferenced entries lack, curable exactly
+there; that eleven silent rows become eleven findings the moment the check
+exists, so the defect is disclosed rather than hidden; and that the alternative
+is on this fact as the AI's option, with the measurement as its case and no
+status against it, so the author may take it in one ruling.
 
-Everything the recommended option says, with the whole-section drill-down struck,
-so that the only author's words anywhere on the page are the per-option
-quotations, narrowed as the recommendation narrows them. This is the author's
-sentence of 2026-09-04 read at its plainest, and it is on the fact as theirs. It
-is viable and not recommended for what the count shows: the references reach 101
-of 222 entries and none at all on 43 of the 68 nodes that carry words, the
-browser renders no `## Disposition`, and `projection` holds that the record is
-read through projections and not by opening node files, so on this option the
-majority of what the author has said to the record is visible nowhere.
+#### section-folded-and-quotation-narrowed
+
+Everything the recommended option says of the per-option quotation, with one
+folded drill-down last in the middle column holding the node's `## Disposition`
+whole and in the order it keeps it, at every stage alike. For it, and it is the
+measurement: the references reach 101 of the 222 entries and none at all on 43 of
+the 68 nodes that carry words, the browser renders no `## Disposition`, and
+`projection`'s answer, which no ruling has reached, says the record is read
+"through projections, never by opening node files, except in alignment sessions",
+so under the recommended option the majority of what the author has said to this
+record is visible in no projection today; and the section is the only text in the
+middle column the AI did not write, which is what would make it a check on a
+draft written in the author's voice rather than more apparatus. Viable and not
+recommended: the author's sentence of 2026-09-04 releases the page from playing
+their response back except as quotes on options, the distinction that would leave
+a folded section standing under that sentence is the AI's and not theirs, and the
+coverage it answers is answered instead by writing the eleven references and
+recording the options the unreferenced entries lack.
 
 #### words-first-in-the-column
 
-Everything the recommended option says, with the drill-down placed at the head of
-the middle column, under the stage chip and above the facts, rather than last.
-For it: the words are the ground the draft answers, and reading the ground before
-the options is the order of the argument rather than the order of the page.
-Against it, and decisive: the column's own ask is the facts, and the parent's
-answer puts the drill-downs last for that reason; a section running to 1,986
-words on this page's parent makes the first thing under the chip a thing the
-author scrolls past on every node that carries words, which is the fault the
-parent names against apparatus in the right-hand column, moved one column over.
-Viable and not recommended.
+Everything `section-folded-and-quotation-narrowed` says, with its drill-down
+placed at the head of the middle column, under the stage chip and above the
+facts, rather than last. For it: the words are the ground the draft answers, and
+reading the ground before the options is the order of the argument rather than
+the order of the page. Against it, and decisive: the column's own ask is the
+facts, and the parent's recommended text puts the drill-downs last for that
+reason; a section running to 1,986 words on this page's parent makes the first
+thing under the chip a thing the author scrolls past on every node that carries
+words, which is the fault the parent names against apparatus in the right-hand
+column, moved one column over. Viable and not recommended, and it falls with the
+option it varies.
 
 #### residue-in-the-drill-down
 
-Everything the recommended option says, with the drill-down carrying only the
-entries no option's `ref` names, so that no entry appears twice on the page. For
-it: 101 of the 222 entries are otherwise rendered in both places on the same
-node. Passed over. The duplication it cures is not a defect, since both are
-projections of one stored section and neither is a copy that can drift, which is
-the test `dialogue` sets in keeping a thing once where it is decided and deriving
-the rest; and the cure costs the property that earns the section its place, since
-a section whose contents are chosen by the AI's own references is a section the
-AI has edited, and the chronology the author reads their dialogue in is broken by
-the removal.
+Everything `section-folded-and-quotation-narrowed` says, with its drill-down
+carrying only the entries no option's `ref` names, so that no entry appears twice
+on the page. For it: 101 of the 222 entries would otherwise be rendered in both
+places on the same node. Passed over. The duplication it cures is not a defect,
+since both are projections of one stored section and neither is a copy that can
+drift, which is the test `dialogue` sets in keeping a thing once where it is
+decided and deriving the rest; and the cure costs the property that earns the
+section its place under that option, since a section whose contents are chosen by
+the AI's own references is a section the AI has edited, and the chronology the
+author reads their dialogue in is broken by the removal.
 
 #### drill-down-only-where-no-option-quotes
 
-Everything the recommended option says, with the drill-down rendered only on
-nodes where no option's `ref` reaches any entry, so the page shows the section
-where nothing else would and stays silent where something does. Passed over: it
-is the same edit at the node's granularity and buys less. On the 25 nodes the
-references partly cover, the 45 entries they miss would be shown nowhere, and
-whether a node's words appear at all would turn on whether the AI wrote one
-resolving reference on it.
+Everything `section-folded-and-quotation-narrowed` says, with its drill-down
+rendered only on nodes where no option's `ref` reaches any entry, so the page
+shows the section where nothing else would and stays silent where something does.
+Passed over: it is the same edit at the node's granularity and buys less. On the
+25 nodes the references partly cover, the 45 entries they miss would be shown
+nowhere, and whether a node's words appear at all would turn on whether the AI
+wrote one resolving reference on it.
 
 #### fallback-to-the-whole-section-kept
 
 Everything the recommended option says, with `authorWordsFor`'s present behaviour
 kept: where an option's `ref` names no entry, the row shows the whole
-`## Disposition` under the label "the author's words it rests on", with the hint
-that the rest is below. For it: the author sees something rather than nothing at
-the point of choosing, and the section is on the page anyway under this
-recommendation. Passed over. It asserts as the ground of one option words that
-may bear on another option on the same fact, which is the whole-section playback
-the author's words strike, wearing a per-option label; and it converts a broken
-reference into a plausible render, where `viable-options` holds that a reference
-of the wrong kind on an author-sourced option "is a finding and not a fact". It
-runs on 11 of the 45 author-sourced options today, so the choice is between
-eleven silent renders and eleven findings.
+`## Disposition` under the label "the author's words it rests on". For it: the
+author sees something rather than nothing at the point of choosing, and on this
+option nothing else on the page would carry those words. Passed over. It asserts
+as the ground of one option words that may bear on another option on the same
+fact, which is the whole-section playback the author's words release the page
+from, wearing a per-option label; and it converts a broken reference into a
+plausible render, where `viable-options`' recommended text, which no ruling has
+reached, names a reference of the wrong kind on an author-sourced option "a
+finding and not a fact". It runs on 11 of the 45 author-sourced options today, so
+the choice it offers is between eleven quiet renders and eleven findings.
 
 #### caption-where-the-node-carries-none
 
@@ -316,30 +345,45 @@ Everything the recommended option says, with a caption where the node carries no
 that what the answer says the AI drafted. For it: absence is easy to miss, and
 the second half is true and worth saying. Passed over: the caption was struck by
 the author's rule of 2026-09-06 as the companion of the control it sat under, and
-extending the drill-down does not bring its question back; it would print on 72
-of the 140 items on the page; and its second half is what the standing choice's
-own row already says wherever there is an answer for it to be about, in the
-parent's words, that confirming ratifies the AI's draft, while on a node with no
-answer at all there is no answer below for the caption to be about.
+nothing in this answer brings its question back; it would print on 72 of the 140
+items on the page, where the rows say the same thing by carrying no quotation;
+and its second half is what the standing choice's own row already says wherever
+there is an answer for it to be about, in the parent's words, that confirming
+ratifies the AI's draft, while on a node with no answer at all there is no answer
+below for the caption to be about.
 
 #### one-drill-down-per-entry
 
-Everything the recommended option says, with one drill-down per dated entry, each
-summarised by its date, rather than one holding the section. For it: 17 entries
-on `alignment-order` and 24 on `alignment-page` are a wall behind a single
-summary. Passed over: it puts 222 summaries on the page whose labels are dates
-and so carry nothing of what was said, where one summary naming the section says
-what the reader is opening; and an entry's sense is usually in the sequence it
-sits in, which per-entry folding hides.
+Everything `section-folded-and-quotation-narrowed` says, with one drill-down per
+dated entry, each summarised by its date, rather than one holding the section.
+For it: 17 entries on `alignment-order` and 24 on `alignment-page` are a wall
+behind a single summary. Passed over: it puts 222 summaries on the page whose
+labels are dates and so carry nothing of what was said, where one summary naming
+the section says what the reader is opening; and an entry's sense is usually in
+the sequence it sits in, which per-entry folding hides. It falls with the option
+it varies.
 
 #### ancestors-words-too
 
-Everything the recommended option says, with the drill-down carrying the author's
-words recorded on the node's ancestors as well as its own, since a ruling here
-falls within their grant. Passed over: the ruling in front of the author is on
-this node's question, the ancestry is already a route the rail and the column's
-one line give them, and a column carrying words no decision on it rests on is the
-apparatus the parent's answer is against.
+Everything `section-folded-and-quotation-narrowed` says, with its drill-down
+carrying the author's words recorded on the node's ancestors as well as its own,
+since a ruling here falls within their grant. Passed over: the ruling in front of
+the author is on this node's question, the ancestry is already a route the rail
+and the column's one line give them, and a column carrying words no decision on
+it rests on is the apparatus the parent's recommended text is against.
+
+#### section-open-not-folded
+
+Everything `section-folded-and-quotation-narrowed` says, with its drill-down
+rendered open rather than folded, so that the author meets their own words
+without a click. For it: a fold is a step the reader may not take, and on that
+option the section is the one text in the column the AI did not write. Against
+it, and decisive on the measurement: a section running to 1,986 words on this
+page's own parent would stand between the stage chip and the facts the ruling
+asks about, which is the fault the parent names against apparatus, and the
+two-level form the record reads under this page is the answer to it. Passed over.
+Raised by the clean-context reading of 2026-09-07, which found the alternative
+decided in the draft's prose and recorded on no fact.
 
 ### authority
 
@@ -348,30 +392,40 @@ would be expensive, irreversible, or capture-shaped, and the limb this node meet
 is capture-shaped.
 
 The decision is which of the author's own recorded words the author is shown at
-the moment they rule on a text the AI drafted in their voice. Under any class but
-ratified the party setting that is the AI, and the author's verbatim words are
-the record's one check on whether the draft is faithful to them: `quotes` holds
-that a restatement is by construction the AI's wording, "which is the drift this
-record exists to resist", and everything else in the column is that restatement.
-A recommender that decides which of the evidence against it the decider sees is
-the shape the limb names, and it is the shape the record has already read here,
-in `bentham-publicity` under this page, of a recommender that "publishes some of
-its decisions and withholds others by its own measure". It is the shape whichever
-way the answer goes: this recommendation keeps more of the author's words rather
-than fewer, and that does not change who would be setting it.
+the moment they rule on a text the AI drafted in their voice. Under this answer
+that selection is made entirely by the references the AI writes on the options:
+the row carries the entries the `ref` names, and no other words of the author's
+are anywhere on the page. Under any class but ratified the party setting that
+rule is the AI, and the author's verbatim words are the record's one check on
+whether the draft is faithful to them — the rationale of the text
+`commons.systems/disposition-graph/quotes` recommends, itself a draft no ruling
+has reached, says that the author's decisions are what re-derivation cannot
+reconstruct and that a restatement is by construction the AI's wording of them,
+"which is the drift this record exists to resist", and everything else in the
+column is that restatement. A recommender that decides which of the evidence
+against it the decider sees is the shape the limb names, and it is the shape the
+record has already read here, in `bentham-publicity` under this page, of a
+recommender that "publishes some of its decisions and withholds others by its own
+measure". It is that shape whichever way the answer goes, and the recommendation
+moving to the author's own option does not change who would be setting it: this
+answer is the narrower of the two, since the references are now the only route
+the author's words have to the page, so the class weighs more here than it did on
+the draft it replaces.
 
 The other two limbs are not met and the reading says so. Not expensive: the
-answer is carried by one projector function and a fold, and nothing is built on
+answer is one projector function with its fallback removed and one drill-down
+struck, with a check and a frontier line owed beside them, and nothing is built on
 it. Not irreversible: the `## Disposition` section stays in the node under every
 option on this fact, so no words are lost either way and a wrong answer is undone
-by re-projecting the page. Delegated would leave the selection of the author's
-own words in the hands of the party those words check, which is the one class of
+by re-projecting the page. Delegated would leave the selection of the author's own
+words in the hands of the party those words check, which is the one class of
 decision a delegation here cannot cover. Deferred is on the fact because the
 record's classes are three: it is what the author takes if they want this answer
 to act while the question stays in front of them, and it is the reasonable choice
-if they read the departure from their sentence as the only contested part.
-Boldness low because the class follows the stated test applied to a stated fact,
-not the AI's judgment of this node alone.
+now that the recommendation is their own sentence read plainly and the contested
+part is the coverage rather than the rule. Boldness low because the class follows
+the stated test applied to a stated fact, and not the AI's judgment of this node
+alone.
 
 ## Account
 
@@ -470,3 +524,61 @@ On the viability of the options: Every option listed is viable on its facts and 
 Strongest counter-argument (moderate): The only words the author has given on this node say that whatever they provide in periagoge 'does not need to be played back in the alignment artifact expect as quotes supporting or refuting fact options' — a release with one named exception — and this answer keeps the whole section on the page at every stage, resting the departure on an AI distinction between a playback and 'the record shown once, at one remove', which the author did not draw. The later rule it leans on cuts the other way as easily: 'The scope of alignment artifact is limited to final confirmation and previews/read only indicators of other phases of the dialogue. All other information from the author is done via the `/align` session interview' is a rule narrowing what the page does with the author, and reading out of it a permission for the page to show more of the author's words than their own sentence allowed inverts its direction. The coverage measurement, which I re-took at ec6e2300 and which is exact in every figure, argues as strongly for the other remedy: 11 of 45 author-sourced options carry a reference that names no entry and 121 of 222 entries are named by no option, and this answer itself calls a broken reference a finding, so the record's own cure is to write the references rather than to keep a section running to 1,986 words on the page beside them. And nothing is lost by the plainer reading that a session cannot restore: the words stay in the node, and the author's own rule of 2026-09-06 sends everything but the confirmation to the `/align` interview, where they are read whole.
 
 The session's reply: Accepted on every finding, and the counter-argument moves the recommendation. The account's paragraph on the parent's marking rule was true when written and false by the reading, since the sitting marked both clauses on 2026-09-06 after the account was drafted; it is restated as the record. The two grounds attributed to `viable-options` and `quotes` stand only in those nodes' recommendation fences, which no ruling has reached, and are re-attributed as drafts the answer reads as direction. The finding on a reference that names no entry is given a locus, the graph's validator, which already raises the wrong-kind reference `viable-options` names, and the frontier lists it. The two readings the argument rests on gain `bears` entries naming this node, and the answer says of `hansard-verbatim-record` that its guard is read by analogy at a structure the reading did not read. The option the answer rejected in prose, the section open, is recorded as passed with the reason the answer gave. The browser argument is recorded on `projection` as the option the reading drafted. And the counter-argument is taken rather than answered: the author's only words on this node release the page from playing their words back except as quotes on options, the later scope rule narrows the page and does not widen it, and the coverage measurement argues for writing the eleven missing references and the options the unreferenced entries lack rather than for a section the author said the page need not carry. The recommendation therefore moves to the author's option `per-option-only`, carrying the quotation narrowed to the entries the reference names and the finding where it names none, at low boldness; the folded section stays on the list as the AI's option with the coverage argument as its case; and the redrawn answer owes a fresh reading.
+
+### The recommendation moved to the author's option, 2026-09-07
+
+The recommendation on the answer fact moved from
+`section-folded-and-quotation-narrowed` to `per-option-only`, the option sourced
+to the author and referenced to their words of 2026-09-04, and `stands` moved
+with it, so the `## Answer` is now that option's text and the fact carries no
+recommendation fence. The draft of 8169831e was forwarded by the clean-context
+reading of 2026-09-07 at moderate strength, and the move is the sitting taking
+that reading's counter-argument rather than answering it: the author's only words
+on this node release the page from playing their response back except as quotes
+supporting or refuting fact options; the later scope rule of 2026-09-06 narrows
+what the page does with the author and cannot be read as widening it; and the
+coverage measurement argues for writing the eleven missing references and
+recording the options the unreferenced entries lack, not for a section the author
+said the page need not carry. The folded section stays on the fact as the AI's
+option, unpassed, with the measurement as its case, so the author may take it in
+one ruling.
+
+The reading's other findings are accepted and applied. The paragraph in
+"### What a ruling here would reach in the parent" claiming the parent marks
+three clauses and not the two this node reaches was true when written and false
+by the reading: the sitting marked both on 2026-09-06, at `alignment-page`'s
+lines 526 and 532, and the marking now appears at five clauses; the paragraph is
+restated as the record and no bookkeeping is owed there. The two grounds
+attributed to `viable-options` and to `quotes` stand only inside those nodes'
+recommendation fences, which no ruling has reached, and are re-attributed as
+drafts this answer reads as direction. The finding for a reference naming no
+entry is given a locus, the graph's validator beside the check that already
+requires a `ref` (`packages/disposition/read.mjs:491`), listed by the frontier and
+not thrown as a parse error; neither the check nor the listing exists today. The
+option the draft rejected in its prose is recorded as `section-open-not-folded`,
+passed, with the reason the draft gave. The two readings the argument rests on
+gain `bears` entries naming this node, `bentham-publicity` adopted on
+`per-option-only` and on `section-folded-and-quotation-narrowed`, and
+`hansard-verbatim-record` adopted on `per-option-only`, within the scope it
+records, the option's row; the draft's extension of the Hansard guard to a
+node-level drill-down is not made in the redrawn answer. The browser argument is
+recorded on `commons.systems/disposition-graph/projection` as the option
+`browser-renders-the-authors-words`. Boldness on the answer fact falls from
+moderate to low, the recommendation now resting on the author's words rather than
+against them.
+
+The redrawn answer owes a fresh reading, its recommendation having moved in
+substance since the pin of 8169831e. What it owes in reconciliation is on the
+record rather than on this node's implementation: eleven author-sourced options
+carry a reference that names no entry and are to be written; 121 of the 222 dated
+entries are named by no option, and each that bears on a fact the record asks is
+to be recorded as an option there, sourced to the author and referenced by its
+date, while an entry that bears on no fact stays in the record for the browser to
+render if `projection` decides it should. In the implementation the change falls
+on `packages/disposition/project.mjs`: the whole-section fallback in
+`authorWordsFor` at `:1413` goes, the `The author's words` drill-down in
+`renderAsk` at `:1726` goes with it and the open section in `renderStageAsk` at
+`:1702` is already struck by the author's rule of 2026-09-06, the styles for both
+go from `packages/disposition/alignment-template.html`, and the new check and its
+frontier line are owed in `packages/disposition/read.mjs` and in the frontier
+projection.

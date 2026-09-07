@@ -315,6 +315,10 @@ The author, 2026-09-06, on where the warning goes that a node's text is an uncon
 
 > A single indication per node to indicate that node is not yet confirmed is fine.
 
+The author, 2026-09-07, on the sitting on their observations of 2026-09-04, whose node `alignment-page-observations` was pruned into this node and its children on 2026-09-05, said while the session was progressing the review-cost dispositions:
+
+> before stopping for confirmation, and ensure alignment-page-observations is progressed up to confirmation and included in the list of reconciliation for alignment/review/survey/artifact
+
 ## Facts
 
 ### answer

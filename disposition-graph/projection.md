@@ -80,6 +80,9 @@ facts:
       - name: rejected-alternative-is-an-option
         source: commons.systems/disposition-graph/rejected
         ref: "2026-09-05"
+      - name: browser-renders-the-authors-words
+        source: commons.systems/disposition-graph/authors-words-on-the-page
+        ref: "2026-09-07"
     recommends: draft
     boldness: moderate
     stands: standing
@@ -214,6 +217,25 @@ found that the answer's claim that the record keeps no second home was not yet
 true of the record and named this text; recorded as an option and not a merge,
 since which of the two texts gives way is the author's, and the pair is ruled
 together.
+
+#### browser-renders-the-authors-words
+
+Everything the recommended option says, with the browser rendering each node's
+`## Disposition` section as the node's own words, whole and in the order the
+section keeps them. For it, measured at graph commit `ec6e2300`: 68 of the 140
+nodes carry 222 dated entries and the browser renders none of them, while
+`authors-words-on-the-page`'s recommended answer puts the author's words on the
+alignment page only as quotations on the option rows whose references name them,
+which reach 101 of the 222, so the majority of what the author has said to this
+record would be rendered in no projection at all; and this node's own answer says
+the record is read through projections and never by opening node files, which is
+what makes that a gap rather than a preference. Against it: the browser is the
+projection for a reader who is not the author, and what the alignment page owes
+its one reader may not be what a public page owes everyone; the entries are the
+author's side of an open dialogue rather than the record's answers, and how they
+are retained and rolled up is `quotes`'. Raised by the clean-context reading of
+`authors-words-on-the-page` on 2026-09-07, under validation 15, as an option and
+not a merge.
 
 ## Recommendation
 
