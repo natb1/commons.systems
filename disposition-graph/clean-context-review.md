@@ -1,13 +1,12 @@
 ---
 question: How is the clean-context review run?
-stage: review
+stage: ruling
 review:
   verdict: forward
   strength: none
   date: 2026-09-07
-  of: 9972f0cfa1d3635eba4440a793ce96b6d88271e0
-  commit: f146f8f44b295c64e47a13bff338748035183d87
-  against: "None found. Checked against the record rather than argued: `packages/clean-context-review/` and `.claude/skills/align-review/` still contain no mention of a wave (`grep -rin wave` empty), confirming the fence's disclosure is accurate; `disposition/disposition-graph/review-cost.md` now carries the `a-waves-brief-is-one-brief` option (source `clean-context-review`, ref 2026-09-07) with the byte figures moved there as the account claims; and the amended survey paragraph's division of labor with `frontier-consistency` (this node cites that node's validations rather than restating them) matches `frontier-consistency`'s own concurrent amendment, which independently records fixing the same contradiction against this node's prior text. All seven of the last reading's findings are answered in substance and nothing in the diff introduces a new false claim, contradiction, or stale pin."
+  of: d3f8d73731fce5eab04745b1b2809d784704636c
+  commit: 9d663f3eed01799da963cc1da55f37af631de36c
   survey:
     date: 2026-09-07
     of: 9972f0cfa1d3635eba4440a793ce96b6d88271e0
@@ -838,3 +837,18 @@ Proposed: frontier-consistency's conditioned form is the survivor, since the con
 ### Amended after the frontier survey, 2026-09-07
 
 Two findings of the survey, both validated at their loci on the main thread. The derivation clause and the rationale argued the round's size from a survey that never ran; forty-five nodes have carried the survey's pin since 2026-09-05, and both are redrawn on the set as it stands, twenty-five of fifty at graph commit e4c87ed0. The survey paragraph restated the one-line class unconditioned where the child conditions it on the node's text; the sentence now cites the child's condition, the option `the-unreached-line-is-conditioned-by-frontier-consistency` is adopted, and `frontier-consistency#one-line-only-where-the-text-a-survey-read-still-stands` is entered in `depends`, so this node is not ruled before the child whose rule it cites. The amended recommendation owes its re-reading, whose object is this repair.
+
+### Clean-context re-reading, 2026-09-07, of d3f8d737
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `wave-membership-derived-from-the-record`.
+
+Findings:
+
+
+On the facts and what they recommend: The answer fact's fence text is amended in two loci, both matching the two frontier findings raised after the last reading's pin: the derivation-of-the-round clause in 'The review of a draft' paragraph now says the round is the set the survey has owed since the 2026-09-05 survey pinned forty-five nodes, a proper subset of the review/ruling stages (twenty-five of fifty at graph commit e4c87ed0), replacing the false premise that 'no survey has run'; and the survey paragraph now says 'of a node no judged node reaches, what the frontier-consistency node's condition on its text gives...stated there and not here' in place of the unconditioned restatement it previously carried while claiming not to restate. A new option, `the-unreached-line-is-conditioned-by-frontier-consistency`, is added to the answer fact's option list and adopted into the recommendation, and `commons.systems/disposition-graph/frontier-consistency#one-line-only-where-the-text-a-survey-read-still-stands` is added to `depends`. `recommends` stays `wave-membership-derived-from-the-record` at high boldness, `standing` still stands as the '## Answer' text, so the '## Recommendation' fence remains required and present. The authority and persistence facts are untouched by this diff.
+
+On the viability of the options: The diff neither removes nor invalidates any existing option: it only adds the one new option the amendment itself introduces (adopted, not merely viable), and every prior option's passed-over or viable-not-adopted reasoning is unaffected by the reworded derivation clause and survey-paragraph citation, since neither reworded passage is the ground any option's own reason cites. All options on all three facts remain viable.
+
+The review found no strong counter-argument.

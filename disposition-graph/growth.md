@@ -2,11 +2,11 @@
 question: How does the graph grow?
 stage: review
 review:
-  verdict: forward
-  strength: none
+  verdict: kickback
+  strength: moderate
   date: 2026-09-07
-  of: 99d667c6fd7d8d8d7fb61bd1a5289ac8bb458c66
-  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
+  of: 89f4bffabf8e00af74bee0c8b4f32b26581c9f1c
+  against: "The amendment can be read as fully closing the survey's finding: the fence's third usage and rationale now agree with the queue sentence and with `alignment-order`'s recommended answer, so the substantive contradiction the survey named -- rank in one clause, ruling order in two others -- is gone, and the missing `status`/`reason` on the new option is a bookkeeping gap rather than a reopening of that contradiction; a reader could judge it non-blocking for forwarding to the author's ruling. But this record treats exactly this omission as a defect elsewhere on the very same fact -- six sibling options record their absorption with `status: passed` and a reason, and an earlier reading on this node raised the identical gap as a finding that was then fixed -- so leaving the one new option unmarked is the one inconsistency in a fence otherwise being presented to the author as internally settled."
   survey:
     date: 2026-09-07
     of: 99d667c6fd7d8d8d7fb61bd1a5289ac8bb458c66
@@ -128,6 +128,8 @@ facts:
       - name: third-usage-in-the-ruling-order
         source: review
         ref: "2026-09-07"
+        status: passed
+        reason: "absorbed by the recommendation, whose third usage and rationale now carry it"
 
     recommends: turn-form-to-a-child-and-terms-aligned
     boldness: moderate
@@ -965,3 +967,25 @@ Recorded as an option on this node's answer fact: `third-usage-in-the-ruling-ord
 ### Amended after the frontier survey, 2026-09-07
 
 The survey's finding, validated at its three loci on the main thread: the fence named rank in the third usage and boost in the rationale where its queue sentence names the ruling order. The fence's third usage now takes the first node of the ruling order, as the alignment-order node says, and the rationale's sentence on boost is replaced by the answer's own clause that the author's naming of a node is their order; the survey's option `third-usage-in-the-ruling-order` is adopted into the recommendation. The standing text is not touched. The amended recommendation owes its re-reading, whose object is this repair.
+
+### Clean-context re-reading, 2026-09-07, of 89f4bffa
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `turn-form-to-a-child-and-terms-aligned`.
+
+Findings:
+
+- In `## Facts`, the `answer` fact: the diff adds `- name: third-usage-in-the-ruling-order` with only `source: review` and `ref: "2026-09-07"` -- no `status` and no `reason` -- immediately after an entry that reads `status: passed` / `reason: "carried by \`commons.systems/disposition-graph/turn-form\`, whose fourth form says which rulings were recorded and that the node moved and why"`. Yet the node's own account prose for the new option says its fate was settled the same way as that sibling: "Adopted into the recommendation on 2026-09-07: the fence's third usage and its rationale now carry it." Every other option on this fact that the account describes as folded into the recommendation carries `status: passed` with a `reason` naming what absorbed it -- `strike-phantom-depends` ("passed over -- already applied: the two dependencies naming no node were struck on 2026-09-03"), `cite-unanswered-for-responses` ("passed over -- already applied: the recommended text cites \`unanswered\` for the responses"), `queue-in-ruling-order` ("passed over -- absorbed by the recommendation, whose queue sentence takes \`alignment-order\`'s ruling order and drops the boost"), `rejected-alternative-is-an-option` ("passed over -- absorbed by the recommendation, whose steer clause now puts a steer on the fact beside the confirmed choice"), `proposal-as-a-state-of-a-ratified-node` ("passed over -- absorbed by the recommendation, whose persistence list now reads a proposal as \`authority\` defines it"), `turn-forms-as-its-own-node` ("passed over -- absorbed by the recommendation, which mints \`commons.systems/disposition-graph/turn-form\` and cites it"), and `the-fourth-form-carries-the-recording` ("passed over -- carried by \`commons.systems/disposition-graph/turn-form\`"). `third-usage-in-the-ruling-order` is the one option among these eight left without the marking, so as recorded it reads as an ordinary undecided viable option rather than one already folded into the recommendation -- an inconsistency the amendment introduces on the very fact it is editing, of the same kind an earlier reading on this node already flagged and required fixing (finding 9, closed per the previous reading's account: "`strike-phantom-depends` and `cite-unanswered-for-responses` are marked `passed` with reasons"). Suggested edit: add `status: passed` and `reason: "absorbed by the recommendation, whose third usage and rationale now carry it"` to the `third-usage-in-the-ruling-order` entry, and change its account sentence from "Adopted into the recommendation on 2026-09-07" to "Passed over on 2026-09-07" to match the sibling options' wording.
+
+On the facts and what they recommend: The diff touches only the `answer` fact: it adds one new option, `third-usage-in-the-ruling-order`, to the option list, and edits the recommendation fence's third-usage clause and rationale sentence so both read the ruling order (citing `alignment-order`) in place of rank and boost, closing the contradiction the survey found between the third usage, the queue sentence, and the rationale. `recommends` (`turn-form-to-a-child-and-terms-aligned`), `boldness` (moderate), and `stands` (`standing`) are all unchanged, and the `authority` and `persistence` facts are untouched by this diff.
+
+On the viability of the options: Every previously-listed option remains on the list untouched. The new option, `third-usage-in-the-ruling-order`, is added but -- unlike the seven other options on this fact the account describes the same way, as absorbed into the recommendation -- it carries no `status: passed` and no `reason`, leaving its viability marking inconsistent with its siblings and with the record's own convention for an absorbed option.
+
+Strongest counter-argument (moderate): The amendment can be read as fully closing the survey's finding: the fence's third usage and rationale now agree with the queue sentence and with `alignment-order`'s recommended answer, so the substantive contradiction the survey named -- rank in one clause, ruling order in two others -- is gone, and the missing `status`/`reason` on the new option is a bookkeeping gap rather than a reopening of that contradiction; a reader could judge it non-blocking for forwarding to the author's ruling. But this record treats exactly this omission as a defect elsewhere on the very same fact -- six sibling options record their absorption with `status: passed` and a reason, and an earlier reading on this node raised the identical gap as a finding that was then fixed -- so leaving the one new option unmarked is the one inconsistency in a fence otherwise being presented to the author as internally settled.
+
+The session's reply: Validated on the main thread: the option carried no status and no reason where the account says it was adopted. It is a mechanical defect of the kind `review-cost`'s rule gives to the instrument, repaired in the option's own fields without touching the recommendation, so the pin the two readings judged is unchanged; under the cap of two readings no third is run and the node goes to the author with the repair noted.
+
+### Repaired after the re-reading, 2026-09-07
+
+The re-reading's one finding, validated on the main thread: the option `third-usage-in-the-ruling-order` carried neither status nor reason where the account says the recommendation absorbed it. The option now carries `status: passed` with the reason the sibling options carry; the recommendation, its pins, and the survey's pin are untouched. The reader's verdict is kickback, and the record's instrument admits no ruling stage on a kickback verdict, so the repaired node returns to review and owes a re-reading whose object is this repair; that the repair moves no pin and the cap of two readings would spare it is recorded on the reconciliation list as the instrument's gap.

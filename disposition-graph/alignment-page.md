@@ -1,6 +1,6 @@
 ---
 question: What does the author read to rule?
-stage: review
+stage: ruling
 probes:
   - id: unit-of-a-ruling
     asks: >-
@@ -189,9 +189,8 @@ review:
   verdict: forward
   strength: weak
   date: 2026-09-07
-  of: 94465d401a161fed15196ead1c0e71bd5950de58
-  commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
-  against: "The amendment is thorough and its own recounts (e.g. the five-links-on-four-rulings correction, done more precisely than the previous reading's own suggested wording) are internally verified against the fence, but one new sentence leans on `commons.systems/disposition-graph/turn-form`'s content, which is outside this delta's given scope; if that node's answer does not in fact state the three surfaces whole, the citation would be a new, unseen-by-the-last-reading inaccuracy. Nothing in the material given to this reading shows that to be the case."
+  of: 39f5c588d154ed762d724dc071ccc15686cd1256
+  against: "The amendment corrects both false claims the survey found, but it does so by again restating, in this parent's own prose, a snapshot of what a child node currently recommends and at what stage — the very method that produced the staleness within a single day, as the option `clauses-cited-not-restated` already argues on this same fact. Nothing stops the same class of drift from recurring the next time `where-the-unconfirmed-indication-goes` moves. That risk is already named and recorded as an open, undecided option rather than hidden, and this reading finds no fresh instance of it in the diff, so the counter-argument bears on the durability of the fix rather than on whether it answers what was raised."
   survey:
     date: 2026-09-07
     of: 94465d401a161fed15196ead1c0e71bd5950de58
@@ -2826,3 +2825,18 @@ Recorded as an option on commons.systems/disposition-graph/plato-maieutics's ans
 ### Amended after the frontier survey, 2026-09-07
 
 Two findings of the survey, validated at their loci on the main thread. The option `standing-named-in-the-pane` named the child's recommendation as `on-the-answer-fact` and its stage as review; the child recommends `line-only-where-the-act-is-live` and stands at ruling. The prose now names the child's recommendation and restates no stage. The answer's reason for keeping the eighth child out of `depends`, a cycle, was false; the child is entered in `depends` with the other seven and the sentence says so. The amended recommendation owes its re-reading, whose object is this repair.
+
+### Clean-context re-reading, 2026-09-07, of 39f5c588
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `every-fact-every-option`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff leaves the answer fact's recommendation (`every-fact-every-option`, boldness moderate) and the recommendation fence's substance unchanged; it corrects the option `standing-named-in-the-pane`'s prose to name the child's actual recommendation (`line-only-where-the-act-is-live`, narrowed to the ruling stage alone) in place of the stale `on-the-answer-fact`, drops the stale restatement of the child's stage ('stands at the review stage with its recommendation moved and its reading owed') in favour of 'the frontier's to show and is not restated here', corrects the closing paragraph's reason for the eighth child's absence from `depends` (removing the false claim that the edge would close a cycle) and enters that child (`where-the-unconfirmed-indication-goes`) into both the frontmatter `depends` list and the prose. The `review` block's `strength`, `of`, `commit` and new `survey` sub-block record the previous reading's and survey's own passage rather than a change to this node's substance. Authority and persistence facts are untouched.
+
+On the viability of the options: The diff changes only prose narrating a sibling/child node's state and one `depends` edge; it neither adds, removes, nor re-marks any option's status on this node's own facts, so every option remains exactly as viable as before the amendment.
+
+Strongest counter-argument (weak): The amendment corrects both false claims the survey found, but it does so by again restating, in this parent's own prose, a snapshot of what a child node currently recommends and at what stage — the very method that produced the staleness within a single day, as the option `clauses-cited-not-restated` already argues on this same fact. Nothing stops the same class of drift from recurring the next time `where-the-unconfirmed-indication-goes` moves. That risk is already named and recorded as an open, undecided option rather than hidden, and this reading finds no fresh instance of it in the diff, so the counter-argument bears on the durability of the fix rather than on whether it answers what was raised.

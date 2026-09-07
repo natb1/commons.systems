@@ -69,7 +69,7 @@ facts:
         ref: "2026-09-07"
     recommends: one-answer-a-node-and-one-read
     boldness: moderate
-    against: "Every clause of it narrows what the reviewer is shown, on measurements taken by the party the review exists to check. A reader that must search for what it is no longer given searches for what it thinks to look for, which is the drafter's own frame, and the failure the index guarded against, a contradiction with a node nobody thought to name, is the one failure a search cannot be aimed at. The answer's reply, that the survey holds the whole graph and is the reader of last resort, is good only while the survey runs before every ruling; this design moves that load onto it, and as of 2026-09-05 the survey has never run once, with forty-eight nodes standing at the review or the ruling stage at graph commit 1cde11f6 and no node in the record carrying a survey pin."
+    against: "Every clause of it narrows what the reviewer is shown, on measurements taken by the party the review exists to check. A reader that must search for what it is no longer given searches for what it thinks to look for, which is the drafter's own frame, and the failure the index guarded against, a contradiction with a node nobody thought to name, is the one failure a search cannot be aimed at. The answer's reply, that the survey holds the whole graph and is the reader of last resort, is good only while the survey runs before every ruling; this design moves that load onto it: at graph commit 1cde11f6 on 2026-09-05, before the first survey ran, forty-eight nodes stood at the review or the ruling stage and none carried a survey pin, and what the survey costs once the load is on it is the question the author raised on 2026-09-07 and `survey-cost` answers beneath this node."
   - name: authority
     options:
       - name: ratified
@@ -79,12 +79,11 @@ facts:
     boldness: moderate
     against: "The author's words on the viable-options node delegate the right-sizing of models and effort to the AI's judgment where it buys token efficiency, and their words here ask the AI for the lessons and grant the reconciliation, which reads as the same delegation; a class that sends every later adjustment of the review's object back to the author spends the author's attention on the thing they asked to be spared."
 review:
-  verdict: forward
-  strength: weak
+  verdict: kickback
+  strength: moderate
   date: 2026-09-07
-  of: b9e1b4e5b54bd35bfd1a6bc94aeaab7bfc8b9c32
-  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
-  against: "The second reading's viability paragraph named two missing candidates for the option list; the amendment added one (`brief-carries-the-recount-command`) but not the other (`rules-of-the-reading-named-as-files`), so `viable-options`'s rule that a candidate never silently leaves the list is still only partly satisfied on this fact. This is a completeness gap rather than a substantive defect in the recommendation, and under this node's own cap the finding is properly recorded as an option for the author rather than redrawn a third time."
+  of: 0afcc1f1f65b18957dbddcdf2fd0c12e19672ebb
+  against: "The amendment fixed the false 'no survey has ever run' premise exactly where the frontier survey's finding pointed -- the rationale paragraph -- but left the identical claim standing, word for word in substance, in the answer fact's own `against` field, which a reader meets as this node's account of the strongest case against its own recommendation. That field now contradicts both the corrected rationale beside it and this node's own review block, which recorded a survey dated 2026-09-05 before the amendment was even written. The survey's finding is therefore only partially closed, in the one place it named but not in the parallel place carrying the same error."
   survey:
     date: 2026-09-07
     of: b9e1b4e5b54bd35bfd1a6bc94aeaab7bfc8b9c32
@@ -795,3 +794,23 @@ Proposed: frontier-consistency's sentence is the survivor. clean-context-review'
 ### Amended after the frontier survey, 2026-09-07
 
 The survey's finding, validated at its locus on the main thread: the rationale argued the round's size from a survey that had never run, and forty-five nodes have carried the survey's pin since 2026-09-05. The sentence now dates the forty-eight to before the first survey and gives the set's size since, twenty-five at graph commit e4c87ed0. The amended recommendation owes its re-reading, whose object is this repair.
+
+### Clean-context re-reading, 2026-09-07, of 0afcc1f1
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `one-answer-a-node-and-one-read`.
+
+Findings:
+
+- In '#### Facts', the '##### answer' subsection's own `against` clause still reads verbatim: "the answer's reply, that the survey holds the whole graph and is the reader of last resort, is good only while the survey runs before every ruling; this design moves that load onto it, and as of 2026-09-05 the survey has never run once, with forty-eight nodes standing at the review or the ruling stage at graph commit 1cde11f6 and no node in the record carrying a survey pin." This is the same over-generalized premise the frontier survey's 'Frontier finding, 2026-09-07' (kind: contradiction) named against this node's rationale -- "because no survey has ever run and so no node carries a survey pin" -- which this amendment did correct in the Rationale ('at graph commit 1cde11f6 on 2026-09-05, before the first survey ran, ... because no node yet carried a survey pin; that day's survey pinned forty-five'). The identical claim in the answer fact's own `against` field was not touched by this diff (confirmed: it is unchanged context in the diff hunk, and `grep -c "survey has never run once"` on the working node file returns exactly 1, i.e. this single remaining instance). As worded, 'as of 2026-09-05 the survey has never run once' also contradicts this same node's own `review.survey` block, which already recorded a survey dated 2026-09-05 before this amendment was written. Suggested edit: apply the same correction here as in the rationale -- replace 'as of 2026-09-05 the survey has never run once' with wording scoped to the pre-survey state at graph commit 1cde11f6 (e.g. 'before the first survey ran on 2026-09-05'), matching the rationale's repaired sentence, since the specific claim about no node carrying a pin at that particular commit is itself accurate and does not need to change.
+
+On the facts and what they recommend: Neither fact's `recommends` or `boldness` moved: `answer` still recommends `one-answer-a-node-and-one-read` (moderate) and `authority` still recommends `ratified` (moderate); the `## Recommendation` fence is unchanged. The diff adds three options to the answer fact's list: `rules-of-the-reading-named-as-files` (passed, source review/2026-09-05), which closes the previous reading's sole finding; and `a-waves-brief-is-one-brief` and `the-surveys-unreached-node-is-one-line` (both source-attributed to sibling nodes, ref 2026-09-07), each a placement candidate left un-adopted pending the author's ruling. The diff also corrects the rationale's false 'no survey has ever run' premise per the frontier survey's contradiction finding, but leaves the identical premise standing, unaddressed, in the answer fact's own `against` clause.
+
+On the viability of the options: All prior options remain viable and none is disturbed by the diff. The three newly added options are each carried with a source, a reason or measurement, and (for the two sibling-sourced options) an explicit placement question for the author; none conflicts with what either fact currently recommends.
+
+Strongest counter-argument (moderate): The amendment fixed the false 'no survey has ever run' premise exactly where the frontier survey's finding pointed -- the rationale paragraph -- but left the identical claim standing, word for word in substance, in the answer fact's own `against` field, which a reader meets as this node's account of the strongest case against its own recommendation. That field now contradicts both the corrected rationale beside it and this node's own review block, which recorded a survey dated 2026-09-05 before the amendment was even written. The survey's finding is therefore only partially closed, in the one place it named but not in the parallel place carrying the same error.
+
+### Repaired after the re-reading, 2026-09-07
+
+The re-reading's one finding, validated on the main thread: the answer fact's `against` still carried the premise the survey's finding struck from the rationale, that as of 2026-09-05 the survey had never run. The clause now dates its measurement to graph commit `1cde11f6`, before the first survey ran, and points what the survey costs to `survey-cost`; the case against is not part of the pin, so the recommendation, its pins, and the survey's pin are untouched. The reader's verdict is kickback, and the record's instrument admits no ruling stage on a kickback verdict, so the repaired node returns to review and owes a re-reading whose object is this repair; that the repair moves no pin and the cap of two readings would spare it is recorded on the reconciliation list as the instrument's gap.

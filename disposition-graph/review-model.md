@@ -1,6 +1,6 @@
 ---
 question: Which model runs the clean-context review's readings?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -56,11 +56,10 @@ facts:
     against: "The answer holds that the rule binds the role and that the model's name is a fact about the harness, so under it the AI decides when the harness's most capable model has changed and rewrites a ratified text with no interview and no ruling; that is the kind of unit the author's words on the viable-options node handed the AI, and this node otherwise takes it back. Ratified therefore buys the author less than it looks: the name that an executor actually launches moves without them, and what a ruling pins is a sentence about roles."
 review:
   verdict: forward
-  strength: none
+  strength: weak
   date: 2026-09-07
-  of: e27a2e7326a338bd4f519b1e55dfccc2394da68c
-  commit: f146f8f44b295c64e47a13bff338748035183d87
-  against: "None found. Verified at the loci the diff touches: `.claude/skills/align-review/SKILL.md` lines 221-223 name the draft reading on the larger/most-capable model and the re-reading on the smaller model, matching the fence's corrected rank and `delegation.md`'s fixed vocabulary (line 85, 'the smaller model for mechanical tooling... the larger model for design and judgment'). `tmp/review/delta-*.brief.md` today holds 18 files, not the five the account measured -- but the node itself discloses that `tmp/review/` is gitignored and that 'the figures stand with the commit that produced them or not at all', so this is the disclosed staleness of an ephemeral measurement rather than a new defect the amendment introduced. All seven of the last reading's findings are answered in substance: the fence's rank, the missing `bears` entries, the pinned measurement, the `delegation` citation's phrasing, the fallback's second instance, and the costs paragraph's answer to the author's question of 2026-09-07."
+  of: f647e854ed2c1893d7c492fd7299f95432f3cbb1
+  against: "The previous reading raised no findings to answer (verdict forward, strength none), so on question 1 there is nothing outstanding. On question 2, the amendment does resolve the frontier's contradiction within review-model.md itself (option prose and fence now agree on 'smaller model'), but its account rests part of that resolution on an unverified claim that a sibling node (n-version-programming) has already been edited to match; if that edit was not actually made, the record still carries the fence/option pair correctly aligned here while a sibling's bears text contradicts the corrected rank, which is exactly the kind of cross-node drift the frontier survey exists to catch and this delta reading cannot check."
   survey:
     date: 2026-09-07
     of: e27a2e7326a338bd4f519b1e55dfccc2394da68c
@@ -830,3 +829,21 @@ Recorded as an option on this node's answer fact: `the-larger-model-on-a-re-read
 ### Amended after the frontier survey, 2026-09-07
 
 The survey's finding, validated at both loci on the main thread: the option's prose named the larger model where the fence names the smaller. The amendment of 2026-09-07 corrected the fence deliberately, as the account above records, and left the option's prose behind; the prose is corrected to the fence, and not the fence to the prose, because the smaller model is the rank the sitting's five re-readings ran on and what they returned is the record's only evidence on the differential. The survey's option `the-larger-model-on-a-re-reading` stays viable for the author. The bears prose on `n-version-programming` said "one rank down", which was true of the text it was written on; it now says a lesser model. The recommendation does not move; the amended prose owes its re-reading, whose object is this repair.
+
+### Clean-context re-reading, 2026-09-07, of f647e854
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-smaller-model-on-a-re-reading`.
+
+Findings:
+
+- Account, "### Amended after the frontier survey, 2026-09-07": the amendment's own narrative asserts, of a sibling node this delta reading has no access to, "The bears prose on n-version-programming said \"one rank down\", which was true of the text it was written on; it now says a lesser model." This is a claim that n-version-programming.md's bears prose has already been edited to match the corrected rank (smaller model). The diff shown to this reading touches only review-model.md and does not include that edit, and this reading's scope excludes the node's siblings, so the claim is unverifiable here. If false or not yet applied, `commons.systems/disposition-graph/n-version-programming`'s bears entry on `the-smaller-model-on-a-re-reading` would still read "one rank down"/"a lesser model" in a sense that supports the larger-model rank the option no longer states, leaving a residual inconsistency the amendment believes it closed. Suggest: verify (or have the survey verify) that n-version-programming.md's bears prose for this option in fact reads "a lesser model" and not "one rank down", before the ruling.
+
+On the facts and what they recommend: The diff leaves `recommends` (the-smaller-model-on-a-re-reading), `boldness` (moderate), and `stands` (nothing stands) unchanged. It adds one new answer-fact option, `the-larger-model-on-a-re-reading` (source review, ref 2026-09-07), and corrects the recommended option's own prose from naming 'the larger model' to naming 'the smaller model', matching the `## Recommendation` fence (itself untouched by this diff, per the account's claim that an earlier amendment had already corrected the fence). The `review:` block is updated to record the prior re-reading's forward/none verdict and its pin/commit; this is the apply step's bookkeeping, not part of the amendment. Authority and existence facts are untouched.
+
+On the viability of the options: Every option already on the answer fact remains viable and undisturbed; the diff adds one new option, `the-larger-model-on-a-re-reading`, recorded as viable and not adopted (no `status: passed`), without displacing, passing over, or re-ranking any existing option. Authority and existence facts' options are untouched.
+
+Strongest counter-argument (weak): The previous reading raised no findings to answer (verdict forward, strength none), so on question 1 there is nothing outstanding. On question 2, the amendment does resolve the frontier's contradiction within review-model.md itself (option prose and fence now agree on 'smaller model'), but its account rests part of that resolution on an unverified claim that a sibling node (n-version-programming) has already been edited to match; if that edit was not actually made, the record still carries the fence/option pair correctly aligned here while a sibling's bears text contradicts the corrected rank, which is exactly the kind of cross-node drift the frontier survey exists to catch and this delta reading cannot check.
+
+The session's reply: Verified on the main thread: `n-version-programming`'s bears entry on `the-smaller-model-on-a-re-reading` reads "a re-reading on a lesser model" at graph commit `72e1715f`, amended at `af8fdcec` with this node's repair; the account's claim stands and the finding is answered.
