@@ -1,7 +1,7 @@
 ---
 question: What does an option's row carry at the first level?
 form: rule
-stage: maieutic
+stage: review
 facts:
   - name: answer
     options:
