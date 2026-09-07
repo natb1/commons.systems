@@ -1,7 +1,7 @@
 ---
 question: How does a survey narrow its object without narrowing what it can find?
 form: rule
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -23,6 +23,12 @@ facts:
           - words/2026-09-07/12
           - words/2026-09-07/13
           - words/2026-09-07/16
+      - name: options-by-sentence-and-status-and-words-by-address
+        source: ai
+        ref: "2026-09-07"
+        supports:
+          - words/2026-09-07/20
+          - words/2026-09-07/21
       - name: several-readers-over-a-partition
         source: ai
         ref: "2026-09-07"
@@ -42,8 +48,8 @@ facts:
         ref: "2026-09-07"
         status: passed
         reason: "measured at graph commit 3eb4942b it nominated every candidate pair the generator produced, 11,781 of them, so the key ordered nothing"
-    recommends: candidate-pairs-with-their-nominating-key
-    boldness: high
+    recommends: options-by-sentence-and-status-and-words-by-address
+    boldness: moderate
     against: "Every clause narrows what the record's only whole-graph reader is shown, and it narrows on a dependency relation this record does not have: semantic contradiction respects neither `under` nor citation nor shared vocabulary, so the pair the survey exists to find, two nodes that disagree in disjoint words and never name each other, is exactly the pair the delta freezes, no nominating key nominates, and only a drift probe whose size this same design chose could ever catch."
   - name: authority
     options:
@@ -208,6 +214,26 @@ By cuts taken in one order, each of which leaves behind the evidence of what it 
 **The candidate pairs.** A candidate pair is two nodes the generator nominates for comparison, with the key that nominated it. The keys are the union of several cheap ones — a defined term, the node that defines it paired with each node that uses it, an entry of the author's words referenced by options on both, a citation either way in prose or in `depends`, a shared parent, and near-duplicate resemblance, a Jaccard similarity over word shingles of a half or more — and each pair is handed to the reader with its key, so the reader is told where to look and what to look for. The key is recorded with any finding it produced, so that a key's yield is measurable across surveys and one that has produced nothing may be demoted on the evidence. A key narrows attention and never the corpus: every node the brief carries stays readable, the pair list orders the reading rather than partitioning it, and a finding on a pair no key nominated is a finding like any other and is the one worth most, being the measurement of what the keys miss.
 
 **What this does not decide.** How many readers the survey uses is not divided here: it is one reader, as the clean-context-review node has it. Which validations a survey runs is the frontier-consistency node's; what a reading costs and what a brief must fit are the review-cost node's; when a survey runs and what it gates are the clean-context-review node's and the recording node's; what a node carries is the dialogue node's and the unconfirmed-accumulation node's. Nothing this answer names is materialized on 2026-09-07: the validator holds no tier, the projector emits no concordance, the brief generator selects on pins alone, and the ledger, the hunk resolution and the fold this answer reads through are the reconciliation the author's grant of that day covers.
+```
+
+#### options-by-sentence-and-status-and-words-by-address
+
+The option list carries each option's sentence and status alone, and the author's words are carried by address, quoted only where the recommended option references them.
+
+**AI support.** The recommendation is `candidate-pairs-with-their-nominating-key` with one more cut on the judged node, taken on the same rule: a part no validation reads is struck rather than shortened. Measured at graph commit 6611799a, after the accumulation strategy's fold and the two compactions of 2026-09-07 (the judged node carried once, the rival options' content rendered by difference), the whole-graph survey brief was 1,111,970 bytes, and its judged set 868,115 of them. Of the judged set, the option list carried 251,640 bytes over 262 options, most of it the reason each passed-over option carries and the readings recorded under each, and the author's words carried 99,303 bytes over 304 quotations, most of them quoted more than once because every option that references an entry quoted it. No validation from the seventh to the sixteenth reads an option's source, its ref, its reason or its readings: the fifteenth reads the sentence, to ask whether a rival option answers the question better than the recommended one, and the status, to know which rivals the record has already passed over. The sixteenth reads the author's words against the answer that binds the node, and that answer is the recommended option's content; the words a rival option references bear on the rival's content, which the brief already carries by difference and the seventh validation reads as a draft. Carried by address, an entry the reader wants is one line of the ledger away, and the brief tells the reader where. The cut is worth about 250,000 bytes of the brief at that commit, a fifth of the judged set, and it leaves the sixteenth validation everything it reads for the node's binding answer. The author's words of 2026-09-07 (words/2026-09-07/21) direct that the optimization be recorded and reconciled for future surveys and that no survey be rerun for it; the survey reading at 6611799a, launched before the option was recorded, runs on the brief it was given.
+
+**AI divergence.** The sixteenth validation asks whether the answer that binds the node is the author's, and the words it reads for that are the ones the recommended option references, so a rival option that carries an entry the recommended one does not is a rival whose words the reader no longer sees quoted: the case that the author's words support a rival better than the answer can be made only by an address, and a reader that does not follow it misses what the fourteenth reading of this node's rivals would have found. The readings recorded under an option, which the option list carried as loci, go with it, and a survey that would have found a tradition's locus contradicted by a neighbour will not find it. Both are losses of the same kind the delta's are: a pair no reader looks at, priced against what the brief costs to hold whole.
+
+**Content.**
+
+From: candidate-pairs-with-their-nominating-key
+
+```diff
+@@ -16,3 +16,3 @@
+ 
+-**The judged node is carried once.** The judged set is the nodes a survey judges, and a judged node is carried by what the validations read of it: its question, the author's words its options carry, the one answer that binds it — the resolved content of the option last confirmed, or of the option the answer fact recommends where none is confirmed — and, of its answer fact, each option's name, its source, its ref and its status, with the sentence saying what that option would answer, which is what the fifteenth validation reads of an option. The resolved content of every other option on its answer fact is carried, once, since a rival's content is a draft the seventh and the fifteenth validations read; the prose of its facts and the AI's accumulated support and divergence on its options are not carried, because no validation from the seventh to the sixteenth reads them, and the review-cost node's rule is that a part no validation reaches is struck rather than shortened. It is never carried twice: the answer is the resolved content of one option and no structured render stands beside it.
++**The judged node is carried once.** The judged set is the nodes a survey judges, and a judged node is carried by what the validations read of it: its question, the author's words its options carry, the one answer that binds it — the resolved content of the option last confirmed, or of the option the answer fact recommends where none is confirmed — and, of its answer fact, each option's name and its status, with the sentence saying what that option would answer, which is what the fifteenth validation reads of an option; an option's source, its ref, the reason it was passed over and the readings recorded under it are not carried, since no validation reads them, and a reader that wants one has the node's id. The author's words are carried by address: every entry an option references is named by its ledger address, and the quotation itself is carried only where the recommended option references it, since the sixteenth validation reads the words against the answer that binds the node, and a rival option's words are evidence for that rival's content and not for the answer. The resolved content of every other option on its answer fact is carried, once, since a rival's content is a draft the seventh and the fifteenth validations read; the prose of its facts and the AI's accumulated support and divergence on its options are not carried, because no validation from the seventh to the sixteenth reads them, and the review-cost node's rule is that a part no validation reaches is struck rather than shortened. It is never carried twice: the answer is the resolved content of one option and no structured render stands beside it.
+ 
 ```
 
 #### several-readers-over-a-partition
@@ -388,3 +414,7 @@ The session's reply: [object Object]
 ### Migrated to the content encoding, 2026-09-07
 
 Written by `packages/disposition/migrate.mjs` on 2026-09-07. The legacy text of commons.systems/disposition-graph/survey-selection stands at graph commit `2b696ace1e7c610bb4c205f1356f0cf19f016af6`, and this file is its projection into the content encoding of 2026-09-07 (`commons.systems/disposition-graph/dialogue`, `an-option-carries-its-content-its-words-and-its-case`). The `## Answer` became the content of `candidate-pairs-with-their-nominating-key`; the `## Rationale` its `**AI support.**`; 5 `## Disposition` entries became the ledger entries words/2026-09-07/16, words/2026-09-07/9, words/2026-09-07/11, words/2026-09-07/12, words/2026-09-07/13, referenced by 0 options the entry's own date names and by the recommended option for 5 the date named none; and `stands` left the answer fact. The record wrote no text of its own for `the-judged-node-is-carried-once`, `the-mechanical-tier-gates-the-launch`, `the-delta-survey-with-a-periodic-whole`, `several-readers-over-a-partition`, `the-judged-set-is-what-the-author-is-about-to-rule`, `a-whole-graph-reading-every-time`, `size-the-cadence-and-the-sample-on-inclusiveness-and-precision`, `a-defined-term-shared-by-any-two-nodes`, so each carries the node as it stands with its own sentence in the answer's place: a transcription of what the option already said it would answer, and not an argument the migration wrote. Each is owed the text a sitting will give it. The draft review's pin `db8719da83e5ac0f7d3a0f5487291829b220aca2` is re-computed for the encoding as `4902b4d4748696375d149520621c12ab98bb1252`; nothing it read changed.
+
+### Option recorded on the author's words, 2026-09-07, at 6611799a
+
+The author asked whether the 1.11 MB survey brief was measured after the accumulation strategy (words/2026-09-07/20); it was, at graph commit 6611799a, and the session answered with the brief's composition and recommended one more cut, the option list by sentence and status and the author's words by address. The author's words of the same day (words/2026-09-07/21) direct that the optimization be recorded and reconciled for future surveys, that the running survey not be interrupted, and that no survey be rerun for it. The option `options-by-sentence-and-status-and-words-by-address` is recorded as a named change against `candidate-pairs-with-their-nominating-key`, amending the paragraph on what a judged node is carried by, and the answer fact's recommendation moves to it, at moderate boldness, the measurement being the session's own. The recommendation having moved, the node returns to the review stage and owes a re-reading of the amendment; the survey pin of 6611799a names the recommendation before the move, and, on the author's words, no survey is rerun for that. The brief tool is reconciled to the option on the implementation ref under the author's grant of 2026-09-07 (words/2026-09-07/11, "begin applying the optimizations as you progress"), for the surveys that follow.
