@@ -1,13 +1,13 @@
 ---
 question: How is the unanswered frontier kept consistent with itself?
-stage: review
+stage: ruling
 review:
   verdict: forward
-  strength: moderate
+  strength: weak
   date: 2026-09-07
-  of: d5b28dd5e3c43d7355a82b50129b991bf8c06067
-  commit: c15fcd502a47f4fc1dec420b1eb44d7a6b78a7f7
-  against: "The amendment fixes the measured defect but leans for its mechanism on `dialogue`'s option `survey-pin-carries-its-commit`, whose own recorded prose still describes the birth-based comparison this very amendment abandons. An author or executor who follows the citation from frontier-consistency to `dialogue` to see what the `commit` key is for will read a description that contradicts what frontier-consistency now recommends, which is the same species of stale cross-reference (validation 12) this node's own validations exist to catch -- just relocated from frontier-consistency itself to a neighbour it newly depends on. It does not undermine the amendment's own correctness, only its assumption that the ground it rests on is already settled."
+  of: e16836cf34c54a6dd6739b19b19eaf0cf02b2317
+  commit: d35b0014367874f0376fea8e271f1737b798857c
+  against: "The amendment's actual content -- delegating the judged set and its comparisons to `survey-selection` and localizing the generator's comparison to the node's survey-block hashes -- answers the author's separate 2026-09-07 instruction to optimize survey cost, not any of the three frontier findings recorded since the last reading. All three findings (contradiction, vocabulary, placement) ask for edits on other nodes (`clean-context-review`, `review-cost`, `decomposition`) and each states this node's own cited sentences are already correct or already the survivor, so the amendment leaves the sentences those findings turn on untouched and unbroken -- but it does not itself act on any of the three. If answering a finding requires an affirmative response rather than mere non-interference, none of the three has actually been engaged by this node's amendment; they remain to be closed at the nodes that own the required edits."
   survey:
     date: 2026-09-07
     of: d5b28dd5e3c43d7355a82b50129b991bf8c06067
@@ -856,3 +856,18 @@ Proposed: frontier-consistency's conditioned form is the survivor, since the con
 ### Option adopted, 2026-09-07
 
 One option recorded from `survey-selection`, the judged set and the comparisons moving to it and the generator's comparison becoming local to the node's survey block. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `one-line-only-where-the-text-a-survey-read-still-stands`; The text `one-line-only-where-the-text-a-survey-read-still-stands` recommended stands whole in this node's fence at graph commit `c55c9ebb`, and the migration under the author's grant of 2026-09-07 recovers it there as that option's content. The stage returns to review and the amendment owes a reading.
+
+### Clean-context re-reading, 2026-09-07, of e16836cf
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-judged-set-and-its-comparisons-move-to-survey-selection`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff moves the answer fact's `recommends` from `one-line-only-where-the-text-a-survey-read-still-stands` to the new option `the-judged-set-and-its-comparisons-move-to-survey-selection` (source `commons.systems/disposition-graph/survey-selection`, ref 2026-09-07), described as that prior option with two passages amended: the judged set and its comparisons cited to `survey-selection`, and the generator's comparison made local to the node's survey block via `dialogue`'s survey-block hashes. Boldness stays moderate and `stands: standing` is unchanged; the fact's `against` text is untouched by the diff but remains substantively accurate, since the one-line-carrying paragraph it critiques (that this node's fence hands a 'what a reader is handed' question to `clean-context-review` and its byte bound to `review-cost`) survives unmodified into the newly recommended text. `depends` swaps `dialogue#survey-pin-carries-its-commit` for `dialogue#the-survey-block-carries-what-the-next-survey-selects-on` and adds `survey-selection#candidate-pairs-with-their-nominating-key`, matching the new option's own citations. No persistence or existence fact is touched, and the node's shape is unchanged.
+
+On the viability of the options: The diff leaves every option on the answer fact viable. `one-line-only-where-the-text-a-survey-read-still-stands` is not marked passed, which is consistent with this node's own established convention (already used for `the-survey-is-given-what-its-validations-read`, kept as 'viable and not adopted' rather than passed when superseded by a refinement of itself). The new option is additive to that text rather than a rival that dominates or contradicts any other listed option, and the authority fact is untouched by this diff.
+
+Strongest counter-argument (weak): The amendment's actual content -- delegating the judged set and its comparisons to `survey-selection` and localizing the generator's comparison to the node's survey-block hashes -- answers the author's separate 2026-09-07 instruction to optimize survey cost, not any of the three frontier findings recorded since the last reading. All three findings (contradiction, vocabulary, placement) ask for edits on other nodes (`clean-context-review`, `review-cost`, `decomposition`) and each states this node's own cited sentences are already correct or already the survivor, so the amendment leaves the sentences those findings turn on untouched and unbroken -- but it does not itself act on any of the three. If answering a finding requires an affirmative response rather than mere non-interference, none of the three has actually been engaged by this node's amendment; they remain to be closed at the nodes that own the required edits.

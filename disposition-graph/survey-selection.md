@@ -1,7 +1,7 @@
 ---
 question: How does a survey narrow its object without narrowing what it can find?
 form: rule
-stage: review
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -42,12 +42,12 @@ facts:
     boldness: low
     against: "The author's words of 2026-09-07 ask the AI to make its own recommendation about how to optimize and to fold it into the reconciliation, which reads as the delegation of right-sizing their words of 2026-09-04 already gave; a class that returns every later adjustment of the survey's selection to the author spends the attention they asked to be spared."
 review:
-  verdict: forward
-  strength: strong
+  verdict: kickback
+  strength: moderate
   date: 2026-09-07
-  of: 9da7e7f1f38926f9d5c7e9c3c9b0ed88455ce79e
-  commit: 6a4bde7352b5a97db596aefac3bf72f6cacde07b
-  against: "The answer's safety rests entirely on backstops whose size this same answer declines to state, and the party that will size them is the party the survey exists to check. The delta freezes exactly the pair the survey is for -- two nodes that disagree in disjoint words, name each other nowhere and share no parent -- and once frozen that pair is invisible until a whole survey or a lucky probe draw, so the design's own claim that the loss is measurable reduces to a promise to measure with a cadence, a sample size and a resemblance threshold that no ruling covers. The one hard number offered for what the narrowing buys, the 73% saved by carrying a judged node once, turns on the claim that no validation from the seventh to the sixteenth reads a rival option's content, which the answer's own fourth paragraph denies and the seventh and fifteenth validations' texts contradict; strike that premise and the cheapest, safest rung of the ladder is smaller than advertised while the unsafe rungs are unchanged. And because a survey that reads less returns fewer findings, and fewer findings look like a cleaner frontier, the failure mode leaves no trace in the record the author reads -- which is the reason this node's own authority subsection gives for asking to be ratified, and is equally a reason to doubt that ratifying the shape while leaving the quantities out amounts to ratifying anything."
+  of: 3e1b937797cf1903f96b575b5df8fc930fb305f5
+  commit: d35b0014367874f0376fea8e271f1737b798857c
+  against: "The amendment repairs eight of nine findings cleanly but leaves the ninth -- the divergence from `evaluation`'s unconditional rule that every surfaced tradition is recorded as a reading -- exactly where the previous reading found it, merely narrating the gap in the account rather than closing it. Four traditions (tolerated inconsistency, lint/Coverity, MapReduce, Deming) are load-bearing in this node's own rationale for parts of the design that remain unratified and quantitatively unaudited, so leaving them unminted keeps a documented rule violation live on a node about to go to the author's ruling. Since `class-recommendation` and `evaluation` bind every node in the record, an amendment that answers eight defects but knowingly leaves a ninth, rule-mandated one open has not fully closed the previous reading's findings."
 under:
   - commons.systems/disposition-graph/review-cost
 defines:
@@ -203,3 +203,20 @@ The session's reply: Validated on the main thread, and eight of the nine finding
 ### Repaired after the reading, 2026-09-07
 
 Eight of the reading's nine findings repaired on the main thread, as the session's reply recorded above says; the nineteen surfaced traditions stay owed as readings under `evaluation`'s rule and are the one finding left open. The option `the-judged-set-is-what-the-author-is-about-to-rule` the reading named is recorded; the other, that the freeze be recorded over the pairs a survey read, is what the survey block now carries and is absorbed. The answer moved in substance, so the node returns to the review stage and owes a re-reading of the amendment.
+
+### Clean-context re-reading, 2026-09-07, of 3e1b9377
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `candidate-pairs-with-their-nominating-key`.
+
+Findings:
+
+- `## Rationale`, unchanged by the diff: "Nineteen further traditions were surfaced in the tradition survey of 2026-09-07 and are owed rather than read; the four bearing hardest on what is not adopted are tolerated inconsistency ... lint's economics and Coverity's false-positive threshold ... MapReduce ... and acceptance sampling with Deming's objection." The previous reading's fifth finding cited `evaluation`'s unconditional rule, "every tradition surfaced is recorded as a reading with the resolution it informed," and asked that at least the four load-bearing traditions be minted as reading nodes with `bears` entries on the options they inform. The diff makes no change to `## Rationale` at all; the only response is the new `### Repaired after the reading, 2026-09-07` account entry's admission that "the nineteen surfaced traditions stay owed as readings under evaluation's rule and are the one finding left open." Acknowledging the gap is not recording it as `evaluation` requires, and none of the four (tolerated inconsistency for the discharge condition, lint/Coverity for the tier's bound, MapReduce for not partitioning, Deming for the drift probe) has been minted. Suggested edit: mint at least the four as reading nodes under this node with `bears` entries on the options they inform, as the previous reading suggested, before this draft returns to review.
+- Frontmatter, the `answer` fact's option list (diff hunk touching `a-whole-graph-reading-every-time`): the amendment inserts a blank line inside that option's mapping, between its `name` and `source` keys -- `- name: a-whole-graph-reading-every-time` followed by a blank `+` line and then `source: ai` -- an artifact not present on any sibling option (compare the newly added `the-judged-set-is-what-the-author-is-about-to-rule` entry three lines above it, whose `name`/`source`/`ref` run with no gap). This is the shape of thing the answer's own mechanical-tier paragraph names as a check ("a hunk that does not apply exactly"), applied to this amendment's own patch. It is likely YAML-harmless (a blank line inside a block mapping does not terminate it), but it was not present before this amendment and the previous reading had no chance to see it. Suggested edit: remove the stray blank line so the entry matches its siblings, and confirm the file still parses.
+
+On the facts and what they recommend: The answer fact gains one candidate, `the-judged-set-is-what-the-author-is-about-to-rule` (source review, ref 2026-09-07), and the arithmetic error in `the-judged-node-is-carried-once`'s support is corrected from 73.6% to 73.0% (verified: (375242+208479)/799187 = 73.04%); `recommends` stays `candidate-pairs-with-their-nominating-key` at high boldness, `stands` is unchanged, and there is still correctly no `## Recommendation` fence. The authority fact's `recommends`/`boldness`/`against` are untouched (ratified, low); only its `### authority` prose changes, from claiming the parent "ruled" to the accurate "recommends ratified ... and no ruling has reached either node."
+
+On the viability of the options: Every option on the answer fact remains viable after the diff. The newly added `the-judged-set-is-what-the-author-is-about-to-rule` option closes one of the two options the previous reading found missing; the other (recording the pairs a survey actually compared, rather than only the keys) is not added as a separate listed alternative but is absorbed directly into the recommended answer's own "What the survey leaves on the node" paragraph, which now records "the pairs read that touch that node, each with the key it was drawn on" -- an acceptable closure since the alternative and the recommendation are now the same design and a redundant sibling option would add nothing.
+
+Strongest counter-argument (moderate): The amendment repairs eight of nine findings cleanly but leaves the ninth -- the divergence from `evaluation`'s unconditional rule that every surfaced tradition is recorded as a reading -- exactly where the previous reading found it, merely narrating the gap in the account rather than closing it. Four traditions (tolerated inconsistency, lint/Coverity, MapReduce, Deming) are load-bearing in this node's own rationale for parts of the design that remain unratified and quantitatively unaudited, so leaving them unminted keeps a documented rule violation live on a node about to go to the author's ruling. Since `class-recommendation` and `evaluation` bind every node in the record, an amendment that answers eight defects but knowingly leaves a ninth, rule-mandated one open has not fully closed the previous reading's findings.

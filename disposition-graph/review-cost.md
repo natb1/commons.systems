@@ -1,6 +1,6 @@
 ---
 question: What does a clean-context review cost, and how is that cost bounded?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -82,12 +82,12 @@ facts:
     boldness: moderate
     against: "The author's words on the viable-options node delegate the right-sizing of models and effort to the AI's judgment where it buys token efficiency, and their words here ask the AI for the lessons and grant the reconciliation, which reads as the same delegation; a class that sends every later adjustment of the review's object back to the author spends the author's attention on the thing they asked to be spared."
 review:
-  verdict: kickback
-  strength: moderate
+  verdict: forward
+  strength: weak
   date: 2026-09-07
-  of: 0afcc1f1f65b18957dbddcdf2fd0c12e19672ebb
-  commit: bcba6986c6a8718919485e38f5d00994f4c7bba9
-  against: "Read narrowly against only the last reading's own finding, the amendment fully answers it: the rewritten `against` clause removes exactly the phrase flagged (\"as of 2026-09-05 the survey has never run once\") and rescopes the claim to the pre-survey state at graph commit 1cde11f6, tracking the suggested edit almost verbatim, and the rationale's parallel fix (made in an earlier round, before this pin) is untouched and still correct. The `survey-cost` citation this reading raises is a different defect, introduced in the course of answering the first one, and not a failure to answer what the last reading actually asked; a reader could reasonably treat it as a minor forward-reference to work the author has already commissioned (the 2026-09-07 disposition asks for exactly this kind of follow-on question) rather than as a fabrication, and record it as an option on the fact instead of a kickback. Against that: the sentence is written as a present-tense fact about the record's current shape, not as a stated intention, and a reader who takes it at face value is told something false about what has already been answered."
+  of: f32d722609f7815130f2b7de88fd0647d809edca
+  commit: d35b0014367874f0376fea8e271f1737b798857c
+  against: "The last reading's finding was that the node made a false present-tense claim citing a node, `survey-cost`, that did not exist. The amendment's fix is to rename the citation to `survey-selection` and assert in its own account that this is 'the child minted this sitting' -- but this delta reading is barred from checking the neighbourhood or the disk, so the only evidence that `survey-selection` actually exists, rather than being a second not-yet-minted placeholder under a new name, is the record's own narration by the party the finding was raised against. Against that: the citation is corroborated from three independent loci (the fact's `against` clause, the new option's `source` field, and a `depends` entry naming a specific option slug on it), which is stronger internal evidence than a bare rename would leave, and the scope of this reading explicitly defers cross-node verification to the survey rather than asking the delta reader to open other files."
   survey:
     date: 2026-09-07
     of: b9e1b4e5b54bd35bfd1a6bc94aeaab7bfc8b9c32
@@ -880,3 +880,18 @@ The session's reply: Validated on the main thread: the repair named `survey-cost
 ### Option adopted, 2026-09-07
 
 One option recorded from `survey-selection`, the child minted this sitting on the author's words of 2026-09-07 quoted under `## Disposition`; the repair of 2026-09-07 that named `survey-cost` is corrected to the node's name in the fact's case against and in the repair's own section, the readings' verbatim sections left as they were. The amendment is the pairs quoted old and new in §5 of `tmp/align/design-survey-cost-3.md` on the implementation checkout, which is not part of the record, applied to the recommended text of `one-answer-a-node-and-one-read`; The text `one-answer-a-node-and-one-read` recommended stands whole in this node's fence at graph commit `c55c9ebb`, and the migration under the author's grant of 2026-09-07 recovers it there as that option's content. The stage returns to review and the amendment owes a reading.
+
+### Clean-context re-reading, 2026-09-07, of f32d7226
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-surveys-selection-moves-to-its-own-node`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff moves the answer fact's `recommends` from `one-answer-a-node-and-one-read` to a newly added option, `the-surveys-selection-moves-to-its-own-node` (still moderate boldness), adding that option to the frontmatter list, adding a matching prose subsection ('AI support' / 'AI divergence'), and a lead paragraph in the fact prose explaining the move; it rewrites the answer fact's `against` clause and the parallel account sentence to cite `survey-selection` in place of the previously non-existent `survey-cost`, adds a `depends` entry on `survey-selection#candidate-pairs-with-their-nominating-key`, and updates the review block's `commit`/`against` to record the last reading's own kickback verdict. The authority fact, its recommendation, and boldness are untouched. The `## Recommendation` fence and rationale gain three citations to `survey-selection` (for object-selection/gating and for the mechanical-defect check) without otherwise changing text the last reading already read; the `## Rationale` prose about the pre-survey node count at graph commit 1cde11f6 is unchanged by this diff and was already corrected in an earlier round, before the pinned commit.
+
+On the viability of the options: Every option present at the last reading's pin remains on the answer and authority facts unchanged; the diff only adds one new viable option (`the-surveys-selection-moves-to-its-own-node`, sourced to the newly cited `survey-selection` node, recommended) and removes none, so no prior option's viability is disturbed.
+
+Strongest counter-argument (weak): The last reading's finding was that the node made a false present-tense claim citing a node, `survey-cost`, that did not exist. The amendment's fix is to rename the citation to `survey-selection` and assert in its own account that this is 'the child minted this sitting' -- but this delta reading is barred from checking the neighbourhood or the disk, so the only evidence that `survey-selection` actually exists, rather than being a second not-yet-minted placeholder under a new name, is the record's own narration by the party the finding was raised against. Against that: the citation is corroborated from three independent loci (the fact's `against` clause, the new option's `source` field, and a `depends` entry naming a specific option slug on it), which is stronger internal evidence than a bare rename would leave, and the scope of this reading explicitly defers cross-node verification to the survey rather than asking the delta reader to open other files.
