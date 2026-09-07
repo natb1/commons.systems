@@ -134,6 +134,10 @@ The author, 2026-09-07, in reply to the session's answer on what the survey serv
 
 > do not stop the current survey, we do not want to lose the work it has already done. For future surveys, make your own recommendation about how to optimize. It could involve changes to how data on unconfirmed nodes is accumulated, or how the survey is orchestrated, improvements to the algorithms/heuristics for full graph analysis, or any other optimization that you recommend. Fold this optimization in to the sittings alignment and bootstrap reconciliation.
 
+The author, 2026-09-07, while the design of the survey's optimization was in hand, on what shape it must take:
+
+> The optimizations must involve some accumulation strategy, with the full history preserved only in git but enough context in the unconfirmed node to support alignment across an unconfirmed frontier. Something between keeping the full pre-confirmation record in the graph and the accumulation that is performed after confirmation. One the recommendation is established, you have bootstrap authority to reconcile that accumulation.
+
 ## Facts
 
 ### answer
