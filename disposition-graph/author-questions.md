@@ -46,6 +46,9 @@ facts:
       - name: reconciliation-passes-an-option-over
         source: commons.systems/disposition-graph/viable-options
         ref: "2026-09-05"
+      - name: the-sitting-stops-only-on-intent
+        source: author
+        ref: "2026-09-06"
       - name: cap-warned-by-the-instrument
         source: review
         ref: "2026-09-05"
@@ -141,6 +144,10 @@ on the rule that sweep and the migration before it applied:
 > Only re-apply the guidelines to the graph if they cover something not already reviewed in the previous sweeps.
 
 
+The author, 2026-09-06, in the sitting on `what-an-option-row-carries`, when the session reported a clean-context reading back to them and offered to run the next one:
+
+> I'm not sure what "run the reading" means. Are there questions for the author to clarify my intent? This is only reason to stop for meiutic. Otherwise, just correct the mechanical/encoding issues with the record and proceed.
+
 ## Answer
 
 In the dialogue state, as `probes`, one list on the node beside `stage`, `review` and `depends`. A probe is a question the AI needs the author to answer before it can recommend, and whose answer is not itself a disposition: it disambiguates what the author meant where the record leaves it open, and when it is answered it binds nothing and stands nowhere. The word is the record's already, used in fourteen nodes when this was drafted on 2026-09-04 and defined in none, and the growth node's periagogic conduct, one probe per turn from the page and not from memory, is where it entered; this answer defines it, extends it to every movement rather than the periagogic one alone, and gives it a shape. One list and not one per fact: an entry names the `fact` it bears on where it bears on one, and names none where it bears on the node's ground. The author's words, a list of the questions needed to disambiguate intention and to make recommendations for each of the facts, admit both readings, and this one is taken because a node at the periagogic stage carries no facts at all, and the periagoge is the first moment the author's words name; a home that cannot hold the first probe it is asked to hold is not the home. What makes the list a list of decisions rather than of decisions repeated is the same rule the parent applies to everything else on a node: a probe is one thing the author must settle, a probe that compounds two is two probes, and a probe whose answer would itself stand as an answer to a question of the record is not a probe at all but a node.
@@ -226,6 +233,30 @@ passing an option over and lifting a status the AI wrote. The viable-options
 node's recommended answer of 2026-09-05 gives all three, and this clause cites
 that node while enumerating fewer acts than it grants; the citation is the
 right shape and only the list is short.
+
+#### the-sitting-stops-only-on-intent
+
+Everything the recommended option says, with one rule added about when a sitting
+returns to the author at all. The author's words of 2026-09-06: a sitting stops
+for the author only where there is a question about the author's intent, which is
+what the maieutic movement is for; everything else — the mechanical and the
+encoding defects of the record, the instruments the sitting runs, the readings
+and what they return — the sitting corrects and proceeds through without asking.
+Under this option the probe is not merely the form a question to the author takes
+but the only occasion for one, so a session that has no probe to raise has nothing
+to stop for, and reporting an instrument's state to the author, or offering them a
+choice about running one, is a deviation of the same kind as putting the AI's
+account before theirs.
+
+It bears on this node because the record already says where the author is asked,
+the maieutic session, and says what may be asked, a probe on three limbs. What it
+does not say is that nothing else may interrupt them, and the author's words say
+so. It also reaches `growth`, whose conduct describes the two movements, and
+`decomposition`, whose seams say which work is a unit; neither is amended here.
+
+The evidence is the sitting it was said in. The session reported a clean-context
+reading's verdict, its findings and its cost to the author, and asked whether to
+run the next one, none of which is a question about what the author intends.
 
 #### cap-warned-by-the-instrument
 
