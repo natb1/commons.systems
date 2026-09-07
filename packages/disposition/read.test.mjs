@@ -871,6 +871,106 @@ describe('parseNode', () => {
 });
 
 // ---------------------------------------------------------------------------
+// parseNode: review.survey's optional keys (commit, text, findings, pairs)
+// ---------------------------------------------------------------------------
+
+describe("parseNode: review.survey's optional keys", () => {
+  const loc = { id: 'm/g/s', graph: 'g', slug: 's', path: 'g/s.md' };
+  const HASH1 = 'a'.repeat(40);
+  const COMMIT = 'b'.repeat(40);
+  const SHA256 = (c) => c.repeat(64);
+
+  // A minimal node that carries a 'review' key: 'stage' and a '## Disposition'
+  // section, and nothing else that 'review''s own shape checks would ask for.
+  function withSurvey(surveyLines) {
+    return [
+      '---', 'question: What?', 'stage: periagogic',
+      'review:', '  survey:', ...surveyLines,
+      '---', '', '## Disposition', '', 'Open.', '',
+    ].join('\n');
+  }
+
+  const fullSurveyLines = [
+    '    date: 2026-09-04',
+    `    of: ${HASH1}`,
+    `    commit: ${COMMIT}`,
+    '    text:',
+    `      question: ${SHA256('a')}`,
+    `      answer: ${SHA256('b')}`,
+    `      options: ${SHA256('c')}`,
+    `      rivals: ${SHA256('d')}`,
+    `      words: ${SHA256('e')}`,
+    '    findings:',
+    '      - finding: The answer overlaps a sibling.',
+    '        kind: coverage',
+    '        status: new',
+    '        since: 2026-09-04',
+    '        supports:',
+    '          - answer',
+    '        discharge: when the option this finding proposes is ruled.',
+    '        nodes:',
+    '          - example.test/main/other',
+    '    pairs:',
+    '      - with: example.test/main/other',
+    '        keys:',
+    '          - parent:x',
+  ];
+
+  test('a survey block with all six keys is accepted, whole', () => {
+    const n = parseNode(withSurvey(fullSurveyLines), loc);
+    assert.deepEqual(n.review.survey, {
+      date: '2026-09-04',
+      of: HASH1,
+      commit: COMMIT,
+      text: {
+        question: SHA256('a'), answer: SHA256('b'), options: SHA256('c'),
+        rivals: SHA256('d'), words: SHA256('e'),
+      },
+      findings: [{
+        finding: 'The answer overlaps a sibling.',
+        kind: 'coverage',
+        status: 'new',
+        since: '2026-09-04',
+        supports: ['answer'],
+        discharge: 'when the option this finding proposes is ruled.',
+        nodes: ['example.test/main/other'],
+      }],
+      pairs: [{ with: 'example.test/main/other', keys: ['parent:x'] }],
+    });
+  });
+
+  test('a survey block with only its two original keys still reads as just those two', () => {
+    const n = parseNode(withSurvey(['    date: 2026-09-04', `    of: ${HASH1}`]), loc);
+    assert.deepEqual(n.review.survey, { date: '2026-09-04', of: HASH1 });
+  });
+
+  test('a malformed commit is refused, naming commit in the schema it violates', () => {
+    const lines = fullSurveyLines.map((l) => (l.startsWith('    commit:') ? '    commit: not-a-sha1' : l));
+    assert.throws(() => parseNode(withSurvey(lines), loc), /survey: \{date: YYYY-MM-DD, of: <sha1>\}, with an optional commit: <sha1>/);
+  });
+
+  test('an unknown key on the survey block is refused, like any other malformed shape', () => {
+    const lines = [...fullSurveyLines, '    bogus: true'];
+    assert.throws(() => parseNode(withSurvey(lines), loc), /'review' must be \{verdict:/);
+  });
+
+  test('a malformed text hash names the shape it violates', () => {
+    const lines = fullSurveyLines.map((l) => (l.startsWith('      question:') ? '      question: too-short' : l));
+    assert.throws(() => parseNode(withSurvey(lines), loc), /text: \{question\|answer\|options\|rivals\|words: <sha256>/);
+  });
+
+  test('a finding missing a required key is refused', () => {
+    const lines = fullSurveyLines.filter((l) => !l.includes('discharge:'));
+    assert.throws(() => parseNode(withSurvey(lines), loc), /findings: \[\{finding, kind, status:/);
+  });
+
+  test('a pair with an unknown key is refused', () => {
+    const lines = [...fullSurveyLines, '        note: nope'];
+    assert.throws(() => parseNode(withSurvey(lines), loc), /pairs: \[\{with: <id>, keys: \[<string>, \.\.\.\]\}\]/);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // parseNode: probes
 // ---------------------------------------------------------------------------
 

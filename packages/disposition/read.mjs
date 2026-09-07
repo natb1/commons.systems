@@ -149,7 +149,19 @@ export const REVIEW_STRENGTHS = ['strong', 'moderate', 'weak', 'none'];
 // field carries none either.
 export const REVIEW_DRAFT_KEYS = ['verdict', 'strength', 'date', 'of', 'against', 'commit'];
 export const REVIEW_DRAFT_REQUIRED_KEYS = ['verdict', 'strength', 'date', 'of'];
-export const REVIEW_SURVEY_KEYS = ['date', 'of'];
+// `survey`'s own six keys, per apply.mjs's `surveyBlock`/`renderSurveyLines`
+// (commons.systems/disposition-graph/survey-selection): `date` and `of` are
+// required, as they always were; `commit`, the graph commit the survey
+// read; `text`, the hashes of the five sections its validations judged,
+// keyed by `question`, `answer`, `options`, `rivals`, `words`; `findings`,
+// the register of what the survey left open on the node; and `pairs`, the
+// candidate pairs it actually read that touch this node, are optional and
+// were added on top of the two the survey has always carried, so an older
+// pin with only `date` and `of` still reads. `REVIEW_SURVEY_KEYS` is the
+// whole vocabulary a survey block may use; an unknown key still fails the
+// same way a bad `date` or `of` does.
+export const REVIEW_SURVEY_KEYS = ['date', 'of', 'commit', 'text', 'findings', 'pairs'];
+export const REVIEW_SURVEY_REQUIRED_KEYS = ['date', 'of'];
 // The two stages the survey judges: a node is ruled from the ruling stage,
 // and reaches it from the review stage, so those are where the frontier's
 // consistency with itself is what the author is about to rule on.
@@ -224,11 +236,65 @@ const PROBE_KEY_SET = new Set(PROBE_KEYS);
 // shape OPTION_STATUSES already has for an option's 'passed'.
 const PROBE_STATUSES = ['discharged'];
 const PROBE_STATUS_SET = new Set(PROBE_STATUSES);
+const REVIEW_SURVEY_KEY_SET = new Set(REVIEW_SURVEY_KEYS);
+
+// The five sections a survey's `text` pin names -- brief.mjs's own
+// `SECTION_HASH_KEYS`, mirrored here rather than imported: clean-context-review
+// depends on this package and not the reverse, so the vocabulary is held in
+// both places, the way the survey's other closed vocabularies already are
+// (STAGES, REVIEW_VERDICTS, and the rest).
+const SURVEY_TEXT_SECTION_KEYS = ['question', 'answer', 'options', 'rivals', 'words'];
+const SURVEY_TEXT_SECTION_SET = new Set(SURVEY_TEXT_SECTION_KEYS);
+// The three states a finding's status may hold in the survey's register,
+// mirrored from apply.mjs's `surveyRegister` the same way.
+const SURVEY_FINDING_STATUSES = ['new', 're-derived', 'standing'];
+const SURVEY_FINDING_STATUS_SET = new Set(SURVEY_FINDING_STATUSES);
+const SURVEY_FINDING_KEYS = ['finding', 'kind', 'status', 'since', 'supports', 'discharge', 'nodes'];
+const SURVEY_PAIR_KEYS = ['with', 'keys'];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const HASH_RE = /^[0-9a-f]{40}$/;
+// The survey's `text` hashes are sha256 (brief.mjs's `sha256`, not the sha1
+// `blobSha1` every other pin in this file uses), so they get their own,
+// wider regex rather than sharing HASH_RE.
+const SHA256_RE = /^[0-9a-f]{64}$/;
 const OPTION_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 const ANSWER_FACT = 'answer';
+
+// `review.survey.text`: a plain object naming a subset of the five section
+// keys, each a sha256 hex digest. Partial is accepted -- brief.mjs's
+// `movedSections` already treats an absent key as unmoved rather than
+// refusing it -- so this checks shape only, not completeness.
+function surveyTextOk(t) {
+  return isPlainObject(t)
+    && Object.keys(t).every((k) => SURVEY_TEXT_SECTION_SET.has(k))
+    && Object.values(t).every((v) => typeof v === 'string' && SHA256_RE.test(v));
+}
+
+// `review.survey.findings[]`: one entry of the register `surveyRegister`
+// writes, whole -- all seven keys, none else.
+function surveyFindingOk(f) {
+  return isPlainObject(f)
+    && Object.keys(f).length === SURVEY_FINDING_KEYS.length
+    && SURVEY_FINDING_KEYS.every((k) => Object.prototype.hasOwnProperty.call(f, k))
+    && isNonEmptyString(f.finding)
+    && isNonEmptyString(f.kind)
+    && SURVEY_FINDING_STATUS_SET.has(f.status)
+    && typeof f.since === 'string' && isValidDate(f.since)
+    && Array.isArray(f.supports) && f.supports.every((s) => SURVEY_TEXT_SECTION_SET.has(s))
+    && isNonEmptyString(f.discharge)
+    && Array.isArray(f.nodes) && f.nodes.length > 0 && f.nodes.every((n) => isNonEmptyString(n));
+}
+
+// `review.survey.pairs[]`: one candidate pair the survey actually read that
+// touches this node, with the key it was drawn on.
+function surveyPairOk(p) {
+  return isPlainObject(p)
+    && Object.keys(p).length === SURVEY_PAIR_KEYS.length
+    && SURVEY_PAIR_KEYS.every((k) => Object.prototype.hasOwnProperty.call(p, k))
+    && isNonEmptyString(p.with)
+    && Array.isArray(p.keys) && p.keys.every((k) => isNonEmptyString(k));
+}
 
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -1583,11 +1649,16 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     const has = (k) => isPlainObject(r) && Object.prototype.hasOwnProperty.call(r, k) && !isAbsent(r[k]);
     const drafted = REVIEW_DRAFT_REQUIRED_KEYS.some(has);
     const surveyed = has('survey');
+    const hasSurvey = (s, k) => isPlainObject(s) && Object.prototype.hasOwnProperty.call(s, k) && !isAbsent(s[k]);
     const surveyOk = (s) => isPlainObject(s)
-      && Object.keys(s).length === REVIEW_SURVEY_KEYS.length
-      && REVIEW_SURVEY_KEYS.every((k) => Object.prototype.hasOwnProperty.call(s, k))
+      && Object.keys(s).every((k) => REVIEW_SURVEY_KEY_SET.has(k))
+      && REVIEW_SURVEY_REQUIRED_KEYS.every((k) => Object.prototype.hasOwnProperty.call(s, k))
       && typeof s.date === 'string' && isValidDate(s.date)
-      && typeof s.of === 'string' && HASH_RE.test(s.of);
+      && typeof s.of === 'string' && HASH_RE.test(s.of)
+      && (!hasSurvey(s, 'commit') || (typeof s.commit === 'string' && HASH_RE.test(s.commit)))
+      && (!hasSurvey(s, 'text') || surveyTextOk(s.text))
+      && (!hasSurvey(s, 'findings') || (Array.isArray(s.findings) && s.findings.every(surveyFindingOk)))
+      && (!hasSurvey(s, 'pairs') || (Array.isArray(s.pairs) && s.pairs.every(surveyPairOk)));
     const ok = isPlainObject(r)
       && Object.keys(r).every((k) => REVIEW_KEY_SET.has(k))
       && (drafted || surveyed)
@@ -1609,7 +1680,11 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
       problems.push(
         `'review' must be {verdict: ${REVIEW_VERDICTS.join('|')}, strength: ${REVIEW_STRENGTHS.join('|')}, date: YYYY-MM-DD, of: <sha1>}`
         + ', with an optional against: <non-empty string> and an optional commit: <sha1> beside them'
-        + ', and an optional survey: {date: YYYY-MM-DD, of: <sha1>};'
+        + ', and an optional survey: {date: YYYY-MM-DD, of: <sha1>}, with an optional commit: <sha1>, '
+        + 'text: {question|answer|options|rivals|words: <sha256>, ...}, '
+        + `findings: [{finding, kind, status: ${SURVEY_FINDING_STATUSES.join('|')}, since: YYYY-MM-DD, `
+        + 'supports: [question|answer|options|rivals|words, ...], discharge, nodes: [<id>, ...]}], '
+        + 'and pairs: [{with: <id>, keys: [<string>, ...]}] beside it;'
         + ' the four draft-review keys are given together or not at all, and the survey may stand alone',
       );
     } else {
@@ -1620,7 +1695,11 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
         of: drafted ? r.of : null,
         against: drafted && has('against') ? r.against : null,
         commit: drafted && has('commit') ? r.commit : null,
-        survey: surveyed ? { date: r.survey.date, of: r.survey.of } : null,
+        survey: surveyed
+          ? Object.fromEntries(
+            REVIEW_SURVEY_KEYS.filter((k) => hasSurvey(r.survey, k)).map((k) => [k, r.survey[k]]),
+          )
+          : null,
       };
     }
   }
