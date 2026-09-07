@@ -99,6 +99,7 @@ export const USAGE = [
   "usage: node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry] [--draft] [--out <file>]",
   "       node brief.mjs --survey    [rootDir] [--date YYYY-MM-DD] [--dry] [--whole]",
   "                                  [--validations-changed] [--force-tier] [--out <file>]",
+  "                                  [--sidecar-dir <dir>]",
   "exactly one of --node <id> and --survey is given: the review of one draft,",
   "or the survey of the frontier. The choice between a draft brief and a",
   "delta (re-reading) brief is read off the record and not off a flag: a",
@@ -120,6 +121,7 @@ export function parseArgs(argv) {
   const opts = {
     node: null, survey: false, rootDir: null, date: null, dry: false, draft: false,
     whole: false, forceTier: false, validationsChanged: false, out: null,
+    sidecarDir: null,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
@@ -157,6 +159,10 @@ export function parseArgs(argv) {
       const v = argv[++i];
       if (v === undefined) throw new Error("--out needs a file");
       opts.out = v;
+    } else if (a === "--sidecar-dir") {
+      const v = argv[++i];
+      if (v === undefined) throw new Error("--sidecar-dir needs a directory");
+      opts.sidecarDir = v;
     } else if (a.startsWith("--")) {
       throw new Error(`unknown flag ${a}`);
     } else if (opts.rootDir === null) {
@@ -178,6 +184,9 @@ export function parseArgs(argv) {
     if (on && !opts.survey) {
       throw new Error(`${flag} is the survey's: a draft's reading selects nothing and freezes nothing`);
     }
+  }
+  if (opts.sidecarDir !== null && !opts.survey) {
+    throw new Error("--sidecar-dir is the survey's: a draft or delta brief writes no sidecar");
   }
   return opts;
 }
@@ -1615,7 +1624,8 @@ export function jaccard(a, b) {
 
 /**
  * Every candidate pair the cheap keys nominate, each with the keys that
- * nominated it: a defined term shared, an entry of the author's words
+ * nominated it: a term one node defines and the other uses (never two users
+ * of the same term with each other), an entry of the author's words
  * referenced by options on both, a citation either way in prose or in
  * `depends`, a shared parent, and near-duplicate resemblance.
  *
@@ -1633,10 +1643,20 @@ export function candidatePairs(graph, { concordance: conc = null } = {}) {
   const ids = new Set(nodes.map((n) => n.id));
   const map = new Map();
 
-  // a defined term shared
+  // a term where one node defines it and the other uses it -- never two
+  // users of the same term with each other. Pairing every user with every
+  // other user is what made this key select nothing on the record: 31 of
+  // 120 terms are used by 100+ nodes, so one term turned into thousands of
+  // user-user pairs nobody asked for. The definer-user edge is the one the
+  // concordance relation actually distinguishes (`entry.users[].reachable`
+  // is a path from a user to the definer, not between users), so that is
+  // the only edge nominated here, and the pair's key names the term and the
+  // node that defines it.
   const terms = (conc ?? concordance(graph)).terms;
   for (const entry of terms) {
-    pairsAmong(map, [entry.defines, ...entry.users.map((u) => u.node)], `term:${entry.term}`);
+    for (const user of entry.users) {
+      addPair(map, entry.defines, user.node, `term:${entry.term} (defines: ${entry.defines})`);
+    }
   }
 
   // an entry of the author's words referenced by options on both
@@ -2043,7 +2063,15 @@ export function surveyPins({ graph, judged, date, commit, dirty }) {
 export async function writeSurveyBrief({
   rootDir, reviewDir, date = null, dry = false,
   whole = false, forceTier = false, validationsChanged = false, out = null,
+  sidecarDir = null,
 }) {
+  // The three sidecars (`survey.history.json`, `survey.pins.json`,
+  // `survey.selection.json`) default to `reviewDir`, same as ever; a caller
+  // that wants the brief written to `--out` without disturbing the record's
+  // own sidecars (a test run against the real graph, say) passes
+  // `sidecarDir` to redirect them alone. The brief itself still falls under
+  // `reviewDir` unless `out` overrides it.
+  const sidecarBase = sidecarDir ?? reviewDir;
   const graph = await readGraph(rootDir);
   const effectiveDate = date ?? todayIsoUtc();
   const { commit, dirty } = graphCommit(rootDir);
@@ -2074,7 +2102,7 @@ export async function writeSurveyBrief({
   // The two backstops. `--whole` forces a whole survey; the history may
   // demand one whether the caller asked or not, and the demand is recorded
   // with its reason so the run says why nothing was frozen.
-  const historyPath = path.join(reviewDir, "survey.history.json");
+  const historyPath = path.join(sidecarBase, "survey.history.json");
   const history = await readSurveyHistory(historyPath);
   const demand = wholeDemand(history, {
     date: effectiveDate, validationsChanged, forced: whole,
@@ -2110,19 +2138,29 @@ export async function writeSurveyBrief({
   const probeIds = new Set(probe.map((p) => `${p.a}\t${p.b}`));
 
   const briefPath = out ?? path.join(reviewDir, "survey.brief.md");
-  const pinsPath = path.join(reviewDir, "survey.pins.json");
-  const selectionPath = path.join(reviewDir, "survey.selection.json");
+  const pinsPath = path.join(sidecarBase, "survey.pins.json");
+  const selectionPath = path.join(sidecarBase, "survey.selection.json");
 
-  const selectionBlock = [
-    "### The selection this survey took, and what it cost",
-    "",
-    `- **This survey is ${isWhole ? "whole" : "a delta"}.** ${demand.why}`,
+  // The six named blocks the template places where its reader needs them
+  // (`brief-survey.md`): the tier stamp and the selection summary near the
+  // top with the scope, the judged index right under "## The judged set",
+  // the live pairs and the drift probe where the reader is told what to
+  // compare, and the reached-but-unchanged lines with the neighbourhood.
+  // Each fills its own named placeholder; none of them is folded into a
+  // single `###`-headed blob the way `batch_index` used to carry all six.
+  const tierStamp = [
     `- The mechanical tier ran ${TIER_CHECKS.length} checks (${TIER_CHECKS.join(", ")}) and reported `
       + `${tierFindings.length} finding(s)${notes.length > 0 ? `, with ${notes.length} note(s) beside it, gating nothing` : ""}.`
       + " A clean tier is not a clean frontier: these checks are what a machine can decide, and nothing else.",
     tierFindings.length > 0
       ? `- **This brief was launched over a failing tier (\`--force-tier\`), for diagnosis.** ${tierFindings.length} finding(s) stand unrepaired; treat what they name with suspicion.`
       : null,
+  ].filter((line) => line !== null).join("\n");
+
+  const selectionSummary = [
+    "### The selection this survey took, and what it cost",
+    "",
+    `- **This survey is ${isWhole ? "whole" : "a delta"}.** ${demand.why}`,
     `- The judged set is ${judged.length} node(s); the neighbourhood carried by what it answers is ${neighbourNodes.length}; `
       + `${unchangedReached.length} node(s) the judged set reaches are carried on one line, their read text unchanged since a survey read them; `
       + `${contextNodes.length} node(s) are context.`,
@@ -2133,35 +2171,39 @@ export async function writeSurveyBrief({
       : `- The drift probe draws ${probe.length} of the ${frozen.length} frozen pair(s), one in ${20} and never fewer than ${10}, on seed \`${seed}\` (mulberry32, seeded from the date and the graph commit). A finding anywhere in the probe forces a whole survey next time: say so in your report.`,
     "",
     "The frozen set is named so that what was not read is a fact of this run and not an inference from the generator. A finding on a pair no key nominated is a finding like any other, and is the one worth most: it measures what the keys miss.",
-    "",
+  ].join("\n");
+
+  const judgedIndex = [
     "### The judged set, in the ruling order",
     "",
     judged.length > 0
       ? judged.map((n) => `${indexLine(n)} | judged because ${reasons.get(n.id) ?? "the survey owes it a reading"}`).join("\n")
       : "(nothing is judged: every node at the review or ruling stage carries a survey pin on the recommendation it now stands on)",
-  ].filter((line) => line !== null).join("\n");
+  ].join("\n");
 
-  const pairsBlock = [
-    "",
-    "",
+  const livePairs = [
     `### The candidate pairs (${live.length} live${isWhole ? "" : `, ${probe.length} of them the drift probe`}), each with the key that nominated it`,
     "",
     "A key narrows attention and never the corpus: every node this brief carries stays readable, and this list orders your reading rather than partitioning it. Record the key with any finding it produced, so a key's yield is measurable across surveys.",
     "",
     live.length > 0 ? live.map(pairLine).join("\n") : "(no key nominated a live pair this round)",
-    "",
-    probe.length > 0
-      ? `#### The drift probe (${probe.length} frozen pair(s), drawn on seed \`${seed}\`; read them like any other pair)`
-      : null,
-    probe.length > 0 ? "" : null,
-    probe.length > 0 ? probe.map(pairLine).join("\n") : null,
-    "",
-    unchangedReached.length > 0
-      ? `#### Reached but unchanged (${unchangedReached.length} node(s), one line each: a survey has read each of them and its text has not moved since)`
-      : null,
-    unchangedReached.length > 0 ? "" : null,
-    unchangedReached.length > 0 ? unchangedReached.map(contextIndexLine).join("\n") : null,
-  ].filter((line) => line !== null).join("\n");
+  ].join("\n");
+
+  const driftProbe = probe.length > 0
+    ? [
+      `#### The drift probe (${probe.length} frozen pair(s), drawn on seed \`${seed}\`; read them like any other pair)`,
+      "",
+      probe.map(pairLine).join("\n"),
+    ].join("\n")
+    : "(no drift probe this round: this survey is whole, or the frozen set holds nothing to draw from)";
+
+  const reachedUnchanged = unchangedReached.length > 0
+    ? [
+      `#### Reached but unchanged (${unchangedReached.length} node(s), one line each: a survey has read each of them and its text has not moved since)`,
+      "",
+      unchangedReached.map(contextIndexLine).join("\n"),
+    ].join("\n")
+    : "(no node the judged set reaches is unchanged since a survey read it)";
 
   const template = await readTemplate(SURVEY_TEMPLATE_PATH);
   const withoutNav = fill(template, {
@@ -2171,7 +2213,12 @@ export async function writeSurveyBrief({
     batch_count: String(judged.length),
     neighbourhood_count: String(neighbourNodes.length),
     context_count: String(contextNodes.length + unchangedReached.length),
-    batch_index: `${selectionBlock}${pairsBlock}`,
+    tier_stamp: tierStamp,
+    selection_summary: selectionSummary,
+    judged_index: judgedIndex,
+    live_pairs: livePairs,
+    drift_probe: driftProbe,
+    reached_unchanged: reachedUnchanged,
     neighbourhood_index: neighbourNodes.length > 0
       ? neighbourNodes.map(contextIndexLine).join("\n")
       : "(nothing judged has a neighbour outside the judged set whose text has moved since a survey read it)",
@@ -2236,6 +2283,7 @@ export async function writeSurveyBrief({
   if (dry) return result;
 
   await mkdir(reviewDir, { recursive: true });
+  await mkdir(sidecarBase, { recursive: true });
   await mkdir(path.dirname(briefPath), { recursive: true });
   await writeFile(briefPath, filled);
   await writeFile(
@@ -2305,6 +2353,7 @@ if (isMain) {
           rootDir, reviewDir, date: opts.date, dry: opts.dry,
           whole: opts.whole, forceTier: opts.forceTier, validationsChanged: opts.validationsChanged,
           out: opts.out,
+          sidecarDir: opts.sidecarDir ? path.resolve(process.cwd(), opts.sidecarDir) : null,
         });
         console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
         console.log(`survey: ${r.batchCount} node(s) judged; neighbourhood ${r.neighbourhoodCount} node(s); reached but unchanged, one line each: ${r.unchangedReachedCount}; context: ${r.contextCount} node(s); ${r.bytes} bytes over ${r.lines} lines; graph commit ${commitText({ commit: r.commit, dirty: r.dirty })}`);

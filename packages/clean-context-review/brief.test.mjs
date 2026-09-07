@@ -105,20 +105,27 @@ function runCliExpectingFailure(args, cwd) {
 
 describe("brief.mjs: the two readings", () => {
   test("parseArgs takes exactly one reading, and refuses neither, both, and an unknown flag", () => {
-    assert.deepEqual(parseArgs(["--node", "x"]), { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: false, whole: false, forceTier: false, validationsChanged: false, out: null });
+    assert.deepEqual(parseArgs(["--node", "x"]), { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: false, whole: false, forceTier: false, validationsChanged: false, out: null, sidecarDir: null });
     assert.deepEqual(parseArgs(["--survey", "root", "--date", "2026-09-04", "--dry"]),
-      { node: null, survey: true, rootDir: "root", date: "2026-09-04", dry: true, draft: false, whole: false, forceTier: false, validationsChanged: false, out: null });
+      { node: null, survey: true, rootDir: "root", date: "2026-09-04", dry: true, draft: false, whole: false, forceTier: false, validationsChanged: false, out: null, sidecarDir: null });
     assert.throws(() => parseArgs([]), /no reading named/);
     assert.throws(() => parseArgs(["--node", "x", "--survey"]), /one invocation runs one of them/);
     assert.throws(() => parseArgs(["--survey", "--frontier"]), /unknown flag --frontier/);
     assert.throws(() => parseArgs(["--node"]), /--node needs a node id/);
   });
 
+  test("--sidecar-dir is read for --survey, and refused for --node", () => {
+    assert.deepEqual(parseArgs(["--survey", "--sidecar-dir", "elsewhere"]),
+      { node: null, survey: true, rootDir: null, date: null, dry: false, draft: false, whole: false, forceTier: false, validationsChanged: false, out: null, sidecarDir: "elsewhere" });
+    assert.throws(() => parseArgs(["--node", "x", "--sidecar-dir", "elsewhere"]), /--sidecar-dir is the survey's/);
+    assert.throws(() => parseArgs(["--survey", "--sidecar-dir"]), /--sidecar-dir needs a directory/);
+  });
+
   test("--draft forces the draft brief, and refuses beside --survey; --fresh is a deprecated alias", () => {
     assert.deepEqual(parseArgs(["--node", "x", "--draft"]),
-      { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: true, whole: false, forceTier: false, validationsChanged: false, out: null });
+      { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: true, whole: false, forceTier: false, validationsChanged: false, out: null, sidecarDir: null });
     assert.deepEqual(parseArgs(["--node", "x", "--fresh"]),
-      { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: true, whole: false, forceTier: false, validationsChanged: false, out: null });
+      { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: true, whole: false, forceTier: false, validationsChanged: false, out: null, sidecarDir: null });
     assert.throws(() => parseArgs(["--survey", "--draft"]), /--draft forces the draft brief on a re-reading/);
     assert.throws(() => parseArgs(["--survey", "--fresh"]), /--draft forces the draft brief on a re-reading/);
   });
@@ -1432,14 +1439,25 @@ describe("candidatePairs: the five keys, each nominating on its own", () => {
   });
   const keysOf = (pairs, a, b) => (pairs.find((p) => p.a === a && p.b === b) ?? { keys: [] }).keys;
 
-  test("a shared defined term", () => {
+  test("a term pairs the definer with a user, and records the term and the definer", () => {
     const pairs = candidatePairs({ nodes: [
       bare("g/def", { defines: ["judged set"] }),
       bare("g/x", { answer: "The judged set is read." }),
       bare("g/y", { answer: "A judged set again." }),
     ] });
-    assert.ok(keysOf(pairs, "g/def", "g/x").includes("term:judged set"));
-    assert.ok(keysOf(pairs, "g/x", "g/y").includes("term:judged set"), "two users of one term are a pair too");
+    const defXKeys = keysOf(pairs, "g/def", "g/x");
+    assert.ok(defXKeys.some((k) => k.startsWith("term:judged set")), "the definer and a user are paired, with the term named");
+    assert.ok(defXKeys.some((k) => k.includes("g/def")), "the pair's key names which node defines the term");
+    assert.ok(keysOf(pairs, "g/def", "g/y").some((k) => k.startsWith("term:judged set")), "the definer is paired with the other user too");
+  });
+
+  test("two users of the same term are not paired on `term`", () => {
+    const pairs = candidatePairs({ nodes: [
+      bare("g/def", { defines: ["judged set"] }),
+      bare("g/x", { answer: "The judged set is read." }),
+      bare("g/y", { answer: "A judged set again." }),
+    ] });
+    assert.deepEqual(keysOf(pairs, "g/x", "g/y"), [], "two users of one term are never paired with each other on `term`");
   });
 
   test("a shared entry of the author's words", () => {
@@ -1481,13 +1499,13 @@ describe("candidatePairs: the five keys, each nominating on its own", () => {
 
   test("one pair carries every key that nominated it, and each pair appears once", () => {
     const pairs = candidatePairs({ nodes: [
-      bare("g/p", { defines: ["judged set"] }),
-      bare("g/a", { under: ["g/p"], answer: "The judged set." }),
+      bare("g/p"),
+      bare("g/a", { under: ["g/p"], defines: ["judged set"] }),
       bare("g/b", { under: ["g/p"], answer: "The judged set." }),
     ] });
     const keys = keysOf(pairs, "g/a", "g/b");
     assert.ok(keys.includes("parent:g/p"));
-    assert.ok(keys.includes("term:judged set"));
+    assert.ok(keys.some((k) => k.startsWith("term:judged set")));
     assert.equal(pairs.filter((p) => p.a === "g/a" && p.b === "g/b").length, 1);
   });
 });
@@ -1712,6 +1730,27 @@ describe("writeSurveyBrief: the selection, the sidecars and --out", () => {
     const result = await writeSurveyBrief({ rootDir, reviewDir: path.join(rootDir, "out"), date: "2026-09-07", out });
     assert.equal(result.briefPath, out);
     assert.match(await readFile(out, "utf8"), /### The selection this survey took/);
+  });
+
+  test("sidecarDir redirects the pins, selection and history sidecars away from reviewDir, without moving the brief", async () => {
+    const rootDir = await freshFrontierFixture("sidecar-");
+    const reviewDir = path.join(rootDir, "out");
+    const sidecarDir = path.join(rootDir, "elsewhere-sidecars");
+    const result = await writeSurveyBrief({ rootDir, reviewDir, date: "2026-09-07", sidecarDir });
+
+    assert.equal(result.briefPath, path.join(reviewDir, "survey.brief.md"));
+    assert.equal(result.pinsPath, path.join(sidecarDir, "survey.pins.json"));
+    assert.equal(result.selectionPath, path.join(sidecarDir, "survey.selection.json"));
+
+    // The brief itself is where reviewDir (or --out) says; only the three
+    // sidecars move, and reviewDir's own copies of them are never written.
+    await readFile(result.briefPath, "utf8");
+    await readFile(path.join(sidecarDir, "survey.pins.json"), "utf8");
+    await readFile(path.join(sidecarDir, "survey.selection.json"), "utf8");
+    await readFile(path.join(sidecarDir, "survey.history.json"), "utf8");
+    await assert.rejects(readFile(path.join(reviewDir, "survey.pins.json"), "utf8"));
+    await assert.rejects(readFile(path.join(reviewDir, "survey.selection.json"), "utf8"));
+    await assert.rejects(readFile(path.join(reviewDir, "survey.history.json"), "utf8"));
   });
 
   test("a dry run writes nothing at all", async () => {

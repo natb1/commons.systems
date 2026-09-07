@@ -18,6 +18,10 @@ No `## Account` is carried anywhere in this brief -- judged, neighbourhood, or c
 
 The survey **forwards nothing**. Only the review of a draft gives a verdict; your findings kick back what must change.
 
+{{tier_stamp}}
+
+{{selection_summary}}
+
 {{record}}
 
 Read first, in full: `disposition/disposition-graph/frontier-consistency.md` (the validations you run), `clean-context-review.md` (the two readings and how this one is pinned), `alignment-order.md` (how a tangle and a divergence are recorded), `recording.md`, `viable-options.md`, `authority.md`, `unanswered.md`, `dialogue.md`, `node.md`, and the global-tier rules `evaluation.md`, `materialization.md`, `session-context.md`, `delegation.md`; then the manifest. Then this brief's judged set, whole, and its neighbourhood, by what it answers, all of it before you write any finding, since the survey compares nodes.
@@ -36,6 +40,12 @@ Across the graph — each judged node against every other node, answered or unan
 14. **Coverage.** Each part of every disposition the author has given in the record is answered by exactly one node: none unanswered, none answered twice; a quotation may be carried on a child as the ground of the part it answers.
 15. **Merge.** Whether each disposition the author has given, each node, and each option pending on one is a new question or a new answer to a question the record already asks, answered or unanswered: a new answer standing as its own node is proposed for the node whose question it answers, as an option with its source, and a new question carried on another node's dialogue is proposed a node of its own. The survey asks it across the frontier.
 16. **Independence** (`probe-or-node`). A node whose `under` names a node that itself carries a `stage`, whose only possible answer is a reading of that parent's answer, whose facts would repeat the parent's, and which would be pruned the moment the parent's recommendation moved, is a probe on the parent and not a child of it: its question can be put as "on the parent, which did you intend", and that is a probe's question. Report it as a finding naming both nodes and carrying, in the `proposal`, the survivor the child's question becomes on the parent — a probe, with the `asks`, the `why` and the `discharges` it would take, or an option on the parent's fact where a candidate answer is held viable — with the note that the child's options are struck as options that were never candidates, that any words of the author's on it move to the parent's `## Disposition`, and that, the child being a node already standing, its existence fact moves to `prune` with this test as the reason and the author rules the prune at the child's own row; and never as a probe raised, since re-encoding a node is the main thread's and not this reading's. Kind: `decomposition`, the schema's nearest — the child is a fragment of its parent, and a fold is what is proposed. A reading (`form: reading`) is exempt by construction: its answer is a standing relation between a tradition and the node above it, which stands whatever the parent recommends.
+
+## Where to look first: the candidate pairs
+
+{{live_pairs}}
+
+{{drift_probe}}
 
 ## How you record what you find
 
@@ -57,13 +67,15 @@ A probe names any node in the graph, judged or not, for the same reason a findin
 
 ## The judged set ({{batch_count}} node(s), in the ruling order)
 
-{{batch_index}}
+{{judged_index}}
 
 {{batch}}
 
 ## The neighbourhood of the judged set ({{neighbourhood_count}} node(s), by what each answers)
 
 {{neighbourhood_index}}
+
+{{reached_unchanged}}
 
 {{neighbourhood}}
 
