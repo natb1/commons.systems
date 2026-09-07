@@ -1,7 +1,7 @@
 ---
 question: Where does the alignment page show the author's recorded words?
 form: rule
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -14,6 +14,8 @@ facts:
       - name: words-first-in-the-column
         source: ai
         ref: "2026-09-06"
+        status: passed
+        reason: "a section running to 1,986 words placed under the stage chip makes the first thing on the node a thing the author scrolls past, which is the fault the parent names against apparatus moved one column over"
       - name: residue-in-the-drill-down
         source: ai
         ref: "2026-09-06"
@@ -49,9 +51,12 @@ facts:
         ref: "2026-09-07"
         status: passed
         reason: "it puts up to two thousand words of the author's prose above the facts the ruling asks"
+      - name: address-for-the-words-no-option-names
+        source: review
+        ref: "2026-09-07"
     recommends: per-option-only
     boldness: low
-    against: "Of the 222 dated entries the record carries, the references on the options reach 101 and 121 reach the page nowhere, none at all on 43 of the 68 nodes that carry words, and on eleven of the forty-five author-sourced options the reference names no entry at all, so until those references are written and the unreferenced entries are given the options they bear on, this answer rules the author on a page showing them a minority of what they have said to the record and eleven rows showing them nothing."
+    against: "The only words the author has given on this node are a release with one named exception, and this answer reads 'does not need to be played back' as 'must nowhere appear' and extends a sentence about the periagogic response to every dated entry a node's `## Disposition` holds, two readings of the AI's resting on the author's one sentence. What that costs, re-taken at graph commit 62121b69: 142 of 255 dated entries are named by no option and 39 of the 71 nodes that carry words have none named at all, while `projection`'s standing answer holds that the record is read through projections and never by opening node files, so the majority of what the author has said reaches no projection they read at the moment of ruling; and this very ruling leans on the author's rule of 2026-09-06, which lives in `alignment-page`'s `## Disposition` and not in this node's, with `ancestors-words-too` passed over, so the author rules here without seeing on the page the later words the answer rests on."
     stands: per-option-only
   - name: authority
     options:
@@ -81,7 +86,9 @@ The author, 2026-09-04, on the alignment page, queued from the sitting on author
 On the option rows, and nowhere else. Where an option's source is the author,
 its row carries, one step down, the author's words that option rests on: exactly
 the entries of this node's `## Disposition` that the option's `ref` names, and no
-others. Nothing else on the page is the author's recorded words. There is no
+others. Nothing else on the page is the author's words under `## Disposition`;
+the reason the author gives with a ruling is the other kind `dialogue` names,
+and it stays where `what-an-option-row-carries` puts it. There is no
 drill-down holding the section whole, neither folded nor open, at any stage, and
 none at the foot of the middle column. This is the author's sentence of
 2026-09-04 read at its plainest: whatever response they provide in the
@@ -91,11 +98,12 @@ of the option it supports or refutes is the one form those words name.
 
 An entry is a dated paragraph beginning "The author, <date>" together with the
 blockquote it introduces, which is the projector's own rule (`AUTHOR_ENTRY_RE`,
-`packages/disposition/project.mjs:1393`, applied by `authorEntries` at `:1395`).
+`packages/disposition/project.mjs:1405`, applied by `authorEntries` at `:1407`,
+at implementation commit cb0e02c6).
 An option's `ref` is the date the words were given, and the match is by that date
 alone: where a date carries more than one entry the row shows all of them, in the
 order the section keeps them, which is what `authorWordsFor` does today
-(`packages/disposition/project.mjs:1409-1415`). That is coarse and this answer
+(`packages/disposition/project.mjs:1421-1427` at cb0e02c6). That is coarse and this answer
 does not refine it — on this page's own parent fourteen of the twenty-four
 entries are dated 2026-09-04, so an option referring to that date carries all
 fourteen. What an option's `source` and `ref` are is
@@ -107,18 +115,18 @@ rests on and nothing besides.
 Where a `ref` names no entry the row carries nothing for the author's words, and
 the mismatch is a finding on the option rather than an occasion to quote. The
 fallback the projector runs today goes with it: at
-`packages/disposition/project.mjs:1413` a date matching nothing returns the whole
+`packages/disposition/project.mjs:1425` at cb0e02c6 a date matching nothing returns the whole
 `## Disposition`, which, shown under the label the row gives it, asserts as the
 ground of one option words that may bear on another option on the same fact —
 the whole-section playback the author's sentence releases the page from, wearing
 a per-option label — and converts a broken reference into a plausible render. The
 finding is raised by the graph's validator, beside the check that already
 requires a `ref` on every option of an answer fact
-(`packages/disposition/read.mjs:491`), and it is listed by the frontier on the
+(`packages/disposition/read.mjs:496-499` at cb0e02c6), and it is listed by the frontier on the
 node that carries it. It is a finding and not a parse error, so the graph still
 reads and still projects while the eleven are outstanding, on the reader's own
 principle that an attention rule never turns into one
-(`packages/disposition/read.mjs:1386-1390`). Both were owed when this answer was
+(`packages/disposition/read.mjs:1391-1394` at cb0e02c6). Both were owed when this answer was
 written; the check landed on the implementation ref at commit cb0e02c6 of
 2026-09-07, as `deriveMechanicalFindings` in the same file, and the frontier lists
 what it raises. The direction is
@@ -275,8 +283,8 @@ status against it, so the author may take it in one ruling.
 Everything the recommended option says of the per-option quotation, with one
 folded drill-down last in the middle column holding the node's `## Disposition`
 whole and in the order it keeps it, at every stage alike. For it, and it is the
-measurement: the references reach 101 of the 222 entries and none at all on 43 of
-the 68 nodes that carry words, the browser renders no `## Disposition`, and
+measurement, at graph commit `ec6e2300`: the references reach 101 of the 222
+entries and none at all on 43 of the 68 nodes that carry words, the browser renders no `## Disposition`, and
 `projection`'s answer, which no ruling has reached, says the record is read
 "through projections, never by opening node files, except in alignment sessions",
 so under the recommended option the majority of what the author has said to this
@@ -300,7 +308,7 @@ facts, and the parent's recommended text puts the drill-downs last for that
 reason; a section running to 1,986 words on this page's parent makes the first
 thing under the chip a thing the author scrolls past on every node that carries
 words, which is the fault the parent names against apparatus in the right-hand
-column, moved one column over. Viable and not recommended, and it falls with the
+column, moved one column over. Passed over on that ground, and it falls with the
 option it varies.
 
 #### residue-in-the-drill-down
@@ -338,7 +346,8 @@ fact, which is the whole-section playback the author's words release the page
 from, wearing a per-option label; and it converts a broken reference into a
 plausible render, where `viable-options`' recommended text, which no ruling has
 reached, names a reference of the wrong kind on an author-sourced option "a
-finding and not a fact". It runs on 11 of the 45 author-sourced options today, so
+finding and not a fact". It ran on 11 of the 45 author-sourced options at graph
+commit `ec6e2300`, so
 the choice it offers is between eleven quiet renders and eleven findings.
 
 #### caption-where-the-node-carries-none
@@ -359,8 +368,9 @@ below for the caption to be about.
 
 Everything `section-folded-and-quotation-narrowed` says, with one drill-down per
 dated entry, each summarised by its date, rather than one holding the section.
-For it: 17 entries on `alignment-order` and 24 on `alignment-page` are a wall
-behind a single summary. Passed over: it puts 222 summaries on the page whose
+For it: 17 entries on `alignment-order` and 24 on `alignment-page`, at graph
+commit `ec6e2300`, are a wall behind a single summary. Passed over: it puts 222
+summaries, at that commit, on the page whose
 labels are dates and so carry nothing of what was said, where one summary naming
 the section says what the reader is opening; and an entry's sense is usually in
 the sequence it sits in, which per-entry folding hides. It falls with the option
@@ -387,6 +397,27 @@ asks about, which is the fault the parent names against apparatus, and the
 two-level form the record reads under this page is the answer to it. Passed over.
 Raised by the clean-context reading of 2026-09-07, which found the alternative
 decided in the draft's prose and recorded on no fact.
+
+#### address-for-the-words-no-option-names
+
+Everything the recommended option says, with one line in the middle column
+addressing the browser's page for this node, so that the entries no option's
+`ref` names are one step away without any of them being rendered here. For it:
+the author's sentence releases the page from playing their response back, and an
+address is not a playback; the parent's answer already uses that route, having
+each metric link to that node in the browser, "which addresses every node by its
+id where this page has no route to one", and the column is already headed by the
+node's id; and at graph commit `62121b69` 142 of 255 dated entries are named by
+no option, while `projection`'s standing answer holds that the record is read
+through projections and never by opening node files, so the residue reaches the
+ruler nowhere. Against it: it turns on `projection` ruling that the browser
+renders a node's `## Disposition`, which is that node's option
+`browser-renders-the-authors-words` and which no ruling has reached, so today the
+link would address a page that shows none of the words. Viable and not adopted,
+for that reason. Raised at the clean-context reading of 2026-09-07, in its
+viability paragraph; if the line in the column heading is the parent's clause
+and not devolved here, the same option belongs on `alignment-page` with this
+node as its source.
 
 ### authority
 
@@ -417,7 +448,7 @@ the draft it replaces.
 
 The other two limbs are not met and the reading says so. Not expensive: the
 answer is one projector function with its fallback removed and one drill-down
-struck, with a check and a frontier line owed beside them, and nothing is built on
+struck, with the check and the frontier line that landed at cb0e02c6 beside them, and nothing is built on
 it. Not irreversible: the `## Disposition` section stays in the node under every
 option on this fact, so no words are lost either way and a wrong answer is undone
 by re-projecting the page. Delegated would leave the selection of the author's own
@@ -624,7 +655,9 @@ Findings:
 - Facts, `### answer`, the fact's `against`, and the prose of three options (validation 3, figures stated unqualified and now stale). The `against` the alignment page will show the author on the recommended option's row reads 'Of the 222 dated entries the record carries, the references on the options reach 101 and 121 reach the page nowhere, none at all on 43 of the 68 nodes that carry words, and on eleven of the forty-five author-sourced options the reference names no entry at all'. I re-took the measurement two ways with the projector's own entry rule and the record's own `parseNode`. At graph commit `ec6e2300`, which the Answer names, every figure is exact: 140 nodes, 68 carrying a `## Disposition`, 222 dated entries, 14,784 words, longest 1,986 on `alignment-page` with 24 entries, 45 author-sourced options carrying a date-shaped `ref` (4 more carry a graph-commit ref), 34 naming at least one entry and 11 naming none, 101 entries named and 121 not, 43 of the 68 nodes with none named. At the graph as it now stands (`62121b69`) the same measurement gives 143 nodes, 71 carrying words, 255 entries, 56 author-sourced date-ref options, 45 naming an entry and 11 naming none, 113 named and 142 not, 39 of the 71 nodes with none named. The Answer's own measurement paragraph is safe, because it says 'What this costs is measured, at graph commit `ec6e2300` and re-taken by the reading of 2026-09-07'; the `against` and the option prose carry no such qualification and are read as of today. The same is true of `#### section-folded-and-quotation-narrowed`, 'the references reach 101 of the 222 entries and none at all on 43 of the 68 nodes that carry words'; of `#### fallback-to-the-whole-section-kept`, 'It runs on 11 of the 45 author-sourced options today'; and of `#### one-drill-down-per-entry`, 'it puts 222 summaries on the page whose labels are dates and so carry nothing of what was said' and 'For it: 17 entries on `alignment-order` and 24 on `alignment-page` are a wall behind a single summary' (`alignment-page` now carries 25). Suggested edit: name the commit in the `against` as the Answer does — 'Of the 222 dated entries the record carried at graph commit `ec6e2300` ...' — and add the same three words to the four option sentences, so that a figure never reads as a count of today.
 - Facts, `#### words-first-in-the-column` (viability, a status the prose has already decided): 'Against it, and decisive: the column's own ask is the facts, and the parent's recommended text puts the drill-downs last for that reason ... Viable and not recommended, and it falls with the option it varies.' Decisive is dominance, and `commons.systems/disposition-graph/viable-options`' recommended `passed-over-options-stay` holds that 'A candidate the AI holds dominated is passed over: it keeps its place on the fact, carries the status passed with the one clause saying why'. The fact treats the identical formula the other way one option down: `#### section-open-not-folded` reads 'Against it, and decisive on the measurement: ... Passed over.' and carries `status: passed`. So two options the prose disposes of in the same words carry different statuses, and the author reads one as an open candidate and the other as dominated on no stated difference. Suggested edit: either give `words-first-in-the-column` `status: passed` with the reason its own prose supplies — 'a section running to 1,986 words placed under the stage chip makes the first thing on the node a thing the author scrolls past, which is the fault the parent names against apparatus moved one column over' — or strike 'and decisive' and say why it stays open where `section-open-not-folded` does not.
 - Viability, answer fact (a viable option is missing). The answer's own case against it is that the words no option's `ref` names reach the author nowhere, and the three remedies it names are all writes to the record or another node's ruling; a fourth remedy is on the page and is on no option — an address rather than a playback. Proposed option `address-for-the-words-no-option-names`, source review, ref 2026-09-07, prose: 'Everything the recommended option says, with one line in the middle column addressing the browser's page for this node, so that the entries no option's `ref` names are one step away without any of them being rendered here. For it: the author's sentence releases the page from playing their response back and an address is not a playback; the parent's answer already uses that route, having each metric link 'to that node in the browser, which addresses every node by its id where this page has no route to one', and the column is already headed by the node's id; and on the record as it stands 142 of 255 dated entries are named by no option while `commons.systems/disposition-graph/projection`'s standing answer holds that the record is read 'through projections, never by opening node files, except in alignment sessions', so the residue reaches the ruler nowhere. Against it: it turns on `projection` ruling that the browser renders a node's `## Disposition`, which is that node's option `browser-renders-the-authors-words` and which no ruling has reached, so today the link would address a page that shows none of the words.' If the session holds that a line in the column heading is the parent's clause and not devolved here, the same option is recorded on `commons.systems/disposition-graph/alignment-page` instead, with this node as its source.
-- Account, '### What a ruling here would reach in the parent, 2026-09-06' (validation 3, a count that is stale again). The repaired paragraph reads 'When this section was drafted it was applied at three clauses and not at the two this node reaches; the sitting of 2026-09-06 marked both, and the parent now carries the mark at five clauses, so no bookkeeping is owed there.' The load-bearing half is true and verified: `disposition/disposition-graph/alignment-page.md` marks both of this node's clauses, at line 599 ('the author's words it rests on, where its source is the author, by the reference it carries, which stands only until `authors-words-on-the-page` rules') and at line 605 ('the first of the two stands only until `authors-words-on-the-page` rules'). The count is not: `sed -n '575,625p' disposition/disposition-graph/alignment-page.md | grep -o "stands only until" | wc -l` returns 10, not five, the parent having marked `which-facts-are-listed`, `where-a-change-request-goes`, `when-the-kickback-feedback-shows` and `where-the-unconfirmed-indication-goes` since. This is the third reading to spend a finding on this one paragraph. Suggested edit: strike the count rather than re-take it — 'the sitting of 2026-09-06 marked both, so no bookkeeping is owed there' — since a count of the parent's marks goes stale every time the parent marks another clause, which is the parent's own reason for not restating its children's stages.
+- Account, '### What a ruling here would reach in the parent, 2026-09-06' (validation 3, a count that is stale again). The repaired paragraph reads 'When this section was drafted it was applied at
+three clauses and not at the two this node reaches; the sitting of 2026-09-06
+marked both, so no bookkeeping is owed there.' The load-bearing half is true and verified: `disposition/disposition-graph/alignment-page.md` marks both of this node's clauses, at line 599 ('the author's words it rests on, where its source is the author, by the reference it carries, which stands only until `authors-words-on-the-page` rules') and at line 605 ('the first of the two stands only until `authors-words-on-the-page` rules'). The count is not: `sed -n '575,625p' disposition/disposition-graph/alignment-page.md | grep -o "stands only until" | wc -l` returns 10, not five, the parent having marked `which-facts-are-listed`, `where-a-change-request-goes`, `when-the-kickback-feedback-shows` and `where-the-unconfirmed-indication-goes` since. This is the third reading to spend a finding on this one paragraph. Suggested edit: strike the count rather than re-take it — 'the sitting of 2026-09-06 marked both, so no bookkeeping is owed there' — since a count of the parent's marks goes stale every time the parent marks another clause, which is the parent's own reason for not restating its children's stages.
 
 On the facts and what they recommend: Two facts, answer and authority, which is what a staged node carrying facts owes; no existence and no persistence fact, correctly, since neither a prune nor a change of shape is proposed. The answer fact recommends `per-option-only` at low boldness and `stands` names the same option, so the absence of a `## Recommendation` fence is right (verified: the file's headings run Disposition, Answer, Rationale, Facts, Account, with no fence); every option named in `recommends` and `stands` is a listed option and every passed option carries a `reason`. The authority fact recommends `ratified` at low boldness and carries the `### authority` reading `class-recommendation` requires, naming the capture-shaped limb and saying why the other two are not met, and that reading holds — though its 'not expensive' sentence still calls the check owed, which is the second finding. Low boldness on the answer fact is defensible, the option being the author's own and referenced to their sentence, but the session should say it means it: the answer reads 'does not need to be played back' as a bar and extends a sentence about 'whatever response is provided in periagoge' to every dated entry a `## Disposition` holds, and both readings are the AI's rather than the author's words, which is the second limb of the boldness `dialogue` defines.
 
@@ -633,3 +666,7 @@ On the viability of the options: Every option listed is viable on its facts and 
 Strongest counter-argument (moderate): The only words the author has given on this node are a release with one named exception — 'Whatever response is provided in periagoge it does not need to be played back in the alignment artifact expect as quotes supporting or refuting fact options' — and this answer reads 'does not need to be played back' as 'must nowhere appear' and extends a sentence about the periagogic response to every dated entry a node's `## Disposition` holds, which are two of the AI's readings resting on the author's one sentence, the mirror of the AI distinction the last reading struck. What that costs is measurable and is not confined to the eleven broken references the answer makes findable: re-taken at the graph as it now stands, 142 of 255 dated entries are named by no option and 39 of the 71 nodes that carry words have none named at all, while `commons.systems/disposition-graph/projection`'s standing answer holds that the record is read 'through projections, never by opening node files, except in alignment sessions', so the majority of what the author has said reaches no projection they read at the moment of ruling. The instance is this very ruling: the recommendation's rationale leans on the author's rule of 2026-09-06, which lives in `alignment-page`'s `## Disposition` and not in this node's, and `ancestors-words-too` is passed over, so the author will rule here without seeing on the page the later words the answer rests on. The reply — that the alternative is on the fact unpassed with the measurement as its case, and that the `/align` interview the author's own rule names is where the words are read whole — is good, and it concedes the point: the check on a draft written in the author's voice is moved off the page the author rules from and onto a session they must open.
 
 The session's reply: Accepted on all eight, each verified at its locus on the main thread. The exclusivity sentence is qualified to the words under ## Disposition, the ruling's reason being the other kind dialogue names; the authority reading's 'owed' becomes 'landed at cb0e02c6'; the seven project.mjs citations and the two read.mjs citations are re-taken; the figures in the against and in four option sentences are dated to graph commit ec6e2300; words-first-in-the-column is passed with the reason its prose supplies; the count of the parent's marks is struck; and address-for-the-words-no-option-names is recorded on the answer fact, source review, viable and not adopted, since it turns on projection's browser-renders-the-authors-words, which no ruling has reached. The recommendation does not move. The counter-argument stands on the row at moderate strength.
+
+### Amended after the fresh reading, 2026-09-07
+
+The fresh reading of the repaired answer forwarded at moderate strength with eight findings and no probes, every one validated at its locus on the main thread and every one accepted. The recommendation does not move: it stays `per-option-only`. The exclusivity sentence is qualified to the words under `## Disposition`, since the reason the author gives with a ruling is the other kind of their words `dialogue` names and `what-an-option-row-carries` places. The authority reading's "owed" is corrected to the check that landed at cb0e02c6. The seven citations into `packages/disposition/project.mjs` and the two into `read.mjs` are re-taken at that commit and dated to it, since the amendment that cited cb0e02c6 had staled its own line numbers by twelve. The figures in the fact's case against and in four option sentences are dated to the graph commit they were taken at, `ec6e2300`, so that no count reads as a count of today; the case against on the row is now the reading's counter-argument, with the measurement re-taken at `62121b69`. `words-first-in-the-column` is passed with the reason its own prose already gave, so that two options the prose disposes of in the same words no longer carry different statuses. The count of the parent's marks is struck rather than re-taken, since it goes stale every time the parent marks another clause. And `address-for-the-words-no-option-names` is recorded on the answer fact, source `review`, viable and not adopted: an address rather than a playback, which turns on `projection`'s `browser-renders-the-authors-words`, which no ruling has reached. The amended answer owes its re-reading.
