@@ -469,7 +469,7 @@ the fourth form contains and what stands outside the rule.
 
 #### third-usage-in-the-ruling-order
 
-Everything the recommendation says, with the third usage and the rationale brought into line with the queue sentence: given nothing, the skill takes the first node of the ruling order, as alignment-order says, and the rationale drops "The author's choice of what to propose next is itself a ranking act, recorded as boost" for the answer's own clause that the author's naming of a node is their order and needs no boost. It is on the table because the fence as it stands names rank in one clause and the ruling order in another for one and the same set of unanswered nodes, and a confirmation would ratify both. Adopted into the recommendation on 2026-09-07: the fence's third usage and its rationale now carry it.
+Everything the recommendation says, with the third usage and the rationale brought into line with the queue sentence: given nothing, the skill takes the first node of the ruling order, as alignment-order says, and the rationale drops "The author's choice of what to propose next is itself a ranking act, recorded as boost" for the answer's own clause that the author's naming of a node is their order and needs no boost. It is on the table because the fence as it stands names rank in one clause and the ruling order in another for one and the same set of unanswered nodes, and a confirmation would ratify both. Passed over on 2026-09-07, absorbed by the recommendation: the fence's third usage and its rationale now carry it.
 
 ### authority
 

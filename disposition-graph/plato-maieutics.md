@@ -25,6 +25,8 @@ facts:
       - name: answer-argues-the-page-divergence
         source: review
         ref: "2026-09-07"
+        status: passed
+        reason: "absorbed by the answer, which now carries the paragraph this option proposed"
     recommends: standing
     boldness: high
     stands: standing
@@ -78,7 +80,8 @@ The strong counter-argument, twice recorded: Socrates' midwifery rests on his be
 
 #### answer-argues-the-page-divergence
 
-Everything `standing` says, with a paragraph saying why the alignment page's option `every-fact-every-option` departs from the tradition: a page that marks the AI's recommendation on every option of every fact before the author chooses is the drafter leading the delivery, which is the one thing the midwife may not do, and the record accepts it for the legitimacy the listing buys. It is on the table because this node's frontmatter already carries `diverged` on that option and `readings` requires "diverged, where the option departs from it and the reading's own answer says why", so the relation stands today on an argument written on the node it bears on and nowhere in the reading itself. Adopted into the answer on 2026-09-07: the paragraph is written.
+Everything `standing` says, with a paragraph saying why the alignment page's option `every-fact-every-option` departs from the tradition: a page that marks the AI's recommendation on every option of every fact before the author chooses is the drafter leading the delivery, which is the one thing the midwife may not do, and the record accepts it for the legitimacy the listing buys. It is on the table because this node's frontmatter already carries `diverged` on that option and `readings` requires "diverged, where the option departs from it and the reading's own answer says why", so the relation stands today on an argument written on the node it bears on and nowhere in the reading itself. Adopted into the answer on 2026-09-07: the paragraph is written. Passed over on 2026-09-07, absorbed by the answer as amended after the frontier survey, which carries the paragraph whole.
+
 
 ## Account
 
@@ -174,4 +177,8 @@ Recorded as an option on this node's answer fact: `answer-argues-the-page-diverg
 
 ### Amended after the frontier survey, 2026-09-07
 
-The survey's finding and its own node finding, validated on the main thread: the frontmatter bore `diverged` on the alignment page's option and the answer did not say why, which the readings node requires; and the answer fact opened straight onto an option subsection. The answer now carries the paragraph the survey's option `answer-argues-the-page-divergence` proposed, adopted, and both facts open with their reason. The amended answer owes its re-reading, whose object is this repair.
+The survey's finding and its own node finding, validated on the main thread: the frontmatter bore `diverged` on the alignment page's option and the answer did not say why, which the readings node requires; and the answer fact opened straight onto an option subsection. The answer now carries the paragraph the survey's option `answer-argues-the-page-divergence` proposed, adopted, and the answer fact opens with its reason, and the authority fact carries none, as the reading of 2026-09-07 found. The amended answer owes its re-reading, whose object is this repair.
+
+### Repaired after the reading, 2026-09-07
+
+The reading's three findings, validated on the main thread. The account's claim that both facts opened with their reason was false, the authority fact carrying none; the sentence now says so. The option `answer-argues-the-page-divergence` had become the answer as amended, and is marked passed over as absorbed. The `bears` entry on `turn-form`'s option `a-turn-that-reports-an-impediment` is argued nowhere in this reading's answer: it was written when `turn-form` was minted, on that node's citation of the midwife for its fourth form, and the argument is owed to this answer at its next amendment rather than added now, since the answer's pin is what the two readings judged. None of the three moves a pin.
