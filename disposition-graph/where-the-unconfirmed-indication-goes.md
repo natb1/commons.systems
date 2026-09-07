@@ -1,7 +1,7 @@
 ---
 question: Where does the page say that a node's text is a draft no one has confirmed?
 form: rule
-stage: maieutic
+stage: review
 facts:
   - name: answer
     options:
