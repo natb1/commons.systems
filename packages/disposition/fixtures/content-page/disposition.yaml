@@ -1,0 +1,5 @@
+module: example.test
+ref: disposition
+graphs:
+  main:
+    about: the fixture the content encoding's own page tests read

@@ -27,14 +27,14 @@ import { fileURLToPath } from "node:url";
 // (commons.systems/disposition-graph/dialogue,
 // `every-option-carries-its-sentence`): a projection reads them from here and
 // never carries a sentence of its own for any option.
-import { glossary, optionText } from "./derive.mjs";
+import { glossary, optionText, confirmedOption } from "./derive.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MARKER = "<!--DG:GRAPH-->";
 
-function parseArgs(argv) {
-  const opts = { rootDir: null, input: null, out: null, rules: null, ancestry: null, local: null, frontier: null, alignment: null, check: false };
-  const valueFlags = { "--input": "input", "--out": "out", "--rules": "rules", "--ancestry": "ancestry", "--local": "local", "--frontier": "frontier", "--alignment": "alignment" };
+export function parseArgs(argv) {
+  const opts = { rootDir: null, input: null, out: null, rules: null, ancestry: null, local: null, frontier: null, alignment: null, concordance: null, check: false };
+  const valueFlags = { "--input": "input", "--out": "out", "--rules": "rules", "--ancestry": "ancestry", "--local": "local", "--frontier": "frontier", "--alignment": "alignment", "--concordance": "concordance" };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a in valueFlags) {
@@ -74,6 +74,154 @@ async function loadGraph(opts) {
 // is not worth drawing the whole reader in for.
 function defineTerms(n) {
   return (n?.defines ?? []).map((d) => (typeof d === "string" ? d : d?.term)).filter((t) => typeof t === "string");
+}
+
+/* ------------------------------------------------------------------ *
+ * the two encodings
+ *
+ * A node is written either the legacy way -- a `## Answer` section, a
+ * `## Rationale`, a `## Disposition`, a `## Recommendation` fence, and a
+ * `stands` field naming the option whose text those sections are -- or in
+ * the content encoding, where the node holds only `## Facts` and
+ * `## Account` and every answer option carries the whole node it would make,
+ * either verbatim or as a named change against another option
+ * (commons.systems/disposition-graph/dialogue). The reader resolves the
+ * changes and writes the result onto the option as `resolved`; everything
+ * below reads that and never re-resolves, so this file needs nothing of
+ * read.mjs (see `loadGraph`: the `--input` path must not draw the reader,
+ * and its 'yaml' import, in).
+ *
+ * Every projection renders both, and a legacy node renders exactly as it
+ * did before the content encoding existed.
+ * ------------------------------------------------------------------ */
+
+// derive.mjs's own `encodingOf`, and defaulted the same way: a node object
+// built by hand -- a caller's, a test's -- keeps the legacy behaviour it has
+// always had unless it says otherwise. Every node the reader returns carries
+// the field.
+function encodingOf(node) {
+  return node?.encoding === "content" ? "content" : "legacy";
+}
+
+// The facts whose options say what they would answer in their own text, and
+// so the facts whose options carry content: read.mjs's `PER_NODE_FACTS`.
+const PER_NODE_FACT_NAMES = new Set(["answer", "persistence"]);
+
+function factByName(node, name) {
+  return (node?.facts ?? []).find((f) => f && f.name === name) ?? null;
+}
+
+function optionByName(fact, name) {
+  return (fact?.options ?? []).find((o) => o && o.name === name) ?? null;
+}
+
+/* The option whose content a content-encoded node's answer is: the one the
+ * author last confirmed, and where none is confirmed the one the answer fact
+ * recommends. Confirmed is derived from the rulings and is never a field
+ * (commons.systems/disposition-graph/viable-options). */
+function answerOptionName(node) {
+  const fact = factByName(node, "answer");
+  if (fact === null) return null;
+  return confirmedOption(node, "answer") ?? fact.recommends ?? null;
+}
+
+/* The option a fact's row leads with, and the one every projection marks
+ * confirmed: the confirmed one where a ruling confirms one, and on a legacy
+ * node the option `stands` names, whose text is in the record whether or not
+ * anyone confirmed it. */
+function standsName(node, fact) {
+  return confirmedOption(node, fact.name) ?? fact.stands ?? null;
+}
+
+/* An option's resolved content is a whole node file -- frontmatter, its
+ * `## Answer`, and where it has one its `## Rationale`. What a projection
+ * renders in the place a legacy node's `## Answer` would go is that section
+ * and not the frontmatter around it, so the resolution is split here, by the
+ * `## ` headings it holds. A section the content does not carry is null. */
+function contentSections(text) {
+  const out = {};
+  let current = null;
+  let body = [];
+  const flush = () => {
+    if (current !== null) out[current] = body.join("\n").replace(/^\n+/, "").replace(/\s+$/, "");
+  };
+  for (const line of String(text ?? "").split("\n")) {
+    const m = /^##\s+(\S[^\n]*?)\s*$/.exec(line);
+    if (m) {
+      flush();
+      current = m[1];
+      body = [];
+    } else if (current !== null) {
+      body.push(line);
+    }
+  }
+  flush();
+  return { Answer: out.Answer ?? null, Rationale: out.Rationale ?? null };
+}
+
+// The whole node an option would make, as the reader resolved it, or null
+// where the option carries no content or the resolution failed (which is a
+// validator problem the reader has already reported).
+function optionContentText(option) {
+  return typeof option?.resolved === "string" && option.resolved.trim() !== "" ? option.resolved : null;
+}
+
+/* The text a node's answer is, whichever encoding it is written in: the
+ * `## Answer` section on a legacy node, and on a content node the same
+ * section of the resolved content of the option last confirmed, or of the
+ * one recommended where none is (commons.systems/disposition-graph/
+ * unconfirmed-accumulation). Null where the node has no answer at all, which
+ * is the state of most of this record. */
+function derivedAnswer(node) {
+  if (encodingOf(node) === "legacy") return typeof node?.answer === "string" ? node.answer : null;
+  const fact = factByName(node, "answer");
+  const name = answerOptionName(node);
+  const content = name === null ? null : optionContentText(optionByName(fact, name));
+  return content === null ? null : contentSections(content).Answer;
+}
+
+function derivedRationale(node) {
+  if (encodingOf(node) === "legacy") return typeof node?.rationale === "string" ? node.rationale : null;
+  const fact = factByName(node, "answer");
+  const name = answerOptionName(node);
+  const content = name === null ? null : optionContentText(optionByName(fact, name));
+  return content === null ? null : contentSections(content).Rationale;
+}
+
+/* An option's own sentence: what it would answer, in its own words. In the
+ * content encoding the reader parses it out of the `#### <option>`
+ * subsection, ahead of the AI's accumulations and the content itself, and it
+ * is that sentence and never the whole subsection a row leads with. In the
+ * legacy encoding it is `optionText`'s, the one home of it. */
+function optionSaid(nodes, node, fact, option) {
+  if (encodingOf(node) === "content" && PER_NODE_FACT_NAMES.has(fact.name)) {
+    const said = typeof option?.sentence === "string" ? option.sentence : "";
+    return said.trim() === "" ? null : { text: said, from: node.id };
+  }
+  return optionText(nodes, node, fact, option);
+}
+
+/* The ledger of the author's words, by address, whatever shape it arrives
+ * in: the `Map` `readGraph` returns, the array `build` serializes into the
+ * browser's payload, or the object a hand-written `--input` file might hold.
+ * Empty where the graph has no `words/` ledger at all, which is the state of
+ * this record until the migration lands one. */
+function wordsIndex(graph) {
+  const words = graph?.words ?? null;
+  if (words instanceof Map) return words;
+  const out = new Map();
+  if (Array.isArray(words)) {
+    for (const e of words) if (e && typeof e.address === "string") out.set(e.address, e);
+  } else if (words && typeof words === "object") {
+    for (const [k, v] of Object.entries(words)) if (v && typeof v === "object") out.set(k, v);
+  }
+  return out;
+}
+
+// The id a ledger entry is linked by, in a document that holds every entry
+// at once: `words/2026-09-07/1` is not an id, so the two slashes go.
+function wordsAnchor(address) {
+  return `words-${String(address).replace(/^words\//, "").replace(/\//g, "-")}`;
 }
 
 // Fatal on anything the page cannot render around; a warning on a field the
@@ -176,11 +324,18 @@ export function ruleFiles(graph) {
   const files = [];
   for (const node of graph.nodes) {
     if (node.tier !== "global") continue;
-    if (typeof node.answer !== "string" || node.answer.length === 0) {
-      throw new Error(`--rules: global-tier node ${node.id} has no '## Answer' section to project`);
+    // A rule file's body is the node's answer, which in the content encoding
+    // is the `## Answer` of the resolved content of the option last confirmed
+    // -- or of the one recommended where none is -- and never the frontmatter
+    // that resolution carries around it.
+    const answer = derivedAnswer(node);
+    if (typeof answer !== "string" || answer.length === 0) {
+      throw new Error(encodingOf(node) === "content"
+        ? `--rules: global-tier node ${node.id} has no answer to project: no option of its answer fact is confirmed or recommended with content`
+        : `--rules: global-tier node ${node.id} has no '## Answer' section to project`);
     }
     const notice = `> Projected from ${node.id} (${classPhrase(node)}). ${RULES_NOTICE} If this file conflicts with the graph on the disposition ref, the graph wins.`;
-    files.push({ fileName: `${node.slug}.md`, id: node.id, content: `# ${node.question}\n${notice}\n\n${node.answer}\n` });
+    files.push({ fileName: `${node.slug}.md`, id: node.id, content: `# ${node.question}\n${notice}\n\n${answer}\n` });
   }
   return files;
 }
@@ -402,6 +557,131 @@ export function excludeUnaligned(graph) {
  * @param {{nodes: object[]}} graph
  * @returns {{nodes: object[]}}
  */
+/* `graph`, with every content-encoded node carrying the answer its options
+ * decide: the `## Answer` and `## Rationale` of the resolved content of the
+ * option last confirmed, or of the one recommended where none is, and the
+ * confirmed option's name on `stands`, which every projection reads as the
+ * label on the choice that holds the record's text.
+ *
+ * Nothing is stored for any of it -- the confirmed option is read off the
+ * rulings and the answer is read off the confirmed option
+ * (commons.systems/disposition-graph/unconfirmed-accumulation) -- so this is
+ * a projection's own view of the graph and never a mutation of it: a fresh
+ * node and a fresh fact are built wherever anything is derived, since the
+ * same graph object is still read by --rules, --frontier and --alignment in
+ * the same run, each of which derives the same values for itself.
+ *
+ * @param {{nodes?: object[]}} graph
+ * @returns {{nodes: object[]}}
+ */
+export function withDerivedAnswers(graph) {
+  const nodes = (graph.nodes || []).map((n) => {
+    if (encodingOf(n) !== "content") return n;
+    const answer = derivedAnswer(n);
+    const rationale = derivedRationale(n);
+    const facts = (n.facts || []).map((f) => {
+      if (!PER_NODE_FACT_NAMES.has(f.name)) return f;
+      const holds = confirmedOption(n, f.name);
+      return holds === null ? f : { ...f, stands: holds };
+    });
+    const next = { ...n, facts };
+    if (answer !== null) next.answer = answer;
+    if (rationale !== null) next.rationale = rationale;
+    next.answerFact = facts.find((f) => f.name === "answer") ?? null;
+    return next;
+  });
+  return { ...graph, nodes };
+}
+
+/* What one option's row in the browser says, as markdown: its own sentence,
+ * and -- in the content encoding, where the option carries the node it would
+ * make -- the content it resolves to, named against its base where it is a
+ * change rather than a whole, the entries of the author's words it rests on
+ * and diverges from, resolved from the ledger and quoted verbatim, and the
+ * AI's own accumulated support and divergence. A legacy option says what it
+ * has always said. The browser renders an option's sentence and nothing
+ * else of it, so everything the content encoding added to an option reaches
+ * the page through here. */
+function browserOptionSentence(graph, n, f, o) {
+  const said = optionSaid(graph, n, f, o);
+  if (encodingOf(n) !== "content" || !PER_NODE_FACT_NAMES.has(f.name)) return said;
+
+  const parts = said ? [said.text] : [];
+  const content = optionContentText(o);
+  if (content !== null) {
+    const sections = contentSections(content);
+    const base = o.content && o.content.form === "change" ? o.content.from : null;
+    parts.push(base
+      ? `**The content it would make the node say**, resolved from a named change against \`${base}\`.`
+      : "**The content it would make the node say.**");
+    if (sections.Answer) parts.push(sections.Answer);
+    if (sections.Rationale) parts.push(`**Rationale.**\n\n${sections.Rationale}`);
+  }
+
+  const words = wordsIndex(graph);
+  for (const [key, lead] of [["supports", "The author's words it rests on."], ["diverges", "The author's words it diverges from."]]) {
+    // "Where a reference resolves to no entry of the ledger the row carries
+    // nothing for it" (commons.systems/disposition-graph/authors-words-on-the-page).
+    const entries = (o[key] || []).map((ref) => words.get(ref)).filter(Boolean);
+    if (entries.length === 0) continue;
+    parts.push(`**${lead}**`);
+    for (const e of entries) {
+      parts.push(`[${e.address}](#${wordsAnchor(e.address)}) — ${e.date}, entry ${e.n}`);
+      parts.push(blockquote(e.text));
+    }
+  }
+  if (o.aiSupport) parts.push(`**AI support.**\n\n${o.aiSupport}`);
+  if (o.aiDivergence) parts.push(`**AI divergence.**\n\n${o.aiDivergence}`);
+
+  return parts.length === 0 ? said : { text: parts.join("\n\n"), from: n.id };
+}
+
+// One ledger entry's quotation as markdown, exactly as the ledger holds it.
+function blockquote(text) {
+  return String(text ?? "").split("\n").map((l) => (l === "" ? ">" : `> ${l}`)).join("\n");
+}
+
+/* `graph`, with the ledger as an array the page's payload can hold: a `Map`
+ * serializes to `{}`, so a browser page built from a graph read off disk
+ * would carry no words at all and a page rebuilt from `--input` would lose
+ * them. Left exactly alone where the graph has no ledger, which is this
+ * record's state until the migration lands one. */
+function withSerializableWords(graph) {
+  const words = wordsIndex(graph);
+  if (words.size === 0) return graph;
+  return { ...graph, words: [...words.values()] };
+}
+
+/* The ledger itself, once per page: every entry of `words/` by date and
+ * number, with the sentence that introduced it and the quotation verbatim,
+ * each carrying the id an option's reference links to
+ * (commons.systems/disposition-graph/quotes). Rendered here rather than by
+ * the page's own script because it is the same on every route: the entries
+ * are the record's, not any one node's, and an entry stays in the ledger
+ * whether or not an option still references it. Nothing at all where the
+ * graph has no ledger. */
+function ledgerSection(graph) {
+  const entries = [...wordsIndex(graph).values()]
+    .sort((a, b) => (a.date === b.date ? a.n - b.n : a.date < b.date ? -1 : 1));
+  if (entries.length === 0) return "";
+  const items = entries.map((e) => `<li id="${alignEsc(wordsAnchor(e.address))}">`
+    + `<p class="wref"><span class="mono">${alignEsc(e.address)}</span> · ${alignEsc(e.date)} · entry ${alignEsc(e.n)}</p>`
+    + (e.context ? `<p class="wctx">${alignEsc(e.context)}</p>` : "")
+    + `<blockquote>${alignEsc(e.text)}</blockquote></li>`).join("");
+  return '<style>'
+    + '#words-ledger { max-width: 46rem; margin: 32px auto 64px; padding: 0 24px; }'
+    + '#words-ledger ol { list-style: none; padding: 0; }'
+    + '#words-ledger li { margin: 0 0 24px; }'
+    + '#words-ledger .wref { font-size: 13px; opacity: .7; margin: 0 0 4px; }'
+    + '#words-ledger .wctx { margin: 0 0 6px; }'
+    + '#words-ledger blockquote { margin: 0; padding-left: 14px; border-left: 2px solid currentColor; white-space: pre-wrap; opacity: .85; }'
+    + '</style>'
+    + '<section id="words-ledger" aria-label="The author’s words">'
+    + '<h2>The author’s words</h2>'
+    + '<p>Every entry of the ledger on this ref, by date and number. An option that rests on one, or diverges from one, links here.</p>'
+    + `<ol>${items}</ol></section>`;
+}
+
 export function withOptionSentences(graph) {
   const nodes = graph.nodes.map((n) => {
     const facts = n.facts;
@@ -410,7 +690,7 @@ export function withOptionSentences(graph) {
       ...n,
       facts: facts.map((f) => ({
         ...f,
-        options: (f.options || []).map((o) => ({ ...o, sentence: optionText(graph, n, f, o) })),
+        options: (f.options || []).map((o) => ({ ...o, sentence: browserOptionSentence(graph, n, f, o) })),
       })),
     };
   });
@@ -436,8 +716,8 @@ export function build(template, graph) {
   if (!template.includes(MARKER)) throw new Error(`template has no ${MARKER} marker`);
   // "<" only ever occurs inside a JSON string, so escaping it keeps the
   // payload valid JSON and keeps "</script" out of the document.
-  const json = JSON.stringify(withoutProbes(withOptionSentences(graph))).replace(/</g, "\\u003c");
-  const block = `<script type="application/json" id="graph">${json}</script>`;
+  const json = JSON.stringify(withoutProbes(withOptionSentences(withSerializableWords(graph)))).replace(/</g, "\\u003c");
+  const block = `<script type="application/json" id="graph">${json}</script>${ledgerSection(graph)}`;
   return template.replace(MARKER, () => block);
 }
 
@@ -496,7 +776,11 @@ function factLine(node, fact) {
     bits.push(`ruled ${option.ruling.response} on ${fact.ruled}, ${option.ruling.date}${moved}`);
   }
   if (fact.name === "answer") {
-    bits.push(fact.stands ? `stands ${fact.stands}` : "nothing stands");
+    // What the record's own text is: `stands` on a legacy node, and on a
+    // content node the option a ruling confirms, which is derived and never
+    // a field.
+    const holds = standsName(node, fact);
+    bits.push(holds ? `stands ${holds}` : "nothing stands");
     if (node.fence) bits.push("fence");
   }
   const options = fact.options
@@ -592,6 +876,7 @@ export function renderFrontier(graph) {
       `${node.class} (${classSourceWord(node)})`,
       `rank ${node.rank.toFixed(4)}`,
     ];
+    if (encodingOf(node) === "content") head.push("content");
     if (node.tier === "global") head.push("tier global");
     if (node.boost != null) head.push(`boost ${node.boost}`);
     lines.push(`- ${head.join(" — ")}`);
@@ -699,6 +984,10 @@ const INDICATIONS_HINT = "Context, not rows: each is a node of its own and is ru
  * choice (commons.systems/disposition-graph/alignment-page, the author's
  * finding on commons.systems/public/agency). */
 function standingState(n) {
+  // In the content encoding nothing "stands": the record's text is the
+  // content of the option a ruling confirms, and where none is confirmed
+  // there is no text of the author's in that place at all.
+  if (encodingOf(n) === "content") return confirmedOption(n, "answer") ? "ratified" : "none";
   const stands = n.answerFact ? n.answerFact.stands : null;
   const hasAnswer = typeof n.answer === "string" && n.answer.length > 0;
   if (!stands || !hasAnswer) return "none";
@@ -711,7 +1000,8 @@ function standingState(n) {
 function pendingOptions(n) {
   const fact = n.answerFact;
   if (!fact) return [];
-  return fact.options.filter((o) => o.name !== fact.stands);
+  const holds = standsName(n, fact);
+  return fact.options.filter((o) => o.name !== holds);
 }
 
 /* The name a row that keeps the text already in the record goes by: the
@@ -720,10 +1010,19 @@ function pendingOptions(n) {
  * ordinary choice when on an AI-drafted node written in the author's own voice
  * it is the least safe one on the page (the author's finding of 2026-09-04 on
  * commons.systems/public/agency). Where nothing stands there is no such row. */
+const CONFIRMED_LABEL = "confirmed by the author";
+const UNCONFIRMED_LABEL = "the text in the record: a draft no one has confirmed";
 const STANDING_LABELS = {
-  ratified: "the ratified answer",
-  draft: "a draft no one has confirmed",
+  ratified: CONFIRMED_LABEL,
+  draft: UNCONFIRMED_LABEL,
 };
+
+/* What the right-hand column says where no option is confirmed. "A projection
+ * that puts an unconfirmed text in that place is showing the author the AI's
+ * draft where their own choice belongs"
+ * (commons.systems/disposition-graph/viable-options), so the column says so
+ * in words and renders no draft there. */
+const PANE_NONE_CONFIRMED = "No option here is confirmed, so nothing of yours stands in this place. Choose one on the left and this column shows the node as it would stand under it.";
 
 const EARLY_STAGES = new Set(["periagogic", "maieutic"]);
 const LOCKED_NOTE = "Not open for a ruling yet: a confirmation recorded before the ruling stage is invalid, so everything below is shown and nothing below can be answered. The chip above opens the dialogue that moves this node on.";
@@ -1360,8 +1659,8 @@ function factLabel(ctx, n, fact) {
  * with the confirmed choice first where there is one -- what the answer fact
  * stands on, or the option the author ruled for on any other, as the dialogue
  * node has every projection show it. */
-function orderedOptions(fact) {
-  const first = fact.stands || fact.ruled || null;
+function orderedOptions(node, fact) {
+  const first = standsName(node, fact) || fact.ruled || null;
   if (!first) return fact.options;
   return [...fact.options].sort((a, b) => (a.name === first ? -1 : b.name === first ? 1 : 0));
 }
@@ -1489,10 +1788,56 @@ function renderReadingAccounts(ctx, readings) {
  * against. Everything else is one step down, with the control for the author's
  * reason and their edits (commons.systems/disposition-graph/alignment-page,
  * commons.systems/disposition-graph/progressive-disclosure). */
+const LEDGER_LABELS = {
+  supports: "The author's words it rests on",
+  diverges: "The author's words it diverges from",
+};
+
+/* The entries of the author's words one option references, resolved from the
+ * ledger and quoted verbatim with the date and the entry number they are
+ * addressed by. They belong on the option rows and nowhere else: an option is
+ * what a reference is recorded on, and the words the author said of the node
+ * as a whole are the node's, not any one option's
+ * (commons.systems/disposition-graph/authors-words-on-the-page). A reference
+ * that resolves to no entry carries nothing rather than a marker, since a
+ * ledger the projection cannot read is not a fact about the option. */
+function renderLedgerWords(ctx, o) {
+  let out = "";
+  for (const key of ["supports", "diverges"]) {
+    const entries = (o[key] || []).map((ref) => ctx.words.get(ref)).filter(Boolean);
+    if (entries.length === 0) continue;
+    out += `<p class="drilllbl">${alignEsc(LEDGER_LABELS[key])}</p>`;
+    out += entries.map((e) => '<blockquote class="wordsentry">'
+      + `<p class="wordsref mono">${alignEsc(e.address)} · ${alignEsc(e.date)} · entry ${alignEsc(e.n)}</p>`
+      + (e.context ? `<p class="wordsctx">${alignEsc(e.context)}</p>` : "")
+      + `<div class="mdbody">${alignHtml(e.text)}</div>`
+      + "</blockquote>").join("");
+  }
+  return out;
+}
+
+/* What the AI accumulated on one option while it was unconfirmed: the support
+ * it gathered and the divergence it gathered, each written into the option's
+ * own subsection and read back by the reader. They are the option's, not the
+ * node's, and they say what a later session would otherwise have to rediscover
+ * (commons.systems/disposition-graph/unconfirmed-accumulation). */
+function renderAiAccumulations(o) {
+  return (o.aiSupport ? `<p class="drilllbl">The AI's support</p><div class="mdbody">${alignHtml(o.aiSupport)}</div>` : "")
+    + (o.aiDivergence ? `<p class="drilllbl">The AI's divergence</p><div class="mdbody">${alignHtml(o.aiDivergence)}</div>` : "");
+}
+
 function renderOption(ctx, n, fact, o, doc, locked) {
   const recommended = fact.recommends === o.name;
-  const stands = fact.name === "answer" && fact.stands === o.name;
-  const said = optionText(ctx.nodes, n, fact, o);
+  // Confirmed is a label derived from the rulings and never read from a
+  // field (commons.systems/disposition-graph/viable-options). On a legacy
+  // node `stands` still names the option whose text is in the record, and
+  // that text is a draft until someone confirms it: the row says which of
+  // the two this is, and the word "stands" is not the page's label for
+  // either.
+  const isConfirmed = confirmedOption(n, fact.name) === o.name;
+  const holdsTheText = isConfirmed
+    || (fact.name === "answer" && encodingOf(n) === "legacy" && fact.stands === o.name);
+  const said = optionSaid(ctx.nodes, n, fact, o);
   // The row carries the option's name nowhere: the name is how a ruling is
   // stored and the sentence is the decision, and the author's words of
   // 2026-09-04 strike the id-shaped string from the row (`alignment-page`).
@@ -1508,8 +1853,8 @@ function renderOption(ctx, n, fact, o, doc, locked) {
   if (recommended) {
     pills += `<span class="pill alt-adopted">recommended${fact.boldness ? `, ${alignEsc(fact.boldness)} boldness` : ""}</span>`;
   }
-  if (stands) {
-    pills += `<span class="pill alt-stands">stands: ${alignEsc(STANDING_LABELS[standingState(n)] || "")}</span>`;
+  if (holdsTheText) {
+    pills += `<span class="pill alt-stands">${alignEsc(isConfirmed ? CONFIRMED_LABEL : UNCONFIRMED_LABEL)}</span>`;
   }
   if (o.ruling) {
     pills += `<span class="pill alt-ruled">ruled: ${alignEsc(o.ruling.response)}, ${alignEsc(o.ruling.date)}</span>`;
@@ -1532,7 +1877,12 @@ function renderOption(ctx, n, fact, o, doc, locked) {
   }
 
   const rest = said ? restOf(said.text) : "";
-  const words = o.source === "author" ? authorWordsFor(n, o.ref) : null;
+  const ledger = renderLedgerWords(ctx, o);
+  // The by-date reading of a legacy node's `## Disposition`, and only where
+  // the option carries no reference into the ledger: the ledger is where the
+  // author's words live, and an option migrated to it carries the addresses
+  // instead (commons.systems/disposition-graph/quotes).
+  const words = ledger === "" && o.source === "author" ? authorWordsFor(n, o.ref) : null;
   const wouldStand = fact.name === "answer" && recommended && n.fence
     ? `<p class="drilllbl">The text as it would stand</p><div class="mdbody">${alignHtml(n.fence.sections.Answer)}</div>`
     : "";
@@ -1550,10 +1900,12 @@ function renderOption(ctx, n, fact, o, doc, locked) {
     + `<summary>${alignEsc(OPTION_DRILL_LBL)}</summary>`
     + (rest ? `<div class="mdbody">${alignHtml(rest)}</div>` : "")
     + wouldStand
+    + ledger
     + (words
       ? `<p class="drilllbl">The author's words it rests on</p><div class="mdbody">${alignHtml(words.text)}</div>`
         + (words.whole ? "" : '<p class="hint-sm">The rest of the author’s words on this node are below.</p>')
       : "")
+    + renderAiAccumulations(o)
     + reason
     + renderReadingAccounts(ctx, o.readings)
     + divergence
@@ -1633,7 +1985,7 @@ function restOf(prose) {
  * recommendation says so and marks no row, rather than rendering an unmarked
  * list that reads as a recommendation withheld. */
 function renderFact(ctx, n, fact, doc, locked) {
-  const rows = orderedOptions(fact).map((o) => renderOption(ctx, n, fact, o, doc, locked)).join("");
+  const rows = orderedOptions(n, fact).map((o) => renderOption(ctx, n, fact, o, doc, locked)).join("");
   const ruledOpt = fact.ruled ? fact.options.find((o) => o.name === fact.ruled) : null;
   const ruled = ruledOpt
     ? `<p class="ruled">Ruled ${alignEsc(ruledOpt.ruling.response)} on <span class="mono">${alignEsc(fact.ruled)}</span>, ${alignEsc(ruledOpt.ruling.date)}.`
@@ -1787,7 +2139,94 @@ function renderAsk(ctx, n, doc, bare) {
  * carrying one and a fence is a draft amending a draft and the diff is
  * still what the author needs to see.
  */
-function renderPane(n) {
+const PANE_UNDER_LBL = "The node as it would stand under this option";
+const PANE_CONFIRMED_LBL = "The node as it stands, confirmed by the author";
+
+/* The right-hand column of a content-encoded node: a preview of the node
+ * under whatever option the middle column has selected, re-rendered as the
+ * selection moves. Every option's content is rendered here once, hidden, and
+ * the script at the foot of the page shows the one the author has chosen;
+ * nothing is computed in the browser, so the column says exactly what the
+ * projector resolved (commons.systems/disposition-graph/alignment-page).
+ *
+ * With nothing selected the column shows the option the rulings confirm, and
+ * where no ruling confirms one it says so in words. It does not fall back to
+ * the recommendation: a draft rendered in the place the confirmed text stands
+ * would read as the record's answer, which is the thing this column exists to
+ * show and the one thing it must not fake
+ * (commons.systems/disposition-graph/viable-options). */
+function renderContentPane(n) {
+  const fact = factByName(n, "answer");
+  if (fact === null) return "";
+  const options = (fact.options || []).filter((o) => optionContentText(o) !== null);
+  if (options.length === 0) return "";
+  const confirmed = confirmedOption(n, "answer");
+
+  const bodyOf = (o) => {
+    const parts = contentSections(optionContentText(o));
+    const base = o.content && o.content.form === "change" && o.content.from
+      ? `<p class="hint-sm">Recorded as a named change against <code>${alignEsc(o.content.from)}</code>, resolved here.</p>`
+      : "";
+    return base + `<div class="mdbody">${alignHtml(parts.Answer || "")}${parts.Rationale ? alignHtml(parts.Rationale) : ""}</div>`;
+  };
+
+  const blocks = options.map((o) => `<div data-pane-option="${alignEsc(o.name)}" hidden>`
+    + `<p class="lbl edit-lbl">${alignEsc(PANE_UNDER_LBL)}</p>`
+    + `<p class="idv mono">${alignEsc(o.name)}</p>`
+    + bodyOf(o)
+    + "</div>").join("");
+
+  const confirmedOpt = confirmed ? optionByName(fact, confirmed) : null;
+  const fallback = confirmedOpt && optionContentText(confirmedOpt) !== null
+    ? `<div data-pane-fallback><p class="lbl">${alignEsc(PANE_CONFIRMED_LBL)}</p>${bodyOf(confirmedOpt)}</div>`
+    : `<div data-pane-fallback><p class="lbl">${alignEsc(PANE_LBL)}</p><p class="none">${alignEsc(PANE_NONE_CONFIRMED)}</p></div>`;
+
+  return '<aside class="col-pane">'
+    + `<section class="stands" data-pane-preview>${fallback}${blocks}</section>`
+    + "</aside>";
+}
+
+/* The script that moves the preview, emitted once and only where a page has
+ * at least one content-encoded pane. It listens for the change on the radio
+ * groups the middle column already writes, and it also syncs on load, since a
+ * response restored from storage sets the radio programmatically and fires no
+ * change event. */
+const PANE_SCRIPT = `<script>
+(function () {
+  function paneSync(item) {
+    var pane = item.querySelector("[data-pane-preview]");
+    if (!pane) return;
+    var doc = item.getAttribute("data-doc");
+    var sel = item.querySelector('input[type=radio][name="fact:' + doc + ':answer"]:checked');
+    var name = sel ? sel.getAttribute("data-option") : null;
+    var shown = false;
+    var blocks = pane.querySelectorAll("[data-pane-option]");
+    for (var i = 0; i < blocks.length; i++) {
+      var hit = name !== null && blocks[i].getAttribute("data-pane-option") === name;
+      blocks[i].hidden = !hit;
+      if (hit) shown = true;
+    }
+    var fb = pane.querySelector("[data-pane-fallback]");
+    if (fb) fb.hidden = shown;
+  }
+  function paneSyncAll() {
+    var items = document.querySelectorAll("[data-item]");
+    for (var i = 0; i < items.length; i++) paneSync(items[i]);
+  }
+  document.addEventListener("change", function (e) {
+    var t = e.target;
+    if (!t || t.type !== "radio" || !t.closest) return;
+    var item = t.closest("[data-item]");
+    if (item) paneSync(item);
+  });
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", paneSyncAll);
+  else paneSyncAll();
+  setTimeout(paneSyncAll, 0);
+})();
+</script>`;
+
+function renderPane(ctx, n) {
+  if (encodingOf(n) === "content") return renderContentPane(n);
   const hasAnswer = typeof n.answer === "string" && n.answer.length > 0;
   let body;
   if (n.fence) {
@@ -1859,7 +2298,11 @@ function renderAlignmentItem(ctx, n) {
 
   // With no answer and no fence there is no disposition to render, so the
   // right-hand column is not held open and the item is one column.
-  const bare = !(typeof n.answer === "string" && n.answer.length > 0) && !n.fence;
+  // A content-encoded node's disposition is in the content of its options,
+  // not in an `## Answer` section, so the pane itself says whether there is
+  // anything to hold the column open for.
+  const pane = renderPane(ctx, n);
+  const bare = pane === "";
   let html = `<article class="item${bare ? " nostand" : ""}" id="item-${alignEsc(doc)}" data-item data-id="${alignEsc(n.id)}" data-doc="${alignEsc(doc)}" data-stage="${alignEsc(n.stage)}" hidden>`;
   html += '<div class="col-ask">';
   html += `<h2 class="iq">${alignEsc(n.question || n.id)}</h2>`;
@@ -1867,7 +2310,7 @@ function renderAlignmentItem(ctx, n) {
   html += renderEyebrow(n);
   html += renderAsk(ctx, n, doc, bare);
   html += "</div>";
-  html += renderPane(n);
+  html += pane;
   html += "</article>";
   return html;
 }
@@ -1908,6 +2351,7 @@ function alignmentPageHtml(graph, items) {
     byId: new Map((graph.nodes || []).map((n) => [n.id, n])),
     browser: browserAddress(graph),
     repo: sessionRepo(graph),
+    words: wordsIndex(graph),
   };
 
   // The rail is the only view of the whole frontier once one node is shown
@@ -1927,6 +2371,10 @@ function alignmentPageHtml(graph, items) {
   }).join("")}</ol>`;
 
   const itemsHtml = items.map((n) => renderAlignmentItem(ctx, n)).join("");
+  // Emitted only where a content-encoded pane exists, and with its own
+  // leading newline, so that a page without one is byte-for-byte the page
+  // this projector wrote before the preview existed.
+  const paneScript = itemsHtml.includes("data-pane-preview") ? `\n${PANE_SCRIPT}` : "";
 
   const emptyHtml = total === 0
     ? '<p class="empty">Nothing is unanswered. Every disposition has been confirmed by the author.</p>'
@@ -1956,7 +2404,7 @@ function alignmentPageHtml(graph, items) {
     ${itemsHtml}
     ${emptyHtml}
   </main>
-</div>
+</div>${paneScript}
 <footer class="foot" id="foot">
   <div class="foot-in">
     <span class="foot-count" id="staged-count">0 responses staged</span>
@@ -1999,7 +2447,7 @@ export async function project(opts) {
   if (!opts.out) return { out: null, html: null, graph, warnings: [] };
   const warnings = check(graph);
   const template = await readFile(resolve(HERE, "browser-template.html"), "utf8");
-  const html = build(template, excludeUnaligned(graph));
+  const html = build(template, excludeUnaligned(withDerivedAnswers(graph)));
   const out = resolve(opts.out);
   await mkdir(dirname(out), { recursive: true });
   await writeFile(out, html);
@@ -2062,6 +2510,26 @@ async function runCli(opts) {
     }
   }
 
+  /* The term concordance the clean-context review's mechanical tier reads
+   * before a reading is launched: every term any node defines, the node that
+   * defines it, and every node whose text uses it, with whether that user has
+   * a path to the definition (commons.systems/disposition-graph/survey-selection,
+   * "The mechanical tier gates the launch"). The computation is
+   * `concordance.mjs`'s and is imported here lazily, so that the projector's
+   * other outputs neither load it nor fail with it. */
+  if (opts.concordance) {
+    const { concordance } = await import("./concordance.mjs");
+    const listing = `${JSON.stringify(concordance(graph), null, 2)}\n`;
+    if (opts.concordance === "-") {
+      process.stdout.write(listing);
+    } else {
+      const filePath = resolve(opts.concordance);
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, listing);
+      process.stdout.write(`wrote ${filePath}\n`);
+    }
+  }
+
   if (opts.alignment) {
     const alignmentTemplate = await readFile(resolve(HERE, "alignment-template.html"), "utf8");
     const alignmentHtml = buildAlignment(alignmentTemplate, graph);
@@ -2082,8 +2550,8 @@ async function runCli(opts) {
     );
   }
 
-  if (!out && !opts.rules && !opts.ancestry && !opts.frontier && !opts.alignment) {
-    process.stderr.write("nothing to do: pass --out, --rules, --ancestry (with --local), --frontier, or --alignment\n");
+  if (!out && !opts.rules && !opts.ancestry && !opts.frontier && !opts.alignment && !opts.concordance) {
+    process.stderr.write("nothing to do: pass --out, --rules, --ancestry (with --local), --frontier, --alignment, or --concordance\n");
     process.exitCode = 1;
   }
 }

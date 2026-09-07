@@ -12,7 +12,7 @@ import os from "node:os";
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { check, build, project, writeRules, checkRules, writeAncestry, excludeUnaligned, renderFrontier, withOptionSentences, buildAlignment, orderAlignmentItems, frontmatterEdits, wordDiff } from "./project.mjs";
+import { check, build, project, writeRules, checkRules, writeAncestry, excludeUnaligned, renderFrontier, withOptionSentences, withDerivedAnswers, buildAlignment, orderAlignmentItems, frontmatterEdits, wordDiff, parseArgs } from "./project.mjs";
 import { readGraph } from "./read.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -2004,7 +2004,7 @@ test("a row carries the status the record holds: its source, the recommendation,
 
   const standing = optionHtml(answer, "standing");
   assert.ok(standing.includes('<span class="pill alt-src">from the author, 2026-01-01</span>'), "the source and its ref");
-  assert.ok(standing.includes('<span class="pill alt-stands">stands: the ratified answer</span>'), "what stands, named for the authority it has");
+  assert.ok(standing.includes('<span class="pill alt-stands">confirmed by the author</span>'), "the text in the record, labelled by the ruling that confirms it");
   assert.ok(standing.includes('<span class="pill alt-ruled">ruled: confirm, 2026-01-01</span>'), "the author's own ruling on it");
 
   const drafted = optionHtml(answer, "the-drafted-answer");
@@ -2029,17 +2029,24 @@ test("a row carries the status the record holds: its source, the recommendation,
 // A choice that keeps the text already in the record is named for the
 // authority that text has and never for more: only a ruling on the answer
 // fact makes it the author's, and a class conferred on the authority fact is
-// a ruling about who decides, not about this text.
-test("the standing row is named for the authority the text actually has, and is not offered where nothing stands", () => {
+// a ruling about who decides, not about this text. The label is "confirmed",
+// derived from the rulings by `confirmedOption` and read from no field, and
+// the word "stands" is not the page's name for either state
+// (commons.systems/disposition-graph/viable-options).
+test("the row that holds the text is labelled confirmed only where a ruling confirms it", () => {
   const ratified = optionHtml(factHtml(pageItem("ruling-node"), "answer"), "standing");
-  assert.ok(ratified.includes("stands: the ratified answer"), "a ruling on the answer fact makes it the author's");
+  assert.ok(ratified.includes('<span class="pill alt-stands">confirmed by the author</span>'), "a ruling on the answer fact makes it the author's");
 
   const draft = optionHtml(factHtml(pageItem("child-ruling", ALIGNMENT_GRAPH), "answer"), "standing");
   assert.equal(nodeBySlug(ALIGNMENT_GRAPH, "child-ruling").class, "unanswered", "fixture precondition: no ruling on its answer");
-  assert.ok(draft.includes("stands: a draft no one has confirmed"), "and without one it is a draft, whatever class is conferred elsewhere");
+  assert.ok(
+    draft.includes('<span class="pill alt-stands">the text in the record: a draft no one has confirmed</span>'),
+    "and without one it is a draft, whatever class is conferred elsewhere",
+  );
 
   const html = buildAlignment(ALIGNMENT_TEMPLATE, PAGE_GRAPH);
   assert.ok(!html.includes("the node as it stands"), "never a standing the text does not have");
+  assert.ok(!/pill alt-stands">stands:/.test(html), "and the label is confirmed, not stands");
   assert.ok(!html.includes("keep the answer as ratified") && !html.includes("keep the AI's draft"), "and never the old captions");
 
   // Nothing stands on the maieutic node, so no row offers to keep it.
@@ -3045,4 +3052,220 @@ test("with nothing staged the instruction is the bare /align, and both routes st
   page.alCopyAll();
   assert.equal(copied, "/align", "nothing to carry, so nothing is claimed");
   assert.equal(new URL(env.byId["btn-launch"].href).searchParams.get("prompt"), "/align");
+});
+
+/* ------------------------------------------------------ the content encoding
+
+   A content-encoded node carries no `## Answer` section and no `stands`
+   field: its answer is the content of the option a ruling confirms, and
+   "confirmed" is a label the rulings derive rather than a field anything
+   reads (commons.systems/disposition-graph/viable-options,
+   commons.systems/disposition-graph/dialogue). The fixture graph holds both
+   encodings side by side, because every projection has to render both while
+   the migration runs, and the legacy rendering must not move. */
+
+const CONTENT_PAGE = await readGraph(resolve(HERE, "fixtures/content-page"));
+const contentItem = (slug) => pageItem(slug, CONTENT_PAGE);
+
+test("the fixture holds both encodings side by side", () => {
+  const enc = (slug) => nodeBySlug(CONTENT_PAGE, slug).encoding;
+  assert.equal(enc("ruling-content"), "content");
+  assert.equal(enc("open-content"), "content");
+  assert.equal(enc("legacy-beside"), "legacy");
+  assert.equal(CONTENT_PAGE.words.size, 2, "and a ledger of the author's words");
+});
+
+test("the right-hand column previews a content node under every option, and stands on the confirmed one until something is selected", () => {
+  const item = contentItem("ruling-content");
+  assert.ok(item.includes("data-pane-preview"), "the column is a preview");
+
+  for (const name of ["the-confirmed-column", "the-previewing-column", "the-previewing-column-with-a-note"]) {
+    assert.ok(item.includes(`data-pane-option="${name}"`), `a block for ${name}`);
+  }
+
+  // With nothing selected the column holds the option the rulings confirm,
+  // named for the ruling and not for the field it is not read from.
+  const fallback = item.slice(item.indexOf("data-pane-fallback"), item.indexOf('<div data-pane-option='));
+  assert.ok(fallback.includes("The node as it stands, confirmed by the author"));
+  assert.ok(fallback.includes("The content of the option the author last confirmed, and nothing else."));
+  assert.ok(!fallback.includes("re-rendered as the selection moves"), "and never the recommendation");
+
+  // Each block is the node as it would stand under that option, resolved:
+  // a named change is applied and says what it was recorded against.
+  const at = item.indexOf('<div data-pane-option="the-previewing-column-with-a-note"');
+  const note = item.slice(at, item.indexOf("</div>", item.indexOf("mdbody", at)));
+  assert.ok(note.includes("The node as it would stand under this option"));
+  assert.ok(note.includes("named change against <code>the-previewing-column</code>"), "with the base of the change named");
+  assert.ok(note.includes("resolved from that option's content"), "the base's own text, carried by the change");
+  assert.ok(note.includes("AI's draft where the author's own choice belongs"), "and the text the change adds");
+
+  // The frontmatter of the resolved document is not the node's disposition
+  // and is not rendered in the place the disposition goes.
+  assert.ok(!note.includes("question: What does the right-hand column"), "no frontmatter in the pane");
+});
+
+test("where no option is confirmed the column says so in words rather than showing a draft in that place", () => {
+  const item = contentItem("open-content");
+  const fallback = item.slice(item.indexOf("data-pane-fallback"), item.indexOf('<div data-pane-option='));
+  assert.ok(fallback.includes("No option here is confirmed"), "it says so");
+  assert.ok(fallback.includes("Choose one on the left"), "and says what the column will then show");
+  assert.ok(!fallback.includes("The recommended option's content"), "the recommendation is not put in the confirmed text's place");
+
+  // The recommendation is still previewable, one selection away.
+  assert.ok(item.includes('data-pane-option="the-recommended-draft"'));
+});
+
+test("the preview script is emitted only where a content pane exists", () => {
+  const withContent = buildAlignment(ALIGNMENT_TEMPLATE, CONTENT_PAGE);
+  assert.ok(withContent.includes("function paneSync(item)"), "the page that has a preview carries the script that moves it");
+  assert.ok(withContent.includes('input[type=radio][name="fact:'), "which reads the middle column's own radio group");
+
+  const legacyOnly = buildAlignment(ALIGNMENT_TEMPLATE, PAGE_GRAPH);
+  assert.ok(!legacyOnly.includes("function paneSync(item)"), "and a page of legacy nodes is the page it was before");
+  assert.ok(!legacyOnly.includes("data-pane-preview"));
+});
+
+test("a legacy node beside a content one keeps the pane it had", () => {
+  const item = contentItem("legacy-beside");
+  assert.ok(!item.includes("data-pane-preview"), "no preview on a legacy node");
+  assert.ok(item.includes("The node as it would stand"), "the pane label it always had");
+  assert.ok(item.includes("The edit, against a draft no one has confirmed"), "and its diff against the text in the record");
+});
+
+test("a content node's option row is labelled confirmed by the ruling, and the rest are not labelled at all", () => {
+  const answer = factHtml(contentItem("ruling-content"), "answer");
+
+  const confirmed = optionHtml(answer, "the-confirmed-column");
+  assert.ok(confirmed.includes('<span class="pill alt-stands">confirmed by the author</span>'));
+  assert.ok(confirmed.includes('<span class="pill alt-ruled">ruled: confirm, 2026-09-07</span>'));
+
+  for (const name of ["the-previewing-column", "the-previewing-column-with-a-note"]) {
+    assert.ok(!optionHtml(answer, name).includes("alt-stands"), `${name} holds no text and claims none`);
+  }
+
+  // The row leads with the option's own sentence and not with the markers
+  // and fences its subsection carries.
+  assert.ok(confirmed.includes("The column holds the content of the option the author last confirmed"));
+  assert.ok(!confirmed.includes("**Content.**") && !confirmed.includes("```markdown"), "no apparatus on the row");
+});
+
+test("an option's drill-down carries the author's words it rests on and diverges from, the AI's accumulations, and the readings", () => {
+  const answer = factHtml(contentItem("ruling-content"), "answer");
+  const previewing = optionHtml(answer, "the-previewing-column");
+
+  // The author's words, resolved from the ledger and quoted verbatim with
+  // the date and the entry number they are addressed by.
+  assert.ok(previewing.includes("The author's words it rests on"));
+  assert.ok(previewing.includes("words/2026-09-07/2 · 2026-09-07 · entry 2"));
+  assert.ok(previewing.includes("Show me the node as it would stand under whichever option I have selected."));
+  assert.ok(previewing.includes("The author's words it diverges from"));
+  assert.ok(previewing.includes("words/2026-09-07/1 · 2026-09-07 · entry 1"));
+  assert.ok(previewing.includes("kept in a ledger outside the graph"), "the words it diverges from, in the author's own words");
+
+  // What the AI accumulated on the option while it was unconfirmed.
+  assert.ok(previewing.includes("The AI's support"));
+  assert.ok(previewing.includes("The author asked for exactly this on 2026-09-07."));
+  assert.ok(previewing.includes("The AI's divergence"));
+  assert.ok(previewing.includes("column they cannot hold two options against at once"));
+
+  // And the reading's relation to it, from the reading node's own `bears`.
+  assert.ok(previewing.includes("example.test/main/reading-node"), "the reading that bears on it");
+  assert.ok(/adopted/.test(previewing), "with the relation it recorded");
+
+  // An option with no ledger reference carries no heading for one.
+  const confirmedOnly = optionHtml(answer, "the-previewing-column-with-a-note");
+  assert.ok(!confirmedOnly.includes("The author's words it rests on"));
+});
+
+test("the browser reads a content node's answer, its options' content, and the ledger the options reference", () => {
+  const html = build(TEMPLATE, excludeUnaligned(withDerivedAnswers(CONTENT_PAGE)));
+  const json = JSON.parse(html.match(/<script type="application\/json" id="graph">([\s\S]*?)<\/script>/)[1].replace(/\\u003c/g, "<"));
+  const node = json.nodes.find((n) => n.slug === "ruling-content");
+
+  // The answer is the confirmed option's content, and the frontmatter of the
+  // document that content is written as is not part of it.
+  assert.equal(node.answer, "The content of the option the author last confirmed, and nothing else.");
+  assert.ok(!String(node.answer).includes("question:"));
+
+  // "Confirmed" reaches the page as the option the rulings confirm.
+  const fact = node.facts.find((f) => f.name === "answer");
+  assert.equal(fact.stands, "the-confirmed-column");
+
+  // Each option carries its sentence, then the content it would make the
+  // node say, resolved, with the base of a named change named.
+  const withNote = fact.options.find((o) => o.name === "the-previewing-column-with-a-note");
+  assert.ok(withNote.sentence.text.startsWith("The preview, and a line saying so"));
+  assert.ok(withNote.sentence.text.includes("resolved from a named change against `the-previewing-column`"));
+  assert.ok(withNote.sentence.text.includes("Where no option is confirmed the column says so"));
+
+  // And the words it references, as a link into the ledger the page renders.
+  const previewing = fact.options.find((o) => o.name === "the-previewing-column");
+  assert.ok(previewing.sentence.text.includes("[words/2026-09-07/2](#words-2026-09-07-2)"));
+  assert.ok(previewing.sentence.text.includes("**AI support.**"));
+
+  // The ledger itself: every entry, by date and number, with its text.
+  assert.ok(html.includes('<section id="words-ledger"'), "the browser renders the ledger");
+  assert.ok(html.includes('id="words-2026-09-07-1"') && html.includes('id="words-2026-09-07-2"'));
+  assert.ok(html.includes("Author quotes are kept in a ledger outside the graph"));
+  assert.ok(html.includes("Asked what the right-hand column of the alignment page holds."), "with the line saying what was asked");
+});
+
+test("a graph with no ledger and no content node reaches the browser exactly as it did", () => {
+  const before = build(TEMPLATE, excludeUnaligned(VALID_GRAPH));
+  const after = build(TEMPLATE, excludeUnaligned(withDerivedAnswers(VALID_GRAPH)));
+  assert.equal(after, before, "the content path adds nothing where there is no content");
+  assert.ok(!after.includes("words-ledger"), "and no empty ledger section");
+});
+
+test("a content-encoded global-tier node projects its rule from the content of its confirmed option", async () => {
+  const dir = await freshTmpDir("dg-rules-content-");
+  // `tier` is set here rather than in the fixture: the reader refuses
+  // `tier: global` on a node with no '## Answer' section, which a
+  // content-encoded node never has (read.mjs, "'tier' requires an '## Answer'
+  // section"). The projector's own contract is what is under test.
+  const graph = {
+    ...CONTENT_PAGE,
+    nodes: CONTENT_PAGE.nodes.map((n) => (n.slug === "ruling-content" ? { ...n, tier: "global" } : n)),
+  };
+  const { written } = await writeRules(graph, dir);
+  assert.deepEqual(written.map((f) => f.split("/").pop()), ["ruling-content.md"]);
+
+  const body = await readFile(join(dir, "ruling-content.md"), "utf8");
+  assert.ok(body.startsWith("# What does the right-hand column of the alignment page hold?\n"));
+  assert.ok(body.includes("> Projected from example.test/main/ruling-content"));
+  assert.ok(body.includes("The content of the option the author last confirmed, and nothing else."));
+  assert.ok(!body.includes("question: What does the right-hand column"), "the answer, not the document it is written in");
+  assert.ok(!body.includes("```markdown"));
+
+  // And the check reads the same body back.
+  assert.ok((await checkRules(graph, dir)).ok);
+});
+
+test("a content node with nothing confirmed and nothing recommended has no rule to project", async () => {
+  const dir = await freshTmpDir("dg-rules-content-bare-");
+  const stripped = CONTENT_PAGE.nodes.map((n) => {
+    if (n.slug !== "open-content") return n;
+    return {
+      ...n,
+      tier: "global",
+      facts: n.facts.map((f) => (f.name === "answer" ? { ...f, recommends: null, options: [] } : f)),
+    };
+  });
+  await assert.rejects(
+    () => writeRules({ ...CONTENT_PAGE, nodes: stripped }, dir),
+    /no option of its answer fact is confirmed or recommended with content/,
+  );
+});
+
+test("the frontier marks a content node in one word and is otherwise what it was", () => {
+  const listing = renderFrontier(CONTENT_PAGE);
+  assert.match(listing, /example\.test\/main\/ruling-content — answered — ratified \(ruling\) — rank [\d.]+ — content/);
+  assert.match(listing, /example\.test\/main\/legacy-beside — unanswered — unanswered \(no ruling\) — rank [\d.]+\n/, "and says nothing extra of a legacy node");
+  assert.match(listing, /fact answer: .*stands the-confirmed-column/, "what stands is the confirmed option, derived");
+});
+
+test("--concordance takes a path and is one of the outputs the CLI will run", () => {
+  assert.equal(parseArgs(["disposition", "--concordance", "out/terms.json"]).concordance, "out/terms.json");
+  assert.equal(parseArgs(["disposition", "--concordance", "-"]).concordance, "-");
+  assert.equal(parseArgs(["disposition", "--out", "x.html"]).concordance, null);
 });
