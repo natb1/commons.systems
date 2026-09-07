@@ -1,6 +1,6 @@
 ---
 question: When is an open question a probe, an option, or a node?
-stage: review
+stage: ruling
 probes:
   - id: a-delegable-review-finding-question
     asks: >-
@@ -82,9 +82,9 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-07
-  of: 2faf26bcf130d6d17ff425eb5ae7dc45963984f9
-  commit: 53ee87f2459c8ff999fc554ca214dce4d6e70728
-  against: "The amendment changes nothing that anyone does. By its own terms the delegation \"acts only when that node's authority fact is ruled `delegated`\", and until then \"the row asks the author\" -- which is what the record already did before any of the author's words on pruning were spoken. So the one clause that moved is a forward reference, and the author is asked to confirm where a question will be answered rather than to answer it, while the substance they actually asked for on 2026-09-04, the four tests, waits behind a `depends` on a node minted the same morning and itself only at the review stage. Against that, the author's plainest words on this node are \"just prune it\", scoped to unratified nodes, and repeated as a standing disposition the next day; the recommended interim reinstates precisely the confirmation they struck, for a period no one has bounded. And the four tests themselves remain, as the fact's own `against` concedes, \"the AI's own... not yet worn by use\", with the survival test asking a recorder to predict what a later sitting will need -- so a ratification here fixes an untested discriminator by the author's ruling while the remedy it fires stays in abeyance, which is the least useful order in which to settle the two."
+  of: 7bd00f2a353005aebe5c3a8f16a0a381deb8ebe6
+  commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
+  against: "The four tests that answer the author's actual 2026-09-04 request still wait behind a `depends` on `graph-topology`, itself only at the review stage, so the substance of this node is still gated on a sibling node's ruling; and the interim this amendment adds is honoured on trust in the pruning session's own account of which of the author's words reached a given prune, with no fact or ruling checking that account until `graph-topology` is ruled."
 depends:
   - commons.systems/disposition-graph/graph-topology
 form: rule
@@ -680,3 +680,20 @@ and `depends` on `graph-topology` orders the question of who prunes ahead of
 them, which is where that question belongs.
 
 The amended answer owes its re-reading.
+
+### Clean-context re-reading, 2026-09-07, of 7bd00f2a
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `interim-follows-the-authors-word`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff moves the answer fact's `recommends` from `delegation-carried-by-its-own-node` to the new option `interim-follows-the-authors-word` (source review), keeps boldness at moderate with a reason now naming the interim as a second thing the author supplied, and rewrites `against` to note the interim is now the one part of the answer that acts today and is checked only by the pruning session's own account; `review.of`/`review.commit` are updated to the prior reading's pin, and `stands`/the fence are otherwise the same shape (nothing stands yet, so the fence is the whole draft).
+
+On the viability of the options: The diff leaves `by-what-is-asked`, `prune-granted-in-dialogue-needs-no-row` (its passed-over reason rewritten to say what supersedes it and when), `prune-delegated-with-two-bounds` (gaining the 'two homes' sentence), `node-by-default` and `delegation-carried-by-its-own-node` all viable, and adds the new viable, recommended option `interim-follows-the-authors-word`; nothing is struck.
+
+Strongest counter-argument (moderate): The four tests that answer the author's actual 2026-09-04 request still wait behind a `depends` on `graph-topology`, itself only at the review stage, so the substance of this node is still gated on a sibling node's ruling; and the interim this amendment adds is honoured on trust in the pruning session's own account of which of the author's words reached a given prune, with no fact or ruling checking that account until `graph-topology` is ruled.
+
+The session's reply: Forwarded with no finding; verified on the main thread that recording carries prune-of-an-unruled-node-needs-no-ruling and that the two-homes sentence matches graph-topology's. The counter-argument stands on the row at moderate strength. Nothing on the node changes.

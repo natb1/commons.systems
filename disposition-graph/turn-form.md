@@ -1,7 +1,7 @@
 ---
 question: What form does a turn of the alignment dialogue addressed to the author take?
 form: rule
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -39,9 +39,9 @@ review:
   verdict: forward
   strength: moderate
   date: 2026-09-07
-  of: 69fa32a80c909f5a664d72000eb39ddf19bff57a
-  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
-  against: "The rule is drawn from a single turn the author disliked, and the author's own words in that same message break it twice over: they say the four forms are what prompts \"are expected to take\", not what every turn must be, and they close by asking for a listing of queued recommendations, which is a turn of none of the four. The answer meets the second by exempting what the author expressly asks for and the first by simply choosing the harder reading, and the cost of choosing it is borne where it cannot be seen -- in the turns a future session does not make. A session that has found something the author would want to know, and that is neither a probe nor a direction nor an acknowledgement, is told to write it to the record and let the projections carry it, on the ground that \"a finding that cannot survive being written down was not worth the author's turn\"; but survival in the record is not the same as reaching the author, and the record is already large enough that what is written to it is read when the author happens on it and not when it matters. What the author asked for was less noise, and what is recorded is a closed list of four forms with two exemptions and, as the fourth finding shows, no form at all for a session that cannot proceed."
+  of: 387386abd5048685a94a39df8346873c76a4cc04
+  commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
+  against: "The rule is still drawn from a single turn the author disliked, and their own words call the four forms what a prompt is 'expected to take' rather than a bound; the impediment turn only covers the sitting that cannot continue, so a session that finds something true and interesting but not of the four forms (or the impediment) still has no way to say so and must trust the record's projections to carry it to the author in time."
 under:
   - commons.systems/disposition-graph/growth
 ---
@@ -531,3 +531,20 @@ the session that has found something the author would want to know.
 The recommendation has moved in substance, so `review.of` no longer matches it
 and the frontier and the alignment page show the node as changed since its
 reading. The amended answer owes its re-reading.
+
+### Clean-context re-reading, 2026-09-07, of 387386ab
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `a-turn-that-reports-an-impediment`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff moves the answer fact's `recommends` from `four-forms` to `a-turn-that-reports-an-impediment` (new option, source review), raises `boldness` from low to moderate with a rewritten reason distinguishing the author's enumeration from the AI's hardening of it, and rewrites `against` to state that the impediment turn answers only the sitting that cannot continue and not the sitting with a finding worth reporting; `stands` is unchanged at `four-forms`, so `## Answer` keeps its original (still-uncorrected) text by design while the corrected text lives in the new `## Recommendation` fence.
+
+On the viability of the options: The diff leaves `four-forms`, `expected-not-required`, `three-forms-no-acknowledgement` and `rule-on-growth` viable as before (the first three subsections now open by naming `four-forms` rather than 'the recommended option', a cosmetic consequence of the move) and adds the new viable, recommended option `a-turn-that-reports-an-impediment`; nothing is struck.
+
+Strongest counter-argument (moderate): The rule is still drawn from a single turn the author disliked, and their own words call the four forms what a prompt is 'expected to take' rather than a bound; the impediment turn only covers the sitting that cannot continue, so a session that finds something true and interesting but not of the four forms (or the impediment) still has no way to say so and must trust the record's projections to carry it to the author in time.
+
+The session's reply: Forwarded with no finding; verified on the main thread that author-questions carries cites-turn-form-for-the-three-surfaces and that alignment-page cites turn-form for the three-surfaces rule. The counter-argument stands on the row at moderate strength. Nothing on the node changes.

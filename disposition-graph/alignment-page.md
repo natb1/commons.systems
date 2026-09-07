@@ -1,6 +1,6 @@
 ---
 question: What does the author read to rule?
-stage: review
+stage: ruling
 probes:
   - id: unit-of-a-ruling
     asks: >-
@@ -187,11 +187,11 @@ facts:
     against: "The shim describes a read-back mechanism the ruling-transport node owns, and could leave that clause to that node's shim."
 review:
   verdict: forward
-  strength: moderate
+  strength: weak
   date: 2026-09-07
-  of: 8fa14130c617985a38376c5a80d4c727546374fc
-  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
-  against: "The strongest case against the draft is that it is now mostly a restatement of decisions it no longer owns, and that the restatement is structurally unstable rather than incidentally stale. Eight children were minted for the author's own observations, four of them stand at the review stage recommending against clauses this text asserts flat, and the closing paragraph's assurance that every such clause is marked is false for exactly those four — so a confirmation here would ratify prose that four rulings in the same round are about to falsify, and the author cannot tell from the text which clauses are live. The answer's own accounting concedes what remains to this node is four things: 'the three columns, what the rail carries, what the page takes from the author, and how a ruling is transported'. Against that, five decisions the author's words did not fix are still bundled into the one recommended option — the metric set, where each metric links, the division of the two content columns, the eyebrow's contents, and when the case against is written — so a single radio row rules five ways at once, which is what `single-subject-rule` is in the record to warn about and what `independent-decisions-as-children` proposes to end. The reply the record can make is real: someone must describe the page whole, and eight cited children describe no page. But the reply argues for a parent that cites and a set of children that decide, which is not the text on offer."
+  of: 94465d401a161fed15196ead1c0e71bd5950de58
+  commit: e6f0b87118fe9410668bf7f8eebef2e69c1ea305
+  against: "The amendment is thorough and its own recounts (e.g. the five-links-on-four-rulings correction, done more precisely than the previous reading's own suggested wording) are internally verified against the fence, but one new sentence leans on `commons.systems/disposition-graph/turn-form`'s content, which is outside this delta's given scope; if that node's answer does not in fact state the three surfaces whole, the citation would be a new, unseen-by-the-last-reading inaccuracy. Nothing in the material given to this reading shows that to be the case."
 depends:
   - commons.systems/disposition-graph/dialogue#every-part-in-the-record
   - commons.systems/disposition-graph/clean-context-review#per-draft-and-survey
@@ -2761,3 +2761,21 @@ says of this one.
 The counter-argument is on the row already, the `review` block carrying it at
 moderate with the date and the pin of the draft it read. The amended answer owes
 its re-reading, and the review pin of 2026-09-07 is stale against it.
+
+### Clean-context re-reading, 2026-09-07, of 94465d40
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `every-fact-every-option`.
+
+Findings:
+
+- Recommendation, the middle column paragraph: a new clause introduced by this amendment reads 'That is this page's side of the three surfaces that bound what reaches the author, which `commons.systems/disposition-graph/turn-form` states whole and which is cited here rather than restated, since one surface's side is not the rule.' This is a new claim about another node's content (that `turn-form` states the three-surfaces rule whole) that this delta reading is not given the neighbourhood to verify; nothing in this node or its diff is inconsistent with it, but it should be checked against `turn-form`'s actual recommended text at the draft's next full reading or by the survey before the author rules.
+
+On the facts and what they recommend: The diff leaves `recommends: every-fact-every-option` and `boldness: moderate` unchanged on the answer fact, but corrects its `against:` from an unnamed count of nine to a named count of five bundled decisions (metric set, where each metric links, division of the two content columns, eyebrow's contents, and where the unconfirmed indication sits), passes three delta options (`case-against-in-the-drill-down`, `case-against-after-the-review-only`, `kick-back-feedback-one-step-down`) over to the children that already hold and dominate the same decisions, records two new options (`copy-control-beside-the-launch-link`, adopted into the recommended text; `clauses-cited-not-restated`, viable and not adopted), marks the four previously-unmarked clauses (facts list, kick-back feedback, the drill-down text control and edits-ride sentence twice, and the unconfirmed-indication naming paragraph) as standing only until their respective children rule, corrects the metric/link counts from four to five throughout, rewrites the stale probe clause and the stale `progressive-disclosure` bears claim, and recounts the shim's `for:` line from nine dated children to eight undated ones. Authority and persistence facts are untouched.
+
+On the viability of the options: Every option on the node's facts is viable after the amendment, and the amendment removes a prior defect in viability: the three delta options passed over here now carry `status: passed` with reasons naming the exact sibling option each duplicates, matching those siblings' own recorded (already-dominated) status, so no option is left live here while a child at the same review stage holds the identical decision dominated.
+
+Strongest counter-argument (weak): The amendment is thorough and its own recounts (e.g. the five-links-on-four-rulings correction, done more precisely than the previous reading's own suggested wording) are internally verified against the fence, but one new sentence leans on `commons.systems/disposition-graph/turn-form`'s content, which is outside this delta's given scope; if that node's answer does not in fact state the three surfaces whole, the citation would be a new, unseen-by-the-last-reading inaccuracy. Nothing in the material given to this reading shows that to be the case.
+
+The session's reply: Forwarded with one finding, verified on the main thread: turn-form's recommended text states the three surfaces whole, so the citation holds. The counter-argument stands on the row at weak strength. Nothing on the node changes.
