@@ -1,12 +1,12 @@
 ---
 question: How is the clean-context review run?
-stage: review
+stage: ruling
 review:
   verdict: forward
   strength: none
   date: 2026-09-07
-  of: dfc0024692847d355b614dd2a3486d0fefbda0cf
-  commit: d35b0014367874f0376fea8e271f1737b798857c
+  of: aaec57a00b39e6489eac17dd85c8bc5b798970fa
+  commit: 6d6704413cb6eda7d56e31ba632fd359e148af77
   survey:
     date: 2026-09-07
     of: 9972f0cfa1d3635eba4440a793ce96b6d88271e0
@@ -891,3 +891,20 @@ The review found no strong counter-argument.
 ### Repaired after the re-reading of d4ab0283, 2026-09-07
 
 Two findings, both taken. The fence's paragraph on the round still carried the judged set as an inline rule after the survey paragraph had been moved to a citation; the round is now the judged set the `survey-selection` node's answer names, cited and not restated, so the two paragraphs cannot diverge from what that node decides, and the fence moved in substance, which sends the node back to the review stage for a re-reading of this amendment. The account's dropped period after `wave-membership-derived-from-the-record` is a full stop.
+
+### Clean-context re-reading, 2026-09-07, of aaec57a0
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `a-surveys-selection-and-its-state-are-the-selection-nodes`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff changes no fact's recommends, boldness, or stands: the answer fact still recommends `a-surveys-selection-and-its-state-are-the-selection-nodes` at high boldness with `stands` at `standing`, so the '## Recommendation' fence stays required and present. The diff is a repair inside that fence's text (and the account's description of it): the draft-review 'round' paragraph is rewritten from an inline restatement of which nodes the survey owes a reading into a citation of `survey-selection`'s judged set, and a stray mid-sentence capital 'The' after a semicolon in the '### Option adopted, 2026-09-07' account entry is fixed by splitting the sentence at a period.
+
+On the viability of the options: The diff touches no option's reasoning on any of the three facts (answer, authority, persistence) other than rewording prose inside the already-recommended fence; it adds no option and passes over none. Every option that was viable before the diff remains viable after it.
+
+The review found no strong counter-argument.
+
+The session's reply: No counter-argument was found.

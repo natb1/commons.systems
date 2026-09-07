@@ -1,6 +1,6 @@
 ---
 question: What does an unanswered node carry?
-stage: review
+stage: maieutic
 probes:
   - id: option-text-per-node-or-per-option
     asks: >-
@@ -111,12 +111,12 @@ probes:
     source: author
     raised: 2026-09-04
 review:
-  verdict: kickback
-  strength: moderate
+  verdict: forward
+  strength: weak
   date: 2026-09-07
   of: 6097ca9b7c2e0da0fa2911fde88a1666a36d2f8f
-  commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
-  against: "The amendment repeats, in one narrow spot, the exact defect class the last reading kicked back for: its rewritten traditions paragraph asserts a tradition diverges from \"the option this fact recommends,\" but the reading's own bears data still names only the superseded option, so a reader confirming the current recommendation would be shown an argument the record does not actually record against it. The rest of the fifteen findings are answered cleanly and no other new defect surfaced."
+  commit: c1128d49c3f3b295deef2f4d20e60aa4a8cd77f7
+  against: "The amendment's own account asserts, without evidence this delta reading can check, that the two edits it credits to `node` and `viable-options` (options `a-node-file-is-facts-and-account` and `every-weighed-candidate-must-be-recorded`) actually landed at commit `d4ab0283`. If either did not land as claimed, the record would still be short the two merge-finding discharges validation 15 raised, and nothing in this node's own file would show it. This is a residual, non-blocking gap rather than a defect the amendment introduces or fails to answer on its own object: the last reading treated the identical item as unverifiable-but-not-kickback-worthy, and the repair changes nothing about that status."
 facts:
   - name: answer
     options:
@@ -2501,3 +2501,21 @@ Strongest counter-argument (moderate): The amendment repeats, in one narrow spot
 ### Repaired after the re-reading of d4ab0283, 2026-09-07
 
 The one finding: the rationale's traditions paragraph named `single-subject-rule` as the case against the option this fact recommends, and the reading's `bears` named only `every-part-in-the-record`, the option it was first read against and which the recommendation absorbed. The data is moved to the prose rather than the prose to the data, since the divergence is real against the recommendation and the author should meet it there: `single-subject-rule` now carries a second `bears` entry on `the-survey-block-carries-what-the-next-survey-selects-on`, diverged, and keeps the first. The second item, that the account's claims about options landed on `node` and `viable-options` were unverifiable in the delta's scope, was validated on the main thread: `a-node-file-is-facts-and-account` is on `node`'s answer fact and `every-weighed-candidate-must-be-recorded` on `viable-options`'s, both at `d4ab0283`. Nothing in the fence moved; the amendment is the reading's entry, and it owes a re-reading of that.
+
+### Clean-context re-reading, 2026-09-07, of 6097ca9b (ii)
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-survey-block-carries-what-the-next-survey-selects-on`.
+
+Findings:
+
+- Account, `### Repaired after the re-reading of d4ab0283, 2026-09-07`: the claim "The second item, that the account's claims about options landed on `node` and `viable-options` were unverifiable in the delta's scope, was validated on the main thread: `a-node-file-is-facts-and-account` is on `node`'s answer fact and `every-weighed-candidate-must-be-recorded` on `viable-options`'s, both at `d4ab0283`" cannot be checked from what this delta re-reading was given (only this node's file and its diff, not `node.md` or `viable-options.md`). This is the same unverified-in-scope item the previous reading flagged (its finding on the same account paragraph's predecessor) and it is carried over rather than newly introduced; consistent with the previous reading's own treatment, it is not by itself a reason to kick back, but it remains worth the survey's or the next full reading's check before the node is treated as having discharged validation 15's two merge findings on `node` and `viable-options`.
+
+On the facts and what they recommend: The diff to `dialogue.md` itself contains no change to any fact's `recommends`, `boldness`, `against`, or to `stands` (still `facts-carry-options`), and no change to the `## Recommendation` fence -- the account's own claim "Nothing in the fence moved" checks out against the diff shown. The diff only updates the `review` block (strength strong->moderate, `of`/`commit` repinned to the previous re-reading's read, and a rewritten `against` recording that re-reading's counter-argument) and appends two account sections: the previous re-reading's applied verdict/findings, and the new `### Repaired after the re-reading of d4ab0283` section describing the actual repair. The repair that closes the substantive finding -- a second `bears` entry for `single-subject-rule` on the recommended option -- was made on the reading node `single-subject-rule.md`, outside this diff, so it is invisible to `dialogue.md`'s own diff but visible in the node's current rendering.
+
+On the viability of the options: No option's viability is touched by this diff; the option list, statuses, and passed-over reasons are unchanged from the last-read text. The rendering of the recommended option `the-survey-block-carries-what-the-next-survey-selects-on` now lists "Readings bearing on it: commons.systems/disposition-graph/single-subject-rule (diverged), commons.systems/disposition-graph/tolerated-inconsistency (adopted), commons.systems/disposition-graph/verifying-traces-and-early-cutoff (adopted)", and the superseded option `every-part-in-the-record` still separately lists `single-subject-rule (diverged)` among its own readings, so the traditions paragraph's claim that the divergence bears on "the option this fact recommends" is now supported by the graph's own `bears` data on both sides -- the prior mismatch (data naming only the superseded option) is resolved.
+
+Strongest counter-argument (weak): The amendment's own account asserts, without evidence this delta reading can check, that the two edits it credits to `node` and `viable-options` (options `a-node-file-is-facts-and-account` and `every-weighed-candidate-must-be-recorded`) actually landed at commit `d4ab0283`. If either did not land as claimed, the record would still be short the two merge-finding discharges validation 15 raised, and nothing in this node's own file would show it. This is a residual, non-blocking gap rather than a defect the amendment introduces or fails to answer on its own object: the last reading treated the identical item as unverifiable-but-not-kickback-worthy, and the repair changes nothing about that status.
+
+The session's reply: Validated on the main thread at graph commit d4ab0283, outside the delta's scope by design: `a-node-file-is-facts-and-account` is on `node`'s answer fact and `every-weighed-candidate-must-be-recorded` on `viable-options`'s, both in their facts and their option subsections, so validation 15's two merge findings are discharged where the account says they are.
