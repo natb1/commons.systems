@@ -41,8 +41,23 @@
 // drafts never wait on each other, and the survey is serialized by the pin
 // its findings carry.
 //
+// Which brief a `--node` review writes is read off the record and not off
+// the verdict: a delta (re-reading) brief is written whenever the node's
+// `review.commit` is set and the node's file has changed since that commit,
+// whatever the last verdict was, forward or kickback, and whatever moved it
+// -- a kickback repaired in a few sentences, or a survey's frontier finding
+// landed on the node's own account. `review-cost`'s rule is that the
+// re-reading's object is the amendment and not the node, and the amendment
+// is the diff since the pin whichever reading or finding provoked it. A
+// draft brief is written when no commit is pinned yet (no reading has run,
+// or the graph was dirty when the last one did), or when the caller passes
+// `--draft` to force it regardless of what the record would otherwise
+// choose (`--fresh` remains as a deprecated alias). No `--delta` flag is
+// needed to force the other way: wherever a commit is pinned and the file
+// has moved, the delta is what the record already owes.
+//
 // Usage:
-//   node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry]
+//   node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry] [--draft]
 //   node brief.mjs --survey    [rootDir] [--date YYYY-MM-DD] [--dry]
 
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -76,12 +91,14 @@ const draftOutFile = (slug) => `tmp/review/draft-${slug}.json`;
 const deltaOutFile = (slug) => `tmp/review/delta-${slug}.json`;
 
 export const USAGE = [
-  "usage: node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry] [--fresh]",
+  "usage: node brief.mjs --node <id> [rootDir] [--date YYYY-MM-DD] [--dry] [--draft]",
   "       node brief.mjs --survey    [rootDir] [--date YYYY-MM-DD] [--dry]",
   "exactly one of --node <id> and --survey is given: the review of one draft,",
-  "or the survey of the frontier. A kickback is read off the node's own",
-  "review block, so the draft brief a redrawn answer owes needs no flag;",
-  "--fresh (--node only) forces it where the record cannot show one.",
+  "or the survey of the frontier. The choice between a draft brief and a",
+  "delta (re-reading) brief is read off the record and not off a flag: a",
+  "delta is written whenever the node's review.commit is set and its file",
+  "has changed since, whatever the last verdict; --draft (--node only)",
+  "forces the draft brief regardless (--fresh is a deprecated alias).",
 ].join("\n");
 
 function todayIsoUtc() {
@@ -94,7 +111,7 @@ function todayIsoUtc() {
  * stderr and exits 2 on.
  */
 export function parseArgs(argv) {
-  const opts = { node: null, survey: false, rootDir: null, date: null, dry: false, fresh: false };
+  const opts = { node: null, survey: false, rootDir: null, date: null, dry: false, draft: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === "--node") {
@@ -110,8 +127,11 @@ export function parseArgs(argv) {
       opts.date = v;
     } else if (a === "--dry") {
       opts.dry = true;
-    } else if (a === "--fresh") {
-      opts.fresh = true;
+    } else if (a === "--draft" || a === "--fresh") {
+      // --fresh is a deprecated alias of --draft, kept so an existing
+      // invocation (the align-review skill's own doc names it) still forces
+      // the draft brief rather than failing on an unknown flag.
+      opts.draft = true;
     } else if (a.startsWith("--")) {
       throw new Error(`unknown flag ${a}`);
     } else if (opts.rootDir === null) {
@@ -126,8 +146,8 @@ export function parseArgs(argv) {
   if (opts.node === null && !opts.survey) {
     throw new Error("no reading named: give --node <id> for the review of a draft, or --survey for the survey of the frontier");
   }
-  if (opts.fresh && opts.survey) {
-    throw new Error("--fresh forces the draft brief on a re-reading; the survey has no re-reading to force");
+  if (opts.draft && opts.survey) {
+    throw new Error("--draft forces the draft brief on a re-reading; the survey has no re-reading to force");
   }
   return opts;
 }
@@ -735,37 +755,26 @@ export function lastAccountSectionOnly(accountText) {
 }
 
 /**
- * The last `### Clean-context review, <date>` subsection of a node's
- * '## Account', verbatim, fence-aware in the same way `apply.mjs`'s
- * `headingBoundaries` is (a heading-looking line inside a fenced code block
- * is not a heading). Matches only a draft reading's own heading and never a
- * re-reading's ("### Clean-context re-reading, ..."), since a re-reading is
- * read against the reading before it and never against itself. Returns null
- * where the account carries no such subsection, which sends the caller back
- * to the draft brief: there is nothing here to re-read against.
+ * The last `### Clean-context review, <date>` or `### Clean-context
+ * re-reading, <date>` subsection of a node's '## Account', verbatim,
+ * fence-aware like `lastAccountSectionOnly` (built on the same
+ * `level3Headings` scan). Matches whichever kind occurs last, and not only
+ * a first reading's own heading: now that a kickback no longer forces a
+ * fresh draft reading (`review-cost`'s re-reading is no longer capped at
+ * one against the original draft), a re-reading can itself be repaired and
+ * re-read, and the next delta's object is that re-reading, not the first
+ * draft review buried beneath it -- "a re-reading is read against the
+ * reading directly before it" now means whichever reading, of either kind,
+ * came last. Returns null where the account carries neither heading, which
+ * sends the caller back to the draft brief: there is nothing here to
+ * re-read against.
  */
 export function lastCleanContextReviewSection(accountText) {
   if (!accountText) return null;
-  const lines = accountText.split("\n");
-  const headingRe = /^(#{1,6})[ \t]+(.*?)\s*$/;
-  const fenceRe = /^[ \t]*(`{3,}|~{3,})/;
-  const headings = [];
-  let fenceChar = null;
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    const fence = line.match(fenceRe);
-    if (fence) {
-      if (fenceChar === null) fenceChar = fence[1][0];
-      else if (fence[1][0] === fenceChar) fenceChar = null;
-      continue;
-    }
-    if (fenceChar !== null) continue;
-    const m = line.match(headingRe);
-    if (m && m[1].length === 3) headings.push({ name: m[2], index: i });
-  }
+  const { lines, headings } = level3Headings(accountText);
   let lastMatch = null;
   for (const h of headings) {
-    if (/^Clean-context review, /.test(h.name)) lastMatch = h;
+    if (/^Clean-context (?:review|re-reading), /.test(h.name)) lastMatch = h;
   }
   if (!lastMatch) return null;
   const at = headings.indexOf(lastMatch);
@@ -774,57 +783,88 @@ export function lastCleanContextReviewSection(accountText) {
 }
 
 /**
+ * Every `### Frontier finding, <date>` account section dated on or after
+ * `sinceDate` (an ISO `YYYY-MM-DD`, comparable lexically), verbatim and
+ * fence-aware like `lastAccountSectionOnly` -- the survey's own objections
+ * raised against this node since the reading that pinned `review.commit`,
+ * which a repair must answer alongside the previous reading's own findings
+ * exactly as if a fresh draft review had raised them (`review-cost`: the
+ * re-reading's object is the amendment, and the amendment answers whatever
+ * the record has raised against the pinned text since, a survey's finding
+ * included and not only the reading that pinned it). Matches only the bare
+ * heading the survey's own apply step writes (`### Frontier finding,
+ * <date>`) and not the titled variant a hand-authored finding may carry
+ * (`### Frontier finding: <title>, <date>`), since only the former's date
+ * sits where this function expects it; a titled finding is carried, if at
+ * all, by the account subsection it stands beside. Returns `[]` on no
+ * account, no `sinceDate`, or no matching section -- not an error, since
+ * most re-readings answer no survey finding at all.
+ */
+export function frontierFindingSectionsSince(accountText, sinceDate) {
+  if (!accountText || !sinceDate) return [];
+  const { lines, headings } = level3Headings(accountText);
+  const out = [];
+  for (let i = 0; i < headings.length; i += 1) {
+    const h = headings[i];
+    const m = h.name.match(/^Frontier finding, (\d{4}-\d{2}-\d{2})$/);
+    if (!m || m[1] < sinceDate) continue;
+    const end = i + 1 < headings.length ? headings[i + 1].index : lines.length;
+    out.push(lines.slice(h.index, end).join("\n").trimEnd());
+  }
+  return out;
+}
+
+/**
  * Which brief a `--node` review writes, decided from the record and never
- * from a flag the session sets on its own account (`review-cost`: the
- * re-reading's object is the amendment, owed only where the answer itself
- * moved since its last reading, while a kickback is a new answer, which owes
- * a fresh reading of its own). The kickback is read off the record and not
- * off a flag: `apply.mjs` writes the reader's verdict into the node's
- * `review` block on a kickback exactly as it does on a forward, so a node
- * whose last reading kicked it back says so in the record the brief is
- * derived from, and the session names nothing. `--fresh` remains as an
- * override for the case the record cannot show -- a redraw whose kickback
- * was never applied. `node.reviewStale` is exactly
- * "changed since its review" -- the same test the frontier renders that way
- * -- and it is `true` only where `node.review` already exists, so every
- * branch below it may read `node.review` without a further null check.
+ * from the verdict or a flag the session sets on its own account
+ * (`review-cost`: "an amendment made for a reading's findings is read once
+ * more, that re-reading's object being the amendment and not the node"). A
+ * delta is owed whenever `review.commit` is set -- a reading has pinned a
+ * commit -- and the node's file has changed since, whatever the last
+ * verdict: a forward later amended, a kickback repaired in a few sentences,
+ * or a node a survey's frontier finding sent back without ever touching
+ * `review.verdict` at all. The verdict is not asked, because "whatever
+ * moved it" includes cases the verdict cannot name: `apply.mjs` writes a
+ * survey's finding onto a node's `## Account` and its answer fact and can
+ * move its `stage` back to `maieutic` or `periagogic` without writing
+ * `review.verdict: kickback`, and that amendment owes exactly the same
+ * re-reading a kickback's does. `--draft` remains as an override that
+ * always forces the draft brief regardless (`--fresh` is a deprecated
+ * alias); no `--delta` flag is needed the other way, since wherever a
+ * commit is pinned and the file has moved, the delta is what the record
+ * already owes.
  *
  * Falls back to the draft brief, with `fallback: true` and a reason naming
- * it, wherever the re-reading has nothing to read against: no review
- * recorded at all, a review whose pin names no commit (one written before
- * the `commit` key existed, or on a graph that was not a git checkout at the
- * time), a commit `git show` cannot resolve the node's file at, or an
- * account carrying no prior `### Clean-context review,` subsection.
+ * it, wherever the re-reading has nothing to read against: no commit
+ * pinned yet (no reading has run, or the review names no commit -- one
+ * written before the `commit` key existed, or on a graph that was not a
+ * git checkout at the time), a commit `git show` cannot resolve the node's
+ * file at, or an account carrying no prior `### Clean-context review,` or
+ * `### Clean-context re-reading,` subsection to re-read against.
+ * `fallback: false` on a draft means there is nothing new to read at all
+ * (no review yet, or the file matches the pinned commit exactly) and not
+ * that a re-reading was owed and could not be produced.
  *
  * @returns {{mode: "draft"|"delta", reason: string, fallback: boolean,
- *   commit?: string, diff?: string, previous?: string}}
+ *   commit?: string, diff?: string, previous?: string,
+ *   frontierFindings?: string[], kickback?: boolean}}
  */
-export function chooseMode(node, { rootDir, fresh }) {
-  if (fresh) {
-    return { mode: "draft", reason: "--fresh forces the draft brief: a kickback's new answer owes a fresh reading, not a re-reading of the old one", fallback: false };
+export function chooseMode(node, { rootDir, draft }) {
+  if (draft) {
+    return { mode: "draft", reason: "--draft forces the draft brief regardless of what the record would otherwise choose", fallback: false };
   }
-  if (node.review && node.review.verdict === "kickback") {
+  if (!node.review || node.review.of === null) {
     return {
       mode: "draft",
-      reason: "the last reading kicked this answer back, and a kickback is a new answer, which owes a fresh reading of its own and not a re-reading of the answer it replaced",
+      reason: "the node carries no draft review yet: this is its first reading",
       fallback: false,
     };
   }
-  if (!node.reviewStale) {
-    const hasDraftReview = !!(node.review && node.review.of !== null);
-    return {
-      mode: "draft",
-      reason: hasDraftReview
-        ? "the node's recommendation has not moved since its last review's pin: nothing for a re-reading to read"
-        : "the node carries no draft review yet: this is its first reading",
-      fallback: false,
-    };
-  }
-  const commit = node.review.commit;
+  const commit = node.review.commit || null;
   if (!commit) {
     return {
       mode: "draft",
-      reason: "the node's recommendation has moved since its review, but the review names no commit to diff against",
+      reason: "the node's last review names no commit to diff against: nothing for a re-reading to read",
       fallback: true,
     };
   }
@@ -837,21 +877,34 @@ export function chooseMode(node, { rootDir, fresh }) {
       fallback: true,
     };
   }
+  if (diff.trim().length === 0) {
+    return {
+      mode: "draft",
+      reason: "the node's file matches the commit its last review pinned: nothing for a re-reading to read",
+      fallback: false,
+    };
+  }
   const previous = lastCleanContextReviewSection(node.account);
   if (!previous) {
     return {
       mode: "draft",
-      reason: "the node's recommendation has moved since its review, but its account carries no prior reading to re-read against",
+      reason: "the node's file has changed since its last review's pin, but its account carries no prior reading to re-read against",
       fallback: true,
     };
   }
+  const kickback = node.review.verdict === "kickback";
+  const frontierFindings = frontierFindingSectionsSince(node.account, node.review.date);
   return {
     mode: "delta",
-    reason: "node.reviewStale is true: the recommendation has moved since the last review's pin, whether the node stands at the review stage or at ruling after a forward",
+    reason: kickback
+      ? "the last reading kicked this answer back, and review.commit is set with the file since amended: the re-reading's object is the repair"
+      : "review.commit is set and the node's file has changed since: a re-reading is owed on the difference, whatever moved it",
     fallback: false,
     commit,
     diff,
     previous,
+    frontierFindings,
+    kickback,
   };
 }
 
@@ -1058,17 +1111,23 @@ function roundLine(node) {
 
 /**
  * Resolve the node a review is invoked on, or throw the exit-2 error the CLI
- * reports on stderr: no such node in the record, or a node at neither of the
- * two states a reading runs on. A reading runs the moment the recommendation
- * is recorded, which is the node's transition to the review stage; and it
- * runs again on a node a forward left at the ruling stage whose
- * recommendation has since moved, which is the amendment a forward reading
- * earns and the re-reading `review-cost` caps at one. Without that second
- * state the two rules deadlock: the apply writes `ruling` on a forward, the
- * session then amends in answer to the findings, and the re-reading that
- * would re-pin the amended text cannot be generated at all, so the node goes
- * to the author with a pin naming text nobody read. A ruling-stage node whose
- * pin still matches is refused as before: it is ready to rule, and there is
+ * reports on stderr: no such node in the record, or a node at none of the
+ * states a reading runs on. A reading runs the moment the recommendation is
+ * recorded, which is the node's transition to the review stage; it runs
+ * again on a node a forward left at the ruling stage whose recommendation
+ * has since moved, which is the amendment a forward reading earns; and it
+ * runs again wherever `review.commit` is set and the node's file has
+ * changed since that commit, whatever the node's stage -- a kickback's
+ * repair, or a node a survey's frontier finding sent back to `maieutic` or
+ * `periagogic` without ever writing `review.verdict: kickback` at all
+ * (`chooseMode` decides the same way and is the fuller account of why).
+ * Without the second and third states the record deadlocks: the apply step
+ * writes `ruling` on a forward or a kickback stage on a kickback, the
+ * session or the survey then amends the node in answer, and the re-reading
+ * that would re-pin the amended text could never be generated at all, so
+ * the node would sit with a pin naming text nobody read. A ruling-stage
+ * node whose pin still matches, and whose file matches the commit its
+ * review pinned, is refused as before: it is ready to rule, and there is
  * nothing for a reading to read. Shared by the draft brief and the delta
  * brief, since both are invoked the same way, by `--node <id>`, and differ
  * only in which template the mode choice below sends them to.
@@ -1082,10 +1141,17 @@ async function resolveReviewNode(rootDir, id) {
     throw err;
   }
   const amendedAfterForward = node.stage === "ruling" && node.reviewStale;
-  if (node.stage !== "review" && !amendedAfterForward) {
+  const commit = node.review && node.review.commit ? node.review.commit : null;
+  const amendedSinceCommit = commit
+    ? (() => {
+      const diff = nodeDiffSinceCommit(rootDir, commit, `${node.graph}/${node.slug}.md`);
+      return diff !== null && diff.trim().length > 0;
+    })()
+    : false;
+  if (node.stage !== "review" && !amendedAfterForward && !amendedSinceCommit) {
     const at = node.stage === "ruling"
       ? `${id} is at stage ruling and its recommendation has not moved since its review's pin: it is ready for the author, and a reading has nothing to read`
-      : `${id} is at stage ${node.stage ?? "none"}, and a reading runs on a node at stage review (its recommendation has just been recorded) or on one at stage ruling whose recommendation has moved since its review's pin (the amendment a forward earned)`;
+      : `${id} is at stage ${node.stage ?? "none"}, and a reading runs on a node at stage review (its recommendation has just been recorded) or on one at stage ruling whose recommendation has moved since its review's pin (the amendment a forward earned), or on one whose review.commit is set and whose file has changed since (a kickback's repair, or a survey's finding)`;
     const err = new Error(at);
     err.exitCode = 2;
     throw err;
@@ -1131,6 +1197,7 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
       ? index.map(indexQuestionLine).join("\n")
       : "(no other question: the parts above carry the whole record)",
     out: outFile,
+    graph_commit: commitText(graphCommit(rootDir)),
   });
   const { text: filled, lines, bytes } = fillNav(withoutNav);
 
@@ -1173,7 +1240,7 @@ export async function writeDraftBrief({ rootDir, reviewDir, id, date = null, dry
  */
 export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry = false }) {
   const { node } = await resolveReviewNode(rootDir, id);
-  const mode = chooseMode(node, { rootDir, fresh: false });
+  const mode = chooseMode(node, { rootDir, draft: false });
   if (mode.mode !== "delta") {
     const err = new Error(`${id} cannot take a re-reading brief: ${mode.reason} -- write the draft brief instead`);
     err.exitCode = 2;
@@ -1195,6 +1262,14 @@ export async function writeDeltaBrief({ rootDir, reviewDir, id, date = null, dry
       ? mode.diff
       : "(no textual difference: the working tree matches the pinned commit at this file)",
     previous_reading: mode.previous,
+    review_date: node.review.date,
+    frontier_findings: mode.frontierFindings.length > 0
+      ? mode.frontierFindings.join("\n\n")
+      : "(no `### Frontier finding` section dated on or after the last review: the repair answers only the previous reading's findings above)",
+    kickback_note: mode.kickback
+      ? "**The last reading kicked this node back; the amendment below is the repair, and your object is whether each finding is answered.**\n\n"
+      : "",
+    graph_commit: commitText(graphCommit(rootDir)),
     out: outFile,
   });
   const { text: filled, lines, bytes } = fillNav(withoutNav);
@@ -1327,13 +1402,13 @@ if (isMain) {
     try {
       if (opts.node !== null) {
         // The mode is derived from the record and never told by the flag:
-        // `--fresh` only forces it, for a kickback's fresh answer. Chosen
-        // once here, printed, and then handed to the write function that
-        // matches it -- which re-derives the same mode itself and refuses
-        // if the two disagree, so a mismatch is a bug and not a silent
-        // divergence.
+        // `--draft` only forces it, overriding whatever the record would
+        // otherwise choose. Chosen once here, printed, and then handed to
+        // the write function that matches it -- which re-derives the same
+        // mode itself and refuses if the two disagree, so a mismatch is a
+        // bug and not a silent divergence.
         const { node } = await resolveReviewNode(rootDir, opts.node);
-        const mode = chooseMode(node, { rootDir, fresh: opts.fresh });
+        const mode = chooseMode(node, { rootDir, draft: opts.draft });
         console.log(`mode: ${mode.mode} (${mode.reason})`);
         if (mode.fallback) {
           process.stderr.write(`falling back to the draft brief: ${mode.reason}\n`);

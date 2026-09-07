@@ -12,6 +12,8 @@ You are given, from the record and never from a set a session named: the node wh
 
 What you do **not** judge here is the frontier's consistency with itself. That is the survey's object, it reads the whole graph in one context, and it runs before the author rules. Do not hunt for drift between other nodes; report what bears on this draft.
 
+**The graph commit you are reading is `{{graph_commit}}`.**
+
 {{record}}
 
 What this review is and what it judges, the validations you run, the two readings and what each is given, the encoding's own vocabulary (facts, options, rulings, and the derived class), what a node is, and the rules that bind every session are carried below in `## The rules of this reading` and `## Its ancestry, and the rules that bind everywhere`: read them there, and do not go and open their files again, since the brief already carries them whole. Then this brief's node, whole, and its neighbourhood, before you write any finding.

@@ -18,6 +18,7 @@ import {
   reviewLine, graphCommit, parseArgs, draftNeighbourhood, READING_RULES,
   chooseMode, nodeDiffSinceCommit, lastCleanContextReviewSection,
   lastAccountSectionOnly, renderNeighbourNode, surveyNeighbourhoodIds,
+  frontierFindingSectionsSince,
 } from "./brief.mjs";
 import { readGraph } from "@commons.systems/disposition/read.mjs";
 
@@ -102,19 +103,22 @@ function runCliExpectingFailure(args, cwd) {
 
 describe("brief.mjs: the two readings", () => {
   test("parseArgs takes exactly one reading, and refuses neither, both, and an unknown flag", () => {
-    assert.deepEqual(parseArgs(["--node", "x"]), { node: "x", survey: false, rootDir: null, date: null, dry: false, fresh: false });
+    assert.deepEqual(parseArgs(["--node", "x"]), { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: false });
     assert.deepEqual(parseArgs(["--survey", "root", "--date", "2026-09-04", "--dry"]),
-      { node: null, survey: true, rootDir: "root", date: "2026-09-04", dry: true, fresh: false });
+      { node: null, survey: true, rootDir: "root", date: "2026-09-04", dry: true, draft: false });
     assert.throws(() => parseArgs([]), /no reading named/);
     assert.throws(() => parseArgs(["--node", "x", "--survey"]), /one invocation runs one of them/);
     assert.throws(() => parseArgs(["--survey", "--frontier"]), /unknown flag --frontier/);
     assert.throws(() => parseArgs(["--node"]), /--node needs a node id/);
   });
 
-  test("--fresh forces the draft brief, and refuses beside --survey", () => {
+  test("--draft forces the draft brief, and refuses beside --survey; --fresh is a deprecated alias", () => {
+    assert.deepEqual(parseArgs(["--node", "x", "--draft"]),
+      { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: true });
     assert.deepEqual(parseArgs(["--node", "x", "--fresh"]),
-      { node: "x", survey: false, rootDir: null, date: null, dry: false, fresh: true });
-    assert.throws(() => parseArgs(["--survey", "--fresh"]), /--fresh forces the draft brief on a re-reading/);
+      { node: "x", survey: false, rootDir: null, date: null, dry: false, draft: true });
+    assert.throws(() => parseArgs(["--survey", "--draft"]), /--draft forces the draft brief on a re-reading/);
+    assert.throws(() => parseArgs(["--survey", "--fresh"]), /--draft forces the draft brief on a re-reading/);
   });
 
   test("CLI: neither mode, both, and an unknown flag each print the usage on stderr and exit 2", async () => {
@@ -179,6 +183,8 @@ describe("writeDraftBrief", () => {
     assert.ok(!brief.includes("{{"), `unfilled placeholder left in brief:\n${brief.slice(0, 2000)}`);
     assert.ok(brief.startsWith("# Clean-context review of a draft, 2026-09-04: `clean-context-review.test/main/review-low`"));
     assert.ok(brief.includes("tmp/review/draft-review-low.json"), "the literal {{out}} path, regardless of the scratch reviewDir");
+    assert.match(brief, /\*\*The graph commit you are reading is `\(unknown: this graph is not a git checkout\)`\.\*\*/,
+      "a plain fixture copy carries no git checkout, and the brief says so rather than leaving the line unfilled");
 
     // The node itself goes in whole, its '## Account' included -- only the
     // last '### ' section of it, per review-cost: a draft's dialogue is its
@@ -865,34 +871,60 @@ async function stageReReading(prefix, { git = true, commitValue = "auto", previo
   return { rootDir, reviewDir: path.join(rootDir, "_review"), commit: resolvedCommit };
 }
 
+const FRONTIER_FINDING_TEXT = "review-low's recommended text still names ruling-a where the record now prefers answered-ratified";
+
+/**
+ * Builds on `stageReReading`: a node a survey's frontier finding sent back
+ * without ever writing `review.verdict: kickback` -- `stage` moved away
+ * from `review` (to `maieutic` by default) and a `### Frontier finding,
+ * <date>` account section appended after the reading it follows, mirroring
+ * the record's own `growth` node at 2026-09-07 (a survey finding regresses a
+ * node's stage on its own account, and `review.verdict` is left exactly as
+ * the last draft or delta reading wrote it). `findingDate` defaults to the
+ * same date `stageReReading` gives the review block, so it is "on or after
+ * `review.date`" by the narrowest possible margin.
+ */
+async function stageFrontierFinding(prefix, { stage = "maieutic", findingDate = "2026-09-04" } = {}) {
+  const { rootDir, reviewDir, commit } = await stageReReading(prefix);
+  const file = path.join(rootDir, "main", "review-low.md");
+  let text = await readFile(file, "utf8");
+
+  const beforeStage = text;
+  text = text.replace("stage: review\n", `stage: ${stage}\n`);
+  assert.notEqual(text, beforeStage, "fixture precondition: the leading 'stage: review' matched");
+
+  text += `\n### Frontier finding, ${findingDate}\n\nKind: contradiction.\n\n${FRONTIER_FINDING_TEXT}.\n`;
+
+  await writeFile(file, text);
+  return { rootDir, reviewDir, commit };
+}
+
 describe("chooseMode: the re-reading's own mode, derived from the record and never told by a flag", () => {
   test("no review at all: draft, and says so as the first reading", async () => {
     const rootDir = await freshFrontierFixture("mode-first-");
     const graph = await readGraph(rootDir);
     const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
-    const mode = chooseMode(node, { rootDir, fresh: false });
+    const mode = chooseMode(node, { rootDir, draft: false });
     assert.equal(mode.mode, "draft");
     assert.equal(mode.fallback, false);
     assert.match(mode.reason, /first reading/);
   });
 
-  test("--fresh forces the draft brief even where the recommendation has moved and a re-reading could otherwise run", async () => {
-    const { rootDir } = await stageReReading("mode-fresh-");
+  test("--draft forces the draft brief even where a commit is pinned and the file has changed", async () => {
+    const { rootDir } = await stageReReading("mode-draft-flag-");
     const graph = await readGraph(rootDir);
     const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
-    assert.equal(node.reviewStale, true, "fixture precondition: the recommendation has moved");
-    const mode = chooseMode(node, { rootDir, fresh: true });
+    const mode = chooseMode(node, { rootDir, draft: true });
     assert.equal(mode.mode, "draft");
     assert.equal(mode.fallback, false);
-    assert.match(mode.reason, /--fresh/);
+    assert.match(mode.reason, /--draft/);
   });
 
-  test("a kickback owes a fresh reading and the record says so, with no flag from the session", async () => {
-    // `review-cost`: a kickback is a new answer, which owes a reading of its
-    // own and not a re-reading of the answer it replaced. `apply.mjs` writes
-    // the reader's verdict into the node's `review` block on a kickback just
-    // as it does on a forward, so the choice is derivable and the session
-    // names nothing -- which is what the review skill claims of it.
+  test("a kickback with review.commit set and the file since amended: delta, whatever the verdict", async () => {
+    // `review-cost`: an amendment made for a reading's findings is read once
+    // more, that re-reading's object being the amendment and not the node --
+    // a kickback repaired in a few sentences owes exactly that, and not a
+    // whole fresh draft reading of the redrawn answer.
     const { rootDir } = await stageReReading("mode-kickback-");
     const file = path.join(rootDir, "main", "review-low.md");
     const staged = (await readFile(file, "utf8")).replace("  verdict: forward\n", "  verdict: kickback\n");
@@ -900,90 +932,114 @@ describe("chooseMode: the re-reading's own mode, derived from the record and nev
 
     const graph = await readGraph(rootDir);
     const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
-    assert.equal(node.reviewStale, true, "fixture precondition: the answer moved after the reading");
     assert.equal(node.review.verdict, "kickback", "fixture precondition: the reading kicked it back");
 
-    const mode = chooseMode(node, { rootDir, fresh: false });
-    assert.equal(mode.mode, "draft", "the redrawn answer gets a fresh reading");
-    assert.equal(mode.fallback, false, "and it is the owed reading, not a fallback");
+    const mode = chooseMode(node, { rootDir, draft: false });
+    assert.equal(mode.mode, "delta", "the repair is the re-reading's object, not the whole node");
+    assert.equal(mode.fallback, false);
+    assert.equal(mode.kickback, true);
     assert.match(mode.reason, /kicked this answer back/);
 
-    // The same node with a forward verdict is the re-reading's case, so the
-    // branch turns on the verdict and not on some other property of the
-    // fixture.
+    // The same node with a forward verdict takes the same mode: the choice
+    // never turns on the verdict, only on the commit and the diff.
     const forwarded = { ...node, review: { ...node.review, verdict: "forward" } };
-    assert.equal(chooseMode(forwarded, { rootDir, fresh: false }).mode, "delta");
+    const forwardedMode = chooseMode(forwarded, { rootDir, draft: false });
+    assert.equal(forwardedMode.mode, "delta");
+    assert.equal(forwardedMode.kickback, false);
   });
 
-  test("the recommendation has not moved since the review's pin: draft, nothing to re-read", async () => {
-    const rootDir = await freshFrontierFixture("mode-unmoved-");
-    const before = await readGraph(rootDir);
-    const currentHash = before.nodes.find((n) => n.id === REVIEW_LOW).recommendationHash;
-    assert.ok(currentHash, "fixture precondition: the node has a recommendation hash");
+  test("a survey's frontier finding sent the node back without ever writing review.verdict: kickback: delta all the same", async () => {
+    // Mirrors the record's own growth.md at 2026-09-07: a survey finding can
+    // move a node's stage away from 'review' or 'ruling' on its own account,
+    // leaving 'review.verdict' exactly as the last reading wrote it. The
+    // choice between draft and delta does not read the verdict at all, so
+    // this case takes the same delta a kickback would.
+    const { rootDir } = await stageFrontierFinding("mode-frontier-");
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
+    assert.equal(node.stage, "maieutic", "fixture precondition: the survey sent it back");
+    assert.equal(node.review.verdict, "forward", "fixture precondition: the verdict itself never changed");
 
+    const mode = chooseMode(node, { rootDir, draft: false });
+    assert.equal(mode.mode, "delta");
+    assert.equal(mode.fallback, false);
+    assert.equal(mode.kickback, false);
+    assert.deepEqual(mode.frontierFindings.length, 1);
+    assert.ok(mode.frontierFindings[0].startsWith("### Frontier finding, 2026-09-04"));
+    assert.ok(mode.frontierFindings[0].includes(FRONTIER_FINDING_TEXT));
+  });
+
+  test("no review.commit at all: draft, whatever the verdict or the stage", async () => {
+    const rootDir = await freshFrontierFixture("mode-nocommit-verdict-");
     const file = path.join(rootDir, "main", "review-low.md");
     const text = await readFile(file, "utf8");
     const staged = text.replace(
       "stage: review\n",
-      `stage: review\nreview:\n  verdict: forward\n  strength: moderate\n  date: "2026-09-04"\n  of: "${currentHash}"\n`,
+      'stage: maieutic\nreview:\n  verdict: kickback\n  strength: moderate\n  date: "2026-09-04"\n  of: "1111111111111111111111111111111111111111"\n',
     );
     assert.notEqual(staged, text, "fixture precondition matched");
     await writeFile(file, staged);
 
     const graph = await readGraph(rootDir);
     const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
-    assert.equal(node.reviewStale, false, "fixture precondition: the pin still matches");
-    const mode = chooseMode(node, { rootDir, fresh: false });
-    assert.equal(mode.mode, "draft");
-    assert.equal(mode.fallback, false);
-    assert.match(mode.reason, /not moved/);
-  });
-
-  test("stale, but the review names no commit: draft, with fallback", async () => {
-    const { rootDir } = await stageReReading("mode-nocommit-", { commitValue: null });
-    const graph = await readGraph(rootDir);
-    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
-    assert.equal(node.reviewStale, true, "fixture precondition");
-    const mode = chooseMode(node, { rootDir, fresh: false });
+    const mode = chooseMode(node, { rootDir, draft: false });
     assert.equal(mode.mode, "draft");
     assert.equal(mode.fallback, true);
     assert.match(mode.reason, /names no commit/);
   });
 
-  test("stale, commit given but unresolvable (no git checkout at all): draft, with fallback", async () => {
+  test("the node's file matches the commit its review pinned: draft, nothing to re-read", async () => {
+    // `nodeDiffSinceCommit` diffs whatever commit `chooseMode` is handed
+    // against the working tree, so a real commit whose tree already matches
+    // the current file byte for byte -- the fixture's own untouched
+    // baseline -- exercises the "nothing changed" branch honestly, without
+    // needing the file to somehow embed its own future commit hash (which
+    // no git history can do).
+    const { rootDir, commit } = await freshGitFrontierFixture("mode-unmoved-");
+    const graph = await readGraph(rootDir);
+    const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
+    const withCommit = {
+      ...node,
+      review: { verdict: "forward", strength: "moderate", date: "2026-09-04", of: node.recommendationHash, against: null, commit, survey: null },
+    };
+    const mode = chooseMode(withCommit, { rootDir, draft: false });
+    assert.equal(mode.mode, "draft");
+    assert.equal(mode.fallback, false);
+    assert.match(mode.reason, /matches the commit/);
+  });
+
+  test("commit given but unresolvable (no git checkout at all): draft, with fallback", async () => {
     const { rootDir } = await stageReReading("mode-unresolvable-", { git: false, commitValue: STALE_PIN });
     const graph = await readGraph(rootDir);
     const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
-    assert.equal(node.reviewStale, true, "fixture precondition");
-    const mode = chooseMode(node, { rootDir, fresh: false });
+    const mode = chooseMode(node, { rootDir, draft: false });
     assert.equal(mode.mode, "draft");
     assert.equal(mode.fallback, true);
     assert.match(mode.reason, /could not resolve/);
   });
 
-  test("stale, commit resolvable, but no prior '### Clean-context review,' subsection: draft, with fallback", async () => {
+  test("commit resolvable, but no prior '### Clean-context review,' or '### Clean-context re-reading,' subsection: draft, with fallback", async () => {
     const { rootDir } = await stageReReading("mode-noprevious-", { previousReading: false });
     const graph = await readGraph(rootDir);
     const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
-    assert.equal(node.reviewStale, true, "fixture precondition");
-    const mode = chooseMode(node, { rootDir, fresh: false });
+    const mode = chooseMode(node, { rootDir, draft: false });
     assert.equal(mode.mode, "draft");
     assert.equal(mode.fallback, true);
     assert.match(mode.reason, /no prior reading/);
   });
 
-  test("stale, commit resolvable, a previous reading on record: delta, carrying the commit, the diff, and the previous reading", async () => {
+  test("commit resolvable, a previous reading on record: delta, carrying the commit, the diff, and the previous reading", async () => {
     const { rootDir, commit } = await stageReReading("mode-delta-");
     const graph = await readGraph(rootDir);
     const node = graph.nodes.find((n) => n.id === REVIEW_LOW);
-    assert.equal(node.reviewStale, true, "fixture precondition");
-    const mode = chooseMode(node, { rootDir, fresh: false });
+    const mode = chooseMode(node, { rootDir, draft: false });
     assert.equal(mode.mode, "delta");
     assert.equal(mode.fallback, false);
     assert.equal(mode.commit, commit);
     assert.ok(mode.diff.includes("amended to also name"), "the diff shows the amendment");
     assert.ok(mode.previous.startsWith("### Clean-context review, 2026-09-04"));
     assert.ok(mode.previous.includes(PREVIOUS_FINDING_TEXT));
+    assert.deepEqual(mode.frontierFindings, []);
   });
 });
 
@@ -1015,7 +1071,7 @@ describe("lastCleanContextReviewSection", () => {
     assert.equal(lastCleanContextReviewSection("### Something else entirely\n\nNo review here.\n"), null);
   });
 
-  test("extracts the last matching subsection verbatim, and never a re-reading's", () => {
+  test("extracts the last matching subsection verbatim, a draft review where no re-reading follows it", () => {
     const account = [
       "### Clean-context review, 2026-08-01",
       "",
@@ -1025,16 +1081,29 @@ describe("lastCleanContextReviewSection", () => {
       "",
       "Second reading, the one to re-read against.",
       "",
-      "### Clean-context re-reading, 2026-09-05",
-      "",
-      "A re-reading's own subsection: never matched as 'the previous reading'.",
-      "",
     ].join("\n");
     const found = lastCleanContextReviewSection(account);
     assert.ok(found.startsWith("### Clean-context review, 2026-09-04"));
     assert.ok(found.includes("Second reading, the one to re-read against."));
     assert.ok(!found.includes("First reading, superseded."));
-    assert.ok(!found.includes("re-reading"), "stops before the re-reading subsection that follows it");
+  });
+
+  test("a re-reading following a draft review is the last match, not the draft review beneath it: a chain of re-readings is now possible since a kickback no longer forces a fresh draft", () => {
+    const account = [
+      "### Clean-context review, 2026-08-01",
+      "",
+      "The first, draft reading, long superseded.",
+      "",
+      "### Clean-context re-reading, 2026-09-04",
+      "",
+      "The re-reading this brief's own object is judged against.",
+      "",
+    ].join("\n");
+    const found = lastCleanContextReviewSection(account);
+    assert.ok(found.startsWith("### Clean-context re-reading, 2026-09-04"),
+      "the most recent reading of either kind, since a re-reading can itself be repaired and re-read again");
+    assert.ok(found.includes("The re-reading this brief's own object is judged against."));
+    assert.ok(!found.includes("draft reading, long superseded"));
   });
 
   test("fence-aware: a heading-looking line inside a fenced code block is not a heading", () => {
@@ -1053,6 +1122,43 @@ describe("lastCleanContextReviewSection", () => {
     assert.ok(found.startsWith("### Clean-context review, 2026-08-01"));
     assert.ok(found.includes("The real subsection continues here."));
     assert.ok(found.includes("```markdown"), "the fence itself is part of the one real subsection, carried whole");
+  });
+});
+
+describe("frontierFindingSectionsSince", () => {
+  test("returns [] on empty or absent account text, or no sinceDate", () => {
+    assert.deepEqual(frontierFindingSectionsSince(null, "2026-09-04"), []);
+    assert.deepEqual(frontierFindingSectionsSince("", "2026-09-04"), []);
+    assert.deepEqual(frontierFindingSectionsSince("### Frontier finding, 2026-09-05\n\nSomething.\n", null), []);
+  });
+
+  test("carries every '### Frontier finding, <date>' section on or after sinceDate, verbatim, and excludes earlier ones", () => {
+    const account = [
+      "### Frontier finding, 2026-09-01",
+      "",
+      "Too early: excluded.",
+      "",
+      "### Frontier finding, 2026-09-04",
+      "",
+      "On the boundary: included.",
+      "",
+      "### Frontier finding, 2026-09-05",
+      "",
+      "After: included.",
+      "",
+    ].join("\n");
+    const found = frontierFindingSectionsSince(account, "2026-09-04");
+    assert.equal(found.length, 2);
+    assert.ok(found[0].startsWith("### Frontier finding, 2026-09-04"));
+    assert.ok(found[0].includes("On the boundary: included."));
+    assert.ok(found[1].startsWith("### Frontier finding, 2026-09-05"));
+    assert.ok(found[1].includes("After: included."));
+    assert.ok(!found.some((s) => s.includes("Too early")));
+  });
+
+  test("does not match a titled finding, only the bare '### Frontier finding, <date>' heading the survey's apply step writes", () => {
+    const account = "### Frontier finding: a titled one, 2026-09-05\n\nNot matched: the date is not where this function expects it.\n";
+    assert.deepEqual(frontierFindingSectionsSince(account, "2026-09-01"), []);
   });
 });
 
@@ -1153,10 +1259,47 @@ describe("writeDeltaBrief", () => {
       },
     );
   });
+
+  test("carries the graph commit it was generated at, and no kickback note on a forward", async () => {
+    const { rootDir, reviewDir } = await stageReReading("delta-graph-commit-");
+    const result = await writeDeltaBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-05" });
+    const brief = await readFile(result.briefPath, "utf8");
+    assert.match(brief, /\*\*The graph commit you are reading is `[0-9a-f]{40}( \(dirty\))?`\.\*\*/);
+    assert.ok(!brief.includes("kicked this node back"), "the last verdict was forward: no kickback note");
+  });
+
+  test("a kickback: the opening line says so, and the mode is still derived from the record", async () => {
+    const { rootDir, reviewDir } = await stageReReading("delta-kickback-note-");
+    const file = path.join(rootDir, "main", "review-low.md");
+    const staged = (await readFile(file, "utf8")).replace("  verdict: forward\n", "  verdict: kickback\n");
+    await writeFile(file, staged);
+
+    const result = await writeDeltaBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-05" });
+    const brief = await readFile(result.briefPath, "utf8");
+    assert.match(brief, /The last reading kicked this node back; the amendment below is the repair/);
+  });
+
+  test("a survey's frontier finding dated on or after the review's date is carried verbatim, under its own heading", async () => {
+    const { rootDir, reviewDir } = await stageFrontierFinding("delta-frontier-");
+    const result = await writeDeltaBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-05" });
+    const brief = await readFile(result.briefPath, "utf8");
+    assert.ok(brief.includes("## The survey's findings the repair answers"));
+    assert.ok(brief.includes("### Frontier finding, 2026-09-04"));
+    assert.ok(brief.includes(FRONTIER_FINDING_TEXT));
+    // The verdict never moved to kickback on this node: no kickback note.
+    assert.ok(!brief.includes("kicked this node back"));
+  });
+
+  test("no frontier finding on or after the review's date: the section says so and carries nothing", async () => {
+    const { rootDir, reviewDir } = await stageReReading("delta-no-frontier-");
+    const result = await writeDeltaBrief({ rootDir, reviewDir, id: REVIEW_LOW, date: "2026-09-05" });
+    const brief = await readFile(result.briefPath, "utf8");
+    assert.ok(brief.includes("(no `### Frontier finding` section dated on or after the last review"));
+  });
 });
 
-describe("CLI: --node derives its mode from the record, prints it, and --fresh forces the draft brief", () => {
-  test("a stale node with a resolvable commit and a previous reading takes the re-reading; --fresh on the same node forces the draft", async () => {
+describe("CLI: --node derives its mode from the record, prints it, and --draft forces the draft brief", () => {
+  test("a commit-pinned node whose file has changed takes the re-reading; --draft on the same node forces the draft, and --fresh does the same as a deprecated alias", async () => {
     const { rootDir } = await stageReReading("cli-delta-");
     const cwd = path.dirname(rootDir);
 
@@ -1165,9 +1308,31 @@ describe("CLI: --node derives its mode from the record, prints it, and --fresh f
     assert.match(delta, /delta: clean-context-review\.test\/main\/review-low; \d+ bytes over \d+ lines/);
     assert.match(delta, /the reviewer's output file: tmp\/review\/delta-review-low\.json/);
 
+    const forced = runCli(["--node", REVIEW_LOW, rootDir, "--date", "2026-09-05", "--dry", "--draft"], cwd);
+    assert.match(forced, /^mode: draft \(--draft/m);
+    assert.match(forced, /draft: clean-context-review\.test\/main\/review-low;/);
+
     const fresh = runCli(["--node", REVIEW_LOW, rootDir, "--date", "2026-09-05", "--dry", "--fresh"], cwd);
-    assert.match(fresh, /^mode: draft \(--fresh/m);
-    assert.match(fresh, /draft: clean-context-review\.test\/main\/review-low;/);
+    assert.match(fresh, /^mode: draft \(--draft/m, "--fresh is a deprecated alias of --draft");
+  });
+
+  test("a node whose review carries no commit at all takes the draft brief, whatever its verdict", async () => {
+    const rootDir = await freshFrontierFixture("cli-nocommit-");
+    const cwd = path.dirname(rootDir);
+    const file = path.join(rootDir, "main", "review-low.md");
+    const text = await readFile(file, "utf8");
+    const staged = text.replace(
+      "stage: review\n",
+      'stage: maieutic\nreview:\n  verdict: kickback\n  strength: moderate\n  date: "2026-09-04"\n  of: "1111111111111111111111111111111111111111"\n',
+    );
+    assert.notEqual(staged, text, "fixture precondition matched");
+    await writeFile(file, staged);
+
+    const out = runCliExpectingFailure(["--node", REVIEW_LOW, rootDir, "--dry"], cwd);
+    // No commit and a stage of neither 'review' nor a commit-backed
+    // amendment: resolveReviewNode has nothing to accept this node on.
+    assert.equal(out.status, 2);
+    assert.match(out.stderr, /or on one whose review\.commit is set/);
   });
 
   test("a fallback prints the reason on stdout's mode line and warns on stderr, but still writes the draft brief", async () => {

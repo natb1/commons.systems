@@ -4,6 +4,8 @@
 
 {{nav}}
 
+{{kickback_note}}**The graph commit you are reading is `{{graph_commit}}`.** The commit named below in "What changed" is the one the last reading pinned; this is the graph as it stands at this brief's own generation, which may be later still.
+
 ## The scope: a re-reading, not a fresh reading
 
 Your object is not `{{id}}` judged from scratch: it is the **amendment** the session wrote in answer to the last reading's findings. The node's recommendation moved since that reading pinned a text (`node.reviewStale`, the same test the frontier renders as "changed since its review"), and this second reading is owed on the difference and not on the whole draft again — the record already knows what moved (`review-cost`: "the reading carries the pin of the text it read, and the difference between that text and the amended one is the amendment. Reading the node whole to find it pays the object's price a second time.") You alone decide whether the amendment stands; your verdict alone forwards it to the author's ruling.
@@ -14,7 +16,7 @@ You are given, and only this: the node as it now stands, whole, its account incl
 
 ## What you judge: two questions
 
-1. **Does the amendment answer each finding of the last reading?** Read each finding of the previous reading below against the diff: is it answered, partially answered, or not addressed at all. **An already-answered finding is not to be re-raised** — if the amendment answers it, it is closed, and restating it here as a new finding double-counts the same defect against the two-reading cap.
+1. **Does the amendment answer each finding of the last reading?** Read each finding of the previous reading below, and every finding in "The survey's findings the repair answers" below it, against the diff: is it answered, partially answered, or not addressed at all. **An already-answered finding is not to be re-raised** — if the amendment answers it, it is closed, and restating it here as a new finding double-counts the same defect against the two-reading cap.
 2. **Does the amendment introduce anything the last reading did not see?** A false statement about the record, a contradiction with an ancestor or a cited node, a ruling paraphrased against its sense, a pin that no longer matches what the node recommends — anything the diff itself shows that the last reading had no chance to catch, since it read an earlier text.
 
 Nothing else is this reading's object. Do not re-run validations 1 to 6 or 15 against the whole node as if this were the first reading; judge the two questions above against the diff and the previous reading's findings, and let `facts_check` and `viability` say only what the diff changed, not a fresh assessment of the whole node.
@@ -40,6 +42,12 @@ The last reading pinned commit `{{commit}}` of the graph. This is the diff of `{
 ## The previous reading, verbatim
 
 {{previous_reading}}
+
+## The survey's findings the repair answers
+
+Every `### Frontier finding, <date>` account section dated on or after this node's last review (`{{review_date}}`), verbatim -- the survey's own objections raised against this node since the reading that pinned the commit above, which the amendment must answer alongside the previous reading's findings just as much as if a fresh draft review had raised them:
+
+{{frontier_findings}}
 
 ## Output
 
