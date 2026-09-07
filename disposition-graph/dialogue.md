@@ -223,6 +223,9 @@ facts:
       - name: an-unconfirmed-nodes-draft-shape
         source: review
         ref: "2026-09-07"
+      - name: survey-pin-carries-its-commit
+        source: commons.systems/disposition-graph/frontier-consistency
+        ref: "2026-09-07"
     recommends: every-part-in-the-record
     boldness: moderate
     against: "It puts six decisions in one row, the standing encoding and the five clauses adopted into it, so a confirmation confers together what the author examined and what they did not, which is the bundling this node's own rule that a text answering two questions is two nodes exists to prevent."
@@ -966,6 +969,22 @@ of `vocabulary-option-summary` on 2026-09-07, which found four drafts written in
 one movement presented to the author in two forms. What the option would decide is
 which shape a node with no ruling takes; it decides nothing about a node that has
 one, where the fence is what carries a proposed change to a text that stands.
+
+#### survey-pin-carries-its-commit
+
+The survey's state on a node, `survey` with its `date` and its `of`, carries a
+third key, `commit`, the graph commit the survey read the graph at, written at
+apply as the draft reading's own `commit` is under `commit-in-the-review-block`.
+Recorded from the sitting on `frontier-consistency` of 2026-09-07, whose
+recommended text carries a node an earlier survey read on one line and a node
+minted since by what it answers, a condition the generator can take only from
+the commit the last survey read at against the commit that first carried the
+node. The survey of 2026-09-05 read the graph at `73e2a04f`, and the record
+holds that commit in the message of the commit that applied it and in no node,
+so the condition rests on a key the review block does not carry. It acts on
+nothing until ruled, and what a ruling would settle is the question
+`commit-in-the-review-block` leaves open, whether a commit key joins the keys
+written together or stands beside them.
 
 ### authority
 
