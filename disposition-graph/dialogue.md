@@ -217,6 +217,12 @@ facts:
       - name: probes-in-the-enumeration
         source: commons.systems/disposition-graph/author-questions
         ref: "2026-09-05"
+      - name: dialogue-glosses-the-four-fact-names
+        source: commons.systems/disposition-graph/how-a-fact-is-headed
+        ref: "2026-09-07"
+      - name: an-unconfirmed-nodes-draft-shape
+        source: review
+        ref: "2026-09-07"
     recommends: every-part-in-the-record
     boldness: moderate
     against: "It puts six decisions in one row, the standing encoding and the five clauses adopted into it, so a confirmation confers together what the author examined and what they did not, which is the bundling this node's own rule that a text answering two questions is two nodes exists to prevent."
@@ -898,6 +904,68 @@ only reconciliation of the gap today is a sentence of `recording`'s, where this
 node's ruler will not meet it. Raised by the second clean-context reading of
 `author-questions` on 2026-09-05, which found the amendment required and named
 nowhere.
+
+#### dialogue-glosses-the-four-fact-names
+
+The recommended answer with a glossed `defines` entry for each of the four fact
+names this node reserves, so that every fact name resolves to a sentence saying
+what the fact decides. Three of the four are not written today. `existence` is
+glossed here already. `authority` is glossed on
+`commons.systems/disposition-graph/authority`, which is the node the author's
+bullet of 2026-09-04 names as the heading's link target, and it stays there. The
+two this option writes are `answer` and `persistence`, and with them the bare
+entries at `disposition/disposition-graph/node.md:65` and
+`disposition/disposition-graph/transience.md:76` are released, since `glossary`
+(`packages/disposition/derive.mjs`) and `definerIndex`
+(`packages/disposition/project.mjs`) each take the first definer they meet and
+ignore every later one, so two entries for one term resolve by the order the
+nodes are read in. The glosses drafted, each drawn from this node's own sentence
+on what the fact decides:
+
+- `answer`: the fact whose options are the candidate answers to the node's own
+  question, and whose ruled option is the answer the node stands on.
+- `authority`: the fact whose options are the class a ruling would confer,
+  ratified, delegated or deferred, which is why no recommendation carries a class
+  of its own. (The entry that stands on the `authority` node, "The standing that
+  lets a recorded answer act, conferred only by a ruling of the author's on one
+  of a node's facts and never by a mark, a command, or a class the AI writes for
+  itself", already says this; this option writes no second entry for it.)
+- `existence`: the fact that asks whether the node stays in the record, with the
+  choices keep and prune; it appears where a prune is proposed. (Stands here
+  today, unchanged.)
+- `persistence`: the fact whose options are the shapes the node would keep,
+  present only where the recommendation would change its shape, declaring or
+  liquidating a shim or adding or dropping evidence, and otherwise derived from
+  the shape and asking nothing.
+
+Raised by `commons.systems/disposition-graph/how-a-fact-is-headed`, whose
+recommended option `glosses-written-with-this-ruling` needs every fact name to
+carry a gloss so that no heading on the alignment page falls back to an unlinked
+word; that node's answer cites the two entries as bare terms claimed by nodes
+asking other questions, "The term `answer` is defined at
+`disposition/disposition-graph/node.md:65` as a bare term with no gloss, on a
+node whose question is 'What is a node?'". The option is here because the
+sentences are this node's to write: it reserves the four names, and a gloss lives
+on the node that defines the term.
+
+#### an-unconfirmed-nodes-draft-shape
+
+The recommended answer with one shape for the draft of a node no ruling has
+reached, instead of two. Today both are legal: `## Answer` with `stands` naming
+the draft and no fence, or a `## Recommendation` fence with nothing standing —
+"a `## Recommendation` fence exactly when the recommended option is not the one
+that stands". The two are not the same on the page the author reads.
+`alignment-page` has the column lead with the edit where an answer stands and
+show the whole where none does, so a draft carried as `## Answer` reaches the
+author with a standing-text chip on a text nobody has confirmed. The four
+children of `alignment-page` drafted on 2026-09-07 split evenly:
+`vocabulary-option-summary` and `which-facts-are-listed` carry theirs in
+`## Answer` with `stands`, `how-a-fact-is-headed` and
+`when-the-kickback-feedback-shows` in a fence. Raised by the clean-context reading
+of `vocabulary-option-summary` on 2026-09-07, which found four drafts written in
+one movement presented to the author in two forms. What the option would decide is
+which shape a node with no ruling takes; it decides nothing about a node that has
+one, where the fence is what carries a proposed change to a text that stands.
 
 ### authority
 

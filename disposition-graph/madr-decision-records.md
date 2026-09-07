@@ -75,7 +75,7 @@ bears:
     relation: diverged
   - node: commons.systems/disposition-graph/how-a-fact-is-headed
     fact: answer
-    option: name-linked-to-the-definer
+    option: glosses-written-with-this-ruling
     relation: adopted
 depends:
   - commons.systems/disposition-graph/viable-options

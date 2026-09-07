@@ -50,7 +50,7 @@ bears:
   - node: commons.systems/disposition-graph/vocabulary-option-summary
     fact: answer
     option: term-at-the-first-level
-    relation: adopted
+    relation: diverged
 ---
 ## Answer
 
@@ -109,7 +109,14 @@ under:
 source: Nielsen, Usability Engineering (1993), chapter 5 on minimalist design, and "Progressive Disclosure" (Nielsen Norman Group, 2006); Carroll, The Nurnberg Funnel (1990), the minimalist instruction programme it descends from; Krug, Don't Make Me Think (2000).
 bears:
   - fact: answer
+    option: three-column-ruling-screen
+    relation: adopted
+  - fact: answer
     option: every-fact-every-option
+    relation: diverged
+  - node: commons.systems/disposition-graph/vocabulary-option-summary
+    fact: answer
+    option: term-at-the-first-level
     relation: diverged
 ---
 ## Answer

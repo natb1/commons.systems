@@ -43,6 +43,9 @@ facts:
       - name: no-mark-where-no-line
         source: review
         ref: "2026-09-07"
+      - name: a-term-is-its-own-sentence
+        source: commons.systems/disposition-graph/vocabulary-option-summary
+        ref: "2026-09-07"
     recommends: three-marks-and-the-case-against
     boldness: moderate
     against: "The record asks the AI for a case against every recommendation — `dialogue`'s recommended text makes a fact's `against` the argument the recommendation had to beat, written when the recommendation is recorded — and under this answer the author never sees it at the level they read: on every fact of every node but one, the row carries a mark saying no reader's line bears and the AI's written objection, where one exists, sits behind a fold, because a reading returns one counter-argument for a node and `caseAgainst` substitutes it on the answer fact alone. The rule is mostly unmet today, 53 fact-level `against` fields beside 247 recommendations at this head, so on most rows the mark replaces nothing yet; that is back-fill debt against the rule, as `dialogue`'s own account records, and not a reason the rule will stay unmet, so what the fold hides grows as the debt is paid. The arrangement this answer forbids, the AI's line at the first level, is the only one under which an objection the record holds is always where the author reads."
@@ -94,8 +97,8 @@ does not write, a vocabulary fact's options and the option that stands. Where th
 record holds none for one yet, the row falls back to the bare name, and that
 fallback is the projector's defence against incomplete data rather than a form
 this answer or the parent provides for — `renderOption` writes a `choicename`
-span where the record yields no sentence, at
-`packages/disposition/project.mjs:1490-1492` — so a bare name on the page is a
+span where the record yields no sentence, in
+`packages/disposition/project.mjs` — so a bare name on the page is a
 record not yet written and a defect to be found. The name also stays in the row's
 markup, where a ruling is staged from it.
 
@@ -340,6 +343,28 @@ know whether anything has been said against the recommendation, and an absence
 where an argument would be reads as an absence of anything to say rather than as
 an absence of a reader, which is the legibility the recommended option buys with
 the mark.
+
+#### a-term-is-its-own-sentence
+
+Everything the recommended option says, with one exception written into the two
+clauses that would otherwise forbid it. This answer holds that a row "carries the
+option's name nowhere", on the reason the parent gives, "the name is how a ruling
+is stored and the sentence is the decision, and the author's words of 2026-09-04
+strike the id-shaped string from the row"; and it holds that where the record
+holds no sentence "the row falls back to the bare name ... so a bare name on the
+page is a record not yet written and a defect to be found". On the two facts
+whose options are the record's own vocabulary, `authority` and `existence`,
+neither reaches. The option's name there is not an id-shaped slug but a term the
+record defines, so the sentence the record holds for it and its name are the same
+string: leading with the term is leading with what the record holds. And it is
+not the fallback, which is what the projector prints where the record holds
+nothing, since here the record holds the term and its gloss both. Raised by
+`commons.systems/disposition-graph/vocabulary-option-summary`, whose recommended
+answer leads a vocabulary row with the term and puts the gloss one step down, and
+which would otherwise print on three rows of each of the 134 nodes carrying the
+authority fact a lead this answer's own words call a defect to be found. Under
+this option those two clauses say what they mean for a per-node fact and say what
+a vocabulary fact does instead; nothing else in the answer changes.
 
 ### authority
 

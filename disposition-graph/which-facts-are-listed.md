@@ -1,6 +1,6 @@
 ---
 question: Which facts does the alignment page list on a node?
-stage: ruling
+stage: review
 form: rule
 facts:
   - name: answer
@@ -34,6 +34,9 @@ facts:
         ref: "2026-09-04"
         status: passed
         reason: "whether the reserved names are four or five is the dialogue node's question, where the author's same words are already the option instrumentation-is-a-fact"
+      - name: existence-asked-persistence-derived
+        source: review
+        ref: "2026-09-07"
     recommends: all-four-listed-two-derived
     boldness: moderate
     against: "On 123 of the 134 nodes that carry facts the author will read two decisions and two rows that say nothing is proposed, and a row that asks nothing is apparatus in the one column the parent reserves for what the ruling asks. The author's directive was to list all facts; what this answer lists on almost every node is two facts and two sentences reporting that the record has nothing to ask, which is the fold struck and its silence reinstated under a heading."
@@ -71,8 +74,8 @@ The author, 2026-09-04, on the alignment page, queued from the sitting on author
 
 Every fact the record reserves, on every node that carries facts at all, in the
 reserved order, and none folded. Four names are reserved today, `answer`,
-`authority`, `existence` and `persistence`
-(`packages/disposition/read.mjs:76`), and the page lists whichever names the
+`authority`, `existence` and `persistence`, which is `FACT_NAMES` in
+`packages/disposition/read.mjs`, and the page lists whichever names the
 record reserves, so a fifth added by a ruling elsewhere appears here without a
 ruling here.
 
@@ -80,12 +83,23 @@ Two of the four the node carries and two it usually does not, and the page shows
 them differently because the record holds them differently. A fact the node
 carries is a decision the ruling asks: it carries its options, the recommendation
 among them and its radio, exactly as the parent's answer describes. A fact the
-node does not carry is listed as a derived row: the row states what the record
-derives for it, that the node is kept and that its shape is unchanged, says that
-no change to either is proposed on this node, and carries no option, no radio and
-no control, at any stage. It is a read-only indicator, which is what the author's
-rule of 2026-09-06 leaves the page free to show of a movement it is not running,
-and it is not a decision the ruling asks.
+node does not carry is listed as a derived row, which is the name of the shape:
+the row carries no option, no radio and no control, at any stage. It is a
+read-only indicator, which is what the author's rule of 2026-09-06 leaves the
+page free to show of a movement it is not running, and it is not a decision the
+ruling asks.
+
+What the two rows say is not the same, because the record holds the two absences
+differently, and only one of them is a derivation. The persistence row states what
+the record derives: `dialogue` enumerates what is derived and names "the
+persistence where no fact carries it", so where no persistence fact stands the
+shape is derived from the node and the row prints it. The existence row derives
+nothing and does not say the node is kept. What the absence of an existence fact
+holds is that no prune has been proposed, which is `dialogue`'s own reason for
+making the pair conditional, "a choice nobody has raised is not a candidate the
+record lists"; so the row says that no prune is proposed on this node and where
+one would be raised, and stops there. Writing `keep` on that row would be the
+page inventing a fact, which is the one thing this answer promises never to do.
 
 That division is the record's own and not the page's invention. Of `persistence`
 the `dialogue` node says it is "present only where the recommendation would
@@ -100,6 +114,29 @@ direction and not as doctrine; the rule stated here holds whichever way that nod
 rules, because the page lists what the record reserves and derives what the
 record derives, and neither clause needs `dialogue` to have ruled. Nothing is
 entered in `depends` for that reason.
+
+One text reads the other way and is quoted rather than passed over. `unanswered`
+says: "A response is given on a node, or on one of the decisions that node's
+ruling asks, which are its facts: the answer, the authority class a ruling would
+confer, the node's existence, and its persistence where the recommendation would
+change its shape." It conditions persistence in terms and leaves existence
+unconditioned, so on that text the existence decision is one a ruling asks
+wherever a ruling can be given, and a row that takes no ruling declines to ask it.
+The page still reports rather than asks, on the author's own rule of 2026-09-06:
+"The scope of alignment artifact is limited to final confirmation and
+previews/read only indicators of other phases of the dialogue. All other
+information from the author is done via the `/align` session interview." A prune
+nobody has proposed is not a recommendation to confirm, so a live radio there
+would collect a proposal, which is the one thing that rule sends to the interview;
+and the author's standing disposition of the same day gives the prune of an
+unratified node to the AI under the general delegation of graph topology, with
+two bounds, so on 123 nodes the page would be asking the author to confirm a
+decision they have said they do not want to be asked about. Where a prune is
+proposed the node carries an existence fact, and then the row is the live one the
+parent's answer describes. The asymmetry between the two texts is real and is not
+resolved here: `unanswered`'s sentence conditions one of the pair and not the
+other, and an option conditioning existence as persistence is conditioned belongs
+on that node, where its answer is.
 
 Where the proposal would be made is said on the row, because a row that reports a
 decision is not being asked and does not say where it would be is the fold the
@@ -117,8 +154,8 @@ record reserves four decisions inside it; where there is no ruling there is
 nothing for them to complete.
 
 The caption above the list changes with the list. Today it reads "What this
-ruling asks" (`packages/disposition/project.mjs:671`), which is false of a
-derived row; under this answer the caption names the decisions the ruling covers,
+ruling asks", which is `FACTS_LBL` in `packages/disposition/project.mjs`, and
+which is false of a derived row; under this answer the caption names the decisions the ruling covers,
 and each derived row says on its own face that it asks nothing.
 
 What this answer does not decide is how many names the record reserves. The
@@ -162,7 +199,7 @@ and a derived value stored in 123 places is the second home
 `commons.systems/disposition-graph/codd-update-anomaly` names, whose reading of
 this record is that "What has a shape is recorded in the field that has it and
 projected from there"
-(`disposition/disposition-graph/codd-update-anomaly.md:50`). The record's reason
+(`disposition/disposition-graph/codd-update-anomaly.md:54`). The record's reason
 for making the pair conditional says the same thing from the other side, that a
 choice nobody has raised is not a candidate the record lists. The page is where a
 derived fact is shown, and the field is where a decided one is kept.
@@ -186,8 +223,10 @@ pair is otherwise derived and asks nothing, printed rather than left implicit.
 What rests on the AI is two things and they are named as the AI's. The choice of
 the page over the encoding, which the author's "Either way" left open and which
 this answer takes on the ground that a derived fact has no second home. And the
-form of the derived row: that it states what is derived, says where a proposal
-would be made, and takes no ruling. Boldness moderate, and the second is why: a
+form of the two rows: that the persistence row states what the record derives,
+that the existence row states that no prune is proposed and where one would be
+raised, that both say where a proposal would be made, and that neither takes a
+ruling. Boldness moderate, and the second is why: a
 row that lists a decision and refuses to take it is a shape the record has not
 used before, and whether it reads as completeness or as a fold with a caption is
 what the author is best placed to say.
@@ -196,7 +235,7 @@ what the author is best placed to say.
 
 Everything the recommended option says, with the page listing only the facts the
 node carries and inventing nothing, which is what `renderFacts` does today
-(`packages/disposition/project.mjs:1648-1656`) and what the parent's clause
+(`packages/disposition/project.mjs`) and what the parent's clause
 "every one the node carries and none folded" says. Passed over: the author's
 words of 2026-09-04 strike it by name, and the fold they struck is not the only
 way a decision goes unseen. On 123 of the 134 nodes that carry facts this option
@@ -264,6 +303,26 @@ node's answer fact. This answer lists whatever that ruling leaves reserved, so a
 ruling there reaches this page with no ruling here, and listing a fifth name the
 record does not reserve would be the page deciding the encoding.
 
+#### existence-asked-persistence-derived
+
+Everything the recommended option says, with the two conditional facts split
+rather than treated as a pair: the persistence row reports what the record
+actually derives from the node's shape, and the existence row carries `keep` and
+`prune` as a live decision on every node that carries facts. For it: it takes the
+author's directive whole where the record backs it, since `unanswered` names the
+node's existence among the decisions a ruling asks with no condition on it and
+`dialogue`'s derived enumeration names persistence alone; a prune is the one
+decision a reader of a node is best placed to raise at the moment they read it;
+`existence` exists precisely so that a prune is recorded as a fact; and it costs
+one live radio on 123 nodes rather than 246. Viable and not adopted: a live
+existence radio on 123 nodes asks a decision no one has recommended, and the
+author's rule of 2026-09-06 keeps that off the page, the page's scope being the
+final confirmation of what is recommended and every other movement's preview.
+The same day's standing disposition gives the prune of an unratified node to the
+AI under the general delegation of graph topology, so on those nodes the radio
+would ask the author to confirm what they have said they do not want to be asked
+about.
+
 ### authority
 
 Ratified, on the capture-shaped limb of `class-recommendation`'s test. The other
@@ -314,7 +373,7 @@ Proposed: Add `commons.systems/disposition-graph/which-facts-are-listed` to `ali
 
 The periagogic stage's object was read by the unit of 2026-09-05, whose report is
 the seventh of its ten items: it found `renderFacts`
-(`packages/disposition/project.mjs:1648-1656`) mapping over `n.facts` and
+(`packages/disposition/project.mjs`) mapping over `n.facts` and
 inventing nothing, `commons.systems/public/agency` carrying two facts and the
 page rendering two fieldsets for it, and the author's directive met by no
 sentence of the parent's recommended text and by no line of the projector. It
@@ -324,12 +383,14 @@ stopping for confirmation, and ensure alignment-page-observations is progressed
 up to confirmation and included in the list of reconciliation for
 alignment/review/survey/artifact."
 
-One periagogic probe is owed and is stated here as a question, to be put when the
-author is directed to the page: does "list all facts" ask that the two conditional
-decisions be *shown*, which is what this answer gives, or that they be *asked*,
-which is the option `derived-rows-ask-and-take-a-ruling`? The author's own words
-answer the first and are silent on the second, and the two differ by whether the
-page will take a prune the author has not been offered.
+No probe is owed. The question the periagoge would have put — does "list all
+facts" ask that the two conditional decisions be *shown* or that they be *asked*?
+— is a candidate answer to this node's own question, which under `probe-or-node`'s
+test makes it an option and not a probe, and both candidates are already on the
+fact: `all-four-listed-two-derived` and `derived-rows-ask-and-take-a-ruling`. The
+author's own words answer the first and are silent on the second, and the two
+differ by whether the page will take a prune the author has not been offered; the
+choice is put to them as the fact's two options.
 
 What the record says. The parent's answer holds two clauses a ruling here
 reaches, located by their words: the facts sentence, "Then the facts, every one
@@ -337,8 +398,11 @@ the node carries and none folded", whose enumeration this answer keeps and whose
 binding to what the node carries it amends; and the no-facts clause, "A node that
 carries no facts offers nothing invented", which this answer leaves exactly as it
 stands and cites as its own limit. The parent's marking rule, that a clause
-standing only until a child rules says so, is applied at three clauses and not at
-these, which is the parent's bookkeeping and is corrected there. `dialogue`'s
+standing only until a child rules says so, was applied at three clauses and not
+at the facts clause this answer amends, so a reader of the parent met an
+unqualified sentence a ruling here replaces; the clean-context reading of
+2026-09-07 named it, and the parent's amendment of this sitting marks it in the
+form the other three already take. `dialogue`'s
 recommended text is the ground of the derived row and is quoted in the answer;
 that node is unanswered, so it is read as direction. `unanswered`'s answer names
 the same four decisions as what a ruling asks, which is why the derived row says
@@ -350,13 +414,14 @@ gap, that a page filling a hole with a plausible render makes the hole
 unfindable, which is why the derived row states what is derived rather than
 staying silent.
 
-The tradition surfaced, and it is one reading, recorded here in prose with the
-`bears` entry on the reading node owed with the ruling.
+The tradition surfaced, and it is one reading, whose `bears` entry on the reading
+node already stands.
 `commons.systems/disposition-graph/special-verdict-form`, whose answer at
-`disposition/disposition-graph/special-verdict-form.md:31` "Supports asking the
-question rather than inferring the answer" and whose account at `:33` records that
-the record already took both halves by putting the authority fact on every node
-that carries facts. It bears on the recommended option as adopted, and it carries
+`disposition/disposition-graph/special-verdict-form.md:35` "Supports asking the
+question rather than inferring the answer" and whose next paragraph at `:37`
+records that the record already took both halves by putting the authority fact on
+every node that carries facts; its entry for this node's recommended option was
+written on 2026-09-06 at `8a672c17` and stands at `:28-31`. It bears on the recommended option as adopted, and it carries
 its own limit in the same paragraph: "The form supplies no question by itself.
 The questions are drafted for the case, and drafting them is the work, which is
 why the rules say what happens to a question the court left out." That limit is
@@ -364,18 +429,21 @@ exactly the line this answer draws. The tradition supports listing the decisions
 the judgment turns on so that a question never put is visibly never answered; it
 does not support putting a question nobody drafted, which is why the two derived
 rows report and do not ask. The second reading, `codd-update-anomaly`, is cited
-in the rationale for the choice of end and bears on the passed option
-`every-node-carries-four-facts` as the reason it is passed; its entry is owed
-there too.
+in the rationale for the choice of end and bears on the option
+`every-node-carries-four-facts` as the reason it is not adopted; its entry stands
+there too, `relation: diverged`, written in the same commit. The clean-context
+reading of 2026-09-07 held that entry to be owed, and it was already written; the
+correction is recorded here rather than left as an obligation a later session
+would discharge twice.
 
 What the implementation does today, at the loci a ruling here changes.
-`renderFacts` (`packages/disposition/project.mjs:1648-1656`) returns
-`NOTHING_PROPOSED` (`:672`) where the node has no facts and otherwise maps over
-`n.facts` under the caption `FACTS_LBL`, "What this ruling asks" (`:671`); it has
-no fold branch and no derivation. `renderFact` (`:1623-1640`) writes a
+`renderFacts` (`packages/disposition/project.mjs`) returns
+`NOTHING_PROPOSED` where the node has no facts and otherwise maps over
+`n.facts` under the caption `FACTS_LBL`, "What this ruling asks"; it has
+no fold branch and no derivation. `renderFact`, in the same file, writes a
 `<fieldset class="fact">` with a legend, the ruled line, the option rows and the
 kick-back row, all of which a derived row would carry none of. The reserved order
-is `FACT_NAMES` in the reader (`packages/disposition/read.mjs:76`). Measured over
+is `FACT_NAMES` in the reader (`packages/disposition/read.mjs`). Measured over
 the 141 node files of both graphs at graph commit `5da05bc4`, 134 carry an
 `answer` fact and the same 134 an `authority` fact, 6 carry `existence`, 5 carry
 `persistence`, and none carries both, so 123 nodes render two fieldsets where
@@ -405,3 +473,61 @@ On the viability of the options: Every listed option is viable and the four pass
 Strongest counter-argument (moderate): The tradition this answer adopts is the one that cuts against it. `special-verdict-form` holds that "a special verdict puts each question the judgment needs to the decider separately, so the answers can be read apart, and a question that was never put was never answered", and the derived row is exactly a question printed and not put: on 123 of the 134 nodes carrying facts the author will read the names of two decisions beside two sentences telling them nothing is being asked. `unanswered` names "the node's existence" among the decisions a ruling asks with no condition on it, so what the page declines to ask is a decision the record says a ruling covers, and the answer's ground for declining -- that the page's scope is the final confirmation of what is recommended -- is the same shape of argument the fold used, that the recommending party decides which decisions reach the decider, now applied to two facts rather than to the low-boldness ones. The author's directive was "list all facts - even if options have not yet been established", and its natural reading is that a fact listed is a fact available to rule on; what this answer delivers on almost every node is two rulings and two notices, which is the fold's silence given a heading.
 
 The session's reply: Accepted on all six, each verified at its locus on the main thread: dialogue derives persistence and not existence, so a row saying the node is kept prints a derivation the record does not make; unanswered conditions persistence and not existence and is cited the other way; the special-verdict-form entry stands since 8a672c17 and the codd-update-anomaly entry is owed; every project.mjs and reading line is stale; the probe the account calls owed is the choice between the fact's options; and the parent's facts clause is unmarked, which the parent's amendment of this sitting takes. The amendments owed: the existence row says that no prune is proposed on this node and where one would be, derived kept for the persistence row alone; unanswered quoted, its asymmetry stated, and why the page reports rather than asks, the author's rule of 2026-09-06 that the page collects only the confirmation of what is recommended; the bears sentence corrected; citations by function; the probe restated as the choice the options put; and the option existence-asked-persistence-derived recorded, source review, viable and not adopted, since a live existence radio on 123 nodes asks a decision no one has recommended, which the author's rule of 2026-09-06 keeps off the page. The counter-argument goes on the row at the strength the reading gave it. The amended answer owes its re-reading.
+
+### The reading of 2026-09-07 applied, 2026-09-07
+
+The reading forwarded to the author's ruling at moderate strength, with six
+findings and no probes. Its verdict, its strength and the pin of the
+recommendation it read are in `review` above, written by the instrument. All six
+were validated on the main thread at the loci they name and all six are accepted.
+The recommendation does not move: `all-four-listed-two-derived` stands, on the
+author's directive to list all facts even where options have not been
+established.
+
+The one that changes what the answer says is the first, and it is a claim about
+the record that the record does not make. `dialogue` enumerates what is derived —
+"the class and the status, the persistence where no fact carries it, the queue and
+its order" — and names persistence there and not existence. The draft had both
+derived rows saying the same kind of thing, that the node is kept and that its
+shape is unchanged, and the first half of that is a derivation nobody has made:
+what the absence of an existence fact holds is that no prune has been proposed,
+which is `dialogue`'s own reason for the conditional pair. So the existence row
+now says that no prune is proposed on this node and where one would be raised, and
+"derived" is kept for the persistence row alone; "derived row" stays as the name
+of the shape, and the answer says as much, so that the name is not read as a
+second claim. The answer's own promise, that the page never invents a fact, is
+what the correction keeps.
+
+`unanswered` was cited as supporting the derived row when on existence it reads
+the other way: it conditions persistence in terms and leaves the node's existence
+unconditioned among the decisions a ruling asks. Its sentence is now quoted, the
+asymmetry is stated, and the ground for reporting rather than asking is given as
+the author's own — the rule of 2026-09-06 fixing the page's scope to the final
+confirmation of what is recommended, and the same day's standing disposition
+giving the prune of an unratified node to the AI under the general delegation of
+graph topology, so that a live radio on 123 nodes would ask the author to confirm
+a decision they have said they do not want to be asked about. The asymmetry
+itself is not resolved here: an option conditioning existence as persistence is
+conditioned belongs on `unanswered`, where that sentence lives.
+
+Two were checks of the record against itself. Both `bears` entries the account
+called owed already stand, written on 2026-09-06 at `8a672c17`:
+`special-verdict-form`'s at `:28-31` on `all-four-listed-two-derived`, adopted,
+and `codd-update-anomaly`'s on `every-node-carries-four-facts`, diverged. The
+reading found the first standing and the second owed; the second was written in
+the same commit, and the sentence is corrected to say so, so that a later session
+does not write it twice. And every citation into `packages/disposition/project.mjs`
+was exact at implementation commit `87e4b24e` and staled when `cb0e02c6` landed on
+2026-09-07, with the two reading nodes' citations staled by the `bears` entries
+themselves; that is one reconciliation across the wave, answered by naming the
+function and not the line, and by correcting the two graph line numbers where a
+function has no name to take.
+
+The account's owed probe is struck, since the question it stated is the choice the
+fact's own options put. The option `existence-asked-persistence-derived` is
+recorded from the reading's viability, viable and not adopted, since a live
+existence radio on 123 nodes asks a decision no one has recommended. And the
+parent's unmarked facts clause, which the reading named, is marked by the parent's
+own amendment of this sitting rather than left as this node's finding.
+
+The amended answer owes its re-reading, and the node returns to the review stage.

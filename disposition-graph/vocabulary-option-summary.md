@@ -1,6 +1,6 @@
 ---
 question: What does an option's summary say on a fact whose options are the record's own vocabulary?
-stage: ruling
+stage: review
 form: rule
 facts:
   - name: answer
@@ -24,6 +24,9 @@ facts:
         ref: "2026-09-07"
         status: passed
         reason: "a gloss cut to the width of a row is the record's sentence with its qualification removed, which on ratified is the half saying the author is asked before it changes"
+      - name: term-with-the-gloss-on-the-first-node-only
+        source: review
+        ref: "2026-09-07"
     recommends: term-at-the-first-level
     boldness: low
     against: "On the most repeated decision on the page the author will now read three words, ratified, delegated and deferred, and the sentence saying what confirming each would do sits behind a fold on every one of the 134 nodes that carry the fact. The record's own reason for putting it on the row was that the bare words told the author nothing they did not already have to know, and this answer's reply is that they do already know it, which is true of this author and of no other reader the page may ever have."
@@ -75,13 +78,37 @@ The reach is two facts and no wider. `authority` and `existence` are the two
 whose options are terms; `persistence`'s options are shapes written per node and
 `answer`'s are candidate answers written per option, and both keep their sentence
 at the first level, where there is no name that says the decision and the sentence
-is the decision. That division is `dialogue`'s own, in the sentence this answer
-reads and does not amend: "An option of the two facts whose options are the
-record's own vocabulary, `authority` and `existence`, has no subsection at all:
-its name is a term, and its sentence is the gloss on the node that defines the
-term." Where the gloss lives and who writes it are untouched: written once, on the
-defining node, read from there, and never carried by the page for itself. What
-changes is which level of the row it appears at.
+is the decision. That division is `dialogue`'s, in the sentence this answer reads
+and does not amend: "An option of the two facts whose options are the record's own
+vocabulary, `authority` and `existence`, has no subsection at all: its name is a
+term, and its sentence is the gloss on the node that defines the term." That text
+is `dialogue`'s recommended text, which no ruling has reached, and this answer
+reads it as direction and not as doctrine; the rule stated here holds whichever
+way that node rules, because a fact whose options are terms the record defines is
+what the rule is about, and `dialogue`'s standing answer already names `authority`
+and `existence` as the two facts whose options are the record's own vocabulary.
+Nothing is entered in `depends` for that reason. Where the gloss lives and who
+writes it are untouched: written once, on the defining node, read from there, and
+never carried by the page for itself. What changes is which level of the row it
+appears at.
+
+What this does to the sibling's rule is said here and not left to an executor.
+`what-an-option-row-carries` holds that a row "carries the option's name nowhere",
+and gives the reason: "the name is how a ruling is stored and the sentence is the
+decision, and the author's words of 2026-09-04 strike the id-shaped string from
+the row"; it holds too that where the record holds no sentence "the row falls
+back to the bare name ... so a bare name on the page is a record not yet written
+and a defect to be found". Neither reaches a vocabulary fact. On the two facts
+whose options are the record's own vocabulary the option's name is not an
+id-shaped slug but a term the record defines, and the sentence the record holds
+for that option and the name of that option are the same string, so leading with
+the term is leading with what the record holds and not with the handle a ruling
+is filed under; and a term is not the fallback that node calls a defect, since
+the fallback is what the projector prints when the record holds nothing, where
+here it holds a gloss and a defined term both. The exception is recorded on that
+node as the option `a-term-is-its-own-sentence`, with this node as its source, so
+that its two sentences are amended with it rather than left contradicting this
+page on 402 rows.
 
 Why the term is enough at the first level, against the record's own reason for
 the gloss. The parent's answer holds that the authority class "is the most
@@ -108,19 +135,18 @@ wherever it appears is `commons.systems/disposition-graph/vocabulary-view`'s
 question and not this page's to settle.
 
 In the implementation the row's lead is `renderOption`
-(`packages/disposition/project.mjs:1490-1492`), which prints the first sentences
+(`packages/disposition/project.mjs`), which prints the first sentences
 of whatever `optionText` returns, and for a vocabulary option `optionText`
-(`packages/disposition/derive.mjs:312-323`) returns the gloss with the id of the
+(`packages/disposition/derive.mjs`) returns the gloss with the id of the
 node that holds it. `optionText` need not change and should not: it is what keeps
 the sentence in one place. What changes is the projector, which for an option of a
 vocabulary fact prints the term as the row's lead and puts the gloss at the head
-of the drill-down. The drill-down's present body is `restOf`
-(`packages/disposition/project.mjs:1607-1613`), the remainder the lead did not
-take, which for a gloss is empty, since a gloss is one sentence and the lead's cap
-is 400 characters (`CHOICE_LEAD_CHARS`, `:1595`); so the gloss reaches the
-drill-down only if the projector is told to put it there, and a reconciliation
-that moved the lead and not the body would drop the sentence off the page
-entirely.
+of the drill-down. The drill-down's present body is `restOf`, the remainder the
+lead did not take, which for a gloss is empty, since a gloss is one sentence and
+the lead's cap is `CHOICE_LEAD_CHARS`, 400 characters, in the same file; so the
+gloss reaches the drill-down only if the projector is told to put it there, and a
+reconciliation that moved the lead and not the body would drop the sentence off
+the page entirely.
 
 ## Rationale
 
@@ -216,6 +242,25 @@ and a gloss with its qualification removed is worse than no gloss, since on
 before the answer changes, which is the whole of what distinguishes it from
 `delegated`.
 
+#### term-with-the-gloss-on-the-first-node-only
+
+Everything the recommended option says, with one exception: the row leads with
+the term everywhere except on the first node of a sitting, or on the first fact
+of the page's session, where the gloss is printed once so that a reader who does
+not hold the vocabulary meets it before they meet 402 bare terms. For it: it
+takes the author's words where the argument for them is strongest, the same
+sentence repeated on 134 nodes, and refuses them only where the argument is
+weakest, the first reading, which the recommended option's own `against` concedes
+it loses; and it costs one condition in the projector, which is less than the
+condition `how-a-fact-is-headed` already asks for on the heading. Viable and not
+adopted: which node is first in a sitting is no fact of the record — the order
+is derived from the frontier and changes with every ruling, and the page has no
+session of its own to be first in — so the condition would key the row's text to
+something no node projects; and the record already has a device for the first
+reading, the fact's own heading linked to the node that defines the term, which
+is one click from the row on the line above it and is there on every node rather
+than on one.
+
 ### authority
 
 Ratified, on the capture-shaped limb of `class-recommendation`'s test. The other
@@ -268,11 +313,14 @@ than in dialogue: "before stopping for confirmation, and ensure
 alignment-page-observations is progressed up to confirmation and included in the
 list of reconciliation for alignment/review/survey/artifact."
 
-One periagogic probe is owed and is stated here as a question, to be put when the
-author is directed to the page: does the direction reach `existence` as well as
-`authority`? The author named the authority fact, `dialogue` states one rule for
-the two together, and this answer takes the class; `authority-alone` is on the
-fact for the other reading, and nothing the author has said chooses between them.
+No probe is owed. The question the periagoge would have put — does the direction
+reach `existence` as well as `authority`? — is a candidate answer to this node's
+own question, which under `probe-or-node`'s test makes it an option and not a
+probe, and both candidates are already on the fact: `term-at-the-first-level`
+reaching the class and `authority-alone` reaching one fact. The author named the
+authority fact, `dialogue` states one rule for the two together, and this answer
+takes the class; nothing the author has said chooses between them, and the choice
+is put to them as the fact's two options.
 
 What the record says. The parent's answer holds two clauses a ruling here reaches,
 located by their words: the vocabulary sentence, "A reserved fact's options are
@@ -293,31 +341,35 @@ fact's heading under that answer is the name linked to the node that defines it;
 the two are stated as complements and neither depends on the other, since each
 holds whichever way the other rules.
 
-The tradition surfaced, and it is one reading, recorded here in prose with the
-`bears` entry on the reading node owed with the ruling.
-`commons.systems/disposition-graph/progressive-disclosure`, whose answer at
-`disposition/disposition-graph/progressive-disclosure.md:53` holds "that an
-interface shows the few things its reader needs most of the time and puts the rest
-one step away; that the split is made by frequency and importance and not by the
-designer's sense of tidiness; and that what is deferred must stay discoverable and
-must never be lost". All three are met exactly here, and the third is why the
-gloss goes to the drill-down rather than off the page. The relation is adopted on
-the recommended option, and the divergence that node records against the parent is
-not repeated here: at `:55` the reading notes that the record splits by boldness
-rather than by frequency, and this answer splits by frequency in the tradition's
-own terms, since the ground for demoting the gloss is that it is the same sentence
-on 134 nodes. That is the one place under this page where the tradition's own
-criterion applies unchanged, and it is recorded as such rather than folded into
-the parent's divergence.
+The tradition surfaced, and it is one reading, whose `bears` entry on the reading
+node already stands and whose relation this amendment moves.
+`commons.systems/disposition-graph/progressive-disclosure`, whose recommended
+text holds that the tradition has three parts, its shape, an interface showing a
+few things first and putting the rest one step away; its criterion, frequency and
+importance of use; and its guarantee, that what is deferred stays discoverable
+and is never lost. The shape and the guarantee are met exactly here, and the
+guarantee is why the gloss goes to the drill-down rather than off the page. The
+criterion is not met, and the relation is diverged for that reason. The reading's
+recommended text says why it cannot travel: "a decision put to the author is not a
+detail whose frequency of use could be measured, the page having one reader." The
+measure this answer takes is not frequency of use at all but repetition across
+nodes — the same three sentences printed on 134 of the 141 node files of both
+graphs — which is a property of the record and not of the reader's habit, so the
+answer re-reads the tradition's criterion rather than applying it. The earlier
+draft recorded the relation as adopted and claimed the criterion applied
+unchanged; the clean-context reading of 2026-09-07 found that it does not, and
+the entry at `disposition/disposition-graph/progressive-disclosure.md:50-53`,
+written on 2026-09-06 at `8a672c17`, moves from `adopted` to `diverged` with this
+amendment.
 
 What the implementation does today, at the loci a ruling here changes.
-`optionText` (`packages/disposition/derive.mjs:312-323`) returns the gloss of the
+`optionText` (`packages/disposition/derive.mjs`) returns the gloss of the
 term for an option of a vocabulary fact, with the id of the defining node;
-`renderOption` (`packages/disposition/project.mjs:1490-1492`) prints
-`firstSentences(said.text)` as the row's lead, capped at 400 characters
-(`CHOICE_LEAD_CHARS`, `:1595`); and the drill-down's body is `restOf`
-(`:1607-1613`), which returns nothing for a one-sentence gloss, so the gloss
-appears on the row and nowhere else. Measured at `5da05bc4`, 134 of the 141 node
+`renderOption` (`packages/disposition/project.mjs`) prints
+`firstSentences(said.text)` as the row's lead, capped at `CHOICE_LEAD_CHARS`, 400
+characters; and the drill-down's body is `restOf`, in the same file, which
+returns nothing for a one-sentence gloss, so the gloss appears on the row and
+nowhere else. Measured at `5da05bc4`, 134 of the 141 node
 files of both graphs carry an authority fact and 6 carry an existence fact, so the
 three authority glosses are the most repeated text on the page.
 
@@ -346,3 +398,71 @@ On the viability of the options: Every listed option is viable and the two passe
 Strongest counter-argument (moderate): The author's sentence -- "Text summary for each authority option is just the name of the authority level" -- was one sentence about one fact, given while reading one node, and this answer generalises it into a rule for a class of facts on every node the record holds. What it takes off the row is the only text on the page that says what confirming `delegated` would do, and that is the most consequential ruling in the record: it is the act by which the AI's recommendation begins to act below a node without the author being asked again. The record's whole guard against capture is that the author reads what they are conferring at the moment they confer it, and this answer's reply -- that the author already knows -- is a claim about one reader on one day, not a property of the record; the answer itself concedes as much in its `against`. The two things it puts in the gap are real but both are one click away, and the nearer of the two, the linked heading, is not yet ruled and belongs to a sibling whose own recommendation leaves two of four headings unlinked.
 
 The session's reply: Accepted on all seven, each verified at its locus on the main thread: what-an-option-row-carries says the row carries the option's name nowhere and a bare name is a defect, and this answer leads 402 rows with one; dialogue's division is its recommended text and is cited as standing; the tradition's criterion is re-read as repetition across nodes and is recorded as adopted; the bears entry stands at progressive-disclosure since 8a672c17; every project.mjs line is stale since cb0e02c6; the probe the account calls owed is the choice between the fact's two options; and the four siblings encode their drafts two ways. The amendments owed: the answer states the reconciliation the reading offers, that on a vocabulary fact the option's name is a term the record defines and its sentence is the same string, so the parent's reason for banishing the name does not reach it, recorded as the option a-term-is-its-own-sentence on what-an-option-row-carries, source this node; dialogue's sentence cited as direction and not doctrine, in which-facts-are-listed's words; the tradition cited to its recommended text, the criterion named as repetition and the relation on progressive-disclosure moved to diverged; the account's bears sentence corrected; citations by function; the probe restated as the choice the options put; and the option term-with-the-gloss-on-the-first-node-only recorded, source review, viable and not adopted, since which node is first in a sitting is no fact of the record and the linked heading is the record's own device for the first reading. The two encodings of the wave's drafts are recorded as an option on dialogue, source review, and no node is re-encoded in this movement. The counter-argument goes on the row at the strength the reading gave it. The amended answer owes its re-reading.
+
+### The reading of 2026-09-07 applied, 2026-09-07
+
+The reading forwarded to the author's ruling at moderate strength, with seven
+findings and no probes. Its verdict, its strength and the pin of the
+recommendation it read are in `review` above, written by the instrument. All
+seven were validated on the main thread at the loci they name and all seven are
+accepted. The recommendation does not move: `term-at-the-first-level` stands, on
+the author's own sentence that the summary is the name of the level.
+
+The one that changes what the answer says is the first. `what-an-option-row-carries`
+holds that a row "carries the option's name nowhere" and that a bare name is "a
+record not yet written and a defect to be found", and under this answer the page
+prints the bare name as the lead on three rows of every one of the 134 nodes that
+carry the authority fact, so an executor holding both texts could not tell
+whether those 402 rows are the required form or 402 defects. The reconciliation
+the reading offers is made in the answer itself: on a vocabulary fact the option's
+name is a term the record defines, and the sentence the record holds for it is the
+same string, so the parent's reason for banishing the name — that it is how a
+ruling is stored — does not reach a term, and a term is not the fallback that
+node calls a defect. The exception is recorded on that node as the option
+`a-term-is-its-own-sentence`, with this node as its source, so its two sentences
+are amended with it rather than left contradicting this page.
+
+Three were checks of the record against itself. `dialogue`'s division of the four
+facts is that node's recommended text, which no ruling has reached, and the draft
+cited it as the record's standing division while the sibling drafted in the same
+wave marked the same node's status in terms; it is now cited as direction and not
+as doctrine, in that sibling's words, and the answer says it holds whichever way
+that node rules. The tradition on `progressive-disclosure` was cited to its
+standing answer and recorded as adopted, when its recommended text says the
+criterion cannot travel to a page with one reader; the criterion this answer takes
+is repetition across nodes and not frequency of use, so the relation is diverged
+and the standing `bears` entry moves with it. And every citation into
+`packages/disposition/project.mjs` was exact at implementation commit `87e4b24e`
+and staled when `cb0e02c6` landed on 2026-09-07, which is one reconciliation
+across the wave, answered by naming the function and not the line.
+
+The `bears` entry the account called owed already stood, written on 2026-09-06 at
+`8a672c17`; the sentence is corrected to say so. A second thing the same finding
+saw is not this node's to fix and is carried to the node it belongs to: the entry
+stands in `progressive-disclosure`'s frontmatter and is absent from that node's
+`## Recommendation` fence, whose `bears` carries one entry only, so a ruling for
+that node's recommended option would silently drop this node's entry and the one
+for `three-column-ruling-screen`.
+
+The account's owed probe is struck, since the question it stated is the choice the
+fact's own options put. The option `term-with-the-gloss-on-the-first-node-only` is
+recorded from the reading's viability, viable and not adopted: which node is first
+in a sitting is no fact of the record, and the linked heading is the record's own
+device for the first reading.
+
+Two things about the round rather than about this node. The four siblings drafted
+in this wave encode their drafts two ways — this node and `which-facts-are-listed`
+in `## Answer` with `stands` naming the draft, `how-a-fact-is-headed` and
+`when-the-kickback-feedback-shows` in a `## Recommendation` fence — and the page
+presents the two shapes differently, so on two of them the author meets a
+standing-text chip on a draft nobody has confirmed. No node is re-encoded in this
+movement; the question is recorded as the option `an-unconfirmed-nodes-draft-shape`
+on `dialogue`, source `review`. And the reading's counter-argument closes on the
+linked heading being "not yet ruled and belong[ing] to a sibling whose own
+recommendation leaves two of four headings unlinked"; on the same day
+`how-a-fact-is-headed`'s recommendation moved to `glosses-written-with-this-ruling`,
+under which no heading falls back, so that clause is overtaken. The
+counter-argument is the reader's words and is not edited; the change is recorded
+here, where the author reads it beside the row.
+
+The amended answer owes its re-reading, and the node returns to the review stage.

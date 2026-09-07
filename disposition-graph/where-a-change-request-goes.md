@@ -40,6 +40,9 @@ facts:
       - name: kick-back-ask-unchanged
         source: review
         ref: "2026-09-06"
+      - name: the-caption-asks-and-the-control-collects
+        source: commons.systems/disposition-graph/when-the-kickback-feedback-shows
+        ref: "2026-09-07"
     recommends: change-requests-go-to-the-kick-back
     boldness: moderate
     against: "A kick-back on one fact moves the whole node, so under this answer the author who wants one word changed loses the ruling they were ready to give and the node's stage with it, and the record answers a request about a label by making the cheapest correction on the page the most expensive act on it."
@@ -216,6 +219,31 @@ also asking for the change by name. It is the counterpart on the kick-back of
 without ruling on a control whose wording is `when-the-kickback-feedback-shows`'
 question. Against it: a channel that is the only home for a change request and
 does not say so is a channel the author must be told about somewhere else.
+
+#### the-caption-asks-and-the-control-collects
+
+Everything the recommended option says of the routing, with the ask moved off the
+control and onto the kick-back row's caption: the caption says that a change to
+what is recommended is asked for here, and the control beneath it collects the
+words. Recorded from
+`commons.systems/disposition-graph/when-the-kickback-feedback-shows`, whose
+recommended answer of 2026-09-07 shows the feedback control only once the
+kick-back is the chosen option, and which therefore departs from this answer's
+sentence that "that control is to ask for the change and not only for the ground
+of the refusal". Its reason is the reveal: a label the author cannot read while
+they are deciding whether to dissent cannot be what tells them that a change is
+made here, so under that answer the label goes on asking for what the options miss
+and the caption, which is on the screen the whole time, carries the ask. For it:
+the ask has to be readable at the moment the author is deciding where their change
+belongs, and a caption is read then where a hidden label is not. Against it: a
+caption that carries both what a kick-back does to the node and what may be
+written in the control asks for two things in one sentence, which is how a caption
+stops saying either, and this answer's own sentence names the control and not the
+caption. Viable and not adopted here: this node routes the request and that node
+rules this control's wording, so the divergence is recorded rather than resolved,
+and it is the author's to rule from either side — here by taking this option, or
+there by taking `the-control-asks-for-the-change-by-name`, which is the same
+question from the other end.
 
 ### authority
 

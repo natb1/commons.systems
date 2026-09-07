@@ -1,6 +1,6 @@
 ---
 question: When is the kick-back's feedback control shown, and what becomes of what is written in it?
-stage: ruling
+stage: review
 form: rule
 under:
   - commons.systems/disposition-graph/alignment-page
@@ -38,9 +38,12 @@ facts:
         ref: "2026-09-07"
         status: passed
         reason: "it infers a ruling from a keystroke, and a denial the author did not choose is the one response the record cannot honour"
+      - name: shown-disabled-until-chosen
+        source: review
+        ref: "2026-09-07"
     recommends: revealed-with-the-choice
     boldness: moderate
-    against: "The control the author reaches for when the draft is wrong is the one control this answer takes off the screen, and it takes it off at the moment the author is deciding whether to dissent at all. A reader who does not know the box appears on choosing reads the row as a refusal with no way to say why, which is the fault `none-of-the-above-ballot` names, a refusal expressed where the voter does not look. The incumbent's cost is a box that collects words the page drops; this answer's is a channel the author may not know is there, paid on the one act the record has for telling the AI its draft is wrong."
+    against: "The control the author reaches for when the draft is wrong is the one control this answer takes off the screen, and it takes it off at the moment the author is deciding whether to dissent at all. A reader who does not know the box appears on choosing reads the row as a refusal with no way to say why, which is the fault `none-of-the-above-ballot` names, a refusal expressed where the voter does not look. The incumbent's cost is a box that collects words the page drops; this answer's is a channel the author may not know is there, paid on the one act the record has for telling the AI its draft is wrong. And hiding is not the record's own device for a control that must not collect what the page will not honour: the parent renders every input at the stages before the ruling and disables it rather than withdrawing it, which is `shown-disabled-until-chosen` on this fact, and the author's words reach the hiding without reaching the choice between hiding and disabling."
   - name: authority
     options:
       - name: ratified
@@ -81,15 +84,26 @@ What rests on the AI is the caption clause, and it is named as the AI's. It is
 required by `where-a-change-request-goes`, whose answer stands at the ruling stage
 and routes every change request to this control; that node declined to write the
 requirement into the control and recorded it here instead, so this node is where
-it is made. Its locus is the AI's too: the caption rather than the label, because
-under this answer the label is not visible at the moment the author is deciding
-whether to dissent. Boldness moderate for that clause alone, since the rest is the
-author's sentences applied where they fall.
+it is made. Its locus is the AI's too, and it departs from that node's own
+sentence rather than applying it: that answer says the change request goes to the
+kick-back's feedback control "and that control is to ask for the change and not
+only for the ground of the refusal", where this answer puts the ask on the row's
+caption and leaves the control's label asking for the ground. The reason is the
+reveal, and it is the reason the answer gives: under this answer the label is not
+visible at the moment the author is deciding whether to dissent. The divergence is
+recorded on that node as the option `the-caption-asks-and-the-control-collects`,
+so it is a choice the author can rule on from either side. Boldness moderate for
+that clause alone, since the rest is the author's sentences applied where they
+fall.
 
 The case against is on the fact at full strength, and it is the cost of the
 author's own instruction rather than of the AI's addition: a dissent channel that
 appears only after the dissent is chosen is a channel a reader may not know
-exists.
+exists. What sharpens it is that the record has a device for a control that must
+not collect what the page will not honour and the device is not hiding: the parent
+renders and disables. `shown-disabled-until-chosen` is that device applied here,
+it is on this fact, and the author's words do not reach the choice between the two
+cures.
 
 #### revealed-with-the-choice
 
@@ -171,6 +185,27 @@ response. Passed over: it infers a ruling from a keystroke, and a denial the aut
 did not choose is a response the record cannot honour, which is the same fault the
 parent's answer names in a confirmation recorded before the ruling stage.
 
+#### shown-disabled-until-chosen
+
+Everything the recommended option says of the row, the discard and the caption,
+with the feedback control never leaving the screen: it stays at the first level of
+every fact, rendered and visibly inert, and becomes writable when the kick-back's
+radio is chosen. Recorded from the reading of 2026-09-07, which raised it as the
+viable option the fact was missing. For it, the parent's own answer, which
+establishes exactly this treatment for a control that must not collect yet: "at
+every earlier stage the facts, their options and the recommendation are all
+rendered and every input among them is disabled: the author sees exactly what will
+be asked and cannot yet answer it." It answers the author's stated reason, "To
+avoid confusion", by removing the confusion the box actually caused, which was
+that it offered to collect words the page would drop; and it does not pay this
+answer's own `against`, since the dissent channel is on the screen while the author
+is deciding whether to dissent. Viable and not adopted: the author's words say the
+control "only needs to be displayed when the kickbox option is selected", and a
+control displayed and disabled is displayed, so this option answers the confusion
+they named while declining the instruction they gave. The choice between the two
+cures is not reached by their words either way, which is why it is on the fact for
+them and not passed over here.
+
 ### authority
 
 Ratified, on the capture-shaped limb of `class-recommendation`'s test. The other
@@ -228,39 +263,57 @@ kept only if the author then chooses the kick-back.
 
 What is written in the control reaches a response only when the kick-back is the
 chosen option on that fact. Where another option is chosen the words are
-discarded, which is what the staging script does today
-(`packages/disposition/alignment-template.html:512-513`). Where no option is
-chosen at all they are discarded too, which the script does not do today:
-`alReadFacts`' `!radio` branch (`:515-523`) collects every non-empty textarea in
-the fieldset and stages the first, and the kick-back's is last in the fieldset's
-DOM order, so kick-back words typed with no radio chosen are staged as an option
-of `null` with `kickback` false and carried into the launch instruction as "no
-option chosen" followed by the words (`:767`). Those words are neither discarded
-nor recorded as what they are. Under this answer they are discarded, on the
-author's second sentence and on their rule of 2026-09-06 alike: words that are not
-a confirmation of anything are not the page's to collect, and the interview is
-where they are given.
+discarded, which is what `alReadFacts` in the alignment page's template does
+today: it reads the chosen option's own control, found by that option's name in
+its `data-option-text` attribute, and never the kick-back's. Where no option is
+chosen at all they are discarded too, which that function does not do today. Its
+`!radio` branch collects every non-empty textarea in the fieldset and stages the
+first, and the kick-back's is last in the fieldset's DOM order, so kick-back words
+typed with no radio chosen are staged as an option of `null` with `kickback` false
+and carried by `alInstructionAll` into the launch instruction as "no option
+chosen" followed by the words. Those words are neither discarded nor recorded as
+what they are. Under this answer they are discarded, on the author's second
+sentence and on their rule of 2026-09-06 alike: words that are not a confirmation
+of anything are not the page's to collect, and the interview is where they are
+given.
 
-The rest of that branch stands. Where the author writes in an option's own text
-control and has not yet chosen that option, the fallback still keeps it: that is a
-confirmation half made, and the words belong to the option they were written
-under. What leaves the branch is the kick-back's own textarea, which is not a
-confirmation of anything and has no option to attach the words to.
+The rest of that branch stands, and it stages what it keeps under the option it
+was written under. Where the author writes in an option's own text control and has
+not yet chosen that option, the fallback still keeps the words, and it names that
+option: every option's control carries the option's name in its own
+`data-option-text` attribute, which is what the branch already reads once a radio
+is chosen, so a confirmation half made reaches the session as a half-made
+confirmation of a named option. That is an amendment to the branch and not a
+description of it. Today it stages `option: null` whatever control the words came
+from, which is the same shape this answer strikes for the kick-back's words two
+paragraphs above, words carried into the instruction as "no option chosen" and so
+neither discarded nor recorded as what they are; keeping the words while losing
+what they were written under is the fallback's defect and not its reason. What
+leaves the branch is the kick-back's own textarea, which carries
+`data-kickback-text` and names no option, because it is not a confirmation of
+anything and there is no option for the words to belong to.
 
 One thing this answer settles that the author's words do not reach. Under
 `commons.systems/disposition-graph/where-a-change-request-goes` this control is
 the one home on the page for a request to change what is recommended, and that
 node records the requirement here rather than making it, so that a ruling on the
 routing does not carry a ruling on this control. This answer makes it, and it puts
-it on the row's caption and not on the control's label. A label the author cannot
-read until they have already chosen the kick-back cannot be what tells them that a
-change is made here, and under this answer the control is not on the screen at the
-moment the author is deciding whether their change belongs anywhere on the page.
-So the caption carries it: the caption is what the author reads while choosing, it
-already says what the kick-back does to the node, and it gains that a change to
-what is recommended is asked for here. The control's own label goes on asking for
-what the options miss and what the next ones are drawn from, which is what it
-takes once it is open.
+it on the row's caption and not on the control's label. That is a departure from
+that node's own words and is not an application of them: its answer says the
+request goes to the kick-back's feedback control "and that control is to ask for
+the change and not only for the ground of the refusal", where under this answer
+the control's label goes on asking for the ground and what asks for the change is
+the caption above it. The reason is the reveal this same answer makes. A label the
+author cannot read until they have already chosen the kick-back cannot be what
+tells them that a change is made here, and under this answer the control is not on
+the screen at the moment the author is deciding whether their change belongs
+anywhere on the page. So the caption carries it: the caption is what the author
+reads while choosing, it already says what the kick-back does to the node, and it
+gains that a change to what is recommended is asked for here. The control's own
+label goes on asking for what the options miss and what the next ones are drawn
+from, which is what it takes once it is open. The divergence is recorded on that
+node as the option `the-caption-asks-and-the-control-collects`, so that a reader
+of its answer is not left expecting a label that will not carry the ask.
 
 ## Rationale
 
@@ -284,11 +337,14 @@ should survive the next keystroke, that argument holds for an option's text
 control, where a half-made confirmation has an option to belong to, and does not
 hold here.
 
-What the answer adds to their words is the caption clause, and it is the AI's,
-required by a sibling's answer and not by anything the author has said on this
-node. It is in the answer rather than left out because the reveal is what makes it
-necessary: hiding the control moves the burden of saying where a change goes onto
-the only text that is still visible while the author is choosing.
+What the answer adds to their words is the caption clause, and it is the AI's: a
+sibling's answer requires that this control's channel say what it is for, and
+nothing the author has said on this node does. Where that sibling puts the ask, on
+the control's label, this answer does not, and the departure is stated in the
+answer and recorded as an option there. It is in the answer rather than left out
+because the reveal is what makes it necessary: hiding the control moves the burden
+of saying where a change goes onto the only text that is still visible while the
+author is choosing.
 
 What the answer beat is on the fact: `shown-always`, the incumbent, which the
 author's words strike; `kick-back-feedback-one-step-down`, the parent's existing
@@ -354,13 +410,22 @@ rather than in dialogue: "before stopping for confirmation, and ensure
 alignment-page-observations is progressed up to confirmation and included in the
 list of reconciliation for alignment/review/survey/artifact."
 
-One periagogic probe is owed and is stated here as a question, to be put when the
-author is directed to the page: does "otherwise kickback text input is discarded"
-reach words typed with no option chosen at all, which is the case the survey
-found and which this answer discards, or only words abandoned for another option,
-which is what the page already does? The author wrote the sentence about a page
-whose second behaviour they had not seen, so their words settle the first reading
-and their intention about the second is not on the record.
+No probe is owed. The question stated here as one is the choice this fact's own
+options put to the author, and it goes to them with the node: does "otherwise
+kickback text input is discarded" reach words typed with no option chosen at all,
+which is the case the survey found and which this answer discards, or only words
+abandoned for another option, which is what the page already does? The author
+wrote the sentence about a page whose second behaviour they had not seen, so their
+words settle the first reading and their intention about the second is not on the
+record. Under `probe-or-node` a question with a viable candidate answer on the
+fact is asked there and not in `probes`, and both candidates are on this one,
+`revealed-with-the-choice` discarding the unattached words and
+`abandoned-words-carried-as-a-draft` keeping them, with
+`abandoned-words-staged-as-a-kick-back` as a third reading of the same sentence.
+An answer to it would also have to stand: it is a rule about what the page
+collects, to be read by a session that never saw the question, which is the
+survival test sending it to a node's fact rather than to `probes`. So what the
+author rules when they rule this fact is the reading of their own sentence.
 
 What the record says. The parent's answer holds one clause a ruling here reaches,
 located by its words, in the kick-back paragraph: "its feedback control opens with
@@ -368,10 +433,12 @@ it at the first level rather than in a drill-down, since the words are what a
 kick-back consists of and what the dialogue resumes from, where on an option the
 words are optional because the ruling's content is the option." Two clauses of the
 same paragraph a ruling here must not move: that the kick-back stays in the radio
-group, and that it is typed to the maieutic movement, which is `recording`'s. The
-parent's marking rule, that a clause standing only until a child rules says so, is
-not applied at the kick-back clause, which is the parent's bookkeeping and is
-corrected there. Among the siblings, `where-a-change-request-goes` stands at the
+group, and that it is typed to the maieutic movement, which is `recording`'s. The parent's marking rule, that a clause standing only until a child rules says
+so, was not applied at the kick-back clause, though it is applied at three others,
+so a reader of the parent met an unqualified clause that a ruling here replaces.
+It is the parent's bookkeeping and it is corrected there: the parent's amendment
+of this sitting marks the clause in the form the other three already take, naming
+this node, and nothing of it is drafted here. Among the siblings, `where-a-change-request-goes` stands at the
 ruling stage recommending that every change request go to this control, and its
 answer names this node as the one that rules the control's ask; its option
 `kick-back-ask-unchanged` is the author's route to refusing the reach from that
@@ -382,39 +449,59 @@ ground if the author rules `kick-back-ask-unchanged` there, so this answer does
 not act whichever way that node rules. `unanswered`'s third response and
 `recording`'s classification are cited and untouched.
 
-The tradition surfaced, and it is one reading, recorded here in prose with the
-`bears` entry on the reading node owed with the ruling.
-`commons.systems/disposition-graph/none-of-the-above-ballot`, whose answer at
-`disposition/disposition-graph/none-of-the-above-ballot.md:31` supports the
-placement the author chose, "on the ground that a refusal a voter has to express
-somewhere else is a refusal most voters never express". That is why this answer
+The tradition surfaced, and it is one reading, recorded here in prose; the `bears`
+entry is not owed and stands already, written on the reading node in the sitting
+of 2026-09-06 and landed at `8a672c17`, naming this node, its answer fact, the
+option `revealed-with-the-choice` and the relation adopted.
+`commons.systems/disposition-graph/none-of-the-above-ballot`, whose `## Answer`
+supports the placement the author chose in its first paragraph, "on the ground
+that a refusal a voter has to express somewhere else is a refusal most voters
+never express". That is why this answer
 moves the control and never the row: the refusal stays among the choices, and what
 is deferred is the writing and not the refusing. The tradition also supplies this
 answer's strongest objection, which is the fact's own `against`, since a control
 the author cannot see is one step nearer to a refusal expressed somewhere else.
-And its recorded failure bears too: at `:33` the reading finds that in both places
-the none line is practised it is advisory, "a refusal that changes nothing is a
-recorded complaint", which is what the discard clause has to answer — the words a
+And its recorded failure bears too: in the second paragraph of that answer the
+reading finds that in both places the none line is practised it is advisory, "A
+refusal that changes nothing is a recorded complaint", which is what the discard clause has to answer — the words a
 kick-back consists of are collected at the moment the refusal is made, and never
 collected when no refusal was made. The relation is adopted on the recommended
 option, with the divergence that the tradition's own subject is the refusal's
 placement and it says nothing about the control beside it.
 
-What the implementation does today, at the loci a ruling here changes.
-`renderKickback` (`packages/disposition/project.mjs:1570-1580`) writes the row,
-the caption `KICKBACK_CAPTION` (`:679`), the note `KICKBACK_NOTE` (`:680`), the
-label "Your feedback" and the textarea with `KICKBACK_PLACEHOLDER` (`:681`), with
-`locked` as the only condition on any of them. The row's whole styling is
-`packages/disposition/alignment-template.html:380-384`, which carries no rule
-keyed to the radio; the reveal needs no script, since the radio and the textarea
-are siblings inside `li.choice.kickback`, and the staging listener already runs on
-every change and every input (`:848-849`). The control stays in the DOM when
-hidden, so a staged kick-back replayed by `alApplyResponse` (`:534`) still
-finds it. The `!radio` branch is `alReadFacts` (`:515-523`), and the instruction
-line it feeds is `:767`. The reveal makes the branch nearly unreachable through
-the page, since the box cannot be typed in until the kick-back is chosen; it is
-corrected anyway, because a response replayed from the page's database can set the
-text with no radio checked.
+What the implementation does today, at the loci a ruling here changes, named by
+function and by constant rather than by line, so that the citations do not stale
+with the next landing on the projector. `renderKickback` in
+`packages/disposition/project.mjs` writes the row, the caption `KICKBACK_CAPTION`,
+the note `KICKBACK_NOTE`, the label "Your feedback" and the textarea with
+`KICKBACK_PLACEHOLDER`, with `locked` as the only condition on any of them. The
+row's styling in `packages/disposition/alignment-template.html` carries no rule
+keyed to the radio: `.choice.kickback` sets the rule above the row and its
+spacing, `.kbnote` the note that is always shown, `.kb-note` the textarea itself.
+
+The reveal cannot be written with a sibling combinator, and this account said it
+could. `renderKickback` wraps the radio in `<label class="choicelbl">`, so the
+input's only sibling is the `<span class="choicename">` beside it and the textarea
+is a sibling of the label and not of the input; a rule of the form
+`input[data-kickback]:checked ~ .kb-note` matches nothing, and it fails silently,
+which is the worst way for this particular reveal to fail, since the control
+simply never appears and no error says so. It is written on the row instead,
+`li.choice.kickback:has(input[data-kickback]:checked)` selecting the "Your
+feedback" label and the textarea beneath it, or by a script where a target the
+page must run in will not carry `:has()`. Either way the rule is exercised by a
+test that asserts the control is hidden with the radio unchecked and shown with it
+checked, because a CSS reveal that fails is invisible and no reader of the page
+will report it.
+
+The rest of the loci. The staging listeners are registered in `alBoot` and already
+run on every change and every input, so the choice that reveals the control is
+already a change the page hears and no new listener is owed. The control stays in
+the DOM when hidden, so a staged kick-back replayed by `alApplyResponse` still
+finds it. The `!radio` branch is in `alReadFacts`, and the instruction line it
+feeds is written by `alInstructionAll`. The reveal makes the branch nearly
+unreachable through the page, since the box cannot be typed in until the kick-back
+is chosen; it is corrected anyway, because a response replayed from the page's
+database can set the text with no radio checked.
 
 The clean-context reading of this recommendation is owed before the author rules.
 
@@ -441,3 +528,72 @@ On the viability of the options: Every listed option is viable and the four pass
 Strongest counter-argument (moderate): The record already has a device for a control that must not collect what the page will not honour, and it is not hiding. The parent's answer, for the whole facts section at every stage before the ruling, is that everything is "rendered and every input among them is disabled: the author sees exactly what will be asked and cannot yet answer it" -- the fault being cured is the same one the author read here, a control that appears to take something the record will drop, and the cure the record chose there was visibility without capability. This answer applies the opposite cure to the one control the record has for dissent: the kick-back's feedback is the only channel by which the author tells the AI that its draft is not what they would confirm, and after this ruling it is not on the screen while they are deciding whether to use it. The fact's own `against` concedes the harm and `none-of-the-above-ballot`, the reading this answer adopts, names it precisely -- a refusal a voter has to express somewhere else is a refusal most voters never express -- and the answer's reply is only that the author asked for it, which is true of the reveal and not of the choice between hiding and disabling, which their words do not reach.
 
 The session's reply: Accepted on all seven, each verified at its locus on the main thread: the retained fallback stages option null at alignment-template.html line 526, the shape the answer condemns for the kick-back's words; the radio is inside a label, so a sibling reveal fails silently; the none-of-the-above-ballot entry stands since 8a672c17; the caption and not the control asks for the change, which departs from where-a-change-request-goes' sentence; every project.mjs and reading line is stale; the probe the account calls owed lands on the fact's options; and the parent's kick-back clause is unmarked, which the parent's amendment of this sitting takes. The amendments owed: the retained fallback stages the option the words were written under, from the textarea's data-option-text attribute, so a half-made confirmation reaches the session as one of a named option; the reveal written with :has() on the row and exercised by a test; the bears sentence corrected; the departure from the sibling stated with its reason and recorded as the option the-caption-asks-and-the-control-collects on where-a-change-request-goes, source this node; citations by function; the probe restated as the choice the options put; and the option shown-disabled-until-chosen recorded, source review, viable and not adopted, since the author's words say the control only needs to be displayed when the kick-back is selected, which is hiding and not disabling, and the confusion they named was a control that offered to collect. The counter-argument goes on the row at the strength the reading gave it. The amended answer owes its re-reading.
+
+### The reading applied, 2026-09-07
+
+Seven findings, forward at moderate strength, no probes; every one validated at
+its locus on the main thread and every one accepted. The recommendation does not
+move: it stays `revealed-with-the-choice`, and what the reading found were a
+false statement about the implementation, a reason that did not describe the
+branch it defended, a debt already paid, a divergence presented as an
+application, six stale line citations, a probe that was not one, and a clause of
+the parent's that the parent should mark.
+
+The reason that did not describe the branch is the heaviest, because the answer
+was keeping for option text the defect it strikes for kick-back text.
+`alReadFacts` stages `option: null` whenever no radio is chosen, whatever control
+the words came from, so the fallback the answer defended as preserving "a
+confirmation half made" preserved words attached to nothing and carried them into
+the instruction under the same "no option chosen" the answer condemns two
+paragraphs above. The amendment does not drop the fallback and does not keep the
+false reason: it makes the branch true to the reason by having it read the
+option's name from the `data-option-text` attribute the control already carries,
+so the words reach the session as a half-made confirmation of a named option. The
+kick-back's textarea carries `data-kickback-text` and no option name, which is
+the same fact stated from the other side and is why its words leave the branch.
+
+The false statement about the implementation would have produced a dead rule. The
+account said the radio and the textarea are siblings inside `li.choice.kickback`
+and that the reveal therefore needs no script; `renderKickback` wraps the radio in
+a label, so the input's only sibling is the name beside it, and a sibling
+combinator keyed to `:checked` matches nothing and says nothing when it fails. The
+reveal is written on the row with `:has()`, or by a script where `:has()` is not
+available, and in either case a test asserts it, since a reveal that fails
+silently is a control that is simply never there.
+
+The divergence is now stated where a reader meets the claim.
+`where-a-change-request-goes` says the kick-back's control "is to ask for the
+change and not only for the ground of the refusal"; this answer leaves that ask on
+the caption and leaves the control's label asking for the ground, which is a
+departure and was written as an application. The answer says so, gives the reason
+it already had, and the option `the-caption-asks-and-the-control-collects` is
+recorded on that node with this node as its source, so the author can rule the
+question from either side and a reader of that answer is not left waiting for a
+label that will not carry the ask.
+
+The rest, each at its locus. The `bears` entry on
+`none-of-the-above-ballot` was called owed and has stood since `8a672c17`; the
+account says it stands. Every citation into `packages/disposition/project.mjs`
+had staled when `cb0e02c6` landed earlier the same day, and the two into the
+reading node staled when the `bears` entry was written; rather than re-take six
+numbers that will stale again, every citation in this node now names a function,
+a module constant or a section, which is the form the reading of
+`where-the-unconfirmed-indication-goes` records as the one that does not go
+stale. The probe is not a probe: both candidate answers are on this fact, so
+under `probe-or-node` the question is put to the author as the choice between
+them. And the parent's unmarked kick-back clause is the parent's to mark, which
+the parent's amendment of this sitting does.
+
+The reading's viability paragraph named the one option the fact was missing and
+it is recorded: `shown-disabled-until-chosen`, source `review`, viable and not
+adopted. The record's own device for a control that must not collect what the
+page will not honour is the parent's, and it is rendering with every input
+disabled rather than hiding; the author's words of 2026-09-04 say the control
+"only needs to be displayed when the kickbox option is selected", which is the
+hiding, while the confusion those same words name is a control that offered to
+collect words the page would drop, which disabling also cures. Their words do not
+reach the choice between the two cures, so the choice is on the fact and is
+theirs. The counter-argument goes on the row at the strength the reading gave it,
+moderate, and the fact's `against` now names the device it rests on.
+
+The amended answer owes its re-reading.

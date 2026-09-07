@@ -1,7 +1,7 @@
 ---
 question: Where does the page say that a node's text is a draft no one has confirmed?
 form: rule
-stage: ruling
+stage: review
 facts:
   - name: answer
     options:
@@ -11,6 +11,9 @@ facts:
       - name: on-the-answer-fact
         source: review
         ref: "2026-09-06"
+      - name: line-only-where-the-act-is-live
+        source: review
+        ref: "2026-09-07"
       - name: warning-on-the-stage-chip
         source: ai
         ref: "2026-09-06"
@@ -24,10 +27,10 @@ facts:
         ref: "2026-09-06"
         status: passed
         reason: "the absence of a confirmed mark on every row is not an indication, and it is the reading of a draft as the record that the author found on agency"
-    recommends: on-the-answer-fact
+    recommends: line-only-where-the-act-is-live
     boldness: moderate
     stands: the-line-that-names-what-the-pane-shows
-    against: "The author said only that a single indication per node is fine, which permits the indication and settles nothing about where it goes, so the placement is the AI's and it puts the record's one warning about the AI's own drafting in the column the author reads last rather than in the column that asks."
+    against: "The author said only that a single indication per node is fine, which permits the indication and settles nothing about where it goes, so both the placement and the narrowing are the AI's. The placement puts the record's one warning about the AI's own drafting a full column from the text it warns about, which is the objection four readings raised against the other placement and which this answer reverses rather than removes. The narrowing pays a second cost on top of it: at the periagogic, maieutic and review stages, which is where the author meets a draft as a preview and where a node spends most of its life, the page now says nothing at all about whose text they are reading."
   - name: authority
     options:
       - name: ratified
@@ -142,16 +145,20 @@ absent mark as an indication in itself.
 
 ### answer
 
-Recommended on the act. The thing this indication guards against is not a
-misreading but a deed: the author confirming an AI draft in the belief that they
-are keeping their own record. The page's one deed is that confirmation, as the
-author's rule of 2026-09-06 fixes its scope, and it is staged by choosing an
-option under a fact. The answer fact is the fact whose ruling makes the text the
-author's rather than the AI's, so the warning stands one line above the rows that
-stage the act, inside the section that holds them, and the author cannot reach the
-control without passing it. A warning that is not in view when the control is used
-has not guarded it, which is what four readings returned against every other
-placement.
+Recommended on the act, and only where the act can be performed. The thing this
+indication guards against is not a misreading but a deed: the author confirming an
+AI draft in the belief that they are keeping their own record. The page's one deed
+is that confirmation, as the author's rule of 2026-09-06 fixes its scope, and it
+is staged by choosing an option under a fact. The answer fact is the fact whose
+ruling makes the text the author's rather than the AI's, so the warning stands one
+line above the rows that stage the act, inside the section that holds them, and
+the author cannot reach the control without passing it. A warning that is not in
+view when the control is used has not guarded it, which is what four readings
+returned against every other placement. The same argument sets the line's limit,
+and the recommendation moved to take it: at the periagogic, maieutic and review
+stages the parent renders every input on the fact and disables it, so the deed
+cannot be done there, and a warning about a deed the page will not accept is a
+sentence with nothing to guard.
 
 It is also where the record already keeps the thing being said. `alignment-page`
 requires that everything the column shows of a fact it reads from the fact, and
@@ -178,14 +185,20 @@ the option the author ruled for, which is `what-an-option-row-carries`' third
 mark and not this node's. So this answer writes one form and asserts nothing
 beyond the author's permission.
 
-Boldness moderate, and what rests on the AI is one thing, named. The author fixed
-the cardinality and left the place; the record then rules out two of the four
-candidates, the row by the sibling's answer and the right-hand column by the
+Boldness moderate, and what rests on the AI is two things, both named. The author
+fixed the cardinality and left the place; the record then rules out two of the
+four candidates, the row by the sibling's answer and the right-hand column by the
 parent's reserve, and rules out none of the remaining two. The choice between the
 node's status object and the fact the act is staged on is decided by no clause of
 the record and by no word of the author's: it is decided here on where a reader's
 eye is when the control is used, which is the AI's judgment and is what the
-counter-argument is aimed at.
+counter-argument is aimed at. The second is the narrowing to the ruling stage. The
+parent supplies its ground, that every input is disabled before that stage, but no
+clause of the record and no word of the author's says that the indication follows
+the control; the author permitted an indication per node and said nothing about
+when, and reading their permission as bounded by the act is this answer's reading
+and not their instruction. `on-the-answer-fact` is that same placement without the
+narrowing and is on this fact for it.
 
 What the answer beat. The heading of the right-hand column, which is where the
 text is but not where the act is, and which would need an exception to a reserve
@@ -199,19 +212,46 @@ which is the state the author objected to on `commons.systems/public/agency`.
 #### on-the-answer-fact
 
 One line on the answer fact, above its options, wherever that fact carries no
-ruling: that no ruling stands on this node's answer, and that confirming one of
-these options would be the first confirmation of the text it carries. It is not a
-row and names no option, so `what-an-option-row-carries` does not reach it; it is
-not in the right-hand column, so the parent's reserve is untouched and no
-exception to it is needed; and it is where the act is, one line above the rows a
-confirmation is staged on. Against it: the text it warns about is rendered in the
-other column, a screen's width from the warning; the section it sits in is the
-one whose heading is `how-a-fact-is-headed`'s question, at the periagogic
-movement, where the author's words ask for that section to carry less and not
-more; and until the first ratification the line never varies, so it faces the
-same objection as an unvarying heading, met only by the claim that a sentence in
-the path of the control is read where a sentence in the path of the text is read
-past.
+ruling, at every stage the node passes through: that no ruling stands on this
+node's answer, and that confirming one of these options would be the first
+confirmation of the text it carries. It is everything the recommended option says
+without the narrowing, and it is the option to take if the author wants the
+warning present while they read a draft as a preview and not only while they can
+rule on it. It is not a row and names no option, so `what-an-option-row-carries`
+does not reach it; it is not in the right-hand column, so the parent's reserve is
+untouched and no exception to it is needed; and it is where the act is, one line
+above the rows a confirmation is staged on. Against it: the text it warns about is
+rendered in the other column, a screen's width from the warning; the section it
+sits in is the one whose heading is `how-a-fact-is-headed`'s question, a node at
+the review stage recommending that every fact heading be the fact's name linked to
+its definer, so the two answers meet in one section without meeting on one
+question, this line sitting beneath whatever that heading becomes; and the line is
+written on every node at every stage, where three stages in four disable the
+control it warns about, so it never varies and faces in full the objection
+`vocabulary-option-summary` makes to a sentence carried on every node of the
+record.
+
+#### line-only-where-the-act-is-live
+
+The recommended option, set out in the fence: everything `on-the-answer-fact`
+says, with the line written on the answer fact only at the ruling stage, where the
+controls are live and a confirmation can actually be staged. Recorded from the
+clean-context reading of 2026-09-07, which raised it as the viable option the fact
+was missing. The parent supplies the ground in terms: "at every earlier stage the
+facts, their options and the recommendation are all rendered and every input among
+them is disabled: the author sees exactly what will be asked and cannot yet answer
+it." The answer's whole case for the placement is that the warning must be in the
+path of the act, where the author "will be standing when they can do the thing it
+warns about", and at the three earlier stages they cannot do it, so on those nodes
+the line is a sentence about an act the page will not accept. Narrowing it there
+cuts the repetition sharply, makes the answer's own opening sentence true rather
+than aspirational, and costs one condition in the same branch of `renderFact` the
+answer already asks for, keyed on the stage that already decides whether the
+fact's inputs are live. Against it: at the periagogic, maieutic and review stages
+the page then says nothing about whose text the author is reading, and those are
+the stages at which they read a draft as a preview and the ones a node spends most
+of its life in; the objection that the text warned about is a column away is
+untouched by the narrowing.
 
 #### warning-on-the-stage-chip
 
@@ -283,8 +323,9 @@ under:
 
 On the answer fact, above its options: one line saying that no ruling stands on
 this node's answer and that confirming one of these options would be the first
-confirmation of the text it carries. It is written wherever that fact carries no
-ruling, and nowhere else on the page.
+confirmation of the text it carries. It is written where that fact carries no
+ruling and the node is at the ruling stage, which is where a confirmation can be
+staged, and nowhere else on the page and at no earlier stage.
 
 The criterion is the answer fact's own ruling and nothing else. A ruling on the
 authority fact says who decides and not that this text was confirmed, so a node
@@ -304,6 +345,24 @@ make the text the author's rather than the AI's, so the record's one warning
 about the AI's own drafting stands one line above the rows that stage the act it
 warns about, inside the section that holds them, and the author does not reach
 the control without passing it.
+
+A sentence written on every node the record renders is the fault
+`vocabulary-option-summary` strikes off the option's row in this same movement,
+and this line is not that fault. Its ground there is that "a sentence carried on
+134 of the 141 node files of both graphs is read once and skipped thereafter, so
+the gloss earns its place on the first node and costs on every node after it", and
+that is exactly right of what it demotes and not of this. The difference is what
+each sentence does. The gloss explains a convention, and a convention is learned
+once: a reader who has met it on one node carries it to the next, so the second
+printing teaches nothing and costs the space it takes. This line explains nothing.
+It warns about an act, and the act is performed again in full on every node the
+author rules; the reader does not carry the last node's confirmation to this one,
+and what they are about to do here is the thing the line is about. A warning beside
+each performance of an act is not one sentence read many times, it is one sentence
+read once per performance. That is also why the line stops where the act stops:
+where the controls are disabled the performance cannot happen, the sentence has
+nothing to warn about, and there it falls to the sibling's rule like any other
+repetition.
 
 Where the answer fact carries a ruling the line is not written, and nothing is
 written in its place. The author's words permit an indication that a node is not
@@ -337,18 +396,32 @@ whether it nevertheless claims a standing the text does not have is a question
 about a sentence in the column the parent reserves, and the parent's own paragraph
 on that column, with the option above, is where it is asked.
 
-One line, once per node, and only where a confirmation can be staged. A node that
-carries no facts carries no answer fact, offers no option to confirm, and takes no
-line; the column there says which movement is owed and that nothing is proposed
-yet, which is the parent's clause and not this one's. Where a node's answer fact
-carries options but no text stands, the line is still written, since what it says
-is that no ruling stands on the answer and not that a column is rendered.
-Everything it says is read from the fact, as the parent requires of everything the
-column shows of a fact: the absence of a ruling on any of its options. In the
-implementation it falls on `renderFact` in the alignment page's projector, between
-the fact's heading and its options, where that function already writes the fact's
-ruling when one exists; the words are the projector's, and what this answer fixes
-is what they must say and where they must say it.
+One line, once per node, and only where a confirmation can be staged, which is the
+ruling stage and no stage before it. The parent settles what the earlier stages
+are: "at every earlier stage the facts, their options and the recommendation are
+all rendered and every input among them is disabled: the author sees exactly what
+will be asked and cannot yet answer it." A warning about an act the page will not
+accept is not a warning, so at the periagogic, maieutic and review stages the line
+is not written, and what says the ruling is not yet being taken there is the
+disabled control itself. A node that carries no facts carries no answer fact,
+offers no option to confirm, and takes no line at any stage; the column there says
+which movement is owed and that nothing is proposed yet, which is the parent's
+clause and not this one's. Where a node at the ruling stage carries an answer fact
+with options but no text standing, the line is still written, since what it says is
+that no ruling stands on the answer and not that a column is rendered. Everything
+it says is read from the fact and from the node's stage, as the parent requires of
+everything the column shows of a fact: the absence of a ruling on any of its
+options. In the implementation it falls on `renderFact` in the alignment page's
+projector, between the fact's heading and its options, where that function already
+writes the fact's ruling when one exists and where the stage already decides
+whether the fact's inputs are live; the words are the projector's, and what this
+answer fixes is what they must say, where they must say it, and when. The heading
+of that section is not this answer's: it is `how-a-fact-is-headed`'s question, and
+that node is at the review stage, recommending that every fact heading be the
+fact's name linked to its definer, which shortens the heading and moves the
+question behind a link. This line sits beneath whatever that heading becomes and
+says nothing about it, so the two answers are complementary and neither waits on
+the other.
 
 ## Rationale
 
@@ -365,8 +438,12 @@ The placement follows from what the indication guards. It guards an act and not 
 reading: the harm is a confirmation given to an AI draft in the belief that it is
 already the author's record, and the page's one act is that confirmation. So the
 question the placement answers is not where the author will read the warning but
-where they will be standing when they can do the thing it warns about. Every
-other placement answers the first question and this one answers the second.
+where they will be standing when they can do the thing it warns about. Every other
+placement answers the first question and this one answers the second. The same
+question answers when as well as where, and the answer takes both: at the stages
+before the ruling the parent disables every input on the fact, so there is no act
+to stand beside, and a line written there would be the warning without the thing
+warned of.
 
 `dialogue`'s `every-part-in-the-record` is the record-wide rule this applies at
 the control. It has the projections name what an edit is against, "the answer as
@@ -702,7 +779,15 @@ and the `depends` entry naming it is owed removal with this move.
 `dialogue#every-part-in-the-record` stays in `depends`, and for a stronger reason
 than citation: this answer takes its criterion, the answer fact's own ruling, from
 that option's clause, so a ruling for another option on that fact would move this
-one.
+one. One clause of the parent is still unmarked and it is the one most directly
+about this node's subject: the naming paragraph, which holds that a row "says that
+confirming ratifies the AI's draft", where under this answer and under
+`what-an-option-row-carries` the row says none of it. The parent marks three other
+clauses as standing only until a child rules and does not mark that one, so a
+reader of the parent meets an unqualified rule two of its children have replaced.
+It is the parent's bookkeeping and is corrected there: the parent's amendment of
+this sitting marks the paragraph in the form the other three already take, naming
+both children, and nothing of it is drafted here.
 
 The other findings, each at its locus. The dialogue quotation in the standing
 Rationale was a rival option's words, `edit-led-against-a-named-ground`'s at
@@ -746,11 +831,16 @@ a day, which is the finding rather than an accident of this one node.
 
 What the recommendation costs, stated as a consequence and not as a reason: one
 string and one branch in `renderFact`, between the fact's heading and its options,
-and nothing in the projector's rendering of the pane. It lands in the same
-function as `how-a-fact-is-headed`, which is at the periagogic movement and owns
-the heading of that section but not what sits beneath it; the two are orderable in
-either direction and no dependency is entered, but a sitting on either should
-read the other.
+under two conditions the function already has to hand, whether the fact carries a
+ruling and whether the node's stage is the ruling stage, which is the same stage
+that decides whether the fact's inputs are live; and nothing in the projector's
+rendering of the pane. It lands in the same function as `how-a-fact-is-headed`,
+which is at the review stage, recommending that every fact heading be the fact's
+name linked to its definer, and which owns the heading of that section but not
+what sits beneath it; that answer shortens the heading and moves the question
+behind a link, this one writes a line below it, so the two are complementary. They
+are orderable in either direction and no dependency is entered, but a sitting on
+either should read the other.
 
 The re-reading of this draft is owed, the recommendation having moved.
 
@@ -776,3 +866,63 @@ On the viability of the options: Every listed option is viable and the two passe
 Strongest counter-argument (moderate): The answer's own argument, taken one step further, cuts against where it stops. It says the warning belongs in the path of the act and not in the path of the text, and then writes it on every node whose answer fact carries no ruling -- which today is every one of the 134 nodes that carry facts, and at three of the four stages is a node where the parent's own clause disables every input, so the act it warns about cannot be performed. A sentence that stands identically above the first fact of every node, on every node, at every stage, is the sentence a reader stops seeing after the second node; and the record knows this, because in this same movement `vocabulary-option-summary` demotes the authority gloss off the row on exactly that ground, that a sentence carried on 134 nodes "is read once and skipped thereafter". So the placement wins the argument about where the eye is and loses the argument about whether the eye still sees it, and the thing the line warns about -- the text -- is meanwhile a full column away, which is the objection the four earlier readings raised in the other direction and which this answer does not remove so much as reverse.
 
 The session's reply: Accepted on all six, each verified at its locus on the main thread: the line is written on 134 nodes while the sibling demotes a sentence for that property; how-a-fact-is-headed is at the review stage and not the periagogic movement; the parent's naming paragraph is unmarked, which the parent's amendment of this sitting takes; the sixth reading runs under review-cost's cap without saying so; every figure re-took exactly; and the opening sentence promises less than the paragraph delivers. The recommendation moves to line-only-where-the-act-is-live, recorded from the reading's viability, since the answer's own argument puts the warning in the path of the act and at three of the four stages the parent disables every input, so the line at those stages warns of an act the page will not accept; with it the opening sentence is true, the repetition is cut to the nodes at the ruling stage, and the answer says why repetition disqualifies the gloss from the row and not this line from the fact. The amendments owed: the sibling's stage and recommendation stated and the two named as complementary; the cap cited to review-cost with the rule the sixth reading runs under, that the redraw was a new answer and this reading is its first; and the citations kept by function, as they are. The counter-argument goes on the row at the strength the reading gave it. The amended answer owes its re-reading.
+
+### The sixth reading, and the narrowing it bought, 2026-09-07
+
+Six findings, forward at moderate strength, no probes; every one validated at its
+locus on the main thread and every one accepted. The recommendation moves within
+the placement rather than away from it, from `on-the-answer-fact` to
+`line-only-where-the-act-is-live`, which the reading raised in its viability
+paragraph as the option the fact was missing.
+
+Which rule this reading ran under, since it is the sixth on this node.
+`review-cost`'s recommended text sets the cap in terms: "How many readings a draft
+gets. Two: the reading, and the re-reading of its amendment. ... The cap bounds
+amendment and not redrawing: either reading may still kick the draft back, and a
+kickback is a new answer, which owes a reading of its own. What the cap forbids is
+a third reading of the same answer." The fifth reading kicked this node back to
+the maieutic movement and the answer was redrawn rather than repaired, so the
+redraw is a new answer and this reading is that answer's first. The count of six
+is the count of answers this node has had plus their re-readings, and no answer of
+it has been read three times. The rule is cited here rather than inferred, because
+the account before this one asserted the exemption without naming what granted it,
+and `review-cost` is itself in this round.
+
+What the narrowing answers. The reading's first finding and its counter-argument
+are one thing: on the same page in the same movement, `vocabulary-option-summary`
+demotes the authority gloss off the option's row because a sentence carried on 134
+of the record's 141 node files "is read once and skipped thereafter", while this
+draft wrote an identical sentence onto the answer fact of all 134. The answer now
+meets that rule head-on rather than half-conceding it in an `against`. A gloss
+explains a convention and a convention is learned once, so its repetitions teach
+nothing; this line warns about an act, and the act is repeated in full on every
+node the author rules, so its repetitions are one per performance and not one per
+reading. But that reply is only true where the act can be performed, and the
+parent disables every input on the fact at the three stages before the ruling. So
+the line stops where the act stops. That is the narrowing, and it also makes the
+answer's own opening sentence true: it promised the line "only where a
+confirmation can be staged" and wrote it wherever the answer fact carried no
+ruling, which the sixth finding caught and which the narrowing rather than a
+rewording repairs.
+
+The rest, each at its locus. `how-a-fact-is-headed` is at the review stage
+recommending that every fact heading be the fact's name linked to its definer, not
+at the periagogic movement as the fact's `against` and the account's last
+paragraph both said, and the inference drawn from the stale claim was wrong in
+substance too: that answer does not ask the section to carry less, it shortens the
+heading and moves the question behind a link, which says nothing about a line
+beneath it, so the two are complementary and both places now say so. The parent's
+naming paragraph is unmarked and is the parent's to mark, which the parent's
+amendment of this sitting does. And the reading re-took every figure and every
+citation in the draft and found them exact, recording that this node alone of the
+wave cites the projector by function and so staled nothing when `cb0e02c6`
+landed; the form is kept and the other three drafts of the wave take it.
+
+The counter-argument goes on the row at the strength the reading gave it,
+moderate, and the fact's `against` is moved onto the recommendation as it now
+stands: the text warned about is still a column away, which the move reversed
+rather than removed, and the narrowing adds a cost of its own, that at the three
+stages where the author reads a draft as a preview the page now says nothing about
+whose text it is.
+
+The amended answer owes its re-reading.
