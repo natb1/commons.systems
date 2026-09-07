@@ -96,6 +96,9 @@ facts:
       - name: unopposed-sentence-versus-an-against-on-every-fact
         source: commons.systems/disposition-graph/what-an-option-row-carries
         ref: "2026-09-06"
+      - name: prune-of-an-unruled-node-needs-no-ruling
+        source: commons.systems/disposition-graph/graph-topology
+        ref: "2026-09-07"
     recommends: per-fact-after-two-readings
     boldness: moderate
     against: "Both readings must pin the recommendation as it stands before the author may answer a single row, so every ruling waits on two readings of the AI's own drafting, while the one judgment no instrument can check, whether a denial is about the options or about the ground, is made by the party the denial was aimed at."
@@ -360,6 +363,10 @@ than claiming the recommendation is unopposed; or `against` is owed only where
 the AI has an objection it holds worth the author's time, and its absence is what
 the sentence reports; or the sentence goes, and the row simply carries whichever
 line exists.
+#### prune-of-an-unruled-node-needs-no-ruling
+
+Where no ruling reaches the node, the prune needs no ruling: the recorder takes it under the delegation of graph topology, writes the reason the question was closed on the node that keeps the question before the file goes, and the requirement that a ruling precede the deletion binds only a node the author has ruled. Raised by `commons.systems/disposition-graph/graph-topology` at its minting on 2026-09-07: that node's recommended answer, drawn from the author's words of 2026-09-06 that the prune grant is standing, departs from this answer's requirement that "a ruling that the node not exist is recorded before the node is deleted", and the evaluation node forbids adopting a contradiction rather than recording it. Viable and not recommended here: the delegation acts only from a ruling of `delegated` on that node's authority fact, and until then this answer's rule stands as written and the row asks every prune.
+
 ### authority
 
 Ratified, at low boldness. This is the node that says what a ruling is and where it is written, so an error here is an error in every ruling the record will ever hold: a response mis-classified confers a class the author did not confer, a ruling recorded on the wrong option records a choice they did not make, and a recording that drops the wrong field loses the reason a question was closed. That is expensive, irreversible in the way a mis-recorded ruling is irreversible, and capture-shaped, which is the test the authority node's answer now states for escalating toward ratified, absorbed there on 2026-09-05 from the option this node sourced on 2026-09-04, and which the frontier applies across the nodes below it. Delegated would let the recommendation act on how the author's own words are read, which is the one thing a delegation cannot cover; deferred is on the fact because the record's classes are three and the author's third exit stays open, and it is what the author takes if they want the recommendation to act while the question stays before them. Boldness low because the class follows that test, stated in the skill and applied across the frontier, rather than the AI's judgment of this node alone.

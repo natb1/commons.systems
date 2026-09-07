@@ -1,6 +1,6 @@
 ---
 question: When is an open question a probe, an option, or a node?
-stage: maieutic
+stage: review
 probes:
   - id: a-delegable-review-finding-question
     asks: >-
@@ -49,12 +49,17 @@ facts:
       - name: prune-delegated-with-two-bounds
         source: author
         ref: "2026-09-06"
+        status: passed
+        reason: "it writes the delegation into the prose of an answer, where no ruling can confer it, and a class the AI writes for itself is not a grant; the delegation it holds moves to `commons.systems/disposition-graph/graph-topology`, and it stays on the list because the author may prefer the remedy to carry the rule rather than cite it"
       - name: node-by-default
         source: ai
         ref: "2026-09-04"
-    recommends: prune-delegated-with-two-bounds
-    boldness: low
-    against: "The four tests are the AI's own, drawn in one sitting from the failure the author named and not yet worn by use; the survival test in particular asks the recorder to predict whether a response will be needed later, which is a judgment about the future of the record and not a fact a reading can check today, and the tie-break toward the probe rests on an argument about which error is cheaper that the author has not confirmed."
+      - name: delegation-carried-by-its-own-node
+        source: author
+        ref: "2026-09-07"
+    recommends: delegation-carried-by-its-own-node
+    boldness: moderate
+    against: "Four of the five paragraphs of the recommended answer are the AI's own: the three tests put to the response, the independence test, the two refusals and the tie-break were drawn in one sitting from the failure the author named and are not yet worn by use, and the survival test asks the recorder to predict whether a response will be needed later, which is a judgment about the future of the record and not a fact a reading can check today. On the clause that moved, sending the prune to a node of its own does not answer the case against the delegation, it only moves where the author rules on it: the power at issue is deletion, which `class-recommendation` names irreversible, conferred on the party that also finds the node redundant; the bound `may not prune something that is ratified` excludes nothing in the record as it stands, no option on any node carrying a ruling; and the second bound, that anything of the author's be transferred first, is checked by the same session that wants the file gone. And the remedy now points at a node no ruling reaches, so until `commons.systems/disposition-graph/graph-topology`'s authority fact is ruled the clause acts only through the interim it names, which is the row this amendment set out to stop asking."
     stands: by-what-the-response-does
   - name: authority
     options:
@@ -64,12 +69,20 @@ facts:
     recommends: ratified
     boldness: low
     against: "The rule decides what the author is asked to rule on and what they are merely asked, which is the shape of decision the record escalates toward ratified, since a recorder who may delegate it to itself decides its own accountability; but the author may hold the four tests to be operating detail under the parent's ratification and delegate them with it."
+  - name: existence
+    options:
+      - name: keep
+      - name: prune
+    recommends: keep
+    boldness: low
 review:
   verdict: kickback
   strength: strong
   date: 2026-09-07
   of: 9d514d0047fcdc619633c31ff36671fd91831432
   against: "The record's architecture rests on there being no stamp: a class is read off a ruling recorded on a fact and is never written in prose, because a class the AI writes for itself is not a grant. This draft writes a delegation into the prose of an answer whose question is a classification rule, and the delegation it writes confers the one power the record calls irreversible, deletion, on the party that also decides which node is redundant -- the recorder both finds the node dominated by its parent and takes the file, which is the shape `segregation-of-duties` and `deprecation-not-deletion` are held in this record to name. The two bounds do not bind where it matters: \"may not prune something that is ratified\" excludes nothing at all today, since no node in the record carries a ruling, and the second bound, that the author's words be transferred first, is checked by the same session that wants the file gone. The concrete case is already on the frontier: `hexis` carries an existence fact recommending `prune` and waits at a row for the author, and under this text it is simply deleted. And the test that fires the deletion is, by the fact's own `against`, \"the AI's own, drawn in one sitting... and not yet worn by use\" -- so one ruling would give an untested discriminator an unrecoverable remedy. The answer to this is that the author asked for exactly this delegation in their own words and repeated the direction, which is why the remedy belongs in the record; but it belongs on a node whose authority fact the author can rule `delegated`, where the scope is stated and the bounds are read off a ruling, and not in a sentence of a rule about probes."
+depends:
+  - commons.systems/disposition-graph/graph-topology
 form: rule
 under:
   - commons.systems/disposition-graph/author-questions
@@ -143,11 +156,15 @@ Readings owed under this node, each surfaced by the second evaluation and named 
 
 ### answer
 
-`by-what-the-response-does` is recommended because it is the only rule on the list that the asker cannot pass by choosing words, and because each of its four tests reads something a probe cannot counterfeit and a reading can check. `by-what-is-asked` is the parent's line and the sweeps' instrument, and it is kept viable because it may be all the author wants, with wording as the test and the sweeps' result accepted. `node-by-default` is kept because the reverse sweep worked under it and the author may hold that its asymmetry is the right one at recording too.
+`delegation-carried-by-its-own-node` is recommended. It keeps `by-what-the-response-does` whole — the four tests, put to the response and not to the question, are what the two sweeps of 2026-09-04 lacked and what a reading can check — and it changes one thing: the independence test's remedy names the delegation that takes a standing node's prune rather than carrying it. The author's words of 2026-09-06 grant that delegation, and this node's own ruling, scope and survival tests all return `node` when they are put to those words: the response is "delegated, do not ask me again", which only a disposition carries; it is already quoted on three nodes and bears on `recording`, `frontier-consistency` and `viable-options`, which is doctrine reaching below it; and every later session that prunes anything needs it on its own account. A rule that fails its own tests on its newest clause cannot be put to the author, and the author said the same thing on 2026-09-07: "If author's intent is a peristent disposition, then it may require a new node to be reconciled into the alignment skill." The node is `commons.systems/disposition-graph/graph-topology`, minted with this answer and entered in `depends`, and the delegation acts from a ruling of `delegated` on its authority fact, which is where the record confers a class.
+
+Boldness is moderate and not low. What moved is the author's — the delegation, its two bounds, and the direction to give it a node — but boldness is a property of the recommendation, which is the whole recommended text, and most of that text is the AI's construction, as this fact's `against` concedes in the words the fact's own earlier `against` used. The delegation clause is the author's; the tests are not, and a low boldness would report the provenance of the amendment in place of the provenance of the answer.
+
+`prune-delegated-with-two-bounds` is passed over and stays on the list. It carries the same delegation and the same two bounds, and it writes them into the prose of this answer, where no ruling can reach them; `authority` holds that a node's class is read off the rulings recorded on its facts and that a class the AI writes for itself is not a grant, so the one thing that option cannot do is confer the power it describes. It is passed rather than struck because the difference between the two is where the delegation is recorded and not whether it is given, and the author may hold that a rule about probes should carry its own remedy rather than cite one. `prune-granted-in-dialogue-needs-no-row` keeps its place for the same reason, being the same words read as a grant given case by case. `by-what-is-asked` is the parent's line and the sweeps' instrument, and it is kept viable because it may be all the author wants, with wording as the test and the sweeps' result accepted; the prune it ends in is asked on the existence fact below and not here. `node-by-default` is kept because the reverse sweep worked under it and the author may hold that its asymmetry is the right one at recording too.
 
 #### by-what-is-asked
 
-The parent's third limb as it stood before this sitting: a question of the record asks what something should be, a probe asks what the author meant by words they have already said, and the recorder classifies by which is asked. Viable if the author holds the sweeps' result to be complete and the line to want no more than wording; under this option the parent's limb is restored to its former sentence and this node is pruned.
+The parent's third limb as it stood before this sitting: a question of the record asks what something should be, a probe asks what the author meant by words they have already said, and the recorder classifies by which is asked. Viable if the author holds the sweeps' result to be complete and the line to want no more than wording; under this option the parent's limb is restored to its former sentence and this node has nothing left to answer. The prune that follows is not this option's to take: deleting the node is never an answer option, because an answer option is a candidate answer to this node's question and deleting the node answers nothing, so the prune is asked on the existence fact below, with this option as its ground, and the author rules the node's life as its own decision.
 
 #### prune-granted-in-dialogue-needs-no-row
 
@@ -208,20 +225,74 @@ the author may yet prefer that a prune be asked for each time, and because the
 difference between the two is exactly the difference between a grant and a
 delegation, which is the thing the author is deciding.
 
-What this option does not settle is which node holds the general delegation of
-graph topology the author names. No node of the record asks what that delegation
-covers, so the delegation is recorded here, on the node whose remedy it changes,
-and named as reaching further than this node's own question. That gap is on the
-frontier and is not filled by minting a node for it, since a carrier is not
-inferred from an input.
+Passed over on 2026-09-07, after the clean-context reading of that day, and kept
+on the list. What it does not settle is which node holds the general delegation of
+graph topology the author names, and it answers that by holding the delegation
+here, in the prose of an answer whose question is a classification rule. That is
+the one place the record cannot put it. `authority` holds that every answer
+carries its authority in the rulings recorded on its facts, that no stamp is
+written beside them, and that a class the AI writes for itself is not a grant; a
+delegation written into a sentence is exactly such a class, conferred by nothing
+the author can rule on, and the power it confers is the one the record calls
+irreversible. The bounds do not close that: `may not prune something that is
+ratified` excludes no node in the record as it stands, since no option on any node
+carries a ruling, and the transfer of the author's words is checked by the same
+session that wants the file gone. `delegation-carried-by-its-own-node` keeps
+everything this option holds and moves it to `commons.systems/disposition-graph/graph-topology`,
+where the two bounds are read off a ruling on an authority fact. The option stays
+listed because the author may hold that a remedy should carry its own rule rather
+than cite one, and because it and its successor differ in where the delegation is
+recorded and not in whether it is given.
 
 #### node-by-default
 
 Wherever the recorder cannot classify a question, it mints a node, on the reverse sweep's asymmetry: a node wrongly kept costs an entry on a long frontier, and a probe wrongly recorded may lose a question the author asked for. Viable if the author weighs a lost question above a rulable row they did not want; under this option the four tests stand and only the tie-break flips.
 
+#### delegation-carried-by-its-own-node
+
+The four tests stand and the remedy's last clause names the delegation rather
+than carrying it. A node of its own under `commons.systems/disposition-graph/authority`,
+`graph-topology`, asks what the recorder may do to the graph's topology without
+asking, carries the author's words of 2026-09-06 with their two bounds, and takes
+its own authority fact, on which a ruling of `delegated` is what confers the
+pruning power; this node's remedy then says that a standing node the independence
+test reaches is pruned under that delegation once it is ruled, and that until then
+the existence fact and its row are how the prune is asked. The node is entered in
+`depends`, so the recommendation here waits on it as the scope test's remedy
+requires.
+
+Viable because it is what this node's own ruling, scope and survival tests return
+when they are put to the author's words of 2026-09-06, and what the author's words
+of 2026-09-07 propose in terms; and because it puts the delegation where a ruling
+can confer it, a class being read off a ruling on an authority fact and never off
+prose in an answer. What it costs is a forward reference: until the new node is
+ruled the remedy acts through the row, so nothing about a prune changes on the day
+this option is confirmed, and the author is confirming where the question will be
+answered rather than answering it. That is the honest shape of it, and it is why
+`prune-delegated-with-two-bounds` stays on the list for an author who would rather
+settle both at once.
+
 ### authority
 
-`ratified` is recommended because the rule decides what the author is asked to rule on and what they are merely asked, which is the recorder deciding its own accountability, and the record escalates toward ratified where being wrong is capture-shaped.
+`ratified` is recommended on two of the three limbs `commons.systems/disposition-graph/class-recommendation` names, and either would carry it. Capture-shaped: the rule decides what the author is asked to rule on and what they are merely asked, so the party that would set it is the party it exists to check, and a recorder that may classify its own questions decides its own accountability. Irreversible: since 2026-09-07 the independence test's remedy reaches a deletion — "Irreversible means it is not paid back at all: a deletion, a swap, a landing that other work is built on" — and while the delegation that takes that deletion is now recorded on `commons.systems/disposition-graph/graph-topology`, the test that fires it is this node's, so a wrong test here is not paid back either. That is what makes a wrong ruling on this node unrecoverable rather than merely expensive, and it is the limb the reading of 2026-09-07 found missing. Boldness low: the escalation is the record's own test applied to a rule whose subject-matter is what the author sees, and the author may still hold the four tests to be operating detail under the parent's ratification and delegate them with it.
+
+### existence
+
+Keep. This node's question — when an open question is a probe, an option, or a
+node — is answered by no other node, its four tests are what three movements of
+2026-09-04 and two readings have worked on, and `commons.systems/disposition-graph/frontier-consistency`'s
+sixteenth validation, the alignment skill and the survey brief all run against it,
+so nothing here folds into the parent without leaving those three pointing at
+nothing.
+
+Prune: the option `by-what-is-asked` ends in one. Under it the parent's third limb
+is restored to the sentence it had before this sitting, the line is drawn by what
+is asked, and this node has no question left of its own. The prune is asked here
+and not on the answer fact, because deleting the node is never an answer option:
+an answer option is a candidate answer to this node's question, and deleting the
+node answers nothing. Recorded on 2026-09-07 so that the author rules the node's
+life as a decision of its own rather than taking it as a consequence of a ruling
+they gave on the answer.
 
 ## Recommendation
 
@@ -244,7 +315,7 @@ The scope test. A probe bears on the recommendations of one node, and its `disch
 
 The survival test. Would anything need the response after the recommendation it moved has been ruled on? A probe dies with the dialogue, and what survives of it is the author's words and the rationale that quotes them; a response that a later sitting, a reading, a projection, or a reconciliation would need on its own account survives the dialogue, and what survives the dialogue is a node.
 
-The independence test, which runs the other way and catches the opposite miss. A node whose only possible answer is a reading of its parent's answer, whose facts would repeat the parent's, and which would be pruned the moment the parent's recommendation moved is a probe on the parent and not a child of it: its question can be put as "on the parent, which did you intend", and that is a probe's question. Such a node found at recording is re-encoded on the parent, as a probe, or as an option on the parent's fact where the AI holds its answer viable, with `source` naming the node it was; its account folds into the parent's, any words of the author's on it move to the parent's `## Disposition`, and its options are struck, since options that were never candidates are the costumed options the author classified on 2026-09-04 on the review node. A node already standing is pruned by the recorder, under the author's delegation of graph topology given on 2026-09-06 and within its two bounds: a ratified node is never pruned, since its answer is a commitment of the author's and withdrawing it is theirs; and anything the record holds as the author's on the node, their words above all, is transferred to another node before the file goes. The survivor is recorded on the parent the same way, the account folds into it, and the reason the question was closed is written down before the deletion; no row on the alignment page asks the prune, and no grant is sought for it. The test does not reach a reading: a reading's answer is a standing relation between a tradition and the node above it, which stands by construction.
+The independence test, which runs the other way and catches the opposite miss. A node whose only possible answer is a reading of its parent's answer, whose facts would repeat the parent's, and which would be pruned the moment the parent's recommendation moved is a probe on the parent and not a child of it: its question can be put as "on the parent, which did you intend", and that is a probe's question. Such a node found at recording is re-encoded on the parent, as a probe, or as an option on the parent's fact where the AI holds its answer viable, with `source` naming the node it was; its account folds into the parent's, any words of the author's on it move to the parent's `## Disposition`, and its options are struck, since options that were never candidates are the costumed options the author classified on 2026-09-04 on the review node. A node already standing is not re-encoded by this test alone, because it cannot be: the survivor is recorded on the parent the same way, the account folds into it, the author's words move with it, and the reason the question was closed is written down before the file goes. Who then takes the prune is not this node's to say, and this node does not confer it: the prune of a standing node is taken under the author's delegation of graph topology, which is recorded on `commons.systems/disposition-graph/graph-topology` and acts only when that node's authority fact is ruled `delegated`; until then the node's existence fact moves to `prune` with this test as its reason, and the row asks the author. The test does not reach a reading: a reading's answer is a standing relation between a tradition and the node above it, which stands by construction.
 
 Two things the tests refuse to rest on. Whether the author has spoken: a probe asks what the author intends, and most of this record was minted without quoting them, so the absence of the author's words is not evidence that no disposition stands behind a node, and their presence is not evidence that a question is a probe; where the author has said nothing, the tests still run on what a response would do. And the question's wording: "what should this be" and "what did you mean by this" are each rewritable as the other, so wording is a tell and never the test, and the parent's line between a question of the record and a probe is read through this rule.
 
@@ -256,8 +327,9 @@ The parent's admission test draws its third limb by what is asked, should be aga
 
 The tie-break reverses between recording and review, and the answer says so rather than choosing one, because the cheaper error is different in the two: at recording a probe is promotable and a node is not demotable, so the probe is the reversible choice; at review the node already stands and may be the author's, so keeping it is.
 
-Readings owed under this node, each surfaced by the second evaluation and named here rather than minted: the distinction between a question of law and a question of fact, for the whole rule, the finder of fact answering what was intended and the court answering what binds, and for the survival test, since a finding of fact binds no later case and a holding does; the request for information against the change order in construction contracting, for the same line drawn where the drawings are the record, an RFI clarifying what the drawings mean and a change order altering what the contract requires, and for the rule that an RFI whose answer alters the contract is re-issued as a change order, which is the promotion clause; the erratum against the revising document in the IETF's practice, for the survival test, an erratum being consumed by the text it corrects; the parol evidence rule, for the ruling test's other face, that what a party intended is evidence and not term; and the issue-based information system already owed on the node node, for the difference between an issue, which stands, and a question put to a participant, which does not. The certified question and IEEE 830's TBD are already owed on the parent and are not repeated. Amended 2026-09-07 to the author's words of 2026-09-06, quoted above: the prune of an unratified node is the AI's under the general delegation of graph topology, within the two bounds those words set, and the row on the alignment page is not where it is asked; the option `prune-delegated-with-two-bounds` carries the reading and the recommendation moved to it on the author's words, which is why the boldness is low.
+The independence test's remedy stops where it does because of the rule this node states about itself. The author's words of 2026-09-06 delegate the prune of an unratified node, and put to the four tests above those words return a node on three of them: the response is a delegation, which only a disposition carries; it reaches `recording`, `frontier-consistency` and `viable-options` besides this one; and every later session that prunes anything needs it on its own account. So this rule says which nodes the test reaches and what a prune must leave behind, and `commons.systems/disposition-graph/graph-topology` says who may take it and under what bounds. A rule that conferred the power in its own prose would be conferring a class the record can only read off a ruling.
 
+Readings owed under this node, each surfaced by the second evaluation and named here rather than minted: the distinction between a question of law and a question of fact, for the whole rule, the finder of fact answering what was intended and the court answering what binds, and for the survival test, since a finding of fact binds no later case and a holding does; the request for information against the change order in construction contracting, for the same line drawn where the drawings are the record, an RFI clarifying what the drawings mean and a change order altering what the contract requires, and for the rule that an RFI whose answer alters the contract is re-issued as a change order, which is the promotion clause; the erratum against the revising document in the IETF's practice, for the survival test, an erratum being consumed by the text it corrects; the parol evidence rule, for the ruling test's other face, that what a party intended is evidence and not term; and the issue-based information system already owed on the node node, for the difference between an issue, which stands, and a question put to a participant, which does not. The certified question and IEEE 830's TBD are already owed on the parent and are not repeated.
 ```
 
 ## Account
@@ -397,3 +469,72 @@ On the viability of the options: Every option listed is viable and none is misfi
 Strongest counter-argument (strong): The record's architecture rests on there being no stamp: a class is read off a ruling recorded on a fact and is never written in prose, because a class the AI writes for itself is not a grant. This draft writes a delegation into the prose of an answer whose question is a classification rule, and the delegation it writes confers the one power the record calls irreversible, deletion, on the party that also decides which node is redundant -- the recorder both finds the node dominated by its parent and takes the file, which is the shape `segregation-of-duties` and `deprecation-not-deletion` are held in this record to name. The two bounds do not bind where it matters: "may not prune something that is ratified" excludes nothing at all today, since no node in the record carries a ruling, and the second bound, that the author's words be transferred first, is checked by the same session that wants the file gone. The concrete case is already on the frontier: `hexis` carries an existence fact recommending `prune` and waits at a row for the author, and under this text it is simply deleted. And the test that fires the deletion is, by the fact's own `against`, "the AI's own, drawn in one sitting... and not yet worn by use" -- so one ruling would give an untested discriminator an unrecoverable remedy. The answer to this is that the author asked for exactly this delegation in their own words and repeated the direction, which is why the remedy belongs in the record; but it belongs on a node whose authority fact the author can rule `delegated`, where the scope is stated and the bounds are read off a ruling, and not in a sentence of a rule about probes.
 
 The session's reply: Accepted, and kicked back to the maieutic movement as the reading asks; the author's own words of 2026-09-07 on this node decide it the same way. Verified on the main thread: no option in the record carries a ruling, so the bound that a ratified node is never pruned excludes nothing today; hexis carries an existence fact recommending prune and waits for the author; this node carries no existence fact while by-what-is-asked ends in a prune; and the align skill at line 468 and frontier-consistency's sixteenth validation still say the author rules the prune. The new answer keeps the four tests and sends the delegation to a node of its own, whose authority fact the author can rule delegated and whose scope and bounds are then read off that ruling; the option the reading names, delegation-carried-by-its-own-node, source author, ref 2026-09-07, is recorded and recommended, prune-delegated-with-two-bounds stays on the fact as the AI's option with the reading's case against it, and the node that carries the delegation is minted with the answer. With it: an existence fact on this node for the prune by-what-is-asked ends in; boldness moderate on the whole recommended text; the case against moved to the clause that moved; hexis named as the node the remedy reaches today; the authority reading naming the irreversible limb beside the capture-shaped one; and the sixteenth validation on frontier-consistency and the skill's clause named as what the amendment leaves standing, since under the new answer the author's delegation, once ruled, is what the recorder acts under and the row is what asks it until then.
+
+### The delegation sent to a node of its own, 2026-09-07
+
+The clean-context reading of 2026-09-07 kicked this node back to the maieutic
+movement on one ground: the amendment of that morning wrote a delegation into the
+prose of this answer, and the record reads a class off a ruling recorded on a fact
+and never off prose. The kickback was accepted whole, and the author's words of
+2026-09-07, quoted under `## Disposition`, decide it the same way — an intent that
+is a persistent disposition may take a node of its own, to be reconciled into the
+alignment skill.
+
+What was written. The option `delegation-carried-by-its-own-node` is recorded on
+the answer fact, source `author`, ref 2026-09-07, and is recommended, at moderate
+boldness; the recommended text keeps the four tests unchanged and ends the
+independence test's remedy by naming the delegation rather than carrying it.
+`prune-delegated-with-two-bounds` is passed over with the reading's case against it
+as its reason and stays on the list, since the two differ in where the delegation
+is recorded and not in whether it is given. The fact's `against` moves to the
+clause that moved and now carries what the reading verified on the main thread:
+no option in the record carries a ruling, so the bound naming a ratified node
+excludes nothing today, and the transfer of the author's words is checked by the
+same session that wants the file gone. The `### authority` reading names the
+irreversible limb beside the capture-shaped one, since the test that fires the
+remedy reaches a deletion. And an `existence` fact is added, recommending `keep`
+at low boldness, because `by-what-is-asked` ends in a prune and a prune is never
+an answer option; that option's prose now says the prune is the existence fact's.
+
+The node minted: `commons.systems/disposition-graph/graph-topology`, under
+`commons.systems/disposition-graph/authority`, asking what the recorder may do to
+the graph's topology without asking. It carries the author's words of 2026-09-06
+with their two bounds as the recommended answer, source `author`, and an authority
+fact recommending `delegated` at low boldness, on which a ruling is what confers
+the pruning power. It is entered in this node's `depends` as
+`commons.systems/disposition-graph/graph-topology`, so the recommendation here
+waits on it, which is what the scope test's own remedy requires of a question that
+would move more than one node's recommendation.
+
+What the amendment does not make stale, and it is worth saying because the earlier
+reading expected it to. Three loci carry the sentence that the author rules the
+prune at the node's own row:
+`commons.systems/disposition-graph/frontier-consistency`'s sixteenth validation, in
+the text it recommends; `.claude/skills/align/SKILL.md` lines 467–468; and
+`packages/clean-context-review/brief-survey.md` line 36. Under the delegation
+carried here they would all three have been falsified on the day this node landed.
+Under the delegation carried by a node of its own they stand exactly as written,
+because until that node's authority fact is ruled `delegated` the row *is* where
+the prune is asked, and what changes when it is ruled is one clause in each. An
+option is recorded on `frontier-consistency` so that its sixteenth validation reads
+the delegation off the new node's ruling rather than restating a rule that will
+move; the two implementation loci are a reconciliation item and are named here so
+they are ruled and not discovered.
+
+The node the remedy reaches today is
+`commons.systems/disposition-graph/hexis`, whose existence fact recommends `prune`
+at low boldness on this node's independence test and which waits at its own row.
+Under `prune-delegated-with-two-bounds` the first effect of a confirmation would
+have been the deletion of a node already queued for the author's own ruling.
+Under the recommended option nothing about that row changes on the day this
+answer is confirmed: `hexis` waits for the author until `graph-topology` is ruled,
+and it is the first prune that ruling would reach. The author is entitled to know
+which of their pending rows a ruling closes, and this is the one.
+
+Owed and not written here: an option on
+`commons.systems/disposition-graph/recording`, whose answer requires that a ruling
+that the node not exist be recorded before the node is deleted. A prune taken
+under the delegation has no such ruling, and validation 2 forbids a recommendation
+adopting a contradiction instead of recording it. The new node's answer states the
+departure in terms; the option that records it belongs on `recording`, and its
+prose is drafted in that node's account.

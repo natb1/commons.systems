@@ -61,6 +61,9 @@ facts:
       - name: a-validation-for-the-round
         source: commons.systems/disposition-graph/review-cost
         ref: "2026-09-05"
+      - name: sixteenth-validation-reads-the-delegation
+        source: commons.systems/disposition-graph/probe-or-node
+        ref: "2026-09-07"
     recommends: split-survey-from-per-draft
     boldness: moderate
     against: "The split answers half of the counter-argument of 2026-09-03: the survey still reads the whole graph on every invocation and is incremental only in what it judges, so its cost and its noise grow with the frontier; the partition is stated in this fence and in the clean-context-review node's, and the merge validation runs at three moments on three objects."
@@ -259,6 +262,30 @@ reader a second object, which is what the division of the readings by their
 object exists to prevent. Raised by the clean-context reading of `review-cost`
 on 2026-09-05, which found the round priced to a validation this reader's list
 does not carry.
+
+#### sixteenth-validation-reads-the-delegation
+
+The sixteenth validation's proposal reports the prune the way the node that owns
+the test now prescribes: the survivor on the parent, the child's options struck,
+the author's words moved, and the prune of the standing child taken by whoever
+`commons.systems/disposition-graph/graph-topology`'s authority fact says may take
+it — the author at the child's own row until that fact is ruled `delegated`, and
+the recorder under the delegation once it is. The clause it replaces reads "the
+child being a node already standing, that its existence fact moves to `prune` with
+the test as its reason and the author rules the prune at the child's own row",
+which this node took from `commons.systems/disposition-graph/probe-or-node` on
+2026-09-04 as that node's own remedy.
+
+Nothing in the survey's instruction is falsified today: until `graph-topology` is
+ruled the row is where the prune is asked, so the recommended text, the alignment
+skill and the survey brief all remain true as written. What the option buys is
+that they stay true after the ruling, by reading the delegation off the node that
+carries it instead of stating a rule this node does not own — which is the same
+remedy `validations-cited-to-their-owners` proposes for the list as a whole and
+which the reading of 2026-09-05 already applied to this very validation, finding
+that the copy had "diverged from its source twice in a day". Raised on
+`commons.systems/disposition-graph/probe-or-node`, by its clean-context reading of
+2026-09-07 and the sitting that applied it.
 
 ### authority
 
