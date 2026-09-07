@@ -1,13 +1,13 @@
 ---
 question: How are references to tradition recorded?
-stage: review
+stage: ruling
 review:
   verdict: forward
   strength: weak
   date: 2026-09-07
   of: 1558b74a9a1199765bdee07abf825ac9313bfde1
-  commit: d9c2e3be43a1b0ba82d6c26ad964a57afb1648f9
-  against: "The account entry \"Repaired after the re-reading, 2026-09-07\" (the first repair's own self-report) still states unqualified that the authority fact's case against \"no longer claims that every reading on the record recommends delegated for itself,\" and that exact sentence is left untouched by this diff -- it was not corrected, only overtaken. A reader who trusted that entry in isolation, without reading the second re-reading's findings that followed it, would still be misled about what the first repair actually fixed (the frontmatter copy only, not the body prose). The sentence reads as true of the node now only because this amendment's authority-prose fix makes it true two steps later, which is incidental to the self-report's own honesty at the time it was written and was never itself corrected or flagged as imprecise."
+  commit: abb15a3e8dbf6291b4a07db98466c158ac0acbbe
+  against: "The previous reading's own weak counter-argument -- that the account entry \"Repaired after the re-reading, 2026-09-07\" still states unqualified that the authority fact's case against no longer claims every reading recommends delegated for itself, when that exact sentence was never itself corrected or flagged as imprecise -- remains true of the node after this amendment: nothing in this diff touches that sentence. It is carried forward here rather than re-raised as a new finding, since the previous reading already surfaced it as a weak counter-argument and not as a blocking finding, and this amendment did not purport to address it."
   survey:
     date: 2026-09-05
     of: 4d59b849501c0abb7bd5648ed67732e57bc94e0b
@@ -600,3 +600,20 @@ Strongest counter-argument (weak): The account entry "Repaired after the re-read
 ### Option recorded, 2026-09-07
 
 `a-readings-class-is-deferred-until-the-author-reads` recorded on the answer fact, source `review`, from the clean-context readings of the three readings under `survey-selection` read at d35b0014, each of which found the authority fact recommending delegated on a sentence that argues for deferred. The recommendation does not move: the option is the derivation behind the nine readings' authority recommendations, held once here, and the census of the record's other readings it names is a reconciliation item of this node's and not a change made in this landing.
+
+### Clean-context re-reading, 2026-09-07, of 1558b74a (ii)
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `the-relation-is-projected-onto-the-option-as-one-of-three`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff lands the previous re-reading's own result (review block moves from verdict kickback/moderate/of 428e3065/commit d35b0014/against the F3-F4 residue text, to verdict forward/weak/of 1558b74a/commit d9c2e3be/against the self-report-sentence text) and appends that reading's own account entry verbatim, then separately records a new answer-fact option, `a-readings-class-is-deferred-until-the-author-reads` (source review, ref 2026-09-07), with its own account entry. `recommends` (the-relation-is-projected-onto-the-option-as-one-of-three), `stands` (relation-per-option), and boldness (moderate) on the answer fact are unchanged, so the `## Recommendation` fence stays present and correctly targets the same recommended option; the authority fact is untouched by this diff.
+
+On the viability of the options: The diff only adds one new answer-fact option and leaves every existing option's status untouched; the new option is not recommended and not passed over, so it sits viable alongside the others without contradicting any of them, and no option is removed or newly dominated.
+
+Strongest counter-argument (weak): The previous reading's own weak counter-argument -- that the account entry "Repaired after the re-reading, 2026-09-07" still states unqualified that the authority fact's case against no longer claims every reading recommends delegated for itself, when that exact sentence was never itself corrected or flagged as imprecise -- remains true of the node after this amendment: nothing in this diff touches that sentence. It is carried forward here rather than re-raised as a new finding, since the previous reading already surfaced it as a weak counter-argument and not as a blocking finding, and this amendment did not purport to address it.
+
+The session's reply: An account entry is the record of what its day did and is not rewritten after it; the sentence the counter names stands as the account of that repair, and what the accumulation folds it will fold. The authority fact's case against was corrected in the same landing, which is what the entry reports.

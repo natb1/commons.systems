@@ -1,7 +1,7 @@
 ---
 question: How does a survey narrow its object without narrowing what it can find?
 form: rule
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -48,8 +48,7 @@ review:
   strength: weak
   date: 2026-09-07
   of: 5b7146faad57c25c3df6cb60385e71e93e559d50
-  commit: d4ab02834a08930a67d9b5885708f3f23f7a9153
-  against: "The amendment's claim of having minted four reading nodes is attested only by this file's own prose and by the brief's synthesized 'Readings bearing on it' lines; a delta reading of survey-selection.md alone is never given the four new reading-node files themselves, so a defect internal to one of them -- a bears entry pointed at the wrong option, or a gloss too thin to count as 'recording a tradition' under evaluation's rule -- would not surface in this diff or this reading. The arithmetic is internally consistent (4 already read + 1 read elsewhere + 4 newly minted + 15 owed = 24 surfaced, matching the survey's count) and the bearings line up with the Rationale's own description, which is the strongest verification available at this reading's scope, but it stops short of reading the minted nodes' own content."
+  against: "The previous reading's own weak counter-argument -- that a delta reading of this node's file alone is never given the four newly minted reading-node files themselves, so a defect internal to one of them (a `bears` entry on the wrong option, or too thin a gloss to count as recording a tradition under `evaluation`'s rule) would not surface here -- still holds after this amendment: this reading, like the last, was given only survey-selection.md's own diff and text, not the minted reading nodes' content, and the newly added option's citation of `regression-test-selection`'s repaired reading is likewise unverifiable at this reading's scope. It is carried forward rather than re-raised as a new finding, since the amendment does not purport to close it."
 under:
   - commons.systems/disposition-graph/review-cost
 defines:
@@ -253,3 +252,20 @@ Strongest counter-argument (weak): The amendment's claim of having minted four r
 ### Option recorded, 2026-09-07
 
 `size-the-cadence-and-the-sample-on-inclusiveness-and-precision` recorded on the answer fact, source `review`, from the counter-argument the clean-context reading of `regression-test-selection` at d35b0014 raised, that a tradition read for its unavailable guarantee alone constrains nothing; the repaired reading names the tradition's measurement apparatus and sends the sizing here. The recommendation does not move. The same repair moved that reading's relation on `the-delta-survey-with-a-periodic-whole` from diverged to adopted, with a second entry adopting on `a-whole-graph-reading-every-time`, so the traditions this node's options carry have changed since the last survey pinned it.
+
+### Clean-context re-reading, 2026-09-07, of 5b7146fa (ii)
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `candidate-pairs-with-their-nominating-key`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff lands the previous re-reading's own result on the review block (verdict moves from kickback/moderate/of 3e1b9377/commit d35b0014 to forward/weak/of 5b7146fa/commit d4ab0283, with `against` replaced by that reading's own minted-readings counter-argument) and appends that reading's account entry verbatim, then separately records one new answer-fact option, `size-the-cadence-and-the-sample-on-inclusiveness-and-precision` (source review, ref 2026-09-07), with its own facts-prose subsection and account entry. `recommends` (candidate-pairs-with-their-nominating-key), `stands` (the same option), and boldness (high) on the answer fact are unchanged, so the absence of a `## Recommendation` fence is unchanged; the authority fact is untouched by this diff.
+
+On the viability of the options: The diff only adds one new answer-fact option, drawn from `regression-test-selection`'s repaired reading, and leaves every existing option's status, recommendation and ranking untouched; nothing on the authority fact changes.
+
+Strongest counter-argument (weak): The previous reading's own weak counter-argument -- that a delta reading of this node's file alone is never given the four newly minted reading-node files themselves, so a defect internal to one of them (a `bears` entry on the wrong option, or too thin a gloss to count as recording a tradition under `evaluation`'s rule) would not surface here -- still holds after this amendment: this reading, like the last, was given only survey-selection.md's own diff and text, not the minted reading nodes' content, and the newly added option's citation of `regression-test-selection`'s repaired reading is likewise unverifiable at this reading's scope. It is carried forward rather than re-raised as a new finding, since the amendment does not purport to close it.
+
+The session's reply: The four minted readings, and the nine under this node, are each read in their own clean-context reading rather than through this node's: six draft readings and three re-readings were launched at abb15a3e, and a defect internal to one of them surfaces there, on the node that carries it.
