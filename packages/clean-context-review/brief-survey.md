@@ -8,9 +8,11 @@
 
 Your object is **the frontier's consistency with itself**. Drift between nodes is invisible to any reading of one node, so the whole graph is here in one context.
 
-The **judged set** is the {{batch_count}} node(s) at the review or ruling stage whose recommendation has moved since the survey last pinned it, and every such node no survey has yet read. Those are the nodes you write an entry for in `nodes`, and only those; they are listed below in the ruling order, the order the author rules in. The **context** is every other node, answered or unanswered, at every stage: {{context_count}} node(s). The context receives no entry, but a finding may name any node in it, and a finding that does is applied to that node as the kickback flow says.
+The **judged set** is the {{batch_count}} node(s) at the review or ruling stage whose recommendation has moved since the survey last pinned it, and every such node no survey has yet read. Those are the nodes you write an entry for in `nodes`, and only those; they are listed below in the ruling order, the order the author rules in, whole (its facts, its rationale, its disposition, its recommendation fence).
 
-No `## Account` is carried here, for the judged set or the context: the accounts are the dialogue's history and not its text. Read the files themselves where a finding turns on the exact bytes.
+The judged set's **neighbourhood** -- every node its ancestry, the rules of the reading, its children, its siblings, the nodes it names, and the readings that bear on it reach -- is carried by what it answers and not whole: the standing answer, the recommendation fence when one stands, and the names of the options on its answer fact, {{neighbourhood_count}} node(s). Everything else, whose text bears on nothing judged this round, is one line: {{context_count}} node(s). Both the neighbourhood and the plain context receive no entry in `nodes`, but a finding may name any node in either, and a finding that does is applied to that node as the kickback flow says.
+
+No `## Account` is carried anywhere in this brief -- judged, neighbourhood, or context: the accounts are the dialogue's history and not its text. Read the files themselves where a finding turns on the exact bytes.
 
 **The graph commit you are reading is `{{commit}}`.** Carry it in your output: a review attests to the text it read. The session that applies your findings compares each node against the recommendation hash this brief pinned (`{{pins}}`), and discards a finding whose subject has moved since — which is what serializes the survey, and why nothing here is locked.
 
@@ -18,7 +20,7 @@ The survey **forwards nothing**. Only the review of a draft gives a verdict; you
 
 {{record}}
 
-Read first, in full: `disposition/disposition-graph/frontier-consistency.md` (the validations you run), `clean-context-review.md` (the two readings and how this one is pinned), `alignment-order.md` (how a tangle and a divergence are recorded), `recording.md`, `viable-options.md`, `authority.md`, `unanswered.md`, `dialogue.md`, `node.md`, and the global-tier rules `evaluation.md`, `materialization.md`, `session-context.md`, `delegation.md`; then the manifest. Then this brief's judged set, whole, all of it before you write any finding, since the survey compares nodes.
+Read first, in full: `disposition/disposition-graph/frontier-consistency.md` (the validations you run), `clean-context-review.md` (the two readings and how this one is pinned), `alignment-order.md` (how a tangle and a divergence are recorded), `recording.md`, `viable-options.md`, `authority.md`, `unanswered.md`, `dialogue.md`, `node.md`, and the global-tier rules `evaluation.md`, `materialization.md`, `session-context.md`, `delegation.md`; then the manifest. Then this brief's judged set, whole, and its neighbourhood, by what it answers, all of it before you write any finding, since the survey compares nodes.
 
 ## What you judge
 
@@ -36,6 +38,8 @@ Across the graph — each judged node against every other node, answered or unan
 16. **Independence** (`probe-or-node`). A node whose `under` names a node that itself carries a `stage`, whose only possible answer is a reading of that parent's answer, whose facts would repeat the parent's, and which would be pruned the moment the parent's recommendation moved, is a probe on the parent and not a child of it: its question can be put as "on the parent, which did you intend", and that is a probe's question. Report it as a finding naming both nodes and carrying, in the `proposal`, the survivor the child's question becomes on the parent — a probe, with the `asks`, the `why` and the `discharges` it would take, or an option on the parent's fact where a candidate answer is held viable — with the note that the child's options are struck as options that were never candidates, that any words of the author's on it move to the parent's `## Disposition`, and that, the child being a node already standing, its existence fact moves to `prune` with this test as the reason and the author rules the prune at the child's own row; and never as a probe raised, since re-encoding a node is the main thread's and not this reading's. Kind: `decomposition`, the schema's nearest — the child is a fragment of its parent, and a fold is what is proposed. A reading (`form: reading`) is exempt by construction: its answer is a standing relation between a tradition and the node above it, which stands whatever the parent recommends.
 
 ## How you record what you find
+
+**Every finding quotes the locus it bears on verbatim** — the sentence or clause exactly as it stands in the file, not paraphrased or summarized — so the applying session can verify it by search before it is recorded on any node. This binds `finding` on a `frontier` entry, `finding` on a `subtree_divergence`, and every entry of a node's own `findings` list.
 
 **A finding may name any node in the graph, judged or not.** It names every node it concerns and recommends, for each node named *whose text must change*, the earliest stage the finding touches: `periagogic` when the ground or the author's words are in question, `maieutic` when the answer must be redrafted. A node named only as context — named because the finding concerns it, but whose own text needs no change — receives the finding too and keeps its stage: omit it from `stages` rather than guessing one for it. **A node that carries no `stage` at all** (settled doctrine, no dialogue open) must be given one in `stages` if you name it, since a finding recorded on it opens its dialogue; name it only when you mean to reopen it.
 
@@ -57,11 +61,15 @@ A probe names any node in the graph, judged or not, for the same reason a findin
 
 {{batch}}
 
-## The full graph, as context ({{context_count}} node(s))
+## The neighbourhood of the judged set ({{neighbourhood_count}} node(s), by what each answers)
+
+{{neighbourhood_index}}
+
+{{neighbourhood}}
+
+## The full graph, as context ({{context_count}} node(s), one line each)
 
 {{context_index}}
-
-{{context}}
 
 ## Output
 
@@ -75,7 +83,7 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
   "nodes": [
     {
       "id": "<a judged node's id, exactly as this brief lists it>",
-      "findings": ["<one finding per string, citing the section and quoting the text it concerns>"],
+      "findings": ["<one finding per string, citing the section and quoting the locus it bears on verbatim>"],
       "counter_argument": "<the strongest argument against this node's recommendation as the frontier reads it, in two to five sentences>" | null,
       "strength": "strong" | "moderate" | "weak" | "none"
     }
@@ -84,7 +92,7 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
     {
       "kind": "contradiction" | "supersession" | "redundancy" | "decomposition" | "vocabulary" | "cross-reference" | "placement" | "coverage" | "merge" | "stale-recommendation",
       "nodes": ["<every node id the finding concerns, judged or not>", "..."],
-      "finding": "<the finding, quoting the sentences concerned>",
+      "finding": "<the finding, quoting the locus it bears on verbatim>",
       "proposal": "<what you propose, naming the survivor and what moves where that applies>",
       "stages": { "<node id whose text must change>": "periagogic" | "maieutic" },
       "options": [
@@ -109,7 +117,7 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
     {
       "ancestor": "<the unruled node whose pending answer options the subtrees diverge over>",
       "sides": { "<an option name on that ancestor's answer fact>": ["<id of a node that stands under it>", "..."] },
-      "finding": "<what diverges, quoting the sentences concerned>"
+      "finding": "<what diverges, quoting the locus it bears on verbatim>"
     }
   ]
 }

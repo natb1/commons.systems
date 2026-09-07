@@ -628,6 +628,10 @@ export function renderFrontier(graph) {
     for (const s of node.shims || []) {
       lines.push(`  shim (${s.declared}): ${s.artifact} — for: ${s.for || "unstated"} — liquidation: ${s.liquidation}`);
     }
+    // `node.findings` (`deriveMechanicalFindings`, read.mjs) is the same
+    // function `validate.mjs` prints; the frontier lists them here, under
+    // the node they concern, rather than recompute them.
+    for (const text of node.findings || []) lines.push(`  finding: ${text}`);
   }
   return `${lines.join("\n")}\n`;
 }
@@ -1389,7 +1393,15 @@ function caseAgainst(n, fact) {
 
 /* The author's words a `## Disposition` section holds, entry by entry: each
  * begins at the line naming the author and the date and runs to the next such
- * line, so a quotation stays with the sentence that introduces it. */
+ * line, so a quotation stays with the sentence that introduces it. Kept as
+ * its own copy rather than imported from `read.mjs` (which now carries the
+ * identical definition for `deriveMechanicalFindings`'s own use --
+ * `authors-words-on-the-page`'s finding, an author-sourced option's `ref`
+ * naming no entry): a CLI test drives this file with only itself,
+ * `derive.mjs` and the template copied beside it, through `--input`, on
+ * purpose so that path needs no ancestor `node_modules` for read.mjs's own
+ * `yaml` import; a static import here would reach read.mjs on every run,
+ * that path included. */
 const AUTHOR_ENTRY_RE = /^\s*(?:\*\*)?the author\b[^\n]*?(\d{4}-\d{2}-\d{2})/i;
 
 function authorEntries(src) {

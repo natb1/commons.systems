@@ -4,7 +4,11 @@ description: The clean-context review of one draft. Invoked by node id the momen
 ---
 # Align review
 
-> **Shim notice (declared 2026-09-04 on `review-skills`).** This file is the
+> **Shim notice (declared 2026-09-04 on `review-skills`).** Reconciled on
+> 2026-09-07 under the author's words "begin applying the optimizations as
+> you progress", to the options the sitting recorded on `review-cost`,
+> `review-model`, `clean-context-review` and `frontier-consistency`, all
+> unanswered. This file is the
 > hand-written projection of the review of a draft as a skill of its own,
 > written from the nodes `clean-context-review` (how the reading is run and
 > what its reader is given), `recording` (what the reading judges),
@@ -211,18 +215,26 @@ reader it is given to.
 
 Launch one subagent with the Agent tool: type `general-purpose`, at the model
 and the effort `review-model` fixes for this reading, named in the prompt at
-the launch and written down nowhere in this file; where that model is
-unavailable to the launching session, the substitute is named in the prompt in
-the same place — a clause `review-model`'s recommended answer names unsupported
-implementation until the author rules on
+the launch and written down nowhere in this file by a harness name — named
+instead by its relation to the other reader, since that relation is what
+`review-model`'s recommended text fixes and a harness name is not: the draft
+reading — the first reading of an answer — runs on the larger model, the most
+capable the harness offers, at high effort; the re-reading of an amendment
+(the `delta-` brief) runs on the smaller model, at the same high effort. Where
+the model a reading is due is unavailable to the launching session, the
+substitute is named in the prompt in the same place — a clause `review-model`'s
+recommended answer names unsupported implementation until the author rules on
 `fallback-when-the-model-is-unavailable`, applied meanwhile and named here so a
 reader of the skill sees it. Never a fork: a forked context carries the session's framing
 and is not clean. The prompt: "Read and follow `<the brief the previous step
 wrote>` exactly; you are a clean-context reviewer with no context but the
-record; read the brief in pieces of at most 300 lines with the Read tool's
-`offset` and `limit`, never a whole file in one call, and pipe every shell
-command through `head -n 40`; never run state-changing git; write only the
-output file the brief names."
+record; read the brief in the fewest pieces your tool allows — the Read tool
+takes up to 2,000 lines per call, so a brief within that bound is one read and
+not several — and never skim past what does not fit; every finding you write
+quotes the locus it bears on verbatim, the sentence or clause exactly as it
+stands in the file, so it can be verified by search; pipe every shell command
+through `head -n 40`; never run state-changing git; write only the output file
+the brief names."
 
 That last instruction is the reading discipline and not decoration
 (`review-cost`): in the sitting of 2026-09-05 one reader autocompacted three

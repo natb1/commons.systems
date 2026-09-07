@@ -530,6 +530,35 @@ test("renderFrontier's '## Ruling order' lists only the alignment frontier, sort
   assert.ok(emptyRulingSection.includes("_none_"));
 });
 
+test("renderFrontier lists a node's own mechanical findings under its entry, and nothing when it carries none", () => {
+  const graph = {
+    module: "example.test",
+    nodes: [
+      {
+        id: "example.test/main/with-findings", stage: null, rank: 1, settles: 0,
+        settledBy: { under: 0, alternatives: 0, depends: 0 }, status: "answered", class: "ratified", authority: null,
+        findings: ["fact 'answer' option 'x' carries status: passed with no reason", "a second finding on the same node"],
+      },
+      {
+        id: "example.test/main/clean", stage: null, rank: 0.5, settles: 0,
+        settledBy: { under: 0, alternatives: 0, depends: 0 }, status: "answered", class: "ratified", authority: null,
+        findings: [],
+      },
+    ],
+  };
+  const listing = renderFrontier(graph);
+  const blockFor = (id) => {
+    const start = listing.indexOf(`- ${id}`);
+    const next = listing.indexOf("\n- ", start + 1);
+    return listing.slice(start, next === -1 ? listing.length : next);
+  };
+  const withFindings = blockFor("example.test/main/with-findings");
+  assert.ok(withFindings.includes("  finding: fact 'answer' option 'x' carries status: passed with no reason"));
+  assert.ok(withFindings.includes("  finding: a second finding on the same node"));
+  const clean = blockFor("example.test/main/clean");
+  assert.ok(!clean.includes("  finding:"), "a node with no findings prints no finding line at all");
+});
+
 test("renderFrontier's ruling order sorts by settles descending before rank, and a node's own alternatives do not count toward it", () => {
   const mk = (id, stage, rank, settles, settledBy) => ({
     id, stage, rank, settles, settledBy, status: "unanswered", authority: null,

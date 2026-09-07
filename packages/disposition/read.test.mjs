@@ -35,7 +35,7 @@ import {
 } from './derive.mjs';
 import { glossary, optionText } from './derive.mjs';
 import {
-  defineTerms, parseNode, readGraph, readyToRule, surveyJudges, surveyOwed, surveyStale,
+  defineTerms, deriveMechanicalFindings, parseNode, readGraph, readyToRule, surveyJudges, surveyOwed, surveyStale,
 } from './read.mjs';
 import { validate } from './validate.mjs';
 
@@ -2065,14 +2065,137 @@ describe('surveyStale, surveyOwed, readyToRule', () => {
 });
 
 // ---------------------------------------------------------------------------
+// deriveMechanicalFindings
+//
+// Never a parse error -- a node carrying one still validates -- so most of
+// the seven kinds are exercised through the fixture graph
+// `fixtures/valid-mechanical-findings/`, one node per reachable kind, read
+// through the ordinary `readGraph` path below and in `validate.mjs`'s own
+// describe block. Two kinds (1 and 7) are already fatal parse errors
+// elsewhere in this file (`readFacts`'s own 'reason' requirement;
+// `readGraph`'s own 'depends' option check), so no fixture can carry one and
+// still validate; those two are exercised directly against hand-built node
+// objects instead, the same way `derive.mjs`'s own tests above do.
+// ---------------------------------------------------------------------------
+
+const MECHANICAL_FINDINGS_DIR = path.join(FIXTURES, 'valid-mechanical-findings');
+
+describe('deriveMechanicalFindings', () => {
+  test('on the fixture graph: one finding per reachable kind, and nothing on a clean node', async () => {
+    const graph = await readGraph(MECHANICAL_FINDINGS_DIR);
+    const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+    const findingsOf = (slug) => byId.get(`example.test/main/${slug}`).findings;
+
+    assert.deepEqual(findingsOf('check2-passed-prose-no-status'), [
+      "fact 'answer' option 'alternate' prose says \"passed over\", but the option carries no status: passed",
+    ]);
+    assert.deepEqual(findingsOf('check3-author-ref-commit-hash'), [
+      "fact 'answer' option 'standing' is source: author with ref 0123456789abcdef0123456789abcdef01234567, "
+      + "a graph commit hash rather than the date '## Disposition' quotes the author under",
+    ]);
+    assert.deepEqual(findingsOf('check3-author-ref-unquoted-date'), [
+      "fact 'answer' option 'standing' is source: author, ref 2026-09-01, but '## Disposition' carries no "
+      + "'The author, 2026-09-01' entry",
+    ]);
+    assert.deepEqual(findingsOf('check4-answer-heading-no-reason'), [
+      "'### answer' opens directly on a '#### ' heading, with no reason prose of its own",
+    ]);
+    assert.deepEqual(findingsOf('check5-account-duplicate-sections'), [
+      "'## Account' sections '### Frontier survey, 2026-08-01' and '### Frontier survey, 2026-08-15' have "
+      + 'byte-identical bodies',
+    ]);
+    assert.deepEqual(findingsOf('check6-rationale-quote-not-in-disposition'), [
+      "'## Rationale' quotes a blockquote beginning 'The author, 2026-08-01' that '## Disposition' does not "
+      + 'also carry verbatim',
+    ]);
+  });
+
+  test('a clean node carries no findings at all', () => {
+    const n = node('example.test/main/clean', {
+      disposition: 'The author, 2026-09-01: plain text.',
+      rationale: 'No blockquote here.',
+      account: '### One section\n\nJust the one.',
+      facts: [
+        fact('answer', [{ name: 'standing', source: 'author', ref: '2026-09-01', prose: 'Fine.' }], {
+          recommends: 'standing', boldness: 'low', stands: 'standing', prose: 'The standing option is recommended.',
+        }),
+      ],
+      depends: [],
+    });
+    n.facts[0].hasHeading = true;
+    assert.deepEqual(deriveMechanicalFindings(n), []);
+  });
+
+  test('kind 1 (unreachable through a real parse -- readFacts already makes it fatal): '
+    + 'a passed option with no reason, checked directly', () => {
+    const n = node('synthetic/root', {
+      facts: [
+        fact('answer', [
+          { name: 'standing', source: 'ai', ref: '2026-09-01' },
+          { name: 'alternate', source: 'ai', ref: '2026-09-01', status: 'passed', reason: null },
+        ], { recommends: 'standing', boldness: 'low', stands: 'standing' }),
+      ],
+    });
+    assert.deepEqual(deriveMechanicalFindings(n), [
+      "fact 'answer' option 'alternate' carries status: passed with no reason",
+    ]);
+  });
+
+  test('kind 7 (unreachable through a real parse -- readGraph\'s own referential-integrity pass already '
+    + 'makes it fatal): a depends fragment naming an option the target does not carry, checked directly '
+    + 'against a hand-built graph', () => {
+    const target = node('synthetic/target', {
+      facts: [fact('answer', ['standing'], { recommends: 'standing', boldness: 'low', stands: 'standing' })],
+    });
+    const n = node('synthetic/root', {
+      facts: [],
+      depends: [{ id: 'synthetic/target', option: 'no-such-option' }],
+    });
+    const byId = new Map([[target.id, target], [n.id, n]]);
+    assert.deepEqual(deriveMechanicalFindings(n, byId), [
+      "'depends' names 'synthetic/target#no-such-option', but synthetic/target's answer fact has no option 'no-such-option'",
+    ]);
+    // without a byId map, kind 7 is skipped rather than guessed
+    assert.deepEqual(deriveMechanicalFindings(n), []);
+  });
+
+  test('kind 7: a depends fragment naming an option the target does carry raises nothing', () => {
+    const target = node('synthetic/target', {
+      facts: [fact('answer', ['standing'], { recommends: 'standing', boldness: 'low', stands: 'standing' })],
+    });
+    const n = node('synthetic/root', {
+      facts: [],
+      depends: [{ id: 'synthetic/target', option: 'standing' }],
+    });
+    const byId = new Map([[target.id, target], [n.id, n]]);
+    assert.deepEqual(deriveMechanicalFindings(n, byId), []);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // validate.mjs
 // ---------------------------------------------------------------------------
 
 describe('validate.mjs', () => {
-  test('validate() succeeds on the valid fixture', async () => {
+  test('validate() succeeds on the valid fixture, carrying the one genuine finding it has always had', async () => {
     const result = await validate(VALID_DIR);
     assert.equal(result.ok, true);
     assert.equal(result.message, 'ok: 8 nodes');
+    // root-b's answer option is source: author, ref 2026-01-01, ratified by
+    // a `ruling` block alone, with no '## Disposition' section at all -- so
+    // there is no 'The author, 2026-01-01' entry for it to name, which is
+    // exactly the mismatch `authors-words-on-the-page` calls a finding and
+    // not a parse error: the fixture still validates.
+    assert.deepEqual(result.findings, [
+      "finding: example.test/main/root-b: fact 'answer' option 'standing' is source: author, ref 2026-01-01, "
+      + "but '## Disposition' carries no 'The author, 2026-01-01' entry",
+    ]);
+  });
+
+  test('validate() carries no findings at all on a fixture with no author-sourced, passed-over, or account-repeating text', async () => {
+    const result = await validate(path.join(FIXTURES, 'valid-order'));
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.findings, []);
   });
 
   test('validate() fails on an invalid fixture without throwing', async () => {
@@ -2081,16 +2204,64 @@ describe('validate.mjs', () => {
     assert.match(result.message, /cycle/);
   });
 
-  test('CLI exits 0 and prints "ok: N nodes" on the valid fixture', () => {
+  test('validate() reports one finding: <node id>: <text> per mechanical finding, ok either way', async () => {
+    const result = await validate(MECHANICAL_FINDINGS_DIR);
+    assert.equal(result.ok, true);
+    assert.equal(result.findings.length, 6, 'one reachable finding per fixture node in this graph');
+    for (const line of result.findings) {
+      assert.match(line, /^finding: example\.test\/main\/check\d/);
+    }
+  });
+
+  test('CLI exits 0 and prints "ok: N nodes" on the valid fixture, plus its one genuine finding', () => {
     const { stdout, status } = runCli(VALIDATE_MJS, [VALID_DIR]);
     assert.equal(status, 0);
-    assert.equal(stdout.trim(), 'ok: 8 nodes');
+    const lines = stdout.trim().split('\n');
+    assert.equal(lines[0], 'ok: 8 nodes');
+    assert.equal(lines.length, 2);
+    assert.match(lines[1], /^finding: example\.test\/main\/root-b:/);
   });
 
   test('CLI exits 1 and prints problems to stderr on an invalid fixture', () => {
     const { stderr, status } = runCli(VALIDATE_MJS, [path.join(FIXTURES, 'invalid-unknown-key')]);
     assert.equal(status, 1);
     assert.match(stderr, /unknown frontmatter key 'bogus'/);
+  });
+
+  test('CLI exits 0 and prints findings after "ok" on the mechanical-findings fixture, without --strict', () => {
+    const { stdout, status } = runCli(VALIDATE_MJS, [MECHANICAL_FINDINGS_DIR]);
+    assert.equal(status, 0);
+    const lines = stdout.trim().split('\n');
+    assert.equal(lines[0], 'ok: 6 nodes');
+    assert.equal(lines.length, 7, 'one "ok" line plus six finding lines');
+    assert.ok(lines.slice(1).every((l) => l.startsWith('finding: example.test/main/')));
+  });
+
+  test('CLI --strict exits 1 and prints "ok" plus every finding on stderr when any finding stands', () => {
+    const { stdout, stderr, status } = runCli(VALIDATE_MJS, [MECHANICAL_FINDINGS_DIR, '--strict']);
+    assert.equal(status, 1);
+    assert.equal(stdout, '');
+    const lines = stderr.trim().split('\n');
+    assert.equal(lines[0], 'ok: 6 nodes');
+    assert.equal(lines.length, 7);
+  });
+
+  test('CLI --strict exits 1 on the valid fixture too: its one finding is still a finding', () => {
+    const { stderr, status } = runCli(VALIDATE_MJS, [VALID_DIR, '--strict']);
+    assert.equal(status, 1);
+    assert.match(stderr, /^ok: 8 nodes\nfinding: example\.test\/main\/root-b:/);
+  });
+
+  test('CLI --strict exits 0 on a graph with no findings at all', () => {
+    const { stdout, status } = runCli(VALIDATE_MJS, [path.join(FIXTURES, 'valid-order'), '--strict']);
+    assert.equal(status, 0);
+    assert.match(stdout, /^ok: \d+ nodes\n?$/);
+  });
+
+  test('CLI --strict never turns a parse failure into anything but the ordinary exit 1', () => {
+    const { stderr, status } = runCli(VALIDATE_MJS, [path.join(FIXTURES, 'invalid-cycle'), '--strict']);
+    assert.equal(status, 1);
+    assert.match(stderr, /cycle/);
   });
 });
 

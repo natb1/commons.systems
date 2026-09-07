@@ -452,6 +452,11 @@ function readFacts(raw, problems) {
     against: isAbsent(entry.against) ? null : entry.against,
     stands: isAbsent(entry.stands) ? null : entry.stands,
     prose: '',
+    // whether '## Facts' actually carries a '### <this fact>' heading --
+    // distinct from `prose === ''`, which is also true when the heading is
+    // simply omitted (owed nothing, nothing to say). Filled in once the
+    // body is parsed, alongside `prose` itself.
+    hasHeading: false,
     recommendationHash: '',
     ruled: null,
     moved: false,
@@ -1510,6 +1515,7 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     const found = factsText[fact.name];
     if (found === undefined) continue;
     fact.prose = found.prose;
+    fact.hasHeading = true;
     for (const option of fact.options) {
       if (found.options[option.name] !== undefined) option.prose = found.options[option.name];
     }
@@ -1687,6 +1693,190 @@ export function parseNode(text, { id, graph, slug, path: relPath }) {
     account: sections.Account,
     disposition: sections.Disposition,
   };
+}
+
+// ---------------------------------------------------------------------------
+// mechanical findings
+//
+// Soft, non-fatal signals a node's own shape can raise without a reading:
+// never a parse error (a node carrying one still validates), printed by
+// `validate.mjs` as `finding: <node id>: <text>` and exposed on the frontier
+// by `project.mjs`. One implementation, called once per node from
+// `readGraph` (or directly, on a hand-built node, for a unit test that a
+// finding a real parse already forbids as fatal cannot otherwise exercise).
+// ---------------------------------------------------------------------------
+
+const COMMIT_HASH_RE = /^[0-9a-f]{40}$/i;
+
+/* The author's words a '## Disposition' section holds, entry by entry: each
+ * begins at the line naming the author and the date and runs to the next
+ * such line, so a quotation stays with the sentence that introduces it.
+ * Shared with `project.mjs` (the alignment page's per-option quotation) and
+ * with `deriveMechanicalFindings` below (`authors-words-on-the-page`'s own
+ * finding: an author-sourced option's `ref` naming no entry here), so there
+ * is one implementation of what an "entry" is and not two that could drift
+ * apart. */
+export const AUTHOR_ENTRY_RE = /^\s*(?:\*\*)?the author\b[^\n]*?(\d{4}-\d{2}-\d{2})/i;
+
+export function authorEntries(src) {
+  const out = [];
+  for (const block of String(src || '').split(/\n\s*\n/)) {
+    if (block.trim() === '') continue;
+    const m = AUTHOR_ENTRY_RE.exec(block);
+    if (m || out.length === 0) out.push({ date: m ? m[1] : null, blocks: [block] });
+    else out[out.length - 1].blocks.push(block);
+  }
+  return out;
+}
+
+/**
+ * Every fence-aware level-3 (`### `) section of `text`: `{name, body}`, body
+ * being everything between that heading and the next one at the same depth
+ * (or the end of the text), not including the heading line itself. A
+ * heading-looking line inside a fenced code block is not a heading, the same
+ * guard `clean-context-review/brief.mjs`'s own account-section helpers use.
+ */
+function level3SectionBodies(text) {
+  const lines = String(text).split('\n');
+  const headingRe = /^(#{1,6})[ \t]+(.*?)\s*$/;
+  const fenceRe = /^[ \t]*(`{3,}|~{3,})/;
+  const headings = [];
+  let fenceChar = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const fence = line.match(fenceRe);
+    if (fence) {
+      if (fenceChar === null) fenceChar = fence[1][0];
+      else if (fence[1][0] === fenceChar) fenceChar = null;
+      continue;
+    }
+    if (fenceChar !== null) continue;
+    const m = line.match(headingRe);
+    if (m && m[1].length === 3) headings.push({ name: m[2], index: i });
+  }
+  return headings.map((h, idx) => {
+    const end = idx + 1 < headings.length ? headings[idx + 1].index : lines.length;
+    return { name: h.name, body: lines.slice(h.index + 1, end).join('\n') };
+  });
+}
+
+/**
+ * Every blockquote paragraph of `text` (consecutive `> ` lines, one
+ * paragraph) that opens with `The author, <date>`, with the date captured.
+ */
+function authorBlockquotes(text) {
+  const lines = String(text).split('\n');
+  const blocks = [];
+  let current = null;
+  for (const line of lines) {
+    const m = line.match(/^>[ \t]?(.*)$/);
+    if (m) {
+      if (current === null) current = [];
+      current.push(m[1]);
+    } else if (current !== null) {
+      blocks.push(current.join('\n'));
+      current = null;
+    }
+  }
+  if (current !== null) blocks.push(current.join('\n'));
+  const out = [];
+  for (const body of blocks) {
+    const m = body.match(/^The author,\s*([0-9]{4}-[0-9]{2}-[0-9]{2})\b/);
+    if (m) out.push({ body, date: m[1] });
+  }
+  return out;
+}
+
+/**
+ * The mechanical findings one node's own shape raises, each a string
+ * (without the node id, which the caller prefixes): never a parse error, and
+ * never turning a valid node invalid.
+ *
+ * 1. An option `status: passed` with no `reason` (`readFacts` already makes
+ *    this fatal on the answer/reserved facts it governs; kept here too so a
+ *    node built or amended outside that gate is still caught).
+ * 2. An option whose `#### ` prose says "passed over" while its `status` is
+ *    not `passed` -- the AI's own prose disagreeing with its own status.
+ * 3. An option `source: author` whose `ref` is a graph commit hash rather
+ *    than a date, or a date `## Disposition` carries no `The author, <ref>`
+ *    entry for (`authors-words-on-the-page`).
+ * 4. A `### answer` or `### authority` subsection that opens directly on a
+ *    `#### ` heading, with no reason prose of its own.
+ * 5. Two `### ` sections of `## Account` with byte-identical bodies.
+ * 6. A `## Rationale` blockquote (or the fence's) opening `The author,
+ *    <date>` whose quoted text `## Disposition` does not also carry.
+ * 7. A `depends` entry naming `#<option>` on a node whose answer fact has no
+ *    such option (`readGraph`'s own referential-integrity pass already makes
+ *    this fatal; kept here for the same reason as (1)).
+ *
+ * @param {object} node - a node as `parseNode`/`readGraph` shapes it.
+ * @param {Map<string, object>} [byId] - every node of the graph, keyed by
+ *   id, needed only for (7); omitted, (7) is skipped rather than guessed.
+ * @returns {string[]}
+ */
+export function deriveMechanicalFindings(node, byId = null) {
+  const findings = [];
+
+  for (const fact of node.facts || []) {
+    for (const option of fact.options || []) {
+      if (option.status === 'passed' && !option.reason) {
+        findings.push(`fact '${fact.name}' option '${option.name}' carries status: passed with no reason`);
+      }
+      if (option.prose && /passed over/i.test(option.prose) && option.status !== 'passed') {
+        findings.push(`fact '${fact.name}' option '${option.name}' prose says "passed over", but the option carries no status: passed`);
+      }
+      if (option.source === 'author' && option.ref) {
+        if (COMMIT_HASH_RE.test(option.ref)) {
+          findings.push(`fact '${fact.name}' option '${option.name}' is source: author with ref ${option.ref}, a graph commit hash rather than the date '## Disposition' quotes the author under`);
+        } else if (!authorEntries(node.disposition).some((e) => e.date === option.ref)) {
+          findings.push(`fact '${fact.name}' option '${option.name}' is source: author, ref ${option.ref}, but '## Disposition' carries no 'The author, ${option.ref}' entry`);
+        }
+      }
+    }
+    if ((fact.name === 'answer' || fact.name === 'authority') && fact.hasHeading && (fact.prose || '').trim() === '') {
+      findings.push(`'### ${fact.name}' opens directly on a '#### ' heading, with no reason prose of its own`);
+    }
+  }
+
+  if (node.account) {
+    const seen = new Map();
+    for (const section of level3SectionBodies(node.account)) {
+      const body = section.body.trim();
+      if (body.length === 0) continue;
+      const prior = seen.get(body);
+      if (prior) {
+        findings.push(`'## Account' sections '### ${prior}' and '### ${section.name}' have byte-identical bodies`);
+      } else {
+        seen.set(body, section.name);
+      }
+    }
+  }
+
+  const rationale = node.rationale
+    ?? (node.fence && node.fence.sections ? node.fence.sections.Rationale : null);
+  if (rationale) {
+    const disposition = node.disposition || '';
+    for (const quote of authorBlockquotes(rationale)) {
+      if (!disposition.includes(quote.body)) {
+        findings.push(`'## Rationale' quotes a blockquote beginning 'The author, ${quote.date}' that '## Disposition' does not also carry verbatim`);
+      }
+    }
+  }
+
+  if (byId) {
+    for (const dep of node.depends || []) {
+      if (!dep.option) continue;
+      const target = byId.get(dep.id);
+      if (!target) continue; // an unresolved 'depends' id is a separate, fatal check
+      const answerFact = (target.facts || []).find((f) => f.name === 'answer');
+      const names = answerFact ? answerFact.options.map((o) => o.name) : [];
+      if (!names.includes(dep.option)) {
+        findings.push(`'depends' names '${dep.id}#${dep.option}', but ${dep.id}'s answer fact has no option '${dep.option}'`);
+      }
+    }
+  }
+
+  return findings;
 }
 
 // ---------------------------------------------------------------------------
@@ -2012,6 +2202,7 @@ export async function readGraph(rootDir) {
         status: deriveStatus(node, nodesById),
         settles: settled.settles,
         settledBy: { under: settled.under, options: settled.options, depends: settled.depends },
+        findings: deriveMechanicalFindings(node, nodesById),
       };
     })
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

@@ -21,7 +21,7 @@ Nothing else is this reading's object. Do not re-run validations 1 to 6 or 15 ag
 
 **The verdict**: `forward` here means **the amendment stands** — the findings it answers are closed and nothing it introduces is a defect — and the node goes to the author's ruling as amended. `kickback` to `periagogic` or `maieutic` means the amendment fails to answer a finding, or introduces something that must itself be redrawn; say in a finding which. **A probe beats the verdict**, exactly as in the first reading: a probe recorded here returns the node to `maieutic` whatever verdict was written, so if you raise a probe, write `kickback` and not `forward`.
 
-**A finding** cites the section and quotes the text it concerns, and gives a suggested edit where you have one. A finding about another node is written here in prose, naming the node it concerns; the session records it, and this reading never edits a node itself.
+**A finding** cites the section and quotes the locus it bears on verbatim — the sentence or clause exactly as it stands in the file, not paraphrased or summarized — so the session can verify it by search before applying it; and gives a suggested edit where you have one. A finding about another node is written here in prose, naming the node it concerns; the session records it, and this reading never edits a node itself.
 
 **Reading discipline.** This brief states its own length in the navigation line above. Read it in pieces of at most 300 lines at a time, with the Read tool's `offset` and `limit`, and never as one whole-file read; pipe every shell command's own output through `head -n 40`. A brief you cannot hold whole is a defect of the brief: report it as a finding, and do not work around it by skimming.
 
@@ -52,7 +52,7 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
   "date": "{{date}}",
   "verdict": "forward" | "kickback",
   "kickback_stage": "periagogic" | "maieutic" | null,
-  "findings": ["<one finding per string, citing the section and quoting the text it concerns; a suggested edit where you have one>"],
+  "findings": ["<one finding per string, citing the section and quoting the locus it bears on verbatim; a suggested edit where you have one>"],
   "probes": [
     {
       "asks": "<the question in one line, put open and never as a choice between drafted answers>",

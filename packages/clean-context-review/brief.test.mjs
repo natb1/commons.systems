@@ -17,7 +17,7 @@ import {
   writeDraftBrief, writeDeltaBrief, writeSurveyBrief, frontierOrderIds,
   reviewLine, graphCommit, parseArgs, draftNeighbourhood, READING_RULES,
   chooseMode, nodeDiffSinceCommit, lastCleanContextReviewSection,
-  renderNeighbourNode,
+  lastAccountSectionOnly, renderNeighbourNode, surveyNeighbourhoodIds,
 } from "./brief.mjs";
 import { readGraph } from "@commons.systems/disposition/read.mjs";
 
@@ -180,11 +180,15 @@ describe("writeDraftBrief", () => {
     assert.ok(brief.startsWith("# Clean-context review of a draft, 2026-09-04: `clean-context-review.test/main/review-low`"));
     assert.ok(brief.includes("tmp/review/draft-review-low.json"), "the literal {{out}} path, regardless of the scratch reviewDir");
 
-    // The node itself goes in whole, its '## Account' included: a draft's
-    // dialogue is its own history. Everything else goes in without one.
+    // The node itself goes in whole, its '## Account' included -- only the
+    // last '### ' section of it, per review-cost: a draft's dialogue is its
+    // own history, but an account that has accumulated one subsection per
+    // earlier reading is not read in full each time. Everything else goes
+    // in without one.
     const nodeSection = brief.slice(brief.indexOf("\n## The node under review"), brief.indexOf("\n## Its ancestry"));
     assert.ok(nodeSection.includes(`### ${REVIEW_LOW}`));
-    assert.ok(nodeSection.includes("#### Account (the AI's account, with the subsections of earlier readings)"));
+    assert.ok(nodeSection.includes("#### Account (the AI's account: only the last '### ' section; the rest is on disk at the file above)"));
+    assert.ok(nodeSection.includes("(no '## Account' section)"), "this fixture's review-low carries no account at all");
 
     const restOfBrief = brief.slice(brief.indexOf("\n## Its ancestry"));
     assert.ok(!restOfBrief.includes("#### Account"), "the neighbourhood carries no account");
@@ -542,7 +546,7 @@ describe("writeDraftBrief", () => {
 // -------------------------------------------------------- the survey
 
 describe("writeSurveyBrief", () => {
-  test("the judged set is surveyJudges in the ruling order; every other node is context; no account anywhere", async () => {
+  test("the judged set is surveyJudges, whole, in the ruling order; its neighbourhood is lean; everything else is one line; no account anywhere", async () => {
     const rootDir = await freshFrontierFixture("survey-ok-");
     const reviewDir = path.join(rootDir, "_review");
     const graph = await readGraph(rootDir);
@@ -552,25 +556,37 @@ describe("writeSurveyBrief", () => {
     assert.equal(result.briefPath, path.join(reviewDir, "survey.brief.md"));
     assert.equal(result.outFile, "tmp/review/survey.json");
     assert.equal(result.batchCount, 6, "the six nodes at review or ruling owed a survey");
-    assert.equal(result.contextCount, graph.nodes.length - 6);
+    // The neighbourhood is everything review-low's own ancestry, children,
+    // siblings and readings reach (answered-ratified, its two children, its
+    // sibling, and the reading bearing on it) -- the other five judged nodes
+    // cite nothing and share no parent. Everything else -- maieutic-node,
+    // periagogic-node, survey-pinned -- is neither judged nor a neighbour.
+    assert.equal(result.neighbourhoodCount, 5);
+    assert.equal(result.contextCount, graph.nodes.length - 6 - 5);
 
     const brief = await readFile(result.briefPath, "utf8");
     assert.ok(!brief.includes("{{"), "every placeholder filled");
     assert.ok(!brief.includes("#### Account"), "no '## Account' section goes into the survey's brief");
 
-    const batchSection = brief.slice(brief.indexOf("\n## The judged set"), brief.indexOf("\n## The full graph, as context"));
+    const batchSection = brief.slice(brief.indexOf("\n## The judged set"), brief.indexOf("\n## The neighbourhood of the judged set"));
+    const neighbourhoodSection = brief.slice(brief.indexOf("\n## The neighbourhood of the judged set"), brief.indexOf("\n## The full graph, as context"));
     const contextSection = brief.slice(brief.indexOf("\n## The full graph, as context"), brief.indexOf("\n## Output"));
 
     for (const id of [REVIEW_A, REVIEW_B, REVIEW_GLOBAL, REVIEW_LOW, REVIEW_SETTLES, RULING_A]) {
-      assert.ok(batchSection.includes(`### ${id}`), `${id} is judged`);
-      assert.ok(!contextSection.includes(`### ${id}`), `${id} is not repeated as context`);
+      assert.ok(batchSection.includes(`### ${id}`), `${id} is judged, carried whole`);
+      assert.ok(!neighbourhoodSection.includes(`### ${id}`) && !contextSection.includes(`### ${id}`), `${id} is not repeated`);
+    }
+    for (const id of [ANSWERED, CHILD_OF_REVIEW_LOW, CHILD_AND_READING_OF_REVIEW_LOW, SIBLING, READING_OF_REVIEW_LOW]) {
+      assert.ok(neighbourhoodSection.includes(`### ${id}`), `${id} is review-low's neighbour, carried leanly`);
+      assert.ok(!batchSection.includes(`### ${id}`) && !contextSection.includes(`### ${id}`), `${id} is not repeated`);
     }
     // survey-pinned stands at the review stage but carries a survey pin on
     // the recommendation it now stands on: nothing has moved, so the survey
-    // does not judge it again.
-    for (const id of [ANSWERED, MAIEUTIC_NODE, PERIAGOGIC_NODE, SIBLING, SURVEY_PINNED]) {
-      assert.ok(contextSection.includes(`### ${id}`), `${id} is context`);
-      assert.ok(!batchSection.includes(`### ${id}`), `${id} is not judged`);
+    // does not judge it again, and it neighbours nothing judged this round.
+    for (const id of [MAIEUTIC_NODE, PERIAGOGIC_NODE, SURVEY_PINNED]) {
+      assert.ok(contextSection.includes(`- ${id} | `), `${id} is plain context, one line`);
+      assert.ok(!contextSection.includes(`### ${id}`), `${id} is never carried whole or leanly`);
+      assert.ok(!batchSection.includes(`### ${id}`) && !neighbourhoodSection.includes(`### ${id}`), `${id} is not repeated`);
     }
 
     // the ruling order: settles descending, then rank descending, then id
@@ -582,12 +598,14 @@ describe("writeSurveyBrief", () => {
     const gotHeadings = [...batchSection.matchAll(/^### (\S+)$/gm)].map((m) => m[1]);
     assert.deepEqual(gotHeadings, want, "the judged set is presented in the ruling order too");
 
-    // the context index is the frontier's own order
+    // the plain context index is the frontier's own order, minus the judged
+    // set and its neighbourhood
     const contextIndexStart = brief.indexOf("\n## The full graph, as context");
-    const contextIndex = brief.slice(contextIndexStart, brief.indexOf("\n### ", contextIndexStart));
+    const contextIndex = brief.slice(contextIndexStart, brief.indexOf("\n## Output"));
     const gotContext = [...contextIndex.matchAll(/^- (\S+) \| /gm)].map((m) => m[1]);
     const judgedIds = new Set(want);
-    assert.deepEqual(gotContext, frontierOrderIds(graph).filter((id) => !judgedIds.has(id)));
+    const neighbourIds = surveyNeighbourhoodIds(graph, judged);
+    assert.deepEqual(gotContext, frontierOrderIds(graph).filter((id) => !judgedIds.has(id) && !neighbourIds.has(id)));
   });
 
   test("writes the pins sidecar: the graph commit, the ids judged, and a pin for every node of the graph", async () => {
@@ -631,7 +649,7 @@ describe("writeSurveyBrief", () => {
     const cwd = path.dirname(rootDir);
     const dry = runCli(["--survey", rootDir, "--date", "2026-09-04", "--dry"], cwd);
     assert.doesNotMatch(dry, /model/i, "the script prints no model: it computes none");
-    assert.match(dry, /survey: 6 node\(s\) judged; context: 8 node\(s\); \d+ bytes over \d+ lines; graph commit \(unknown/);
+    assert.match(dry, /survey: 6 node\(s\) judged; neighbourhood 5 node\(s\); context: 3 node\(s\); \d+ bytes over \d+ lines; graph commit \(unknown/);
     assert.match(dry, /the pins sidecar: .*survey\.pins\.json \(dry run: nothing written\)/);
     await assert.rejects(readFile(path.join(cwd, "tmp/review/survey.brief.md")), { code: "ENOENT" });
     await assert.rejects(readFile(path.join(cwd, "tmp/review/survey.pins.json")), { code: "ENOENT" });
@@ -1035,6 +1053,65 @@ describe("lastCleanContextReviewSection", () => {
     assert.ok(found.startsWith("### Clean-context review, 2026-08-01"));
     assert.ok(found.includes("The real subsection continues here."));
     assert.ok(found.includes("```markdown"), "the fence itself is part of the one real subsection, carried whole");
+  });
+});
+
+describe("lastAccountSectionOnly", () => {
+  test("no account at all: text is null, nothing omitted", () => {
+    assert.deepEqual(lastAccountSectionOnly(null), { text: null, omitted: 0 });
+    assert.deepEqual(lastAccountSectionOnly(""), { text: null, omitted: 0 });
+  });
+
+  test("no '### ' heading at all: the whole account is carried, nothing omitted", () => {
+    const account = "Untitled prose, no subsections at all.";
+    assert.deepEqual(lastAccountSectionOnly(account), { text: account, omitted: 0 });
+  });
+
+  test("one '### ' section: carried whole, nothing omitted", () => {
+    const account = "### Clean-context review, 2026-08-01\n\nThe only reading so far.";
+    const { text, omitted } = lastAccountSectionOnly(account);
+    assert.equal(omitted, 0);
+    assert.equal(text, account);
+  });
+
+  test("several '### ' sections: only the last is carried, and the rest are counted", () => {
+    const account = [
+      "### Clean-context review, 2026-08-01",
+      "",
+      "First reading, superseded.",
+      "",
+      "### Frontier survey, 2026-08-15",
+      "",
+      "A survey subsection, also superseded.",
+      "",
+      "### Clean-context review, 2026-09-04",
+      "",
+      "The last reading, the one this brief carries.",
+      "",
+    ].join("\n");
+    const { text, omitted } = lastAccountSectionOnly(account);
+    assert.equal(omitted, 2, "the two earlier sections are counted, not carried");
+    assert.ok(text.startsWith("### Clean-context review, 2026-09-04"));
+    assert.ok(text.includes("The last reading, the one this brief carries."));
+    assert.ok(!text.includes("First reading, superseded."));
+    assert.ok(!text.includes("A survey subsection, also superseded."));
+  });
+
+  test("fence-aware, like lastCleanContextReviewSection: a heading-looking line inside a fence is not a heading", () => {
+    const account = [
+      "### Clean-context review, 2026-08-01",
+      "",
+      "```markdown",
+      "### Clean-context review, 2099-01-01",
+      "not a real heading -- inside a fence",
+      "```",
+      "",
+      "The real subsection continues here.",
+    ].join("\n");
+    const { text, omitted } = lastAccountSectionOnly(account);
+    assert.equal(omitted, 0, "the fenced text is not a second heading");
+    assert.ok(text.includes("```markdown"), "the fence is part of the one real section, carried whole");
+    assert.ok(text.includes("The real subsection continues here."));
   });
 });
 

@@ -438,8 +438,16 @@ function renderWholeNode(node, { account = true } = {}) {
   }
 
   if (account) {
-    parts.push("#### Account (the AI's account, with the subsections of earlier readings)", "");
-    parts.push(node.account || "(no '## Account' section)", "");
+    const { text: lastSection, omitted } = lastAccountSectionOnly(node.account);
+    parts.push("#### Account (the AI's account: only the last '### ' section; the rest is on disk at the file above)", "");
+    if (lastSection === null) {
+      parts.push("(no '## Account' section)", "");
+    } else {
+      if (omitted > 0) {
+        parts.push(`(${omitted} earlier '### ' section(s) of this account omitted; read them at ${nodeFile(node)} if the dialogue's history bears on your reading)`, "");
+      }
+      parts.push(lastSection, "");
+    }
   }
 
   return parts.join("\n");
@@ -477,12 +485,14 @@ function renderWholeNode(node, { account = true } = {}) {
  *
  * Used for every part of a draft's neighbourhood -- ancestry, the rules of
  * the reading, children, siblings, cited, readings -- and never for the node
- * under review itself, which keeps `renderWholeNode`, nor for the survey's
- * own context nodes (`renderContextNode`), whose reader is meant to see the
- * whole graph.
+ * under review itself, which keeps `renderWholeNode`. Also used for the
+ * survey's own neighbourhood (`surveyNeighbourhoodIds`), with `reviewedId`
+ * given as `null` -- the survey judges a batch and not one draft, so no
+ * option earns the "carried whole" exception there.
  *
- * @param {string} reviewedId - the id of the draft under review, whose own
- *   text is the source that earns an option this treatment.
+ * @param {string|null} reviewedId - the id of the draft under review, whose
+ *   own text is the source that earns an option this treatment; `null` where
+ *   no single draft is under review (the survey).
  */
 export function renderNeighbourNode(node, reviewedId) {
   const parts = [
@@ -545,33 +555,6 @@ function indexQuestionLine(node) {
   return `- ${node.id} | ${node.question} | ${nodeFile(node)}`;
 }
 
-/**
- * One context node: class, stage, question, standing answer, other options.
- * Still used for the survey's context nodes (`writeSurveyBrief`), whose
- * reader is given the whole graph and is meant to see each one in full; the
- * draft's index uses `indexQuestionLine` instead (`review-cost`).
- */
-function renderContextNode(node) {
-  const head = [`### ${node.id}`, "", `- File: ${nodeFile(node)}`, `- Question: ${node.question}`];
-  head.push(`- Status: ${node.status} | class: ${classText(node)} | rank ${node.rank.toFixed(4)} | settles ${settlesText(node)} | stage: ${node.stage || "none (no dialogue open)"}`);
-  head.push(`- Facts: ${factsSummary(node)}`);
-  if (node.review) head.push(`- Review: ${reviewLine(node)}`);
-  const bears = bearsText(node);
-  if (bears) head.push(`- Bears on (this node is a reading): ${bears}`);
-  head.push("", "#### Answer", "", node.answer || "(no '## Answer' section: nothing stands on this node yet)", "");
-  const others = (node.answerFact ? node.answerFact.options : []).filter((o) => o.name !== node.answerFact.stands);
-  if (others.length > 0) {
-    head.push("#### Other options on its answer", "");
-    for (const option of others) {
-      const origin = [option.source ? `source ${option.source}` : null, option.ref ? `ref ${option.ref}` : null].filter(Boolean).join(", ");
-      head.push(`- \`${option.name}\` — ${origin || "no source recorded"}${node.answerFact.recommends === option.name ? " — recommended" : ""}`);
-      const prose = option.prose && option.prose.length > 0 ? option.prose : "(no prose recorded for this option)";
-      for (const line of prose.split("\n")) head.push(`  ${line}`);
-      head.push("");
-    }
-  }
-  return head.join("\n");
-}
 
 /**
  * Fill `{{nav}}` last, from the filled text itself: a brief is long, and a
@@ -698,6 +681,57 @@ export function nodeDiffSinceCommit(rootDir, commit, relPath) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Every fence-aware level-3 (`### `) heading in `text`, each `{name, index}`
+ * (`index` the zero-based line the heading starts on) -- the scan
+ * `lastCleanContextReviewSection` and `lastAccountSectionOnly` both build on,
+ * factored once so a heading-looking line inside a fenced code block
+ * (`apply.mjs`'s `headingBoundaries` guards the same case) is never mistaken
+ * for a real one in either.
+ */
+function level3Headings(text) {
+  const lines = text.split("\n");
+  const headingRe = /^(#{1,6})[ \t]+(.*?)\s*$/;
+  const fenceRe = /^[ \t]*(`{3,}|~{3,})/;
+  const headings = [];
+  let fenceChar = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const fence = line.match(fenceRe);
+    if (fence) {
+      if (fenceChar === null) fenceChar = fence[1][0];
+      else if (fence[1][0] === fenceChar) fenceChar = null;
+      continue;
+    }
+    if (fenceChar !== null) continue;
+    const m = line.match(headingRe);
+    if (m && m[1].length === 3) headings.push({ name: m[2], index: i });
+  }
+  return { lines, headings };
+}
+
+/**
+ * The node under review's `## Account` is its own dialogue's history, and a
+ * node reviewed more than once accumulates one `### ` subsection per prior
+ * reading -- so carrying it whole, as the account grows, is what pushes a
+ * draft brief past the size a reader can hold (`review-cost`). Only the
+ * **last** `### ` subsection bears on the reading now owed (the finding a
+ * fresh reading must answer, or the record of the reading just before this
+ * one); everything before it is history a session amending the draft has
+ * already acted on. Returns `{text, omitted}`: `text` is the last section
+ * verbatim, fence-aware, or the whole account where it carries no `### `
+ * heading at all (untitled prose, nothing to cut); `omitted` is the count of
+ * earlier sections left out, `0` when there is nothing to omit. `text` is
+ * `null` only where there is no account at all.
+ */
+export function lastAccountSectionOnly(accountText) {
+  if (!accountText) return { text: null, omitted: 0 };
+  const { lines, headings } = level3Headings(accountText);
+  if (headings.length === 0) return { text: accountText, omitted: 0 };
+  const last = headings[headings.length - 1];
+  return { text: lines.slice(last.index).join("\n").trimEnd(), omitted: headings.length - 1 };
 }
 
 /**
@@ -984,6 +1018,33 @@ export function draftNeighbourhood(graph, node) {
 }
 
 /**
+ * The union, across every judged node, of the neighbourhood
+ * `draftNeighbourhood` would carry whole for it -- ancestry, the reading
+ * rules, children, siblings, cited nodes, and readings -- minus the judged
+ * ids themselves. This is the survey's own neighbourhood (`review-cost`'s
+ * "carried whole ... and their neighbourhoods by what they answer"): every
+ * node connected to something the survey is judging this round is rendered
+ * leanly (`renderNeighbourNode`), and every node connected to nothing judged
+ * is left to the plain one-line index, since a contradiction between two
+ * untouched nodes would already have been caught by an earlier survey.
+ *
+ * @param {object} graph
+ * @param {object[]} judgedNodes
+ * @returns {Set<string>}
+ */
+export function surveyNeighbourhoodIds(graph, judgedNodes) {
+  const ids = new Set();
+  for (const node of judgedNodes) {
+    const { ancestry, rules, children, siblings, cited, readings } = draftNeighbourhood(graph, node);
+    for (const list of [ancestry, rules, children, siblings, cited, readings]) {
+      for (const n of list) ids.add(n.id);
+    }
+  }
+  for (const node of judgedNodes) ids.delete(node.id);
+  return ids;
+}
+
+/**
  * One line for the round: a sibling draft that has moved since the survey
  * last pinned it, given as a pointer and not whole (`review-cost`: "id,
  * question, and the recommendation each now makes, one line each, since
@@ -1170,12 +1231,17 @@ export function surveyPins({ graph, judged, date, commit, dirty }) {
  * Write the survey's brief and its pins sidecar. The judged set is
  * `surveyJudges` -- every node at the review or ruling stage whose
  * recommendation has moved since the survey last pinned it, and every such
- * node no survey has read -- in the ruling order; the context is every other
- * node, in the frontier's order. No account goes into either.
+ * node no survey has read -- in the ruling order, carried whole (`## Facts`,
+ * `## Rationale`, `## Disposition`, `## Recommendation`, no `## Account`).
+ * The **neighbourhood** of the judged set (`surveyNeighbourhoodIds`) --
+ * everything their ancestry, the reading rules, children, siblings, cited
+ * nodes and readings reach -- is carried leanly, by what it answers
+ * (`renderNeighbourNode`), in the frontier's order. Every other node is one
+ * line, in the frontier's order. No account goes into any of the three.
  *
  * @returns {Promise<{briefPath: string, pinsPath: string, outFile: string,
- *   batchCount: number, contextCount: number, lines: number, bytes: number,
- *   commit: string|null, dirty: boolean}>}
+ *   batchCount: number, neighbourhoodCount: number, contextCount: number,
+ *   lines: number, bytes: number, commit: string|null, dirty: boolean}>}
  */
 export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = false }) {
   const graph = await readGraph(rootDir);
@@ -1187,7 +1253,9 @@ export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = 
 
   const judged = [...surveyJudges(graph)].sort(rulingOrderCompare);
   const judgedIds = new Set(judged.map((n) => n.id));
-  const contextNodes = ordered.filter((n) => !judgedIds.has(n.id));
+  const neighbourIds = surveyNeighbourhoodIds(graph, judged);
+  const neighbourNodes = ordered.filter((n) => neighbourIds.has(n.id));
+  const contextNodes = ordered.filter((n) => !judgedIds.has(n.id) && !neighbourIds.has(n.id));
 
   const briefPath = path.join(reviewDir, "survey.brief.md");
   const pinsPath = path.join(reviewDir, "survey.pins.json");
@@ -1198,19 +1266,23 @@ export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = 
     repo: path.resolve(rootDir, ".."),
     commit: commitText({ commit, dirty }),
     batch_count: String(judged.length),
+    neighbourhood_count: String(neighbourNodes.length),
     context_count: String(contextNodes.length),
     batch_index: judged.length > 0
       ? judged.map(indexLine).join("\n")
       : "(nothing is judged: every node at the review or ruling stage carries a survey pin on the recommendation it now stands on)",
+    neighbourhood_index: neighbourNodes.length > 0
+      ? neighbourNodes.map(contextIndexLine).join("\n")
+      : "(nothing judged has a neighbour outside the judged set)",
     context_index: contextNodes.length > 0
       ? contextNodes.map(contextIndexLine).join("\n")
-      : "(no other node: the judged set is the whole graph)",
+      : "(no other node: the judged set and its neighbourhood are the whole graph)",
     batch: judged.length > 0
       ? judged.map((n) => renderWholeNode(n, { account: false })).join("\n")
       : "(nothing is judged: there is no entry to write in `nodes`)",
-    context: contextNodes.length > 0
-      ? contextNodes.map(renderContextNode).join("\n")
-      : "(no other node: the judged set is the whole graph)",
+    neighbourhood: neighbourNodes.length > 0
+      ? neighbourNodes.map((n) => renderNeighbourNode(n, null)).join("\n")
+      : "(nothing judged has a neighbour outside the judged set)",
     out: SURVEY_OUT_FILE,
     pins: SURVEY_PINS_FILE,
   });
@@ -1221,6 +1293,7 @@ export async function writeSurveyBrief({ rootDir, reviewDir, date = null, dry = 
     pinsPath,
     outFile: SURVEY_OUT_FILE,
     batchCount: judged.length,
+    neighbourhoodCount: neighbourNodes.length,
     contextCount: contextNodes.length,
     lines,
     bytes,
@@ -1285,7 +1358,7 @@ if (isMain) {
       } else {
         const r = await writeSurveyBrief({ rootDir, reviewDir, date: opts.date, dry: opts.dry });
         console.log(opts.dry ? `${r.briefPath} (dry run: nothing written)` : r.briefPath);
-        console.log(`survey: ${r.batchCount} node(s) judged; context: ${r.contextCount} node(s); ${r.bytes} bytes over ${r.lines} lines; graph commit ${commitText({ commit: r.commit, dirty: r.dirty })}`);
+        console.log(`survey: ${r.batchCount} node(s) judged; neighbourhood ${r.neighbourhoodCount} node(s); context: ${r.contextCount} node(s); ${r.bytes} bytes over ${r.lines} lines; graph commit ${commitText({ commit: r.commit, dirty: r.dirty })}`);
         console.log(opts.dry ? `the pins sidecar: ${r.pinsPath} (dry run: nothing written)` : `the pins sidecar: ${r.pinsPath}`);
         console.log(`the reviewer's output file: ${r.outFile}`);
         if (r.lines > 4000) {

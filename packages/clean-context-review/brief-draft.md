@@ -45,7 +45,7 @@ And validation 15, asked here of the draft against the index of every question t
 
 **A probe beats the verdict.** A probe recorded on a node at the review or the ruling stage returns that node to the `maieutic` stage whatever verdict was written, and on this reading it beats yours and not merely your choice of stage: a reader that has recorded what it could not ground has said the draft is not ready, and a forward beside it is a contradiction. So if you raise a probe, do not also forward — write `kickback` with `kickback_stage: "maieutic"`, or `"periagogic"` where the ground itself is at issue, and say in a finding which probe sent it back.
 
-**A finding** cites the section and quotes the text it concerns, and gives a suggested edit where you have one. A finding about another node — a duplicate question, an option that belongs elsewhere, a merge or a split — is written here in prose, naming the node it concerns, the name the option would take, and the prose it would carry; the session records it, and the review proposes but never merges, splits, or edits a node. Nothing in this reading changes another node's stage: only the survey's findings do that.
+**A finding** cites the section and quotes the text it bears on verbatim — the sentence or clause exactly as it stands in the file, not paraphrased or summarized — so the session can verify it by search before applying it; and gives a suggested edit where you have one. A finding about another node — a duplicate question, an option that belongs elsewhere, a merge or a split — is written here in prose, naming the node it concerns, the name the option would take, and the prose it would carry; the session records it, and the review proposes but never merges, splits, or edits a node. Nothing in this reading changes another node's stage: only the survey's findings do that.
 
 **Reading discipline.** This brief states its own length in the navigation line above. Read it in pieces of at most 300 lines at a time, with the Read tool's `offset` and `limit`, and never as one whole-file read; pipe every shell command's own output through `head -n 40`. A brief you cannot hold whole is a defect of the brief: report it as a finding, and do not work around it by skimming.
 
@@ -108,7 +108,7 @@ Write exactly one file, `{{out}}` (create its directory with mkdir if absent): o
   "date": "{{date}}",
   "verdict": "forward" | "kickback",
   "kickback_stage": "periagogic" | "maieutic" | null,
-  "findings": ["<one finding per string, citing the section and quoting the text it concerns; a suggested edit where you have one>"],
+  "findings": ["<one finding per string, citing the section and quoting the locus it bears on verbatim; a suggested edit where you have one>"],
   "probes": [
     {
       "asks": "<the question in one line, put open and never as a choice between drafted answers>",
