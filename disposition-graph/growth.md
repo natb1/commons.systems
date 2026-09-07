@@ -1,13 +1,12 @@
 ---
 question: How does the graph grow?
-stage: review
+stage: ruling
 review:
   verdict: forward
-  strength: strong
+  strength: none
   date: 2026-09-07
-  commit: "b319e072bb983e08de11c64838ad3f2f36c1abd8"
-  of: d3e9fa8a9dcd869cc2e6afa5317a86ac833996c8
-  against: "The draft's own paragraph is the case against it. Growth's answer already answers, in one paragraph, the loop of three moves, the three usages, the two conducts with their Plato loci, the two periagogic objects, the six movements, the presentation rule with its three facts, the persistence list, the ban on transient dispositions, and the un-aligned queue; the 2026-09-07 amendment adds one more, and one that binds harder than any of them, since it governs every turn of every sitting and admits no fifth. Two clean-context readings of this node have already found that answer to break the rule it sits under — `node`: 'If a text answers two questions, it is two nodes' — and the session declined the split twice and referred it to the author, while the record has since done the opposite on a comparable node, minting nine children under `alignment-page` on 2026-09-05 for exactly this reason. The consequence is not formal: with one answer fact and one kick-back row, the author cannot confirm the four forms without ratifying nine other rules they were never asked about separately, and cannot refuse any one of them except by kicking the whole node back to the maieutic stage. And of all the clauses in the paragraph this is the one it is most costly to fold in unexamined, because it is the clause that decides what the author is allowed to be told."
+  of: 99d667c6fd7d8d8d7fb61bd1a5289ac8bb458c66
+  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
 facts:
   - name: answer
     options:
@@ -914,3 +913,20 @@ it stands, the re-taking being part of the recommended text.
 The reading of the recommendation as it now stands is owed, the recommendation
 having moved in substance since the reading of 2026-09-07, and the sitting on
 `turn-form` owes its own.
+
+### Clean-context re-reading, 2026-09-07, of 99d667c6
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `turn-form-to-a-child-and-terms-aligned`.
+
+Findings:
+
+
+On the facts and what they recommend: All fourteen findings of the 2026-09-07 reading are answered. The four-forms rule (findings 1-4) leaves the node entirely: `commons.systems/disposition-graph/turn-form` is minted and cited (added to `depends`), the answer fact's `recommends` moves from `the-turn-takes-one-of-four-forms` to `turn-form-to-a-child-and-terms-aligned`, boldness low to moderate (finding 6), and both prior options are marked `passed`/absorbed alongside the two new options the reading itself proposed (`turn-forms-as-its-own-node`, `the-fourth-form-carries-the-recording`), so none silently left the list. `### answer` and `### authority` now open with their recommendation reasons (finding 5). The `cites` pin on `author-questions` is re-taken to `e2791b5e...` (verified by `git hash-object`, matching the working tree) and the account sentence claiming the pin tracks is corrected to say a pin is re-taken by hand (finding 7). "quoted" is corrected to "described" (finding 8). `strike-phantom-depends` and `cite-unanswered-for-responses` are marked `passed` with reasons (finding 9); the eight `ai, ref 8938e2b7` options each gain a substantive reason in place of "no reason recorded" (finding 10). The persistence-list clauses on `proposal` and `steer` are corrected to match `authority` and `rejected` (finding 11), and the presentation rule now names the alignment page as its surface (finding 3). Two dated author quotes move under `## Disposition` (finding 13). The ruling account now states what the 2026-09-03 ruling covered and that the fresh ruling is for the rest, with `partial-ratification` kept pending (finding 14).
+
+On the viability of the options: Every option on all three facts stays viable and none was silently dropped: the two absorbed four-forms options and the reading's own two proposed options are all recorded as passed with reasons on the answer fact, and `partial-ratification`, `split-presentation-and-movements`, `define-sitting`, `facts-from-recommendation-field` and `cite-the-reading` remain viable and unadopted as the account says. `depends` gaining `alignment-order` and `turn-form` is consistent with the new fence; the reading's suggestion to also add `author-questions` and `alignment-page` no longer applies now that the rule itself, and not just a citation to it, has moved off this node.
+
+The review found no strong counter-argument.
+
+The session's reply: Forwarded with no finding; verified on the main thread that turn-form carries the four-forms rule and the absorbed options, and that the cites pin matches the working tree. Nothing on the node changes.

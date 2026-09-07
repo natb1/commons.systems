@@ -1,6 +1,6 @@
 ---
 question: What does a clean-context review cost, and how is that cost bounded?
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -50,6 +50,11 @@ facts:
       - name: brief-carries-the-recount-command
         source: review
         ref: "2026-09-05"
+      - name: rules-of-the-reading-named-as-files
+        source: review
+        ref: "2026-09-05"
+        status: passed
+        reason: "it saves the 65,882 bytes the twelve rule nodes cost in every brief and buys back the double read, the reader opening each of the twelve by instruction and five of them twice, which is the fourth measurement in the rationale and the one the brief was cut to remove"
       - name: a-cap-on-redraws-per-node-per-sitting
         source: ai
         ref: "2026-09-05"
@@ -69,11 +74,11 @@ facts:
     against: "The author's words on the viable-options node delegate the right-sizing of models and effort to the AI's judgment where it buys token efficiency, and their words here ask the AI for the lessons and grant the reconciliation, which reads as the same delegation; a class that sends every later adjustment of the review's object back to the author spends the author's attention on the thing they asked to be spared."
 review:
   verdict: forward
-  strength: strong
-  date: 2026-09-05
-  of: 7fff9cf3036a1719b7b108e676dd22368ba03aff
-  commit: 1cde11f680752bee6ece18bbe6d224966c7a4c95
-  against: "The reviewed party wrote the reviewer's brief, and this is the second reading of that brief; the first found three measurements wrong in the direction that flattered the design, and this one finds that the repair does not hold. The rationale's promise that anyone can recount its numbers is false in both limbs -- `tmp/` is gitignored, so no brief is on the implementation ref, and 21 of the 23 briefs have been regenerated past both ends of the before/after pair -- so an answer that narrows what every future reviewer is shown now rests on figures no reviewer can check, and the last reading's finding was answered by rewriting a number rather than by re-taking it. Two clauses of the answer are also false of the instrument that materializes them: the exception for an option sourced to the draft is not implemented, which cost this reader the same trip outside the brief the last reader reported, and the enumeration of the neighbourhood omits the cited nodes the brief actually carries. The design's reply is the survey, its named reader of last resort, and the survey has still never run: 48 nodes now stand at the review or the ruling stage and not one carries a survey pin. And the record's own measurement, on `decomposition`, a node this one names, puts the sitting's spend at roughly an order of magnitude over the batch design it replaced, after this reconciliation landed, while this node's answer declares that total \"not bounded, and is not waste\" -- so the node the author asked to price the review prices the reading and disclaims the number their words named. Against all that: the design is right on its merits, no listed alternative dominates it, validation 2's scope really is the ancestry and the cited nodes, both of which the neighbourhood carries, and the authority fact already escalates to ratified for exactly this capture shape. The case is strong and is not decisive. One thing the author should rule on in the same sitting: this node's cap of two readings, plus its rule that the reading is applied before the amendment, means the corrections these findings ask for will land unread and the pin will again name text no reader saw, which is the option `pin-names-the-text-the-reader-read` becoming a live obstruction on its first use."
+  strength: weak
+  date: 2026-09-07
+  of: b9e1b4e5b54bd35bfd1a6bc94aeaab7bfc8b9c32
+  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
+  against: "The second reading's viability paragraph named two missing candidates for the option list; the amendment added one (`brief-carries-the-recount-command`) but not the other (`rules-of-the-reading-named-as-files`), so `viable-options`'s rule that a candidate never silently leaves the list is still only partly satisfied on this fact. This is a completeness gap rather than a substantive defect in the recommendation, and under this node's own cap the finding is properly recorded as an option for the author rather than redrawn a third time."
   survey:
     date: 2026-09-05
     of: 6e810cedd50278ba761aed96a897047c1d870409
@@ -236,6 +241,21 @@ since it looks checkable. It was the clean-context reading of 2026-09-05's own
 suggestion; this node answered it in the rationale with a recount instruction
 instead, and the second reading found that instruction false in both its limbs,
 which is why the option is on the list rather than in the prose.
+
+#### rules-of-the-reading-named-as-files
+
+The brief names the twelve rule nodes for the reader to open rather than
+carrying them, which is what the brief did until 2026-09-04. It would save the
+65,882 bytes those twelve cost in every brief, three times the index they
+displaced, and it is passed over for the double read it costs: the reader
+opening the twelve by instruction, five of them twice, since the five
+global-tier rules are in every neighbourhood already, and reaching outside its
+neighbourhood for the other seven, which is the fourth measurement in the
+rationale and the cheapest cost the brief was cut to remove. The clean-context
+reading of 2026-09-05 named it as a candidate this node argued against in prose
+and did not list, and the delta reading of 2026-09-07 found it still unlisted;
+it is on the fact so that the author sees the bytes it would save beside the
+read it would cost.
 
 #### a-cap-on-redraws-per-node-per-sitting
 
@@ -692,3 +712,21 @@ A placement made against the brief this unit was given. The rule that a mechanic
 Three of the four clauses were already running in the working tree at `87e4b24e` under the author's instruction to begin applying: the account cut to its last section, the verbatim locus in both brief templates, and the survey's carrying rule. They are unsupported implementation until this option is ruled, and are named as such here rather than presented as the state of the record.
 
 The reading of this amended recommendation is owed.
+
+### Clean-context re-reading, 2026-09-07, of b9e1b4e5
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `one-answer-a-node-and-one-read`.
+
+Findings:
+
+- Answer, on viability of the options, the previous (second) reading named two missing candidates under `viable-options`'s rule that a candidate never silently leaves the list, but only one was added. `brief-carries-the-recount-command` was added to the answer fact (correct). The second, `rules-of-the-reading-named-as-files` -- "the brief naming the twelve rule nodes for the reader to open rather than carrying them ... it should stand on the fact marked passed over with that reason, so the author sees the 65,882 bytes it would save and the double read it would cost" -- is not on the answer fact's option list; the rationale's shape-test paragraph and the double-read paragraph argue against it in prose only, which is the same defect the reading found elsewhere on this node. Suggested edit: add it as a passed option, source review, ref 2026-09-05, with the reason already written in the rationale's fourth-measurement paragraph (the double read the pointer form would cost).
+
+On the facts and what they recommend: Nine of the ten findings of the 2026-09-05 second reading are answered on the fact and in the standing text. The recount instruction is replaced with an honest statement that the figures are unrecomputable (tmp/ is gitignored, 21 of 23 briefs regenerated), every figure now carries its graph and implementation commit, and `brief-carries-the-recount-command` is added to the answer fact. The neighbourhood enumeration now includes the nodes a draft names, verified consistent with `depends`-plus-names in the answer text; `neighbourhood-cited-not-restated`'s prose now records three divergences. The sourced-option exception is disclosed as materialized by `renderNeighbourNode` as of the 2026-09-05 reconciliation. The diff-as-tradition and review-approval-pinned-to-a-revision citations are added where the rationale and the `pin-names-the-text-the-reader-read` option needed them. The out-of-scope clause now attributes the per-draft multiplier to `clean-context-review`'s decision and cites `decomposition`'s measured price. The round clause is bounded to validation 15 with the recommendation field recorded as an option on `frontier-consistency`. Stale counts (45->48 nodes, 137->142) are corrected and dated to graph commit 1cde11f6. The two implementation-level findings are disclosed as reconciled on the implementation ref, outside the graph. The recommendation additionally moves to `one-answer-a-node-and-one-read`, four new clauses (one answer per node, account cut to its last section, fewest-pieces reading, and mechanical defects as the instrument's) drawn from a sixth, 2026-09-07 measurement, honestly disclosing which of the four are already running and which are not.
+
+On the viability of the options: All prior options remain viable and undisturbed by the new clauses; `brief-carries-the-recount-command` and `a-cap-on-redraws-per-node-per-sitting` (added at the prior reading) are both present. One gap remains open: the missing candidate `rules-of-the-reading-named-as-files`, named above.
+
+Strongest counter-argument (weak): The second reading's viability paragraph named two missing candidates for the option list; the amendment added one (`brief-carries-the-recount-command`) but not the other (`rules-of-the-reading-named-as-files`), so `viable-options`'s rule that a candidate never silently leaves the list is still only partly satisfied on this fact. This is a completeness gap rather than a substantive defect in the recommendation, and under this node's own cap the finding is properly recorded as an option for the author rather than redrawn a third time.
+
+The session's reply: Accepted; verified on the main thread that rules-of-the-reading-named-as-files stood in the rationale and in the second reading's viability paragraph and on no fact. It is recorded on the answer fact, source review, ref 2026-09-05, passed with the double read as its reason, so the author sees the bytes it would save beside the read it would cost. The recommendation is unchanged and no third reading is owed.

@@ -1,7 +1,7 @@
 ---
 question: Where does the alignment page show the author's recorded words?
 form: rule
-stage: review
+stage: maieutic
 facts:
   - name: answer
     options:
@@ -62,12 +62,12 @@ facts:
     boldness: low
     against: "Whichever way this goes the author's words stay in the node unaltered and are read in full in the `/align` interview their own rule of 2026-09-06 sends everything else to, so nothing is lost that a session cannot show them on request; ratifying it spends the author's scarcest act on which dated entries a projector quotes beside an option, and the capture the reading names is already answered by the parent's own authority fact, under which the whole shape of this page is the author's to confirm."
 review:
-  verdict: forward
+  verdict: kickback
   strength: moderate
   date: 2026-09-07
-  commit: "b319e072bb983e08de11c64838ad3f2f36c1abd8"
-  of: 8169831eb6d72c91b2acd9145afcd141707d579f
-  against: "The only words the author has given on this node say that whatever they provide in periagoge 'does not need to be played back in the alignment artifact expect as quotes supporting or refuting fact options' — a release with one named exception — and this answer keeps the whole section on the page at every stage, resting the departure on an AI distinction between a playback and 'the record shown once, at one remove', which the author did not draw. The later rule it leans on cuts the other way as easily: 'The scope of alignment artifact is limited to final confirmation and previews/read only indicators of other phases of the dialogue. All other information from the author is done via the `/align` session interview' is a rule narrowing what the page does with the author, and reading out of it a permission for the page to show more of the author's words than their own sentence allowed inverts its direction. The coverage measurement, which I re-took at ec6e2300 and which is exact in every figure, argues as strongly for the other remedy: 11 of 45 author-sourced options carry a reference that names no entry and 121 of 222 entries are named by no option, and this answer itself calls a broken reference a finding, so the record's own cure is to write the references rather than to keep a section running to 1,986 words on the page beside them. And nothing is lost by the plainer reading that a session cannot restore: the words stay in the node, and the author's own rule of 2026-09-06 sends everything but the confirmation to the `/align` interview, where they are read whole."
+  of: 2a1f9fd131f7734acedd4549c89b0d82c68b0e18
+  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
+  against: "The account still contains, unedited, the false claim about the parent's marking rule that the last reading's first finding asked to fix, and the new account section's own narration that the paragraph 'is restated as the record' is itself inaccurate, since no restatement reaches the original text. A reader of the node's account history still meets a false statement the reading already found and the sitting believed it had closed."
 under:
   - commons.systems/disposition-graph/alignment-page
 ---
@@ -118,8 +118,10 @@ requires a `ref` on every option of an answer fact
 node that carries it. It is a finding and not a parse error, so the graph still
 reads and still projects while the eleven are outstanding, on the reader's own
 principle that an attention rule never turns into one
-(`packages/disposition/read.mjs:1386-1390`). Neither the check nor the listing
-exists today, and both are owed with this answer. The direction is
+(`packages/disposition/read.mjs:1386-1390`). Both were owed when this answer was
+written; the check landed on the implementation ref at commit cb0e02c6 of
+2026-09-07, as `deriveMechanicalFindings` in the same file, and the frontier lists
+what it raises. The direction is
 `commons.systems/disposition-graph/viable-options`' recommended text, which no
 ruling has reached and which this answer reads as direction rather than as
 doctrine: an option sourced to the author "carrying a graph commit where the date
@@ -496,9 +498,12 @@ column's reserve, which is the parent's apparatus rule and where
 sentence. Both are recorded as options on the parent and neither is amended here.
 
 The parent also carries a marking rule, that a clause standing only until a child
-rules says so, and it is applied at three clauses and not at the two this node
-reaches. A reader therefore takes both of this node's clauses as settled parent
-text. That is the parent's bookkeeping and is corrected there.
+rules says so. When this section was drafted it was applied at three clauses and
+not at the two this node reaches; the sitting of 2026-09-06 marked both, and the
+parent now carries the mark at five clauses, so no bookkeeping is owed there.
+[Restated on 2026-09-07 for the delta reading of that day, which found the
+paragraph still standing in its first form after the reply of the reading before
+said it had been restated.]
 
 ### Clean-context review, 2026-09-07, of 8169831e
 
@@ -581,5 +586,25 @@ on `packages/disposition/project.mjs`: the whole-section fallback in
 `renderAsk` at `:1726` goes with it and the open section in `renderStageAsk` at
 `:1702` is already struck by the author's rule of 2026-09-06, the styles for both
 go from `packages/disposition/alignment-template.html`, and the new check and its
-frontier line are owed in `packages/disposition/read.mjs` and in the frontier
-projection.
+frontier line were owed in `packages/disposition/read.mjs` and in the frontier
+projection when this was written and landed there at cb0e02c6 later the same
+day, which the answer now says.
+
+### Clean-context re-reading, 2026-09-07, of 2a1f9fd1
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: kicked back to the maieutic stage.
+
+Recommended at this reading: `per-option-only`.
+
+Findings:
+
+- Account, '### What a ruling here would reach in the parent, 2026-09-06' (verified on disk at disposition/disposition-graph/authors-words-on-the-page.md:498-501; no hunk in the diff touches it). The last reading's first finding asked to strike or restate the paragraph 'The parent also carries a marking rule, that a clause standing only until a child rules says so, and it is applied at three clauses and not at the two this node reaches. A reader therefore takes both of this node's clauses as settled parent text. That is the parent's bookkeeping and is corrected there.', verified false because the parent marks both of this node's clauses, at five clauses in all. The amendment's new account section says this was done — 'the paragraph is restated as the record and no bookkeeping is owed there' — but the diff contains no edit to the original paragraph, which still stands unedited and still false where a reader meets it. The finding is not answered, and the new section's own account of what happened is itself inaccurate. Suggested edit: in '### What a ruling here would reach in the parent, 2026-09-06', replace the sentence 'That is the parent's bookkeeping and is corrected there' (and the sentence before it) with something like 'The parent marks both of this node's clauses; no bookkeeping is owed there', matching what the new account section already asserts happened.
+- Account, the new section 'The redrawn answer owes a fresh reading': 'the new check and its frontier line are owed in `packages/disposition/read.mjs` and in the frontier projection', echoing the Answer's own 'Neither the check nor the listing exists today, and both are owed with this answer.' Verified against the current implementation: `packages/disposition/read.mjs`'s `deriveMechanicalFindings` (read.mjs:1817-1834, wired into node findings at :2205) already raises exactly this finding for an author-sourced option whose `ref` names no `## Disposition` entry, per its own comment naming `authors-words-on-the-page`'s finding as the reason it exists. That check landed on greenfield at commit cb0e02c674e0240b328acb3c441c5e24d7b0e76c, 2026-09-07 11:01:37, which postdates this node's own last commit (1ca53dd6, 2026-09-07 10:30:57) by about half an hour — so the claim was true when the amendment was written and is stale now, describing as owed a debt the record's own tooling already appears to discharge. Suggested edit: on the node's next touch, verify the check covers this answer's case and, if so, strike the 'owed' clause rather than continue to carry it as open reconciliation debt; this is not this reading's to fix, since it is a fact about the implementation and not about the amendment's own text.
+
+On the facts and what they recommend: The diff moves the answer fact's recommendation from `section-folded-and-quotation-narrowed` to the author-sourced `per-option-only`, moves `stands` with it, drops boldness from moderate to low, rewrites the fact's `against` to the coverage measurement, and confirms no `## Recommendation` fence (correctly absent both before and after). The authority fact keeps `ratified` at low boldness; only its `against` prose is reworded to reflect that the recommendation now rests on the author's own words.
+
+On the viability of the options: Every option remains viable: `section-folded-and-quotation-narrowed` stays on the list, unpassed, carrying the coverage measurement as its case against it now that it is no longer recommended; the new option `section-open-not-folded` is added, correctly marked passed, with the reason the last reading's own finding supplied. No option was dropped or left without a reason.
+
+Strongest counter-argument (moderate): The account still contains, unedited, the false claim about the parent's marking rule that the last reading's first finding asked to fix, and the new account section's own narration that the paragraph 'is restated as the record' is itself inaccurate, since no restatement reaches the original text. A reader of the node's account history still meets a false statement the reading already found and the sitting believed it had closed.
+
+The session's reply: Both findings verified on the main thread and repaired where they stand: the account paragraph on the parent's marking rule, which the reply of the reading before said was restated and was not, is restated now and says so; and the answer's clause that the reference check and its frontier line do not exist, true at 1ca53dd6 and false since the implementation commit cb0e02c6 of the same day, now says the check landed as deriveMechanicalFindings and the frontier lists what it raises, and the account's closing section says the same. Neither finding reaches what the answer recommends, per-option-only, the author's own option, which is unchanged; the kickback is recorded as the reading gave it, since a node reaches the ruling stage only on a forward verdict, and the repair is read once more on the smaller model with the two paragraphs as its object, which is the reading the encoding requires and the cheapest one there is. That the encoding gives the session no way to forward a kickback whose findings it has repaired without a further reading is noted for review-cost's cap and for the instrument.

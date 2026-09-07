@@ -1,6 +1,6 @@
 ---
 question: How is a complex disposition decomposed into units for a sitting, and how are their results integrated?
-stage: review
+stage: ruling
 probes:
   - id: bundled-disposition-as-queued-questions
     asks: >-
@@ -83,11 +83,11 @@ facts:
     against: "The author's words on viable-options leave the right-sizing of models and effort to the AI's judgment, which is the review-model node's recorded case for delegated and bears harder here, where the author named no model and asked for right-sized ones."
 review:
   verdict: forward
-  strength: strong
-  date: 2026-09-05
-  of: dec0f8270420c2078329363da3f3ca7182c7c866
-  commit: fc205d47a672c22d7621078709ff2acc1b2ac9ec
-  against: "The author's first-named judge for this design is token and context efficiency, and the measurement of the design as it now runs cuts hard against it, harder than the node's own case against admits. That case says the index was the lever, that `review-cost` pulled it on 2026-09-05, and that what is left is \"the residue, that a sitting still pays a fixed cost of brief and contract per draft where the batch paid it once\". The residue is not small: after the lever was pulled, one draft's brief is 268,598 bytes, about a third of the entire 838,923-byte batch brief of 2026-09-03 that this design replaces, so the cost is not a fixed increment per draft but roughly a third of a batch per draft. Measured on disk today, this sitting's per-draft briefs total 7,709,220 bytes across 22 files, 6,748,728 of them written today, and the survey half is a further 1,083,638 bytes -- itself larger than the whole batch it was said to be a leaner reading of, and more than double the 519,400 the grant's own evidence recorded -- before the second reading each draft is entitled to under `review-cost`'s cap. That is roughly an order of magnitude on the criterion the author named first, and the fence still presents the per-draft read as the smaller one. The disposition stands regardless: the author named attention second and it is real, a finding at the point of writing reaches a main thread still holding the node while a batch finding reaches one that has moved on, and a reader's context is bounded whatever the total spend, so a single brief that fits is worth more than a cheaper one that does not. But the design should be ruled on with its price stated, and the price the record states today is wrong by roughly an order of magnitude."
+  strength: weak
+  date: 2026-09-07
+  of: dd59cbca7f78752bac9704bc5eff7ed7a2b27990
+  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
+  against: "The measured byte totals for the eight design units (16,432 to 44,306 bytes, 281,879 total) recompute today to 282,151 bytes across the same files, roughly 0.1% over the stated figure, which is within noise (the files may have been touched fractionally after the cited commit) and not a material misstatement. No other gap found."
   survey:
     date: 2026-09-05
     of: 036b9a00cb75d617527ad2193fdc1388cd7d5ed7
@@ -535,3 +535,20 @@ What stays viable. Every option keeps its row. `seams-and-split-review` is the t
 Not applied. Nothing in the working tree at `87e4b24e` enforces the shape; this design unit's own output follows it only for the fences, which are spliced from the record by a script rather than retyped, and returns its new prose whole because the prose is new.
 
 The reading of this amended recommendation is owed.
+
+### Clean-context re-reading, 2026-09-07, of dd59cbca
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `a-unit-returns-the-amendment`.
+
+Findings:
+
+
+On the facts and what they recommend: All eleven findings of the 2026-09-05 second reading are answered. The cost sentence and evidence paragraph are rewritten to state the brief-per-draft cost as `review-cost` now decides it, dated (F1/F11). The periagogic refusal mechanism is rewritten to move each queued node's existence fact to `prune` with the author's words as reason rather than claiming one response rules the existence facts directly, with that shortcut recorded on `recording` instead (F2/F9). The four undocumented tradition adoptions are struck from the Rationale and, verified by `grep`, are now registered on `stub-traditions` under 'Registered from decomposition, 2026-09-05' as claimed and unread (F3). The fact paragraph now cites `class-recommendation` and `dialogue` instead of restating their rules (F4). `depends` now points at `clean-context-review#pointers-for-what-grows-with-the-record` (verified in frontmatter) instead of the superseded option (F5). The materialization sentence discloses both the superseded escalation trigger in the skill file and the shim-scope gap on `growth`, where `shim-reaches-what-the-skill-draws-on` is confirmed present as a persistence option (F6). `reviewer-on-a-fixed-model`'s reversed reason is struck (F7). `unit-models-left-to-delegation` is recorded on the answer fact with the reply's own reason (F8). `tier` is added to `depends` (verified in frontmatter) and the design unit's escalation is scoped to the first limb until `tier` is ruled (F10). The recommendation additionally moves from `seams-and-split-review` to `a-unit-returns-the-amendment`, a new clause on what a unit returns (pairs, not whole redraws), openly disclosed as not yet followed by this sitting's own design units.
+
+On the viability of the options: Every option on the answer and authority facts stays viable; the new option `a-unit-returns-the-amendment` is added as the recommendation and `unit-models-left-to-delegation` is added as passed, with no other option's status changed. `units-carried-by-their-own-skills`, raised the same day by the newly minted `unit-skills` child, is correctly left viable and unadopted, consistent with the account's note that another unit is amending this fence in the same sitting.
+
+Strongest counter-argument (weak): The measured byte totals for the eight design units (16,432 to 44,306 bytes, 281,879 total) recompute today to 282,151 bytes across the same files, roughly 0.1% over the stated figure, which is within noise (the files may have been touched fractionally after the cited commit) and not a material misstatement. No other gap found.
+
+The session's reply: Forwarded with no finding; the byte-count drift of 272 bytes across the eight design files is noted and not corrected, since the figure is dated to its commit and the drift is the files' later edits. Nothing on the node changes.

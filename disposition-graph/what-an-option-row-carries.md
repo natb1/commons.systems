@@ -1,7 +1,7 @@
 ---
 question: What does an option's row carry at the first level?
 form: rule
-stage: review
+stage: ruling
 facts:
   - name: answer
     options:
@@ -63,11 +63,10 @@ facts:
     against: "Layout is reversible and cheap to get wrong, so deferred would let the recommendation act on the row while the author works the rest of the frontier; and a ratified ruling here stops any delegation from ever reaching the page's presentation, which is most of what this subtree decides."
 review:
   verdict: forward
-  strength: moderate
+  strength: none
   date: 2026-09-07
-  of: 29fa08a920c4bbdd26d20f8a893c74fdad975001
-  commit: 6a84b48e7a0f05cb5893fb22e776f6af85cdce69
-  against: "The answer's central move is that the AI never writes the first-level line, and the record can supply a reader's line on exactly one row of one fact per node: `review.against` is one counter-argument for the node and `caseAgainst` substitutes it only where `fact.name === \"answer\"` (packages/disposition/project.mjs:1381-1388). So on every other fact of every node -- this node's own `authority` row among them, where a real argument for `deferred` would sit in a drill-down under a notice -- what the author meets at the level the eye reads is a mark saying nobody has checked. The ground for demoting the AI's line is an extension of the author's words past their object: \"Move AI reasoning (such as 'passed over') to the details area for each option - not in a chip\" governs an option's chips, and the case against is neither a chip nor an option's status but a fact's line, which the answer reaches by asserting that it is \"the AI's reasoning however it is set\". `hansard-verbatim-record` holds that the case against \"illustrates the argument, so by this standard it cannot be edited out\" of the first level; `chenery-reasoned-decision` holds that a decision stands on the reason its decider gave and not another's; `bentham-publicity` holds that a recommender withholding its own reasoning defeats publicity at the source; and `scholastic-articulus`, which the answer leans on, licences the substitution only where a reader's line exists and warns that even there it \"is weaker than the tradition's guarantee\". On a node whose own authority reading is that the decision is capture-shaped because the party setting it is the AI, the checked party has chosen to weaken the check on most rows of the page -- and `ai-case-against-on-the-row`, on the fact and not adopted, is the only arrangement under which an objection the record holds is always where the author reads."
+  of: 76904185c4740a91851f800c31a0ea71cb6e9ab2
+  commit: 8a672c17fcd4f0bf104d3c4e2a87077eb1213d7c
 under:
   - commons.systems/disposition-graph/alignment-page
 depends:
@@ -965,3 +964,20 @@ mark as well as the stage chip rather than asserting it.
 
 The re-reading is owed, and its object is this amendment and not the node. It is
 the second of the two readings this answer gets.
+
+### Clean-context re-reading, 2026-09-07, of 76904185
+
+Read in clean context by a subagent given the amendment, the diff against the text the last reading pinned, and that reading's own findings, and nothing else of the sitting. Verdict: the amendment stands, forwarded to the author's ruling.
+
+Recommended at this reading: `three-marks-and-the-case-against`.
+
+Findings:
+
+
+On the facts and what they recommend: The diff leaves the answer fact recommending `three-marks-and-the-case-against` at moderate boldness with `stands` unchanged and no recommendation fence; it reworks the fact's `against` prose, adds `status: passed` with a reason to `ai-line-until-a-reading-returns`, and adds a new option, `no-mark-where-no-line` (source review), to the answer fact's list. The authority fact's recommendation, `ratified` at low boldness, and its fence are unchanged; only its `against` prose is reworded.
+
+On the viability of the options: Every option on both facts remains viable under the diff: the newly added `no-mark-where-no-line` carries a reasoned, argued case rather than an assertion, and `ai-line-until-a-reading-returns` is now correctly encoded `status: passed` to match its own prose, closing the one encoding fault the last reading found. No option lost or gained ambiguous status.
+
+The review found no strong counter-argument.
+
+The session's reply: Forwarded with no finding; the fact's own count, 53 cases against beside 247 recommendations, re-taken by the reading and exact. Nothing on the node changes.
