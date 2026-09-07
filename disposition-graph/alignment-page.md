@@ -133,6 +133,9 @@ facts:
       - name: page-collects-only-the-confirmation
         source: author
         ref: "2026-09-06"
+      - name: standing-named-in-the-pane
+        source: commons.systems/disposition-graph/where-the-unconfirmed-indication-goes
+        ref: "2026-09-06"
       - name: standing-sentence-stored
         source: ai
         ref: "2026-09-04"
@@ -387,6 +390,32 @@ Recommending it is not this subsection's act: the rule is the author's and is
 recorded here the turn it was said, and what it does to the answer's own text is
 this node's maieutic movement, still owed.
 
+
+#### standing-named-in-the-pane
+
+Two clauses of this answer change if
+`commons.systems/disposition-graph/where-the-unconfirmed-indication-goes` rules
+that the indication goes in the right-hand column's heading, and they are this
+node's and not that one's, which is why they are an option here rather than an
+amendment there.
+
+The naming paragraph says the row tells the author that confirming ratifies the
+AI's draft. Under that child's answer the row says nothing of the kind, since the
+sibling `what-an-option-row-carries` takes the standing mark off the row and the
+indication moves to the column that holds the disposition; the paragraph's
+argument survives whole and its locus changes. And the account of the right-hand
+column says that column carries "no control, no caption, no indication, no
+drill-down", which the child's answer contradicts in one word: a qualified
+heading is an indication. The reserve's reason is that every sentence of
+apparatus there is a sentence the author must read past to see the disposition,
+and one qualification of a heading that already exists is the smallest
+exception that reason admits, which is the case for making it rather than
+widening the reserve.
+
+Recorded and not applied. The child stands at the review stage with its
+recommendation moved and its reading owed, and a ruling here is what would move
+these two clauses; the reading of 2026-09-06 on that node found that the child
+had amended them itself, which is authority widening on the way down.
 #### standing-sentence-stored
 
 The recommended answer with one clause changed: the option that stands carries a `####` subsection of its own, a stored sentence, rather than the answer's first sentences read from `## Answer`; the data-side resolution of the seam between `viable-options`, which has every option carry its sentence, and `dialogue`, which exempts the one that stands. Against it, a stored sentence beside the answer is the answer's first sentences said twice, and drifts. Passed over on 2026-09-04 after the reading of that day: by its own words it answers the dialogue node's question, where it is recorded as `standing-option-carries-a-subsection` with this node as its source, and the row's sentence follows whichever that node rules.
