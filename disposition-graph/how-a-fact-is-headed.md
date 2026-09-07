@@ -527,159 +527,18 @@ describes.
 
 ## Account
 
+
 What the sitting would amend: `commons.systems/disposition-graph/alignment-page`, its answer fact, and in the recommended text the sentence "Each is labelled with the question it asks, in the words of the node or of the fact, because under `aspects-are-nodes` every decision is a question and a decision labelled with a category tells the author nothing about what is being asked." The author's two bullets strike both halves of it: the reserved fact is headed by its own name and not by the question of the node that defines it, and the answer fact is headed "Answer" and not by the node's question, which the column has already printed above. The heading gains something the answer does not give it today, a link to the node that defines the fact, and that half of the author's words is not met by any sentence of the recommended text; it also meets a condition that answer states elsewhere, that a metric links "to that node in the browser, which addresses every node by its id where this page has no route to one, and a node the browser does not render, one with no answer yet, is named by its id and not linked", so the sitting has to say what the heading does where the defining node is itself unanswered, as `dialogue` is. In the implementation the change falls on the alignment page's projector in `packages/disposition/project.mjs`, `factLabel`, which returns the node's own question for the answer fact and the gloss or the defining node's question for a reserved one, and `renderFact`, which prints it in `<legend class="factlbl">` with no link, and on the legend's styling in `packages/disposition/alignment-template.html`.
 
 Cascades: `commons.systems/disposition-graph/dialogue`, whose `aspects-are-nodes` is the ground the incumbent sentence rests on and whose `defines` entries and glosses are what a heading would name and link to; `commons.systems/disposition-graph/authority`, the node the authority heading would link to; `commons.systems/disposition-graph/vocabulary-view`, on a defined term being linked to the node that defines it wherever it appears; and `commons.systems/disposition-graph/projection`, which owns the browser's address and whether an unanswered node is rendered there at all, since that is what decides whether such a heading can be a link.
 
 The periagogic object: the published alignment page at https://claude.ai/code/artifact/6b0ef96d-c597-4b3c-9928-be8a4a679678 at the answer and authority facts of `commons.systems/public/agency`, read against the recommended text of `alignment-page`, the `defines` entries of `dialogue` and `authority`, and `factLabel` in the projector, before anything is changed.
 
-### The maieutic movement, 2026-09-07
+### Manifest
 
-The periagogic stage's object was read by the unit of 2026-09-05, whose report is
-the seventh of its ten items. It found both halves of the author's observation
-standing: the answer fact is not headed "Answer", the authority heading is
-neither "Authority" nor a link, and there is no `<a>` inside any
-`legend.factlbl` in the built page. It found one detail of what the author read
-already changed, and not by the reconciliation of 2026-09-05: the authority
-legend is no longer the string they quoted, "Who may change an answer?", but the
-gloss of the term `authority`, which `29d285d5` introduced on 2026-09-04. The
-stage is passed on the author's words of 2026-09-07 rather than in dialogue:
-"before stopping for confirmation, and ensure alignment-page-observations is
-progressed up to confirmation and included in the list of reconciliation for
-alignment/review/survey/artifact."
-
-No probe is owed. The question the periagoge would have put — where the record
-carries no gloss for a fact's name, would the author rather read the unlinked
-name, the question the incumbent prints, or the gloss written with the ruling —
-is a candidate answer to this node's own question, which under `probe-or-node`'s
-test makes it an option and not a probe, and all three candidates are already on
-the fact: `name-linked-to-the-definer`, `question-as-the-heading` and the
-recommended `glosses-written-with-this-ruling`. It is put to the author as the
-fact's options, where their ruling settles it in one act.
-
-What the record says. The parent's answer holds two clauses a ruling here
-reaches, located by their words: the heading sentence, "How a fact is headed is
-the `how-a-fact-is-headed` node's question ... the record's own reasoning headed
-each fact with the question it asks", which the parent already marks as standing
-only until this node rules, and which this answer replaces; and the metric
-clause, "a node the browser does not render, one with no answer yet, is named by
-its id and not linked, the metric saying so", which this answer cites and does not
-move, since it is the parent's own and about metrics. `dialogue`'s `defines`
-entries are what the link resolves against, and `dialogue` is where the two
-missing definitions are owed. Among the siblings, `vocabulary-option-summary`
-decides what an option's summary says on the same fact whose heading this decides,
-and the two meet only in that a reader who reads a bare term on a row can reach
-its meaning by the heading's link, which is stated in that node's answer and not
-here. `authors-words-on-the-page` supplies the rule this answer follows on a
-fallback, that a projection filling a gap with a plausible render makes the gap
-unfindable, which is why `link-to-the-definer-or-to-dialogue` is not the
-recommendation.
-
-The tradition surfaced, and it is one reading, recorded here in prose with the
-`bears` entry on the reading node owed with the ruling.
-`commons.systems/disposition-graph/madr-decision-records`, whose source line at
-`disposition/disposition-graph/madr-decision-records.md:45` names the template's
-own section headings, "Context and Problem Statement, Decision Drivers,
-Considered Options, Decision Outcome with its chosen option, consequences, and
-confirmation, Pros and Cons of the Options, More Information", descending from
-Nygard's "Context, Decision, Status, Consequences". A decision record in the
-tradition the record's own encoding is drawn from names its sections for what
-they hold and never restates them as the questions they answer, which is the
-author's direction arrived at independently; the relation is adopted on
-`glosses-written-with-this-ruling`, which is what the entry owed on that reading
-node names. The tradition's limit is stated with it: MADR names sections
-and never links them, so the link half of this answer is the record's own and the
-tradition says nothing for it or against it. That node's own review of 2026-09-05
-records that the reading has never left the AI's memory, so it is cited for the
-one clause its source line quotes and no further.
-
-What the implementation does today, at the loci a ruling here changes.
-`factLabel` in `packages/disposition/project.mjs` returns the node's
-question for the answer fact, the gloss of the term for a glossed reserved fact,
-the defining node's question where the term is defined without a gloss, and the
-bare name where nothing defines it; `definerIndex`, in the same file, is the
-index it reads for the third branch, and `glossary`
-(`packages/disposition/derive.mjs`) is the map it reads for the second, which
-holds the glossed terms alone. Both take the first definer they meet and ignore
-every later one. `renderFact` prints the label with no link. Measured over the built page, the four headings today are the node's
-question on the answer fact, the gloss of `authority` on the authority fact, the
-gloss of `existence` on the existence fact, and "How is transient disposition
-recorded?" on the persistence fact, which is `transience`'s question reached
-through the bare term at `disposition/disposition-graph/transience.md:76`. The
-legend's styling is `packages/disposition/alignment-template.html` and carries no
-rule for an anchor inside it.
-
-The clean-context reading of this recommendation is owed before the author rules.
-
-### Clean-context review, 2026-09-07, of 5306f2c9
-
-Read in clean context by a subagent given this draft, its ancestry, its siblings, the nodes it names, and the index of every question the record asks, and nothing of the sitting. Verdict: forward to the author's ruling.
-
-Recommended at this reading: `name-linked-to-the-definer`.
-
-Findings:
-
-- ## Answer, validation 3 (every claim about the record is verified). The sentence "Nothing in the record defines the term `answer`." is false. `commons.systems/disposition-graph/node` carries a `defines` entry for the bare term `answer` at `disposition/disposition-graph/node.md:65`, and again inside its own recommendation fence at `:153`. `definerIndex` indexes every `defines` term whether or not it carries a gloss -- its own comment says so, "Which node defines a term, whether or not the definition carries a gloss" -- so under this answer's rule the name `answer` resolves, and it resolves to a node whose question is "What is a node?". The state of the record is therefore not that `answer` has no definer but that it has the same defect `persistence` has: a bare term with no gloss, claimed by a node asking another question. The recommendation is unchanged by this, because the answer's own qualifier already disqualifies such an entry -- "the target is a `defines` entry carrying the term and its gloss, and a bare term claimed by another question is not one" -- but the ground the author would be ruling on is misstated and must be redrawn. Suggested edit: replace the sentence with "The term `answer` is defined at `disposition/disposition-graph/node.md:65` as a bare term with no gloss, on a node whose question is 'What is a node?', so it does not qualify under the rule above, exactly as `persistence` does not; the most frequent heading on the page therefore carries no link, on all 134 of the node files that carry facts, measured at graph commit `5da05bc4`."
-- ## Facts, answer fact, the passed-over reason on `heading-is-the-name-and-a-link`, and the same fact's `against`. Both rest on the claim just falsified. The passed-over reason reads "the record defines no term answer, so on the most frequent heading of the page the link it directs has no target, and the entry it would resolve for persistence names a node asking another question", and the `against` reads "`Answer` has no target on any of the 134 nodes that carry facts, because nothing in the record defines the term". Under `definerIndex` the flat reading of the author's words produces a link on `answer` that resolves to `node` and misleads, which is the same fault the reason already names for `persistence`, not the absence of a target. The `against` matters most, because `alignment-page` puts it on the recommended option's row at the first level, so it is one of the few lines the author reads before choosing, and as written it tells them something about the record that is not so. Suggested edit to the reason: "the record defines both `answer` and `persistence` as bare terms on nodes asking other questions -- `disposition/disposition-graph/node.md:65` and `disposition/disposition-graph/transience.md:76` -- so on two of the four facts, one of them the heading that appears on all 134 nodes carrying facts, the link the direction asks for would resolve and mislead." Suggested edit to the `against`: strike "because nothing in the record defines the term" and say instead that the only entry for it is a bare term on a node asking another question, which this answer refuses to link to.
-- ## Answer, the fallback clause. "Where the record carries no such entry the heading is the name and it is not a link, and the missing definition is a finding on `commons.systems/disposition-graph/dialogue`, which reserves the four names." Two things are wrong with the routing. First, the record does carry an entry for both names, so what is missing is a gloss on an entry that already exists elsewhere and not a definition on `dialogue`. Second, `dialogue` owes no gloss for a fact's *name* today: its recommended text has a gloss written "once, on the defining node, and read from there, ratified, delegated and deferred on the authority node and keep and prune here", which is a rule about the *options* of the two vocabulary facts and says nothing about the four fact names. So the obligation this answer places on `dialogue` is one this node is inventing, and it should say so, or send the finding to the node that already carries the bare term -- `node` for `answer`, `transience` for `persistence`. Suggested edit: name the two nodes that carry the bare entries, say that what is owed is a gloss on each, and say whether this answer asks `dialogue` to take the four names over or asks the two definers to gloss what they already claim.
-- ## Answer and ## Facts, validation 3 (a file named exists, a line cited names what is claimed). Every line citation in this draft is off. `factLabel` is at `packages/disposition/project.mjs:1350-1357`, not `:1346-1353`; the answer-fact branch, cited as `packages/disposition/project.mjs:1347` for "Today it is headed with the node's own question", is at `:1351`; `definerIndex`, cited as `packages/disposition/project.mjs:1326-1337` in "the definer index (`packages/disposition/project.mjs:1326-1337`) resolves the fact's name to a node asking a different question", is at `:1330-1341`; and `renderFact` prints the label at `:1648`, where the passed-over reason on `question-as-the-heading` cites `packages/disposition/project.mjs:1346-1353` for `factLabel` again. The substance of each claim holds at the corrected line; only the numbers are wrong. Every one of them was exact at implementation commit `87e4b24e` and staled when `cb0e02c6` landed on 2026-09-07, and the same staleness runs through all four drafts of this wave, so it is one reconciliation and not a defect of this draft's care. `disposition/disposition-graph/transience.md:76` and `disposition/disposition-graph/madr-decision-records.md:45` are exact, as are the counts of 134 answer facts and 141 node files at graph commit `5da05bc4`, which I re-took.
-- ## Account, the probe stated as owed. "One periagogic probe is owed and is stated here as a question, to be put when the author is directed to the page: where the record defines no term for a fact, so that the heading cannot be the link they asked for, would the author rather read the unlinked name or the question the incumbent prints?" Under `probe-or-node`'s test that question is not a probe: it is a candidate answer to this node's own question, and all three candidates are already listed as options -- `name-linked-to-the-definer`, `name-with-no-link`, and `question-as-the-heading`. "An open question has three homes and this rule sends it to one of them: it is an **option** where you hold a candidate answer to this node's question viable, whether or not you would recommend it." The record is already in the right shape; what is wrong is the Account calling it a probe owed, which would send a later session to record one and return the node to the maieutic stage for a question the fact already asks. Suggested edit: say that the question is put to the author as the fact's options and not as a probe, and drop the word probe.
-
-On the facts and what they recommend: Two facts, both well formed. The answer fact recommends `name-linked-to-the-definer` at moderate boldness among seven options, four passed over with reasons and two viable-and-not-adopted; nothing stands, so there is no `stands` and the `## Recommendation` fence is correctly present, and it carries frontmatter without the dialogue's keys, `## Answer` and `## Rationale`, which is the shape `dialogue`'s recommended text asks for. The authority fact recommends `ratified` at low boldness with the three reserved terms and no prose on the options, correctly, and its `### authority` subsection applies `class-recommendation`'s three limbs by name and says which it found, which is what that node requires. Moderate boldness on the answer fact reads slightly low to me now: the two clauses the AI added to the author's words turn on a description of the record that the first finding falsifies, so more of the recommendation rests on the AI's own reading than the fact's prose claims. No existence or persistence fact, correctly: no prune is proposed and the recommendation changes no shim or evidence.
-
-On the viability of the options: Every listed option is viable on its facts, and the four passed over carry reasons that hold: `question-as-the-heading` is struck by both of the author's bullets by name, `name-and-question-together` prints the incumbent and the direction one after the other, `answer-keeps-the-question` is named by the second bullet in terms, and `heading-is-the-name-and-a-link` is dominated once the bare entries are seen for what they are -- though its stated reason needs the correction above. One viable option is missing, and it is the one that would deliver the author's direction whole: `glosses-written-with-this-ruling` -- every fact heading is the fact's name and every one of them is a link, and the two entries that would resolve wrongly are fixed rather than routed around, a gloss being written on `disposition/disposition-graph/node.md:65` for `answer` and on `disposition/disposition-graph/transience.md:76` for `persistence`, or both terms moved to the node that reserves the four names, so that no heading falls back and the author gets on all four facts what they asked for on two. It is not dominated: the answer's own `against` states that the weakness of the recommendation is precisely the unlinked word on the most frequent heading of the page, and the recommendation's reply to that is 'the gap is now a finding', which defers to another ruling what one ruling here could close. Its cost is that it writes on two nodes this ruling does not own, and that is exactly the trade the author should get to make.
-
-Strongest counter-argument (moderate): The author's stated ground for the change is repetition -- the answer prose fact "doesn't need to restate the question as its title" -- and that ground is exact on the answer fact alone, where the column prints the node's question two lines above. On the three reserved facts the page today prints no repetition at all: it prints the gloss of the term, or the definer's question, neither of which the reader has already met. So on three of the four headings this answer replaces a sentence that says something with a category word that says less, on a ground that does not reach them, and it does so on every one of the 134 nodes that carry facts. Where the link resolves the loss is recovered by a click; where it does not -- on `answer` and `persistence`, which is the most frequent heading and one other -- the author is left with a bare category and the record's own reasoning under `aspects-are-nodes`, that a decision labelled with a category tells the author nothing about what is being asked, stands whole with nothing answering it. The answer's reply is that the absence becomes a finding on another node, which is a promise about a future ruling rather than anything the author gets on the page they are looking at.
-
-The session's reply: Accepted on all five, each verified at its locus on the main thread: node defines answer as a bare term at line 65, so the answer's ground, the passed reason and the fact's against all misstate the record; the fallback routes a missing gloss to dialogue, which owes none for a fact's name; every project.mjs line is stale since cb0e02c6, which is one reconciliation across the wave and is answered by naming functions and not lines; and the probe the account calls owed is the choice the fact's options already put. The recommendation moves to glosses-written-with-this-ruling, recorded from the reading's viability, since the fallback the recommended text carried was an incumbent defect doing the work of a design constraint, which the evaluation node's lens exists to catch: every heading is the fact's name and every one is a link, and the two entries that would resolve wrongly are fixed rather than routed around, the four names glossed on the node that reserves them, recorded as an option on dialogue, source this node, and the bare entries on node and transience released with it. The amendments owed: the answer's ground restated as the reading suggests; the reason and the against corrected; the fallback clause replaced by the amendment's own rule; the citations by function; and the account's probe restated as the fact's options. The counter-argument goes on the row at the strength the reading gave it. The amended answer owes its re-reading.
-
-### The reading of 2026-09-07 applied, and the recommendation moved, 2026-09-07
-
-The reading forwarded to the author's ruling at moderate strength, with five
-findings and no probes. Its verdict, its strength and the pin of the
-recommendation it read are in `review` above, written by the instrument. All five
-were validated on the main thread at the loci they name and all five are
-accepted.
-
-Three were checks of the record against itself. The term `answer` is defined at
-`disposition/disposition-graph/node.md:65`, and again inside that node's own
-recommendation fence at `:153`, as a bare term with no gloss on a node whose
-question is "What is a node?", so the draft's "Nothing in the record defines the
-term `answer`" was false and the passed reason and the fact's `against` were
-false with it; `definerIndex` indexes a term whether or not its entry carries a
-gloss, which its own comment says, so the flat reading of the author's words
-builds a link there that resolves and misleads. The fallback the draft carried
-routed the missing definition to `dialogue`, which owes no gloss for a fact's
-name today, when what is missing is a gloss on an entry that already stands
-elsewhere. And every citation into `packages/disposition/project.mjs` was exact
-at implementation commit `87e4b24e` and staled when `cb0e02c6` landed on
-2026-09-07; the same staleness ran through all four drafts of this wave, so it is
-one reconciliation, answered by naming the function and not the line, which is
-the form `where-the-unconfirmed-indication-goes` already takes.
-
-The recommendation moves to `glosses-written-with-this-ruling`, recorded from the
-reading's viability with `review` as its source. What moved it is the record's
-own lens: the fallback the recommended text carried was an incumbent defect —
-two bare `defines` entries — doing the work of a design constraint, which is the
-failure `evaluation` says a recommendation is redrawn for. So every heading is
-the fact's name and every one is a link, the two entries that would resolve
-wrongly are fixed rather than routed around, the glosses for `answer` and
-`persistence` are written on `dialogue`, the node that reserves the four names,
-and the bare entries on `node` and `transience` are released to it.
-`name-linked-to-the-definer` stays viable and unadopted as the option that leaves
-the record as it stands, which is the side the counter-argument's second half
-argues for.
-
-The text a ruling here would write on `dialogue` is drafted there, as the option
-`dialogue-glosses-the-four-fact-names` with this node as its source, so that no
-sentence this ruling would add to another node's `defines` list lives only in
-this node's prose.
-
-The account's owed probe is struck, since the question it stated is the choice the
-fact's own options put, and the `### answer` subsection, the fence and the
-Rationale are redrawn for the option that now stands. The amended answer owes its
-re-reading, and the recommendation having moved, the node returns to the review
-stage.
+- Folded: The maieutic movement, 2026-09-07, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Clean-context review, 2026-09-07, of 5306f2c9, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: The reading of 2026-09-07 applied, and the recommendation moved, 2026-09-07, at f0741490d538f17733f64bce56a14d8e122c8d34
 
 ### Clean-context re-reading, 2026-09-07, of ffc2656d
 

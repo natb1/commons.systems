@@ -98,20 +98,9 @@ The reviewer's cheaper answer, offered when the recommended option was kicked ba
 
 ## Account
 
-### Sitting on purpose, 2026-09-03
+### Manifest
 
-**Scope of a rule**
-
-Three nodes carry tier global (authority, session-context, evaluation) and the rules projection reads the flag. Every concern has a scope: a typing convention does not bind purpose. Topology alone fails, because a rule's home question and its scope differ (evaluation lives under growth and binds every evaluation). Citations alone fail unless they inherit. Together they suffice: a rule binds the subtree of every node that cites it, inherited along under; a rule cited by purpose binds the repository; the rules projection is the rules cited at purpose, and a bite's ancestry projection carries the rules cited along its ancestry. Tier is then derived and the field is pruned; every field name and value on a page links to the node that defines it, so nothing appears in the projection that no node defines.
-
-Options:
-- (recommended) Prune tier; a rule's scope is the subtrees of the nodes that cite it; the rules projection is the rules cited by purpose; the ancestry projection carries the rules cited along the ancestry — authority ratified; boldness moderate; persistence standing; a schema change
-- Keep tier as a stored flag — authority ratified; boldness low; persistence standing
-- Scope by under alone, a rule binds the subtree it sits in — authority ratified; boldness moderate; persistence standing
-
-Feeds: `under`, `node`, `projection`, `session-context`, `authority`
-
-Responses open: confirm the recommended option; confirm with edits, naming another option; deny with feedback.
+- Folded: Sitting on purpose, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
 
 ### Clean-context review, 2026-09-03
 

@@ -139,33 +139,10 @@ The coverage finding of 2026-09-03: the author's form-versus-assumption question
 
 ## Account
 
-### Sitting on purpose, 2026-09-03
+### Manifest
 
-**The capture hypothesis as a disposition with an unvalidated criterion**
-
-Form stays assumption, as the forms node now recommends; a criterion, an assessment dated at each sitting, is added.
-
-Facts: authority ratified on the form; the answer stays deferred as the author's hypothesis; boldness low; persistence standing.
-
-Depends on: `forms`, `instruments`
-
-Proposed text: the draft section of this node.
-
-Responses open: confirm as shown; confirm with edits; deny with feedback.
-
-### Clean-context review, 2026-09-03
-
-Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
-
-Findings:
-
-- Draft criterion note stores 'not yet validated', which transience forbids, and the assessment has no date and records no judgment, so it does not meet instruments' definition of an assessment.
-- Draft rationale, last sentence: 'The traditions that would ground it are gathered as an open question under this node.' That node, capture-traditions, carries a '## Proposal' and no stage, and the validator rejects it today. The graph does not validate while capture's rationale points at it. Suggested edit: give capture-traditions a stage in the same landing.
-- Draft Answer, sentence 2: 'a record of one's dispositions with criteria against them is a general defence'. The archē this rests on names the capacity 'to notice that I have been captured and to recover', not prevention. Suggested edit: 'a general instrument for noticing capture and recovering from it'.
-
-On the three facts: Same split-stamp issue as knowledge-store: the node has one deferred stamp, and the form decision belongs to forms and node.
-
-Strongest counter-argument (weak): The archē already carries the general claim: it names capture without restricting it to software, and its readings (Pettit on non-domination, Hirschman on exit and voice) are general. This node then asks whether the same discipline helps with capture generally, which is close to asking whether the archē is true. If the hypothesis fails, purpose returns to the author, but so would the archē. Worth one line: the node may be a restatement of its own root rather than a hypothesis under it.
+- Folded: Sitting on purpose, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Clean-context review, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
 
 ### Clean-context review, 2026-09-03
 

@@ -603,70 +603,12 @@ Everything the recommendation says, with this node's bare `defines` entry for `p
 
 ## Account
 
-### Overrule: the un-aligned disposition is a node, 2026-09-03
+### Manifest
 
-The author, 2026-09-03:
-> you have bootstrap authority to reconcile the model of unanswered disposition as disposition + dialogue state
-
-The answer above previously read "An un-aligned disposition has no children, and at its recording it becomes an answer, an amendment quoted into the node it refines, or nothing." That sentence is struck and replaced, on the author's ruling of 2026-09-03 and under `evaluation`, which holds that a deferred answer may be overruled on best judgment and that the overruled answer stays deferred and enters the author's review. This answer was deferred; it remains deferred, and this is that review.
-
-What the overrule turns on. The no-children rule was an inference, not a first principle: a thing that may become nothing cannot be a parent, because its children would be orphaned and its edges left dangling, which the rationale prices from the legacy tactic node. The author denies the premise rather than the inference. On the author's model an unanswered disposition is a durable node plus dialogue state, registered for the alignment dialogue and carrying no authority for reconciliation; nothing dissolves, so no edge dangles, and the guard is unnecessary. The legacy failure the rationale cites remains a real failure of the legacy tactic, which was a completable unit removed on completion. This shape is not that: it is not removed on completion, it is answered.
-
-What the record showed before the ruling. The rule did not reach what its own name suggested. It keyed on the absence of an `## Answer` section, not on the unanswered status, so every node carrying a deferred answer was unanswered and could already have children; `materialization` is such a node and took a child on 2026-09-03. The author's model was therefore already the record's model for every unanswered node but this one shape.
-
-Consequences carried out in the same landing: `node`, which restated the rule, is amended to match; `un-aligned-children`, the node that asked the question, carries the answer; and the validator's check is removed on the implementation ref, since an instrument bound to a struck answer is unsupported implementation. The instrument question this exposed — that a machine check hard-failed a deferred answer, enforcing it exactly as a ratified one and removing in practice the overrule `evaluation` grants in principle — is a proposal on `instruments` and is not decided here.
-
-This node's answer changed after its review of 2026-09-03, so the frontier and the alignment page show it as changed since that review, and the review is owed again on the changed text.
-
-### Sitting on purpose, 2026-09-03
-
-**The transience node, whole, as recorded on 2026-09-03**
-
-As recorded on 2026-09-03 at the author's direction: never as a disposition; criterion, shim, proposal, open question, evidence, or not recorded; no work-shaped node. The rationale quotes the author verbatim twice, which q10 decides. Here for the ruling on the whole.
-
-Facts: authority deferred; ratified if the author rules so; boldness high; persistence standing.
-
-Rejected:
-- A stored self-liquidating class of node. — Expiry stored on a node is the state that drifts, and the legacy record found none needed.
-- Shims declared in the artifact alone. — A notice the frontier cannot read is a permanent in disguise.
-
-Depends on: `quotes`
-
-Proposed: the node as it stands.
-
-Responses open: confirm as shown; confirm with edits; deny with feedback.
-
-### Clean-context review, 2026-09-03
-
-Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
-
-Findings:
-
-- Frontmatter, instrument note: 'the validator and the frontier projection on the implementation ref, not yet materialized for shims'. By this node's own rule a stand-in for a materialization not yet made is a shim, declared where it comes into being with a liquidation condition; here it is a note on an instrument, which the frontier cannot read. Suggested edit: declare the shim.
-- Rationale carries 'Traditions, owed as readings: Aristotle on hexis and kinesis ... mission command', which readings in this batch forbids and the author ruled against on 2026-09-02.
-- Answer, un-aligned paragraph: 'It is a node with a question and no answer.' Authority's draft and growth's answer call the same thing an open question, and node's draft drops the term entirely. One name is needed, and this node is where it should be defined.
-- Answer, criterion paragraph: 'Transience is never stored; it is projected.' Three criteria drafted at this same sitting (knowledge-store, capture, and by implication purpose) store 'not yet validated' in the criterion's note. Suggested edit: either say where an unvalidated marker lives, or strike it from the drafted criteria.
-
-On the three facts: Deferred, ratified if the author rules so, standing, is right. Boldness should be high rather than moderate: the five-shape taxonomy and the stored 'stage' exception are the AI's construction from two surveys, not the author's words, and the author's own instruction was to evaluate the scope of the requirement rather than to adopt a taxonomy.
-
-Strongest counter-argument (strong): The rule that forbids work-shaped nodes is already bent by the record's two largest work-carrying texts. Work-loop's reconciliation shim declares a liquidation condition of nine clauses that read as an exit checklist, and scope's proposal is a twelve-item survey with questions attached. The node anticipates this ('the exit list is the liquidation condition of a declared shim, derived onto the frontier and never a checklist'), but the distinction is a matter of where the text sits rather than what it says, and an executor reading 'a node that records a unit of work, a plan, a task, or a step list, whatever it is called' is forbidden could reasonably conclude the exit criteria the bootstrap depends on are themselves forbidden. Naming the exception in the answer rather than the rationale would settle it.
-
-The session's reply: Accepted. The answer now names the exception: a shim's liquidation condition and the survey in a proposal are not the forbidden shape, since neither can be claimed and neither has a phase. Boldness is high, the taxonomy being the AI's construction from two surveys. The one term is un-aligned disposition, and growth's list now uses it. The instrument note is amended: the frontier lists live shims since 2026-09-03, and only the flagging of a met condition is still unmaterialized.
-
-### Clean-context review of the amendment, 2026-09-03
-
-Read in clean context by a subagent given the node, its ancestry, the author's words, and the amendment named in the brief, and nothing of the sitting. Verdict: forward to the author's ruling.
-
-Findings:
-
-- Answer, amended sentence: 'Every function of the un-aligned disposition reduces to this.' The author's words this transcribes, quoted in this node's own Rationale, are 'Reduce all functions of the unanswered primitive to this - persistence of un-aligned dispositions from the user.' The amendment narrows the reduction from the unanswered primitive to the un-aligned disposition, and on the same day the unanswered primitive acquired a second function: carrying the dialogue on nodes that do have answers. The author's reduction is therefore no longer recorded as binding on anything, and the divergence appears on neither node. Suggested edit: name it as a divergence forced by the later ruling and let the author rule on the pair.
-- Answer, amended last sentence: 'the browser shows such a node as it stands, with its stage.' The browser renders no stage — the string does not occur in packages/disposition/browser-template.html, and its pill comes from STATUS_WORD. This node carries a check instrument, which is where a false claim about a projection should be caught, and the instrument's note does not cover the browser. Suggested edit: state the browser change as owed, or extend the instrument.
-- Answer, amended last sentence: 'A node with an answer carries the same fields while its dialogue is open, which is every unanswered node.' Read with the first amended clause this requires every unanswered node with an answer to carry '## Disposition', '## Proposal', stage, and from the review stage on the recommendation and review data. The sixteen nodes reclassified on 2026-09-03 carry '## Proposal' and stage and none of the rest, so the record contradicts the rule on the day it was written. Suggested edit: say the fields are owed and until when.
-- Frontmatter: removing 'stage' from defines is right — dialogue now defines it and the double definition is gone. But the answer still enumerates the four stages in full, so the term is defined in two places while the defines lists point to one. Suggested edit: have this node's sentence say 'stage, as the dialogue node defines it' and stop.
-
-On the three facts: The Facts line ('authority deferred; ratified if the author rules so; boldness moderate; persistence standing') predates the amendment, and the session's own reply on this node already raised boldness to high for the five-shape taxonomy without the facts being updated. The amended paragraph is high boldness too: the reduction sentence, the browser rule and the 'every unanswered node' scope are the AI's reconciliation of two author rulings made a day apart, one of which it narrows.
-
-Strongest counter-argument (moderate): The amendment makes the un-aligned disposition a special case of a dialogue that lives on every node, which is tidier and dissolves the distinction the author asked for. The author introduced 'un-aligned' as a name for a disposition that 'isn't just unratified/unreviewed, but hasn't even survived the alignment dialog yet', and the amendment answers that a node with an answer 'carries the same fields'. The fields therefore no longer mark the distinction, and the only thing left dividing the two is whether the file has an '## Answer' heading — a fact about the file, not about the dialogue. If everything carries the dialogue then 'un-aligned' has become a rendering rule for the browser rather than a class of disposition, and the author should be told that is what the amendment does before ruling on it.
+- Folded: Overrule: the un-aligned disposition is a node, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Sitting on purpose, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Clean-context review, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Clean-context review of the amendment, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
 
 ### Clean-context review, 2026-09-03
 

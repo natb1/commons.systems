@@ -660,97 +660,18 @@ Everything the recommendation says, with the sentence naming the decisions a rul
 
 ## Account
 
-### Recording of 2026-09-03
+### Manifest
 
-The author's words quoted above are recorded as this node's answer, stamped deferred. The author's: the classification of every disposition as unanswered with nothing lost, the review of what had not been reviewed, and the page's order and its three responses. The AI's, open to the author's ruling: the encoding, one derived status and a stage on every unanswered node; the reading that the browser keeps showing the drafts and hides only nodes with no answer; the meaning given to each response, a confirmation ratifying, edits applied with a second review when they change substance, a denial classified as a kickback; and the placement of the public graph after this project's on the page. Done the same day: every node without a stage was set to review and the review ran on every node at that stage; the reader derives the status and refuses an unanswered node without a stage, the frontier and the browser show the status and the stage, and the alignment page lists every node with a stage in the order this node fixes and offers the three responses; the alignment skill reads them. The review recorded below read the state of the morning, before that tooling landed.
-
-Facts: authority ratified; boldness moderate, the classification and the three responses being the author's words and the encoding and the meanings of the responses the AI's; persistence standing.
-
-### Clean-context review, 2026-09-03
-
-Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
-
-Findings:
-
-- Answer, paragraph 2: 'The validator refuses an unanswered node without a stage, and an answered node carries one only while its ratification is under review.' Neither rule is in the validator. packages/disposition/read.mjs enforces exactly three: a node with no '## Answer' must carry stage; a '## Disposition' requires stage; a stage requires a '## Disposition' or a '## Proposal'. A node with a deferred stamp, an answer and no stage passes, and an answered node may carry a stage at any time. Suggested edit: keep the rule and say it is owed.
-- Proposal, 'Done the same day': 'the validator, the frontier, the browser, and the alignment page were reconciled to this node.' Three of the four are false as of this reading. The validator, above. The browser renders no stage at all — the string does not occur in packages/disposition/browser-template.html, whose pill comes from STATUS_WORD (ratified, delegated, deferred, proposal, un-aligned). The alignment page groups by stage in the fixed order ruling, review, maieutic, periagogic and ranks only within a group (groupAlignmentItems), so it is neither 'in rank order' nor 'this project's graph ... and then the public graph's': commons.systems/public/agency at rank 1.0000 is the seventh item, and the three public nodes lead the review group. Suggested edit: state the gaps; the author is being asked to confirm an account of work as well as a rule.
-- Answer, paragraph 3: 'the author may confirm, confirm with edits, or deny with feedback', with the Rationale rejecting a fourth: 'a fourth response, defer, is not needed.' The page as built offers four — 'Ratify as shown', 'Ratify with edits', 'Defer', 'Overrule' — and recording's answer classifies both a deferral and an overrule. Suggested edit: reconcile the response vocabulary across this node, recording and the page in one place.
-- Answer, paragraph 1: 'Unanswered is a status the projections derive, never a field.' No projection derives it: deriveStatus returns the stamp's class, or 'proposal' for an answer with no stamp, or 'unaligned' for no answer, and the word 'unanswered' appears in no projection. A reader of the browser or the frontier cannot see the status this node defines. Suggested edit: say the derivation is owed, or name which projection is to carry it.
-
-On the three facts: 'Authority ratified if the author confirms; boldness moderate, the classification and the three responses being the author's words and the encoding and the meanings of the responses the AI's; persistence standing' is well formed: one class, one boldness value, and an honest split of the author's from the AI's. It should add that the 'Done the same day' reconciliation claims are not all true, since a confirmation here endorses that account as well as the rule.
-
-Strongest counter-argument (moderate): Reclassifying every deferred answer as unanswered loses nothing formally, and changes what the record is while the record is in use. Fifty-odd nodes now sit in one undifferentiated queue with no distinction between an answer written that morning from the author's quoted words and one written two days earlier from the AI's own knowledge, and the author must rule on all of them one at a time through a dialogue whose own rules are themselves in the queue. The alternative the node rejects — leave the deferred stamps as the review queue, which authority already called them, and put a stage only where a dialogue is actually open — preserves the same guarantee, that nothing unconfirmed is doctrine, at a fraction of the ceremony. What the reclassification bought is a word; what it cost is a record that describes itself as entirely unanswered while every session works under it.
-
-The session's reply: The findings read the morning's state, and the afternoon's tooling answered them: the reader derives the status and refuses an unanswered node without a stage, the browser and the frontier show both, and the alignment page lists every node with a stage in this node's order and offers exactly the three responses the answer names, the page's earlier four having been the projector's and not the record's. The proposal's account of what was done is corrected above. On the counter-argument: the deferred stamps were the review queue in name only, since nothing listed them or said what each was owed; the stage says it, and the record describing itself as unanswered is the author's classification, quoted above, not the AI's.
-
-### Clean-context review, 2026-09-03
-
-Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
-
-Findings:
-
-- Answer, paragraph 2: 'The validator refuses an unanswered node without a stage.' Verified true: read.mjs raises '<id> is unanswered and must carry stage' from deriveStatus. The previous review's finding is resolved. The second half, 'an answered node carries one only while its ratification is under review', is not enforced and cannot be tested, since no answered node exists.
-- Answer, paragraph 1: 'Unanswered is a status the projections derive, never a field.' Verified now true: deriveStatus returns 'unanswered' and the frontier and browser both print it. Resolved.
-- Answer, paragraph 3: 'the author may confirm, confirm with edits, or deny with feedback', with the Rationale rejecting a fourth. Verified the page now offers exactly three (RESPONSE_CHOICES: confirm, edit, deny). But twenty-four nodes' Proposals still close with 'Rulings open: ratify as shown; ratify with edits; defer; overrule' and nine with 'take the recommended option; take another option by number; defer; answer in prose'. The response vocabulary is settled here and unsettled everywhere else.
-- Answer, paragraph 3: 'The page lists every unanswered node of this project's graph in rank order, the purpose node first, and then the public graph's.' Verified true of orderAlignmentItems. Resolved.
-- Answer: 'A confirmation given on a node whose review has not run is held until the review runs.' Five nodes are at the review stage today (checkpoint, clean-context-review, frontier-consistency, second-stop, work-loop), so this rule is live for the author's next sitting and the page says so in its stage hint.
-
-On the three facts: The frontmatter recommendation (ratified, moderate) states one class and one value and splits the author's from the AI's honestly. The 'Done the same day' account in the Proposal is now true where the previous review found three of four claims false; it should be updated to say so, since a confirmation endorses that account as well as the rule.
-
-Strongest counter-argument (moderate): Reclassifying every deferred answer as unanswered loses nothing formally and changes what the record is while the record is in use. Sixty-two nodes now sit in one queue with no distinction between an answer written that morning from the author's quoted words and one written two days earlier from the AI's own knowledge, and the author must rule on all of them through a dialogue whose own rules are in the queue. The session's reply — that the stage says what each is owed where the deferred stamp did not — is a real gain and is now visible in the frontier and the page. What is not answered is the volume: forty-eight nodes are before the author at review or ruling in one sitting.
-
-The session's reply: Validated: the validator refuses an unanswered node without a stage, the status is derived, the page offers the three responses and lists in rank order. The thirty-three Proposal lines now use those three responses. This node is the survivor of the vocabulary and of the classification, and nothing in it is redrafted. The 'Done the same day' account is true now. On the counter-argument, the volume before the author: the ruling order the batch recommends is on the page, agency first. Stage ruling.
-
-### Frontier finding, 2026-09-03
-
-Kind: contradiction.
-
-Three response vocabularies are live for one act. Unanswered: 'the author may confirm, confirm with edits, or deny with feedback', with 'a fourth response, defer, is not needed'. Recording's Answer classifies four outcomes: 'A confirmation as shown, or the recommended option taken, is recorded ... A deferral leaves the answer deferred; an overrule records what the author said stands.' Growth restates unanswered's three. The alignment page implements exactly three (RESPONSE_CHOICES: confirm, edit, deny in packages/disposition/project.mjs). Meanwhile twenty-four node Proposals close with 'Rulings open: ratify as shown; ratify with edits; defer; overrule' and nine with 'take the recommended option; take another option by number; defer; answer in prose' — a fourth and fifth wording, neither matching the page the author will use.
-
-Also named: commons.systems/disposition-graph/recording, commons.systems/disposition-graph/growth.
-
-Proposed: Unanswered is the survivor: it defines the responses and the page implements them. Recording cites unanswered rather than restating, and recasts its second step as the classification of each of the three responses (a deferral being a node left unconfirmed, an overrule being a denial with feedback). Growth cites unanswered for the page's responses instead of restating them. The thirty-three Proposal closing lines are rewritten to the three words the page uses, which is a mechanical pass the session can do at the recording.
-
-### Frontier finding, 2026-09-03
-
-Kind: supersession.
-
-The author, quoted on transience: 'Unanswered nodes are hidden from the browser artifact and listed by the alignment artifact.' Later the same day the author classified every disposition as unanswered ('Classify all dispositions as unanswered ... There should be no loss of disposition encoding'), which makes the earlier words, applied literally, empty the browser. Projection's amendment records the reconciliation and its counter-argument names it squarely; transience still carries the earlier rule as its own ('hidden from the browser and listed by the alignment page') with no note that its scope was narrowed by the later ruling; unanswered argues the narrowing in its rationale under 'Rejected'. The superseded words are answered by transience and the superseding words by two other nodes.
-
-Also named: commons.systems/disposition-graph/transience, commons.systems/disposition-graph/projection.
-
-Proposed: Unanswered is the survivor of the classification and projection of the browser rule. Transience's un-aligned paragraph cites unanswered for the status and projection for what the browser shows, and drops its own restatement of the hiding rule; projection's answer keeps the amended sentence and adds one clause saying it narrows the author's earlier words, which is what projection's own counter-argument asks for and what the author must rule on.
-
-### Frontier finding, 2026-09-03
-
-Kind: decomposition.
-
-Transience's un-aligned paragraph now enumerates the whole dialogue — 'the author's words, verbatim and dated, in a `## Disposition` section; the AI's account ... in a `## Proposal` section; `stage` ... and, from the review stage on, the recommendation's facts and the review's state as data' — which is dialogue's entire answer, and it states the status rule, which is unanswered's. Its own amendment review flagged the double definition of 'stage' and the frontmatter defines list was fixed; the prose enumeration was not. The result is that three nodes carry the same list and drift between them is invisible until they are read together, which is what this survey is for.
-
-Also named: commons.systems/disposition-graph/transience, commons.systems/disposition-graph/dialogue.
-
-Proposed: Dialogue is the survivor of what an unanswered node carries and unanswered of the status. Transience's un-aligned paragraph reduces to two sentences: that an un-aligned disposition is a node with a question and no answer, and that it carries the dialogue as dialogue defines it and has no children. Everything else in that paragraph moves to, or is already in, dialogue and unanswered. The five-shape taxonomy, which is what the node is for, is untouched.
-
-### The author's words of 2026-09-03 on dialogue
-
-The sentence quoted above says what becomes of a conflicting answer that survives the dialogue: it is marked unanswered until confirmed. The answer says when a disposition is answered and does not say what an answer in conflict with a recorded one is, nor whether the node it conflicts with stays answered while the conflict is open; the stage returns to maieutic for that. The whole disposition is on the dialogue node, whose sitting carries it.
-
-### The author's retraction, 2026-09-03
-
-The sentence carried above, that a surviving conflicting answer is marked unanswered until confirmed, is retracted by the author's words of the same day as a hack. What stands in its place is the function: an answered node with an alternative pending on it, a proposal from outside alignment or an alternate answer from inside it, keeps its stamp and shows the pending alternative to its reader. This node's answer already says the status is derived and never a field, and that an answered node carries the dialogue while its ratification is under review, keeping its stamp until the author rules; the redraft under the sitting on dialogue extends that from ratification under review to any pending alternative, and this node's part of it is whether the standing answer keeps its authority meanwhile, put to the author in the maieutic movement.
-
-### Re-encoding, 2026-09-03
-
-Re-encoded on 2026-09-03 under the author's bootstrap grant on the dialogue node, against graph commit 6d21d356: the account section, formerly named the proposal, and the recommended text, formerly the draft, were renamed, and the dialogue state was written as data.
-Alternatives pending, with their sources: `pending-alternative-keeps-stamp` (author, 2026-09-03); `standing-keeps-authority` (author, 2026-09-03).
-The recommendation adopts `standing` and is pinned to the standing text as it was at that commit.
-Merge analysis of the author's words: 2026-09-03, own-question: Because the bootstrap recorded deferred dispositions before the alignment dialogue existed, every disposition is reclassified as unanswered with no loss of encoding, anything not yet adversarially reviewed is reviewed, and the alignment artifact sorts unanswered nodes by rank with purpose first and offers confirm, confirm with edits, and deny with feedback on any subset. 2026-09-03, own-question: A conflicting answer that arises in alignment and survives periagoge, maieutic and adversarial review is marked unanswered until confirmed. 2026-09-03, own-question: The same marking rule, with the addition that a conflicting answer arising outside alignment is a proposal — the second sentence answering authority's question and already carried there. 2026-09-03, own-question: The flip from answered to unanswered pending confirmation is retracted as a hack; what the author wants at the functional level is to see, on a node already confirmed, the proposals surfaced outside alignment and the alternate answers pending confirmation. 2026-09-03, own-question: When an alternative is pending on any node with authority, the previously confirmed answer keeps its full authority until an alternative is confirmed.
-Moved to other nodes as alternatives: `cite-unanswered-responses` on commons.systems/disposition-graph/recording; `cite-unanswered-for-page-responses` on commons.systems/disposition-graph/growth; `reduce-un-aligned-paragraph` on commons.systems/disposition-graph/transience; `narrowing-clause` on commons.systems/disposition-graph/projection.
-The census unit's note: The node carries an answer and no draft, so the recommendation adopts the standing text. Two alternatives are pending, both in the author's own later words: that an answered node with a pending alternative keeps its stamp and shows what is pending, which the author gave when retracting the flip to unanswered, and that a standing answer keeps its full authority meanwhile. The marking rule of the earlier blocks is not an alternative because the author retracted it themselves. Excluded as already ruled: the counter-argument's proposal to leave the deferred stamps as the queue and put a stage only where a dialogue is open, which the rationale rejects by name. Moved elsewhere: the response-vocabulary finding to recording and growth, the decomposition finding to transience, the supersession finding to projection.
-
-### Alternatives merged, 2026-09-03
-
-The alternatives raised on this node by more than one census cohort were merged at the re-encoding, and any alternative the standing answer already carries was removed: `pending-alternative-keeps-stamp` dropped, Carried by the answer's sentence 'an answered node carries one while an alternative is pending on it, from the alignment dialogue or from a proposal outside it, keeping its stamp and its full authority, whatever its class, until an alternative is confirmed; the author's first suggestion, that such a node be marked unanswered until confirmed, was retracted by the author on 2026-09-03 as a hack, and the projections show the pending alternatives beside the answer instead', together with the page listing 'the alternatives pending with their sources'; `standing-keeps-authority` dropped, Carried by the same sentence: an answered node with an alternative pending keeps 'its stamp and its full authority, whatever its class, until an alternative is confirmed', which is the author's words that a pending alternative does not unanswer a node. The merge unit's note: Both entries drop, so the `alternatives` list becomes empty and the `## Alternatives` section must be removed with it: the validator requires the section present iff the list is non-empty. The node keeps its stage and its recommendation of `standing`.
+- Folded: Recording of 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Clean-context review, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Clean-context review, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Frontier finding, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Frontier finding, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Frontier finding, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: The author's words of 2026-09-03 on dialogue, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: The author's retraction, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Re-encoding, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Alternatives merged, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
 
 ### Clean-context review, 2026-09-03
 
@@ -769,6 +690,7 @@ On the three facts: The frontmatter recommendation (adopts standing, ratified, m
 Strongest counter-argument (moderate): Reclassifying every deferred answer as unanswered loses nothing formally and changes what the record is while the record is in use: sixty-eight nodes now sit in one queue with no distinction between an answer written that morning from the author's quoted words and one written two days earlier from the AI's own knowledge, and the author must rule on all of them through a dialogue whose own rules are in the queue. The session's reply — that the stage says what each is owed where the deferred stamp did not — is a real gain and is now visible in the frontier and the page. What is unanswered is the volume: forty-three nodes stand at review or ruling in one sitting, and the record offers a ruling order only as a review's recommendation that nothing consumes.
 
 The session's reply: Forward accepted. The retraction and the authority-keeping rule are the author's in quoted words; what happens to review-stale pins at the first ratification is accepted as a finding for the author.
+
 ### The author's dispositions of 2026-09-03, and where they fall
 
 The words are in the Disposition section above and in full on

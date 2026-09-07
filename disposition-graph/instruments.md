@@ -370,40 +370,10 @@ has both a check and an assessment.
 
 ## Account
 
-### Sitting on purpose, 2026-09-03
+### Manifest
 
-**The instruments node, whole; criteria on every page**
-
-The single instrument becomes a list of criteria; three kinds, check, assessment, assumption; each says whether the answer is achieved or maintained; every page shows its criteria or the word unguarded; the re-grasp triggers are unchanged; the prose list of traditions leaves the rationale.
-
-Facts: authority ratified; boldness moderate; persistence standing; the schema change is materialized by the validator and projector.
-
-Rejected:
-- Criteria as child nodes with their own stamps, which the legacy transcription chose. — A criterion that needs its own stamp is a question of its own and becomes a node then; the common case is a line on the node it guards.
-- Keep one instrument per node. — An answer commonly has a check and an assessment, and purpose has both.
-
-Depends on: `forms`
-
-Proposed text: the draft section of this node.
-
-Responses open: confirm as shown; confirm with edits; deny with feedback.
-
-### Clean-context review, 2026-09-03
-
-Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
-
-Findings:
-
-- Draft Answer, sentence 3: 'A criterion also says whether the answer is to be achieved ... or maintained.' No field carries this. The four criteria drafted at this sitting (purpose, node, knowledge-store, capture) carry only kind, ref and note. Suggested edit: name the field, or fold achieve and maintain into 'kind'.
-- Draft Answer: 'A ratified answer with no criterion is unguarded, and the record says so.' Combined with the forms merge, an unguarded disposition carries no achieve-or-maintain at all, so the distinction target and rule used to carry is lost exactly where there is no criterion, which is most of the graph today.
-- Draft defines drops 'instrument' while 'instrument:' remains a live frontmatter field on review, transience, node and public/agency. Ratifying this renames the field in prose while four nodes keep the old one. Suggested edit: name the migration as part of what is confirmed.
-- Rejected list: 'a criterion that needs its own stamp is a question of its own and becomes a node then.' Purpose-criteria in this same batch offers criteria at 'authority deferred' on a node whose facts say ratified, which this rejection forbids.
-
-On the three facts: Ratified, moderate boldness, standing is right. The facts should add that the schema change makes the 'instrument:' field on four nodes non-conforming, and that no field yet carries achieve or maintain.
-
-Strongest counter-argument (strong): The rule mandates a fact the schema cannot hold and the common case cannot express. Every criterion is to say whether its answer is achieved or maintained, but no field exists for it and none of the four criteria drafted in the same sitting says it; and an unguarded node, which instruments itself makes a legitimate state, has no criterion and so can say neither. Since the forms merge is justified by this carrier, ratifying instruments as drafted ratifies a carrier that does not exist. The record's use of the distinction is live: this node's own current text says 'A target's failing check is work. A rule's failing check is a variance that gates the work that broke it', which is how the frontier decides what to do with a failure.
-
-The session's reply: The counter-argument wins on the carrier. No field carries achieve or maintain and the session does not invent one here: the recommendation on forms changes to keeping rule beside disposition, so the distinction stays on the form, and the draft's sentence that moves it to the criterion is withdrawn at the recording. Accepted: the migration of the instrument field on four nodes to criteria is named as part of what is confirmed; and the split stamp on purpose-criteria is resolved by changing that recommendation to leaving purpose unguarded.
+- Folded: Sitting on purpose, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Clean-context review, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
 
 ### Clean-context review, 2026-09-03
 

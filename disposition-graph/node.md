@@ -481,43 +481,11 @@ A node is one question and the options its facts carry, each answer option holdi
 
 ## Account
 
-### Amended with the transience overrule, 2026-09-03
+### Manifest
 
-The clause "and it has no children" is struck from the answer above and replaced, following the overrule recorded on `transience` on the author's ruling of 2026-09-03 that an unanswered disposition is a disposition plus dialogue state. This node restated the rule; `transience` defines the shape and carries the reasoning. The two frontier findings of 2026-09-03 recorded below, which asked that this sentence be kept because it was the schema node's only statement of the no-children rule, are answered by the rule being struck rather than by the sentence being kept: what they were protecting was the record's only statement of a rule that no longer holds.
-
-The stamp stays deferred, as `evaluation` provides for an overruled deferred answer, and the answer changed after its review, so the review is owed again on the changed text.
-
-### Sitting on purpose, 2026-09-03
-
-**The node node, whole; forms collapse to four**
-
-Four forms: disposition (target and rule merged; whether it is to be achieved or maintained is carried by its criteria), archē, reading, tradition. Assumption leaves the forms and becomes a criterion kind. Every node carries a stamp or is an open question; proposal is content. The rationale carries the rejected alternatives with their reasons and the page projects them beside the stamp. The prose list of traditions leaves the rationale. Vocabulary stays with the nodes that define each term (n-form-vocabulary).
-
-Facts: authority ratified if q1 stands; boldness moderate; the achieve-or-maintain carrier is the goal-oriented requirements tradition, the merge is the author's question; persistence standing.
-
-Rejected:
-- Keep rule as a form beside disposition. — Open as q1; a rule is a disposition to be maintained, which its criterion already says.
-- Keep all five forms. — Open as q1; assumption as a form recorded the same fact twice, once as form and once as criterion.
-
-Depends on: `forms`, `traditions-home`
-
-Proposed text: the draft section of this node.
-
-Responses open: confirm as shown; confirm with edits; deny with feedback.
-
-### Clean-context review, 2026-09-03
-
-Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
-
-Findings:
-
-- Draft Answer removes the sentence 'A node with a question and no answer is an un-aligned disposition ... and it has no children' and replaces it with 'Every node carries a stamp, or it is an open question awaiting its answer.' That deletes from the schema node the only statement of what an unanswered node is and of the no-children rule, and introduces a term no node defines. The validator's message says 'a node without an ## Answer section is an un-aligned disposition and must carry stage'. The removal is not announced in the Proposal summary. Suggested edit: keep the un-aligned sentence and add the stamp rule beside it.
-- Draft Answer: 'a disposition, something that should become or stay true, where whether it is to be achieved or maintained is carried by its criteria.' No criterion in the graph carries that marker, including the four drafted at this sitting, and an unguarded node has no criteria at all. An executor recording a maintain-type disposition with no criterion has nowhere to put the fact.
-- Draft Answer: 'a tradition, the root of a mounted body of thought or work' makes tradition a form of node here, while readings' draft puts traditions in a separate graph. Neither node says whether a tradition root carries 'form: tradition'. Suggested edit: settle it in one of the two.
-
-On the three facts: 'Ratified if q1 stands' is the right contingency, but 'boldness moderate' understates the deletion of the un-aligned-disposition sentence, which is the AI's own and is not announced.
-
-Strongest counter-argument (weak): The four-form model rests on the merge argued at forms, and the strongest case against it belongs there: the achieve-or-maintain distinction that target and rule carried has no field to move into, and no criterion in the record carries it. Ratifying this node bakes the merge into the schema definition before that carrier exists.
+- Folded: Amended with the transience overrule, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Sitting on purpose, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Clean-context review, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
 
 ### Clean-context review, 2026-09-03
 

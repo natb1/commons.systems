@@ -206,11 +206,9 @@ as dogma, and dogma needs power to maintain.
 
 ## Account
 
-### Recording of 2026-09-03
+### Manifest
 
-Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
-
-Facts: authority ratified if the author confirms, or delegated where the author's words delegate it; boldness as the rationale shows, the AI's drafting from the author's rulings and from the legacy record as evidence; persistence standing.
+- Folded: Recording of 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
 
 ### Clean-context review, 2026-09-03
 

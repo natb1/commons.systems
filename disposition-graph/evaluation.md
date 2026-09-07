@@ -220,28 +220,10 @@ Against the full solution frontier. Nothing is sacred: no doctrine is implied by
 
 ## Account
 
-### Recording of 2026-09-03
+### Manifest
 
-Reclassified as unanswered at the author's ruling of 2026-09-03, quoted on the unanswered node: the answer above, stamped deferred during bootstrap before the alignment dialogue existed, stands as the draft the author rules on, and the clean-context review runs on it before the ruling. Nothing in the node was changed by the reclassification.
-
-Facts: authority ratified; boldness moderate; persistence standing; this text is projected into the rules directory and binds every session today.
-
-### Clean-context review, 2026-09-03
-
-Read in clean context by a subagent given the node, its ancestry, and the author's words, and nothing of the sitting. Verdict: forward to the author's ruling.
-
-Findings:
-
-- Node, whole: no '## Disposition' and no ruling quoted of any date. The Rationale rests the entire answer on 'The author's rulings in the legacy bootstrap of 2026-08-31 to 2026-09-02, given again to this bootstrap as the standing rule for the AI's evaluations', with 'The legacy rule projection on main and the ratified clarifications behind it' as the evidence. Authority: 'a ratified stamp whose ruling is not in the record is invalid'; legacy: legacy nodes are evidence and 'never authority'. Suggested edit: quote the ruling, dated, under '## Disposition' before any stamp is written.
-- Answer: 'Delegated and deferred answers need no interview: the AI may overrule them on its best judgment.' Under unanswered and the amended authority in this same batch, every deferred answer is unanswered and sits at a stage in an open dialogue with a draft the author is queued to rule on. Nothing here says what happens when the AI overrules a draft at stage ruling; dialogue's 'of' pin exists for exactly that case and this node does not point at it. An executor could rewrite a node the author is reviewing without re-triggering the review.
-- Answer: 'every tradition surfaced is recorded as a reading with the resolution it informed', while this node's own Rationale carries a prose tradition list ('the Pareto frontier of multi-objective choice ... Chesterton's fence (The Thing, 1929)'). Eleven rationales in the record do the same. The rule is unmet by the node that states it.
-- Frontmatter 'tier: global': this text is already projected to .claude/rules/evaluation.md and binds every session under the bootstrap grant. [Superseded 2026-09-03: the bootstrap grant was struck when the author expired it. These rules still bind every session; what they bind under is the unanswered-node model, not that grant.] A kickback or overrule here changes what sessions are running under today, which the Proposal does not say.
-
-On the three facts: Generic template, and inadequate for a global-tier rule already materialized into .claude/rules/. It must state one class; boldness is moderate at best, since the evaluate-twice rule and the overrule ladder are the AI's construction and the author's words behind them are not in the node; and the facts should say that this text is live doctrine-by-shim today, so the ruling is not prospective.
-
-Strongest counter-argument (strong): 'Nothing is sacred', 'no doctrine is implied by what exists' and 'the AI may overrule delegated and deferred answers on its best judgment' are stated without limit and exempt nothing, including this node and the record's own instruments. Since the unanswered node made every answer in the record deferred, the rule licenses an AI to re-decide the entire graph between two author sittings, with the author's review — which has not happened once — as the only brake. Chesterton's fence is cited and then diverged from on the ground that 'the record, not the fence, carries the reason', but every reason in the record is itself AI-written and equally overrulable, so the divergence removes the fence and keeps nothing in its place.
-
-The session's reply: The brake the counter-argument misses is the record itself. An overrule of a deferred answer is an edit to a node at the ruling stage, which sends the node back to the review stage and shows on the frontier and the page as a draft changed since its review; the author sees every such change before it is confirmed, and nothing the AI writes becomes doctrine without that confirmation. That the rule's scope is today the whole record is the condition of the bootstrap grant declared on the authority node, and it narrows with each ratification. [Superseded 2026-09-03: the bootstrap grant was struck the same day, replaced by the unanswered-node model. The reply's substance is unchanged and its condition is now stated directly: nothing is ratified, so the overrule's scope is the whole record, and it narrows with each ratification exactly as written. The citation should read the unanswered model, or bootstrap authority where an explicit grant is meant.] Accepted: the answer now says what an overrule of a draft at the ruling stage does; the prose tradition list in the rationale is owed to the stub-traditions ruling with the eleven others.
+- Folded: Recording of 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
+- Folded: Clean-context review, 2026-09-03, at f0741490d538f17733f64bce56a14d8e122c8d34
 
 ### Clean-context review, 2026-09-03
 
@@ -299,6 +281,7 @@ Recorded as a pending alternative on commons.systems/disposition-graph/readings:
 Recorded as a pending alternative on commons.systems/disposition-graph/stub-traditions: `one-ruling-for-the-prose-lists` (source review, 2026-09-03).
 
 Recorded as a pending alternative on commons.systems/disposition-graph/quotes: `one-ruling-for-the-unquoted-stamp` (source review, 2026-09-03).
+
 ### The greenfield lens made operational, 2026-09-03
 
 Recorded at the author's direction, quoted above, during the sitting on
